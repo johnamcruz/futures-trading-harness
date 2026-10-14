@@ -90,6 +90,19 @@ test('judge: a fix that breaks another category beyond the tolerance is rejected
   assert.strictEqual(judge({ pairs: pairs([...many(25, 'wrong stated reason'), ...many(25, 'right')], [...many(25, 'right'), 'bad size', ...many(24, 'right')]), targets: ['wrong stated reason'], failures: FAILURES, rule: ruleFrom({ harmTolerance: 0.01 }) }).verdict, 'rejected');
 });
 
+test('a pair unchecked on either side is left out for both, symmetrically; too many left out is insufficient evidence', () => {
+  // The candidate trades where the champion stood aside, and the scorecard can't check those decisions: neither
+  // broken nor fixed. A champion's unchecked decision the candidate gets right is no fix either.
+  const left = judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(10, 'right'), ...many(5, 'unchecked')], [...many(20, 'right'), ...many(10, 'unchecked'), ...many(5, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([left.verdict, left.tests.pairs, left.tests.unchecked, left.tests.target.b, left.tests.target.c], ['kept', 20, 15, 20, 0]);
+  const thin = judge({ pairs: pairs([...many(15, 'wrong stated reason'), ...many(10, 'right')], [...many(15, 'right'), ...many(10, 'unchecked')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(thin.verdict, 'inconclusive');
+  assert.match(thin.reasons[0], /insufficient evidence: 15 pairs judged; at least 20 \(10 left out: unchecked on either side\)/);
+  // Blows still count where the decision is unchecked.
+  const blow = judge({ pairs: pairUp(many(20, 'wrong stated reason').map((c, i) => ({ key: `t${i}`, repeat: 0, category: c })), many(20, 'right').map((c, i) => ({ key: `t${i}`, repeat: 0, category: i === 0 ? 'unchecked' : c, blow: i === 0 }))), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(blow.verdict, 'rejected');
+});
+
 test('decisions only the candidate made (a trade the champion never opened) count as broken and for blows, never toward the sample', () => {
   const base = many(20, 'wrong stated reason').map((c, i) => ({ key: `t${i}`, repeat: 0, category: c }));
   const cand = [...base.map(r => ({ ...r, category: 'right' })), { key: 'extra', repeat: 0, category: 'right', blow: true }];

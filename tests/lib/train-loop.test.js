@@ -241,6 +241,26 @@ test('the scorecard is read under the look\'s rules: tuning on the tuning window
   assert.ok(looks.every(l => !l.ledger.some(x => x.purpose === 'judging')), 'checked against the ledger as it was before this judging\'s own look');
 });
 
+test('a judging stopped between logging its look and saving it resumes with its own look; nothing else may', async () => {
+  const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
+  await run(w, { dryRun: true });
+  const [kept] = readArchive(w.paths.archive);
+  const tag = `h-${kept.proposalId}-`;
+  // The disk as a stop right after the look was logged leaves it: "started" saved, the look (with its loop and
+  // proposal) and the snapshot written, the look's own done flag not saved.
+  const snapshot = path.join(w.paths.dir, `held-out-${kept.proposalId}`, 'ledger-before.jsonl');
+  fs.mkdirSync(path.dirname(snapshot), { recursive: true });
+  fs.copyFileSync(w.paths.ledger, snapshot);
+  fs.appendFileSync(w.paths.ledger, `${JSON.stringify({ candidate: `l1/${kept.proposalId}`, purpose: 'judging', ranges: w.loop.heldOutWindows, loopId: 'l1', proposalId: kept.proposalId, at: new Date().toISOString() })}\n`);
+  const state = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  state.done[`judging:${tag}`] = 'started';
+  fs.writeFileSync(w.paths.state, JSON.stringify(state));
+  const v = await L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true });
+  assert.strictEqual(v.verdict, 'kept');
+  assert.strictEqual(S.readLedger(w.paths.ledger).filter(l => l.purpose === 'judging').length, 1, 'no second look');
+  assert.strictEqual(readArchive(w.paths.archive).filter(e => e.phase === 'held-out').length, 1);
+});
+
 test('a held-out judging resumed without its ledger snapshot is refused, saying what is missing; nothing more runs', async () => {
   const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
   await run(w, { dryRun: true });

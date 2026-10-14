@@ -85,7 +85,7 @@ function acquireLock(paths, { loopId, pid = process.pid, now = new Date() }) {
         if (err.code !== 'EEXIST') throw err;
         const lock = readJson(paths.lock, null);
         // Unreadable: held (fails closed); a person removes it once no loop runs.
-        if (!lock) throw new Error(`${paths.lock} is unreadable: another loop may hold it; remove it by hand once no training loop runs`, { cause: err });
+        if (!lock) throw new Error(`${paths.lock} is unreadable, so it is taken as held. Remove ${paths.lock} by hand only when no training loop (scripts/train-loop.js) is running on this harness home.`, { cause: err });
         if (alive(lock.pid)) throw busy(lock, err);
         // A dead holder's lock: moved aside (only one process can move it), then checked to be the one read.
         const aside = `${paths.lock}.${tag}.stale`;
@@ -160,7 +160,15 @@ function readLedger(file) {
 /** fn holding the ledger's lock (`<ledger>.lock`, prop/evaluate-run.js withLedgerLock, as the evaluator takes it). */
 function locked(file, fn) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  return withLedgerLock(file, fn);
+  try {
+    return withLedgerLock(file, fn);
+  } catch (err) {
+    // A run killed while it held the lock (SIGKILL) leaves the lock file: it is never broken automatically.
+    if (/locked by another run/.test(err.message)) {
+      throw new Error(`the look ledger is locked: ${file}.lock exists. Another training loop (scripts/train-loop.js) or evaluator run (scripts/evaluate.js) holds it, or one was killed while holding it. Remove ${file}.lock by hand only when no training loop and no evaluator run is running.`, { cause: err });
+    }
+    throw err;
+  }
 }
 
 function appendChecked(file, look, now) {
@@ -195,16 +203,30 @@ function monthsOf(from, to) {
  * earlier judging look or a recorded look (each held-out month judges once, section 4); else the ledger as it is
  * now is written to `snapshot` (the judging's checks run against it), and the look is checked and appended.
  */
-function takeJudgingLook(file, look, { snapshot, now = new Date() }) {
+function takeJudgingLook(file, look, { snapshot, own = null, resume = false, now = new Date() }) {
   return locked(file, () => {
+    const ledger = readLedger(file);
+    // A resume after a stop between this look being logged and the loop saving it (resume: the loop had saved "judging
+    // started"; own: { loopId, proposalId }, written into the look): the look this loop and proposal logged on the same
+    // months is theirs. Any other look on those months refuses: a month never judges a second proposal.
+    const mineAlready = resume && own && ledger.find(l => l.purpose === 'judging' && l.loopId === own.loopId && l.proposalId === own.proposalId
+      && JSON.stringify(l.ranges) === JSON.stringify(look.ranges));
+    if (mineAlready) {
+      if (!fs.existsSync(snapshot)) throw new Error(`the held-out ledger snapshot ${snapshot} is missing for a judging whose look is already logged: restore the file from a backup to resume; otherwise those held-out months are spent`);
+      return { resumed: true };
+    }
     const months = ws => new Set(ws.flatMap(w => monthsOf(w.from, w.to)));
     const mine = months(look.ranges);
-    const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...readLedger(file).filter(l => l.purpose === 'judging')]
+    const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...ledger.filter(l => l.purpose === 'judging')]
       .flatMap(l => [...months(Array.isArray(l.ranges) ? l.ranges : [l])]).filter(m => mine.has(m));
     if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
+    // The look's own rules (budget, role) checked before anything is written.
+    const verdict = checkLook(look, ledger);
+    if (!verdict.ok) throw new Error(`look refused:\n- ${verdict.refusals.join('\n- ')}`);
     fs.mkdirSync(path.dirname(snapshot), { recursive: true });
     fs.writeFileSync(snapshot, fs.existsSync(file) ? fs.readFileSync(file) : '');
-    return appendChecked(file, look, now);
+    fs.appendFileSync(file, `${JSON.stringify({ ...look, ...(own ? { loopId: own.loopId, proposalId: own.proposalId } : {}), at: now.toISOString() })}\n`);
+    return verdict;
   });
 }
 

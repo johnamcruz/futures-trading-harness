@@ -1180,12 +1180,14 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     enough for a small local model, structured edits to skills, strategies
     and rulebooks only, validated, applied and synced in a copy; an external
     model only as a manual import a person approves); the paired test (the
-    same points, seeds and repeats, each decision's repeats counted once;
-    an exact McNemar test with a minimum
+    same points, seeds and repeats, each decision's repeats counted once,
+    a decision unchecked on either side left out for both; an exact
+    McNemar test with a minimum
     pair count, discordant count and effect, a per-category harm check with
     a tolerance of floor(2% of the decisions), so none under 50, zero
     blows; frozen, a config may only tighten it; a trade either side opens
-    is followed to its end); the
+    is followed to its end); a rulebook edit only tightens it, key by key;
+    the
     archive; every look logged through `prop/looks.js`, tuning windows only,
     held-out judging a separate step that spends the budget, each held-out
     month once, in one ledger whatever the harness home; a kept change

@@ -453,8 +453,14 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     ctx.lookFor = () => ({ purpose: 'judging', candidate: `${loop.loopId}/${proposalId}`, ledger: snapshot() });
     if (!ctx.state.done[`look:${tag}`]) {
       // Each held-out month judges once (section 4), across every loop and change. The month check, the snapshot
-      // and the look are one step under the ledger's lock, so two judgings can't both take a month.
-      S.takeJudgingLook(ctx.paths.ledger, { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' }, { snapshot: before });
+      // and the look are one step under the ledger's lock, so two judgings can't both take a month. "Started" is
+      // saved first: a stop after the look is logged but before it is saved resumes with this loop's own look.
+      const started = ctx.state.done[`judging:${tag}`] === 'started';
+      if (!started) {
+        ctx.state.done[`judging:${tag}`] = 'started';
+        ctx.save();
+      }
+      S.takeJudgingLook(ctx.paths.ledger, { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' }, { snapshot: before, own: { loopId: loop.loopId, proposalId }, resume: started });
       ctx.state.done[`look:${tag}`] = true;
       ctx.save();
     } else if (!fs.existsSync(before)) throw missing();

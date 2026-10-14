@@ -125,14 +125,18 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   const reasons = [];
   const targetSet = new Set(targets || []);
   if (!targetSet.size) throw new Error('judge: a proposal names the failure categories it targets');
-  // The decisions both sides made: the sample the minimums, the effect and the tolerance are counted on. Decisions
-  // only the candidate made (pairUp) still count as broken and for blows, never toward the sample.
-  const n0 = pairs.filter(p => !p.base.implicit).length;
-  // Fixed: a targeted failure the candidate decides right (never one it turns into another failure or unchecked).
+  // A pair either side of which the scorecard couldn't check (`unchecked`) says nothing either way: left out for
+  // both sides alike (counted, never fixed or broken), so neither trading more nor less is favoured by it. Its blows
+  // still count. The decisions both sides made, of what is left, are the sample the minimums, the effect and the
+  // tolerance are counted on; decisions only the candidate made (pairUp) count as broken and for blows, never toward it.
+  const judged = pairs.filter(p => p.base.category !== 'unchecked' && p.cand.category !== 'unchecked');
+  const unchecked = pairs.length - judged.length;
+  const n0 = judged.filter(p => !p.base.implicit).length;
+  // Fixed: a targeted failure the candidate decides right (never one it turns into another failure).
   // Broken: a right decision the candidate decides otherwise.
   let b = 0;
   let c = 0;
-  for (const p of pairs) {
+  for (const p of judged) {
     if (targetSet.has(p.base.category) && p.cand.category === 'right') b += 1;
     else if (p.base.category === 'right' && p.cand.category !== 'right') c += 1;
   }
@@ -141,10 +145,10 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   // The tolerance as stated, never looser: floor(harmTolerance x decisions), so under 50 decisions at 2% no decision
   // of a category may break.
   const tol = Math.floor(rule.harmTolerance * n0);
-  for (const k of [...new Set([...(failures || []), 'unchecked', NO_DECISION])]) harm[k] = tally(pairs, r => r.category === k);
-  harm['any failure'] = tally(pairs, r => r.category !== 'right');
+  for (const k of [...new Set([...(failures || []), NO_DECISION])]) harm[k] = tally(judged, r => r.category === k);
+  harm['any failure'] = tally(judged, r => r.category !== 'right');
   const blows = pairs.filter(p => p.cand.blow === true).length;
-  const tests = { pairs: n0, onlyCandidate: pairs.length - n0, target, harm, harmTolerance: tol, blows, rule };
+  const tests = { pairs: n0, onlyCandidate: judged.length - n0, unchecked, target, harm, harmTolerance: tol, blows, rule };
   if (blows) reasons.push(`${blows} blow(s) on the candidate's side: zero blows, no exception`);
   for (const [k, t] of Object.entries(harm)) {
     if (t.c - t.b > tol) reasons.push(`${k}: ${t.c} decision(s) broken against ${t.b} fixed, worse by more than the tolerance (${tol})`);
@@ -159,7 +163,7 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   } else if (mechanical) {
     return { verdict: 'blocked', reasons: [`a strategy or rulebook change is screened by the evaluator first (R28): ${(evaluator && evaluator.why) || 'none available'}`], tests };
   }
-  if (n0 < rule.minPairs) return { verdict: 'inconclusive', reasons: [`${n0} pairs; at least ${rule.minPairs}`], tests };
+  if (n0 < rule.minPairs) return { verdict: 'inconclusive', reasons: [`insufficient evidence: ${n0} pairs judged; at least ${rule.minPairs}${unchecked ? ` (${unchecked} left out: unchecked on either side)` : ''}`], tests };
   if (target.n < rule.minDiscordant) return { verdict: 'inconclusive', reasons: [`${target.n} discordant pairs on the targeted measure; at least ${rule.minDiscordant}`], tests };
   if (target.effect < rule.minEffect) reasons.push(`effect ${target.effect} is under ${rule.minEffect}`);
   if (target.pBetter > rule.alpha) reasons.push(`no significant gain on the targeted measure (p ${target.pBetter} > ${rule.alpha})`);

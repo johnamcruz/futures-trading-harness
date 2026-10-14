@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const { CATEGORIES } = require('../replay/scorecard');
 const { parseFrontmatter } = require('../frontmatter');
+const { rulebookErrors } = require('./rulebook-guard');
 
 const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'unchecked'));
 const MAX_EDITS = 3;
@@ -140,6 +141,8 @@ function validateProposal(p, { root }) {
   if (changed > MAX_CHANGED) errors.push(`a small diff: ${changed} characters changed, at most ${MAX_CHANGED}`);
   // A strategy's owner-held keys, compared parsed before and after (however the edit is worded).
   for (const [file, after] of texts) {
+    // A rulebook: valid after the edit, and only tightened, key by key (train/rulebook-guard.js).
+    if (kindOf(file) === 'rulebook') { errors.push(...rulebookErrors(file, originals.get(file), after)); continue; }
     if (kindOf(file) !== 'strategy') continue;
     let a;
     let b;

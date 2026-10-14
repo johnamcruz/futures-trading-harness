@@ -43,7 +43,7 @@ test('lock: one loop at a time; a live holder refuses, a dead one\'s lock is tak
   const p2 = S.loopPaths({ FTH_HOME: tmpDir() }, 'l1');
   fs.mkdirSync(p2.training, { recursive: true });
   fs.writeFileSync(p2.lock, '');
-  assert.throws(() => S.acquireLock(p2, { loopId: 'l1' }), /unreadable: another loop may hold it/);
+  assert.throws(() => S.acquireLock(p2, { loopId: 'l1' }), new RegExp(`${p2.lock.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is unreadable, so it is taken as held\\. Remove .* by hand only when no training loop \\(scripts/train-loop\\.js\\) is running`));
   assert.deepStrictEqual(fs.readdirSync(p2.training), ['loop.lock'], 'no temporary file left');
   // A release by a process that no longer holds it leaves the holder's lock alone.
   fs.writeFileSync(p.lock, JSON.stringify({ pid: 1, loopId: 'x' }));
@@ -89,7 +89,7 @@ test('takeJudgingLook: two judgings at once (two harness homes, one ledger) - ex
     });
     const outs = await Promise.all([child(1), child(2)]);
     assert.strictEqual(outs.filter(o => o === 'took').length, 1, outs.join(' | '));
-    assert.ok(outs.some(o => /refused: (held-out months already used for judging: 2023-09|the ledger is locked by another run)/.test(o)), outs.join(' | '));
+    assert.ok(outs.some(o => /refused: (held-out months already used for judging: 2023-09|the look ledger is locked)/.test(o)), outs.join(' | '));
     assert.strictEqual(S.readLedger(ledger).filter(l => l.purpose === 'judging').length, 1);
   }
 });
@@ -106,8 +106,27 @@ test('takeJudgingLook: a used month refused (recorded looks too); the snapshot i
   assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'other/y' }, { snapshot: snap }), /already used for judging: 2023-09/);
   assert.throws(() => S.takeJudgingLook(ledger, { ...look, ranges: [{ from: '2024-04-22', to: '2024-04-27' }] }, { snapshot: snap }), /already used for judging: 2024-04/);
   fs.writeFileSync(`${ledger}.lock`, '');
-  assert.throws(() => S.logLook(ledger, { candidate: 'l/t2', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /ledger is locked by another run/);
+  assert.throws(() => S.logLook(ledger, { candidate: 'l/t2', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /the look ledger is locked: .*looks\.jsonl\.lock exists[^]*Remove .*looks\.jsonl\.lock by hand only when no training loop and no evaluator run is running/);
   assert.deepStrictEqual(S.monthsOf('2023-09-25', '2023-11-02'), ['2023-09', '2023-10', '2023-11']);
+});
+
+test('takeJudgingLook: the look\'s own rules decide too - a reserve month is refused with nothing written', () => {
+  const dir = tmpDir();
+  const ledger = path.join(dir, 'training', 'looks.jsonl');
+  const snap = path.join(dir, 'snap.jsonl');
+  // 2027-H1 is reserve: no month of it was judged, so only the look's own check (prop/looks.js) refuses it.
+  assert.throws(() => S.takeJudgingLook(ledger, { candidate: 'l/x', purpose: 'judging', ranges: [{ from: '2027-02-01', to: '2027-02-06' }] }, { snapshot: snap }), /look refused:[^]*reserved/);
+  assert.ok(!fs.existsSync(snap), 'no snapshot');
+  assert.deepStrictEqual(S.readLedger(ledger), [], 'nothing logged');
+  // The look names its loop and proposal; a resume finds only its own.
+  const look = { candidate: 'l1/p1', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] };
+  S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' } });
+  assert.deepStrictEqual([S.readLedger(ledger)[0].loopId, S.readLedger(ledger)[0].proposalId], ['l1', 'p1']);
+  assert.deepStrictEqual(S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' }, resume: true }), { resumed: true });
+  assert.throws(() => S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' } }), /already used/, 'without the saved "started" state it is not a resume');
+  assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'l1/p2' }, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p2' }, resume: true }), /already used/, 'another proposal never judges the month');
+  assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'l2/p1' }, { snapshot: snap, own: { loopId: 'l2', proposalId: 'p1' }, resume: true }), /already used/, 'another loop never judges the month');
+  assert.strictEqual(S.readLedger(ledger).length, 1);
 });
 
 test('the look ledger: a look is checked before it is logged; a refused one logs nothing; an unreadable ledger allows none', () => {
