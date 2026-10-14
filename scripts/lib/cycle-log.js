@@ -214,7 +214,8 @@ function cycleClock(env, at) {
 
 /**
  * Write the cycle record and its summary line. Returns { file, summary, lookups } (lookups: the cycle's skill_lookup
- * records, read before the run's lookups file is removed, for the report cache: report-cache.js recordReports).
+ * records but the session's own (skill-lookups.js rolesOwn), read before the run's lookups file is removed, for the
+ * report cache: report-cache.js recordReports).
  * Never throws (logging must not stop trading).
  * `at`: when the cycle started on the wall clock (its `at`: the replay store and labels window the gate log, which
  * the wall clock stamps, with it). `env`: the cycle's environment (cycleClock): its own time (`cycleAt`, the replay
@@ -231,7 +232,9 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   const end = at.getTime() + (Number.isFinite(durationMs) ? durationMs : Math.max(0, Date.now() - at.getTime())) + GATE_SLACK_MS;
   const summary = summarize(output, att ? att.skills : [], env ? gateOrders(env, at.getTime(), end) : []);
   let lookups = [];
-  try { if (transcript) lookups = require('./trading/skill-lookups').readLookups(transcript); } catch (_err) { /* none */ }
+  // The roles' own: a lookup the head trader made naming a role (sessionLookups) is never that role's, so it is never
+  // stored with the role's cached report and credited on a later cycle (as the gate leaves it out: lookupRule).
+  try { if (transcript) { const L = require('./trading/skill-lookups'); lookups = L.rolesOwn(L.readLookups(transcript), transcript); } } catch (_err) { /* none */ }
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
   if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at: cycleAt, laneBars });
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded

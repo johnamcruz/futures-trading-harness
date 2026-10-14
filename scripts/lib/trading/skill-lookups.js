@@ -20,7 +20,12 @@
  * (order-gate.js evaluates entries only).
  *
  * What it can't tell: which session called the tool (an MCP server isn't told), so a lookup is attributed
- * by the role it names and the time it was made, inside that role's call.
+ * by the role it names and the time it was made, inside that role's call. The head trader's own calls are in the
+ * transcript and left out (rolesOwn: the gate, and the report cache's records, cycle-log.js). A subagent's are not
+ * (opencode's transcript holds the main session's tool calls only): an analyst that names ANOTHER role while that
+ * role's call runs in parallel is credited to that role. Nothing the harness reads can tell the two apart; the
+ * prompts give each role its own name to pass (opencode.js lookupCall), and a role naming another is a misfollow the
+ * gate can't see.
  *
  *   lookupsFile(transcript)                     the cycle's lookups file
  *   recordLookup(env, { role, skill }, at)            append one (no cycle, or no role: nothing)

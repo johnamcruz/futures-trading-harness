@@ -414,3 +414,26 @@ test('cycleFacts: a lane\'s signal record gives its setups with their recorded t
   // briefingFacts with an unreadable lanes list (config.js null): null.
   assert.strictEqual(L.briefingFacts(tmpDir(), 'MNQ', now, null), null);
 });
+
+test('the cycle log\'s lookups for the report cache leave out the head trader\'s own, made naming a role during that role\'s call: never stored with its report', () => {
+  const { writeCycleLog } = require('../../scripts/lib/cycle-log');
+  const home = tmpDir();
+  const transcript = path.join(home, 'cycle-transcript.jsonl');
+  const role = 'market-structure-analyst';
+  const call = { role, start: T, end: T + 10 };
+  const task = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: 'report', time: { start: T, end: T + 10 } } } });
+  // The head trader's own skill_lookup naming the analyst, inside the analyst's call (the transcript shows it as the
+  // session's); the analyst's own lookup of another skill in the same call.
+  const own = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'harness_skill_lookup', state: { status: 'completed', input: { skill: 'rejection', role }, output: '<skill name="rejection">', time: { start: T + 4, end: T + 6 } } } });
+  fs.writeFileSync(transcript, [task, own].join('\n'));
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'rejection' }, T + 5);
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'breakout' }, T + 7);
+  const { lookups } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
+  assert.deepStrictEqual(lookups, [{ at: T + 7, role, skill: 'breakout' }]);
+  // What the report cache stores with the analyst's report (report-cache.js recordReports): its own lookup only.
+  assert.deepStrictEqual(L.lookupsInCall(lookups, role, call), ['breakout']);
+  // Without the session's call in the transcript, both are the role's (the transcript can't show otherwise).
+  fs.writeFileSync(transcript, task);
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'rejection' }, T + 5);
+  assert.deepStrictEqual(L.lookupsInCall(writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' }).lookups, role, call), ['rejection']);
+});
