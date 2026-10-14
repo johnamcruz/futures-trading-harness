@@ -56,9 +56,14 @@ const count = list => list.reduce((m, u) => m.set(u, (m.get(u) || 0) + 1), new M
 // The skill format's own section headings: every new skill has them (CLAUDE.md, skill format).
 const STRUCTURE = ['When to Use', 'How It Works', 'Examples'];
 
-// Deliberate differences, each with its reason. None today: every unit moved unchanged. An entry is
-// { old, now?, copies?, reason }, as in the broker-mcp split.
-const ALLOWED = [];
+// Deliberate differences, each with its reason. An entry is { old, now?, copies?, reason }, as in the broker-mcp split.
+const ALLOWED = [
+  // A truth fix in moved text (pre-existing): orb's `risk.min_rr` is 2 (strategies/orb/STRATEGY.md), and the scan's
+  // summary prints the stop in points, whole ticks and one contract's dollars (harness-tools/compact.js candidateLine).
+  { old: 'strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5 (a candidate)',
+    now: 'strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2 (a candidate)',
+    reason: 'the example as the scan prints it, with orb\'s own min R:R' },
+];
 
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
 function differences(beforeText, homeTexts) {
@@ -82,10 +87,38 @@ function differences(beforeText, homeTexts) {
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 
+/**
+ * Units out of their old order: in each home, the units that came from the old skill (a changed one standing in for
+ * its old text) keep their old relative order, numbered steps included. [] when every home keeps it.
+ */
+function orderErrors(beforeText, homeTexts) {
+  const old = units(beforeText);
+  const nowToOld = new Map(ALLOWED.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
+  const bad = [];
+  homeTexts.forEach((text, h) => {
+    const used = new Map();
+    let last = -1;
+    let lastUnit = '';
+    for (const u0 of units(text)) {
+      const u = nowToOld.get(u0) || u0;
+      if (STRUCTURE.includes(u)) continue;
+      const from = used.has(u) ? used.get(u) + 1 : 0;
+      const at = old.indexOf(u, from);
+      if (at < 0) continue; // new text, not from the old skill
+      used.set(u, at);
+      if (at < last) bad.push(`${HOMES[h]}: ${JSON.stringify(u)} now comes after ${JSON.stringify(lastUnit)}; it came before it`);
+      last = at;
+      lastUnit = u;
+    }
+  });
+  return bad;
+}
+
 test('strategy-library split: every unit of the old skill is in exactly one new home, byte-for-byte (whitespace normalised)', () => {
   const sha = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(ROOT, BEFORE))).digest('hex');
   assert.strictEqual(sha, BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.deepStrictEqual(differences(read(BEFORE), homeTexts()), []);
+  assert.deepStrictEqual(orderErrors(read(BEFORE), homeTexts()), [], 'moved text keeps its old order in each home');
   for (const a of ALLOWED) assert.ok(a.reason, a.old);
 });
 
@@ -107,6 +140,21 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   assert.notDeepStrictEqual(differences(old, swap('harness-root', `${homes[at('harness-root')]}\n${LEG}\n`)), []);
   // Edited: one word changed.
   assert.notDeepStrictEqual(differences(old, swap('strategy-gate-checks', gate.replace('never more than 45 minutes ago', 'never more than 50 minutes ago'))), []);
+  // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
+  const lib = homes[at('strategy-library')];
+  const ROOM = /3\. \*\*Room\*\*[^]*?\(`needR`\) → no trade\.\n/.exec(lib)[0];
+  const TREND = /2\. \*\*The trend rule\*\*[^]*?nearest\n {3}target\.\n/.exec(lib)[0];
+  const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
+  assert.notStrictEqual(swapped, lib);
+  assert.deepStrictEqual(differences(old, swap('strategy-library', swapped)), [], 'a swap loses nothing');
+  assert.notDeepStrictEqual(orderErrors(old, swap('strategy-library', swapped)), [], 'but changes the order');
+  // Two sentences of one paragraph swapped, in another home.
+  const A1 = 'Exits and protective stops on either leg always go.';
+  const A2 = '`paper` strategies can only be paper-traded.';
+  assert.notDeepStrictEqual(orderErrors(old, swap('strategy-gate-checks', gate.replace(`${A1} ${A2}`, `${A2} ${A1}`))), []);
+  // A changed line reverted to its old text (the exception no longer needed) also fails: the list only shrinks.
+  const scan = homes[at('strategy-scan')];
+  assert.notDeepStrictEqual(differences(old, swap('strategy-scan', scan.replace(ALLOWED[0].now, ALLOWED[0].old))), []);
   // A section heading dropped: each new skill keeps the format's three sections.
   assert.notDeepStrictEqual(differences(old, swap('harness-root', homes[at('harness-root')].replace('## Examples', '## Example'))), []);
 });
@@ -126,4 +174,23 @@ test('strategy-library split: each skill answers one question in a short index l
   for (const s of HOMES.slice(1)) assert.doesNotMatch(read(`skills/${s}/SKILL.md`), /\*\*Hard stops → no trade\*\*|floor\(size \/ 2\)/, s);
   // The place the strategies_* tool rows land (the harness-tools split): strategy-scan's own section.
   assert.match(read('skills/strategy-scan/SKILL.md'), /### The strategy tools/);
+});
+
+test('strategy-library split: the head trader still loads all of the old skill (the gate requires the pieces; the prompt and trade-session name them)', () => {
+  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  // Every unit of the old skill is in a skill the main session must load before an entry, except harness-root's:
+  // finding <root> is interactive use, and the autonomous prompt states the root itself ("Harness root (FTH_ROOT)").
+  const asOld = new Map(ALLOWED.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
+  const loaded = new Set(REQUIRED_FOR_ENTRY.filter(s => HOMES.includes(s)).flatMap(s => units(read(`skills/${s}/SKILL.md`))).map(u => asOld.get(u) || u));
+  const rootOnly = new Set(units(read('skills/harness-root/SKILL.md')));
+  const lost = units(read(BEFORE)).filter(u => !STRUCTURE.includes(u) && !loaded.has(u) && !rootOnly.has(u));
+  assert.deepStrictEqual(lost, [], 'the main session loads every section of the old strategy-library');
+  assert.deepStrictEqual(HOMES.filter(s => !REQUIRED_FOR_ENTRY.includes(s)), ['harness-root']);
+  // trade-session's step 0 names each required skill; the autonomous prompt does too.
+  const step0 = /### 0\. Load the skills([^]*?)###/.exec(read('skills/trade-session/SKILL.md'))[1];
+  for (const s of REQUIRED_FOR_ENTRY) assert.match(step0, new RegExp(`\`${s}\``), `trade-session step 0 names ${s}`);
+  const A = require('../../scripts/lib/autotrader');
+  const prompt = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
+  const sentence = /load ([^.]*) before deciding/.exec(prompt)[1];
+  for (const s of REQUIRED_FOR_ENTRY) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
 });

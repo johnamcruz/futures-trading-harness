@@ -318,7 +318,25 @@ test('order gate: with a Claude transcript, an entry needs the trading skills lo
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
-  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill).join('\n'));
+  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill).join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
+test('order gate (hook): strategy-library was split; an entry without any one of its pieces is refused, an exit never is', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
+  const transcript = path.join(dir, 'session.jsonl');
+  const ALL = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  for (const missing of ['strategy-library', 'strategy-scan', 'strategy-gate-checks']) {
+    fs.writeFileSync(transcript, ALL.filter(s => s !== missing).map(skill).join('\n'));
+    const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+    assert.strictEqual(r.code, 2, missing);
+    assert.match(r.stderr, new RegExp(`\\[skills-loaded\\] .*not loaded in this session: ${missing}\\.`), missing);
+    const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+    assert.strictEqual(exit.code, 0, `${missing}: an exit is never held back by it: ${exit.stderr}`);
+  }
+  fs.writeFileSync(transcript, ALL.map(skill).join('\n'));
   const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
@@ -335,11 +353,11 @@ test('order gate: with a Qwen Code chat transcript (parts format), the skills lo
   assert.strictEqual(none.code, 2);
   assert.match(none.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
   const failedLoad = [call('c', 'strategy-library'), answer('c', { error: 'Skill "strategy-library" not found.' }, 'error')];
-  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...failedLoad].join('\n'));
+  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...load('e', 'strategy-scan'), ...load('f', 'strategy-gate-checks'), ...failedLoad].join('\n'));
   const failed = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(failed.code, 2);
   assert.match(failed.stderr, /\[skills-loaded\] .*not loaded in this session: strategy-library\./);
-  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...failedLoad, ...load('d', 'strategy-library')].join('\n'));
+  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...load('e', 'strategy-scan'), ...load('f', 'strategy-gate-checks'), ...failedLoad, ...load('d', 'strategy-library')].join('\n'));
   const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(ok.code, 0, ok.stderr);
   assert.doesNotMatch(ok.stderr, /skills-loaded/);
@@ -1900,7 +1918,7 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'VERDICT: APPROVE - size 1' }] } })];
   const transcript = path.join(dir, 'session.jsonl');
@@ -1950,7 +1968,7 @@ test('order gate hook: a room fact is about the order\'s own setup tag (phase2-f
     ] } },
   } });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })];
   const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
@@ -1974,7 +1992,7 @@ test('order gate: in an autonomous cycle, an entry approved on a fact the bar br
     m15: { version: 'b', validUntil: '2026-10-07T14:30:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
   } });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
   const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
@@ -2202,7 +2220,7 @@ test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report co
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
-  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(name => ev('skill', { name })),
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ev('skill', { name })),
     ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
       .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
   const index = { ...env, FTH_ROLE_SKILLS: 'index' };

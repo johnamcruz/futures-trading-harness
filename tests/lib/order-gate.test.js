@@ -1186,16 +1186,39 @@ test('skills-loaded: a parts-format (Qwen Code chat) transcript with the skills 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const call = (id, skill) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'skill', args: { skill: `futures-trading-harness:${skill}` } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'skill', response } }] } });
-  const lines = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, { output: `# ${s}` })]);
+  const lines = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, { output: `# ${s}` })]);
   const run = input => evaluateOrder({ input, entries: [plan()], now: NOW, config, transcriptPath: file });
   fs.writeFileSync(file, lines.join('\n'));
   assert.deepStrictEqual(run(entryOrder()).violations, []);
-  fs.writeFileSync(file, [...lines.slice(0, 4), call('c2', 'strategy-library'), answer('c2', { error: 'Skill "strategy-library" not found.' })].join('\n'));
+  fs.writeFileSync(file, [...lines.slice(0, 4), ...lines.slice(6), call('c2', 'strategy-library'), answer('c2', { error: 'Skill "strategy-library" not found.' })].join('\n'));
   const r = run(entryOrder());
   assert.deepStrictEqual(checks(r), ['skills-loaded']);
   assert.match(r.violations[0].message, /not loaded in this session: strategy-library\./);
   // A risk-reducing order is never held back by it.
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
+});
+
+test('skills-loaded: strategy-library was split; an entry needs each piece (strategy-library, strategy-scan, strategy-gate-checks) as it needed the one skill', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(REQUIRED_FOR_ENTRY, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
+  const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
+  const load = s => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: s } }] } });
+  const run = input => evaluateOrder({ input, entries: [plan()], now: NOW, config, transcriptPath: file });
+  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(load).join('\n'));
+  assert.deepStrictEqual(run(entryOrder()).violations, [], 'the full set passes');
+  for (const missing of REQUIRED_FOR_ENTRY) {
+    fs.writeFileSync(file, REQUIRED_FOR_ENTRY.filter(s => s !== missing).map(load).join('\n'));
+    const r = run(entryOrder());
+    assert.deepStrictEqual(checks(r), ['skills-loaded'], missing);
+    assert.match(r.violations[0].message, new RegExp(`not loaded in this session: ${missing}\\.`), missing);
+    // Exits and protective orders are never held back by it.
+    assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, [], `${missing}: exit`);
+  }
+  // The set before the split (strategy-library alone) no longer passes: the scan and gate-check text left it.
+  fs.writeFileSync(file, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(load).join('\n'));
+  assert.match(run(entryOrder()).violations[0].message, /not loaded in this session: strategy-scan, strategy-gate-checks\./);
 });
 
 // --- Tick specs: the broker's, as the translator recorded them (broker-specs.js). ---
@@ -1411,7 +1434,7 @@ test('max-risk: a policy strategy\'s entry is checked against its own cap, not i
 const fs = require('fs');
 const path = require('path');
 const ocEvent = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1' } } });
-const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(name => ocEvent('skill', { name }));
+const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ocEvent('skill', { name }));
 const ocRoles = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].map(subagent_type => ocEvent('task', { subagent_type }));
 
 test('roles-ran: an autonomous full cycle enters only after the analysts and both risk-manager phases returned; exits are never held', () => {

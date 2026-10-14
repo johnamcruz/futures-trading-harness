@@ -121,7 +121,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   for (const c of cycles) {
     assert.match(c.prompt, /MNQ last 10 closed 3m bars \(ET open time, oldest first\)/);
     assert.match(c.prompt, /MNQ Trend rule: prevailing trend/);
-    assert.match(c.prompt, /With your skill tool, load trade-session, multi-timeframe-analysis, and strategy-library/);
+    assert.match(c.prompt, /With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks/);
   }
   assert.ok(cycles.some(c => /Your last \d cycle\(s\)/.test(c.prompt)), 'later cycles see the earlier results');
   // The 04:09 bar fired fx_break and fx_cross long (with each other): the trade, and the refusals.

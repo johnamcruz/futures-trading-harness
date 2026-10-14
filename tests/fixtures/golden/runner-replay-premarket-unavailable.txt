@@ -15,7 +15,7 @@ Autonomous cycle at 2026-04-27 10:36:01 ET (2026-04-27T14:36:01.000Z).
   Account 7 at 10:36 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Context unavailable this cycle (not "none"): premarket plan unavailable (today's premarket run failed 2 time(s); there is no plan for today: trade from the bars and your skills).
-  With your skill tool, load trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding (the order gate refuses an entry without them), then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
