@@ -202,7 +202,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `session-timing` (skills/session-timing/SKILL.md): Use when timing an entry - the trading day, its sessions, and the windows that allow entries.
 - `setup-expectancy` (skills/setup-expectancy/SKILL.md): Measure whether each futures setup has an edge - win rate, average win/loss in R, expectancy, profit factor, sample size, and confidence - from get_performance and journal reviews, then promote, restrict, or cut setups. Use weekly, before raising size, or when a setup feels off.
 - `strategy-authoring` (skills/strategy-authoring/SKILL.md): Use when writing, porting or changing a STRATEGY.md.
-- `strategy-backtest` (skills/strategy-backtest/SKILL.md): Use when backtesting a strategy or comparing bar sources.
+- `strategy-backtest` (skills/strategy-backtest/SKILL.md): Use when backtesting a strategy, studying a broker field, or comparing two bar sources.
 - `strategy-gate-checks` (skills/strategy-gate-checks/SKILL.md): What the order gate checks of a strategy entry.
 - `strategy-library` (skills/strategy-library/SKILL.md): Apply a strategy, and the priority order that sizes or skips a setup.
 - `strategy-rules` (skills/strategy-rules/SKILL.md): Use when writing a strategy's `rules` and the series they read.

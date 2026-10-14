@@ -1,6 +1,6 @@
 ---
 name: strategy-backtest
-description: Use when backtesting a strategy or comparing bar sources.
+description: Use when backtesting a strategy, studying a broker field, or comparing two bar sources.
 ---
 
 # Strategy Backtest

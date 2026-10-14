@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { units, differences, STRUCTURE } = require('./skill-split');
 const { orderErrors } = require('./skill-split-order');
+const { homeErrors } = require('./skill-split-homes');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -33,11 +34,23 @@ const ALLOWED = [
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 
+// Each home's old units (inclusive indexes into units() of the fixture): news-blackouts the When to Use's blackout
+// line, the three news rows and the blackouts file with its example; exchange-holidays the holidays paragraph;
+// contract-roll the roll paragraph; session-timing the rest (the clock, the windows, the table's other rows and its
+// header, the metals and crude sentence).
+const RANGES = {
+  'session-timing': [[0, 2], [4, 25], [29, 34], [38, 46], [50, 62], [76, 76], [80, 80]],
+  'news-blackouts': [[3, 3], [26, 28], [35, 37], [47, 49], [77, 79], [81, 84]],
+  'exchange-holidays': [[63, 71]],
+  'contract-roll': [[72, 75]],
+};
+
 test('session-timing split: every unit of the old skill is in exactly one new home, in its old order', () => {
   const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, BEFORE))).digest('hex');
   assert.strictEqual(sha, BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.deepStrictEqual(differences(read(BEFORE), homeTexts(), ALLOWED), []);
   assert.deepStrictEqual(orderErrors(read(BEFORE), homeTexts(), HOMES, ALLOWED), [], 'moved text keeps its old order in each home');
+  assert.deepStrictEqual(homeErrors(read(BEFORE), homeTexts(), HOMES, RANGES, ALLOWED), [], 'each unit is in the home its old section maps to');
   for (const a of ALLOWED) assert.ok(a.reason, a.old);
 });
 
@@ -67,6 +80,14 @@ test('session-timing split: the comparison catches a lost, a doubled, an edited 
   // A table header in a third home, or a section heading dropped.
   assert.notDeepStrictEqual(differences(old, swap('contract-roll', `${homes[at('contract-roll')]}\n| Window (ET) | x |\n`), ALLOWED), []);
   assert.notDeepStrictEqual(differences(old, swap('contract-roll', homes[at('contract-roll')].replace('## Examples', '## Example')), ALLOWED), []);
+  // Misplaced: the roll-exit sentence moved from contract-roll back to session-timing loses and doubles nothing, but
+  // it is out of its home.
+  const EXIT = /Exit a position by the name\s+`list_open_positions` shows for it: the gate matches the exact month, so an\s+exit by another month \(or by the root, for an old-month position\) is refused,\s+since it would open a new position\. /;
+  const cr = homes[at('contract-roll')];
+  const exit = EXIT.exec(cr)[0];
+  const moved = swap('contract-roll', cr.replace(exit, '')).map((h, i) => (i === at('session-timing') ? `${h}\n${exit.trim()}\n` : h));
+  assert.deepStrictEqual(differences(old, moved, ALLOWED), [], 'a move loses nothing');
+  assert.notDeepStrictEqual(homeErrors(old, moved, HOMES, RANGES, ALLOWED), [], 'but it leaves its home');
 });
 
 test('session-timing split: each skill has a short "Use when" index line, and session-timing points to the rest', () => {
