@@ -198,12 +198,12 @@ S's prop simulation (the same set-up as N1's): 106 attempts, 14.2% pass
 (15), 0% blow, 85.8% timeout, median 14 sessions to pass, average profit
 $142, 48.1 trades an attempt, expectancy -0.023R.
 
-4. **A trend strategy.** The owner's intent: a CISD with the trend on a
-   pullback, or at a range extreme. `cisd_ote` became `mtf: trend` (it was
-   `mtf: reversal`): the trend rule now drops a CISD against the prevailing
-   higher-timeframe trend, and passes both directions when no timeframe has
-   one. That changes which setups trade, so S was run again as a labelled
-   follow-up, ST (S as a trend strategy, the shipped definition now):
+**(4) A trend strategy.** The owner's intent: a CISD with the trend on a
+pullback, or at a range extreme. `cisd_ote` became `mtf: trend` (it was
+`mtf: reversal`): the trend rule now drops a CISD against the prevailing
+higher-timeframe trend, and passes both directions when no timeframe has
+one. That changes which setups trade, so S was run again as a labelled
+follow-up, ST (S as a trend strategy, the shipped definition now):
 
 | Variant (follow-up) | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | one-sided p |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -214,30 +214,31 @@ its trades came from a 60m CISD. Its prop simulation (as before): 106
 attempts, 10.4% pass (11), 0% blow, 89.6% timeout, median 10 sessions to
 pass, average profit $187, 32.3 trades an attempt, expectancy -0.007R.
 
-5. **Not in chop: a measured variant, not shipped.** The owner: a CISD
-   works in a trend or a range, not in chop. The `cisd` skill names chop
-   from briefing fields. The rules can express part of it cheaply: the
-   computed regime (regime.js, the last 500 3m bars), as `regimes`. Written
-   here before it ran: **SC** = ST with `regimes: [trend, range]` (no entry
-   in a `transition` regime), on the same Train file, with the prop
-   simulation. Reported beside ST; shipped only if the owner says so.
-   Result:
+**(5) Not in chop: a measured variant, not shipped.** The owner: a CISD
+works in a trend or a range, not in chop. The `cisd` skill names chop
+from briefing fields. The rules can express part of it cheaply: the
+computed regime (regime.js, the last 500 3m bars), as `regimes`. Written
+here before it ran: **SC** = ST with `regimes: [trend, range]` (no entry
+in a `transition` regime), on the same Train file, with the prop
+simulation. Reported beside ST; shipped only if the owner says so.
+Result:
 
 | Variant (post-registration) | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | one-sided p |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SC (ST, not in a `transition` regime) | 479 | 0.044 [-0.072, 0.166] | 1.05 | 39% | 18.4 | 175 / 0.074 | 304 / 0.027 | 246 / 0.003 | 233 / 0.087 | 0.01 / 0.11 / -0.02 | 0.25 |
 
-   SC's prop simulation: 106 attempts, 14.2% pass (15), 0% blow, 85.8%
-   timeout, median 15 sessions to pass, average profit $1,167, 21.6 trades
-   an attempt, expectancy 0.096R. The first mean above zero here, on fewer
-   trades, its interval straddling zero (p 0.25), and 2023 below zero:
-   not a finding, and chosen after the results above. A candidate to
-   pre-register for Select if the owner wants it; not shipped.
-6. **Absorption at the OTE: a follow-up, not measured.** Absorption during
-   the retracement into the zone confirms the pullback (the
-   `fib-retracement` and `cisd` skills). Order-flow fields are not on the
-   Train file, so a flow-confirmed variant waits for recorded flow data
-   (replay or live NQ). No volume-only proxy was run.
+SC's prop simulation: 106 attempts, 14.2% pass (15), 0% blow, 85.8%
+timeout, median 15 sessions to pass, average profit $1,167, 21.6 trades
+an attempt, expectancy 0.096R. The first mean above zero here, on fewer
+trades, its interval straddling zero (p 0.25), and 2023 below zero: not a
+finding, and chosen after the results above. A candidate to pre-register
+for Select if the owner wants it; not shipped.
+
+**(6) Absorption at the OTE: a follow-up, not measured.** Absorption during
+the retracement into the zone confirms the pullback (the
+`fib-retracement` and `cisd` skills). Order-flow fields are not on the
+Train file, so a flow-confirmed variant waits for recorded flow data
+(replay or live NQ). No volume-only proxy was run.
 
 **Read plainly:** the shipped definition (S, and ST as shipped) has no edge on Train either:
 its mean is below zero with an interval straddling it, as the old port's
