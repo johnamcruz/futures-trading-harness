@@ -79,6 +79,7 @@ test('takeJudgingLook: two judgings at once (two harness homes, one ledger) - ex
   for (let trial = 0; trial < 5; trial += 1) {
     const dir = tmpDir();
     const ledger = path.join(dir, 'training', 'looks.jsonl');
+    S.logLook(ledger, { candidate: 'l/t', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] });
     const startAt = Date.now() + 400;
     const child = k => new Promise(resolve => {
       const code = `const S = require(${JSON.stringify(STATE)}); while (Date.now() < ${startAt}); try { S.takeJudgingLook(${JSON.stringify(ledger)}, { candidate: 'loop${k}/x', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] }, { snapshot: ${JSON.stringify(path.join(dir, `snap${k}.jsonl`))} }); process.stdout.write('took'); } catch (e) { process.stdout.write('refused: ' + e.message); }`;
@@ -114,19 +115,52 @@ test('takeJudgingLook: the look\'s own rules decide too - a reserve month is ref
   const dir = tmpDir();
   const ledger = path.join(dir, 'training', 'looks.jsonl');
   const snap = path.join(dir, 'snap.jsonl');
+  // A judging needs the ledger the tuning looks started: missing, it is refused (never a fresh budget).
+  assert.throws(() => S.takeJudgingLook(ledger, { candidate: 'l/x', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] }, { snapshot: snap }), /no ledger at .*looks\.jsonl/);
+  S.logLook(ledger, { candidate: 'l/t', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] });
+  const lines = fs.readFileSync(ledger, 'utf8');
   // 2027-H1 is reserve: no month of it was judged, so only the look's own check (prop/looks.js) refuses it.
   assert.throws(() => S.takeJudgingLook(ledger, { candidate: 'l/x', purpose: 'judging', ranges: [{ from: '2027-02-01', to: '2027-02-06' }] }, { snapshot: snap }), /look refused:[^]*reserved/);
   assert.ok(!fs.existsSync(snap), 'no snapshot');
-  assert.deepStrictEqual(S.readLedger(ledger), [], 'nothing logged');
+  assert.strictEqual(fs.readFileSync(ledger, 'utf8'), lines, 'nothing logged');
   // The look names its loop and proposal; a resume finds only its own.
   const look = { candidate: 'l1/p1', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] };
   S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' } });
-  assert.deepStrictEqual([S.readLedger(ledger)[0].loopId, S.readLedger(ledger)[0].proposalId], ['l1', 'p1']);
+  assert.deepStrictEqual([S.readLedger(ledger).find(l => l.purpose === 'judging').loopId, S.readLedger(ledger).find(l => l.purpose === 'judging').proposalId], ['l1', 'p1']);
   assert.deepStrictEqual(S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' }, resume: true }), { resumed: true });
   assert.throws(() => S.takeJudgingLook(ledger, look, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p1' } }), /already used/, 'without the saved "started" state it is not a resume');
   assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'l1/p2' }, { snapshot: snap, own: { loopId: 'l1', proposalId: 'p2' }, resume: true }), /already used/, 'another proposal never judges the month');
   assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'l2/p1' }, { snapshot: snap, own: { loopId: 'l2', proposalId: 'p1' }, resume: true }), /already used/, 'another loop never judges the month');
-  assert.strictEqual(S.readLedger(ledger).length, 1);
+  assert.strictEqual(S.readLedger(ledger).filter(l => l.purpose === 'judging').length, 1);
+});
+
+test('the one ledger reader and writer (prop/ledger-file.js): a list-format file, a missing file, an empty file, a torn line', () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'training', 'looks.jsonl');
+  const old = { candidate: 'old', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }], at: '2026-10-01T00:00:00.000Z' };
+  // A file in the earlier JSON-list format reads as its looks (never as one array "look") ...
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify([old]));
+  assert.deepStrictEqual(S.readLedger(file), [old]);
+  // ... counts against the budget, and the next look rewrites it as lines with every look kept.
+  S.logLook(file, { candidate: 'new', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] });
+  assert.deepStrictEqual(S.readLedger(file).map(l => l.candidate), ['old', 'new']);
+  assert.ok(!fs.readFileSync(file, 'utf8').startsWith('['), 'JSON lines now');
+  // A missing file: no looks where the loop starts its ledger; refused where it must exist.
+  const missing = path.join(dir, 'none', 'looks.jsonl');
+  assert.deepStrictEqual(S.readLedger(missing), []);
+  assert.throws(() => S.readLedger(missing, { create: false }), /no ledger at/);
+  // An existing empty file may be truncated: refused, and no look is logged against it.
+  fs.writeFileSync(file, '');
+  assert.throws(() => S.readLedger(file), /is empty/);
+  assert.throws(() => S.logLook(file, { candidate: 'x', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /is empty/);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '');
+  // A torn line refuses the ledger.
+  fs.writeFileSync(file, `${JSON.stringify(old)}\n{"candidate":"to`);
+  assert.throws(() => S.readLedger(file), /looks\.jsonl:2: not a JSON look/);
+  // A list whose entry isn't a look is refused too.
+  fs.writeFileSync(file, '[[1,2]]');
+  assert.throws(() => S.readLedger(file), /entry 1 is not a look/);
 });
 
 test('the look ledger: a look is checked before it is logged; a refused one logs nothing; an unreadable ledger allows none', () => {
@@ -144,6 +178,6 @@ test('the look ledger: a look is checked before it is logged; a refused one logs
   assert.throws(() => S.logLook(file, oos), /retired/);
   assert.strictEqual(S.readLedger(file).length, 3);
   fs.appendFileSync(file, 'torn\n');
-  assert.throws(() => S.readLedger(file), /line 4 is not a look/);
-  assert.throws(() => S.logLook(file, { candidate: 'l1/iter-2', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /not a look/);
+  assert.throws(() => S.readLedger(file), /looks\.jsonl:4: not a JSON look/);
+  assert.throws(() => S.logLook(file, { candidate: 'l1/iter-2', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /not a JSON look/);
 });

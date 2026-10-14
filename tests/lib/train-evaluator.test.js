@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 
 // A result as scoreStream shapes it (the parts the loop reads).
 const result = ({ attempts = 30, passed = 15, blown = 0, lb = 0.35, months = { '2022-03': { blown: 0 }, '2022-04': { blown: 0 } }, seed = 7 } = {}) => ({
-  attempts, passed, blown, passRate: passed / attempts, months, objective: { lowerBound: lb }, medianDaysToPass: 12, inputs: { seed }, look: null,
+  attempts, passed, blown, ess: Math.min(attempts, 25), passRate: passed / attempts, months, objective: { lowerBound: lb }, medianDaysToPass: 12, inputs: { seed }, look: null,
 });
 
 test('resolveEvaluator: none is null; prop and data required; the loop owns the window and the ledger; files resolved', () => {
@@ -26,15 +26,27 @@ test('resolveEvaluator: none is null; prop and data required; the loop owns the 
   assert.deepStrictEqual(E.resolveEvaluator({ prop: 'p', data: { MNQ: 'bars/a.csv' }, paths: 300 }, '/x').data, { MNQ: path.resolve('/x', 'bars/a.csv') });
 });
 
-test('compare: a blow, a new gate failure or a lower pass-rate bound fails the candidate; the champion\'s own failures don\'t', () => {
+test('compare: a candidate must show itself better - a blow, a new gate failure, a lower OR TIED bound fails it', () => {
   const s = r => E.summarize(r);
-  assert.deepStrictEqual(E.compare(s(result()), s(result())), []);
-  assert.match(E.compare(s(result()), s(result({ blown: 1 }))).join(), /1 blow\(s\)/);
-  assert.match(E.compare(s(result()), s(result({ passed: 6 }))).join(), /a gate failure the champion doesn't have: pass rate 0\.2/);
+  assert.match(E.compare(s(result()), s(result({ blown: 1, lb: 0.4 }))).join(), /1 blow\(s\)/);
+  assert.match(E.compare(s(result()), s(result({ passed: 6, lb: 0.4 }))).join(), /a gate failure the champion doesn't have: pass rate 0\.2/);
   assert.match(E.compare(s(result()), s(result({ lb: 0.3 }))).join(), /lower bound fell from 0\.35 to 0\.3/);
-  // Both under the pass-rate floor (a tuning window need not pass the gate): not new; a better bound is fine.
+  // A tie counts against the candidate, at any bound, the degenerate 0 of a short window included.
+  assert.match(E.compare(s(result()), s(result())).join(), /lower bound ties the champion's \(0\.35\): a tie counts against the candidate/);
+  assert.match(E.compare(s(result({ passed: 3, lb: 0 })), s(result({ passed: 5, lb: 0 }))).join(), /ties the champion's \(0\)/, 'a better pass rate on a short window shows nothing');
+  // Shown better: passes, even both under the gate's floor on a tuning window (the champion's own failures aren't new).
   assert.deepStrictEqual(E.compare(s(result({ passed: 3, lb: 0.05 })), s(result({ passed: 5, lb: 0.1 }))), []);
   assert.deepStrictEqual(s(result()).gate, []);
+});
+
+test('compare: no bound on either side shows nothing better; the exemption is only identical results of a change the evaluator does not read', () => {
+  const s = r => E.summarize(r);
+  const nob = o => ({ ...result(o), objective: { lowerBound: null } });
+  assert.match(E.compare(s(nob()), s(nob())).join(), /no pass-rate bound to compare \(champion null, candidate null\): nothing shows the candidate better/);
+  assert.match(E.compare(s(result()), s(nob())).join(), /no pass-rate bound to compare \(champion 0\.35, candidate null\)/);
+  assert.deepStrictEqual(E.compare(s(result()), s(result()), { exempt: true }), [], 'identical, nothing read changed');
+  assert.match(E.compare(s(result()), s(result({ passed: 16 })), { exempt: true }).join(), /ties the champion's/, 'not identical: no exemption');
+  assert.match(E.compare(s(result()), s(result({ blown: 1 })), { exempt: true }).join(), /1 blow/, 'a blow is never exempt');
 });
 
 test('evaluate: both trees on every window with one seed; held-out scores the candidate alone with the look; unavailable without a config', async () => {
@@ -72,15 +84,6 @@ test('evaluate: both trees on every window with one seed; held-out scores the ca
   assert.strictEqual(h.windows[0].champion, null);
 });
 
-test('compare: with no two bounds, the passes over the attempts and the attempts scored decide', () => {
-  const s = r => E.summarize(r);
-  const nob = o => ({ ...result(o), objective: { lowerBound: null } });
-  assert.match(E.compare(s(nob({ passed: 10 })), s(nob({ passed: 4 }))).join(), /the pass rate fell from 0\.3333 to 0\.1333/);
-  assert.match(E.compare(s(nob({ attempts: 30 })), s(nob({ attempts: 0, passed: 0 }))).join(), /the attempts scored changed \(30 to 0\)/);
-  assert.match(E.compare(s(result()), s(nob())).join(), /no pass-rate bound to compare \(champion 0\.35, candidate null\)/);
-  assert.deepStrictEqual(E.compare(s(nob()), s(nob())), []);
-});
-
 test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree and seed give the same scores', async () => {
   const home = tmpDir();
   const SHIFT = 260 * 7 * 86400000;
@@ -103,7 +106,10 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   const to = new Date(Date.parse(`${sessions[sessions.length - 1]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const cfg = E.resolveEvaluator({ prop: 'eval_fixture', data: { MNQ: data }, paths: 100, reps: 100 });
-  const v = await E.evaluate({ cfg, windows: [{ from: sessions[0], to }], champion: ROOT, candidate: ROOT, seed: 3, env });
+  const windows = [{ from: sessions[0], to }];
+  // A skill-only change (nothing the evaluator reads): identical results, exempt from showing itself better.
+  const skill = { edits: [{ file: 'skills/session-timing/SKILL.md' }] };
+  const v = await E.evaluate({ cfg, windows, champion: ROOT, candidate: ROOT, seed: 3, env, proposal: skill });
   assert.strictEqual(v.available, true);
   const [w] = v.windows;
   assert.deepStrictEqual(w.candidate, w.champion, 'the same tree, bars and seed: the same scores');
@@ -112,4 +118,7 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   assert.ok(v.covers.includes('strategies/orb/STRATEGY.md') && !v.covers.some(f => f.includes('eval_fixture')), v.covers.join());
   assert.ok(w.candidate.attempts > 0);
   assert.deepStrictEqual(v.failures.filter(f => !/blow/.test(f)), [], 'no failure the champion lacks');
+  // A change to a strategy the streams read: the same scores are a tie, and a tie counts against it.
+  const screened = await E.evaluate({ cfg, windows, champion: ROOT, candidate: ROOT, seed: 3, env, proposal: { edits: [{ file: 'strategies/orb/STRATEGY.md' }] } });
+  assert.match(screened.failures.join(), /ties the champion's|no pass-rate bound to compare/);
 });

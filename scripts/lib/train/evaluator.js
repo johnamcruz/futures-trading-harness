@@ -9,7 +9,8 @@
  * result).
  *
  * On the tuning windows (paired): the candidate fails on any blow (R8: a single blow rejects), on a gate
- * failure the champion doesn't have, or on a lower pass-rate bound than the champion's (R8's objective). On
+ * failure the champion doesn't have, or on a pass-rate lower bound no higher than the champion's (R8's objective; a tie,
+ * the degenerate 0 of a short window included, shows nothing). On
  * held-out windows (`judge --held-out-look`): only the candidate is scored, as a judging look the evaluator
  * logs to the ledger before it reads a bar, and every gate failure counts (the promotion gate, absolute).
  *
@@ -58,20 +59,23 @@ function summarize(r) {
   };
 }
 
-function compare(champion, candidate) {
+/**
+ * A candidate's failures against the champion on one window. A screened change must SHOW itself better: a pass-rate
+ * lower bound that only ties the champion's (equal, including the degenerate 0 of a short window), that is missing
+ * on either side, or that falls, fails it; so do a blow and a gate failure the champion lacks. `exempt`: the change
+ * touches nothing the evaluator scores and both results are identical (a skill-only change: the paired test judges it).
+ */
+function compare(champion, candidate, { exempt = false } = {}) {
   const out = [];
   if (candidate.blown > 0) out.push(`${candidate.blown} blow(s) over the attempts scored (R8: a single blow rejects)`);
+  if (exempt && JSON.stringify(champion) === JSON.stringify(candidate)) return out;
   const had = new Set(champion.gate.map(kind));
   for (const f of candidate.gate) if (!had.has(kind(f)) && kind(f) !== 'blows') out.push(`a gate failure the champion doesn't have: ${f}`);
   if (champion.lowerBound !== null && candidate.lowerBound !== null) {
     if (candidate.lowerBound < champion.lowerBound) out.push(`the pass-rate lower bound fell from ${champion.lowerBound} to ${candidate.lowerBound}`);
-  } else if (champion.lowerBound !== null || candidate.lowerBound !== null) {
-    out.push(`no pass-rate bound to compare (champion ${champion.lowerBound}, candidate ${candidate.lowerBound})`);
+    else if (candidate.lowerBound === champion.lowerBound) out.push(`the pass-rate lower bound ties the champion's (${candidate.lowerBound}): a tie counts against the candidate, it shows nothing better`);
   } else {
-    // Neither has a bound: the passes over the attempts, and a change in what was scored, decide.
-    const r = x => (x.attempts ? Math.round((x.passed / x.attempts) * 10000) / 10000 : null);
-    if (champion.attempts !== candidate.attempts) out.push(`the attempts scored changed (${champion.attempts} to ${candidate.attempts}) where no pass-rate bound compares them`);
-    else if (r(candidate) !== null && r(champion) !== null && r(candidate) < r(champion)) out.push(`the pass rate fell from ${r(champion)} to ${r(candidate)}`);
+    out.push(`no pass-rate bound to compare (champion ${champion.lowerBound}, candidate ${candidate.lowerBound}): nothing shows the candidate better`);
   }
   return out;
 }
@@ -92,12 +96,15 @@ function coversDefault(root, prop, env) {
  * ledger: the look the evaluator checks and logs for a window outside Train (tuning or judging) and the ledger
  * file. Every run gets the same seed: the config's, else the loop's.
  */
-async function evaluate({ cfg, windows, champion = null, candidate, seed, env = process.env, look = null, ledger = null, scratchLedger = null, run = runDefault, coversOf = coversDefault, log = () => {} }) {
+async function evaluate({ cfg, windows, champion = null, candidate, seed, proposal = null, env = process.env, look = null, ledger = null, scratchLedger = null, run = runDefault, coversOf = coversDefault, log = () => {} }) {
   if (!cfg) return { available: false, why: UNAVAILABLE };
   const { seed: own, ...rest } = cfg;
   const s = Number.isInteger(own) ? own : seed;
   const covers = [...new Set([...coversOf(candidate, cfg.prop, env), ...(champion ? coversOf(champion, cfg.prop, env) : [])])].sort();
   const out = { available: true, seed: s, covers, blows: 0, failures: [], windows: [] };
+  // Whether the change edits anything the streams read (a strategy they count, or any rulebook): then only a
+  // candidate shown better passes; a change that edits none of it may tie, when both results are identical.
+  const touches = !proposal || (proposal.edits || []).some(e => covers.includes(e.file) || /RULEBOOK\.md$/.test(e.file));
   for (const w of windows) {
     // scratchLedger: a copy of the ledger as it was before the caller's own look (held-out judging), made fresh for
     // each scoring, so the evaluator checks the same look and logs nothing more: one judging, one look.
@@ -113,7 +120,7 @@ async function evaluate({ cfg, windows, champion = null, candidate, seed, env = 
     const at = r => (look && ledger ? { ...r, ledger: fresh() } : r);
     const champ = champion ? summarize(run(at(raw), { root: champion, env, log })) : null;
     const cand = summarize(run(at(raw), { root: candidate, env, log }));
-    const failures = champ ? compare(champ, cand) : [...(cand.blown > 0 ? [`${cand.blown} blow(s) over the attempts scored (R8: a single blow rejects)`] : []), ...cand.gate.filter(f => kind(f) !== 'blows')];
+    const failures = champ ? compare(champ, cand, { exempt: !touches }) : [...(cand.blown > 0 ? [`${cand.blown} blow(s) over the attempts scored (R8: a single blow rejects)`] : []), ...cand.gate.filter(f => kind(f) !== 'blows')];
     out.blows += cand.blown;
     out.failures.push(...failures.map(f => `${w.from}..${w.to}: ${f}`));
     out.windows.push({ from: w.from, to: w.to, champion: champ, candidate: cand });

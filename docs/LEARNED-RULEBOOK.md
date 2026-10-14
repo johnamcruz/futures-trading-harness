@@ -1199,7 +1199,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     (`scripts/lib/train/evaluator.js`): on the tuning windows the
     champion's tree and the candidate's are scored on the same bar files
     and seed, and the candidate fails on a blow, a gate failure the
-    champion lacks, or a lower pass-rate bound; on held-out windows the
+    champion lacks, or a pass-rate lower bound no higher than the
+    champion's (a tie, the 0 of a short window included, counts against
+    it); on held-out windows the
     candidate alone, each scoring a judging look; with no `evaluator` in
     the loop config a strategy or rulebook change stays `blocked`.
     Not yet: Optuna over the agent's design (R30's categorical search; the

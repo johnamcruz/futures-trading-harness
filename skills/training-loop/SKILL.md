@@ -101,7 +101,10 @@ runs**: the local model server runs out of memory. Run them after.
 when the config names one (`"evaluator": { "prop", "data": { "MNQ":
 "<bar file>" }, ... }`, any `scripts/evaluate.js` setting): the champion
 and the candidate on the same bar files and seed; a blow, a gate failure
-the champion lacks or a lower pass-rate bound rejects. Without one, a
+the champion lacks, or a pass-rate lower bound that doesn't rise above the
+champion's rejects (a tie, the 0 of a short window included, shows
+nothing). Only a change that edits nothing the evaluator reads may tie,
+with identical results. Without one, a
 strategy or rulebook change stays `blocked`, and so does a change to a
 strategy its streams don't read, or to a rulebook (it reads none yet). On
 held-out windows it scores the candidate alone against the promotion gate,

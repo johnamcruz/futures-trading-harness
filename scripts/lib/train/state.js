@@ -35,7 +35,7 @@ const { readJson, writeJsonAtomic } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { checkLook } = require('../prop/looks');
 const { RECORDED_LOOKS } = require('../prop/splits');
-const { withLedgerLock } = require('../prop/evaluate-run');
+const LF = require('../prop/ledger-file');
 
 const VERSION = 1;
 
@@ -139,29 +139,21 @@ function spend(state, n = 1) {
   state.modelCalls += n;
 }
 
-function readLedger(file) {
-  let text;
-  try {
-    text = fs.readFileSync(file, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
-  // An unreadable line is refused, never skipped: a lost look would hand back budget (R16).
-  return text.split('\n').filter(l => l.trim()).map((l, i) => {
-    try {
-      return JSON.parse(l);
-    } catch (err) {
-      throw new Error(`${file}: line ${i + 1} is not a look; the ledger can't be read, so no look is allowed`, { cause: err });
-    }
-  });
+/**
+ * The ledger's looks, through the one reader (prop/ledger-file.js): JSON lines or the earlier JSON-list format; a
+ * line that isn't a look, or an existing empty file, is refused (a lost look would hand back budget, R16). A missing
+ * file is a ledger with no looks only where the loop starts the one ledger at its fixed path (create, the default
+ * for a tuning look); a held-out judging requires it to exist (takeJudgingLook).
+ */
+function readLedger(file, { create = true } = {}) {
+  return LF.readLedger(file, { create });
 }
 
-/** fn holding the ledger's lock (`<ledger>.lock`, prop/evaluate-run.js withLedgerLock, as the evaluator takes it). */
+/** fn holding the ledger's lock (`<ledger>.lock`, prop/ledger-file.js withLedgerLock, as the evaluator takes it). */
 function locked(file, fn) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   try {
-    return withLedgerLock(file, fn);
+    return LF.withLedgerLock(file, fn);
   } catch (err) {
     // A run killed while it held the lock (SIGKILL) leaves the lock file: it is never broken automatically.
     if (/locked by another run/.test(err.message)) {
@@ -174,7 +166,7 @@ function locked(file, fn) {
 function appendChecked(file, look, now) {
   const verdict = checkLook(look, readLedger(file));
   if (!verdict.ok) throw new Error(`look refused:\n- ${verdict.refusals.join('\n- ')}`);
-  fs.appendFileSync(file, `${JSON.stringify({ ...look, at: now.toISOString() })}\n`);
+  LF.appendLook(file, { ...look, at: now.toISOString() });
   return verdict;
 }
 
@@ -205,7 +197,8 @@ function monthsOf(from, to) {
  */
 function takeJudgingLook(file, look, { snapshot, own = null, resume = false, now = new Date() }) {
   return locked(file, () => {
-    const ledger = readLedger(file);
+    // A judging follows the loop's tuning looks: the ledger exists (a missing one is refused, never a fresh budget).
+    const ledger = readLedger(file, { create: false });
     // A resume after a stop between this look being logged and the loop saving it (resume: the loop had saved "judging
     // started"; own: { loopId, proposalId }, written into the look): the look this loop and proposal logged on the same
     // months is theirs. Any other look on those months refuses: a month never judges a second proposal.
@@ -225,7 +218,7 @@ function takeJudgingLook(file, look, { snapshot, own = null, resume = false, now
     if (!verdict.ok) throw new Error(`look refused:\n- ${verdict.refusals.join('\n- ')}`);
     fs.mkdirSync(path.dirname(snapshot), { recursive: true });
     fs.writeFileSync(snapshot, fs.existsSync(file) ? fs.readFileSync(file) : '');
-    fs.appendFileSync(file, `${JSON.stringify({ ...look, ...(own ? { loopId: own.loopId, proposalId: own.proposalId } : {}), at: now.toISOString() })}\n`);
+    LF.appendLook(file, { ...look, ...(own ? { loopId: own.loopId, proposalId: own.proposalId } : {}), at: now.toISOString() });
     return verdict;
   });
 }
