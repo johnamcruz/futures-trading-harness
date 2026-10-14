@@ -729,8 +729,12 @@ function detailEntries(data) {
     : [k, v]));
 }
 
-/** A 4h candle's sweep of its previous candle (candle-facts.js prevSweep), as the summary says it; '' without one. */
-const sweepText = s => (s ? `; swept the ${s.of}, closed ${s.closedBack ? 'back inside its range' : 'beyond it'}` : '');
+/**
+ * A 4h candle beyond its previous candle's high or low (candle-facts.js prevSweep), as the summary says it: a sweep only
+ * when it closed back inside; else where it closed. '' when it stayed inside.
+ */
+const sweepText = s => (!s ? '' : s.closedBack ? `; swept the ${s.of}, closed back inside its range`
+  : `; traded beyond the ${s.of}, closed ${s.closedBeyond === 'high' ? 'above its high' : 'below its low'}`);
 
 /** The summary's completed-candle lines: one per timeframe, then the next swing targets. */
 function candleLines(m3, et, roomOf = 'R = the reference stop') {

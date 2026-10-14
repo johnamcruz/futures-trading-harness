@@ -29,7 +29,7 @@ Summary (MNQ 3m, 00:48 ET):
 - 3m (closed 00:48): displacement up, close top third, range 1.56 ATR, vol 1.79x; broke above previous 3m high.
 - 15m (closed 00:45): inside, close top third, range 0.53 ATR, vol 0.45x; touched session POC.
 - 1h (closed 00:00): none, close bottom third, range 0.58 ATR, vol 0.16x; rejected VWAP (session) (closed back below), rejected prior VAH (closed back below), broke below previous 1h low, touched session POC.
-- 4h (closed 04-23 22:00): none, close top third, vol 0.21x; swept the previous 4h high, closed beyond it; rejected session POC (closed back below), rejected 15m swing high 27119 (closed back below), broke above session VAL, broke above round number 27000, +4 more.
+- 4h (closed 04-23 22:00): none, close top third, vol 0.21x; traded beyond the previous 4h high, closed above its high; rejected session POC (closed back below), rejected 15m swing high 27119 (closed back below), broke above session VAL, broke above round number 27000, +4 more.
 - Next swing above (R = the 3m reference stop): 3m 27078.25 (24.5 pts, 98 ticks, 4.78R), 15m/1h 27135.75 (82 pts, 328 ticks, 15.99R), 4h 27155.75 (102 pts, 408 ticks, 19.89R); below: 3m 27016.25 (37.5 pts, 150 ticks, 7.31R), 15m 26840.25 (213.5 pts, 854 ticks, 41.63R), 1h/4h 26681.75 (372 pts, 1488 ticks, 72.54R).
 - CISD (completed candles; a read, not a signal): 3m bullish at 27030.75 (closed 00:36, weak), no key-level sweep, a weak displacement: no zone; 15m bearish at 27030.25 (closed 00:30, weak), no key-level sweep, a weak displacement: no zone; 1h bullish at 27094.5 (closed 04-23 21:00, weak), no key-level sweep, a weak displacement: no zone.
 - Setups: none fired on this bar.

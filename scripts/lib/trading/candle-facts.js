@@ -17,8 +17,8 @@
  * 4h candles open on the same grid: 18:00, 22:00, 02:00, 06:00, 10:00 and 14:00 ET. The session's last one (14:00 ET)
  * holds the bars up to the daily break and is completed on the next session's first bar (18:00 ET, or Sunday's open),
  * as any candle whose last sub-bar is missing: never from a clock or a calendar; its `closedAt` is the 18:00 ET
- * boundary. A 4h candle also states its sweep of the previous 4h candle (prevSweep): it traded beyond that candle's
- * high or low and closed back inside its range (the sweep of the prior 4h low and close back), or closed beyond it.
+ * boundary. A 4h candle also states whether it traded beyond the previous 4h candle's high or low (prevSweep): a sweep
+ * when it closed back inside that range (the sweep of the prior 4h low and close back), else the side it closed beyond.
  *
  *   completedSeries(bars, minutes, base)   { available, reason, candles, lastAt }: lastAt[i] the index of the last
  *                                          candle completed by bar i's close (-1 none)
@@ -33,8 +33,9 @@
  *                                          bars for a timeframe the base bars can't build)
  *   holdingSwingsAt(bars, minutes, base, idx)   the swings still holding as of bar idx
  *   briefingTargets({ bars, minutes, price, oneR, tick })    the briefing's `swingTargets` block (last bar)
- *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack } when c traded beyond prev's
- *                                          high or low (closedBack: closed inside prev's range), else null
+ *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack, closedBeyond } when c traded
+ *                                          beyond prev's high or low (closedBack: closed inside prev's range; closedBeyond:
+ *                                          'high' | 'low', the side it closed beyond, else null), else null
  *
  * The definitions below are HYPOTHESES to test against outcomes, not established edges. R = high - low, B = |close -
  * open|, U = high - max(open, close), D = min(open, close) - low; prev is the previous completed candle on the same
@@ -221,15 +222,17 @@ function relation(c, level, prevClose = NaN) {
 }
 
 /**
- * Candle c's sweep of its previous candle: traded beyond prev's high (low), with whether it closed back inside prev's
- * range (strictly between its low and high); both sides: 'both'. null without prev or without a sweep.
+ * Whether candle c traded beyond its previous candle's high (low), and where it closed: back inside prev's range
+ * (strictly between its low and high: a sweep), or beyond its high or low (closedBeyond; on the extreme counts as
+ * beyond). Both sides: 'both'. null without prev or when it stayed inside.
  */
 function prevSweep(c, prev) {
   if (!prev) return null;
   const high = c.h > prev.h;
   const low = c.l < prev.l;
   if (!high && !low) return null;
-  return { side: high && low ? 'both' : high ? 'high' : 'low', closedBack: c.c > prev.l && c.c < prev.h };
+  const closedBack = c.c > prev.l && c.c < prev.h;
+  return { side: high && low ? 'both' : high ? 'high' : 'low', closedBack, closedBeyond: closedBack ? null : c.c >= prev.h ? 'high' : 'low' };
 }
 
 /** Per completed candle: its facts (shape, ATR, volume against its average, patterns). */
@@ -472,11 +475,14 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
   return out;
 }
 
-/** A SWEEP_FRAMES candle's `sweep` of its previous candle ({} on other timeframes; null: no sweep, or no previous). */
+/**
+ * A SWEEP_FRAMES candle's `sweep` of its previous candle: { of, closedBack, closedBeyond } when it traded beyond its high
+ * or low ({} on other timeframes; null: it stayed inside, or no previous).
+ */
 function sweepField(m, c, prev) {
   if (!SWEEP_FRAMES.includes(m)) return {};
   const s = prevSweep(c, prev);
-  return { sweep: s ? { of: `previous ${label(m)} ${s.side === 'both' ? 'high and low' : s.side}`, closedBack: s.closedBack } : null };
+  return { sweep: s ? { of: `previous ${label(m)} ${s.side === 'both' ? 'high and low' : s.side}`, closedBack: s.closedBack, closedBeyond: s.closedBeyond } : null };
 }
 
 /**

@@ -37,7 +37,7 @@ time the entry.
   volume ratio, `pattern`) and the levels it met (`rejected`, `broke`,
   `touched`), only levels that existed before it opened. `unavailable` or
   missing (5m without 1m bars) is `unknown`. The 4h's `sweep`: beyond the
-  previous 4h high or low, closed back inside or not.
+  previous 4h high or low, closed back or not.
 - The targets: `m3.swingTargets`, the next swing each side.
 - In strategy rules the same candle is `htfd_*` (strategy-rules).
 
@@ -49,11 +49,11 @@ against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over
 
 **Patterns** (hypotheses):
 
-- doji: body share under about 0.1;
+- doji: body share under about 0.1, indecision;
 - pin bar (hammer, shooting star): one wick at least about 0.6 of the
   range, the close in the opposite third;
 - engulfing: the body covers the prior one, opposite colour;
-- inside bar: within the prior bar's range;
+- inside bar: within the prior bar's range, compression;
 - outside bar: beyond both;
 - displacement: large, the close in the extreme third.
 
@@ -62,7 +62,7 @@ against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over
 The stack counts once (`confluence-counting`, item 4).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured in our data yet. Confirmation only.
+general, none measured in our data yet.
 
 ## Examples
 

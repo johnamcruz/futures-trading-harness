@@ -73,12 +73,13 @@ test('4h candles across the weekend and DST: Friday\'s last one completes on Sun
 
 test('prevSweep: traded beyond the previous candle\'s high or low, closed back inside or beyond', () => {
   const prev = { o: 100, h: 104, l: 98, c: 102 };
-  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 97, c: 100 }, prev), { side: 'low', closedBack: true });
-  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 96, c: 97.5 }, prev), { side: 'low', closedBack: false });
-  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 105, l: 99, c: 103 }, prev), { side: 'high', closedBack: true });
-  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 105, l: 97, c: 104.5 }, prev), { side: 'both', closedBack: false });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 97, c: 100 }, prev), { side: 'low', closedBack: true, closedBeyond: null });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 96, c: 97.5 }, prev), { side: 'low', closedBack: false, closedBeyond: 'low' });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 105, l: 99, c: 103 }, prev), { side: 'high', closedBack: true, closedBeyond: null });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 105, l: 97, c: 104.5 }, prev), { side: 'both', closedBack: false, closedBeyond: 'high' });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 105, l: 97, c: 97.5 }, prev), { side: 'both', closedBack: false, closedBeyond: 'low' });
   // A close on the previous extreme is not back inside.
-  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 97, c: 98 }, prev), { side: 'low', closedBack: false });
+  assert.deepStrictEqual(CF.prevSweep({ o: 101, h: 103, l: 97, c: 98 }, prev), { side: 'low', closedBack: false, closedBeyond: 'low' });
   // Equal to the extreme is no sweep; no previous candle, none.
   assert.strictEqual(CF.prevSweep({ o: 101, h: 104, l: 98, c: 100 }, prev), null);
   assert.strictEqual(CF.prevSweep({ o: 101, h: 105, l: 97, c: 100 }, null), null);
@@ -97,7 +98,7 @@ test('the briefing\'s 4h candle: the sweep of the prior 4h low and the close bac
   assert.strictEqual(h4.t, '2026-06-15T14:00:00.000Z');
   assert.strictEqual(h4.l, 96);
   assert.strictEqual(h4.c, 100.5);
-  assert.deepStrictEqual(h4.sweep, { of: 'previous 4h low', closedBack: true });
+  assert.deepStrictEqual(h4.sweep, { of: 'previous 4h low', closedBack: true, closedBeyond: null });
   assert.strictEqual(h4.levels['previous 4h low'], 'rejected: closed back above');
   // Only the 4h states a sweep; the other timeframes keep their relation to "previous <tf> low".
   const all = CF.briefingCandles({ bars: b, base: 3 });
@@ -112,7 +113,16 @@ test('the briefing\'s 4h candle: the sweep of the prior 4h low and the close bac
   // Its relation to the previous 4h low may be past the four levels listed (rejected levels sort by level first): the
   // sweep is stated on its own, so the read never depends on that cut.
   assert.ok(!('previous 4h low' in brief.sections.m3.data.candles['4h'].levels));
-  assert.deepStrictEqual(brief.sections.m3.data.candles['4h'].sweep, { of: 'previous 4h low', closedBack: true });
+  assert.deepStrictEqual(brief.sections.m3.data.candles['4h'].sweep, { of: 'previous 4h low', closedBack: true, closedBeyond: null });
+});
+
+test('the summary: a sweep only when the close is back inside; else the side it closed beyond', () => {
+  const line = sweep => B.renderBriefing({ symbol: 'MNQ', minutes: 3, asOf: '2026-06-15T18:27:00.000Z', closedAt: '2026-06-15T18:30:00.000Z', price: 100, sections: { m3: { version: 'v', validUntil: '2026-06-15T18:33:00.000Z', data: { candles: { '4h': { closedAt: '2026-06-15T18:00:00.000Z', pattern: 'none', closeLocation: null, rangeAtr: null, volRatio: null, levels: {}, sweep } } } } } }, { now: new Date('2026-06-15T18:30:00Z') }).split('\n').find(l => l.startsWith('- 4h'));
+  assert.match(line({ of: 'previous 4h low', closedBack: true, closedBeyond: null }), /; swept the previous 4h low, closed back inside its range\.$/);
+  assert.match(line({ of: 'previous 4h low', closedBack: false, closedBeyond: 'low' }), /; traded beyond the previous 4h low, closed below its low\.$/);
+  assert.match(line({ of: 'previous 4h high and low', closedBack: false, closedBeyond: 'high' }), /; traded beyond the previous 4h high and low, closed above its high\.$/);
+  assert.ok(!/swept/.test(line({ of: 'previous 4h high', closedBack: false, closedBeyond: 'high' })));
+  assert.strictEqual(line(null), '- 4h (closed 14:00): none.');
 });
 
 test('a 4h candle is a fact only once completed: rebuilt with the bars cut at each bar\'s close, the same fact', () => {
@@ -127,10 +137,12 @@ test('a 4h candle is a fact only once completed: rebuilt with the bars cut at ea
     assert.strictEqual(out.t, c.t, `bar ${i}`);
     assert.ok(Date.parse(out.closedAt) <= Date.parse(b[i].t) + 3 * MIN, `bar ${i}: closed by the bar's close`);
     assert.deepStrictEqual([out.o, out.h, out.l, out.c], [c.o, c.h, c.l, c.c], `bar ${i}`);
-    assert.deepStrictEqual(out.sweep, (o => (o ? { of: `previous 4h ${o.side === 'both' ? 'high and low' : o.side}`, closedBack: o.closedBack } : null))(CF.prevSweep(c, s.candles[j - 1] || null)), `bar ${i}`);
-    // Bars after bar i, however wild, never change it.
-    const wild = [...cut, ...b.slice(i + 1).map(x => ({ ...x, h: x.h + 40, l: x.l - 40 }))];
-    assert.deepStrictEqual(CF.briefingCandles({ bars: wild.slice(0, i + 1), base: 3, timeframes: [240] })['4h'], out, `bar ${i}`);
+    assert.deepStrictEqual(out.sweep, (o => (o ? { of: `previous 4h ${o.side === 'both' ? 'high and low' : o.side}`, closedBack: o.closedBack, closedBeyond: o.closedBeyond } : null))(CF.prevSweep(c, s.candles[j - 1] || null)), `bar ${i}`);
+    // Bars after bar i, however wild, never change the candle the series says was completed by bar i.
+    const wild = [...cut, ...b.slice(i + 1).map(x => ({ ...x, h: x.h + 40, l: x.l - 40, c: x.c + 7 }))];
+    const ws = CF.completedSeries(wild, 240, 3);
+    const w = ws.candles[ws.lastAt[i]];
+    assert.deepStrictEqual([w.t, w.o, w.h, w.l, w.c], [out.t, out.o, out.h, out.l, out.c], `bar ${i}`);
   }
 });
 

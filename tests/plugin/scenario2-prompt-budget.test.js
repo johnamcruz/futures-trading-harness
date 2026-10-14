@@ -2,7 +2,7 @@
 
 // Scenario 2's facts (docs/COMPOSED-ENTRY.md section 8, PR 5) go into the briefing's data; no role prompt and no
 // head-trader prompt may grow for them. The skills that teach these reads are edited in place, never longer: each
-// stays within its bytes on main before PR 5 (commit e89585b9), and so do the prompts they are embedded in. A PR
+// stays within its bytes on main before PR 5 (the role prompts as of ca46d38f), and so do the prompts they are embedded in. A PR
 // that shrinks one may lower its number here; none may raise it.
 
 const test = require('node:test');
@@ -27,7 +27,7 @@ const ROLE_MAX = {
   'fth-head-trader': 67313,
   'market-structure-analyst': 43667,
   'news-calendar-analyst': 10523,
-  'risk-manager': 81270,
+  'risk-manager': 74333,
   'strategy-researcher': 25662,
   'trade-executor': 30268,
   'trade-reviewer': 9195,
