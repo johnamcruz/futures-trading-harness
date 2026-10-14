@@ -31,11 +31,11 @@ as `low`-`high`, the whole gap as `gapLow`-`gapHigh`), or **filled**
 open FVG".
 
 **Source vs ours.** The source: fair price just moved, a large middle
-candle, bounds as above, invalid once price passes the far edge. Ours, the
-same in substance: our rule: the middle candle must be a strong displacement
-candle the gap's way (the CISD strength rule: body ≥ 0.6 of its range, close
-in the extreme third, range ≥ 1.0×ATR(14) or engulfing); wicks count; partly filled is ours; filled is its invalid. The
-gaps of the last 60 bars of the briefing's own timeframe, the last 3 of
+candle, bounds as above, invalid once price passes the far edge. Ours is
+the same in substance. Our rule: the middle candle must be a strong
+displacement candle the gap's way (the CISD strength rule: body ≥ 0.6 of its
+range, close in the extreme third, range ≥ 1.0×ATR(14) or engulfing); wicks
+count; partly filled is ours; filled is its invalid. The gaps of the last 60 bars of the briefing's own timeframe, the last 3 of
 each kind; a filled gap is in neither list. Never mark one by eye.
 
 **The read.** A location, never a trigger. The source: price back in the
