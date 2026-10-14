@@ -711,7 +711,8 @@ function summaryLines(b, et) {
   const fields = brokerFieldsText(m3.brokerFields);
   if (fields) out.push(fields);
   out.push(...candleLines(m3, et, roomOf, b.closedAt));
-  const fvg = fvgLine(m3.fvgs, et);
+  // The FVGs near price (within 2R) or retested by their timeframe's last candle (fvg-frames.js fvgLine).
+  const fvg = fvgLine(m3.fvgs, et, { price: m3.price, near: m3.oneR ? 2 * m3.oneR.points : NaN });
   if (fvg) out.push(fvg);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);

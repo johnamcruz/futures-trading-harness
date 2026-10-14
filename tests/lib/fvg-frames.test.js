@@ -97,12 +97,21 @@ test('three candles not back to back (a feed gap, the daily break, a weekend): n
   assert.deepStrictEqual(F.fvgFrames({ bars: b, base: 3, frames: [15] })['15m'].map(x => [x.low, x.high]), [[101, 105.5]]);
 });
 
-test('fvgLine: open, filled to, the retest; an unbuildable timeframe without 1m bars is left out', () => {
+test('fvgLine: event-driven: only the gaps retested or near price; open, filled to, the retest; null when none qualifies', () => {
   const et = x => x.slice(11, 16);
-  assert.strictEqual(F.fvgLine({ '5m': 'unavailable (not whole 3m bars; no 1m bars configured)', '15m': [
+  const fvgs = { '5m': 'unavailable (not whole 3m bars; no 1m bars configured)', '15m': [
     { side: 'bullish', low: 101, high: 103, at: '2026-06-15T18:45:00.000Z', state: 'partly', unfilled: [101, 102.5], retest: 'closed out' },
     { side: 'bearish', low: 97, high: 99, at: '2026-06-15T19:00:00.000Z', state: 'partly', unfilled: [98, 99], retest: null },
-  ], '1h': [] }, et), '- FVGs (completed candles, unfilled): 15m bullish 101-103 (18:45) filled to 102.5, retest closed out, bearish 97-99 (19:00) filled to 98; 1h none.');
+    { side: 'bearish', low: 120, high: 122, at: '2026-06-15T19:15:00.000Z', state: 'open', retest: null },
+  ], '1h': [] };
+  // Price 100, near 2.5 points: the retested one, the one 1 point away (its unfilled part 98-99); not the far one.
+  assert.strictEqual(F.fvgLine(fvgs, et, { price: 100, near: 2.5 }), '- FVGs near price or retested (completed candles): 15m bullish 101-103 (18:45) filled to 102.5, retest closed out, bearish 97-99 (19:00) filled to 98.');
+  // Nearer than 1 point: only the retest; with no price, only the retest.
+  assert.match(F.fvgLine(fvgs, et, { price: 100, near: 0.5 }), /: 15m bullish 101-103 \(18:45\) filled to 102\.5, retest closed out\.$/);
+  assert.match(F.fvgLine(fvgs, et), /retest closed out\.$/);
+  // Nothing retested or near: no line (the JSON holds every gap); 1m bars that stopped are named.
+  assert.strictEqual(F.fvgLine({ '15m': [fvgs['15m'][2]], '1h': [] }, et, { price: 100, near: 2.5 }), null);
+  assert.strictEqual(F.fvgLine({ '5m': 'unavailable (the 1m bars stop at x: no current 5m candle)' }), '- FVGs near price or retested (completed candles): 5m unavailable (the 1m bars stop at x: no current 5m candle).');
   assert.strictEqual(F.fvgLine(null), null);
 });
 
@@ -129,9 +138,10 @@ test('causality: as of each bar, the same gaps as the bars cut at its close; lat
 // The bytes the FVG line adds to the rendered briefing (the detail leaves it out): on the fixture with a 1m lane's bars at
 // every 25th bar, and the worst case, nine gaps all partly filled, retested, and dated (another ET day).
 const FVG_RENDER_BUDGET = 600;
+const FVG_TYPICAL_BUDGET = 120;
 const FVG_WORST_BUDGET = 820;
 
-test('the briefing\'s fvgs: per timeframe, at most MAX each; within FVG_RENDER_BUDGET bytes of the rendered briefing', () => {
+test('the briefing\'s fvgs: per timeframe, at most MAX each; the line within FVG_RENDER_BUDGET bytes on any bar, FVG_TYPICAL_BUDGET on average', () => {
   const brief = B.buildBriefing({ symbol: 'NQ', bars: BARS, minutes: 3, roundSteps: defaultRoundSteps() });
   const d = brief.sections.m3.data;
   assert.deepStrictEqual(Object.keys(d.fvgs), ['5m', '15m', '1h']);
@@ -144,12 +154,15 @@ test('the briefing\'s fvgs: per timeframe, at most MAX each; within FVG_RENDER_B
     delete without.sections.m3.data.fvgs;
     return Buffer.byteLength(B.renderBriefing(b, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
   };
-  assert.ok(added(brief) > 0 && added(brief) <= FVG_RENDER_BUDGET, `${added(brief)} bytes added`);
+  assert.ok(added(brief) <= FVG_RENDER_BUDGET, `${added(brief)} bytes added`);
   const fine = G.toMinutes(BARS);
-  let most = 0;
-  for (let i = 400; i < BARS.length; i += 25) most = Math.max(most, added(B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, i + 1), minutes: 3, fineBars: fine, roundSteps: defaultRoundSteps() })));
+  const sizes = [];
+  for (let i = 400; i < BARS.length; i += 25) sizes.push(added(B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, i + 1), minutes: 3, fineBars: fine, roundSteps: defaultRoundSteps() })));
+  const most = Math.max(...sizes);
+  const typical = sizes.reduce((x, y) => x + y, 0) / sizes.length;
   assert.ok(most <= FVG_RENDER_BUDGET, `${most} bytes added with 1m bars`);
+  assert.ok(typical <= FVG_TYPICAL_BUDGET, `typical ${typical} bytes with 1m bars`);
   const g = { side: 'bullish', low: 27521.25, high: 27526.75, at: '2026-04-24T01:45:00.000Z', state: 'partly', unfilled: [27521.25, 27523.25], retest: 'closed inside' };
-  const worst = F.fvgLine({ '5m': [g, g, g], '15m': [g, g, g], '1h': [g, g, g] }, x => `04-23 ${x.slice(11, 16)}`);
+  const worst = F.fvgLine({ '5m': [g, g, g], '15m': [g, g, g], '1h': [g, g, g] }, x => `04-23 ${x.slice(11, 16)}`, { price: 27522, near: 10 });
   assert.ok(Buffer.byteLength(worst) + 1 <= FVG_WORST_BUDGET, `${Buffer.byteLength(worst)} bytes`);
 });

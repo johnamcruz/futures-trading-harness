@@ -26,7 +26,8 @@
  *
  *   gapsOn({ src, upto, candles, j }, { window, max })  the unfilled gaps as of source bar upto
  *   fvgFrames({ bars, base, fine, frames, at })         the briefing's `fvgs`: { '5m': [...] | 'unavailable (...)', ... }
- *   fvgLine(fvgs, et)                                   the summary's line (et: a time as the briefing shows it), or null
+ *   fvgLine(fvgs, et, { price, near })                  the summary's event-driven line (et: a time as the briefing
+ *                                                       shows it), or null
  */
 
 const ind = require('./indicators');
@@ -76,18 +77,24 @@ function fvgFrames({ bars, base, fine = null, frames = FRAMES, at = bars.length 
 }
 
 /**
- * The summary's FVG line: per timeframe each unfilled gap as `bullish 101-103 (10:45) open` or `... filled to 102.5`
- * (partly filled: how far price came into it), with `, retest closed out` (or `closed inside`). A timeframe that can't be built is left out when no 1m bars
- * are configured (as the candle lines); null when nothing is left to say.
+ * The summary's FVG line, event-driven: only the gaps the last completed candle retested, or whose unfilled part is
+ * within `near` points of `price` (price inside one counts); each as `bullish 101-103 (10:45) open` or `... filled to
+ * 102.5` (partly filled: how far price came into it), with `, retest closed out` (or `closed inside`). A timeframe
+ * that can't be built is named only when 1m bars are configured (they stopped). null when nothing qualifies: the JSON
+ * holds every gap.
  */
-function fvgLine(fvgs, et = x => x) {
+function fvgLine(fvgs, et = x => x, { price = NaN, near = NaN } = {}) {
   if (!fvgs || typeof fvgs !== 'object') return null;
-  const parts = Object.entries(fvgs).filter(([, v]) => !(typeof v === 'string' && /no 1m bars configured/.test(v))).map(([tf, v]) => {
-    if (typeof v === 'string') return `${tf} ${v}`;
-    if (!v.length) return `${tf} none`;
-    return `${tf} ${v.map(g => `${g.side} ${g.low}-${g.high} (${et(g.at)}) ${g.state === 'open' ? 'open' : `filled to ${g.side === 'bullish' ? g.unfilled[1] : g.unfilled[0]}`}${g.retest ? `, retest ${g.retest}` : ''}`).join(', ')}`;
-  });
-  return parts.length ? `- FVGs (completed candles, unfilled): ${parts.join('; ')}.` : null;
+  const edge = g => (g.state === 'open' ? [g.low, g.high] : g.unfilled);
+  const dist = g => { const [lo, hi] = edge(g); return price < lo ? lo - price : price > hi ? price - hi : 0; };
+  const shown = g => Boolean(g.retest) || (Number.isFinite(price) && Number.isFinite(near) && dist(g) <= near);
+  const parts = [];
+  for (const [tf, v] of Object.entries(fvgs)) {
+    if (typeof v === 'string') { if (!/no 1m bars configured/.test(v)) parts.push(`${tf} ${v}`); continue; }
+    const list = (v || []).filter(shown);
+    if (list.length) parts.push(`${tf} ${list.map(g => `${g.side} ${g.low}-${g.high} (${et(g.at)}) ${g.state === 'open' ? 'open' : `filled to ${g.side === 'bullish' ? g.unfilled[1] : g.unfilled[0]}`}${g.retest ? `, retest ${g.retest}` : ''}`).join(', ')}`);
+  }
+  return parts.length ? `- FVGs near price or retested (completed candles): ${parts.join('; ')}.` : null;
 }
 
 module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames, fvgLine };
