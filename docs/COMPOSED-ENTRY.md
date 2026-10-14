@@ -317,7 +317,7 @@ here can hold one.
 **Paper in replay.** Without the D10 exemption a `paper` composed entry gets
 no fill in replay: replay runs with `FTH_PAPER=0` (`replay/config.js:67`), so
 the status check refuses it, and paper mode would refuse it too
-(`order-gate.js:262`) and only journal the plan (`replay/labels.js:738-740`).
+(`order-gate.js:262`), whose refusal says to journal the plan instead.
 The learning loop needs real replay fills, so the exemption is what lets
 practice score outcomes while `composed` is still `paper`; only the owner
 promotes it to `active`.
@@ -646,8 +646,9 @@ shown until an owner-approved rebuild (section 4.7).
 ### 4.8 How we know it learned
 
 A **paired replay** on held-out months after the model's cutoff (D23: the
-2026-H2 walk-forward quarters, then the reserve; Select and Out-of-sample
-only as a pre-check marked as possibly recalled): the same bars, the same
+held-out quarter of each walk-forward half-year from 2026-H2, and the
+reserve once it is an out-of-sample window; Select and Out-of-sample only
+as a pre-check marked as possibly recalled): the same bars, the same
 skills and the same composed document, run once per arm.
 
 | Arm | `experience_lookup` |
@@ -745,9 +746,8 @@ the read form section 3.2's checker gains.
 
 **Parameters worth keeping as skill guidance:** momentum is a bar read: a
 range at least 1 ATR(14), a close in the far third, volume at least the
-20-bar average (the version-5 rule's bar part; the kept skill text already
-says "closes at the side's extreme, ranges at or above ATR, participation 1
-or more", `skills/momentum-and-volume/SKILL.md:56-57`); the higher-timeframe
+20-bar average (the version-5 rule's bar part; section 7 rewrites the
+skill's momentum read to match); the higher-timeframe
 trend (ADX(14) at least 20, EMA20 beyond EMA50) is a separate bias read,
 so pairing them is the model's choice, not a definition; a strong CISD candle (body at least 0.6 of its
 range, close in its extreme third, range at least 1 ATR); a CRT sweep is
@@ -798,6 +798,7 @@ goes into skills read with `skill_lookup`.
 | `absorption:48`, `fib-retracement:65`, `cisd:53`, `fair-value-gaps:42` | "No setup without a fired strategy" / "and a fired strategy" | "No entry without verified reads" |
 | `setup-judgment` | Judges each fired strategy's setup | Composes from the skills, calls `compose_check`, then `experience_lookup` (section 4.4) |
 | `agents/risk-manager.md:84-91` (step 0) | Candidate or veto | An `ok` composed record for this bar (and, in an attempt, its verdict); else veto |
+| `momentum-and-volume:56-57` | "Momentum: closes at the side's extreme, ranges at or above ATR, participation 1 or more, ADX rising" | The bar read of D4 (close in the far third, range at least 1 ATR, volume at least the 20-bar average); "ADX rising" leaves the momentum read, since the trend is its own read |
 | `trade-plan` | `order_plan` with a strategy | Unchanged rule; the example uses `strategy: "composed"` |
 | `trading/skills-loaded.js:44` (`REQUIRED_FOR_ENTRY`) | Names `strategy-library`, `strategy-scan`, `strategy-gate-checks` | Names the new skill, composed-entry, instead (section 9 deletes the three) |
 | A new skill, composed-entry (index only) | | The read forms, side agreement, the stop and target rules, how to use the record (section 4.5), one worked example per scenario |
@@ -1075,8 +1076,13 @@ Each has a proposed default; the owner may change any of them.
     the promotion gate needs at least 20 attempts over two months, so
     months of waiting.
   - *Practise before, judge after:* practise and index on Train; judge
-    only on months after the cutoff (2026-H2's walk-forward quarters, then
-    the reserve). The record's statistics stay true (code computes them);
+    only on months after the cutoff. Each walk-forward half-year (2026-H2,
+    2027-H2, ...) is a tuning quarter then a held-out quarter
+    (`prop/splits.js:23-26, 171-172`): the paired replay and the promotion
+    gate judge on the held-out quarter; a look at the tuning quarter is a
+    logged pre-check. The reserve half-years (2027-H1, ...) become an
+    out-of-sample window only once they hold `RESERVE_MIN_MONTHS` (12)
+    months (`prop/splits.js:65`). The record's statistics stay true (code computes them);
     practice choices may reflect recall, which the clean judgment exposes
     rather than rewards. Judging waits for those months.
   - *Mask dates and rebase prices:* hide the date and shift every price in
@@ -1086,5 +1092,6 @@ Each has a proposed default; the owner may change any of them.
 
   *Proposed default: practise before, judge after. Practice and indexing on
   Train; Select and Out-of-sample only as a pre-check marked as possibly
-  recalled; the paired replay and the promotion gate (D9) only on months
-  after the cutoff, as they accumulate.*
+  recalled; the tuning quarter of 2026-H2 as a logged pre-check; the paired
+  replay and the promotion gate (D9) on the held-out quarters (2026-Q4
+  first), then the reserve once it is an out-of-sample window.*
