@@ -1168,6 +1168,46 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
 14. The training loop (R24-R28, R30): the proposer, Optuna over the agent's
     design with the decision-point replay mode and paired tests, the
     verifiers, the archive, and promotion as a reviewed pull request.
+    **Status: skeleton built** (`scripts/train-loop.js`,
+    `scripts/lib/train/`, the `training-loop` and `design-self-review`
+    skills). Built: the orchestrator (resumable, one loop at a time, refused
+    while a live runner runs, limits on iterations, model calls and wall
+    time, a dry run); the decision-point replay mode in its simplest form
+    (the champion's continuous replay checkpointed before each trade
+    decision, each point re-run from its checkpoint with the champion's or a
+    candidate's tree, a point in a trade run on to the day's end); the
+    proposer (the runner config's harness CLI, a prompt template short
+    enough for a small local model, structured edits to skills, strategies
+    and rulebooks only, validated, applied and synced in a copy; an external
+    model only as a manual import a person approves); the paired test (the
+    same points, seeds and repeats, each decision's repeats counted once,
+    a decision the champion's scorecard left unchecked left out (more than
+    10% of them: insufficient evidence), one the candidate turned unchecked
+    counted as broken; an exact
+    McNemar test with a minimum
+    pair count, discordant count and effect, a per-category harm check with
+    a tolerance of floor(2% of the decisions), so none under 50, zero
+    blows; frozen, a config may only tighten it; a trade either side opens
+    is followed to its end); a rulebook edit only tightens it, key by key, multipliers compared as
+    the verdict applies them;
+    the
+    archive; every look logged through `prop/looks.js`, tuning windows only,
+    held-out judging a separate step that spends the budget, each held-out
+    month once, in one ledger whatever the harness home; a kept change
+    written as a local branch and a pull request body draft, never pushed.
+    The evaluator (step 9) is the mechanical verifier
+    (`scripts/lib/train/evaluator.js`): on the tuning windows the
+    champion's tree and the candidate's are scored on the same bar files
+    and seed, and the candidate fails on a blow, a gate failure the
+    champion lacks, or a pass-rate lower bound no higher than the
+    champion's (a tie, the 0 of a short window included, counts against
+    it); on held-out windows the
+    candidate alone, each scoring a judging look; with no `evaluator` in
+    the loop config a strategy or rulebook change stays `blocked`.
+    Not yet: Optuna over the agent's design (R30's categorical search; the
+    loop judges each proposal on its own), and the LLM-level estimate (R20)
+    as a verifier. The scorecard (step 2) is read through an adapter, under
+    the look's rules (tuning, or judging held out).
 15. Walk-forward re-learning (R17), run through the training loop.
 16. Strategy-change re-learning (R33): the fingerprint, staleness in code,
     the trigger, and paper until re-verified (enforced by the gate).

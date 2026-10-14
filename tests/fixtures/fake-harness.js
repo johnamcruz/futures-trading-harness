@@ -134,7 +134,26 @@ async function probe(argv) {
   else process.stdout.write(`${JSON.stringify(events)}\n`);
 }
 
-if (prompt.includes('FTH-HEADLESS-PROBE')) {
+/**
+ * The training loop's tests. FAKE_HARNESS_PROPOSALS=<JSON list>: the self-review prompt (FTH-SELF-REVIEW) gets one
+ * PROPOSAL line per item. FAKE_HARNESS_PLANT=<a file in the tree the runner runs from, FTH_ROOT>: the cycle's result
+ * reads it: PLANTED-FIX in it gives a right result, PLANTED-HARM a harmful one, neither the planted failure.
+ */
+function planted() {
+  if (prompt.includes('FTH-SELF-REVIEW') && process.env.FAKE_HARNESS_PROPOSALS) {
+    for (const p of JSON.parse(process.env.FAKE_HARNESS_PROPOSALS)) process.stdout.write(`PROPOSAL ${JSON.stringify(p)}\n`);
+    return true;
+  }
+  if (!process.env.FAKE_HARNESS_PLANT) return false;
+  const text = fs.readFileSync(path.join(process.env.FTH_ROOT, process.env.FAKE_HARNESS_PLANT), 'utf8');
+  const result = text.includes('PLANTED-FIX') ? 'nothing fired (planted fix)' : text.includes('PLANTED-HARM') ? 'planted harm' : 'opening window until 10:00 (planted failure)';
+  process.stdout.write(`CYCLE RESULT: no-trade - ${result}\n`);
+  return true;
+}
+
+if (planted()) {
+  // a training-loop test's answer, written above
+} else if (prompt.includes('FTH-HEADLESS-PROBE')) {
   probe(process.argv.slice(2)).catch(err => {
     process.stderr.write(`fake harness probe: ${err.message}\n`);
     process.exit(5);
