@@ -14,13 +14,17 @@ const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 
 const DIR = path.join(__dirname, '..', 'fixtures', 'parity');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+const { FX_STRATEGIES } = require('../helpers');
 
-// The shipped ports and their names in the original bot's output. The expected files also hold the signals of the
-// ports retired on 2026-10-13 (bos, ema, keltner, supertrend; strategies/README.md, "Retired strategies"): the
-// original bot's own output, kept as it was and left out here.
-const NAMES = { orb: 'orb', cisd_ote: 'cisd_ote' };
-// The shipped STRATEGY.md files, as written: Markdown rules, no strategy code.
-const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), {}).strategies;
+// The ports and their names in the original bot's output: the shipped ones (orb, cisd_ote), and the rules of the ports
+// retired on 2026-10-13 (strategies/README.md, "Retired strategies") as test fixtures, so the rule series they read
+// (swing crosses, EMA crosses with ADX, Keltner bands, SuperTrend flips) keep their parity: fx_break and fx_cross
+// (tests/fixtures/strategies-fx, the old bos and ema_cross rules), fx_keltner and fx_supertrend
+// (tests/fixtures/strategies-fx-parity).
+const NAMES = { orb: 'orb', cisd_ote: 'cisd_ote', fx_break: 'bos', fx_cross: 'ema', fx_keltner: 'keltner', fx_supertrend: 'supertrend' };
+// The STRATEGY.md files, as written: Markdown rules, no strategy code.
+const FX_DIRS = [FX_STRATEGIES, path.join(__dirname, '..', 'fixtures', 'strategies-fx-parity')].join(',');
+const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_DIRS }).strategies;
 const strategy = name => {
   const s = SHIPPED.find(x => x.name === name);
   assert.ok(s && s.valid && s.signal === 'rules', `${name} is a valid rules strategy`);
@@ -44,12 +48,12 @@ for (const sym of ['NQ', 'RTY']) {
       }
     }
     const key = x => `${new Date(x.t).toISOString()} ${x.s} ${x.d}`;
-    const want = new Map(expected.signals.filter(x => Object.values(NAMES).includes(x.s)).map(x => [key(x), Math.round(x.stop * 100) / 100]));
+    const want = new Map(expected.signals.map(x => [key(x), Math.round(x.stop * 100) / 100]));
     const have = new Map(got.map(x => [key(x), x.stop]));
     assert.deepStrictEqual([...have.keys()].filter(k => !want.has(k)), [], 'signals the original bot does not fire');
     assert.deepStrictEqual([...want.keys()].filter(k => !have.has(k)), [], 'signals the harness misses');
     for (const [k, stop] of want) assert.ok(Math.abs(have.get(k) - stop) <= 0.01, `${k}: stop ${have.get(k)} vs ${stop}`);
-    assert.ok(want.size >= 5, `${want.size} signals`);
+    assert.ok(want.size > 150, `${want.size} signals`);
     for (const n of Object.values(NAMES)) assert.ok(expected.signals.some(x => x.s === n), `the original bot fires ${n} here`);
   });
 }

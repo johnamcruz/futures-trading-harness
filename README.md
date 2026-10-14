@@ -454,8 +454,12 @@ More runner settings:
   disagrees with the first lane's is refused. A `policies` list that leaves
   out another policy on the lane's timeframe with a running prop attempt is
   refused at start too: that policy owns its strategies' setups, which the
-  lane would never trade. `node scripts/preflight.js` lists each lane with
-  its strategies and policies.
+  lane would never trade. A lane that lists a retired strategy
+  (`strategies/README.md`, "Retired strategies") is the exception: the
+  runner starts, logs it as an error (and a `lane_retired` event), and that
+  lane enters nothing while every open position is still managed; remove
+  the name. `node scripts/preflight.js` lists each lane with its strategies
+  and policies, and fails on a retired one.
 
   Several lanes cycle together: a bar clock per symbol and lane, and the
   lanes whose bars close at the same time go into ONE cycle (each 3m close is

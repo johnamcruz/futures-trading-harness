@@ -144,7 +144,9 @@ test('order_plan: the caller chooses; it refuses, with the reason, rather than p
   refuse({ strategy: 'fx_break', side: 'up' }, /side: long or short/);
   refuse({ strategy: 'fx_break', side: 'short' }, /fx_break fired long on the last closed bar, not short: the other side is not its setup; no order/);
   refuse({ strategy: 'orb', side: 'long' }, /orb is not a candidate on the last closed bar \(no rule set fired .*\); no order/);
-  refuse({ strategy: 'nope', side: 'long' }, /unknown strategy "nope"/);
+  refuse({ strategy: 'nope', side: 'long' }, /unknown strategy "nope" \(known:/);
+  // A retired strategy (strategies/README.md, "Retired strategies"): refused, saying so.
+  refuse({ strategy: 'bos', side: 'long' }, /unknown strategy "bos" \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\) \(known:/);
   refuse({ strategy: 'fx_break', side: 'long', accountId: 1.5 }, /accountId: the broker account's id/);
   // A contract outside every family fx_break lists (MNQ, MES, MYM, M2K): refused, its family named too.
   assert.throws(() => plan({ file, symbol: 'GC', strategy: 'fx_break', side: 'long' }, ctx), /fx_break does not trade GC \(instruments: MNQ, MES, MYM, M2K\)/);

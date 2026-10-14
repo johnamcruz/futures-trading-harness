@@ -37,14 +37,23 @@
  *   analystFrames(cfg, agents)           the analysts on a timeframe other than the first lane's:
  *                                        [{ role, minutes, lane }] (lane: the lane of that timeframe's index, or -1: built)
  *   omittedPolicyErrors(cfg, strategies, attemptRunning)  a lane's policies list leaving out a policy with a running attempt
- *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, agents)
+ *   retireLanes(cfg, strategies)         marks each lane that lists a retired strategy (strategies.js RETIRED) no folder
+ *                                        defines: lane.retired = [names]; returns one error line per such lane
+ *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, agents),
+ *                                        after retireLanes (a retired lane is never a refusal: see below)
+ *
+ * A lane that lists a retired strategy doesn't stop the runner (that would leave an open position untrailed): the
+ * runner starts, says so loudly (its log, a lane_retired event, preflight), and the lane enters nothing: it scans no
+ * strategy and no policy, so no setup fires and no verdict is recorded on it, and the gate refuses any entry on its
+ * timeframe. Its bars are still polled, so the trailing stops, end of day and every open position's management go on;
+ * it runs a cycle only for an open position or a working order. A name that never existed still fails closed at start.
  *
  * Several lanes cycle together (runner.js, lane-cycle.js): a bar clock per symbol and lane, and the lanes whose
  * bars closed on a pass go into one cycle. The first lane is the runner's own (its timeframe and trigger are the
  * config's): its bars feed the multi-timeframe record, the bar briefing and the trailing stops.
  */
 
-const { onTimeframe, retiredNote } = require('./trading/strategies');
+const { onTimeframe, retiredNote, RETIRED } = require('./trading/strategies');
 const { familyRoot } = require('./trading/contracts');
 const { ANALYSTS } = require('./trading/roles-ran');
 
@@ -111,6 +120,7 @@ function lanesOf(cfg) {
  * policies' setups). A list left out takes every one of its kind.
  */
 function laneStrategies(strategies, lane) {
+  if (lane.retired) return [];
   const on = onTimeframe(strategies, tfOf(lane));
   const policies = on.filter(s => s.signal === 'policy' && (!lane.policies || lane.policies.includes(s.name)));
   const traded = new Set(policies.flatMap(p => (Array.isArray(p.strategies) ? p.strategies : [])));
@@ -127,6 +137,7 @@ function laneStrategyErrors(lanes, strategies) {
       for (const n of lane[k] || []) {
         const s = strategies.find(x => x.name === n);
         const at = `lanes[${i}].${k}`;
+        if (!s && lane.retired && lane.retired.includes(n)) continue; // retired: the lane enters nothing (retireLanes)
         if (!s) errors.push(`${at}: no strategy named ${n}${retiredNote(n)}`);
         else if (!s.valid) errors.push(`${at}: ${n} is not valid (${(s.errors || []).join('; ') || 'see strategies_validate'})`);
         else if (k === 'policies' && s.signal !== 'policy') errors.push(`${at}: ${n} is signal: ${s.signal}, not a policy strategy (list it under strategies)`);
@@ -140,7 +151,7 @@ function laneStrategyErrors(lanes, strategies) {
 
 /** A trigger "signal" lane needs a mechanical strategy that isn't disabled: otherwise only open positions start its cycles. */
 function signalLaneErrors(lanes, strategies) {
-  return lanes.filter(l => l.trigger === 'signal')
+  return lanes.filter(l => l.trigger === 'signal' && !l.retired)
     .filter(l => !laneStrategies(strategies, l).some(s => s.valid && s.status !== 'disabled' && s.signal !== 'manual'))
     .map(l => `trigger "signal" with timeframe ${l.timeframe}: no active mechanical strategy uses ${tfOf(l)}, so only open positions would ever start a cycle. Use trigger "bar" or a matching timeframe.`);
 }
@@ -155,7 +166,7 @@ function omittedPolicyErrors(cfg, strategies, attemptRunning = () => false) {
   const fams = new Set((cfg.symbols || []).map(familyRoot));
   const errors = [];
   lanesOf(cfg).forEach((lane, i) => {
-    if (!lane.policies) return;
+    if (!lane.policies || lane.retired) return;
     for (const s of onTimeframe(strategies, tfOf(lane))) {
       if (!(s.valid && s.signal === 'policy') || lane.policies.includes(s.name)) continue;
       if (!(s.status === 'active' || (cfg.paper && s.status !== 'disabled'))) continue;
@@ -168,6 +179,7 @@ function omittedPolicyErrors(cfg, strategies, attemptRunning = () => false) {
 
 /** One line on a lane: its bar, trigger, and the strategies and policies it scans. */
 function describeLane(lane, strategies) {
+  if (lane.retired) return `${tfOf(lane)} bars, trigger ${lane.trigger}; ${retiredLaneText(lane)}`;
   const list = laneStrategies(strategies, lane).filter(s => s.valid && s.status !== 'disabled');
   const names = kind => list.filter(s => (kind === 'policy') === (s.signal === 'policy')).map(s => s.name);
   const show = a => (a.length ? a.join(', ') : 'none');
@@ -254,13 +266,32 @@ function analystFrames(cfg, agents) {
     .map(t => ({ ...t, lane: lanes.findIndex(l => l.timeframe === t.minutes) }));
 }
 
-/** Every refusal the runner checks at start against the strategies and agent roles. */
-const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => [
+/** What a retired lane does, for the runner's log and preflight. */
+const retiredLaneText = lane => `lists ${lane.retired.map(n => `${n}${retiredNote(n)}`).join(', ')}: this lane enters nothing (no strategy or policy scanned, no setup, no verdict); its bars, the trailing stops, end of day and every open position's management go on. Remove ${lane.retired.length > 1 ? 'them' : 'it'} from the runner config's lanes`;
+
+/**
+ * Marks each of the config's lanes that lists a retired strategy no strategy folder defines (a user's own copy under
+ * that name is theirs: strategies.js RETIRED): `lane.retired` = those names. Returns one error line per lane marked.
+ */
+function retireLanes(cfg, strategies) {
+  if (!Array.isArray(cfg.lanes)) return [];
+  const out = [];
+  cfg.lanes.forEach((lane, i) => {
+    const names = [...(lane.strategies || []), ...(lane.policies || [])].filter(n => Object.hasOwn(RETIRED, n) && !strategies.some(s => s.name === n));
+    if (!names.length) return;
+    lane.retired = names;
+    out.push(`lanes[${i}] (${tfOf(lane)}) ${retiredLaneText(lane)}`);
+  });
+  return out;
+}
+
+/** Every refusal the runner checks at start against the strategies and agent roles (after retireLanes marks its lanes). */
+const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => (retireLanes(cfg, strategies), [
   ...laneStrategyErrors(lanesOf(cfg), strategies), ...signalLaneErrors(lanesOf(cfg), strategies),
   ...omittedPolicyErrors(cfg, strategies, attemptRunning), ...agentErrors(cfg, agents),
-];
+]);
 
 module.exports = {
   LANE_KEYS, TRIGGERS, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
-  tfMinutes, tfLabel, agentOverrideErrors, agentErrors, agentTimeframes, frameError, analystFrames, omittedPolicyErrors, startErrors,
+  tfMinutes, tfLabel, agentOverrideErrors, agentErrors, agentTimeframes, frameError, analystFrames, omittedPolicyErrors, retiredLaneText, retireLanes, startErrors,
 };

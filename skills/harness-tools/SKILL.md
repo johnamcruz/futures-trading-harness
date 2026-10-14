@@ -96,7 +96,7 @@ market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-15m.
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ"}
 → Scan of MNQ on the last closed bar (opened 2026-10-07T13:57:00.000Z): 9 strategies, 1 candidate. Regime trend-up. Trend 4h up, 1h up, 15m up, prevailing 4h up.
   Candidates:
-    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), target 1.5R = 31 ticks ($15.50/MNQ contract), minRR 1.5, exit: target 1.5R | with: none; against: none
+    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none
   Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
   Every strategy (name | status | timeframe | direction | candidate | why not):
     cisd_ote | active | 3m | - | no | no rule set fired (long: cisd_ote_dir > 0; short: cisd_ote_dir < 0)

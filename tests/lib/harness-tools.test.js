@@ -61,7 +61,8 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   assert.ok(rows.some(r => r.name === 'orb'));
   assert.match(strategies.list({}, ctx).text, /^orb +active/m);
   assert.match(strategies.show({ name: 'orb' }, ctx).text, /^---\nname: orb/);
-  assert.throws(() => strategies.show({ name: 'nope' }, ctx), /unknown strategy "nope"/);
+  assert.throws(() => strategies.show({ name: 'nope' }, ctx), /unknown strategy "nope" \(known:/);
+  assert.throws(() => strategies.show({ name: 'keltner' }, ctx), /unknown strategy "keltner" \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\)/);
   assert.strictEqual(strategies.validate({}, ctx).code, 0);
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, 'broken'));

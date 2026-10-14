@@ -81,10 +81,12 @@ rules can't spell out (cisd_ote) is a series the rules use (`cisd_ote_dir`).
 
 The ports' rules trade exactly as the original bot's detectors do:
 `tests/lib/parity.test.js` checks every signal and stop against the original bot's
-own output on its data. Their frontmatter adds no extra gates: no
-`sessions`, `regimes`, or `filters`. The runner's sessions and end of day
-decide when they trade. To adapt one to a regime, add `regimes:` (or a
-filter) in a copy, and backtest both (`scripts/backtest.js`, see
+own output on its data (and the retired ports' rules, kept as test
+fixtures, against theirs). `orb` trades the New York session, as its
+source does, and (a harness filter, not in the source) only in trend and
+transition regimes; `cisd_ote` has no `sessions`, `regimes`, or
+`filters`, and the runner's sessions and end of day decide when it trades. To adapt one, add
+`regimes:` (or a filter) in a copy, and backtest both (`scripts/backtest.js`, see
 docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
 initial stop (0.5 × ATR(20)) until +2R, then trail 0.5R behind the best
 price (`exit:` block).
@@ -141,18 +143,23 @@ Why, for all four:
 
 - The owner's decision: as strategies they confused the model, and the
   basic skills already cover what they detect.
-- Correlated: in the 2026-10-13 quant audit, about half of the `bos`
-  candidates had a `keltner` one within 9 minutes, and for `ema_cross` and
-  `supertrend` 46%.
-- Negative after costs on Train in the 2026-10-13 edge census.
+- Correlated: they largely fire together (2026-10-13 quant audit).
+- Negative after costs on Train (2026-10-13 edge census).
 
 A record that still names one never breaks anything: an entry tagged with
 it is refused, saying it was retired (the order gate, `order_plan`, a
-policy verdict from it, a lanes config or policy list naming it, a
-backtest asked for it), while an `[exit]` or `[protect]` order for a
-position it opened still goes and the runner keeps trailing that position
-by its remembered exit plan (`scripts/lib/trading/strategies.js`
-`RETIRED`; `tests/lib/retired-strategies.test.js`).
+policy verdict from it, a policy list naming it, a backtest asked for
+it), while an `[exit]` or `[protect]` order for a position it opened still
+goes and the runner keeps trailing that position by its remembered exit
+plan. A runner lane that lists one doesn't stop the runner: it starts and
+says so loudly (its log, a `lane_retired` event, and preflight), and that
+lane enters nothing while its bars, the trailing stops, end of day and
+every open position's management go on (`scripts/lib/lanes.js`
+`retireLanes`; remove the name from the runner config). A name that never
+existed still stops the runner at start (`scripts/lib/trading/strategies.js`
+`RETIRED`; `tests/lib/retired-strategies.test.js`). A private copy under
+one of these names in a folder of your own (`FTH_STRATEGIES_DIRS`) is
+yours, not a shipped strategy: it loads and trades as any user strategy.
 
 ## Commands
 

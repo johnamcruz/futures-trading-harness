@@ -36,7 +36,7 @@ const { lockExemption, lockStatus, lockRefusal, serverIdentities, lockDir, lockD
 const { createMcpClient } = require('./broker/mcp-client');
 const { checkConformance } = require('./broker/conformance');
 const { loadStrategies } = require('./trading/strategies');
-const { lanesOf, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane, agentTimeframes, agentErrors, omittedPolicyErrors } = require('./lanes');
+const { lanesOf, lanePolicies, retireLanes, laneStrategyErrors, signalLaneErrors, describeLane, agentTimeframes, agentErrors, omittedPolicyErrors } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { loadAccounts } = require('./trading/accounts');
 const { readAttempt } = require('./trading/prop-state');
@@ -181,11 +181,13 @@ function propProfiles(strategies, accounts, cfg) {
 
 /** Each lane of the runner (lanes.js): its bar, trigger, strategies and policies; a listed name off its lane fails. */
 function laneChecks(cfg, strategies, home = null) {
+  // A lane listing a retired strategy: the runner starts, but the lane enters nothing (lanes.js retireLanes): a failure here.
+  const retired = retireLanes(cfg, strategies);
   const lanes = lanesOf(cfg);
   const out = lanes.map((l, i) => r(`lane ${l.timeframe}m`, 'ok', `${describeLane(l, strategies)}${i === 0 && !cfg.lanes ? ' (from timeframe and trigger)' : ''}`));
   const running = a => Boolean(home && readAttempt(home, a));
   const why = [...laneStrategyErrors(lanes, strategies), ...signalLaneErrors(lanes, strategies), ...omittedPolicyErrors(cfg, strategies, running)];
-  return why.length ? [...out, r('lane strategies', 'fail', why.join('; '))] : out;
+  return [...out, ...(retired.length ? [r('retired strategies in lanes', 'fail', retired.join('; '))] : []), ...(why.length ? [r('lane strategies', 'fail', why.join('; '))] : [])];
 }
 
 /** Each agent role's effective timeframe (its config override, its agent file's, else the lane's); lanes.js agentErrors decides which fail. */
