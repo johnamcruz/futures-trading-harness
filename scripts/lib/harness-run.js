@@ -47,7 +47,7 @@ function liveWriter(file) {
 
 /**
  * Run argv in its own process group (so a timeout kills the harness and
- * everything it started). Resolves { ok, timedOut, code, output, stdout } once the
+ * everything it started). Resolves { ok, timedOut, code, output, stdout, lineTimes } once the
  * harness process exits (`stdout`: the standard output alone): a detached grandchild still holding its output
  * pipes can't hold up the loop, and whatever it left in its process group is
  * stopped.
@@ -70,7 +70,9 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
         child.kill(sig);
       }
     };
-    child.stdout.on('data', c => { output += c; stdout += c; live(c); });
+    // Each standard-output line's arrival (wall ms), for the cycle's timing (cycle-timing.js): a line without its own time.
+    const lineTimes = [];
+    child.stdout.on('data', c => { const s = String(c); output += s; stdout += s; live(c); for (let i = s.indexOf('\n'); i !== -1; i = s.indexOf('\n', i + 1)) lineTimes.push(Date.now()); });
     child.stderr.on('data', c => { output += c; });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -82,7 +84,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       clearTimeout(timer);
       onChild(null);
       live.done();
-      resolve({ ok: false, timedOut, stdout, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
+      resolve({ ok: false, timedOut, stdout, lineTimes, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
@@ -97,7 +99,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
         child.stderr.destroy();
         live.done();
         const exitCode = code === null ? (signal ? 1 : 0) : code;
-        resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output, stdout });
+        resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output, stdout, lineTimes });
       }, 200);
     });
   });

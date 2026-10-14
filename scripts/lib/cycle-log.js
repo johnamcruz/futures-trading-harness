@@ -20,6 +20,9 @@
  *       risk-manager phase-2 report's FACTS checked against the briefing
  *       (trading/fact-claims.js cycleFactChecks), for review (the scorecard
  *       reads its own reasonChecks, not this record)
+ *   timing (in both, when the runner gave one): when the cycle acted against
+ *       its bar (cycle-timing.js: the bar's close, the roles' calls, the
+ *       decision, the order, the end; latencies, overran, setup caught/missed)
  *
  * Transcripts: Claude Code runs with --output-format stream-json (one JSON
  * event per line, tool calls included); Codex with --json; Qwen Code with
@@ -196,16 +199,17 @@ function gateOrders(env, fromMs, toMs) {
  * autotrader.js childEnv) as the order gate reads them there: the replay clock's time when one is in force
  * (FTH_REPLAY_NOW, trading/harness-now.js; unset or refused: `at`, the wall clock), and the lanes whose bar closed
  * (FTH_CYCLE_LANE_BARS, trading/config.js; set but unreadable: null, so every situational lookup is required, as the
- * gate). No env (a caller that gives none): `at` and one lane, as before.
+ * gate). No env (a caller that gives none): `at` and one lane, as before. `replay`: the replay clock was in force.
  */
 function cycleClock(env, at) {
-  if (!env) return { cycleAt: at, laneBars: {} };
+  if (!env) return { cycleAt: at, laneBars: {}, replay: false };
   let cycleAt = at;
+  let replay = false;
   try {
     const c = resolveClock(env, { testClock: false });
-    if (c.replay) cycleAt = c.now();
+    if (c.replay) [cycleAt, replay] = [c.now(), true];
   } catch (_err) { /* the wall clock */ }
-  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS) };
+  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS), replay };
 }
 
 /**
@@ -217,7 +221,7 @@ function cycleClock(env, at) {
  * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
  * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
  */
-function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
+function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
@@ -240,7 +244,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     fs.mkdirSync(dir, { recursive: true });
     const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
-      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck,
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck, ...(timing ? { timing } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2);
@@ -259,6 +263,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
       ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
+      ...(timing ? { timing } : {}),
     })}\n`);
   } catch (_err) {
     // best effort
@@ -286,4 +291,4 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders };
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders, RISK_REDUCING };

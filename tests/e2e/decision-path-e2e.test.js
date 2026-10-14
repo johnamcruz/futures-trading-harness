@@ -188,6 +188,35 @@ test('decision path, entry: every skill, lookup, role and fact in place: the ord
   const placed = fs.readFileSync(w.journal, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.kind === 'order_placed');
   assert.strictEqual(placed.length, 1);
   assert.match(placed[0].text, new RegExp(`^setup:${SETUP.strategy} ${SETUP.side}`));
+  // The cycle's timeline, on the replay clock: the bar's close, the start (the decision time), each role's call, the
+  // decision (the entry order, as the gate logged it), the end, in that order; the setup decided and entered in time.
+  const t = line.timing;
+  const ms = x => Date.parse(x);
+  const closeOf = bar => new Date(ms(bar) + D.STEP).toISOString();
+  assert.deepStrictEqual([t.clock, t.barClose, t.nextBarClose, t.start, t.latencyMs.start], ['replay', closeOf(FIRED_BAR), closeOf(NEXT_BAR), decisionAt(FIRED_BAR), 2000]);
+  assert.deepStrictEqual(t.roles.map(r => r.role), [...D.ANALYSTS, 'risk-manager', 'risk-manager', 'trade-executor']);
+  assert.ok(t.roles.every(r => r.ms >= 0), JSON.stringify(t.roles));
+  const reports = t.roles.filter(r => r.role !== 'trade-executor');
+  const seq = [ms(t.barClose), ms(t.start), ...reports.flatMap(r => [ms(r.start), ms(r.end)]), ms(t.decision), ms(t.order), ms(t.end)];
+  assert.deepStrictEqual(seq, [...seq].sort((a, b) => a - b), JSON.stringify(t));
+  assert.strictEqual(t.decision, t.order, 'decided at the entry order');
+  assert.ok(ms(t.order) >= ms(t.roles.at(-1).start), 'sent by the trade-executor');
+  assert.deepStrictEqual([t.decisionFrom, t.orders, t.orderDecision, t.overran, t.setup, t.setupCaught, t.enteredInTime, t.setupMissed], ['transcript', 1, 'allowed', false, true, true, true, null]);
+  assert.deepStrictEqual([t.latencyMs.decision, t.latencyMs.order], [ms(t.decision) - ms(t.barClose), ms(t.order) - ms(t.barClose)]);
+  // The replay report carries it (store.js cycleSummary).
+  assert.deepStrictEqual(require('../../scripts/lib/replay/store').cycleSummary(line).timing, t);
+});
+
+test('decision path, missed: a setup on the table, the model decides after the next bar closed; recorded as missed, overran', async () => {
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, `${SETUP.strategy} ${SETUP.side} skipped: late`), { lateBy: 200000 });
+  const t = D.cycleLines(w).at(-1).timing;
+  assert.ok(Date.parse(t.decision) > Date.parse(t.nextBarClose) && Date.parse(t.end) > Date.parse(t.nextBarClose), JSON.stringify(t));
+  assert.deepStrictEqual([t.clock, t.setup, t.overran, t.setupCaught, t.enteredInTime, t.setupMissed, t.order], ['replay', true, true, false, false, 'overran', null]);
+  assert.ok(t.latencyMs.decision > 200000);
+  // And in the report: one setup bar, missed for overrunning.
+  const r = require('../../scripts/lib/cycle-timing').timingReport([{ timing: t }]);
+  assert.deepStrictEqual([r.setup.cycles, r.setup.decidedInTime, r.setup.missed, r.setup.missedBy, r.all.overran], [1, 0, 1, { overran: 1 }, 1]);
 });
 
 // One refusal per missing piece: the entry cycle with that piece removed, the gate's one check that refuses it.
