@@ -17,6 +17,7 @@ const { scratchDir } = require('./bars-fetch');
 const { SERVER_NAME, activeBroker } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
+const { candidateTrendRule } = require('./trading/signal-state');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
@@ -327,7 +328,7 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [] } = {}) {
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false } = {}) {
   // Manage-only is stated once, in the instruction's mode.
   if (manageOnly) return '';
   // No scan: the reason is in the "Context unavailable" line.
@@ -336,7 +337,9 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
-    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
+    // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).
+    const rule = lane ? candidateTrendRule(r) : null;
+    return `${r.name} ${r.direction}${rule ? ` (trend rule: ${rule})` : ''}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
   // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.
@@ -475,7 +478,7 @@ function prompts(cfg, now, root = '') {
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
-        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [] }));
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe }));
       const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',

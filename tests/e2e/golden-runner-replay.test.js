@@ -241,7 +241,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   for (const c of oneMin) assert.match(c.prompt, /MNQ: a 1-minute bar just closed .* MNQ [^.]*\(recorded for the order gate, which enforces it\)/);
 });
 
-test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss sequence and keys are pinned; 1m cycles reuse the 3m reports, no extra misses', async () => {
+test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss sequence and keys are pinned; in full mode 1m cycles reuse the 3m reports with no extra misses; in index mode a 1m setup runs the roles its lookups require', async () => {
   // A 1m rules strategy (a reversal: no trend rule) firing on a 1m bar that closes off the last one: in these bars,
   // the first minute of each 3m bar (1m-only closes), so the signal lane cycles between the 3m closes.
   const dir = path.join(tmpDir(), 'strategies', 'tick_up');

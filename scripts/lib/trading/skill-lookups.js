@@ -72,17 +72,17 @@ function readLookups(transcript) {
   return out;
 }
 
-// A candidate whose trend rule a lane's signal record doesn't carry: every trend rule a situational trigger reads, so
-// each lookup such a candidate could require is required (fails closed).
+// A candidate from a lane's signal record written before the records kept their setups' trend rules: every trend rule
+// a situational trigger reads, so each lookup such a candidate could require is required (fails closed).
 const UNKNOWN_TREND_RULES = ['reversal', 'allows', 'against'];
 
 /**
  * The facts the situational triggers read for one root this cycle: the runner's bar briefing's m3 while current at
  * `now`, with the candidates of each other lane whose bar closed this cycle (`lanes`: [{ minutes, t }], t that bar's
  * open). A lane's candidates come from its briefing on that bar (readFrame(minutes), when an analyst reads that
- * timeframe), else from its signal record on that bar (readSignal(minutes); its candidates carry no trend rule, so
- * every trend rule counts). null, so every situational lookup is required (fails closed): no current runner briefing,
- * or a closed lane with neither on its bar.
+ * timeframe), else from its signal record on that bar (readSignal(minutes): its setups with their trend rules; an
+ * older record without them, its candidates under every trend rule). null, so every situational lookup is required
+ * (fails closed): no current runner briefing, or a closed lane with neither on its bar.
  */
 function cycleFacts({ first, now, lanes = [], readFrame = () => null, readSignal = () => null }) {
   const m3 = first && current(first, now) && first.sections.m3 ? first.sections.m3.data || null : null;
@@ -94,7 +94,11 @@ function cycleFacts({ first, now, lanes = [], readFrame = () => null, readSignal
     const data = f && f.asOf === t && f.sections && f.sections.bar ? f.sections.bar.data : null;
     if (data && Array.isArray(data.candidates)) { extra.push(...data.candidates); continue; }
     const rec = readSignal(minutes);
-    if (!rec || rec.error || rec.asOf !== t || !Array.isArray(rec.candidates)) return null;
+    if (!rec || rec.error || rec.asOf !== t) return null;
+    // Its setups as the briefing lists them, each with its trend rule (signal-state.js buildSignals); a record from
+    // before they were kept: its rules candidates under every trend rule.
+    if (Array.isArray(rec.setups)) { extra.push(...rec.setups.map(c => ({ name: c.name, direction: c.direction, trendRule: c.trendRule ?? null }))); continue; }
+    if (!Array.isArray(rec.candidates)) return null;
     for (const c of rec.candidates) for (const trendRule of UNKNOWN_TREND_RULES) extra.push({ name: c.name, direction: c.direction, trendRule });
   }
   if (!extra.length) return m3;
@@ -104,8 +108,12 @@ function cycleFacts({ first, now, lanes = [], readFrame = () => null, readSignal
 /** The other lanes' bars that closed this cycle for `root` ({ ROOT: { minutes: t } }, config.js cycleLaneBars). */
 const lanesFor = (laneBars, root) => Object.entries((laneBars || {})[familyRoot(root)] || {}).map(([m, t]) => ({ minutes: Number(m), t }));
 
-/** cycleFacts over the harness home for `root`: its bar briefing, and its lanes' briefings and signal records. */
+/**
+ * cycleFacts over the harness home for `root`: its bar briefing, and its lanes' briefings and signal records.
+ * `laneBars` null (FTH_CYCLE_LANE_BARS set but unreadable: config.js): the lanes are unknown, so null (fails closed).
+ */
 function briefingFacts(home, root, now, laneBars = {}) {
+  if (laneBars === null) return null;
   return cycleFacts({
     first: readBriefing(home, root), now, lanes: lanesFor(laneBars, root),
     readFrame: m => readFrameBriefing(home, root, m), readSignal: m => readSignals(home, root, `${m}m`),

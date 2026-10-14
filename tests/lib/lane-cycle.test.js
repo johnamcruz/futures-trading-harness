@@ -98,7 +98,7 @@ test('the trade prompt: each lane\'s bar file and minutes; a symbol\'s further l
   const bar = (t, file) => ({ t, c: 1, file, contractId: 'MNQ', trend: 'trend rule: 4h up', day: 'Day so far: up', plan: 'Plan: buy dips', recent: [] });
   const items = [
     { symbol: 'MNQ', minutes: 3, repeat: false, scan: [], bar: bar('2026-10-07T14:00:00Z', '/b/MNQ-3m.json') },
-    { symbol: 'MNQ', minutes: 1, repeat: true, scan: [{ name: 'quick', signal: 'rules', candidate: true, direction: 'long' }], bar: bar('2026-10-07T14:02:00Z', '/b/MNQ-1m.json') },
+    { symbol: 'MNQ', minutes: 1, repeat: true, scan: [{ name: 'quick', signal: 'rules', candidate: true, direction: 'long', mtf: { style: 'reversal' } }], bar: bar('2026-10-07T14:02:00Z', '/b/MNQ-1m.json') },
   ];
   const text = prompts(cfg, now).trade(items, { lanes: LC.lanesLine(cfg.lanes) });
   assert.match(text, /Lanes closed this cycle: 3m \(every bar\), 1m \(every bar\)/);
@@ -106,7 +106,11 @@ test('the trade prompt: each lane\'s bar file and minutes; a symbol\'s further l
   assert.match(text, /MNQ: a 1-minute bar just closed .* in \/b\/MNQ-1m\.json .* for the 1-minute timeframe/);
   assert.strictEqual(text.split('trend rule: 4h up').length - 1, 1, 'the trend line once');
   assert.strictEqual(text.split('Plan: buy dips').length - 1, 1, 'the plan once');
-  assert.match(text, /MNQ 1m fired on this bar .*quick long/);
+  assert.match(text, /MNQ 1m fired on this bar .*quick long \(trend rule: reversal\)/, 'another lane\'s setup with its trend rule (the roles\' lookups read it)');
+  // The first lane's setups don't repeat it: the bar briefing gives their trend rule.
+  const first = prompts(cfg, now).trade([{ ...items[0], scan: [{ name: 'orb', signal: 'rules', candidate: true, direction: 'long', mtf: { style: 'trend', longAllowed: true } }] }]);
+  assert.match(first, /orb long/);
+  assert.doesNotMatch(first, /trend rule: allows/);
   assert.match(text, /run the trade-session skill for MNQ on account 7\./, 'the symbol once, no "one symbol at a time"');
   // One lane: no lanes line, and the same text with or without the minutes key.
   const one = validateConfig({ ...BASE, timeframe: 3 });

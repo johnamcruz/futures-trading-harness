@@ -85,6 +85,7 @@ const { normalizeBars, atr: atrOf, sessionKey } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, tickOf, levelOnTick } = require('./contracts');
+const { candidateTrendRule } = require('./signal-state');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
@@ -498,7 +499,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
     entryRef: r.entryRef, stopPoints: round2(R), minRR: r.minRR ?? null,
     exit: { trailActivateR: exit.trailActivateR ?? null, trailGivebackR: exit.trailGivebackR ?? null, targetR: exit.targetR ?? null, maxBars: exit.maxBars ?? null },
     target, inTheWay, ahead, needR,
-    trendRule: mtf.style === 'reversal' ? 'reversal' : allowed === false ? 'against' : allowed === true ? 'allows' : null,
+    trendRule: candidateTrendRule(r),
     alignment: align, vwapSide, facts,
     ...(values ? { values } : {}),
     ...(blocked ? { blocked } : {}),

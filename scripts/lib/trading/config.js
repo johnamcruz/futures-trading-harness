@@ -55,20 +55,26 @@ function cycleBarsOf(raw) {
   }
 }
 
-/** FTH_CYCLE_LANE_BARS ({"MNQ": {"1": "<bar open>"}}): the lanes' bars that closed this cycle, by family root and minutes. */
+/**
+ * FTH_CYCLE_LANE_BARS ({"MNQ": {"1": "<bar open>"}}): the lanes' bars that closed this cycle, by family root and
+ * minutes. Unset or blank: {} (one lane). Set but not that shape: null, which the lookups read as unknown lanes, so
+ * every situational lookup is required (fails closed).
+ */
 function cycleLaneBarsOf(raw) {
+  if (raw === undefined || String(raw).trim() === '') return {};
   try {
-    const o = JSON.parse(raw || '{}');
-    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
     const out = {};
     for (const [k, lanes] of Object.entries(o)) {
-      if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) continue;
-      const ok = Object.entries(lanes).filter(([m, t]) => /^[1-9]\d{0,3}$/.test(m) && typeof t === 'string');
-      if (ok.length) out[familyRoot(k)] = { ...(out[familyRoot(k)] || {}), ...Object.fromEntries(ok) };
+      if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) return null;
+      const entries = Object.entries(lanes);
+      if (entries.some(([m, t]) => !/^[1-9]\d{0,3}$/.test(m) || typeof t !== 'string')) return null;
+      out[familyRoot(k)] = { ...(out[familyRoot(k)] || {}), ...Object.fromEntries(entries) };
     }
     return out;
   } catch (_err) {
-    return {};
+    return null;
   }
 }
 

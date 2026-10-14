@@ -2060,24 +2060,56 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   all();
   assert.deepStrictEqual(run(entryOrder()).violations, []);
   fs.unlinkSync(lookupsFile(file));
-  // The lane's briefing is another bar's (or none: no analyst reads 1m): its signal record on the bar decides. A
-  // candidate there carries no trend rule, so every trend rule's lookups are required.
+  // The lane's briefing is another bar's (or none: no analyst reads 1m): its signal record on the bar decides, its
+  // setups with their trend rules (signal-state.js buildSignals).
   frame('2026-10-07T13:58:00.000Z', []);
-  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [{ name: 'tick_up', direction: 'long' }] });
-  const viaSignal = run(entryOrder());
-  assert.match(viaSignal.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, mtf-rejection, mtf-breakout/);
+  const record = extra => writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [{ name: 'tick_up', direction: 'long' }], ...extra });
+  const unmet = r => r.violations.length ? r.violations[0].message : '';
+  // A reversal setup: the reversal lookups only (never the breakout ones).
+  record({ setups: [{ name: 'tick_up', direction: 'long', trendRule: 'reversal' }] });
+  const rev = unmet(run(entryOrder()));
+  assert.match(rev, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection \(/);
+  assert.match(rev, /trend-momentum-analyst reported without looking up pullback-vs-reversal \(/);
+  assert.match(rev, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(rev, /breakout-vs-fakeout|mtf-breakout/);
+  all();
+  assert.deepStrictEqual(run(entryOrder()).violations, [], 'the reversal lookups made: it goes');
+  fs.unlinkSync(lookupsFile(file));
+  // A with-trend setup: the breakout lookups only.
+  record({ setups: [{ name: 'tick_up', direction: 'long', trendRule: 'allows' }] });
+  const allows = unmet(run(entryOrder()));
+  assert.match(allows, /market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout \(/);
+  assert.doesNotMatch(allows, /pullback-vs-reversal|mtf-rejection|trend-momentum-analyst reported/);
+  look('market-structure-analyst', 'breakout-vs-fakeout', 11);
+  look('market-structure-analyst', 'mtf-breakout', 12);
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 32);
+  assert.deepStrictEqual(run(entryOrder()).violations, [], 'the breakout lookups made: it goes');
+  fs.unlinkSync(lookupsFile(file));
+  exits();
+  // A record from before the setups were kept (no setups field): its candidates under every trend rule (fails closed).
+  record({});
+  assert.match(unmet(run(entryOrder())), /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, mtf-rejection, mtf-breakout/);
+  exits();
   // Nothing fired on the lane's bar (its record says so): nothing more is required.
-  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [] });
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [], setups: [] });
   assert.deepStrictEqual(run(entryOrder()).violations, []);
   // Neither on the lane's bar (the record is an older bar's): every situational lookup is required (fails closed).
-  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: '2026-10-07T13:58:00.000Z', closedAt: '2026-10-07T13:59:00.000Z', candidates: [] });
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: '2026-10-07T13:58:00.000Z', closedAt: '2026-10-07T13:59:00.000Z', candidates: [], setups: [] });
   const closed = run(entryOrder());
   assert.match(closed.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
-  assert.match(closed.violations[0].message, /volume-liquidity-analyst|market-structure-analyst reported without looking up/);
+  assert.match(closed.violations[0].message, /market-structure-analyst reported without looking up/);
   exits();
-  // An unreadable FTH_CYCLE_LANE_BARS is none (the 3m briefing alone), never a crash.
-  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: 'not json' }).cycleLaneBars, {});
-  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: JSON.stringify({ MNQ: { x: lane, 5: 7 }, MES: [] }) }).cycleLaneBars, {});
+  // FTH_CYCLE_LANE_BARS set but unreadable: the lanes are unknown, every lookup is required (fails closed), even with
+  // the lane's bar recorded as quiet; unset or blank is one lane.
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [], setups: [] });
+  for (const raw of ['not json', '[]', JSON.stringify({ MNQ: { x: lane } }), JSON.stringify({ MNQ: { 1: 7 } }), JSON.stringify({ MES: [] })]) {
+    assert.strictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: raw }).cycleLaneBars, null, raw);
+    const r = run(entryOrder(), { ...cfg, ...loadConfig({ ...env, FTH_CYCLE_LANE_BARS: raw }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home });
+    assert.match(unmet(r), /risk-manager reported without looking up confluence-counting, invalidation/, raw);
+  }
+  for (const raw of [undefined, '', ' ']) assert.deepStrictEqual(loadConfig(raw === undefined ? {} : { FTH_CYCLE_LANE_BARS: raw }).cycleLaneBars, {});
+  exits();
 });
 
 test('a session that isn\'t autonomous: no situational skill is required of the head trader, in the default (index) mode too', () => {
