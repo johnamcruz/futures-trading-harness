@@ -98,7 +98,7 @@ const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets 
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
-const { fvgFrames } = require('./fvg-frames');
+const { fvgFrames, fvgLine } = require('./fvg-frames');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -711,6 +711,8 @@ function summaryLines(b, et) {
   const fields = brokerFieldsText(m3.brokerFields);
   if (fields) out.push(fields);
   out.push(...candleLines(m3, et, roomOf, b.closedAt));
+  const fvg = fvgLine(m3.fvgs, et);
+  if (fvg) out.push(fvg);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
@@ -766,19 +768,22 @@ const targets = list => list.reduce((out, x) => {
   return out;
 }, []).map(target).join(', ');
 
-/**
- * A section's data as the detail shows it: what the summary already says in full is left out (the swing targets;
- * each candle's pattern, close location, range, volume and levels; an unavailable timeframe), and so is a candle's
- * OHLCV when it is the `bar` above (the base timeframe's own), so the text stays small; the JSON keeps it all.
- */
+// The m3 fields the summary says in full (one line each), left out of the detail whole.
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
+/**
+ * A section's data as the detail shows it: what the summary already says in full is left out (SUMMARY_FIELDS: the
+ * swing and range targets, the timeframes' FVGs; SUMMARY_ONLY; each candle's pattern, close location, range, volume and
+ * levels; an unavailable timeframe or an event-driven one), and so is a candle's OHLCV when it is the `bar` above (the
+ * base timeframe's own), so the text stays small; the JSON keeps it all.
+ */
 function detailEntries(data) {
   if ('brokerFields' in data) data = omit(data, ['brokerFields']);
   const bar = data.bar || {};
   const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
-  return Object.entries(data).filter(([k]) => k !== 'swingTargets' && k !== 'rangeTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
+  return Object.entries(data).filter(([k]) => !SUMMARY_FIELDS.includes(k)).map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
     ? [k, Object.fromEntries(Object.entries(v).filter(([tf, c]) => !c.unavailable && !(tf in EVENT_FRAMES))
       .map(([tf, c]) => [tf, { t: c.t, ...ohlcv(c), body: c.body, upperWick: c.upperWick, lowerWick: c.lowerWick, ...(c.patterns ? { patterns: c.patterns } : {}) }]))]
     : [k, SUMMARY_ONLY[k] && v && typeof v === 'object' ? omit(v, SUMMARY_ONLY[k]) : v]));

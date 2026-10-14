@@ -8,7 +8,8 @@
  * A gap is market-snapshot.js fvgAt on the timeframe's candles: three candles, the first's high under the third's low
  * (bullish; the mirror bearish), the middle one a strong displacement candle the gap's way (cisd.js strongCandle: body
  * at least 0.6 of its range, close in its extreme third, range at least 1 x the timeframe's ATR(14) as of the middle
- * candle, or its body engulfing the first's). It is known when the third candle completes. Over the last WINDOW
+ * candle, or its body engulfing the first's), the three candles back to back in time (none across the daily break, a
+ * weekend or a feed gap: price there never traded on either side). It is known when the third candle completes. Over the last WINDOW
  * candles; the bars closed since the third candle (the source bars up to this bar's close, the candle forming
  * included) say what is left of it: `open` (not traded into), `partly` (traded into, not through: `unfilled` is the
  * part left) or filled (traded through: dropped). The last MAX of the unfilled ones, oldest first.
@@ -25,6 +26,7 @@
  *
  *   gapsOn({ src, upto, candles, j }, { window, max })  the unfilled gaps as of source bar upto
  *   fvgFrames({ bars, base, fine, frames, at })         the briefing's `fvgs`: { '5m': [...] | 'unavailable (...)', ... }
+ *   fvgLine(fvgs, et)                                   the summary's line (et: a time as the briefing shows it), or null
  */
 
 const ind = require('./indicators');
@@ -42,6 +44,8 @@ function gapsOn({ src, upto, candles, j }, { window = WINDOW, max = MAX } = {}) 
   const last = cs[j];
   const out = [];
   for (let k = Math.max(2, cs.length - window); k < cs.length; k += 1) {
+    // Back to back: each candle opens where the one before closed.
+    if (cs[k - 2].closedAt !== cs[k - 1].t || cs[k - 1].closedAt !== cs[k].t) continue;
     const g = fvgAt(cs, k, atr);
     if (!g) continue;
     const bull = g.side === 'bullish';
@@ -71,4 +75,19 @@ function fvgFrames({ bars, base, fine = null, frames = FRAMES, at = bars.length 
   return out;
 }
 
-module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames };
+/**
+ * The summary's FVG line: per timeframe each unfilled gap as `bullish 101-103 (10:45) open` or `... filled to 102.5`
+ * (partly filled: how far price came into it), with `, retest closed out` (or `closed inside`). A timeframe that can't be built is left out when no 1m bars
+ * are configured (as the candle lines); null when nothing is left to say.
+ */
+function fvgLine(fvgs, et = x => x) {
+  if (!fvgs || typeof fvgs !== 'object') return null;
+  const parts = Object.entries(fvgs).filter(([, v]) => !(typeof v === 'string' && /no 1m bars configured/.test(v))).map(([tf, v]) => {
+    if (typeof v === 'string') return `${tf} ${v}`;
+    if (!v.length) return `${tf} none`;
+    return `${tf} ${v.map(g => `${g.side} ${g.low}-${g.high} (${et(g.at)}) ${g.state === 'open' ? 'open' : `filled to ${g.side === 'bullish' ? g.unfilled[1] : g.unfilled[0]}`}${g.retest ? `, retest ${g.retest}` : ''}`).join(', ')}`;
+  });
+  return parts.length ? `- FVGs (completed candles, unfilled): ${parts.join('; ')}.` : null;
+}
+
+module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames, fvgLine };
