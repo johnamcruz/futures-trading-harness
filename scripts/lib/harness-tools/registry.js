@@ -199,11 +199,11 @@ const TOOLS = [
   },
   {
     name: 'skill_lookup', op: 'skill_lookup', script: 'skill-lookup',
-    description: 'A whole skill of the harness by name: one your prompt\'s skill index lists. Look one up only when the cycle needs it. Give role (your role\'s name) in a trading cycle: where the bar requires a skill of your index, your report counts for an entry only with that lookup. Without skill: every skill of the harness, one line each (name: description), or those whose name or description contains query; a listing is not a lookup. Read-only.',
+    description: 'A whole skill of the harness by name: one your prompt\'s skill index lists. Look one up only when the cycle needs it. Give role (your role\'s name) in a trading cycle: where the bar requires a skill of your index, your report counts for an entry only with that lookup. No skill: lists every skill (query filters). Read-only.',
     inputSchema: object({
-      skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'The skill\'s name, e.g. liquidity-concepts. Leave it out to list every skill.' },
+      skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'The skill\'s name, e.g. liquidity-concepts.' },
       role: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'Your role\'s name, e.g. volume-liquidity-analyst.' },
-      query: { type: 'string', minLength: 1, maxLength: 64, description: 'Without skill: list only the skills whose name or description contains this text (any case), e.g. vwap.' },
+      query: { type: 'string', maxLength: 64 },
     }),
     args: i => pick(i, { skill: 'skill', role: 'role', query: 'query' }),
     narrow: 'the skill is too large to return; for the list, give query',

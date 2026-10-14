@@ -42,7 +42,7 @@ test('skill_lookup: unknown skills, paths, and a skill folder that leads outside
   assert.match(validate(schema, { skill: 'x', section: 'y' }).join(';'), /"section": unknown argument/);
   assert.deepStrictEqual(validate(schema, {}), [], 'no skill: the catalog');
   assert.deepStrictEqual(validate(schema, { query: 'vwap' }), []);
-  assert.match(validate(schema, { query: '' }).join(';'), /query/);
+  assert.throws(() => K.skillLookup({ query: '' }, { env: {} }), /--query/, 'an empty query: the operation refuses it');
   assert.match(validate(schema, { query: 'x'.repeat(65) }).join(';'), /query/);
 });
 
@@ -114,6 +114,18 @@ test('skill_lookup catalog: a listing is not a lookup, nothing recorded, with a 
 test('skill-lookup.js: the CLI prints the skill; a bad argument fails', () => {
   assert.deepStrictEqual(K.parseArgv(['--skill', 'a', '--role=b']), { skill: 'a', role: 'b', query: null });
   assert.deepStrictEqual(K.parseArgv(['--query=vwap']), { skill: null, role: null, query: 'vwap' });
+  // A flag without its value is refused: never read as left out (which would list every skill).
+  assert.throws(() => K.parseArgv(['--skill']), /--skill: give its value/);
+  assert.throws(() => K.parseArgv(['--query']), /--query: give its value/);
+  assert.throws(() => K.parseArgv(['--skill', '--role', 'r']), /--skill: give its value/);
+  assert.throws(() => K.parseArgv(['--role', 'r', '--query']), /--query: give its value/);
+  assert.throws(() => K.parseArgv(['--role']), /--role: give its value/);
+  for (const flag of ['--skill', '--query']) {
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'skill-lookup.js'), flag], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 1, flag);
+    assert.strictEqual(r.stdout, '', flag);
+    assert.match(r.stderr, new RegExp(`^\\[skill-lookup\\] ${flag}: give its value`), flag);
+  }
   const list = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'skill-lookup.js'), '--query', 'liquidity'], { encoding: 'utf8' });
   assert.strictEqual(list.status, 0);
   assert.match(list.stdout, /^Skills matching "liquidity"/);

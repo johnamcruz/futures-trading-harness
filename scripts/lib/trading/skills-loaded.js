@@ -132,9 +132,11 @@ function skillsInTranscript(text) {
     const part = ev.part && typeof ev.part === 'object' ? ev.part : null;
     if (ev.type === 'tool_use' && part && part.tool === 'skill' && part.state && part.state.status === 'completed'
       && part.state.input && typeof part.state.input.name === 'string') out.add(skillName(part.state.input.name));
-    // A whole skill read with the harness tool skill_lookup (index mode): read as a load.
+    // A whole skill read with the harness tool skill_lookup (index mode): read as a load. Only a reply that is the
+    // skill (its <skill name=...> text): a refusal or a catalog listing (no skill) read nothing.
     if (ev.type === 'tool_use' && part && /(^|_)skill_lookup$/.test(String(part.tool || '')) && part.state && part.state.status === 'completed'
-      && part.state.input && typeof part.state.input.skill === 'string') out.add(skillName(part.state.input.skill));
+      && part.state.input && typeof part.state.input.skill === 'string'
+      && typeof part.state.output === 'string' && part.state.output.trimStart().startsWith('<skill name=')) out.add(skillName(part.state.input.skill));
     const msg = ev.message && typeof ev.message === 'object' ? ev.message : {};
     const content = msg.content;
     if (Array.isArray(content)) {

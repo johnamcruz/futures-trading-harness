@@ -15,6 +15,7 @@ const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { loadRoles } = require('../../scripts/lib/role-skills');
 const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
 const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SKILLS = fs.readdirSync(path.join(ROOT, 'skills')).filter(n => fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md'))).sort();
@@ -27,18 +28,11 @@ const ALLOWED = {
   'design-self-review': 'the training loop\'s proposer reads it as its prompt (scripts/lib/train/proposer.js); never a trading role',
 };
 
-// Descriptions over the limit when the limit came in: each may only shrink, and goes once it fits.
+// Descriptions over the limit when the limit came in (skill-descriptions.pins.json: skill -> its length): each pin
+// equals its description's length, may only shrink against the base branch, and goes once the description fits.
 const MAX_DESCRIPTION = 160;
-const LONG_DESCRIPTIONS = {
-  absorption: 292, 'autonomous-trading': 316, 'breakout-vs-fakeout': 290, 'candle-reading': 309, cisd: 339,
-  'confluence-counting': 301, 'design-self-review': 319, 'end-of-day': 307, 'fib-retracement': 338, 'harness-tools': 546,
-  invalidation: 249, 'levels-and-reactions': 317, 'liquidity-concepts': 287, 'market-snapshot': 332, 'market-structure': 251,
-  'momentum-and-volume': 300, 'mtf-breakout': 357, 'mtf-rejection': 295, 'multi-timeframe-analysis': 592, 'position-sizing': 210,
-  premarket: 297, 'prop-challenge-pacing': 471, 'pullback-vs-reversal': 328, replay: 480, 'session-timing': 247,
-  'setup-expectancy': 279, 'strategy-authoring': 254, 'strategy-library': 276, 'trade-review': 255, 'trade-session': 278,
-  'trading-agent-security': 312, 'training-loop': 481, 'trend-momentum-indicators': 234, 'trend-vs-range': 274,
-  'vwap-volume-profile': 324,
-};
+const PINS = path.join(__dirname, 'skill-descriptions.pins.json');
+const LONG_DESCRIPTIONS = JSON.parse(fs.readFileSync(PINS, 'utf8'));
 
 /** The skills the autonomous runner's prompts name: "the <skill> skill" and the load list before deciding. */
 function promptSkills() {
@@ -103,11 +97,49 @@ test('descriptions: every skill has one, at most 160 characters (the long ones p
     const d = description(s);
     assert.ok(d, `${s}: no description`);
     if (Object.hasOwn(LONG_DESCRIPTIONS, s)) {
-      assert.ok(d.length > MAX_DESCRIPTION, `${s}: ${d.length} characters now fits; remove it from LONG_DESCRIPTIONS`);
-      assert.ok(d.length <= LONG_DESCRIPTIONS[s], `${s}: ${d.length} characters, over its pinned ${LONG_DESCRIPTIONS[s]}: shorten it`);
+      assert.ok(d.length > MAX_DESCRIPTION, `${s}: ${d.length} characters now fits; remove it from skill-descriptions.pins.json`);
+      // Exactly its length: a pin follows its description down, so the text can never grow back to an old pin.
+      assert.strictEqual(d.length, LONG_DESCRIPTIONS[s], `${s}: ${d.length} characters, pinned at ${LONG_DESCRIPTIONS[s]}: a shorter one lowers its pin to ${d.length}; a longer one is refused`);
     } else {
       assert.ok(d.length <= MAX_DESCRIPTION, `${s}: ${d.length} characters, over ${MAX_DESCRIPTION}`);
     }
   }
-  for (const s of Object.keys(LONG_DESCRIPTIONS)) assert.ok(SKILLS.includes(s), `LONG_DESCRIPTIONS names no skill "${s}"`);
+  for (const s of Object.keys(LONG_DESCRIPTIONS)) assert.ok(SKILLS.includes(s), `skill-descriptions.pins.json names no skill "${s}"`);
+});
+
+/**
+ * The pins at `git merge-base HEAD origin/main` (as no-platform-specifics.test.js reads its own). Null only when the
+ * base has no skills-indexed test (the change that brings it); throws (fails closed) when the base can't be read,
+ * or has the test but not the pins (a rename or a deletion would otherwise switch the check off).
+ */
+function basePins(ref = 'origin/main') {
+  const git = args => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+  const mb = git(['merge-base', 'HEAD', ref]);
+  if (mb.status !== 0) throw new Error(`the base branch can't be read (git merge-base HEAD ${ref}): fetch ${ref} (CI: fetch-depth: 0)`);
+  const base = mb.stdout.trim();
+  const tree = git(['ls-tree', '-r', '--name-only', base, 'tests/plugin/']);
+  if (tree.status !== 0) throw new Error(`the base's tests/plugin/ can't be listed: ${tree.stderr.trim()}`);
+  const names = tree.stdout.split('\n');
+  if (!names.includes('tests/plugin/skills-indexed.test.js')) return null;
+  if (!names.includes('tests/plugin/skill-descriptions.pins.json')) throw new Error(`the base ${base.slice(0, 12)} has the test but no skill-descriptions.pins.json: can't check the pins only shrink`);
+  const shown = git(['show', `${base}:tests/plugin/skill-descriptions.pins.json`]);
+  if (shown.status !== 0) throw new Error(`the base's pins can't be read: ${shown.stderr.trim()}`);
+  return JSON.parse(shown.stdout);
+}
+
+/** Problems with the pins against the base's: a skill the base didn't pin, or a pin raised. */
+function pinsAgainstBase(pins, base) {
+  if (base === null) return [];
+  return Object.entries(pins).flatMap(([k, n]) => (!Object.hasOwn(base, k) ? [`${k}: not pinned on the base branch: the pins may only shrink`]
+    : !(n <= base[k]) ? [`${k}: pinned at ${n}, over the base's ${base[k]}: the pins may only shrink`] : []));
+}
+
+test('the description pins only shrink against the base branch (git merge-base HEAD origin/main); an unreadable base fails closed', () => {
+  assert.deepStrictEqual(pinsAgainstBase(LONG_DESCRIPTIONS, basePins()), []);
+  assert.deepStrictEqual(pinsAgainstBase({ a: 200 }, null), [], 'the change that brings the pins');
+  assert.deepStrictEqual(pinsAgainstBase({ a: 200, b: 170 }, { a: 200, b: 180, c: 300 }), [], 'equal, lower, or gone');
+  assert.match(pinsAgainstBase({ a: 201 }, { a: 200 }).join(), /a: pinned at 201, over the base's 200/);
+  assert.match(pinsAgainstBase({ a: '999' }, { a: 200 }).join(), /a: pinned at 999/);
+  assert.match(pinsAgainstBase({ d: 170 }, { a: 200 }).join(), /d: not pinned on the base branch/);
+  assert.throws(() => basePins('no-such-ref-for-this-test'), /the base branch can't be read/);
 });

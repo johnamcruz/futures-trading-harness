@@ -83,7 +83,12 @@ function parseArgv(argv) {
   const o = { skill: null, role: null, query: null };
   for (let i = 0; i < argv.length; i += 1) {
     const [flag, inline] = argv[i].split(/=(.*)/s);
-    const val = () => (inline !== undefined ? inline : argv[++i]);
+    // A flag without its value is refused, never read as left out (no --skill would list every skill instead).
+    const val = () => {
+      const v = inline !== undefined ? inline : argv[++i];
+      if (v === undefined || v.startsWith('--')) throw new Error(`${flag}: give its value (${USAGE})`);
+      return v;
+    };
     if (flag === '--skill') o.skill = val();
     else if (flag === '--role') o.role = val();
     else if (flag === '--query') o.query = val();
