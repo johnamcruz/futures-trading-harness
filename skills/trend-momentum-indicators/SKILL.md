@@ -1,15 +1,14 @@
 ---
 name: trend-momentum-indicators
-description: Use when a strategy gates on ADX, an EMA, SuperTrend or Keltner, or to classify the regime (trend, range, volatility) for sizing and strategy choice.
+description: Use when a read rests on ADX, an EMA, SuperTrend, Keltner or ATR - their settings and fields, and the volatility regime for sizing. Metrics, not the trend.
 ---
 
 # Trend and Momentum Indicators
 
 ## When to Use
 
-- A strategy gate depends on ADX, an EMA relationship, SuperTrend, or Keltner.
-- Classifying the regime (trend, range, high or low volatility) for sizing and
-  strategy choice.
+- A read depends on ADX, an EMA relationship, SuperTrend, Keltner or ATR.
+- The volatility regime (high or low) for sizing.
 
 ## How It Works
 
@@ -20,12 +19,13 @@ The bar briefing holds these values (`m3` `trend`, `context`, `regime`;
 |---|---|---|
 | EMA 9/20 | close, ewm adjust=False | 9 above 20 and both rising → short-term uptrend. Cross = momentum shift. |
 | EMA 50/200 | close | Higher-timeframe slope and location filter. |
-| ADX(14) | Wilder | < 18: no trend, crossover signals whipsaw. 18–25: emerging trend. > 25: trending. Rising slope matters more than the level. ADX is directionless. |
+| ADX(14) | Wilder | Trend strength, a metric with no side: never the trend (the votes) nor the regime. Rising slope matters more than the level. |
 | ATR(14/20) | Wilder | Volatility per bar. Stops and targets scale with it. The regime compares ATR(14) with its average over the last 100 bars. |
 | SuperTrend(10, 3) | ATR bands | Direction and trailing level. Flips late in chop; useful as a trailing stop in trends. |
 | Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 | Close outside the band with ADX ≥ 20 → expansion. Inside and flat → range. |
 
-Regime: trend, range or transition, by the rule the code applies, is the
+Each timeframe's trend is its votes (`multi-timeframe-analysis`); the
+regime (trend, range or transition, by the code's rule) is the
 `trend-vs-range` skill's; momentum and the participation fields, the
 `momentum-and-volume` skill's.
 
@@ -34,11 +34,8 @@ Regime: trend, range or transition, by the rule the code applies, is the
   it, don't recompute). High → keep the $ risk
   constant: the wider stop means a smaller size; widen stops to structure.
   Low → breakouts fail more; prefer strategies that list it.
-- **The regime's fields** (`m3.regime`): primary (trend-up, trend-down,
-  range, transition), volatility (high, normal, low), tags, and the metrics
-  behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes
-  crossing the session VWAP in the last 30 bars, the same count as
-  `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).
+- **The regime's metrics** (`m3.regime.metrics`): ADX, EMA(20) slope in
+  ATRs, `sessionVwapCrosses`, ATR vs its average (`atrRatio`).
 - **VWAP** (`m3.vwap`): which applies (`applies`: `rth` from 09:30 to
   16:00 ET, else `session`), price's `side`, `distanceAtr` (in ATR(14)),
   and the closes crossing each in the last 30 bars (`rthCrossesLast30`,
@@ -54,7 +51,7 @@ Regime: trend, range or transition, by the rule the code applies, is the
   `m3.overnight` and `m3.today.openingRange` (null until the range
   closes); value is `m3.location` (judged on exact levels, so a VAH shown a
   tick below price can read inside); the day type `m3.today.dayType`.
-  Meanings: `levels-and-reactions`, `vwap-volume-profile`.
+  Meanings: `levels-and-reactions`, `vwap-volume-profile`, `day-context`.
 
 ## Examples
 

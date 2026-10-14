@@ -70,6 +70,15 @@ const ALLOWED = [
   { old: "A policy strategy's verdict is a ceiling: the read halves or skips it like any setup (the priority order, strategy-library).",
     now: "For a composed trade the label is a reason in its plan, never a cut (the priority order, strategy-library).",
     reason: "owner decision D1 (fix/skills-composed-process): a composed trade, the policy's one component, is never halved by the read" },
+  { old: "From the highest timeframe down, for each side:",
+    now: "From the highest timeframe down, for each side (`m15.alignment`; read `read <side> <label>`):",
+    reason: "the skill audit (fix/skills-concept-owners): the label's briefing field and its read form" },
+  { old: "Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `value_area_reentry`) trade against the lower timeframes by design, and the trend rule lets them fade the prevailing trend.",
+    now: "A composed entry against the prevailing trend needs a true 15m or 1h CHoCH its way among its reads (`bos-vs-choch`; the priority order, step 2).",
+    reason: "the reversal strategies are retired (strategies/retired.json); owner decision D2: a composed entry against the trend needs a verified 15m or 1h CHoCH" },
+  { old: "Judge the setup against the timeframe above its range candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against that one too, it is a `counter` reversal (the priority order, step 2, decides it: level, size, target).",
+    copies: 0,
+    reason: "crt_1h and crt_4h are retired (strategies/retired.json)" },
 ];
 // The units dropped outright (copies 0, no new text): no home holds them.
 const DROPPED = new Set(ALLOWED.filter(a => a.copies === 0 && !a.now).map(a => a.old));
@@ -140,7 +149,8 @@ test('multi-timeframe-analysis split: the comparison catches a lost, a doubled, 
   assert.deepStrictEqual(differences(old, moved1, ALLOWED), [], 'the move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved1), [], 'but the trend rule left the core');
   const h = homes[at('htf-to-ltf')];
-  const REV = /Reversal strategies \(`crt_1h`[^]*?size, target\)\.\n/.exec(h)[0];
+  // The reversal paragraph (now the composed entry's, owner decision D2).
+  const REV = /A composed entry against the prevailing trend[^]*?step 2\)\.\n/.exec(h)[0];
   const moved2 = swap(['htf-to-ltf', h.replace(REV, '')], ['multi-timeframe-analysis', `${core}\n${REV}`]);
   assert.deepStrictEqual(differences(old, moved2, ALLOWED), [], 'the move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved2), [], 'but the reversal paragraph left htf-to-ltf');

@@ -87,7 +87,7 @@ strategy's `timeframe` (never guessed).
 the nearest confirmed m-minute swing above (below) the close that no bar
 has traded beyond since; any bar trading beyond it (its high above a
 swing high, its low below a swing low) takes it, so it never crosses
-(compare with `htfd_high`, not the target). A 60m rejection of
+(compare with `htfd_high`, not the target). A 1h rejection of
 the prior day's high: `htfd_rejected(60, prior_high) < 0`; its target:
 `exit.target: close - htfd_next_swing_low(60)`.
 

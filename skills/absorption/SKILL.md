@@ -31,11 +31,9 @@ progress (`(c-o)`, `m3.bar.rangeAtr`, whether price got past the level).
 A bar's volume has no side: from bars, absorption is a guess at who
 traded, never a measurement.
 
-**Broker fields.** Some brokers add fields to their bars; the harness
-computes none of them. Their evidence reaches you only as
-`candidate.values` (the fields its fired rules read on this bar), with
-meaning and units in that strategy's STRATEGY.md. Never derive one from
-OHLCV or guess its meaning; without `values`, `unknown`.
+**Broker fields** a broker adds to its bars (the harness computes none of
+them): `broker-bar-fields`. Never derive one from OHLCV; without them,
+`unknown`.
 
 **Evidence**: none measured on bars yet.
 

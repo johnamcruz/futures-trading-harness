@@ -21,7 +21,7 @@ is never a reason to enter without a fired strategy.
 A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
-5m, 15m and 60m (`candle-reading`).
+5m, 15m, 1h and 4h (`candle-reading`).
 
 **By timeframe**, the same setup:
 
@@ -29,19 +29,19 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 |---|---|---|
 | 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |
 | 15m | the working structure and the session levels | more |
-| 60m | HTF levels (prior day, overnight, CRT) | most |
+| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**Strongest**: a 15m or 60m breakout confirmed on 3m or 5m (step 6),
+**Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6),
 with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
 
 By PLAN step:
 
-- **1 HTF**: the 60m and 15m bias (`h1.h1.trend`, `m15.frame.trend`) agrees
+- **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`) agrees
    with the break, or the range is mature (`trend-vs-range`).
 - **3 Location**: a key level in the way (`levels-and-reactions`; the
    previous candle's high/low, a CRT range; `m3.candles` has them).
 - **4 Setup**: a completed candle closes beyond the level with
-   acceptance: a strong close in the extreme third, the body beyond the
+   acceptance (the briefing's `broke`: `<tf> broke <level> up|down`): a strong close in the extreme third, the body beyond the
    level, not just a wick (`breakout-vs-fakeout`, `candle-reading`). A
    close beyond a level that is also a BOS on that timeframe
    (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure
@@ -72,11 +72,11 @@ positive on 38 trades, interval straddling zero. Not a finding.
 ## Examples
 
 ```text
-Take: at the prior RTH high 21615.00, 60m and 15m up: on the 15m close a body beyond, close 21624.75
+Take: at the prior RTH high 21615.00, 1h and 15m up: on the 15m close a body beyond, close 21624.75
   (top third); on the 3m close a retest low 21615.75 held with a hammer. orb long fired. Priority order -> take.
 Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (no acceptance);
   value_area_breakout long fired; candidate.inTheWay session VAH at 0.5R. Priority order (step 3, room): skip.
-Loser: at the overnight high 21614.75: on the 60m close a body beyond, close 21629.50; on the 3m close a
+Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a
   retest held. orb long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   a 15m close back inside at 21611.00. -34 ticks, -$17.00.
 ```

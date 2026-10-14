@@ -15,6 +15,11 @@ A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are the
 code's or hypotheses; a missing field is `unknown`.
 
+Each timeframe's trend is its votes (`multi-timeframe-analysis`; read
+`<15m|1h|4h> up|down|range`); ADX is a metric
+(`trend-momentum-indicators`). Here: the regime (`regime <name>`) and
+structure.
+
 **The computed regime** (`m3.regime.primary`; 15m:
 `m15.indicators.regime.primary`), as regime.js decides it:
 
@@ -30,14 +35,9 @@ code's or hypotheses; a missing field is `unknown`.
 `m3.vwap` counts each VWAP's crosses, labeled: `sessionCrossesLast30` is
 the regime's count; `rthCrossesLast30`, the RTH VWAP's, can differ from it.
 
-**Structure.** Swing pattern (`HH/HL`, `LH/LL`, `mixed`, or `unclear`:
-fewer than two confirmed swings, no vote):
-`m15.frame.swingPattern`, `h1.h1.swingPattern`, `h1.h4.swingPattern`; on
-3m, from `m3.liquidity.swingHighs` and `m3.liquidity.swingLows`. Latest
-break (`bos-vs-choch`): `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `barsAgo`),
-`m3.lastBreak.previous`, `m15.lastBreak`, `h1.lastBreak`. A stop belongs
-behind structure (a swing), not at an arbitrary distance; the stop itself
-stays the strategy's (`invalidation`).
+**Structure.** Swing patterns (`HH/HL`, `LH/LL`, `mixed`, `unclear`)
+and the latest breaks per timeframe: `bos-vs-choch`. A stop belongs
+behind structure (a swing), not at an arbitrary distance (`invalidation`).
 
 **The read**, per timeframe:
 

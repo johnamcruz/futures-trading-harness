@@ -14,13 +14,12 @@ description: Trader-process steps 3 and 6 - completed candles at a level (body, 
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (the previous higher-timeframe candle's high and low;
-`m3.candles` lists both).
+low and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
-every timeframe. Never judge the in-progress candle: a 15m pin bar half
-formed is not a pin bar. In strategy rules `htfc_*` is the candle in
+every timeframe. Never judge the in-progress candle: a 15m hammer half
+formed is not a hammer. In strategy rules `htfc_*` is the candle in
 progress: never judge a pattern on it.
 
 A read, never a veto: the priority order (strategy-library) decides take,
@@ -28,46 +27,50 @@ skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle, named with its
-timeframe. 15m and 60m weigh more at a higher-timeframe level (a 60m
+timeframe. 15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
 rejection of the prior day's high outweighs a 3m one: `rejection`,
 `breakout`); 3m and 5m time the entry.
 
-- 3m, 5m, 15m and 60m: `m3.candles` and a summary line each: the last
-  completed candle (OHLCV, close time, body and wick shares, close third,
-  range in ATR, volume against its average, `pattern`) and the levels it
-  met (`rejected`, `broke`, `touched`), only levels that existed before it
-  opened. `unavailable` or missing (5m without 1m bars) is `unknown`.
-- The targets: `m3.swingTargets`, the next swing each side.
+- 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
+  `pattern` and the levels it
+  met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
+  levels that existed before it opened. 5m, `unavailable` without a 1m
+  lane, is `unknown`.
+- The targets: `m3.swingTargets`, the next swing each side (base,
+  15m, 1h, 4h).
 - In strategy rules the same candle is `htfd_*` (strategy-rules).
 
-**Anatomy** (range = h - l; h = l is `unknown`): body share |c - o| /
-range; wick shares (h - max(o, c)) / range and (min(o, c) - l) / range;
-close location (c - l) / range, in the top, middle or bottom third; size
-against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over about
-1.5).
+**Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
+the range; close location (c - l) / range: top third at least 2/3, bottom at most
+1/3, else middle (read `<tf> close top|middle|bottom`); size against ATR (`rangeAtr`).
 
-**Patterns** (hypotheses):
+**Patterns**, as the code labels them (`pattern`, `patterns`; read
+`<tf> pattern <name>`; hypotheses; R range, B body, U and D the upper and lower wicks, prev the
+prior candle, ATR(14) as of prev):
 
-- doji: body share under about 0.1, indecision;
-- pin bar (hammer, shooting star): one wick at least about 0.6 of the
-  range, the close in the opposite third;
-- engulfing: the body covers the prior body, the opposite colour;
-- inside bar: within the prior bar's high and low, compression;
-- outside bar: beyond both;
-- displacement: large, the close in the extreme third.
+- doji: B at most 0.1 R;
+- hammer: D at least 2 B and 0.6 R, U at most 0.15 R; shooting star: the
+  mirror (the pin bars);
+- bullish engulfing: a bullish candle after a bearish one, its body
+  covering prev's and larger; bearish engulfing: the mirror;
+- inside: within prev's high and low, a smaller range; outside: beyond
+  both, a larger range;
+- displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
+  close vs its open.
 
-**Context decides**: with the HTF read (`trend-vs-range`,
-`pullback-vs-reversal`) and volume (`momentum-and-volume`, `absorption`).
+A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
+read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
+(`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, item 4).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured in our data yet. Confirmation only.
+general, none measured in our data yet.
 
 ## Examples
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 60m close (`m3.candles`) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  on the 1h close (`m3.candles`) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   crt_1h short. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); the 15m still forming.
   orb long; candidate.inTheWay session VAH at 0.4R. Priority order (step 3, room): skip.

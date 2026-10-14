@@ -99,9 +99,9 @@ const PINS = {
     'The code\'s note (under 1.0 thin, 1.5 or more strong) is a hypothesis.',
   ],
   absorption: [
-    'the harness computes none of them.',
-    'Their evidence reaches you only as `candidate.values`',
-    'Never derive one from OHLCV or guess its meaning; without `values`, `unknown`.',
+    // Broker bar fields are broker-bar-fields' (fix/skills-concept-owners): this skill points there.
+    '(the harness computes none of',
+    '`broker-bar-fields`. Never derive one from OHLCV; without them, `unknown`.',
     'A bar\'s volume has no side',
   ],
   invalidation: [
@@ -116,9 +116,10 @@ const PINS = {
   ],
   'confluence-counting': [
     'each in exactly one bucket, so for + against + neutral = 6',
-    'Same-side fires from correlated strategies within a few bars are ONE confluence.',
-    '**A strategy\'s own trigger is never confluence for itself**',
-    '| 6 | Its own `candidate.values` | - | - | always |',
+    // Keyed on the briefing's fields and reads (no scan candidate): the same fact counts once, in item 6.
+    '**Other reads of the same fact count once** (item 6)',
+    '| 6 | Other reads of a fact already counted | - | - | always |',
+    '| 3 | VWAP, `m3.vwap.side` | its side | the other side | `at` |',
     '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately.',
     '**An HTF structure break is read in item 1**',
     '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
@@ -128,7 +129,7 @@ const PINS = {
   ],
   'candle-reading': [
     'A pattern away from a level is not evidence.',
-    'Never judge the in-progress candle: a 15m pin bar half formed is not a pin bar.',
+    'Never judge the in-progress candle: a 15m hammer half formed is not a hammer.',
     'In strategy rules `htfc_*` is the candle in progress: never judge a pattern on it.',
     'Judge a pattern at its candle\'s close, on every timeframe.',
     'standalone candlestick patterns have weak evidence in general',
@@ -137,11 +138,13 @@ const PINS = {
     'The order gate allows an entry only when a strategy fired on the bar.',
     'It is never a reason to enter without a fired strategy.',
     'a dedicated detector strategy for it is coming.',
-    '**4 Setup**: a completed candle rejects the level: it trades through and closes back inside, with a long wick and the close in the opposite third, or an engulfing at the level',
+    // A rejection is the briefing's relation; the wick, the close third and an engulfing grade it (candle-facts.js).
+    '**4 Setup**: a completed candle rejects the level: the briefing\'s relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).',
+    'A long wick, the close in the opposite third or an engulfing grade its strength (`candle-reading`)',
     '| 3m, 5m | entry timing at an HTF level; alone, a minor level | least |',
     '| 15m | the working structure and the session levels | more |',
-    '| 60m | HTF levels (prior day, overnight, CRT) | most |',
-    '**Strongest**: a 15m or 60m rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
+    '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
+    '**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
     'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
     'Never anticipate it.',
     'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
@@ -177,8 +180,8 @@ const PINS = {
     'not just a wick',
     '| 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |',
     '| 15m | the working structure and the session levels | more |',
-    '| 60m | HTF levels (prior day, overnight, CRT) | most |',
-    '**Strongest**: a 15m or 60m breakout confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
+    '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
+    '**Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
     'a retest of the broken level that holds (a pullback: `pullback-vs-reversal`), with a rejection candle there (preferred), or a continuation displacement.',
     'Never anticipate it.',
     'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
@@ -256,7 +259,7 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
     assert.ok(words >= 250 && words <= 650, `${s}: ${words} words`);
-    // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 60m): a little more room.
+    // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room.
     const max = SETUPS.includes(s) ? 4000 : 3400;
     assert.ok(Buffer.byteLength(body) <= max, `${s}: ${Buffer.byteLength(body)} bytes, embedded in its roles' prompts`);
   }
@@ -308,7 +311,7 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred|counts as one AGAINST/, s);
   // The HTF structure break is item 1's, the level reaction (item 4) never claims it, and no seventh item appears.
   const cc = flat(read(file('confluence-counting')));
-  assert.match(cc, /\| 1 \| HTF read, `candidate\.alignment` \(HTF breaks included\) \|/);
+  assert.match(cc, /\| 1 \| HTF read, `m15\.alignment` for its side \(HTF breaks included\) \|/);
   assert.doesNotMatch(cc, /break[^|.]*item 4|item 4[^|.]*break/);
   assert.doesNotMatch(cc, /\| 7 \|/);
   assert.ok(flat(read(file('rejection'))).includes('is read in item 1 of `confluence-counting`'));
@@ -390,7 +393,7 @@ test('basics skills: confluence-counting\'s examples count six items', () => {
   const counts = [...ex.matchAll(/for (\d), against (\d), neutral (\d)/g)];
   assert.ok(counts.length >= 3);
   for (const [, a, b, c] of counts) assert.strictEqual(Number(a) + Number(b) + Number(c), 6);
-  // Item 6 (its own values) is neutral in every example, never for or against.
+  // Item 6 (other reads of a fact already counted) is neutral in every example, never for or against.
   for (const line of ex.split('\n').filter(l => /^(?:Take|Skip):/.test(l))) assert.match(line, /\b6(?: values)?:? (?:\(?neutral)/, line);
   // trader-process's own example uses the same six.
   const tp = /5 Confluence: for (\d), against (\d), neutral (\d)/.exec(read('skills/trader-process/SKILL.md').split('## Examples')[1]);
@@ -414,11 +417,11 @@ test('basics skills: examples name existing active strategies (or ones retired o
 test('basics skills: candle-reading is confirmation at a level, on completed candles of the stack', () => {
   const t = flat(read(file('candle-reading')));
   assert.ok(t.includes('**Confirmation only, at a level.**') && t.includes('`levels-and-reactions` skill\'s list'));
-  for (const tf of ['3m', '5m', '15m', '60m']) assert.ok(t.includes(`- ${tf}`) || t.includes(`${tf}:`) || t.includes(`${tf} and`), tf);
+  for (const tf of ['3m', '5m', '15m', '1h', '4h']) assert.ok(t.includes(`- ${tf}`) || t.includes(`${tf}:`) || t.includes(`${tf} and`) || t.includes(`${tf},`), tf);
   const ex = read(file('candle-reading')).split('## Examples')[1];
   // Every example is at a named level and names the close of its timeframe; one shows the stack agreeing.
-  for (const k of ['Take:', 'Skip:', 'Loser:']) assert.match(ex.slice(ex.indexOf(k)), /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^\n]*on the (?:3m|5m|15m|60m) close/, k);
-  assert.match(flat(ex), /on the 15m close[^\n]*?on the 60m close[^\n]*?on the 3m close[^\n]*?Stack agrees/);
+  for (const k of ['Take:', 'Skip:', 'Loser:']) assert.match(ex.slice(ex.indexOf(k)), /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^\n]*on the (?:3m|5m|15m|1h|4h) close/, k);
+  assert.match(flat(ex), /on the 15m close[^\n]*?on the 1h close[^\n]*?on the 3m close[^\n]*?Stack agrees/);
 });
 
 test('basics skills: the two setups, on any timeframe, follow the PLAN steps, on completed candles, at a level', () => {
@@ -431,21 +434,21 @@ test('basics skills: the two setups, on any timeframe, follow the PLAN steps, on
       assert.ok(k > at, `${s}: step ${n} ${name} in order`);
       at = k;
     }
-    assert.ok(t.includes('Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).'), s);
+    assert.ok(t.includes('Completed candles only, on 3m, 5m, 15m, 1h and 4h (`candle-reading`).'), s);
     // The strategies it names exist and are active (or retired on 2026-10-14: the skills are kept as they are).
     const names = [...t.slice(0, t.indexOf('A read, never a veto')).matchAll(/`([a-z0-9_]+)`/g)].map(m => m[1]);
     assert.ok(names.length >= 3, s);
     for (const n of names) assert.ok(namedStrategyOk(n), `${s}: ${n}`);
     // Generic: the setup is defined on any completed candle, not on one timeframe; its timeframe table has three rows.
-    assert.doesNotMatch(t, /\*\*4 Setup\*\*: a completed (?:3m|5m|15m|60m)/, s);
-    for (const row of ['| 3m, 5m |', '| 15m |', '| 60m |']) assert.ok(t.includes(row), `${s}: ${row}`);
+    assert.doesNotMatch(t, /\*\*4 Setup\*\*: a completed (?:3m|5m|15m|1h|4h)/, s);
+    for (const row of ['| 3m, 5m |', '| 15m |', '| 1h, 4h |']) assert.ok(t.includes(row), `${s}: ${row}`);
     assert.ok(t.includes('| Timeframe | What it reads | Weight |') && t.includes('| least |') && t.includes('| most |'), `${s}: the weight by timeframe`);
     // The multi-timeframe form is the best practice, pointed to the reads that define it, not restated.
     for (const p of ['trend-vs-range', 'pullback-vs-reversal', 'bos-vs-choch', 'candle-reading', 'levels-and-reactions']) assert.ok(t.includes(`\`${p}\``), `${s}: ${p}`);
     const ex = text.split('## Examples')[1];
     const tfs = new Set();
     for (const k of ['Take:', 'Skip:', 'Loser:']) {
-      const m = /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^]*?on the (3m|5m|15m|60m) close/.exec(ex.slice(ex.indexOf(k)));
+      const m = /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^]*?on the (3m|5m|15m|1h|4h) close/.exec(ex.slice(ex.indexOf(k)));
       assert.ok(m, `${s} ${k}`);
       tfs.add(m[1]);
     }

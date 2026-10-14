@@ -29,7 +29,7 @@ range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
 prior one. A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
-**Sweep** (`sweep`, `levels-and-reactions`): A CISD after a sweep of a key
+**Sweep** (`sweep`, `breakout-vs-fakeout`): A CISD after a sweep of a key
 level is stronger confluence; one without is still a CISD.
 
 Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
@@ -57,7 +57,7 @@ pullback ending; against it, noise until a higher one agrees.
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
 `ote`. Wait for a completed candle closing back the CISD's way in it
 (`candle-reading`); `absorption` in the zone confirms. Never anticipate
-the bounce. Paper strategy: `cisd_ote`.
+the bounce.
 
 ## Examples
 

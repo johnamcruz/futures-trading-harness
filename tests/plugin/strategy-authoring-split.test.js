@@ -31,6 +31,9 @@ const ALLOWED = [
   { old: 'Bars the backtester builds from shorter ones, and CSV files, carry no broker fields (step 8 says how to backtest on them).',
     now: 'Bars the backtester builds from shorter ones, and CSV files, carry no broker fields (the `strategy-backtest` skill says how to backtest on them).',
     reason: 'step 8 is the strategy-backtest skill' },
+  { old: "A 60m rejection of the prior day's high: `htfd_rejected(60, prior_high) < 0`; its target: `exit.target: close - htfd_next_swing_low(60)`.",
+    now: "A 1h rejection of the prior day's high: `htfd_rejected(60, prior_high) < 0`; its target: `exit.target: close - htfd_next_swing_low(60)`.",
+    reason: "\"60m\" is written \"1h\" in prose, as the briefing names it; the rules language keeps its minutes argument (fix/skills-concept-owners)" },
 ];
 
 // Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each

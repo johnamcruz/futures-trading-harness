@@ -19,21 +19,18 @@ overrule it. A missing field is `unknown` and counts neutral.
 
 | # | Item | For | Against | Neutral |
 |---|---|---|---|---|
-| 1 | HTF read, `candidate.alignment` (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
-| 2 | Other strategies, `candidate.confluence.with` / `candidate.confluence.against` | any with it | any against it | none |
-| 3 | VWAP, `candidate.vwapSide` | its side | the other side | `at` |
+| 1 | HTF read, `m15.alignment` for its side (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
+| 2 | Setup-timeframe structure: a CISD, OTE, a 3m or 5m break (`cisd`, `bos-vs-choch`) | any its way | any against it | none |
+| 3 | VWAP, `m3.vwap.side` | its side | the other side | `at` |
 | 4 | Reaction at the nearest level (`levels-and-reactions`, `rejection`) | rejection or sweep its way | acceptance against it | none yet |
 | 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
-| 6 | Its own `candidate.values` | - | - | always |
+| 6 | Other reads of a fact already counted | - | - | always |
 
 **Rules.**
 
-- **Correlated fires count as one.** Strategies whose triggers read the
-  same indicator or structure event fire largely together. Same-side
-  fires from correlated strategies within a few bars are ONE confluence.
-  `candidate.confluence` is this bar; earlier bars, `strategies_recent`.
-- **A strategy's own trigger is never confluence for itself**: its
-  `candidate.values` are its own rules' readings (item 6, neutral).
+- **Other reads of the same fact count once** (item 6): a pattern on the
+  candle that made item 4's rejection, a candle's sweep that is that
+  rejection, a second timeframe of the same reaction.
 - **Indicators together are one item**: EMA, ADX and SuperTrend readings
   count together in item 5, never separately.
 - **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
@@ -47,10 +44,11 @@ overrule it. A missing field is `unknown` and counts neutral.
 ## Examples
 
 ```text
-Take: vwap_reclaim long: 1 aligned, 2 orb with it, 3 above VWAP, 4 rejection, 5 momentum: for; 6 neutral.
-  5 Confluence: for 5, against 0, neutral 1. Priority order: room -> take.
-Skip: orb long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 crt_1h short, 3 below VWAP: against.
-  5 Confluence: for 0, against 2, neutral 4. Priority order (step 6, the other side): skip.
-Loser: for 4, against 0, neutral 2; vwap_reclaim long at 21522.75, stop 21516.50
-  (6.25 pts = 25 ticks, $12.50 on 1 MNQ). -25 ticks, -$12.50. A high count is odds, not a promise.
+Take: long: 6 neutral (15m pattern hammer, the candle of 4); 1 aligned, 2 15m cisd up, 3 vwap above,
+  4 15m rejected prior vah up, 5 momentum: for. 5 Confluence: for 5, against 0, neutral 1.
+  Priority order: room -> take.
+Skip: long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 3m choch down, 3 vwap below: against.
+  5 Confluence: for 0, against 2, neutral 4. Priority order (contradicting facts): skip.
+Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
+  (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```

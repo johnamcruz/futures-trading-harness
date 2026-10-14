@@ -43,7 +43,7 @@ timeframe:
   `m3.trend.keltner.upper`, `m3.trend.keltner.lower`;
 - 15m: `m15.indicators.ema20`, `m15.indicators.adx`,
   `m15.indicators.adxSlope`, `m15.indicators.supertrend.direction`;
-- 60m: `h1.h1.ema20`, `h1.h1.ema50`, `h1.h1.adx`.
+- 1h: `h1.h1.ema20`, `h1.h1.ema50`, `h1.h1.adx`.
 
 They confirm that a price-action read has momentum behind it (a 15m
 rejection with the trend while price holds the right side of a rising
@@ -52,12 +52,12 @@ override the price-action read. In the count they are one item with the
 bar's momentum (`confluence-counting`, item 5): all with its side FOR, all
 against AGAINST, mixed neutral.
 
-**The read.** Momentum: the 3m candle line's `momentum up|down` (any
-timeframe's line alike): range ≥ 1 ATR, close in the far third, volume
-≥ the mean of up to 20 prior candles, at least 5. A line showing range
-and vol but no momentum: none. Trend (ADX, EMAs) is separate. Fading:
-ADX falling, ranges shrinking, closes mid-range. High volume with little
-range: `absorption`.
+**The read.** Momentum (this skill owns it; read `<tf> momentum up|down`):
+the 3m candle line's `momentum up|down` (any timeframe's line alike):
+range ≥ 1 ATR, close in the far third, volume ≥ the mean of up to 20 prior
+candles, at least 5. A line showing range and vol but no momentum: none.
+Trend (ADX, EMAs) is separate. Fading: ADX falling, ranges shrinking,
+closes mid-range. High volume with little range: `absorption`.
 
 **Evidence**: above-average volume on a first close through the IB high
 did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
