@@ -114,8 +114,9 @@ its facts; the order decides.
    policy verdict's entry is at most order_plan's size, and a rules
    strategy's size follows position-sizing; then risk $ = risk per contract ×
    the plan's size. Approve the plan's numbers as order_plan shows them; never
-   supply tick numbers of your own. Its refusal (the `order-plan` skill) is a
-   VETO. A manual strategy has no order_plan: check its arithmetic by the
+   supply tick numbers of your own. Its refusal (not a candidate now, the other side, a
+   verdict the gate would refuse) is a VETO; a tick-spec refusal: `get_contract`,
+   then call it again (the `order-plan` skill). A manual strategy has no order_plan: check its arithmetic by the
    formula above. order_plan does the arithmetic only: every judgement here
    stays yours.
 6. The strategy (`strategies_show` with its name) is `active`, trades this symbol,

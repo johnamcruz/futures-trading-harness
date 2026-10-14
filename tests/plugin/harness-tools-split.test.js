@@ -57,15 +57,22 @@ const HEADER_OF = home => (home === 'user-commands' ? ['Tool', 'Script (people)'
 // The bar_briefing row's description, with the CISD block the briefing has carried since #125 (briefing.js
 // cisdBlock and its summary line) named where the old row lists the m3 fields.
 const BRIEFING_CELL = units(read(BEFORE)).find(u => u.startsWith('the bar briefing the autonomous runner built'));
+// The order the briefing prints them (briefing.js): the candle lines, the swing targets, then the CISD line; in the
+// m3 fields, `cisd` before `candidates`, as briefing.js builds m3; a timeframe's briefing points to the runner's.
+const CISD_FIELD = '`cisd` (the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles: its direction, level, displacement, any key-level sweep before it, and its leg\'s OTE zone with its status and whether price is in it; a read, not a signal), ';
 const CISD = [
-  ['a line per timeframe for its last completed candle, the next swing targets,', 'a line per timeframe for its last completed candle, the latest CISD per timeframe, the next swing targets,'],
-  ['`location`, `candles` (per timeframe,', '`location`, `cisd` (the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles: its direction, level, displacement, any key-level sweep before it, and its leg\'s OTE zone with its status and whether price is in it; a read, not a signal), `candles` (per timeframe,'],
+  ['a line per timeframe for its last completed candle, the next swing targets,', 'a line per timeframe for its last completed candle, the next swing targets, the latest CISD per timeframe,'],
+  ['15m and 1h, in points, ticks and R), `candidates`', `15m and 1h, in points, ticks and R), ${CISD_FIELD}\`candidates\``],
+  ['with a pointer to the runner\'s `candles` and `swingTargets`', 'with a pointer to the runner\'s `candles`, `swingTargets` and `cisd`'],
 ];
 
 // Deliberate differences, each with its reason.
 const ALLOWED = [
   ...HEADER.map(old => ({ old, copies: HOMES.filter(h => HEADER_OF(h).includes(old)).length, reason: 'the tool table header, in each home with a table' })),
   { old: 'Harness Tools', reason: 'the retired skill\'s title: each home has its own' },
+  // tool-arguments' When to Use lists what it holds (the rules for calling any tool, skill_lookup's row).
+  { old: 'Any time a skill or role needs bars in a file, a strategy scan, indicator numbers, the multi-timeframe read, the news blackouts, the prop attempt\'s state, the journal\'s lessons, or a day\'s reconcile.',
+    now: 'Calling any harness tool: its arguments, the paths it reads, what it refuses; skill_lookup\'s row.', reason: 'the When to Use of the skill that holds the general rules, not of every tool' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
   { old: BRIEFING_CELL, now: CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || ''), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name' },
@@ -181,7 +188,7 @@ test('harness-tools retired: the comparison catches a lost, a doubled, an edited
   assert.notDeepStrictEqual(differences(old, swap(['prop-challenge-pacing', pp.replace('combine_status {}\n', '')]), ALLOWED), [], 'stale');
   assert.notDeepStrictEqual(differences(old, swap(['user-commands', homes[at('user-commands')].replace('| `lessons` | `lessons.js', '| `lessons` | `top`?, `json`? | `lessons.js')]), ALLOWED), [], 'a dropped cell back');
   // The CISD exception reverted (the old row back) fails too.
-  assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace(ALLOWED.find(a => a.now).now, BRIEFING_CELL)]), ALLOWED), [], 'cisd reverted');
+  assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace(ALLOWED.find(a => a.old === BRIEFING_CELL).now, BRIEFING_CELL)]), ALLOWED), [], 'cisd reverted');
 });
 
 const { TOOLS } = require('../../scripts/lib/harness-tools/registry');
@@ -231,7 +238,7 @@ test('every role has the row of every harness tool it holds in its core, or a re
     if (held.includes('skill_lookup')) assert.ok(a.skills.includes('tool-arguments'), `${a.name}: skill_lookup's row`);
   }
   const rm = flat(read('agents/risk-manager.md'));
-  assert.match(rm, /Approve the plan's numbers as order_plan shows them; never supply tick numbers of your own\. Its refusal \(the `order-plan` skill\) is a VETO\./);
+  assert.match(rm, /Approve the plan's numbers as order_plan shows them; never supply tick numbers of your own\. Its refusal \(not a candidate now, the other side, a verdict the gate would refuse\) is a VETO; a tick-spec refusal: `get_contract`, then call it again \(the `order-plan` skill\)\./);
   assert.doesNotMatch(read('agents/risk-manager.md'), /^role-skills: \[[^\]]*\border-plan\b/m);
   assert.match(flat(skill('bar-briefing')), /Without one, the news blackouts are `blackouts_list`\./);
   // The scan's tool calls in strategy-scan reference the rows' skill.
@@ -250,13 +257,11 @@ test('the new skills answer one question in a short index line; the topic skills
 });
 
 test('no file names the retired harness-tools skill (the code module scripts/lib/harness-tools/ and its tests keep their name)', () => {
-  // The skill's name: backticked (not a path), "skills/harness-tools", "the harness-tools skill", or in a role's list.
-  const SKILL_REF = /`harness-tools`|skills\/harness-tools\b|harness-tools\s+skill|[[,]\s*harness-tools\s*[\],]/;
-  // Frozen: the skill-split fixtures (old skills as main had them, pinned by sha256), a recorded transcript of an old
-  // run, and this test.
-  const FROZEN = f => /^tests\/fixtures\/skill-split\/[a-z-]+\.before\.txt$/.test(f) || ['tests/fixtures/qwen-cycle-transcript.txt', 'tests/plugin/harness-tools-split.test.js',
-    // Their allow-lists quote the old sentence that pointed to it.
-    'tests/plugin/broker-mcp-split.test.js', 'tests/plugin/strategy-library-split.test.js'].includes(f);
+  // Frozen whole: the skill-split fixtures (old skills as main had them, pinned by sha256), a recorded transcript of an
+  // old run, and this test. In the other splits' tests only their allow-list lines that quote the old text
+  // (`old: '...'`) may name it.
+  const FROZEN = f => /^tests\/fixtures\/skill-split\/[a-z-]+\.before\.txt$/.test(f) || ['tests/fixtures/qwen-cycle-transcript.txt', 'tests/plugin/harness-tools-split.test.js'].includes(f);
+  const QUOTES_OLD = ['tests/plugin/broker-mcp-split.test.js', 'tests/plugin/strategy-library-split.test.js'];
   // Every file in the tree (tracked or new), but not dependencies or the repository database, nor a symlinked directory.
   const files = [];
   const walk = dir => {
@@ -267,19 +272,46 @@ test('no file names the retired harness-tools skill (the code module scripts/lib
     }
   };
   walk('.');
-  const bad = files.filter(f => !FROZEN(f) && /\.(md|js|json|toml|txt)$/.test(f))
-    .filter(f => SKILL_REF.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+  const bad = files.filter(f => !FROZEN(f) && /\.(md|js|json|toml|txt|sh|ya?ml)$/.test(f))
+    .flatMap(f => skillRefs(f, fs.readFileSync(path.join(ROOT, f), 'utf8'), QUOTES_OLD.includes(f)));
   assert.deepStrictEqual(bad, []);
-  // The check catches what it is for.
-  for (const s of ['the `harness-tools` skill', 'skills/harness-tools/SKILL.md', 'role-skills: [a, harness-tools, b]', 'the harness-tools skill']) assert.match(s, SKILL_REF);
-  for (const s of ['scripts/lib/harness-tools/registry.js', 'harness-tools-mcp.js', 'tests/lib/harness-tools-order-plan.test.js']) assert.doesNotMatch(s, SKILL_REF);
+  // The check catches what it is for: any case, a space or a hyphen, backticked or bare, in a list, a title; in a file
+  // whose allow-list may quote it, a line that isn't an allow-list quote.
+  for (const s of ['the `harness-tools` skill', 'skills/harness-tools/SKILL.md', 'role-skills: [a, harness-tools, b]', 'the harness-tools skill',
+    'the Harness-Tools skill', 'the harness tools skill', 'the `Harness Tools` skill', '(harness-tools)', 'load harness-tools first', 'load harness-tools.', '# Harness Tools']) {
+    assert.notDeepStrictEqual(skillRefs('x.md', s), [], s);
+  }
+  assert.notDeepStrictEqual(skillRefs(QUOTES_OLD[0], 'see the harness-tools skill', true), [], 'a new line in a file that quotes the old text');
+  assert.deepStrictEqual(skillRefs(QUOTES_OLD[0], "  { old: 'then `mtf_read` (the `harness-tools` skill).',", true), [], 'its allow-list quote');
+  // The code module keeps its name; prose about the harness's tools is no reference to the skill.
+  for (const s of ['scripts/lib/harness-tools/registry.js', 'harness-tools-mcp.js', 'tests/lib/harness-tools-order-plan.test.js', 'tests/plugin/harness-tools-split.test.js', 'tests/lib/harness-tools.test.js',
+    'the harness-tools MCP server', "path.join(ROOT, 'scripts', 'lib', 'harness-tools', script)", 'With the harness tools (the `strategy-tools` skill):', 'the harness tools server']) {
+    assert.deepStrictEqual(skillRefs('x.md', s), [], s);
+  }
 });
+
+/**
+ * The lines of a file that name the retired skill: any case, a space or a hyphen between the words. The hyphenated
+ * name is the skill's unless it is the code module's (`lib/harness-tools`, `harness-tools/`, `harness-tools-mcp`,
+ * `harness-tools[-<x>].test`, "the harness-tools MCP server", "server" or "operations");
+ * the spaced one ("the harness tools") is plain prose unless it is backticked, called a skill, or a title.
+ */
+function skillRefs(rel, text, quotesOld = false) {
+  const HYPHEN = /(?<!lib\/|'lib', ')harness-tools(?![\w/.-]|\s+(?:MCP|server|operations)\b)|harness-tools(?=[-.])(?!-mcp\b|-[a-z-]+\.test\b|\.test\b)/i;
+  const SPACED = /`harness[\s-]tools`|skills\/harness[\s-]tools\b|harness[\s-]tools`?\s+skill|^#+\s*harness[\s-]tools\s*$/i;
+  const out = [];
+  text.split('\n').forEach((line, i) => {
+    if (quotesOld && /^\s*\{?\s*old: '/.test(line)) return;
+    if (HYPHEN.test(line) || SPACED.test(line)) out.push(`${rel}:${i + 1}: ${line.trim().slice(0, 100)}`);
+  });
+  return out;
+}
 
 // trade-session step 4 as main had it (at 0b1a2f79): the head trader's own procedure, read every cycle, stays as it
 // was; the one change is the reference to the order-plan skill.
 const STEP4 = 'tests/fixtures/skill-split/trade-session-step4.before.txt';
 const STEP4_SHA256 = '7fc1e45612ccb7a7569bca0119c44d5a48a9d849c5694f25407e033d5ea06228';
-const STEP4_REF = ['**The exact numbers come from `order_plan`**, not from your own arithmetic:', '**The exact numbers come from `order_plan`** (the `order-plan` skill), not from your own arithmetic:'];
+const STEP4_REF = ['**The exact numbers come from `order_plan`**, not from your own arithmetic:', '**The exact numbers come from `order_plan`** (`order-plan`), not from your own arithmetic:'];
 
 test('trade-session step 4 is main\'s, with a reference to order-plan; the head trader\'s load list is unchanged', () => {
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');

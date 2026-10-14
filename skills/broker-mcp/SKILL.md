@@ -25,7 +25,7 @@ guide resource once per session if it has one.
 3. `journal_read {kind:"lesson"}` plus recent `review` entries.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
 5. `search_contracts {searchText:"MNQ"}`: contracts come back by standard name: `MNQ` is the front month, `MNQ:2027-03` a later one. Note `tickSize`, `tickValue`: the harness takes every contract's tick specs from the broker's own answers (it records them as `search_contracts` or `get_contract` returns them), never from a table of its own. Use the name as `contractId` everywhere; the harness translates it to the broker's own id.
-6. Bars to a file: the runner's bars file, or the harness tool `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read`, and `strategies_scan` with `record` (the `bar-briefing` skill).
+6. Bars to a file: the runner's bars file, or `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read` (`bar-briefing`) and `strategies_scan` with `record` (`strategy-tools`).
 7. `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`.
 8. `place_order` only when the plan's trigger has happened.
 9. Manage with `get_account_snapshot` / `get_quote` / `list_open_orders`.

@@ -132,9 +132,9 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // order-mechanics. The risk manager (it places no order) takes gate-refusals-limits and gate-refusals-cycle (the size,
 // risk, prop and FACTS refusals its checks name); the executor gate-refusals (the order itself) and
 // gate-refusals-positions (managing a position): the limits and cycle rows are the head trader's to act on.
-// From the harness-tools split (tests/plugin/harness-tools-split.test.js): bar-briefing (core) for the analysts and the
+// From the split of the retired tool skill (tests/plugin/harness-tools-split.test.js): bar-briefing (core) for the analysts and the
 // risk manager, and reason-check (core) for the risk manager (it references order-plan from its step 5). From its
-// retirement: tool-arguments in place of harness-tools, and strategy-tools (core) for the roles that hold strategies tools.
+// retirement: tool-arguments in place of the retired skill, and strategy-tools (core) for the roles that hold strategies tools.
 const MAIN_SKILLS = {
   'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'news-calendar-analyst': ['session-timing', 'trader-process'],

@@ -67,7 +67,7 @@ const ALLOWED = [
   // A pointer to a skill retired later (tests/plugin/harness-tools-split.test.js): the strategies tools' rows are
   // strategy-tools'.
   { old: 'With the harness tools (the `harness-tools` skill):', now: 'With the harness tools (the `strategy-tools` skill):',
-    reason: 'harness-tools is retired; the strategies tools\' rows are in strategy-tools' },
+    reason: 'the tool skill is retired; the strategies tools\' rows are in strategy-tools' },
 ];
 
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */

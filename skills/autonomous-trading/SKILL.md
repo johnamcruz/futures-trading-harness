@@ -138,7 +138,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    orders, and fix any position without a working stop first.
 8. **Harness tools, not scripts.** Bars, scans, the snapshot, the
    multi-timeframe read, blackouts, the prop status, lessons, and reconcile
-   are tools on the `harness` MCP server (the `tool-arguments` skill): call
+   are tools on the `harness` MCP server (each in its skill): call
    them; don't run the harness's scripts from a shell. Starting, stopping, or
    recording a prop attempt, backtests, and replays (`replay.js`) are the
    user's.

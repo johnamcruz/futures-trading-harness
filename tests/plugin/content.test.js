@@ -328,9 +328,10 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing\. The alignment and the\s+trend rule in a trade plan are the briefing's \(intraday frames\); a daily\s+read, if you have one \(premarket's\), is context only, never a second\s+alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
   const ht = read('skills/bar-briefing/SKILL.md');
-  // The briefing's m3 cisd (briefing.js cisdBlock): named with the fields the old row listed.
-  assert.match(ht, /`location`, `cisd` \(the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles:[^)]*; a read, not a signal\), `candles`/);
-  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the latest CISD per timeframe, the next swing targets, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
+  // The briefing's m3 cisd (briefing.js cisdBlock), before the candidates as m3 builds it; a frame points to it.
+  assert.match(ht, /in points, ticks and R\), `cisd` \(the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles:[^)]*; a read, not a signal\), `candidates`/);
+  assert.match(ht, /with a pointer to the runner's `candles`, `swingTargets` and `cisd`/);
+  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the next swing targets, the latest CISD per timeframe, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
   assert.match(ht, /`candidates` \(each with its stop, exit, the first level in its way in R, the room it needs, and its context as `facts`[^;]*; `null`: the scan failed or the bar wasn't scanned/);
   assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile\. Each part has a version and changes only on expiry/);
   assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
@@ -473,7 +474,7 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   for (const name of agents.filter(a => a !== 'risk-manager')) assert.notStrictEqual(oc.agent[name].permission.harness_reason_check, 'allow', name);
   assert.match(oc.agent['risk-manager'].prompt, /\*\*Check every reason against the facts\*\*/);
   // The head trader reads the skills from their files; the workspace instructions list the tool's skill.
-  assert.match(read('workspace/AGENTS.md'), /`reason-check` \(skills\/reason-check\/SKILL\.md\): Checking stated reasons against the facts\./);
+  assert.match(read('workspace/AGENTS.md'), /`reason-check` \(skills\/reason-check\/SKILL\.md\): Use when checking stated reasons vs the facts\./);
 });
 
 test('fact-checked reasons: phase 2 states its FACTS in the forms the code checks (fact-claims.js), in every adapter', () => {

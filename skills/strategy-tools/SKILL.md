@@ -1,6 +1,6 @@
 ---
 name: strategy-tools
-description: The strategies tools' arguments, results.
+description: Use when calling a strategies_* harness tool.
 ---
 
 # Strategy Tools

@@ -1,6 +1,6 @@
 ---
 name: user-commands
-description: Commands only the user runs, and scripts.
+description: Use when a person runs a script themselves.
 ---
 
 # User Commands
@@ -8,6 +8,8 @@ description: Commands only the user runs, and scripts.
 ## When to Use
 
 - To know which script a person would run for the same result.
+- The user asks for a backtest, a replay, or a prop attempt's start, stop or
+  day.
 
 ## How It Works
 

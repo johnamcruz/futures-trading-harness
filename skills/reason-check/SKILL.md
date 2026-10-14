@@ -1,6 +1,6 @@
 ---
 name: reason-check
-description: Checking stated reasons against the facts.
+description: Use when checking stated reasons vs the facts.
 ---
 
 # Reason Check

@@ -1,6 +1,6 @@
 ---
 name: tool-arguments
-description: How harness tools take arguments, refusals.
+description: Use when calling a harness tool, for its arguments.
 ---
 
 # Tool Arguments
@@ -16,9 +16,8 @@ scripts. None places, changes, or cancels an order.
 
 ## When to Use
 
-- Any time a skill or role needs bars in a file, a strategy scan, indicator
-  numbers, the multi-timeframe read, the news blackouts, the prop attempt's
-  state, the journal's lessons, or a day's reconcile.
+- Calling any harness tool: its arguments, the paths it reads, what it
+  refuses; skill_lookup's row.
 - When a step says to record something for the order gate (`record: true`).
 
 ## How It Works

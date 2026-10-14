@@ -1,13 +1,13 @@
 ---
 name: order-plan
-description: Reading order_plan's numbers and refusals.
+description: Use when reading order_plan's order numbers.
 ---
 
 # Order Plan
 
 ## When to Use
 
-- An order's numbers.
+- Planning or checking an order's stop, ticks, size and $ risk.
 
 ## How It Works
 
