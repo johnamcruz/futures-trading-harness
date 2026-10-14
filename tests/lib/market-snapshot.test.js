@@ -115,3 +115,84 @@ test('participation counts by trading day: the evening (from the 18:00 ET open) 
   const breakTime = snapshot({ bars: bars.filter(b => Date.parse(b.t) < et(12, 16, 0)) }).participation;
   assert.strictEqual(breakTime.relVolLastVsOpeningRange, 0.5, 'still Monday\'s range at the close');
 });
+
+test('priorDayCandle: the prior RTH day as a daily candle: direction, close location, and close against the day before', () => {
+  const { priorDayCandle, levels } = require('../../scripts/lib/trading/market-snapshot');
+  const et = (d, h, m) => new Date(Date.UTC(2026, 9, d, h + 4, m)).toISOString(); // October: ET = UTC-4
+  // A whole RTH day as three 3m bars: the 09:30 bar (its open), a bar making its high and low, and the 15:57 bar (its close).
+  const day = (d, o, h, l, c) => [{ t: et(d, 9, 30), o, h: o, l: o, c: o, v: 1 },
+    { t: et(d, 12, 0), o, h, l, c: o, v: 1 }, { t: et(d, 15, 57), o, h: Math.max(o, c), l: Math.min(o, c), c, v: 1 }];
+  const after = d => ({ t: et(d, 18, 0), o: 1, h: 1, l: 1, c: 1, v: 1 });
+  const monday = day(12, 105, 110, 100, 108);
+  // Tuesday opens 104, trades 102-120, closes 119: up, the top third, above Monday's high.
+  const up = [...monday, ...day(13, 104, 120, 102, 119), after(13)];
+  const c = priorDayCandle(up);
+  assert.deepStrictEqual(c, { day: '2026-10-13', open: 104, dir: 'up', closeLocation: 'top', dayBefore: { day: '2026-10-12', high: 110, low: 100 }, closeVsDayBefore: 'above its high' });
+  // The same day as levels().priorRth (the briefing's day.priorRth): one prior day, one value.
+  assert.strictEqual(c.day, levels(up).priorRth.day);
+  assert.strictEqual(levels(up).priorRth.close, 119);
+  // Down, the bottom third, below the day before's low; inside its range; flat in the middle.
+  const down = priorDayCandle([...monday, ...day(13, 104, 106, 90, 91), after(13)]);
+  assert.deepStrictEqual([down.dir, down.closeLocation, down.closeVsDayBefore], ['down', 'bottom', 'below its low']);
+  const inside = priorDayCandle([...monday, ...day(13, 104, 109, 99, 104), after(13)]);
+  assert.deepStrictEqual([inside.dir, inside.closeLocation, inside.closeVsDayBefore], ['flat', 'middle', 'inside its range']);
+  // Before Tuesday's 16:00 ET close, Monday is the prior day; its day before isn't in the bars: null.
+  const mid = priorDayCandle([...monday, ...day(13, 104, 120, 102, 119).slice(0, 2)]);
+  assert.deepStrictEqual([mid.day, mid.dayBefore, mid.closeVsDayBefore], ['2026-10-12', null, null]);
+  // A partial day before (no 09:30 bar): no day before. No whole prior day, or no bars: null.
+  assert.strictEqual(priorDayCandle([...monday.slice(1), ...day(13, 104, 120, 102, 119), after(13)]).dayBefore, null);
+  assert.strictEqual(priorDayCandle([...day(13, 104, 120, 102, 119).slice(1), after(13)]), null);
+  assert.strictEqual(priorDayCandle([]), null);
+});
+
+test('priorDayCandle: causal at every bar of the fixtures: the cut bars give what the days complete by then give, and it changes only at the RTH close', () => {
+  const path = require('path');
+  const { priorDayCandle, levels } = require('../../scripts/lib/trading/market-snapshot');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const etParts = t => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date(t)).map(x => [x.type, x.value]));
+    return { day: `${p.year}-${p.month}-${p.day}`, minute: Number(p.hour) * 60 + Number(p.minute) };
+  };
+  for (const f of ['NQ-3m.csv', 'RTY-3m.csv']) {
+    const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', f));
+    const ets = bars.map(b => etParts(b.t));
+    let seen = 0;
+    let changes = 0;
+    let prev = null;
+    for (let i = 0; i < bars.length; i += 1) {
+      const cut = bars.slice(0, i + 1);
+      const got = priorDayCandle(cut);
+      // An independent reference read from the FULL series: the RTH days (09:30-16:00 ET) whose close has passed by bar i.
+      const days = new Map();
+      for (let j = 0; j < bars.length; j += 1) {
+        const e = ets[j];
+        if (e.minute < 570 || e.minute >= 960) continue;
+        if (!(e.day < ets[i].day || (e.day === ets[i].day && ets[i].minute >= 960))) continue;
+        const d = days.get(e.day) || { o: bars[j].o, h: -Infinity, l: Infinity, c: null, whole: e.minute === 570 };
+        d.h = Math.max(d.h, bars[j].h); d.l = Math.min(d.l, bars[j].l); d.c = bars[j].c;
+        days.set(e.day, d);
+      }
+      const keys = [...days.keys()].sort();
+      const k = keys.map(x => days.get(x).whole).lastIndexOf(true);
+      if (k < 0) { assert.strictEqual(got, null, `${f} bar ${i}`); continue; }
+      const p = days.get(keys[k]);
+      const q = k > 0 && days.get(keys[k - 1]).whole ? days.get(keys[k - 1]) : null;
+      seen += 1;
+      assert.strictEqual(got.day, keys[k], `${f} bar ${i}`);
+      assert.strictEqual(got.day, levels(cut).priorRth.day, `${f} bar ${i}: the briefing's prior RTH day`);
+      assert.strictEqual(got.open, p.o);
+      assert.strictEqual(got.dir, p.c > p.o ? 'up' : p.c < p.o ? 'down' : 'flat');
+      const at = (p.c - p.l) / (p.h - p.l);
+      assert.strictEqual(got.closeLocation, at >= 2 / 3 ? 'top' : at <= 1 / 3 ? 'bottom' : 'middle', `${f} bar ${i}`);
+      assert.strictEqual(got.closeVsDayBefore, !q ? null : p.c > q.h ? 'above its high' : p.c < q.l ? 'below its low' : 'inside its range', `${f} bar ${i}`);
+      if (prev && JSON.stringify(prev) !== JSON.stringify(got)) {
+        changes += 1;
+        // It changes only on the first bar at or after a 16:00 ET close.
+        assert.ok(ets[i].minute >= 960 || ets[i].day !== ets[i - 1].day, `${f} bar ${i}: changed mid-session`);
+      }
+      prev = got;
+    }
+    assert.ok(seen > 200 && changes >= 2, `${f}: ${seen} bars with a prior day, ${changes} changes`);
+  }
+});

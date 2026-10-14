@@ -65,7 +65,7 @@ Detail by timeframe:
   overnight: {"high":27135.75,"low":26992}
   sessionProfile: {"poc":27035.75,"vah":27110,"val":27019.25,"hvnAbove":27077.5,"hvnBelow":27035.75,"lvnAbove":27054.5,"lvnBelow":null}
   priorProfileNodes: {"hvnAbove":27096.5,"hvnBelow":27016,"lvnAbove":27068,"lvnBelow":27030.25}
-  location: {"priorValue":"inside","sessionValue":"inside","initialBalance":null,"priorRthRange":"inside"}
+  location: {"priorValue":"inside","sessionValue":"inside","initialBalance":null,"priorRthRange":"inside","priorRthClose":"above"}
   candidates: []
   trendRule: Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
   cisd: {"3m":{"dir":"bullish","level":27030.75,"confirmedClose":"00:36","displacement":"weak","engulfing":false,"sweep":null,"leg":{"origin":27016.25,"extreme":27037},"ote":null,"status":"weak","priceInOte":false,"retracement":-0.807},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bearish","level":27030.25,"confirmedClose":"00:30","displacement":"weak","engulfing":false,"sweep":null,"leg":{"origin":27049,"extreme":27016.25},"ote":null,"status":"weak","priceInOte":false,"retracement":1.145},"1h":{"dir":"bullish","level":27094.5,"confirmedClose":"04-23 21:00","displacement":"weak","engulfing":false,"sweep":null,"leg":{"origin":26681.75,"extreme":27135.75},"ote":null,"status":"weak","priceInOte":false,"retracement":0.181}}
@@ -81,6 +81,7 @@ Detail by timeframe:
   lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":26890,"swingAt":"04-23 05:00","at":"04-23 13:00","barsAgo":9,"knownAt":"04-23 14:00"},"previous":{"kind":"BOS","direction":"up","level":27013.5,"swingAt":"04-23 03:00","at":"04-23 07:00","barsAgo":15,"knownAt":"04-23 08:00"}}
 [day] version day@2026-04-24T04:48:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2026-04-23","high":27155.75,"low":26681.75,"close":26926.25}
+  priorRthCandle: {"day":"2026-04-23","open":27014.25,"dir":"down","closeLocation":"middle","dayBefore":null,"closeVsDayBefore":null}
   priorProfile: {"poc":26916.5,"vah":27075.25,"val":26843,"hvn":[26916.5,27016,27096.5],"lvn":[26968.5,27030.25,27068,27153.5]}
 === MNQ 3m bar 1244 (opened 2026-04-27T14:30:00.000Z) ===
 --- strategies_scan (the runner's, compact) ---
@@ -152,7 +153,7 @@ Detail by timeframe:
   overnight: {"high":27542.5,"low":27344.25}
   sessionProfile: {"poc":27380.25,"vah":27447.25,"val":27344.75,"hvnAbove":27380.25,"hvnBelow":null,"lvnAbove":27468,"lvnBelow":null}
   priorProfileNodes: {"hvnAbove":27414.25,"hvnBelow":27318,"lvnAbove":null,"lvnBelow":27284.75}
-  location: {"priorValue":"inside","sessionValue":"below","initialBalance":"inside","priorRthRange":"inside"}
+  location: {"priorValue":"inside","sessionValue":"below","initialBalance":"inside","priorRthRange":"inside","priorRthClose":"below"}
   candidates: [{"name":"orb","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":27325.5,"stopPoints":14.51,"minRR":2,"exit":{"trailActivateR":2,"trailGivebackR":0.5,"targetR":null,"maxBars":null},"target":null,"inTheWay":{"name":"round number","price":27300,"points":25.5,"R":1.76},"ahead":[{"name":"round number","price":27300,"points":25.5,"R":1.76},{"name":"day low / IB low / session low / 15m swing low","price":27298.5,"points":27,"R":1.86},{"name":"prior VAL","price":27246.5,"points":78.96,"R":5.44}],"needR":2,"trendRule":"allows","alignment":"mixed","vwapSide":"below","facts":["the trend rule allows a short","multi-timeframe read for a short: mixed","first level in its way: round number at 1.76R; it needs 2R (the level comes first)","confluence: none with it","price below the VWAP (its side)"]}]
   trendRule: Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too.
   cisd: {"3m":{"dir":"bearish","level":27356.5,"confirmedClose":"10:33","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":27383.25,"extreme":27321.5},"ote":{"top":27370.25,"bottom":27359.75,"mid":27365},"status":"waiting","priceInOte":false,"retracement":0.065},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bearish","level":27475.5,"confirmedClose":"08:15","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":27500.25,"extreme":27298.5},"ote":{"top":27458,"bottom":27423.5,"mid":27440.75},"status":"waiting","priceInOte":false,"retracement":0.134},"1h":{"dir":"bearish","level":27425,"confirmedClose":"09:00","displacement":"strong","engulfing":true,"sweep":{"name":"prior RTH high","price":27462.5},"leg":{"origin":27500.25,"extreme":27298.5},"ote":{"top":27458,"bottom":27423.5,"mid":27440.75},"status":"waiting","priceInOte":false,"retracement":0.134}}
@@ -168,6 +169,7 @@ Detail by timeframe:
   lastBreak: {"last":{"kind":"BOS","direction":"up","level":27462.5,"swingAt":"04-24 13:00","at":"04-26 21:00","barsAgo":12,"knownAt":"04-26 22:00"},"previous":{"kind":"BOS","direction":"up","level":27363.75,"swingAt":"04-24 07:00","at":"04-24 11:00","barsAgo":21,"knownAt":"04-24 12:00"}}
 [day] version day@2026-04-27T14:33:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2026-04-24","high":27462.5,"low":27130.25,"close":27434}
+  priorRthCandle: {"day":"2026-04-24","open":27210,"dir":"up","closeLocation":"top","dayBefore":{"day":"2026-04-23","high":27155.75,"low":26681.75},"closeVsDayBefore":"above its high"}
   priorProfile: {"poc":27414.25,"vah":27455.75,"val":27246.5,"hvn":[27231.5,27318,27414.25],"lvn":[27284.75]}
 === MNQ 3m bar 1299 (opened 2026-04-27T17:15:00.000Z) ===
 --- strategies_scan (the runner's, compact) ---
@@ -239,7 +241,7 @@ Detail by timeframe:
   overnight: {"high":27542.5,"low":27344.25}
   sessionProfile: {"poc":27373,"vah":27415.5,"val":27335,"hvnAbove":27482.75,"hvnBelow":27373,"lvnAbove":27468,"lvnBelow":null}
   priorProfileNodes: {"hvnAbove":27414.25,"hvnBelow":27318,"lvnAbove":null,"lvnBelow":27284.75}
-  location: {"priorValue":"inside","sessionValue":"inside","initialBalance":"inside","priorRthRange":"inside"}
+  location: {"priorValue":"inside","sessionValue":"inside","initialBalance":"inside","priorRthRange":"inside","priorRthClose":"below"}
   candidates: [{"name":"value_area","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":27394.25,"stopPoints":28.07,"minRR":2,"exit":{"trailActivateR":null,"trailGivebackR":null,"targetR":null,"maxBars":40},"target":{"level":"close - prior_val","points":147.71,"R":5.26},"inTheWay":{"name":"last 3m swing low","price":27379,"points":15.25,"R":0.54},"ahead":[{"name":"last 3m swing low","price":27379,"points":15.25,"R":0.54},{"name":"session POC","price":27373,"points":21.33,"R":0.76},{"name":"VWAP (rth)","price":27368.55,"points":25.7,"R":0.92}],"needR":5.26,"trendRule":"allows","alignment":"mixed","vwapSide":"above","facts":["the trend rule allows a short","multi-timeframe read for a short: mixed","first level in its way: last 3m swing low at 0.54R; it needs 5.26R (the level comes first)","confluence: none with it","price above the VWAP (the other side)","lunch lull"],"values":"field(\"flow.windows.3.ofiTrade\")=-0.239"}]
   trendRule: Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
   cisd: {"3m":{"dir":"bearish","level":27397.5,"confirmedClose":"13:18","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":27418.25,"extreme":27393},"ote":{"top":27413,"bottom":27408.75,"mid":27410.75},"status":"waiting","priceInOte":false,"retracement":0.05},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bullish","level":27377.75,"confirmedClose":"12:45","displacement":"weak","engulfing":false,"sweep":{"name":"overnight low","price":27344.25},"leg":{"origin":27307.5,"extreme":27406.5},"ote":null,"status":"weak","priceInOte":false,"retracement":0.124},"1h":{"dir":"bearish","level":27425,"confirmedClose":"09:00","displacement":"strong","engulfing":true,"sweep":{"name":"prior RTH high","price":27462.5},"leg":{"origin":27500.25,"extreme":27298.5},"ote":{"top":27458,"bottom":27423.5,"mid":27440.75},"status":"waiting","priceInOte":false,"retracement":0.475}}
@@ -255,6 +257,7 @@ Detail by timeframe:
   lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27388,"swingAt":"04:00","at":"10:00","barsAgo":2,"knownAt":"11:00"},"previous":{"kind":"BOS","direction":"up","level":27462.5,"swingAt":"04-24 13:00","at":"04-26 21:00","barsAgo":15,"knownAt":"04-26 22:00"}}
 [day] version day@2026-04-27T17:18:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2026-04-24","high":27462.5,"low":27130.25,"close":27434}
+  priorRthCandle: {"day":"2026-04-24","open":27210,"dir":"up","closeLocation":"top","dayBefore":{"day":"2026-04-23","high":27155.75,"low":26681.75},"closeVsDayBefore":"above its high"}
   priorProfile: {"poc":27414.25,"vah":27455.75,"val":27246.5,"hvn":[27231.5,27318,27414.25],"lvn":[27284.75]}
 === MNQ 3m bar 1400 (opened 2026-04-27T23:18:00.000Z) ===
 --- strategies_scan (the runner's, compact) ---
@@ -323,7 +326,7 @@ Detail by timeframe:
   overnight: {"high":27501.5,"low":27420.25}
   sessionProfile: {"poc":27488,"vah":27499,"val":27471.5,"hvnAbove":27488,"hvnBelow":27462,"lvnAbove":null,"lvnBelow":null}
   priorProfileNodes: {"hvnAbove":null,"hvnBelow":27427.5,"lvnAbove":null,"lvnBelow":27454}
-  location: {"priorValue":"above","sessionValue":"inside","initialBalance":null,"priorRthRange":"above"}
+  location: {"priorValue":"above","sessionValue":"inside","initialBalance":null,"priorRthRange":"above","priorRthClose":"above"}
   candidates: []
   trendRule: Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
   cisd: {"3m":{"dir":"bullish","level":27487.5,"confirmedClose":"19:21","displacement":"weak","engulfing":false,"sweep":null,"leg":{"origin":27474.75,"extreme":27493.5},"ote":null,"status":"weak","priceInOte":false,"retracement":0.293},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bullish","level":27444.75,"confirmedClose":"18:15","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":27411.25,"extreme":27501.5},"ote":{"top":27445.5,"bottom":27430.25,"mid":27437.75},"status":"waiting","priceInOte":false,"retracement":0.15},"1h":{"dir":"bullish","level":27482,"confirmedClose":"19:00","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":27298.5,"extreme":27501.5},"ote":{"top":27375.75,"bottom":27341.25,"mid":27358.5},"status":"waiting","priceInOte":false,"retracement":0.067}}
@@ -339,4 +342,5 @@ Detail by timeframe:
   lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27388,"swingAt":"04:00","at":"10:00","barsAgo":7,"knownAt":"11:00"},"previous":{"kind":"BOS","direction":"up","level":27462.5,"swingAt":"04-24 13:00","at":"04-26 21:00","barsAgo":20,"knownAt":"04-26 22:00"}}
 [day] version day@2026-04-27T23:21:00.000Z, valid until 04-28 16:03 ET
   priorRth: {"day":"2026-04-27","high":27454.75,"low":27298.5,"close":27445}
+  priorRthCandle: {"day":"2026-04-27","open":27410.75,"dir":"up","closeLocation":"top","dayBefore":{"day":"2026-04-24","high":27462.5,"low":27130.25},"closeVsDayBefore":"inside its range"}
   priorProfile: {"poc":27372.75,"vah":27408,"val":27336,"hvn":[27372.75,27399.25,27427.5],"lvn":[27390,27416.5,27454]}

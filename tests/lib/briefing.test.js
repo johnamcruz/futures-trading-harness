@@ -840,3 +840,26 @@ test('an 18:00 candle that trades through the last session\'s overnight range sh
   assert.match(etOf(c.t), /^Sun 18:00$/);
   assert.ok(!Object.keys(c.levels).some(n => /^(overnight|IB|opening range)/.test(n)), JSON.stringify(c.levels));
 });
+
+test('the day part carries the prior RTH day as a daily candle, and m3 location price against its close: one value in every briefing', () => {
+  const { priorDayCandle } = require('../../scripts/lib/trading/market-snapshot');
+  const b = build(1300);
+  const day = b.sections.day.data;
+  // The same prior day as day.priorRth, computed once on the runner's bars.
+  assert.deepStrictEqual(day.priorRthCandle, priorDayCandle(at(1300)));
+  assert.strictEqual(day.priorRthCandle.day, day.priorRth.day);
+  assert.deepStrictEqual(Object.keys(day.priorRthCandle), ['day', 'open', 'dir', 'closeLocation', 'dayBefore', 'closeVsDayBefore']);
+  assert.ok(day.priorRthCandle.closeVsDayBefore, 'two whole RTH days in the bars: the day before is known');
+  const loc = b.sections.m3.data.location;
+  assert.strictEqual(loc.priorRthClose, b.price > day.priorRth.close ? 'above' : b.price < day.priorRth.close ? 'below' : 'at');
+  // Kept, same version, until the RTH close: the next bar leaves the day part as it was.
+  const next = build(1301, b);
+  assert.strictEqual(next.sections.day.version, b.sections.day.version);
+  assert.deepStrictEqual(next.sections.day.data.priorRthCandle, day.priorRthCandle);
+  // An analyst's frame shares the runner's day part (one value), and its bar part has no location (the runner's).
+  const whole = B.wholeBars(at(1300), 15);
+  const f = B.buildFrameBriefing({ symbol: 'NQ', bars: whole, minutes: 15, first: b });
+  assert.ok(!('location' in f.sections.bar.data));
+  const text = B.renderFrameBriefing(f, b, { now: new Date(f.closedAt) });
+  assert.ok(text.includes(`priorRthCandle: ${JSON.stringify(day.priorRthCandle)}`), 'the frame shows the runner\'s value');
+});

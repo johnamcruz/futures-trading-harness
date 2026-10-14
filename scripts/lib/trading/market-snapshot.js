@@ -13,6 +13,7 @@ const vp = require('./volume-profile');
 const dayContext = require('./day-context');
 const { onTick, levelOnTick } = require('./contracts');
 const { SNAPSHOT_PARAMS: SNAPSHOT_CISD } = require('./cisd');
+const { closeLocation } = require('./candle-facts');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -44,31 +45,69 @@ function etDayMinute(t) {
 }
 
 
-function levels(bars) {
-  const last = bars[bars.length - 1];
-  const lastEt = etDayMinute(last.t);
-  const session = ind.sessionKey(last.t, GLOBEX_OPEN);
-  const rthDays = new Map();
-  let onHigh = null; let onLow = null;
+/**
+ * The RTH days in the bars by ET date ({ open, high, low, close, whole }), and the dates complete by the last bar (its
+ * 16:00 ET close passed), oldest first. A day whose 09:30 bar isn't in the data is partial (whole false).
+ */
+function rthDaysOf(bars) {
+  const lastEt = etDayMinute(bars[bars.length - 1].t);
+  const days = new Map();
   for (const b of bars) {
     const { day, minute } = etDayMinute(b.t);
-    if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
-      // A day whose 09:30 bar isn't in the data is partial: no levels from it (as the rules engine).
-      const d = rthDays.get(day) || { high: -Infinity, low: Infinity, close: null, whole: minute === RTH_OPEN };
-      d.high = Math.max(d.high, b.h); d.low = Math.min(d.low, b.l); d.close = b.c;
-      rthDays.set(day, d);
-    } else if (ind.sessionKey(b.t, GLOBEX_OPEN) === session && !(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
+    if (minute < RTH_OPEN || minute >= RTH_CLOSE) continue;
+    const d = days.get(day) || { open: b.o, high: -Infinity, low: Infinity, close: null, whole: minute === RTH_OPEN };
+    d.high = Math.max(d.high, b.h); d.low = Math.min(d.low, b.l); d.close = b.c;
+    days.set(day, d);
+  }
+  const complete = [...days.keys()].filter(d => d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE)).sort();
+  return { days, complete };
+}
+
+function levels(bars) {
+  const last = bars[bars.length - 1];
+  const session = ind.sessionKey(last.t, GLOBEX_OPEN);
+  // A day whose 09:30 bar isn't in the data is partial: no levels from it (as the rules engine).
+  const { days: rthDays, complete } = rthDaysOf(bars);
+  let onHigh = null; let onLow = null;
+  for (const b of bars) {
+    const { minute } = etDayMinute(b.t);
+    if (minute >= RTH_OPEN && minute < RTH_CLOSE) continue;
+    if (ind.sessionKey(b.t, GLOBEX_OPEN) === session && !(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
       onHigh = onHigh === null ? b.h : Math.max(onHigh, b.h);
       onLow = onLow === null ? b.l : Math.min(onLow, b.l);
     }
   }
-  const priorDays = [...rthDays.keys()].filter(d => rthDays.get(d).whole && (d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE))).sort();
+  const priorDays = complete.filter(d => rthDays.get(d).whole);
   // The overnight session counts only if the data starts before it (its 18:00 ET open is in the data).
   const overnightWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
   const prior = priorDays.length ? rthDays.get(priorDays[priorDays.length - 1]) : null;
   return {
     priorRth: prior ? { day: priorDays[priorDays.length - 1], high: prior.high, low: prior.low, close: prior.close } : null,
     overnight: onHigh === null || !overnightWhole ? null : { high: onHigh, low: onLow },
+  };
+}
+
+/**
+ * The prior RTH day (levels().priorRth: the last whole day complete by the last bar) as a daily candle: its open
+ * (the 09:30 bar's), its direction (close against open), where it closed in its range (candle-facts closeLocation:
+ * the top, middle or bottom third), and where it closed against the RTH day before it: above its high, below its low,
+ * or inside its range. `dayBefore` is the RTH day just before it in the data, null when that day is partial (no 09:30
+ * bar) or not in the bars. Null without a prior RTH day. Causal: it reads days complete by the last bar only.
+ */
+function priorDayCandle(bars) {
+  if (!bars.length) return null;
+  const { days, complete } = rthDaysOf(bars);
+  const k = complete.map(d => days.get(d).whole).lastIndexOf(true);
+  if (k < 0) return null;
+  const p = days.get(complete[k]);
+  const q = k > 0 && days.get(complete[k - 1]).whole ? { day: complete[k - 1], ...days.get(complete[k - 1]) } : null;
+  return {
+    day: complete[k],
+    open: p.open,
+    dir: p.close > p.open ? 'up' : p.close < p.open ? 'down' : 'flat',
+    closeLocation: closeLocation({ o: p.open, h: p.high, l: p.low, c: p.close }),
+    dayBefore: q ? { day: q.day, high: q.high, low: q.low } : null,
+    closeVsDayBefore: !q ? null : p.close > q.high ? 'above its high' : p.close < q.low ? 'below its low' : 'inside its range',
   };
 }
 
@@ -388,4 +427,4 @@ function levelsAsOf(bars, i, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps, levelsAsOf };
+module.exports = { PARAMS, snapshot, signalSeries, levels, priorDayCandle, volumeProfile, fairValueGaps, levelsAsOf };
