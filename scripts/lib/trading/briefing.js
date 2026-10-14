@@ -23,8 +23,9 @@
  *          shape, pattern and how it met the key levels as they stood (fixed ones complete by its open, moving ones at
  *          its close; 5m from a 1m lane's bars when the base bars can't; each one's sweep of its previous candle),
  *          the next swing target each side on the base bars, 15m, 60m and 4h, the last completed 1h and 4h candle's
- *          high, mid and low as targets (and the side the candle forming since has taken), and the half of the
- *          session's range price is in                                    until the next base-bar close
+ *          high, mid and low as targets (and the side the candle forming since has taken), the half of the session's
+ *          range price is in, and the unfilled FVGs on 5m, 15m and 1h candles with the last candle's retest
+ *          (fvg-frames.js)                                                until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -97,6 +98,7 @@ const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets 
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
+const { fvgFrames } = require('./fvg-frames');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -439,6 +441,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // The last completed 1h and 4h candle's high, mid and low as targets, and the side the candle forming since has
         // taken, only when it has (candle-facts.js; the runner's, as above).
         rangeTargets: own ? null : briefingRangeTargets({ bars, base: minutes, price, oneR, tick }),
+        // The unfilled fair value gaps on completed 5m, 15m and 1h candles, each with its last candle's retest (fvg-frames.js).
+        fvgs: own ? null : fvgFrames({ bars, base: minutes, fine }),
       },
     },
     m15: {
