@@ -290,4 +290,4 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders };
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders, RISK_REDUCING };
