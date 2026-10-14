@@ -19,7 +19,7 @@ const { validateConfig, childEnv } = require('../../scripts/lib/autotrader');
 const { barBriefing } = require('../../scripts/lib/harness-tools/briefing');
 const { decisionPoints } = require('../../scripts/lib/replay/schedule');
 const { tfLabel } = require('../../scripts/lib/lanes');
-const { wireRunner, closedBarsOnly } = require('../../scripts/lib/runner-wiring');
+const { wireRunner, closedBarsOnly, lookupNeeds } = require('../../scripts/lib/runner-wiring');
 const { readBriefing } = require('../../scripts/lib/trading/briefing');
 const RC = require('../../scripts/lib/trading/report-cache');
 
@@ -70,17 +70,25 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
     const served = ctx.cachedRoles || [];
     const b = readBriefing(home, 'MNQ');
     const versions = b ? ['m3', 'm15', 'h1', 'day'].map(p => b.sections[p].version).join(', ') : 'none';
-    // The roles not served from the cache run: two analysts build on the briefing; the third reads the bars itself (never cacheable).
+    // The roles not served from the cache run (at wall-clock times, as opencode's events carry them): two analysts
+    // build on the briefing; the third reads the bars itself (never cacheable). In index mode each role that runs looks
+    // up what this bar requires of it (as its prompt says), inside its call: the cycle's lookup records.
+    const at = now().getTime();
+    const laneBars = {};
+    for (const x of ctx.symbols || []) { const m = /^(\d+)m$/.exec(String(x.lane || '')); if (m) laneBars[x.symbol] = { ...(laneBars[x.symbol] || {}), [m[1]]: x.bar.t }; }
+    const needs = lookupNeeds({ MNQ: b }, now(), env, { home, laneBars });
+    const ran = ANALYSTS.filter(r => !served.includes(r));
+    const lookups = ran.flatMap(r => (needs[r] || []).map(skill => ({ at: at + 12, role: r, skill })));
     const output = [
-      ...ANALYSTS.filter(r => !served.includes(r)).map((r, k) => task(r, analyst ? analyst(r, { ctx, cfg, env: runEnv, now }) : k === 2 || r === ANALYSTS[2] ? 'Data: get_bars, market_snapshot\nBias: neutral' : `Data: bar_briefing ${versions}\nBias: long`, [10, 20 + k])),
-      ...(served.includes('risk-manager') ? [] : [task('risk-manager', 'Phase 1: flat, budget 2 trades', [10, 15])]),
-      task('risk-manager', 'Phase 2: VETO - no plan', [30, 40]),
+      ...ran.map((r, k) => task(r, analyst ? analyst(r, { ctx, cfg, env: runEnv, now }) : k === 2 || r === ANALYSTS[2] ? 'Data: get_bars, market_snapshot\nBias: neutral' : `Data: bar_briefing ${versions}\nBias: long`, [at + 10, at + 20 + k])),
+      ...(served.includes('risk-manager') ? [] : [task('risk-manager', 'Phase 1: flat, budget 2 trades', [at + 10, at + 15])]),
+      task('risk-manager', 'Phase 2: VETO - no plan', [at + 30, at + 40]),
     ].join('\n');
     const cache = RC.readCache(home);
     // `lanes`: several lanes, the lanes this cycle covers (the context the cycle log records).
     cycles.push({ at: now().toISOString(), action, prompt: paths(prompt), history: ctx.historyLines || [], served, fired: (ctx.symbols || []).flatMap(s => s.fired.map(f => `${f.name} ${f.direction}`)), before: cache, ...(ctx.lanes ? { lanes: ctx.lanes } : {}) });
     clockRef.t += 20000;
-    return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - golden replay', transcript: output };
+    return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - golden replay', transcript: output, lookups };
   };
   // `restart`: a new runner every pass from the state it saved (as JSON), as a replay runs one pass per process.
   let saved = state;
@@ -259,10 +267,13 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   // lane's signal record: no analyst reads 1m) runs every role a lookup is required of, as the gate requires them
   // (skill-lookups.js cycleFacts); one without it (a 3m close) is served from the cache as in full mode.
   const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv });
-  const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1], 'risk-manager'];
-  for (const c of indexed.cycles.filter(x => x.fired.includes('tick_up long') || x.fired.includes('tick_up short'))) {
-    for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a bar its lookups are required`);
-  }
+  // The risk manager carries its situational skills in its core (no lookup required of it): phase 1 is served as in full mode.
+  const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1]];
+  // A role served on such a bar only with a cached report whose own call made the lookups under the same facts key (the
+  // same 3m bar and lane bars): each 1m setup is a new lane bar, so the roles its lookups require run every time.
+  const setupBars = indexed.cycles.filter(x => x.fired.includes('tick_up long') || x.fired.includes('tick_up short'));
+  assert.ok(setupBars.length >= 3, `setup bars: ${setupBars.length}`);
+  for (const c of setupBars) for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a new setup`);
   assert.ok(indexed.cycles.some(c => !c.fired.some(f => f.startsWith('tick_up')) && c.served.includes(ANALYSTS[0])), 'a cycle without the lane\'s setup: served');
   // Full mode: the lanes' caching rule alone (no lookups required).
   const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });

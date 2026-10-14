@@ -60,13 +60,18 @@
  *   workspaceConfig(agents, head) workspace/opencode.json's object; `head`: the head trader's embedded skills (index mode,
  *                                head-prompt.js headPlan), or null (full mode: no prompt of its own, the skill tool)
  *   sessionPermission(roles, denied, mode)  the session's and the head trader's permissions (index: skill_lookup, no skill tool)
- *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch;
- *                                `mode`: the run's role-skills mode (FTH_ROLE_SKILLS)
- *   runEnv(base, { ... })        the run's environment for opencode
+ *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles a kind of cycle may
+ *                                not launch (its task permission); `mode`: the run's role-skills mode (FTH_ROLE_SKILLS);
+ *                                the runner's plugin, which refuses FTH_DENIED_ROLES
+ *   runEnv(base, { ... })        the run's environment for opencode; `refusedRoles`: this cycle's other denied roles
+ *                                (FTH_DENIED_ROLES, with `deniedRoles`), refused by the plugin
+ *   deniedTaskRefusal(tool, args, env)   the plugin's refusal of a task call naming a denied role, or null
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
  */
 
+const path = require('path');
+const { pathToFileURL } = require('url');
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { scratchDir } = require('./bars-fetch');
@@ -288,14 +293,41 @@ function externalDirs({ root, dataDir, stateDir }) {
 }
 
 /**
+ * The runner's opencode plugin (scripts/opencode-plugin.js, loaded by every run's config): it refuses a task call
+ * naming a role the run lists in FTH_DENIED_ROLES (deniedTaskRefusal). A role denied in the task permission drops out
+ * of the task tool's description, which opencode puts in the head trader's prompt ahead of everything else, so a
+ * permission that changed from cycle to cycle (the roles served from the report cache) broke the model server's
+ * prompt cache every such cycle; the plugin refuses them with that description the same every cycle. The permission
+ * keeps what a whole kind of cycle denies (autotrader.js deniedRoles: off the desk).
+ */
+const PLUGIN_FILE = ['scripts', 'opencode-plugin.js'];
+const DENIED_ROLES_ENV = 'FTH_DENIED_ROLES';
+
+/** The roles a run may not launch (FTH_DENIED_ROLES, comma-separated): a list. */
+const deniedRolesOf = env => String((env && env[DENIED_ROLES_ENV]) || '').split(',').map(r => r.trim()).filter(Boolean);
+
+/**
+ * The plugin's check of one tool call: the refusal for a task call whose subagent_type is a role the run denies, else
+ * null. Any other tool, or no role named, is not this check's (opencode's own checks apply).
+ */
+function deniedTaskRefusal(tool, args, env) {
+  if (tool !== 'task' || !args || typeof args !== 'object') return null;
+  const role = String(args.subagent_type || '').trim();
+  if (!role || !deniedRolesOf(env).includes(role)) return null;
+  return `[denied-role] ${role} is not launched this cycle (the cycle prompt gives its cached report, or the role is off the desk): don't call it again; go on with the reports you have.`;
+}
+
+/**
  * The per-run config: every permission again, the session's, the head trader's and each role's (so a
  * run whose directory has no opencode.json, or another one, is still locked down: merged last, they
- * replace the project's in place), and reading the runner's directories for all of them.
+ * replace the project's in place), reading the runner's directories for all of them, and the runner's plugin
+ * (PLUGIN_FILE under the harness root) that refuses the roles the run's FTH_DENIED_ROLES names.
  */
 function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = null }) {
   const external = externalDirs({ root, dataDir, stateDir });
   const roles = agents.map(a => a.name);
   return {
+    plugin: [pathToFileURL(path.join(root, ...PLUGIN_FILE)).href],
     default_agent: HEAD_AGENT,
     permission: { ...sessionPermission(roles, deniedRoles, mode), external_directory: external },
     agent: {
@@ -322,11 +354,16 @@ const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'O
  * directory from PWD before its working directory, and a PWD inherited from the runner would load
  * another project's config.
  */
-function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], mode = null }) {
+function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], refusedRoles = [], mode = null }) {
   const env = { ...base };
   for (const k of UNSAFE_ENV) delete env[k];
+  // `deniedRoles`: denied by permission (the same for every cycle of a kind); with `refusedRoles` (this cycle's: the
+  // roles served from the report cache), refused by the plugin. Never inherited: only the run's own list.
+  delete env[DENIED_ROLES_ENV];
+  const refused = [...new Set([...deniedRoles, ...refusedRoles])];
   return {
     ...env,
+    ...(refused.length ? { [DENIED_ROLES_ENV]: refused.join(',') } : {}),
     PWD: dir,
     OPENCODE_DISABLE_AUTOUPDATE: '1',
     OPENCODE_DISABLE_SHARE: '1',
@@ -369,4 +406,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
+module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal };

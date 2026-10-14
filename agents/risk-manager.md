@@ -2,8 +2,8 @@
 name: risk-manager
 description: Independent risk officer for the futures desk. Phase 1 (parallel with analysts) reports account state, limits, loss streak, and today's risk budget. Phase 2 approves or vetoes a specific trade plan with sizing. Read-only; cannot place orders. Use in /premarket, /trade-session, and before any order.
 tools: Read, Skill, mcp__harness__combine_status, mcp__harness__order_plan, mcp__harness__strategies_show, mcp__harness__blackouts_list, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__broker__get_server_config, mcp__broker__list_accounts, mcp__broker__get_account_snapshot, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_performance, mcp__broker__journal_read, mcp__harness__bar_briefing, mcp__harness__reason_check, mcp__harness__skill_lookup
-role-skills: [position-sizing, prop-challenge-pacing, prop-pacing-judgment, trading-agent-security, strategy-library, strategy-gate-checks, broker-mcp, order-types, order-mechanics, order-failures, trade-journal, gate-refusals-limits, gate-refusals-cycle, broker-refusals, trader-process, tool-arguments, bar-briefing, strategy-tools, reason-check]
-role-index: [confluence-counting, invalidation, strategy-scan, micro-mini-specs]
+role-skills: [position-sizing, prop-challenge-pacing, prop-pacing-judgment, trading-agent-security, strategy-library, strategy-gate-checks, broker-mcp, gate-refusals-limits, gate-refusals-cycle, trader-process, tool-arguments, bar-briefing, strategy-tools, reason-check, confluence-counting, invalidation]
+role-index: [strategy-scan, micro-mini-specs, order-types, order-mechanics, order-failures, trade-journal]
 model: inherit
 ---
 
@@ -12,11 +12,11 @@ find trades and you can't place them. Your veto is final for the session.
 
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `prop-pacing-judgment`, `trading-agent-security`, `strategy-library`,
-`strategy-gate-checks`, `broker-mcp`, `order-types`, `order-mechanics`,
-`order-failures`, `trade-journal`, `gate-refusals-limits`, `gate-refusals-cycle`,
-`broker-refusals`, `tool-arguments`, `bar-briefing`, `strategy-tools`,
-`reason-check`, `confluence-counting`, `invalidation`, `strategy-scan`, and
-`micro-mini-specs`. `<root>`: the `harness-root` skill.
+`strategy-gate-checks`, `broker-mcp`, `gate-refusals-limits`,
+`gate-refusals-cycle`, `tool-arguments`, `bar-briefing`, `strategy-tools`,
+`reason-check`, `confluence-counting`, `invalidation`, `strategy-scan`,
+`micro-mini-specs`, `order-types`, `order-mechanics`, `order-failures`, and
+`trade-journal`. `<root>`: the `harness-root` skill.
 
 Your steps of the trader process (the `trader-process` skill) are phase
 2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision). Phase 1

@@ -29,7 +29,7 @@
  *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings })  { roles, reports: [{ role, text, at, until, tf? }] }
  *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
  *   phase1Holds(text, account)                  phase 1 confirms every active attempt and denies none
- *   recordReports({ prev, output, served, briefings, symbols, account, day, now, frames, frameBriefings })  the new cache
+ *   recordReports({ prev, output, served, briefings, symbols, account, day, now, frames, frameBriefings, lookups })  the new cache
  *   cacheFile(home), readCache(home), writeCache(home, cache)
  */
 
@@ -171,7 +171,13 @@ function accountKey(a) {
 
 const sameSymbols = (cache, symbols) => JSON.stringify(cache.symbols || []) === JSON.stringify(symbols.map(s => [s.symbol, s.contractId || null]));
 
-/** The cached reports still valid for this cycle, and the roles they stand for. */
+// The skills a cached report's own call looked up (an entry recorded before they were kept: none).
+const lookupsOf = r => (Array.isArray(r.lookups) ? r.lookups.filter(s => typeof s === 'string') : []);
+
+/**
+ * The cached reports still valid for this cycle, and the roles they stand for; each analyst's with the skills its
+ * own call looked up (`lookups`: index mode serves it only when they cover what this bar requires, runner-wiring.js).
+ */
 function serveReports({ cache, briefings, symbols, account, day, now = null, frames = {}, frameBriefings = {} }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
@@ -184,10 +190,10 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
     if (m) {
       // On its own timeframe: its versions now, and never past their time.
       const f = r && r.tf === m ? frameNow({ briefings, frameBriefings, symbols, minutes: m, now }) : null;
-      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m` });
+      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m`, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
       continue;
     }
-    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until });
+    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
   }
   const p1 = cache.phase1;
   const key = accountKey(account);
@@ -202,9 +208,13 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
 /**
  * The cache after a cycle: each analyst's last report this cycle that names this bar's briefing versions, and
  * phase 1's report (the cycle's first risk-manager call, when phase 1 wasn't served from the cache) with the
- * account the cycle was given. Roles served from the cache keep their entry.
+ * account the cycle was given. Roles served from the cache keep their entry. Each analyst's entry carries the skills
+ * that role looked up during the call whose report it holds (`lookups`: the cycle's skill_lookup records,
+ * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
+ * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {} }) {
+function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
+  const { lookupsInCall } = require('./skill-lookups');
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
@@ -218,13 +228,13 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
       // On its own timeframe: built on its briefing's bar and the shared parts current now, reusable while they hold.
       const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, now });
       const named = f && last ? reportVersions(last.text, f.versions, frameParts(m)) : null;
-      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString() };
+      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
       else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && keep.analysts[role].tf === m) cache.analysts[role] = keep.analysts[role];
       continue;
     }
     const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
-    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString() };
+    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
     else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && !keep.analysts[role].tf) cache.analysts[role] = keep.analysts[role];
   }
   const key = accountKey(account);

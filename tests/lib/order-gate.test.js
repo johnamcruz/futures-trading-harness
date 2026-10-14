@@ -1992,9 +1992,9 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
-  assert.match(refused.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, risk-manager phase 1/);
+  assert.match(refused.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst \(/);
   assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
-  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(refused.violations[0].message, /risk-manager reported without/, "the risk manager embeds its situational skills: no lookup is required of it");
   // Full mode (on request, FTH_ROLE_SKILLS=full): no lookup is required.
   assert.deepStrictEqual(run(entryOrder(), { ...index, roleSkills: 'full' }).violations, []);
   // Each role looked its own up during one of its calls (phase 2 for the risk manager): counted.
@@ -2032,6 +2032,39 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
   assert.deepStrictEqual(run(entryOrder({ rationale: '[protect] stop for the long' })).violations, []);
+  // Reports served from the cache (only phase 2 ran this cycle): a cached report counts only with the lookups its own
+  // call made (cycleCachedLookups, from the runner's FTH_CYCLE_CACHED_LOOKUPS); none recorded, or another role's: refused.
+  const p2 = path.join(dir, 'logs', 'cycle-transcript-p2.jsonl');
+  fs.writeFileSync(p2, [...ocSkills, timed('risk-manager', 30, 40)].join('\n'));
+  const cachedCfg = lookups => ({ ...index, cycleTranscript: p2, cycleCached: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], cycleCachedLookups: lookups });
+  // The facts key the requirement comes from: this bar's briefing m3 version (no other lane).
+  const versioned = (version, candidates) => writeBriefing(home, { symbol: 'MNQ', sections: { m3: { version, validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
+  const KEY = 'm3@bar-n';
+  versioned(KEY, [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  const keyed = (o, key = KEY) => Object.fromEntries(Object.entries(o).map(([r, skills]) => [r, { skills, key }]));
+  const met = keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] });
+  assert.deepStrictEqual(run(entryOrder(), cachedCfg(met)).violations, []);
+  for (const lookups of [{}, undefined, keyed({ 'trend-momentum-analyst': ['pullback-vs-reversal'] }), keyed({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] }),
+    keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] }, 'm3@bar-earlier')]) {
+    const r = run(entryOrder(), cachedCfg(lookups));
+    assert.deepStrictEqual(checks(r), ['roles-ran'], JSON.stringify(lookups));
+    assert.match(r.violations[0].message, /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
+  }
+  // The reviewer's case: lookups made on an earlier bar (another key) are not credited to a candidate on this one,
+  // nor are this bar's once another lane's bar closed (its candidates join the requirement).
+  versioned('m3@bar-n3', [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  assert.match(run(entryOrder(), cachedCfg(met)).violations[0].message, /market-structure-analyst was served from the report cache/);
+  versioned(KEY, [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  assert.match(run(entryOrder(), { ...cachedCfg(met), cycleLaneBars: { MNQ: { 1: '2026-10-07T13:59:00.000Z' } } }).violations.map(v => v.message).join(' '), /served from the report cache/);
+  // A briefing without a version: no key, nothing credited (fails closed).
+  versioned(undefined, [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  assert.match(run(entryOrder(), cachedCfg(met)).violations[0].message, /served from the report cache/);
+  versioned(KEY, [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  // From the environment the runner sets: the same.
+  const fromEnv = loadConfig({ FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) });
+  assert.deepStrictEqual(run(entryOrder(), cachedCfg(fromEnv.cycleCachedLookups)).violations, []);
+  // Exits never held by it.
+  assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' }), cachedCfg({})).violations, []);
 });
 
 test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry needs the lookups its bar requires; exits, protective stops, stop moves, cancels and closes are never held', () => {
@@ -2063,7 +2096,7 @@ test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
   assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
-  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(refused.violations[0].message, /risk-manager reported without/, "the risk manager embeds its situational skills: no lookup is required of it");
   // Never held by a missing lookup: an exit and a protective stop (place_order), a stop move and a risk-reducing size
   // cut (modify_order), a cancel and a partial close (the gateway's account checks only), and close_position (never
   // gated: not an order tool of the gateway's).
@@ -2120,7 +2153,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
   assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
-  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(refused.violations[0].message, /risk-manager reported without/, "the risk manager embeds its situational skills: no lookup is required of it");
   // Without the lane (one lane, or the lane's bar didn't close this cycle): the 3m briefing alone, nothing required.
   assert.deepStrictEqual(run(entryOrder(), { ...cfg, cycleLaneBars: {} }).violations, []);
   exits();
@@ -2146,7 +2179,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   const rev = unmet(run(entryOrder()));
   assert.match(rev, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection \(/);
   assert.match(rev, /trend-momentum-analyst reported without looking up pullback-vs-reversal \(/);
-  assert.match(rev, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(rev, /risk-manager reported without/);
   assert.doesNotMatch(rev, /breakout-vs-fakeout|(?<![\w-])breakout(?![\w-])/);
   all();
   assert.deepStrictEqual(run(entryOrder()).violations, [], 'the reversal lookups made: it goes');
@@ -2173,7 +2206,6 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   // Neither on the lane's bar (the record is an older bar's): every situational lookup is required (fails closed).
   writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: '2026-10-07T13:58:00.000Z', closedAt: '2026-10-07T13:59:00.000Z', candidates: [], setups: [] });
   const closed = run(entryOrder());
-  assert.match(closed.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
   assert.match(closed.violations[0].message, /market-structure-analyst reported without looking up/);
   exits();
   // FTH_CYCLE_LANE_BARS set but unreadable: the lanes are unknown, every lookup is required (fails closed), even with
@@ -2182,7 +2214,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   for (const raw of ['not json', '[]', JSON.stringify({ MNQ: { x: lane } }), JSON.stringify({ MNQ: { 1: 7 } }), JSON.stringify({ MES: [] })]) {
     assert.strictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: raw }).cycleLaneBars, null, raw);
     const r = run(entryOrder(), { ...cfg, ...loadConfig({ ...env, FTH_CYCLE_LANE_BARS: raw }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home });
-    assert.match(unmet(r), /risk-manager reported without looking up confluence-counting, invalidation/, raw);
+    assert.match(unmet(r), /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, rejection, breakout/, raw);
   }
   for (const raw of [undefined, '', ' ']) assert.deepStrictEqual(loadConfig(raw === undefined ? {} : { FTH_CYCLE_LANE_BARS: raw }).cycleLaneBars, {});
   exits();

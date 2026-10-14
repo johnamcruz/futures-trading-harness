@@ -347,7 +347,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, embedded));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
-  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, laneBars: config.cycleLaneBars }) : null;
+  // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
+  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
   // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:

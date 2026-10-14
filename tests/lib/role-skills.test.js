@@ -68,12 +68,22 @@ test('the agents: role-index skills exist, aren\'t core, and the role holds skil
   // And the strategy-library split's pieces a role reads only when a cycle needs one (strategy-library, with the
   // priority order, stays core wherever it was), and the prop and sizing split's micro-mini-specs (the risk manager).
   const SPLIT = ['strategy-scan', 'strategy-gate-checks', 'micro-mini-specs'];
+  // The risk manager's two basics, confluence-counting and invalidation, are its core: every setup it judges needs
+  // them, so it carries them instead of looking them up; it indexes the order pieces it only reads about (it places
+  // no order): order-types and order-mechanics (order-mechanics-split.test.js), order-failures and trade-journal.
+  const RM_CORE = ['confluence-counting', 'invalidation'];
+  const RM_ORDER = ['order-types', 'order-mechanics', 'order-failures', 'trade-journal'];
   // contract-roll too: the volume-liquidity analyst reads VWAP and levels, which a roll day breaks.
-  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT, 'contract-roll', 'market-snapshot'].sort());
+  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS.filter(s => !RM_CORE.includes(s)), ...SPLIT, ...RM_ORDER, 'contract-roll', 'market-snapshot'].sort());
+  const rmRole = agents.find(a => a.name === 'risk-manager');
+  for (const s of RM_CORE) assert.ok(rmRole.skills.includes(s) && !rmRole.index.includes(s), `risk-manager: ${s} in its core`);
+  for (const s of RM_ORDER) assert.ok(rmRole.index.includes(s), `risk-manager: ${s} in its index`);
+  assert.ok(![...rmRole.skills, ...rmRole.index].includes('broker-refusals'), 'risk-manager: no broker-refusals (it sends no order)');
   for (const a of agents.filter(x => x.index.includes('strategy-scan') || x.skills.includes('strategy-scan'))) assert.ok(a.skills.includes('strategy-library'), `${a.name}: strategy-library core`);
-  for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s) || s === 'market-snapshot'), [], `${a.name}: basics and the fallback only in its index`);
+  for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => (BASICS.includes(s) && !(a.name === 'risk-manager' && RM_CORE.includes(s))) || s === 'market-snapshot'), [], `${a.name}: basics and the fallback only in its index`);
   const req = RS.requiredByRole(ROOT, 'index');
-  assert.deepStrictEqual(req.get('risk-manager'), [{ skill: 'confluence-counting', when: [{ key: 'candidate', value: null }] }, { skill: 'invalidation', when: [{ key: 'candidate', value: null }] }]);
+  // Its situational skills are embedded in its core, so no lookup is required of it.
+  assert.strictEqual(req.get('risk-manager'), undefined, 'risk-manager: its situational skills are in its core');
   assert.deepStrictEqual(req.get('trend-momentum-analyst'), [{ skill: 'pullback-vs-reversal', when: [{ key: 'candidate.trendRule', value: 'reversal' }] }]);
   assert.strictEqual(req.get('volume-liquidity-analyst'), undefined, 'no situational skill in its index: it looks up as it judges');
   assert.ok(!req.get('market-structure-analyst').some(r => r.skill === 'fair-value-gaps'), 'fair-value-gaps has no gate rule');
@@ -107,7 +117,10 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   }
   assert.match(vl, /- market-snapshot: [^\n]*\n\nOther skills: `skill_lookup \{\}` lists them all\.\n/, 'after the index');
   const rm = index.agent['risk-manager'].prompt;
-  assert.match(rm, /Required by the situation[^]*- a setup fired \(the briefing lists a candidate\): `confluence-counting`\n- a setup fired \(the briefing lists a candidate\): `invalidation`/);
+  // Its situational skills embedded in its core: no lookup is asked of it. An analyst's still are.
+  for (const s of ['confluence-counting', 'invalidation']) assert.ok(rm.includes(`<skill name="${s}">`), s);
+  assert.doesNotMatch(rm, /Required by the situation/);
+  assert.match(index.agent['market-structure-analyst'].prompt, /Required by the situation[^]*: `breakout`/);
   assert.ok(vl.length < fullVl.length);
   // The core is embedded in full in both modes: every skill the body says to load.
   for (const a of HS.loadAgents(ROOT)) {
@@ -173,11 +186,12 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // command; no step of the role reads it). From the multi-timeframe-analysis split: htf-to-ltf (core) and daily-bias
 // (indexed) for the market-structure analyst. Retired since: market-structure and liquidity-concepts; market-snapshot is
 // index-only; a role loads the skills their content went to where its body reads those fields (fair-value-gaps and the
-// topic skills: skill-retire.test.js).
+// topic skills: skill-retire.test.js). The risk manager no longer loads broker-refusals: it sends no order, so a
+// broker's refusal of one never reaches it (the executor keeps it).
 const MAIN_SKILLS = {
   'market-structure-analyst': ['multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
-  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
+  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
   'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
   'trade-executor': ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
