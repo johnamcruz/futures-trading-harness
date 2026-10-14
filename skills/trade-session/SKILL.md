@@ -28,7 +28,9 @@ Before any decision, load `trade-session` (this skill),
 order gate refuses an entry from a session whose transcript doesn't show each
 one loaded (a load that returned an error, such as a skill not found, doesn't
 count: load it again by the name the error lists). Load `trader-process` too:
-its checklist is the order you decide in. Load the others as a step names them.
+its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
+well: the alignment labels for each side and the reversal rule. Load the others
+as a step names them.
 
 ### 1. State first
 
@@ -109,7 +111,7 @@ rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
 participation and liquidity, the session window), each part with its version
 and how long it holds. Read it once per role and reuse it: no role re-runs
 `market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without a current briefing (interactively, or when the tool says none or old), the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `multi-timeframe-analysis` skill). **The trend rule is enforced:** a trend strategy never enters
+(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced:** a trend strategy never enters
 against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
 only a strategy with `mtf: reversal` may fade it. The scan already drops
 such candidates and the order gate refuses them. In autonomous runs the
@@ -249,7 +251,7 @@ It orders the thinking and adds no filter: the priority order decides.
   group's held branches only), where a field's meaning and units are in the
   strategy's own document). They are context, not a verdict: judge the setup by its
   strategy's STRATEGY.md (`strategies_show`: its context filter and skip
-  rules) and the rules below (the trend rule, the multi-timeframe table,
+  rules) and the rules below (the trend rule, the alignment table in `htf-to-ltf`,
   its min R:R). A setup the trend rule allows, `aligned` for its side, with
   room past what it needs and confluence with it is the opportunity this
   harness looks for, when the rest of this step agrees and it isn't

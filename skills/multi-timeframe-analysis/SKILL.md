@@ -1,6 +1,6 @@
 ---
 name: multi-timeframe-analysis
-description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (the harness tool mtf_read) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (one marked mtf reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
+description: Use when reading each timeframe's trend and the trend rule the gate enforces (mtf trend|reversal).
 ---
 
 # Multi-Timeframe Analysis
@@ -10,57 +10,21 @@ the same way, and it is a pullback (or a trap) when they don't. This skill
 makes that read the same every time: one tool reads the trend on each
 higher timeframe from the bars you already have, and labels each side.
 
+Elsewhere: the bars and briefing fields per timeframe (`timeframe-sources`),
+the day's bias (`daily-bias`), reading the labels from HTF to LTF
+(`htf-to-ltf`), and the trend as a rules filter (`mtf-bias-filter`).
+
 ## When to Use
 
-- Premarket: the bias per timeframe and the levels of the day.
-- Every trade plan, before risk-manager phase 1: is this setup with the
-  higher timeframes, a pullback inside them, or against them?
-- Whenever the trigger timeframe and a higher timeframe disagree.
+- Every trade plan, before risk-manager phase 1: each timeframe's trend, and
+  whether the trend rule allows the side (with them, a pullback or against
+  them: `htf-to-ltf`).
 
 ## How It Works
 
-### 1. Get the bars (one request per timeframe at most)
+### 1. The trend per timeframe
 
-`get_bars` allows 50 requests per 30 s across all agents. The higher
-intraday timeframes are built from the trigger bars, so you rarely need more
-than two requests:
-
-| Role | Timeframe | Source |
-|---|---|---|
-| Context | daily | `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": "daily"}` (60 bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-1d.json`) |
-| Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
-| Bias | 1 hour | built from the trigger bars |
-| Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (the runner's default, 5000 3-minute bars, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate) |
-
-Without `daily` the highest timeframe is the 4-hour: the alignment is then
-judged from it, and the plan says "no daily read". Fetch the daily bars once
-a session (premarket) and reuse the file; if the fetch fails, go on without
-them rather than retrying.
-
-### 2. Run the read
-
-In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing`
-skill) already holds this read for the bar: the 15m frame and the alignment
-per side (`m15`), the 1h and 4h frames (`h1` `h1` and `h4`), and the trend
-rule (`m3` `trendRule`). Each frame there has the trend, bias, swing pattern,
-close, EMA20 and EMA50, ADX, ATR and the last 20 candles' range with its mid
-(`range`); it leaves out the close's position in that range, the frame's
-swing high and low and its previous candle's high and low (the 15m and 1h
-swings against price are `m3` `htfLevels`; `mtf_read` with `json` has
-the rest). Use it; run `mtf_read` only without a current briefing. The alignment and the
-trend rule in a trade plan are the briefing's (intraday frames); a daily
-read, if you have one (premarket's), is context only, never a second
-alignment.
-
-```text
-mtf_read {"bars": "<trigger bars>", "daily": "<the daily file bars_fetch returned>"}
-mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}    every number
-```
-
-`<trigger bars>` is the runner's bars file by absolute path (e.g.
-`/home/u/.futures-trading-harness/bars/MNQ-3m.json`; no `~`) or a
-`bars_fetch` file (the `tool-arguments` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
+Candles align to the 18:00 ET open: 1-hour candles open
 on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
 Only completed candles decide a trend; the one forming is reported apart.
 
@@ -77,7 +41,7 @@ Two votes the same way, and none against, set the trend (UP or DOWN);
 anything else is RANGE. Each line also gives ADX, ATR, where the close sits
 in the last 20 candles' range, and the swing high and low.
 
-### 3. The trend rule (enforced, not advice)
+### 2. The trend rule (enforced, not advice)
 
 The prevailing trend is the highest of 4h, 1h, and 15m (built from the
 trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
@@ -114,46 +78,7 @@ trend strategies may not go short; reversal strategies (mtf: reversal) may go sh
 The daily (`daily`) is context for your judgment; the rule reads the
 intraday frames.
 
-### 4. Read the alignment
-
-From the highest timeframe down, for each side:
-
-| Label | Means | What to do |
-|---|---|---|
-| `aligned` | no timeframe against it, most with it | Step 4 of the priority order (strategy-library) sets the size; with room to its trail activation and confluence it is the opportunity (the briefing's candidate `facts` show both) |
-| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then step 4 of the priority order (strategy-library) sets the size. Do not enter while it is still moving against you |
-| `mixed` | timeframes disagree without a clear pullback | Step 4 of the priority order (strategy-library) sets the size. Target the nearest opposing level; skip in a quiet session |
-| `counter` | the highest timeframe is against it | Step 4 of the priority order (strategy-library); a reversal at a higher-timeframe level is its step 2, and the plan says why |
-
-A policy strategy's verdict is a ceiling: the read halves or skips it like
-any setup (the priority order, strategy-library).
-
-The `bias` (long, short, or neutral) weights the higher timeframes more
-(score out of ±max): use it for the game plan's headline.
-
-Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`,
-`value_area_reentry`) trade
-against the lower timeframes by design, and the trend rule lets them fade
-the prevailing trend. Judge the setup against the timeframe above its range
-candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against
-that one too, it is a `counter` reversal (the priority order, step 2, decides it: level,
-size, target).
-
-### 5. Levels flow down
-
-Take levels from the higher timeframes and treat them as targets on the
-trigger timeframe, or as reasons to skip a setup that runs straight into
-one. The briefing shows: the 15m and 1h swing highs and lows against price
-(`m3` `htfLevels`), the 1h swings not yet traded back to (`m3`
-`untested1hSwings`), each frame's last-20-candle range high, low and mid
-(`m15` `frame.range`, `h1` `h1.range` and `h4.range`), and the prior RTH
-day's high and low (`day` `priorRth`). The daily and 4-hour swing highs and
-lows are not in it: take them from `mtf_read` (premarket's daily read).
-Each timeframe's last completed candle (3m, 5m, 15m, 1h), with the levels it
-met, its previous candle's high and low among them, is in `m3` `candles`; the
-next swing high and low each side is in `m3` `swingTargets`.
-
-### 6. Write it down
+### 3. Write it down
 
 One line per timeframe and the verdict, in the plan entry and the premarket
 note, so reviews can grade it:
@@ -162,24 +87,6 @@ note, so reviews can grade it:
 Daily UP (HH/HL). 4h UP. 1h UP, ADX 26. 15m DOWN (pullback to the 1h EMA20).
 Long: pullback (wait for a 3m shift up). Short: counter.
 ```
-
-### 7. In rules (mechanical strategies)
-
-`mtf_bias(m)` is the same trend per bar, causal (each bar sees only candles
-completed before it): 1 up, -1 down, 0 range. Add it to a strategy's rules
-to keep its trades with the higher timeframe, and backtest both versions:
-
-```yaml
-rules:
-  long:
-    - close crosses_above ema(20)
-    - mtf_bias(60) > 0          # the 1-hour trend is up
-    - mtf_bias(240) >= 0        # and the 4-hour isn't down
-```
-
-The ported strategies keep their source's rules (parity); try a filter in a
-copy (e.g. `strategies/orb_mtf/`) and compare the two with
-`scripts/backtest.js`.
 
 ## Examples
 

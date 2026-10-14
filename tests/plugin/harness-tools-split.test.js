@@ -272,9 +272,11 @@ test('the new skills answer one question in a short index line; the topic skills
     const d = parseFrontmatter(skill(s)).data.description;
     assert.ok(d.length <= 80, `${s}: description ${d.length} chars, over 80 (each is a line of the head trader's catalog)`);
   }
-  for (const s of ['liquidity-concepts', 'vwap-volume-profile', 'market-structure', 'trend-momentum-indicators', 'market-snapshot', 'multi-timeframe-analysis']) {
+  for (const s of ['liquidity-concepts', 'vwap-volume-profile', 'market-structure', 'trend-momentum-indicators', 'market-snapshot']) {
     assert.match(skill(s), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/, s);
   }
+  // The multi-timeframe read's briefing fields: timeframe-sources (split from multi-timeframe-analysis) points there.
+  assert.match(skill('timeframe-sources'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`/);
 });
 
 test('no file names the retired harness-tools skill (the code module scripts/lib/harness-tools/ and its tests keep their name)', () => {

@@ -56,10 +56,11 @@ test('planErrors: an index skill that doesn\'t exist, one in both lists, or an i
 test('the agents: role-index skills exist, aren\'t core, and the role holds skill_lookup; the proof case indexes the basics skills', () => {
   const agents = HS.loadAgents(ROOT);
   assert.doesNotThrow(() => HS.checkRoleSkills(ROOT));
-  // The proof case: the eleven basics skills, and cisd and fib-retracement since, are in the index of the roles that
-  // carry them.
+  // The proof case: the eleven basics skills, and cisd, fib-retracement and daily-bias since, are in the index of the
+  // roles that carry them.
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'];
+    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement',
+    'daily-bias'];
   // And the strategy-library split's pieces a role reads only when a cycle needs one (strategy-library, with the
   // priority order, stays core wherever it was), and the prop and sizing split's micro-mini-specs (the risk manager).
   const SPLIT = ['strategy-scan', 'strategy-gate-checks', 'micro-mini-specs'];
@@ -140,9 +141,10 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // for the news analyst, contract-roll (indexed) for the volume-liquidity analyst, strategy-rules for the strategy researcher.
 // From the prop and sizing split (tests/plugin/prop-sizing-split.test.js): micro-mini-specs (indexed) and
 // prop-pacing-judgment (core) for the risk manager, which doesn't load prop-evaluator (the evaluator is the user's
-// command; no step of the role reads it).
+// command; no step of the role reads it). From the multi-timeframe-analysis split: htf-to-ltf (core) and daily-bias
+// (indexed) for the market-structure analyst.
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
   'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library', 'strategy-gate-checks', 'harness-root'],

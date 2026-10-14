@@ -76,7 +76,7 @@ replaces, and says when the last bar closed; the `bar-briefing` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `market-snapshot`, `strategy-library`,
+   `htf-to-ltf`, `daily-bias`, `market-snapshot`, `strategy-library`,
    `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
    `rejection`, `breakout`, `cisd`, `fib-retracement`, `strategy-scan`,

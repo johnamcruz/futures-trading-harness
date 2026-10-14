@@ -104,7 +104,7 @@ Common pieces:
   and closes back inside within 1-3 bars ... Stops were taken; often
   reverses", and "reversal setups need a sweep first"; market-structure: a
   CHoCH (the first close beyond structure against the move) is the early
-  reversal sign; multi-timeframe-analysis step 4: a reversal is judged
+  reversal sign; htf-to-ltf: a reversal is judged
   against the timeframe above its range candle (for an hourly range, the
   4-hour).
 - **Bias** (variant C only): `mtf_bias(240) >= 0` for a long (the 4-hour
@@ -141,7 +141,7 @@ Common pieces:
   and lows are where stops rest, and a sweep "often reverses";
   `crt_1h`'s own context section: "a raid of the hourly low while the
   4-hour trend is up ... is the A setup: the raid is the pullback, and the
-  target is with the trend"; multi-timeframe-analysis: with-trend setups
+  target is with the trend"; htf-to-ltf: with-trend setups
   after a pullback, "wait for the trigger timeframe to turn back (a shift,
   a reclaim)".
 - **Bias**: `mtf_bias(60) > 0` (A, B) or `mtf_bias(240) > 0` (C).
@@ -158,7 +158,7 @@ Common pieces:
 
 - **Rationale.** vwap-volume-profile: "Price above a rising RTH VWAP, with
   pullbacks holding it: buyers in control; buy pullbacks to VWAP";
-  multi-timeframe-analysis: the 1-hour is the bias timeframe.
+  timeframe-sources: the 1-hour is the bias timeframe.
 - **Bias**: `mtf_bias(60) > 0`; B adds `mtf_bias(240) >= 0` and a rising
   VWAP, `vwap_rth > vwap_rth[10]`.
 - **Location**: a pullback that touched VWAP in the last five bars and held
@@ -175,7 +175,7 @@ Common pieces:
 - **Rationale.** vwap-volume-profile: "Open outside the prior value area,
   then back inside for two closes: rotation to the far side is likely (the
   80% rule)"; here the reentry is taken only with the 4-hour bias, so the
-  rotation runs with the higher timeframe (multi-timeframe-analysis:
+  rotation runs with the higher timeframe (htf-to-ltf:
   "levels flow down").
 - **Bias**: `mtf_bias(240) > 0`; C adds `mtf_bias(60) > 0`.
 - **Location**: a dip below the prior RTH day's VAL in the last ten bars
@@ -191,7 +191,7 @@ Common pieces:
 
 - **Rationale.** liquidity-concepts: "Break: a candle closes beyond the
   level and the next pullback holds it (old resistance becomes support).
-  Continuation"; multi-timeframe-analysis step 5: the daily and session
+  Continuation"; htf-to-ltf, "levels flow down": the daily and session
   levels flow down to the trigger timeframe. The continuation twin of F7.
 - **Bias**: `mtf_bias(60) > 0`.
 - **Location**: a level L (A the prior RTH day's high `prior_high`, B the
