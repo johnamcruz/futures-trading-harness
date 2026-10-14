@@ -72,7 +72,7 @@ function replaySetup() {
   }));
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
-    runId: 'nla', workDir: path.join(user, 'replays'), broker: 'replaymock',
+    runId: 'nla', workDir: path.join(user, 'replays'), broker: 'replaymock', learning: false,
     start: '2026-10-05T13:31:00Z', end: '2026-10-05T13:40:00Z', premarket: false,
     autotrader: { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },

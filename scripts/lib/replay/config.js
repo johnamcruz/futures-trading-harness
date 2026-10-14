@@ -128,7 +128,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (!errors.length && !(start < end)) errors.push('end: after start');
   const everyNth = r.everyNthBar === undefined ? 1 : r.everyNthBar;
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
-  for (const k of ['premarket', 'endOfDay']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
+  for (const k of ['premarket', 'endOfDay', 'learning']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -166,6 +166,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const cfg = validateConfig(derived);
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
+    // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
+    learning: r.learning !== false,
     prop: r.prop || null,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
