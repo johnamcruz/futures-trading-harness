@@ -305,6 +305,117 @@ left out:
 To be filled in after the census, below this line, without changing
 anything above it.
 
+**Verdict: nothing survives.** Every variant's BH-adjusted p is 1.000 (the
+smallest raw one-sided p is F8B's 0.082), and no 95% interval's lower bound is above zero. No
+strategy document is written; every family stays in this catalog only.
+
+Census run on 244,916 MNQ 3-minute bars (2021-05-02 to 2023-06-30, ten
+front contracts joined raw), as the method above says. The backtester's
+data audit flagged 435 missing bars in 108 gaps (the largest 97 bars,
+2022-11-30) and 18 opens more than 8 ATR from the prior close (the
+rolls and holiday reopenings); nothing was repaired.
+
+Columns: n trades; mean R after costs with its 95% day-block interval;
+profit factor of net dollars (it can exceed 1 while the mean R is
+negative, because R weighs every trade the same while dollars weigh the
+wide-stop trades more); win rate (net > 0); trades per Train month; RTH
+(entry 09:30-16:00 ET) and overnight trades with their mean R; mean R by
+year; BH-adjusted p over the 27 variants.
+
+| Variant | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | 2021 / 2022 / 2023 | BH q |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| F1A | 2232 | -0.133 [-0.201, -0.065] | 0.94 | 28% | 85.8 | 9 / 0.788 | 2223 / -0.137 | -0.16 / -0.03 / -0.32 | 1.000 |
+| F1B | 2420 | -0.081 [-0.136, -0.027] | 0.96 | 35% | 93.1 | 5 / -0.227 | 2415 / -0.081 | -0.09 / -0.02 / -0.20 | 1.000 |
+| F1C | 887 | -0.156 [-0.235, -0.075] | 0.83 | 35% | 34.1 | 317 / -0.147 | 570 / -0.161 | -0.10 / -0.11 / -0.34 | 1.000 |
+| F2A | 515 | -0.098 [-0.214, 0.022] | 0.85 | 32% | 19.8 | 142 / -0.066 | 373 / -0.111 | -0.07 / -0.07 / -0.20 | 1.000 |
+| F2B | 1080 | -0.024 [-0.097, 0.048] | 0.94 | 39% | 41.5 | 345 / -0.033 | 735 / -0.020 | 0.01 / 0.02 / -0.16 | 1.000 |
+| F2C | 390 | -0.095 [-0.230, 0.044] | 0.88 | 33% | 15.0 | 98 / 0.017 | 292 / -0.133 | -0.04 / -0.09 / -0.19 | 1.000 |
+| F3A | 379 | 0.025 [-0.093, 0.143] | 0.98 | 44% | 14.6 | 379 / 0.025 | 0 / - | 0.06 / 0.10 / -0.16 | 1.000 |
+| F3B | 248 | 0.037 [-0.108, 0.187] | 1.01 | 45% | 9.5 | 248 / 0.037 | 0 / - | 0.09 / 0.09 / -0.14 | 1.000 |
+| F3C | 1450 | -0.111 [-0.171, -0.050] | 0.82 | 35% | 55.8 | 230 / -0.107 | 1220 / -0.112 | -0.10 / -0.10 / -0.15 | 1.000 |
+| F4A | 50 | -0.216 [-0.611, 0.249] | 0.70 | 24% | 1.9 | 50 / -0.216 | 0 / - | -0.20 / -0.07 / -0.49 | 1.000 |
+| F4B | 35 | -0.131 [-0.568, 0.390] | 0.98 | 29% | 1.3 | 35 / -0.131 | 0 / - | -0.23 / -0.15 / 0.04 | 1.000 |
+| F4C | 14 | 0.423 (under 30: no interval) | 0.89 | 36% | 0.5 | 14 / 0.423 | 0 / - | 1.28 / 0.05 / -1.02 | 1.000 |
+| F5A | 792 | -0.160 [-0.277, -0.041] | 0.79 | 26% | 30.5 | 137 / -0.207 | 655 / -0.150 | -0.27 / -0.00 / -0.31 | 1.000 |
+| F5B | 883 | -0.171 [-0.279, -0.058] | 0.75 | 25% | 34.0 | 143 / -0.224 | 740 / -0.161 | -0.27 / -0.06 / -0.25 | 1.000 |
+| F5C | 395 | -0.164 [-0.324, 0.012] | 0.77 | 25% | 15.2 | 61 / -0.014 | 334 / -0.191 | -0.31 / -0.10 / -0.05 | 1.000 |
+| F6A | 316 | 0.021 [-0.136, 0.180] | 1.11 | 35% | 12.2 | 95 / -0.069 | 221 / 0.060 | 0.06 / -0.05 / 0.10 | 1.000 |
+| F6B | 323 | 0.071 [-0.099, 0.249] | 1.13 | 37% | 12.4 | 114 / -0.001 | 209 / 0.111 | 0.13 / 0.07 / -0.02 | 1.000 |
+| F6C | 259 | 0.008 [-0.170, 0.188] | 1.10 | 35% | 10.0 | 85 / -0.093 | 174 / 0.058 | -0.06 / 0.01 / 0.07 | 1.000 |
+| F7A | 35 | 0.112 [-0.255, 0.496] | 1.24 | 49% | 1.3 | 35 / 0.112 | 0 / - | 0.35 / 0.26 / -0.73 | 1.000 |
+| F7B | 5 | -0.517 (under 30: no interval) | 0.18 | 20% | 0.2 | 5 / -0.517 | 0 / - | -1.02 / -1.01 / 1.48 | 1.000 |
+| F7C | 64 | 0.098 [-0.185, 0.401] | 1.44 | 47% | 2.5 | 64 / 0.098 | 0 / - | 0.06 / 0.23 / -0.20 | 1.000 |
+| F8A | 61 | -0.455 [-0.724, -0.156] | 0.38 | 20% | 2.3 | 61 / -0.455 | 0 / - | -0.41 / -0.43 / -0.68 | 1.000 |
+| F8B | 38 | 0.281 [-0.117, 0.699] | 1.17 | 50% | 1.5 | 38 / 0.281 | 0 / - | 0.42 / 0.15 / 0.18 | 1.000 |
+| F8C | 100 | -0.145 [-0.416, 0.149] | 0.74 | 30% | 3.8 | 100 / -0.145 | 0 / - | -0.21 / -0.09 / -0.13 | 1.000 |
+| F9A | 41 | -0.051 [-0.402, 0.313] | 0.62 | 44% | 1.6 | 41 / -0.051 | 0 / - | 0.23 / -0.13 / -0.56 | 1.000 |
+| F9B | 59 | -0.242 [-0.527, 0.059] | 0.54 | 34% | 2.3 | 59 / -0.242 | 0 / - | 0.24 / -0.41 / -0.27 | 1.000 |
+| F9C | 57 | -0.032 [-0.356, 0.313] | 0.86 | 40% | 2.2 | 57 / -0.032 | 0 / - | -0.25 / 0.19 / -0.20 | 1.000 |
+| `crt_1h` (reference) | 241 | -0.074 [-0.239, 0.098] | 1.17 | 35% | 9.3 | 212 / -0.060 | 29 / -0.172 | -0.38 / -0.01 / 0.14 | not in the set |
+
+No variant has the same positive sign in all three years except F8B (38
+trades, interval from -0.12 to 0.70), which is where 27 tries are
+expected to put one by chance.
+
+### F1 beside `crt_1h`
+
+- F1 trades far more often than `crt_1h` (34 to 93 trades a month against
+  9) and does worse: every F1 variant's interval lies wholly below zero,
+  while `crt_1h`'s straddles it. The conditions F1 drops (a hourly range
+  of at least 3 ATR, a sweep at most half the range deep and at most 10
+  bars old, one setup per candle, New York hours) are what keep
+  `crt_1h` near break-even; a plain "hour swept, close back inside" is a
+  losing trade after costs.
+- **The session matters more than the trigger.** A and B trade the whole
+  session, and the gate's daily limits (3 losing trades, 6 entries per
+  trading day, by default) are used up overnight, where the 3-minute ATR
+  is small: an overnight stop is often a few points, so a round trip's
+  fees and one tick of slippage are 0.1-0.2R. Only 9 (A) and 5 (B) of
+  their trades are in RTH.
+- **Post-hoc, outside the BH set (not pre-registered):** F1A and F1B with
+  `crt_1h`'s hours (08:00-15:30 ET) were run to make the comparison fair:
+  F1A 1,935 trades, -0.080R [-0.160, -0.000]; F1B 2,135 trades, -0.114R
+  [-0.171, -0.059]. Still worse than `crt_1h`. It changes nothing above.
+
+### Prop simulation (top 3 by the interval's lower bound)
+
+F3A (-0.093), F2B (-0.097) and F6B (-0.099), each as the only strategy of
+a `paper` policy with `prop_portfolio`'s sizing and 2R / 0.5R trail, on
+the 100K account profile, 105 attempts of 30 sessions starting every 5
+trading days in Train (the attempts overlap, so they are not 105
+independent tries):
+
+| Variant | pass | blow | timeout | median sessions to pass | average profit |
+| --- | --- | --- | --- | --- | --- |
+| F3A | 2.9% (3) | 0% | 97.1% | 20 | -$38 |
+| F2B | 6.7% (7) | 0% | 93.3% | 12 | -$722 |
+| F6B | 10.5% (11) | 0% | 89.5% | 15 | $726 |
+
+No blows, but no pass rate near the 40% the promotion gate asks for:
+with no edge, the sizing protects the account and the attempts run out
+of time.
+
+### What the census says, read with care
+
+These are not findings (nothing survived); they are where a next round
+might look, each to be pre-registered and measured again on Train
+before it is believed:
+
+- The with-trend pullbacks in RTH (F3A, F3B: 1h trend, VWAP touch, 3m
+  shift) and the HTF sweep before a CISD/OTE entry (F6) are the only
+  families near zero rather than below it; F3's 2023 is negative in both.
+- The same F3 rules over the whole session with the session VWAP (F3C)
+  lose -0.11R: as for F1, the overnight trades and the daily limits they
+  use up decide the result.
+- Fading the hourly sweep with a fixed rule (F1) and buying an 8-hour
+  discount with the 4-hour trend (F5) lose clearly after costs.
+- Several location families (F4, F7, F8, F9) fire 1-4 times a month:
+  too few trades in 26 months to say anything either way.
+
+No family survived, so there is no "How the agent trades it" section,
+and the continuation-versus-reversal choice the owner asked to have
+spelled out has no measured setup to choose between yet.
+
 ## Appendix: every variant's rules
 
 Generated from one source so the long and short sides mirror exactly.
