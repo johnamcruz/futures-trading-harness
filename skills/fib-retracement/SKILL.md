@@ -1,6 +1,6 @@
 ---
 name: fib-retracement
-description: Measure a Fibonacci retracement of the displacement (impulse) leg on completed candles - the 0.5, 0.618, 0.705 and 0.79 levels, the OTE golden zone from 0.62 to 0.79 with its 0.705 mid, premium vs discount - and read a bounce from the zone on a completed candle. A read for trader-process step 4 and the cisd skill, never a veto.
+description: Measure a Fibonacci retracement of a leg (the impulse leg a setup defines) on completed candles - the 0.5, 0.618, 0.705 and 0.79 levels, the OTE golden zone from 0.62 to 0.79 with its 0.705 mid, premium vs discount - and read a bounce from the zone on a completed candle. A read for trader-process step 4 and the cisd skill, never a veto.
 ---
 
 # Fib Retracement
@@ -19,10 +19,11 @@ skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; the numbers are the code's (`scripts/lib/trading/fib.js`
 `LEVELS` and `OTE`); a missing field is `unknown`.
 
-**Which leg.** The displacement (impulse) leg: from its origin (where the
-move started, e.g. the sweep extreme) to its extreme (where it ended), on
-completed candles only, never the candle forming. Not any swing: the leg
-that broke something (for a CISD, its `leg`).
+**Which leg.** The leg the setup defines, an impulse: from its origin
+(where the move started) to its extreme (where it ended), on completed
+candles only, never the candle forming. Not any swing: the setup's own
+skill says which leg qualifies (for a CISD, the `cisd` skill and its
+`leg`).
 
 **Measure.** A retracement r runs back from the extreme: 0 at the extreme,
 1 at the origin; the price at r is extreme - r x (extreme - origin), for

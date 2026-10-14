@@ -124,6 +124,8 @@ const PINS = {
     'Confirmed when a completed candle CLOSES above that level, within 6 candles of the run',
     'The CISD usually comes first: an early sign, not yet a change of structure.',
     'It is evidence for a fired strategy\'s side, never a setup of its own',
+    'A CISD after a sweep of a key level is stronger confluence; one without is still a CISD.',
+    'A doji, a small body or a mid-range close is weak: no zone, no fib',
     'a 3m or 5m CISD in the 15m/1h trend\'s direction is the pullback ending',
     'Never anticipate the bounce.',
   ],
@@ -526,6 +528,11 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   // The CISD skill's run and wait are the code's defaults.
   const c = flat(read(file('cisd')));
   assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));
+  // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing.
+  assert.ok(c.includes(`body at least ${cisd.PARAMS.minBody} of the range, the close in the top third, and a range of at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of that timeframe or a body engulfing the prior one`));
+  // fib-retracement stays generic: no displacement-strength rules (they are the cisd skill's).
+  assert.doesNotMatch(text, /displacement|engulf|doji|\bstrong\b|\bweak\b/i, 'fib-retracement names no displacement rule');
+  assert.match(flat(read(file('cisd'))), /strong/);
   // pullback-vs-reversal points to both in a few words.
   assert.match(flat(read(file('pullback-vs-reversal'))), /A CISD \(`cisd`\) is an earlier sign than the CHoCH; depth in fib terms: `fib-retracement`\./);
 });

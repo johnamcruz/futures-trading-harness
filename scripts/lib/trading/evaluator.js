@@ -187,7 +187,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       ...(biases ? { mtf: mtf.ruleSummary(biases, s.mtf || 'trend') } : {}),
       ...(ruleDetail ? { rules: ruleDetail } : {}),
       // Detector state on this bar (e.g. a CRT sweep's range, extreme, and why it did or didn't fire).
-      ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i)) : {}),
+      ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i, JSON.stringify([s.rules, s.risk, s.exit]))) : {}),
     };
   }
 

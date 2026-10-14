@@ -88,7 +88,8 @@ source does, and (a harness filter, not in the source) only in trend and
 transition regimes; `cisd_ote` (paper since version 4) has no `sessions`, `regimes`, or
 `filters`, and the runner's sessions and end of day decide when it trades. To adapt one, add
 `regimes:` (or a filter) in a copy, and backtest both (`scripts/backtest.js`, see
-docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
+docs/BACKTESTING.md). The port (`orb`) exits with a trailing stop (`cisd_ote` since
+version 4 with a 2R bracket): hold the
 initial stop (0.5 × ATR(20)) until +2R, then trail 0.5R behind the best
 price (`exit:` block).
 

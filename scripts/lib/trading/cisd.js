@@ -24,21 +24,33 @@
  *               The most recent qualifying run is the reference; a newer run
  *               replaces it, and a confirmed run is used up. A candle that would
  *               confirm both directions confirms neither.
- *   Sweep       a key level the run traded through and closed back beyond, by
- *               the confirming candle: for a bullish CISD a key LOW L at or below
- *               the level (the run started at or above it), some candle from the
- *               run's start to the confirmation with low < L, and a close > L at
- *               or after it. Key levels: the prior RTH day's high/low, the
- *               overnight high/low (complete, so only for candles in RTH), and the
- *               prior session's (the 18:00 ET day's) high/low, each as it stood
- *               at the candle's first bar. Reported, not required (the strategy
- *               requires it with cisd_sweep(m) > 0).
- *   Leg         the displacement leg: ORIGIN = the lowest low (bullish) from the
- *               run's first bar to the confirming candle's last bar, the sweep
- *               extreme; EXTREME = the highest high from the origin to the
+ *   Displacement the confirming candle must be STRONG for a zone: body >= `minBody`
+ *               (0.6) of its range, its close in the extreme third the CISD's way,
+ *               and its range >= `minRangeAtr` (1.0) x ATR(14) of the CISD
+ *               timeframe's completed candles OR its body engulfing the prior
+ *               candle's (opposite colour). A weak one (a doji, a small body, long
+ *               wicks, a close mid-range) is still reported as a CISD, with no
+ *               zone, no fib and no entry (status `weak`).
+ *   Known       a CISD counts from the bar its confirming candle is known complete:
+ *               that candle's last bar when it closes the candle's boundary, else
+ *               the next bar (the last one is missing: a feed gap).
+ *   Sweep       confluence, reported, never required: a key level the run traded
+ *               through and closed back beyond, by the confirming candle. For a
+ *               bullish CISD a key LOW L at or below the level (the run started at
+ *               or above it), some candle from the run's start to the confirmation
+ *               with low < L, and a close > L at or after it. Key levels: the prior
+ *               RTH day's high/low, the overnight high/low (complete, so only when
+ *               the run starts in RTH), and the prior session's (the 18:00 ET
+ *               day's) high/low, each as it stood at the run's first bar (never a
+ *               level the run itself made). A CISD after a sweep is stronger
+ *               confluence (the `cisd` skill).
+ *   Leg         the displacement leg: ORIGIN = the run's extreme, the lowest low
+ *               (bullish; bearish: the highest high) from the run's first bar to
+ *               the confirming candle's last bar (the sweep extreme when there was
+ *               a sweep); EXTREME = the highest high from the origin to the
  *               confirmation, then extended by each later base bar that makes a
  *               new high before price first trades into the zone (frozen at that
- *               first touch).
+ *               first touch; a bar that touches never extends it).
  *   OTE         fib.zone(leg): the 0.62-0.79 retracement, mid 0.705 (fib.OTE).
  *   Touch       a base bar whose range reaches the zone (bullish: low <= top).
  *   Bounce      after (or on) the touch, a completed base bar that traded in the
@@ -51,6 +63,9 @@
  *               level by more than `voidTol` (0.05) of the leg (bullish: close
  *               < bottom - 0.05 x leg). A void zone takes no entry.
  *   Expired     `expiry` (12) CISD-timeframe candles after the confirmation closed.
+ *   Replaced    by a newer CISD, either way, from the bar it is known: that bar is
+ *               read for the newer CISD only (a bounce of the older zone on it is
+ *               not taken).
  *
  * A timeframe the base bars can't build (5m from 3m bars, or one finer than the
  * bars) is unavailable. The completed-candle helpers on the candle-facts branch
@@ -69,7 +84,9 @@ const ind = require('./indicators');
 const { candles: mtfCandles } = require('./mtf');
 const { zonedParts } = require('./clock');
 
-const PARAMS = Object.freeze({ minRun: 2, maxWait: 6, expiry: 12, voidTol: 0.05, bufferAtr: 0.1 });
+const PARAMS = Object.freeze({ minRun: 2, maxWait: 6, expiry: 12, voidTol: 0.05, bufferAtr: 0.1, minBody: 0.6, minRangeAtr: 1 });
+const ATR_LEN = 14; // the displacement's range is measured against ATR(14) of the CISD timeframe's completed candles
+const DEAD = new Set(['void', 'expired', 'weak']);
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
 const UPPER_THIRD = 2 / 3;
@@ -77,6 +94,9 @@ const UPPER_THIRD = 2 / 3;
 // The same defaults as strategy params (market-snapshot PARAMS, so a strategy's `params` may set them).
 const SNAPSHOT_PARAMS = Object.freeze({
   cisdMinRun: PARAMS.minRun, cisdMaxWait: PARAMS.maxWait, cisdExpiry: PARAMS.expiry, cisdVoidTol: PARAMS.voidTol, cisdBufferAtr: PARAMS.bufferAtr,
+  cisdMinBody: PARAMS.minBody, cisdMinRangeAtr: PARAMS.minRangeAtr,
+  // A second, higher CISD timeframe for cisd_entry(m) / cisd_risk(m) (rules.js): 0 = none (the default).
+  cisdHigherMinutes: 0,
 });
 
 /** The CISD params from a strategy's params (cisdMinRun, ...), else the defaults. */
@@ -85,6 +105,7 @@ function paramsFrom(p = {}) {
   return {
     minRun: pick('cisdMinRun', PARAMS.minRun), maxWait: pick('cisdMaxWait', PARAMS.maxWait), expiry: pick('cisdExpiry', PARAMS.expiry),
     voidTol: pick('cisdVoidTol', PARAMS.voidTol), bufferAtr: pick('cisdBufferAtr', PARAMS.bufferAtr),
+    minBody: pick('cisdMinBody', PARAMS.minBody), minRangeAtr: pick('cisdMinRangeAtr', PARAMS.minRangeAtr),
   };
 }
 
@@ -136,6 +157,19 @@ function candlesOf(bars, minutes, step) {
   return { candles: mtfCandles(bars, minutes).filter(c => c.complete) };
 }
 
+/**
+ * The base bar at which candle `c` is known complete: its last bar when that bar's close is the candle's boundary,
+ * else the next bar (its last bar is missing, a feed gap: only a later bar shows the candle ended); -1 when no such
+ * bar is in `bars` yet.
+ */
+function knownAt(bars, c, minutes, step) {
+  const end = Date.parse(bars[c.end].t) + step * 60000;
+  const p = zonedParts(new Date(end), 'America/New_York');
+  const sinceOpen = (p.hour * 60 + p.minute - 18 * 60 + 1440) % 1440;
+  if (minutes === step || (sinceOpen % minutes === 0 && end % 60000 === 0)) return c.end;
+  return c.end + 1 < bars.length ? c.end + 1 : -1;
+}
+
 /** The key levels at each base bar: [{ name, price, side }] (levels: rules.causalLevels of the bars). */
 function keyLevelsAt(bars, levels) {
   const day = ind.htfCandles(bars, 1440);
@@ -155,8 +189,11 @@ function keyLevelsAt(bars, levels) {
 function sweepOf(ev, candles, keyAt) {
   const lows = ev.dir === 1;
   const swept = [];
+  // The key levels as they stood at the run's first bar: never one the run's own candles made (a run across the
+  // 18:00 ET open would otherwise "sweep" the prior-session low its own earlier candles set).
+  const keys = keyAt(candles[ev.runStart].start);
   for (let k = ev.runStart; k <= ev.confirm; k += 1) {
-    for (const lv of keyAt(candles[k].start)) {
+    for (const lv of keys) {
       if (lv.side !== (lows ? 'low' : 'high')) continue;
       if (lows ? lv.price > ev.level : lv.price < ev.level) continue;
       if (lows ? !(candles[k].l < lv.price) : !(candles[k].h > lv.price)) continue;
@@ -169,8 +206,30 @@ function sweepOf(ev, candles, keyAt) {
   return swept.sort((a, b) => (lows ? a.price - b.price : b.price - a.price))[0];
 }
 
+/**
+ * The confirming candle as a displacement (hypotheses): its body at least `minBody` (0.6) of its range, its close in
+ * the extreme third the CISD's way, and either its range at least `minRangeAtr` (1.0) x ATR(14) of the CISD
+ * timeframe's completed candles or its body engulfing the prior candle's (the prior one the opposite colour: the
+ * candle-reading skill's engulfing). Strong when all hold; else weak (a doji, a small body, long wicks, a close
+ * mid-range, or a small candle that engulfs nothing): no zone.
+ */
+function displacementOf(candles, j, dir, atrTf, p = PARAMS) {
+  const k = candles[j];
+  const prev = j > 0 ? candles[j - 1] : null;
+  const range = k.h - k.l;
+  const body = range > 0 ? Math.abs(k.c - k.o) / range : 0;
+  const loc = range > 0 ? (dir === 1 ? (k.c - k.l) / range : (k.h - k.c) / range) : 0;
+  const withDir = dir === 1 ? k.c > k.o : k.c < k.o;
+  const prevOpposite = prev && (dir === 1 ? prev.c < prev.o : prev.c > prev.o);
+  const engulfing = Boolean(withDir && prevOpposite && Math.min(k.o, k.c) <= Math.min(prev.o, prev.c) && Math.max(k.o, k.c) >= Math.max(prev.o, prev.c));
+  const a = atrTf ? atrTf[j] : NaN;
+  const rangeAtr = Number.isFinite(a) && a > 0 ? range / a : null;
+  const strong = withDir && body >= p.minBody && loc >= UPPER_THIRD && (engulfing || (rangeAtr !== null && rangeAtr >= p.minRangeAtr));
+  return { strong, engulfing, body, rangeAtr };
+}
+
 /** A new CISD's state at the base bar its confirming candle closes on. */
-function openState(ev, candles, bars, keyAt, minutes, step, expiry) {
+function openState(ev, candles, bars, keyAt, minutes, step, expiry, disp) {
   const from = candles[ev.runStart].start;
   const to = candles[ev.confirm].end;
   const bull = ev.dir === 1;
@@ -185,14 +244,16 @@ function openState(ev, candles, bars, keyAt, minutes, step, expiry) {
     runStartAt: candles[ev.runStart].t, runCandles: ev.runEnd - ev.runStart + 1,
     confirmedAt: candles[ev.confirm].t, confirmedClose: new Date(closeMs).toISOString(), confirmClose: candles[ev.confirm].c,
     sweep: sweepOf(ev, candles, keyAt), origin, originAt: bars[originIdx].t, extreme,
-    status: origin === extreme ? 'void' : 'waiting', touched: false, entered: false, entryAt: null,
+    displacement: disp.strong ? 'strong' : 'weak', engulfing: disp.engulfing, bodyShare: disp.body, rangeAtr: disp.rangeAtr,
+    // A weak displacement has no zone: no fib, no entry.
+    status: !disp.strong ? 'weak' : origin === extreme ? 'void' : 'waiting', touched: false, entered: false, entryAt: null,
     expiresMs: closeMs + expiry * minutes * 60000,
   };
 }
 
 /** One base bar's effect on a live CISD: expiry, the leg's extension, the touch, the void, the bounce. */
 function step1(s, b, ms, atr, p) {
-  if (s.status === 'void' || s.status === 'expired') return 0;
+  if (DEAD.has(s.status)) return 0;
   if (ms >= s.expiresMs) { s.status = 'expired'; return 0; }
   const bull = s.dir === 1;
   let z = fib.zone({ origin: s.origin, extreme: s.extreme });
@@ -235,7 +296,9 @@ function cisdSeries(bars, minutes, { levels, atr, params = PARAMS, barMinutes = 
   if (built.unavailable) return { unavailable: built.unavailable };
   const candles = built.candles;
   const keyAt = keyLevelsAt(bars, levels);
-  const byEnd = new Map(findCisds(candles, p).map(ev => [candles[ev.confirm].end, ev]));
+  const atrTf = ind.atr(candles, ATR_LEN);
+  // Each CISD from the bar its confirming candle is known complete (knownAt), never sooner.
+  const byEnd = new Map(findCisds(candles, p).map(ev => [knownAt(bars, candles[ev.confirm], minutes, step), ev]).filter(([k]) => k >= 0));
   const out = {
     dir: new Array(n).fill(0), level: new Array(n).fill(NaN), top: new Array(n).fill(NaN), bottom: new Array(n).fill(NaN),
     mid: new Array(n).fill(NaN), inOte: new Array(n).fill(0), sweep: new Array(n).fill(0), entry: new Array(n).fill(0), risk: new Array(n).fill(NaN),
@@ -245,8 +308,10 @@ function cisdSeries(bars, minutes, { levels, atr, params = PARAMS, barMinutes = 
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
     const ev = byEnd.get(i);
-    if (ev) s = openState(ev, candles, bars, keyAt, minutes, step, p.expiry);
-    else if (s) {
+    if (ev) s = openState(ev, candles, bars, keyAt, minutes, step, p.expiry, displacementOf(candles, ev.confirm, ev.dir, atrTf, p));
+    // A newer CISD replaces the older one on the bar it is known (that bar is read only for the newer one). A bar
+    // after the confirming candle (it was known only from this bar: a gap) is read for the bounce at once.
+    if (s && (!ev || i > candles[ev.confirm].end)) {
       const risk = step1(s, b, Date.parse(b.t), atr ? atr[i] : NaN, p);
       if (risk > 0) {
         out.entry[i] = s.dir;
@@ -259,20 +324,20 @@ function cisdSeries(bars, minutes, { levels, atr, params = PARAMS, barMinutes = 
     out.dir[i] = s.dir;
     out.level[i] = s.level;
     out.sweep[i] = s.sweep ? 1 : 0;
-    if (s.status !== 'void' && s.status !== 'expired') {
+    if (!DEAD.has(s.status)) {
       const z = fib.zone({ origin: s.origin, extreme: s.extreme });
       out.top[i] = z.top; out.bottom[i] = z.bottom; out.mid[i] = z.mid;
       out.inOte[i] = b.c >= z.bottom && b.c <= z.top ? 1 : 0;
     }
   }
   const lastBar = bars[n - 1];
-  out.last = s && lastBar ? { ...s, zone: s.status === 'void' || s.status === 'expired' ? null : fib.zone({ origin: s.origin, extreme: s.extreme }), price: lastBar.c } : null;
+  out.last = s && lastBar ? { ...s, zone: DEAD.has(s.status) ? null : fib.zone({ origin: s.origin, extreme: s.extreme }), price: lastBar.c } : null;
   return out;
 }
 
 /**
  * The latest CISD on `minutes`-minute completed candles as of the last bar, as the briefing shows it: { tf, dir,
- * level, confirmedAt (the confirming candle's open), confirmedClose, run, sweep, leg, ote, status, priceInOte,
+ * level, confirmedAt (the confirming candle's open), confirmedClose, run, displacement, engulfing, sweep, leg, ote, status, priceInOte,
  * retracement } or { tf, none } / { tf, unavailable }. `round` puts a price on the contract's tick (display only).
  */
 function cisdFacts(bars, minutes, { levels, atr, params = PARAMS, barMinutes = null, round = x => x } = {}) {
@@ -287,6 +352,7 @@ function cisdFacts(bars, minutes, { levels, atr, params = PARAMS, barMinutes = n
   return {
     tf, dir: st.dir === 1 ? 'bullish' : 'bearish', level: round(st.level), confirmedAt: st.confirmedAt, confirmedClose: st.confirmedClose,
     run: { startAt: st.runStartAt, candles: st.runCandles },
+    displacement: st.displacement, engulfing: st.engulfing,
     sweep: st.sweep ? { name: st.sweep.name, price: round(st.sweep.price) } : null,
     leg: { origin: round(st.origin), originAt: st.originAt, extreme: round(st.extreme) },
     ote: live ? { top: round(st.zone.top), bottom: round(st.zone.bottom), mid: round(st.zone.mid) } : null,
@@ -296,4 +362,22 @@ function cisdFacts(bars, minutes, { levels, atr, params = PARAMS, barMinutes = n
   };
 }
 
-module.exports = { PARAMS, SNAPSHOT_PARAMS, paramsFrom, findCisds, candlesOf, stepMinutes, keyLevelsAt, sweepOf, cisdSeries, cisdFacts };
+/**
+ * cisd_entry / cisd_risk over two CISD timeframes: the lower one's series (`own`), with the `higher` one's bounce taking
+ * the bar when both fire (the higher timeframe preferred); every other series stays the lower one's. Entries say which.
+ */
+function combineHigher(own, higher, higherMinutes) {
+  if (own.unavailable) return own;
+  if (higher.unavailable) return own;
+  const entry = own.entry.slice();
+  const risk = own.risk.slice();
+  const entries = new Map(own.entries);
+  for (const [i, x] of higher.entries) {
+    entry[i] = higher.entry[i];
+    risk[i] = higher.risk[i];
+    entries.set(i, { ...x, minutes: higherMinutes });
+  }
+  return { ...own, entry, risk, entries };
+}
+
+module.exports = { PARAMS, SNAPSHOT_PARAMS, paramsFrom, findCisds, displacementOf, combineHigher, candlesOf, knownAt, stepMinutes, keyLevelsAt, sweepOf, cisdSeries, cisdFacts };
