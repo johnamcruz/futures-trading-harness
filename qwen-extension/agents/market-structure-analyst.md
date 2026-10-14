@@ -79,7 +79,7 @@ never paste a long `get_bars` reply into a file.
    `market-snapshot`, `strategy-library`,
    `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
-   `mtf-rejection`, `mtf-breakout`, `cisd`, `fib-retracement`, `strategy-scan`,
+   `rejection`, `breakout`, `cisd`, `fib-retracement`, `strategy-scan`,
    and `strategy-gate-checks`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 60m (120) and 15m
    (160). One request per timeframe (the rate limit is shared). Run

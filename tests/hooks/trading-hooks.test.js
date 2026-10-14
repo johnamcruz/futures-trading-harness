@@ -2387,12 +2387,12 @@ test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report co
   look('risk-manager', 'invalidation', 31);
   const r = gate({ ...orderPayload(), transcript_path: transcript }, index);
   assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, breakout(?![\w-])/);
   // The default (full): not required.
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
   // Looked up during its call (the harness tool records it next to the transcript): counted.
   look('market-structure-analyst', 'breakout-vs-fakeout', 15);
-  look('market-structure-analyst', 'mtf-breakout', 15);
+  look('market-structure-analyst', 'breakout', 15);
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, index).stderr, /roles-ran/);
   // An exit is never held.
   fs.unlinkSync(`${transcript}.lookups.jsonl`);

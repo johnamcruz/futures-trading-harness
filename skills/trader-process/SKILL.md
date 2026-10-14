@@ -38,7 +38,7 @@ It adds no filter and no veto:
    without `mtf: reversal`, with the Trend rule's prevailing trend;
    reversal is one with it (a fade). Its STRATEGY.md and the
    priority order judge it, not this label. Read: `pullback-vs-reversal`, `cisd`;
-   setups: `mtf-rejection`, `mtf-breakout`.
+   setups: `rejection`, `breakout`.
 5. **Confluence.** Count the six items of `confluence-counting`; the
    candidate's own `values` are always neutral.
 6. **Entry.** Its trigger fired on a closed bar; never anticipate.

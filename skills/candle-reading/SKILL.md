@@ -29,8 +29,8 @@ hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle, named with its
 timeframe. 15m and 60m weigh more at a higher-timeframe level (a 60m
-rejection of the prior day's high outweighs a 3m one); 3m and 5m time the
-entry.
+rejection of the prior day's high outweighs a 3m one: `rejection`,
+`breakout`); 3m and 5m time the entry.
 
 - 3m, 5m, 15m and 60m: `m3.candles` and a summary line each: the last
   completed candle (OHLCV, close time, body and wick shares, close third,
@@ -61,7 +61,7 @@ against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over about
 The stack counts once (`confluence-counting`, item 4).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, and none is measured in our data yet. Confirmation only.
+general, none measured in our data yet. Confirmation only.
 
 ## Examples
 
