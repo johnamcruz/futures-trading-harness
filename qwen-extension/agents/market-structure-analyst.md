@@ -76,7 +76,7 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `htf-to-ltf`, `daily-bias`, `top-down-entry`, `market-snapshot`, `strategy-library`,
+   `htf-to-ltf`, `daily-bias`, `market-snapshot`, `strategy-library`,
    `harness-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
    `mtf-rejection`, `mtf-breakout`, `cisd`, and `fib-retracement`.
@@ -104,7 +104,9 @@ never paste a long `get_bars` reply into a file.
    e.g. `setup:crt_1h`, `setup:crt_4h`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
    evaluate from their STRATEGY.md body (`strategies_show`) against the
-   briefing's numbers; what no tool computes, say is not computed.
+   briefing's numbers; what no tool computes, say is not computed. The
+   steps from level to entry: the `top-down-entry` skill (`skill_lookup`
+   when a setup forms at a level).
 
 ## Output (keep it under 250 words)
 

@@ -674,9 +674,16 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
   for (const p of ['htf-to-ltf', 'daily-bias', 'levels-and-reactions', 'mtf-rejection', 'mtf-breakout', 'cisd', 'pullback-vs-reversal', 'bos-vs-choch', 'candle-reading', 'momentum-and-volume', 'invalidation']) {
     assert.ok(top.includes(`\`${p}\``), p);
   }
-  // The market-structure analyst looks it up as needed; the head trader never loads it every cycle.
-  const roles = parseFrontmatter(read('agents/market-structure-analyst.md')).data;
-  assert.ok(roles['role-index'].includes('top-down-entry') && !roles['role-skills'].includes('top-down-entry'));
+  // Referenced, never embedded: no role lists it (full mode would embed it); the market-structure analyst's body names it
+  // in its setup step and looks it up as needed; the head trader never loads it every cycle.
+  for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) {
+    const d = parseFrontmatter(read(`agents/${f}`)).data;
+    assert.ok(![...(d['role-skills'] || []), ...(d['role-index'] || [])].includes('top-down-entry'), f);
+  }
+  const msa = read('agents/market-structure-analyst.md');
+  assert.ok(flat(msa).includes('The steps from level to entry: the `top-down-entry` skill (`skill_lookup` when a setup forms at a level).'));
+  assert.ok(!/Load the\s+skills?\s+[^.]*`top-down-entry`/.test(flat(msa)), 'not in the load sentence');
+  assert.ok(!JSON.parse(read('workspace/opencode.json')).agent['market-structure-analyst'].prompt.includes('<skill name="top-down-entry">'), 'not embedded');
   const ts = read('skills/trade-session/SKILL.md');
   const step0 = flat(ts.slice(ts.indexOf('### 0. Load the skills'), ts.indexOf('### 1.')));
   assert.ok(!step0.includes('top-down-entry'));
