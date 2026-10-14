@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
+const { DEFAULT_LANE_TIMEOUT_MS, handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
 const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
@@ -38,7 +38,7 @@ const { createServerAttestation } = require('./lib/broker/allow-list');
 const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/trading/order-tracker');
 
 const ROOT = path.resolve(__dirname, '..');
-const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
+const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : DEFAULT_LANE_TIMEOUT_MS;
 const LEDGER_TTL_MS = 30000;
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
 

@@ -98,12 +98,27 @@ async function handleClientLine(line, check, log = () => {}) {
   return { forward: null, respond: d.blocked ? [d.blocked] : [] };
 }
 
+/** How long the gateway waits on one of its own calls to the server (an account read) before it fails closed. */
+const CALL_TIMEOUT_MS = 15000;
+/**
+ * How long the contract translator waits on one of its own lookups (search_contracts, get_contract). Seconds longer than
+ * the callers that read through the translator wait on a call (the gateway's account reads, CALL_TIMEOUT_MS; the
+ * broker adapter's reads client): a hung lookup ends with the caller's timeout (the gate fails closed), not in a tie
+ * of two equal timers in two processes, where whichever fired first decided between a refusal and an answer named
+ * from the cache. Shorter than the order lane (DEFAULT_LANE_TIMEOUT_MS): an order whose contract lookup hangs is
+ * normally answered "not sent" before the lane gives up on it (behind another hung lookup it may not be, and is then
+ * an order of unknown outcome, which still blocks new entries).
+ */
+const LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + 5000;
+/** How long the gateway holds the order lane for a server reply by default (FTH_LANE_TIMEOUT_MS overrides). */
+const DEFAULT_LANE_TIMEOUT_MS = 30000;
+
 /**
  * Calls tools on the wrapped server on the gateway's own behalf. Requests use
  * ids prefixed "fth-gw-" and their responses are consumed here, never shown to
  * the client.
  */
-function childCaller(writeToChild, { timeoutMs = 15000, nonce = require('crypto').randomBytes(6).toString('hex'), prefix = 'fth-gw-' } = {}) {
+function childCaller(writeToChild, { timeoutMs = CALL_TIMEOUT_MS, nonce = require('crypto').randomBytes(6).toString('hex'), prefix = 'fth-gw-' } = {}) {
   let seq = 0;
   const pending = new Map();
   return {
@@ -262,4 +277,4 @@ function closeRefused(response) {
   return Boolean(body) && body.success === false;
 }
 
-module.exports = { canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+module.exports = { CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS, canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

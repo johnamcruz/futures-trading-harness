@@ -88,6 +88,20 @@ test('childCaller correlates its own responses and leaves others alone', async (
   await assert.rejects(q, /server exited/);
 });
 
+test('a hung contract lookup outlasts every caller\'s timeout: the caller fails closed first, never a tie of equal timers', async () => {
+  const { CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS } = require('../../scripts/lib/trading/mcp-gateway');
+  const { DEFAULT_TIMEOUT_MS } = require('../../scripts/lib/broker/mcp-client');
+  // Seconds apart, not milliseconds: a loaded machine fires timers late, in each process differently.
+  assert.ok(LOOKUP_TIMEOUT_MS - CALL_TIMEOUT_MS >= 5000, `${LOOKUP_TIMEOUT_MS} vs the gateway's ${CALL_TIMEOUT_MS}`);
+  assert.ok(LOOKUP_TIMEOUT_MS - DEFAULT_TIMEOUT_MS >= 5000, `${LOOKUP_TIMEOUT_MS} vs the broker adapter's reads ${DEFAULT_TIMEOUT_MS}`);
+  // An order whose contract lookup hangs is answered "not sent" (definitely refused) before the order lane gives up on
+  // it and counts it as an order of unknown outcome.
+  assert.ok(DEFAULT_LANE_TIMEOUT_MS - LOOKUP_TIMEOUT_MS >= 5000, `${LOOKUP_TIMEOUT_MS} vs the lane's ${DEFAULT_LANE_TIMEOUT_MS}`);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'mcp-gateway.js'), 'utf8'), /FTH_LANE_TIMEOUT_MS\) : DEFAULT_LANE_TIMEOUT_MS;/);
+  // The gateway's own calls wait CALL_TIMEOUT_MS by default; the translator passes LOOKUP_TIMEOUT_MS to its caller.
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'contract-translator.js'), 'utf8'), /childCaller\(toChild, \{[^}]*timeoutMs: LOOKUP_TIMEOUT_MS/);
+});
+
 test('client requests may not use the gateway-reserved id prefix; lane calls are recognized', async () => {
   const r = await handleClientLine(JSON.stringify({ jsonrpc: '2.0', id: 'fth-gw-1', method: 'tools/call', params: { name: 'list_open_positions' } }), () => ({ allowed: true }));
   assert.strictEqual(r.forward, null);

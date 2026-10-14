@@ -531,11 +531,20 @@ test('a harness run ends with its process group: nothing it left behind keeps ru
   const path = require('path');
   const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-run-'));
   const marker = path.join(dir, 'ticks');
-  const r = await runHarness(['bash', '-c', `(while true; do echo x >> '${marker}'; sleep 0.2; done) & exit 0`], { cwd: dir, env: process.env, timeoutMs: 10000 });
+  // The harness exits only once its background loop has written (else, on a loaded machine, the group could be ended
+  // before the loop ever ran, and there would be nothing to prove).
+  let group = null;
+  const r = await runHarness(['bash', '-c', `(while true; do echo x >> '${marker}'; sleep 0.2; done) & until [ -s '${marker}' ]; do sleep 0.05; done; exit 0`], {
+    cwd: dir, env: process.env, timeoutMs: 10000, onChild: c => { if (c && group === null) group = c.pid; },
+  });
   assert.strictEqual(r.ok, true);
-  await new Promise(res => setTimeout(res, 2600));
+  assert.ok(fs.readFileSync(marker, 'utf8').length > 0, 'the loop ran while the harness did');
+  // The group is gone (SIGTERM at the harness's exit, SIGKILL 2 s later): polled, not slept for a fixed time.
+  const alive = () => { try { process.kill(-group, 0); return true; } catch (e) { return e.code !== 'ESRCH'; } };
+  for (const until = Date.now() + 10000; alive() && Date.now() < until;) await new Promise(res => setTimeout(res, 50));
+  assert.strictEqual(alive(), false, 'nothing in the harness\'s process group is left running');
   const n = fs.readFileSync(marker, 'utf8').length;
-  await new Promise(res => setTimeout(res, 800));
+  await new Promise(res => setTimeout(res, 500));
   assert.strictEqual(fs.readFileSync(marker, 'utf8').length, n, 'the background loop was stopped');
 });
 
