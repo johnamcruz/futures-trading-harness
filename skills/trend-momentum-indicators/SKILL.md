@@ -1,6 +1,6 @@
 ---
 name: trend-momentum-indicators
-description: Read EMA, ADX, ATR, SuperTrend and Keltner for futures - trend, strength, volatility, the regime and skip-rule fields, and when each signal is unreliable. Use when a strategy gates on an indicator or to classify the regime.
+description: Use when a strategy gates on ADX, an EMA, SuperTrend or Keltner, or to classify the regime (trend, range, volatility) for sizing and strategy choice.
 ---
 
 # Trend and Momentum Indicators

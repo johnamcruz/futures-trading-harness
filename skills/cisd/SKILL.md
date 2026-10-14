@@ -1,6 +1,6 @@
 ---
 name: cisd
-description: Read a CISD (change in state of delivery) from the briefing's m3.cisd - a strong completed candle closes through the open of the opposing run before it - where it works (a trend pullback ending, a range extreme), top-down by timeframe, then its OTE zone (fib-retracement) and the bounce. Confluence for trader-process step 4, never a veto.
+description: Trader-process step 4 - read the briefing's m3.cisd (a change in state of delivery) per timeframe, its OTE zone and bounce. Confluence, never a veto.
 ---
 
 # CISD

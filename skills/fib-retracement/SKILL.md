@@ -1,6 +1,6 @@
 ---
 name: fib-retracement
-description: Measure a Fibonacci retracement of a leg (the impulse leg a setup defines) on completed candles - the 0.5, 0.618, 0.705 and 0.79 levels, the OTE golden zone from 0.62 to 0.79 with its 0.705 mid, premium vs discount - and read a bounce from the zone on a completed candle. A read for trader-process step 4 and the cisd skill, never a veto.
+description: Use after an impulse to judge pullback depth, or for a CISD's OTE zone (0.62-0.79) - fib levels and a bounce on a completed candle. A read, never a veto.
 ---
 
 # Fib Retracement

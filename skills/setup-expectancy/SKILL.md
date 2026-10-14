@@ -1,6 +1,6 @@
 ---
 name: setup-expectancy
-description: Measure whether each futures setup has an edge - win rate, average win/loss in R, expectancy, profit factor, sample size, and confidence - from get_performance and journal reviews, then promote, restrict, or cut setups. Use weekly, before raising size, or when a setup feels off.
+description: Use weekly (/setup-scorecard), before raising size or adding a setup, or after a losing streak - measure each setup's edge, then promote, restrict or cut it.
 ---
 
 # Setup Expectancy

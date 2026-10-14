@@ -1,6 +1,6 @@
 ---
 name: breakout-vs-fakeout
-description: Read a level traded through as accepted (closes held beyond it, a retest that holds) or a fakeout (a sweep that closed back inside), from the briefing's computed sweeps, breaks and location fields. A read for trader-process step 3, never a veto. Use whenever price is through or at a level.
+description: Trader-process step 3, price through or at a level - accepted (closes hold, a retest holds) or a fakeout (a sweep closed back inside). A read, never a veto.
 ---
 
 # Breakout vs Fakeout

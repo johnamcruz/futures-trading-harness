@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: The fallback without a current bar briefing - compute indicators, levels and the regime from closed bars with the harness tool market_snapshot, never by mental math; the topic skills say what each value means.
+description: Use without a current bar briefing, or for a number it doesn't carry - compute indicators, levels and the regime from closed bars with market_snapshot.
 ---
 
 # Market Snapshot

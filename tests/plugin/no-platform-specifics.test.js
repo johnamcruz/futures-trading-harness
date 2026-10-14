@@ -69,7 +69,6 @@ const SHRINK_ONLY = [
   ['scripts/lib/trading/reasons.js', 'account'],
   ['scripts/lib/trading/report-cache.js', 'account'],
   ['scripts/replay.js', 'account'],
-  ['skills/end-of-day/SKILL.md', 'firm-time'],
   ['skills/replay/SKILL.md', 'firm account firm-time'],
   ['strategies/README.md', 'account'],
   ['strategies/prop_flow_1m/STRATEGY.md', 'account'],
