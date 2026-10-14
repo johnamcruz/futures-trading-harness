@@ -71,8 +71,9 @@ writes no PLAN line.
 Your reasoning, not a claim list. If your role's instructions give a
 fact-claim line, state facts only there, in its forms. Fields are the
 briefing's (`m3`, `m15`, `h1`, and a `candidate` in `m3.candidates`):
-on your own timeframe's briefing `m3` is its `bar`: take `rule` and the
-candidates from the runner's briefing or the cycle prompt.
+on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`,
+`location` are the runner's; candidates and `nearestLiquidity`, the
+briefing's of the lane trading them.
 
 ```text
 PLAN:

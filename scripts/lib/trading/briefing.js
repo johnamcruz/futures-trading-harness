@@ -31,7 +31,7 @@
  * Sections change only on expiry: m15 and h1 read completed candles only, so nothing in them changes before
  * their next close. What moves with price against them (a 3m close through a 15m or 1h swing, the room to the
  * nearest levels) is in m3. Distances are in points and R: 1R is a setup's own stop, else the reference stop
- * (0.5 x ATR(20)).
+ * (0.5 x ATR(20) of the briefing's own bars), and every R and ATR names its timeframe ("0.5 x 15m ATR(20)").
  *
  * Each section carries a version that changes only when it is recomputed, so
  * whatever was built on it (an analyst's report) stays valid while the
@@ -48,7 +48,13 @@
  *
  * An analyst on its own timeframe (lanes.js analystFrames: 15m or 1h from 3m bars, or another lane's bars) gets a
  * briefing on that timeframe: its `bar` part is the m3 part's facts computed on its own bars (the trend rule is the
- * runner's, the gate's; setups only on a lane's bars), valid until its next bar close; the runner's briefing's
+ * runner's, the gate's; setups only on a lane's bars), valid until its next bar close. One fact has one value in every
+ * briefing: the session's facts (today, overnight, opening range, IB, the VWAPs, the session profile, `location`) are
+ * computed on the runner's bars only, so a frame leaves them out (`sessionLevels` points to the runner's briefing) and
+ * its levels, room and sweeps are its own bars' (its swings, equal highs and lows, round numbers). A lane's frame,
+ * whose setups are traded, adds the runner's session levels (its `keyLevels`, the same values) to its room and its
+ * candidates' levels in the way, so a traded setup's room is never computed without them; only from the runner's
+ * briefing holding at the lane bar's close (else it throws, and the runner allows no entry on that bar). The runner's briefing's
  * parts that change no faster than its bars (m15 up to 15m bars, h1 up to 1h, day) are shared: read from that
  * briefing, never copied, so every timeframe's briefing names the same versions.
  *
@@ -162,9 +168,13 @@ const atClose = (lb, mins) => {
 const cents = p => (p ? { ...p, ...Object.fromEntries(['poc', 'vah', 'val', 'low', 'high', 'hvnAbove', 'hvnBelow', 'lvnAbove', 'lvnBelow'].map(k => [k, round2(p[k])])), hvn: (p.hvn || []).map(round2), lvn: (p.lvn || []).map(round2) } : {});
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
+// A frame's pointer for what it leaves out: the session's facts are the runner's briefing's, one value each.
+const SESSION_ELSEWHERE = 'is in the runner\'s bar briefing (bar_briefing without a timeframe)';
+// The m3 fields a frame leaves out: the session's facts (computed on the runner's bars only).
+const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
   // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
   // list). Display only: room, R and every other decision input are computed from the unrounded levels.
   const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
@@ -190,6 +200,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   const t15 = (snap15 && snap15.trend) || {};
   // 1R without a setup: the reference stop, 0.5 x ATR(20), the stop the strategies are built on (a setup's own stop is its 1R).
   const oneR = (snap.referenceStop || {}).distance;
+  const tf = `${minutes}m`;
   const step = minutes * 60000;
   const after = (iso, k = EQUAL_K) => new Date(Date.parse(iso) + k * step).toISOString();
   // A 1h swing counts as tested only by bars after its hour closed (the bars inside it made it).
@@ -200,14 +211,17 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   const htf = (cs, mins, label) => swingLevels(cs, 2, 3).map(x => {
     const end = Date.parse(x.t) + mins * 60000;
     const b = bars.find(y => Date.parse(y.t) >= end && (x.type === 'high' ? y.c > x.price : y.c < x.price));
-    return { name: `${label} swing ${x.type}`, type: x.type, price: x.price, side: side(x.price, price), brokenAt: b ? b.t : null };
+    // On a frame, a close of its own bars breaks it (the runner's briefing counts its own closes): named, as a different fact.
+    return { name: `${label} swing ${x.type}`, type: x.type, price: x.price, side: side(x.price, price), brokenAt: b ? b.t : null, ...(own ? { brokenBy: `a ${tf} close` } : {}) };
   });
   // Per timeframe: the swings still holding, and the latest one a 3m close went through (with when).
   const holdAndLastBreak = list => {
     const broken = list.filter(x => x.brokenAt).sort((x, y) => Date.parse(y.brokenAt) - Date.parse(x.brokenAt))[0];
     return [...list.filter(x => !x.brokenAt), ...(broken ? [broken] : [])];
   };
-  const htfLevels = [...holdAndLastBreak(htf(c15, 15, '15m')), ...holdAndLastBreak(htf(c60, 60, '1h'))];
+  // On a frame (`own`, 15m up to 1h), only the timeframes at or above its own: its bars can't make a shorter one's swings.
+  const htfLevels = [...(own && minutes > 15 ? [] : holdAndLastBreak(htf(c15, 15, '15m'))), ...holdAndLastBreak(htf(c60, 60, '1h'))];
+  const ownSwing = own ? tf : '3m';
   // Equal highs (lows) still untaken: no bar since their last touch traded above (below) them.
   const pool = (list, type) => (list || []).map(x => {
     const level = type === 'high' ? Math.max(...x.prices) : Math.min(...x.prices);
@@ -227,7 +241,12 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   // Each is shown as every other level is (level(): on the contract's tick), so 30.125 on a 0.005 tick stays 30.125.
   const { at: roundOn, levels: roundLevels } = roundNumbers(price, roundStep);
   const roundAt = roundOn === null ? [] : [['round number', roundOn]];
-  const levels = [
+  // The session levels (the day, IB, opening range, session range, VWAP, prior RTH, overnight, the profiles): computed
+  // on the runner's bars only (exported as the briefing's `keyLevels`). A frame never computes them on its own bars (they
+  // would differ: no 1h bar opens at 09:30): one fact has one value in every briefing. A lane's frame, whose setups
+  // are traded, takes the runner's (`keyLevels`), so its room and its candidates' levels in the way are never
+  // without them; an analyst's frame shows only its own levels and points to the runner's briefing for the rest.
+  const ownSession = [
     ['day high', rth ? day.high : null], ['day low', rth ? day.low : null], ['IB high', day.ibHigh], ['IB low', day.ibLow],
     ['opening range high', (lv.openingRange || {}).high], ['opening range low', (lv.openingRange || {}).low],
     ['session high', ((snap.context || {}).session || {}).high], ['session low', ((snap.context || {}).session || {}).low],
@@ -237,7 +256,13 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     // The profile's levels (row centers, off the tick) carry their shown price, on the tick.
     ['prior VAH', prior.vah, level(priorX.vah)], ['prior VAL', prior.val, level(priorX.val)], ['prior POC', prior.poc, level(priorX.poc)],
     ['session VAH', sess.vah, level(sessX.vah)], ['session VAL', sess.val, level(sessX.val)], ['session POC', sess.poc, level(sessX.poc)],
-    ['last 3m swing high', st.lastSwingHigh], ['last 3m swing low', st.lastSwingLow],
+  ].filter(([, p]) => Number.isFinite(p));
+  const sessionLevels = own ? keyLevels || [] : ownSession;
+  // The VWAP that applies, for a frame from the runner's levels (its value, against this bar's price).
+  const runnerVwap = own ? (sessionLevels.find(([n]) => /^VWAP /.test(n)) || [])[1] : null;
+  const levels = [
+    ...sessionLevels,
+    [`last ${ownSwing} swing high`, st.lastSwingHigh], [`last ${ownSwing} swing low`, st.lastSwingLow],
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
     ...[...eqHighs, ...eqLows].filter(x => !x.taken).map(x => [x.name, x.price]),
@@ -262,7 +287,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // The session window, with its scope stated: whether the market is open and entries are allowed, and until when.
         et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(), windowEntries: win.entries, marketOpen: win.marketOpen, windowText: win.text, windowRefusal: win.refusal,
         // R: every distance below is in points and R; 1R here is the reference stop (a setup's own stop is its 1R).
-        oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: `0.5 x ATR(20) ${round2(2 * oneR)}, the reference stop` } : null,
+        // 1R names its timeframe: the reference stop on a 15m frame is the 15m ATR's, not the runner's.
+        oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: `0.5 x ${tf} ATR(20) ${round2(2 * oneR)}, the ${tf} reference stop` } : null,
         news,
         regime: snap.regime ? { primary: snap.regime.primary, volatility: snap.regime.volatility, tags: snap.regime.tags, metrics: snap.regime.metrics } : null,
         trend: { ema9: round2(t.emaFast), ema20: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend ? { direction: t.supertrend.direction, line: round2(t.supertrend.line) } : null, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },
@@ -284,11 +310,12 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // against price (a 3m close through one since its candle closed: brokenAt).
         lastBreak: lastBreaks(bars),
         sweeps: sweeps(bars, [
-          ['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true],
+          // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
+          ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
           // The overnight range is final at 09:30 ET: its sweeps count in RTH only.
-          ...(rth ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
-          ['last 3m swing high', st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
-          ['last 3m swing low', st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null],
+          ...(rth && !own ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
+          [`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
+          [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null],
           ...eqHighs.map(x => [x.name, x.price, 'high', false, x.since]), ...eqLows.map(x => [x.name, x.price, 'low', false, x.since]),
         ].map(([name, p, sideOf, key = false, since = null]) => ({ name, price: p, side: sideOf, key, since })), 10),
         htfLevels,
@@ -308,7 +335,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
-        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, news, lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: side(price, vwapRef), tick })) : null,
+        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, news, lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: own ? side(price, runnerVwap) : side(price, vwapRef), tick })) : null,
         ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
       },
@@ -341,6 +368,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         priorProfile: prior.poc ? { poc: level(priorX.poc), vah: level(priorX.vah), val: level(priorX.val), hvn: (priorX.hvn || []).map(x => level(x)), lvn: (priorX.lvn || []).map(x => level(x)) } : null,
       },
     },
+    keyLevels: own ? null : ownSession,
   };
 }
 
@@ -419,7 +447,7 @@ function newsState(blackouts, at) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date() }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -449,7 +477,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   // Round-number steps: config (round-numbers.js) the caller loaded and passes; none passed, no round numbers.
   const root = String(symbol || '').split(':')[0];
   const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
-    roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps) });
+    roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -459,7 +487,8 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
     const s = fresh[name];
     sections[name] = { version: `${name}@${closedAt.toISOString()}`, computedAt: closedAt.toISOString(), validUntil: s.validUntil.toISOString(), reason: old ? 'expired' : 'new', data: s.data };
   }
-  return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
+  // keyLevels: this bar's session levels ([name, price]), the ones a lane's frame takes for its room (not rendered: m3 has them).
+  return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections, ...(own ? {} : { keyLevels: fresh.keyLevels }) };
 }
 
 /**
@@ -549,16 +578,22 @@ function summaryLines(b, et) {
   const vw = m3.vwap || {};
   const news = m3.news || {};
   const room = m3.nearestLiquidity || { above: [], below: [] };
+  // Every R and ATR names its timeframe: a frame's 1R is its own bars' reference stop, not the runner's.
+  const tf = `${b.minutes}m`;
+  // A frame (its m3 is its `bar`, without the session's facts): its room is its own levels; the session's are the runner's.
+  const own = m3.sessionLevels !== undefined;
+  const roomOf = `R = the ${tf} reference stop`;
   const out = [
-    `Summary (${b.symbol} ${b.minutes}m, ${m3.et} ET):`,
+    `Summary (${b.symbol} ${tf}, ${m3.et} ET):`,
     `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
     alignment,
-    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
+    own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
+      : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
-    `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
-    `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,
+    `- Room above (${roomOf}): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
+    `- Room below (${roomOf}): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,
     ...(room.at && room.at.length ? [`- At price: ${room.at.map(x => `${x.name} ${x.price}`).join(', ')}.`] : []),
     ...(room.roundNumbers ? [`- Round numbers: none (${room.roundNumbers}).`] : []),
   ];
@@ -627,11 +662,28 @@ const sharedParts = minutes => Object.keys(SHARED_CLOCK).filter(p => SHARED_CLOC
 function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, lane = false, scan = null, scanError = null, barsFile = null, blackouts = null, clock = null, roundSteps = null, now = new Date() }) {
   if (!first || !first.sections || !first.sections.m3) throw new Error(`no runner bar briefing to share with the ${minutes}m one`);
   if (first.symbol !== symbol || (first.contractId || null) !== contractId) throw new Error(`the runner's bar briefing is for ${first.symbol} ${first.contractId || ''}, not ${symbol} ${contractId || ''}`);
-  const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, roundSteps, now });
+  // A lane's setups are traded: their room needs every key level, the session's from the runner's briefing (one value
+  // each). A runner briefing without them (an older file) builds no lane briefing: never a room without them.
+  if (lane && !Array.isArray(first.keyLevels)) throw new Error(`the runner's bar briefing has no session levels for the ${minutes}m lane's room`);
+  const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, roundSteps, now, own: true, keyLevels: lane ? first.keyLevels : null });
+  // Its session levels must be the runner's as of this lane bar's close: the runner's bar holding then (closed at or
+  // before it, its next not yet closed). An older runner briefing (a bar behind, or hours old) or a later one is refused.
+  const laneClose = Date.parse(b.closedAt);
+  if (lane && !(Date.parse(first.closedAt) <= laneClose && Date.parse(first.sections.m3.validUntil) > laneClose)) {
+    throw new Error(`the runner's bar briefing (closed ${first.closedAt}) isn't the one holding at the ${minutes}m lane bar's close (${b.closedAt}): its session levels aren't this bar's`);
+  }
   const base = b.sections.m3;
+  // No session facts computed on these bars: they would differ from the runner's (no 1h bar opens at 09:30 ET, a VWAP
+  // or a profile on coarser bars is another number), and one fact has one value in every briefing the model reads.
+  // They are the runner's briefing's; a lane's room and candidates take its session levels, an analyst's frame has
+  // only its own.
   // No trend rule: one read off these bars isn't the gate's, and the gate's, copied here, would be served as current
   // for this bar's whole life (and in a report cached on it). The gate's current rule is the runner's briefing's.
-  const data = { ...base.data, trendRule: `Trend rule: not in a ${minutes}m briefing (it would be up to a ${minutes}m bar old): the order gate's current rule is in the runner's ${first.minutes}m bar briefing and the cycle prompt` };
+  const data = {
+    ...omit(base.data, SESSION_FIELDS),
+    sessionLevels: `not in a ${minutes}m briefing: the session's facts (today so far: open, gap, opening range, IB, high and low; the overnight range; the RTH and session VWAP and price's side of it; the session profile and the prior day's nodes; where price is against them) are computed on the runner's ${first.minutes}m bars only, one value each: in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe); the prior RTH day and its profile are the [day] part below${lane ? `; the room and the setups' levels below include the runner's session levels (its values)` : ''}`,
+    trendRule: `Trend rule: not in a ${minutes}m briefing (it would be up to a ${minutes}m bar old): the order gate's current rule is in the runner's ${first.minutes}m bar briefing and the cycle prompt`,
+  };
   if (!lane) {
     delete data.candidates;
     delete data.scanError;

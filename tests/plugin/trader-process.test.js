@@ -166,18 +166,20 @@ test('trader-process: on an analyst\'s own timeframe, m3 is the frame\'s bar par
   const whole = candles(bars, 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
   const f = B.buildFrameBriefing({ symbol: 'NQ', bars: whole, minutes: 15, first });
   const bar = f.sections.bar.data;
-  // Every m3 path but the trend rule and the setups resolves on the frame's bar part.
+  // Every m3 path but the trend rule, the setups and the session's facts resolves on the frame's bar part; the
+  // session's facts (one value each, on the runner's bars) resolve on the runner's m3 and are not in the frame.
   const block = planBlock(read(SKILL));
-  const m3 = [...block.join('\n').matchAll(/\bm3\.([a-zA-Z0-9.]+)/g)].map(m => m[1]).filter(p => p !== 'trendRule');
-  assert.ok(m3.length >= 6);
-  for (const p of m3) {
-    let at = bar;
-    for (const k of p.split('.')) { assert.ok(at && Object.prototype.hasOwnProperty.call(at, k), `bar.${p}`); at = at[k]; }
-  }
+  const session = p => /^(vwap|location)\b/.test(p);
+  const all = [...block.join('\n').matchAll(/\bm3\.([a-zA-Z0-9.]+)/g)].map(m => m[1]).filter(p => p !== 'trendRule');
+  const m3 = all.filter(p => !session(p));
+  assert.ok(m3.length >= 4 && all.filter(session).length >= 2);
+  const resolves = (root, p) => { let at = root; for (const k of p.split('.')) { if (!(at && Object.prototype.hasOwnProperty.call(at, k))) return false; at = at[k]; } return true; };
+  for (const p of m3) assert.ok(resolves(bar, p), `bar.${p}`);
+  for (const p of all.filter(session)) assert.ok(resolves(first.sections.m3.data, p) && !resolves(bar, p), `runner m3.${p}, not bar.${p}`);
   // The frame carries no trend rule of its own, and the skill says where the rule and the setups come from.
   assert.match(bar.trendRule, /not in a 15m briefing/);
   assert.ok(!('candidates' in bar));
-  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`: take `rule` and the candidates from the runner's briefing or the cycle prompt."));
+  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; candidates and `nearestLiquidity`, the briefing's of the lane trading them."));
 });
 
 test('trader-process: a candidate with nothing in its way has room, not an unknown one', () => {
