@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { structure5m } = require('../../scripts/lib/trading/m5-structure');
+const { structure5m, structureLine, RECENT } = require('../../scripts/lib/trading/m5-structure');
 const { lastBreaks } = require('../../scripts/lib/trading/structure-events');
 const B = require('../../scripts/lib/trading/briefing');
 const G = require('../fixtures/golden-bars');
@@ -92,9 +92,35 @@ test('causality: as of each bar, the same as the bars cut at its close; a break 
   assert.ok(seen > 0, 'the fixture has 5m breaks');
 });
 
-const M5_RENDER_BUDGET = 450;
+// The 5m line's bytes in the rendered briefing (event-driven: only a recent break): on the fixture with a 1m lane's bars
+// at every 20th bar, at most M5_RENDER_BUDGET on any bar and M5_TYPICAL_BUDGET on average.
+const M5_RENDER_BUDGET = 160;
+const M5_TYPICAL_BUDGET = 60;
 
-test('the briefing\'s structure5m: unavailable without 1m bars, built with them; within M5_RENDER_BUDGET bytes', () => {
+test('knownAt is when the breaking candle was known complete: its last 1m bar missing, the next bar\'s close', () => {
+  // The 1m bar 10:44 ET (the breaking candle's last) is missing: the 10:40 candle completes on the 10:45 bar, at 10:46.
+  // Its 10:43 bar closes at 106 (above the swing high), so the candle still breaks without its last bar.
+  const gap = ONE.filter(b => b.t !== new Date(END - MIN).toISOString()).map(b => (b.t === new Date(END - 2 * MIN).toISOString() ? { ...b, c: 106, h: Math.max(b.h, 106) } : b));
+  const next = { t: new Date(END).toISOString(), o: 106, h: 106.5, l: 105.5, c: 106, v: 100 };
+  const s = structure5m({ bars: [...gap, next], base: 1 });
+  assert.strictEqual(s.lastBreak.last.at, at(14));
+  assert.strictEqual(s.lastBreak.last.knownAt, new Date(END + MIN).toISOString());
+  // Without the missing bar, its own close.
+  assert.strictEqual(structure5m({ bars: ONE, base: 1 }).lastBreak.last.knownAt, new Date(END).toISOString());
+});
+
+test('structureLine: only a break at most RECENT candles old; unavailable only when 1m bars are configured', () => {
+  const s = structure5m({ bars: base3(), base: 3, fine: ONE });
+  const et = x => x.slice(11, 16);
+  assert.strictEqual(structureLine(s, et), '- 5m structure: BOS up through 105 (known 14:45, 0 candles ago); swing high 105, swing low 94.');
+  const old = { ...s, lastBreak: { last: { ...s.lastBreak.last, barsAgo: RECENT + 1 }, previous: null } };
+  assert.strictEqual(structureLine(old, et), null);
+  assert.strictEqual(structureLine({ ...s, lastBreak: { last: null, previous: null } }, et), null);
+  assert.strictEqual(structureLine(structure5m({ bars: base3(), base: 3 })), null, 'no 1m lane: nothing to say');
+  assert.match(structureLine(structure5m({ bars: base3(), base: 3, fine: ONE.slice(0, -12) })), /^- 5m structure: unavailable \(the 1m bars stop at /);
+});
+
+test('the briefing\'s structure5m: unavailable without 1m bars, built with them; the line within its byte budgets', () => {
   const steps = defaultRoundSteps();
   const none = B.buildBriefing({ symbol: 'NQ', bars: BARS, minutes: 3, roundSteps: steps });
   assert.match(none.sections.m3.data.structure5m.unavailable, /no 1m bars configured/);
@@ -102,9 +128,17 @@ test('the briefing\'s structure5m: unavailable without 1m bars, built with them;
   const d = brief.sections.m3.data.structure5m;
   assert.strictEqual(d.source, '1m bars');
   assert.deepStrictEqual(d, structure5m({ bars: BARS, base: 3, fine: FINE }));
-  const now = new Date(brief.closedAt);
-  const without = JSON.parse(JSON.stringify(brief));
-  delete without.sections.m3.data.structure5m;
-  const added = Buffer.byteLength(B.renderBriefing(brief, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
-  assert.ok(added > 0 && added <= M5_RENDER_BUDGET, `${added} bytes added`);
+  const added = b => {
+    const now = new Date(b.closedAt);
+    const without = JSON.parse(JSON.stringify(b));
+    delete without.sections.m3.data.structure5m;
+    return Buffer.byteLength(B.renderBriefing(b, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
+  };
+  const sizes = [];
+  for (let i = 400; i < BARS.length; i += 20) sizes.push(added(B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, i + 1), minutes: 3, fineBars: FINE, roundSteps: steps })));
+  const typical = sizes.reduce((x, y) => x + y, 0) / sizes.length;
+  const worst = Math.max(...sizes);
+  assert.ok(worst > 0, 'a recent break shows somewhere');
+  assert.ok(worst <= M5_RENDER_BUDGET, `worst ${worst} bytes`);
+  assert.ok(typical <= M5_TYPICAL_BUDGET, `typical ${typical} bytes`);
 });

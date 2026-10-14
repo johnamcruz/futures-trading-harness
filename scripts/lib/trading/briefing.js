@@ -100,7 +100,7 @@ const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine } = require('./fvg-frames');
-const { structure5m } = require('./m5-structure');
+const { structure5m, structureLine } = require('./m5-structure');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -719,6 +719,9 @@ function summaryLines(b, et) {
   // The FVGs near price (within 2R) or retested by their timeframe's last candle (fvg-frames.js fvgLine).
   const fvg = fvgLine(m3.fvgs, et, { price: m3.price, near: m3.oneR ? 2 * m3.oneR.points : NaN });
   if (fvg) out.push(fvg);
+  // The 5m structure only when its last break is recent (m5-structure.js structureLine).
+  const s5 = structureLine(m3.structure5m, et);
+  if (s5) out.push(s5);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
@@ -775,15 +778,15 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
 /**
  * A section's data as the detail shows it: what the summary already says in full is left out (SUMMARY_FIELDS: the
- * swing and range targets, the timeframes' FVGs; SUMMARY_ONLY; each candle's pattern, close location, range, volume and
- * levels; an unavailable timeframe or an event-driven one), and so is a candle's OHLCV when it is the `bar` above (the
- * base timeframe's own), so the text stays small; the JSON keeps it all.
+ * swing and range targets, the timeframes' FVGs, the 5m structure; SUMMARY_ONLY; each candle's pattern, close
+ * location, range, volume and levels; an unavailable timeframe or an event-driven one), and so is a candle's OHLCV when
+ * it is the `bar` above (the base timeframe's own), so the text stays small; the JSON keeps it all.
  */
 function detailEntries(data) {
   if ('brokerFields' in data) data = omit(data, ['brokerFields']);
