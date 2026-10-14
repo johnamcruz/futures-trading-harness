@@ -76,7 +76,7 @@ function syncRetiredMarks(home, { symbols = [], lanes = [], now = new Date() }) 
       write(signalFile(home, symbol, timeframe), { ...base, symbol: base.symbol || String(symbol).toUpperCase(), timeframe, recordedAt: now.toISOString(), candidates: [], retiredLane: names }, timeframe, names);
     }
   }
-  let files = [];
+  let files;
   try { files = fs.readdirSync(path.join(home, 'signals')).filter(f => /^[A-Z0-9]+-\d+m\.json$/.test(f)); } catch (_err) { files = []; }
   for (const f of files) {
     const [root, tf] = f.replace(/\.json$/, '').split('-');
