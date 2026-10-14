@@ -139,7 +139,7 @@ test('skills: a user-only command an autonomous doc names is marked as the user\
 
 test('skills: every broker tool the docs name is in the broker-mcp tool table', () => {
   const ref = DOCS.find(d => d.rel === 'skills/broker-mcp/SKILL.md').text;
-  const table = ref.slice(ref.indexOf('### Tools'), ref.indexOf('### Order mechanics'));
+  const table = ref.slice(ref.indexOf('### Tools'), ref.indexOf('### Where the rest is'));
   const known = new Set([...table.matchAll(/`([a-z_]+)`/g)].map(m => m[1]));
   assert.ok(known.has('place_order') && known.size > 15, 'the tool table moved; update this test');
   const TOOL = /^(get|list|search|place|modify|cancel|close|partial|journal)_[a-z_]+$/;

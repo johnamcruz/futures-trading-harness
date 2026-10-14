@@ -180,8 +180,8 @@ description: Rules for running the trading harness unattended (headless, schedul
      your last one (the Execution rule).
    - The scan again only after you fetched new bars. A trade review's
      `get_bars` over a trade's hold is one read per trade reviewed.
-   - A failed read may be retried once (broker-mcp skill, Failures and
-     limits). Never resend an order call blindly: after a failed or timed-out
+   - A failed read may be retried once (the `order-failures`
+     skill). Never resend an order call blindly: after a failed or timed-out
      one, read `list_open_orders` and `get_account_snapshot`, and send it
      again only if they show it didn't go through and it is still needed (a
      close or a `[protect]` stop always is). A gate refusal ends the entry
@@ -192,7 +192,7 @@ description: Rules for running the trading harness unattended (headless, schedul
    may not move until the next one. An order
    that hasn't filled at its one check is journalled as working and the cycle
    ends (`executed` or `managed`, saying it is working); the next cycle checks
-   the fill (broker-mcp skill, Order mechanics). Every entry carries its
+   the fill (the `order-mechanics` skill). Every entry carries its
    stop bracket; a refused entry (`success: false` with an `errorCode`
    other than 6 (`OrderPending`) or 7 (`UnknownError`), its brackets
    included) ends the cycle as `blocked` with the broker's message,

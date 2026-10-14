@@ -8,7 +8,7 @@
  * gate reads (order-gate.js: the `setup:<name> <side>` tag first, then the
  * stop and target prices, which must agree with the brackets).
  *
- * Rounding, as the skills teach it (trade-session, broker-mcp): a stop away
+ * Rounding, as the skills teach it (trade-session, order-rationale): a stop away
  * from the entry, ceil(distance / tickSize), so a stop is never tighter than
  * the strategy's distance; a target toward the entry, floor. Pure: no files,
  * no clock.

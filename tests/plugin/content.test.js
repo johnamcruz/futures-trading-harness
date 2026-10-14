@@ -84,7 +84,37 @@ test('backticked skill and agent references point at files that exist', () => {
       assert.ok(known.has(m[1]), `${file}: references missing skill or agent "${m[1]}"`);
     }
   }
+  // Skill references in prose too: a name, backticked or not, followed by "skill", "skill's" or "step N" must be a skill,
+  // and "(<skill> skill, <Section>)" must name a heading of that skill (a split skill leaves no pointer to a gone section).
+  const misses = text => skillRefMisses(text, new Set(skills), s => read(`skills/${s}/SKILL.md`));
+  for (const file of [...files, ...list('rules/trading').map(r => `rules/trading/${r}`)]) {
+    assert.deepStrictEqual(misses(read(file)), [], file);
+  }
+  // The check catches what it is for (it would fail without it).
+  assert.deepStrictEqual(misses('see the no-such-skill skill'), ['no-such-skill']);
+  assert.deepStrictEqual(misses('(the `no-such-thing` skill)'), ['no-such-thing']);
+  assert.deepStrictEqual(misses('as in no-such-flow step 3'), ['no-such-flow']);
+  assert.deepStrictEqual(misses('the fill (broker-mcp skill, Order mechanics).'), ['broker-mcp, Order mechanics']);
+  assert.deepStrictEqual(misses('(broker-mcp skill, Session loop) and the trade-session skill\'s step 6, trade-session step 6'), []);
 });
+
+/**
+ * Skill references in prose that point nowhere: "<name> skill", "<name> skill's", "<name> step N" (the name backticked
+ * or not) where <name> isn't a skill, and "<name> skill, <Section>)" where <Section> isn't one of its headings.
+ */
+function skillRefMisses(text, skillSet, readSkill) {
+  const flat = text.replace(/\s+/g, ' ');
+  const out = [];
+  for (const m of flat.matchAll(/(?<![\w/-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`?(?= skill\b| skill's\b| step \d)/g)) {
+    if (!skillSet.has(m[1])) out.push(m[1]);
+  }
+  for (const m of flat.matchAll(/(?<![\w/-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`? skill, ([A-Z][^).,"]*)\)/g)) {
+    if (!skillSet.has(m[1])) continue;
+    const headings = readSkill(m[1]).split('\n').filter(l => /^#{2,4} /.test(l)).map(l => l.replace(/^#+ /, '').trim());
+    if (!headings.some(h => h.startsWith(m[2].trim()))) out.push(`${m[1]}, ${m[2].trim()}`);
+  }
+  return out;
+}
 
 test('commands have a description and point at an existing skill', () => {
   for (const f of list('commands')) {
@@ -137,7 +167,7 @@ test('every harness manifest agrees on name and version, and its paths exist', (
 // fills can lag): every doc that places or verifies an order checks it once, and an unfilled one ends the cycle.
 test('order docs check a new order once and never wait or poll for a fill; the cycle result is plain text', () => {
   const docs = {
-    'skills/broker-mcp/SKILL.md': [/check a new order once; never wait for a fill/i, /read its status once/, /Still working[^]*?journal that\s+it is working[^]*?end the cycle/, /Never wait or poll for a fill/, /closing is acting,\s+not waiting/,
+    'skills/order-mechanics/SKILL.md': [/check a new order once; never wait for a fill/i, /read its status once/, /Still working[^]*?journal that\s+it is working[^]*?end the cycle/, /Never wait or poll for a fill/, /closing is acting,\s+not waiting/,
       // An unbracketed entry still working is cancelled, and the cancel confirmed (orders and positions read once).
       /Still working without a stop bracket[^]*?`cancel_order` it[^]*?read `list_open_orders` and `list_open_positions`\s+once to confirm/,
       /Gone and flat: journal\s+a review tagged `result:nofill`/, /Filled before\s+the cancel \(in whole or part\): it is a live, executed trade/,
@@ -182,7 +212,7 @@ test('order docs check a new order once and never wait or poll for a fill; the c
   }
   // No doc still has the executor wait for the fill to show before protecting it.
   assert.doesNotMatch(read('agents/trade-executor.md'), /as soon as\s+`list_open_positions` shows the fill/);
-  assert.doesNotMatch(read('skills/broker-mcp/SKILL.md'), /stop once `list_open_positions` shows the fill/);
+  assert.doesNotMatch(read('skills/order-mechanics/SKILL.md'), /stop once `list_open_positions` shows the fill/);
   // The gate counts a placed entry until a review (result:nofill counts) names it: what the docs tell the model to journal.
   assert.match(read('scripts/lib/trading/order-gate.js'), /hasTag\(e, 'result:nofill'\)/);
   // The generated copies carry it too (node scripts/sync-harness.js).
@@ -199,12 +229,12 @@ test('order docs check a new order once and never wait or poll for a fill; the c
   // A refusal excludes codes 6 (OrderPending) and 7 (UnknownError): the gateway reads them as unknown outcomes (order-markers.js).
   const EXCLUDES = /`success: false`\s+(?:and|with)\s+an\s+`errorCode`\s+other\s+than\s+6\s+\(`OrderPending`\)\s+or\s+7\s+\(`UnknownError`\)/;
   const BARE_REFUSAL = /`success: false`\s+(?:and|with)\s+an\s+`errorCode`(?!\s+other\s+than\s+6\s+\(`OrderPending`\)\s+or\s+7\s+\(`UnknownError`\))/;
-  for (const rel of ['agents/trade-executor.md', 'skills/broker-mcp/SKILL.md', 'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'rules/trading/execution.md']) {
+  for (const rel of ['agents/trade-executor.md', 'skills/order-mechanics/SKILL.md', 'skills/broker-refusals/SKILL.md', 'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'rules/trading/execution.md']) {
     assert.match(read(rel), EXCLUDES, rel);
     assert.doesNotMatch(read(rel), BARE_REFUSAL, rel);
   }
   // A flat entry after a successful reply is a nofill only when nothing shows it filled; unknown yet, no review.
-  for (const rel of ['agents/trade-executor.md', 'skills/broker-mcp/SKILL.md', 'skills/trade-session/SKILL.md']) {
+  for (const rel of ['agents/trade-executor.md', 'skills/order-mechanics/SKILL.md', 'skills/trade-session/SKILL.md']) {
     assert.match(read(rel), /`result:nofill`\s+only\s+when\s+nothing\s+shows\s+the\s+order\s+filled\.\s+If\s+the\s+reply\s+or\s+the\s+broker's\s+message\s+says\s+a\s+position\s+was\s+opened\s+or\s+closed,\s+or\s+`search_trades`\s+shows\s+any\s+fill\s+for\s+the\s+order[^]*?If\s+it\s+can't\s+be\s+told\s+yet[^]*?no\s+review\s+this\s+cycle/, rel);
   }
   const generated = ['workspace/AGENTS.md', 'workspace/QWEN.md', 'workspace/opencode.json', 'qwen-extension/QWEN.md', 'qwen-extension/agents/trade-executor.md', '.codex/agents/trade-executor.toml'];
@@ -228,7 +258,7 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
     /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way \(the candidate's `inTheWay` in the briefing's\s+`m3` `candidates`: the first level in its direction in points and R, where\s+1R is its own stop/,
     /multi-timeframe alignment for the side \(aligned, pullback, mixed, counter\)\s+and the size it implies/, /A plan\s+that can't name them isn't ready/,
   ]) assert.match(ts, re);
-  assert.match(read('skills/broker-mcp/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
+  assert.match(read('skills/gate-refusals/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
 });
 
 test('the roles start from the bar briefing, reuse it, and say which versions they used', () => {
@@ -282,7 +312,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
   // Codex can't take Read away (its sandbox reads files): a role without Read is told not to read files.
   assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/market-structure\/SKILL\.md, [^)]*skills\/harness-tools\/SKILL\.md under the harness root\): take bars and market data only through the tools above\./);
-  assert.match(read('.codex/agents/trade-executor.toml'), /except your skills \(skills\/broker-mcp\/SKILL\.md under the harness root\)/, 'the executor can still load broker-mcp');
+  assert.match(read('.codex/agents/trade-executor.toml'), /except your skills \(skills\/broker-mcp\/SKILL\.md, skills\/order-mechanics\/SKILL\.md, skills\/order-failures\/SKILL\.md, skills\/order-rationale\/SKILL\.md, skills\/trade-journal\/SKILL\.md, skills\/gate-refusals\/SKILL\.md, skills\/broker-refusals\/SKILL\.md under the harness root\)/, 'the executor can still load its skills');
   assert.doesNotMatch(read('.codex/agents/risk-manager.toml'), /Do not read files/, 'a role that has Read may');
   // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.
   for (const a of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
