@@ -15,26 +15,21 @@ description: Read futures market structure - swing highs/lows, trend vs range, b
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the
 `harness-tools` skill) holds this bar's structure (`m3`, `m15`, `h1`): use
-it, and compute only what it doesn't hold. The latest BOS or CHoCH
-(`lastBreak`) is computed there from confirmed swings: never call it by eye.
+it, and compute only what it doesn't hold.
 
-1. **Swings.** Confirmed fractal swings (k=2: a pivot with 2 strictly
-   lower highs or higher lows on each side, confirmed 2 bars later). Mark
+1. **Swings**: how they are confirmed, the `bos-vs-choch` skill. Mark
    the last 3-4 of each.
 2. **Trend, range or transition**: the `trend-vs-range` skill.
-3. **Events.** BOS: a close beyond the last swing in the trend's
-   direction. CHoCH: the first close beyond the last swing against it, an
-   early warning, not a reversal by itself (the `pullback-vs-reversal`
-   skill). A wick through a swing that closes back inside is a sweep, not
-   a break (the `breakout-vs-fakeout` skill).
+3. **Events**: BOS and CHoCH, and what each means by timeframe, the
+   `bos-vs-choch` skill; a move against the trend, `pullback-vs-reversal`;
+   a wick through a swing, `breakout-vs-fakeout`.
 4. **Location.** Split the current dealing range (last major swing low to
    high) at 50%: above is premium, below is discount. Within a trend,
    pullbacks into discount (premium for shorts) are where continuation
    setups sit.
 5. **Invalidation**: the `invalidation` skill (the stop stays the
    strategy's).
-6. **Higher timeframe wins.** A 3-minute BOS against a 1-hour downtrend is
-   a counter-trend trade.
+6. **Higher timeframe wins** (`bos-vs-choch`, by timeframe).
 
 ## Examples
 

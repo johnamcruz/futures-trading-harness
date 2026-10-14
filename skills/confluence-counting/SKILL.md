@@ -36,8 +36,8 @@ overrule it. A missing field is `unknown` and counts neutral.
   `candidate.values` are its own rules' readings (item 6, neutral).
 - **Indicators together are one item**: EMA, ADX and SuperTrend readings
   count together in item 5, never separately.
-- **An HTF structure break is read in item 1**: a 15m or 1h break its way
-  (`m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
+- **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
+  `m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
   the HTF read, never an item of its own.
 - **Not counted**: the trend rule, the regime fit, the room, the window,
   the news: the priority order's own steps or the gate's.

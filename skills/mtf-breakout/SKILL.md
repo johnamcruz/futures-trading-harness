@@ -32,7 +32,10 @@ By PLAN step:
    edge, swing, previous candle high/low).
 - **4 Setup**: a completed 15m or 60m candle closes beyond the level with
    acceptance: a strong close in the extreme third, the body beyond the
-   level, not just a wick (`breakout-vs-fakeout`, `candle-reading`).
+   level, not just a wick (`breakout-vs-fakeout`, `candle-reading`). A
+   close beyond a level that is also a BOS on that timeframe
+   (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure
+   (`bos-vs-choch`).
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`:
    `m3.bar.rangeAtr`, `m3.participation.relVolLast3VsPrior20`), no
    absorption against it (`absorption`); counted by `confluence-counting`.
@@ -44,7 +47,8 @@ By PLAN step:
    (`candidate.stopPoints`, `order_plan`): check it sits there
    (`invalidation`). Size: the priority order and the rulebook.
 - **9 Manage**: a close back inside the level means the breakout failed:
-   invalidation.
+   invalidation. A CHoCH against the trade on its timeframe or higher
+   (`bos-vs-choch`) is one too.
 
 **Paired with `mtf-rejection`**: a failed breakout (a close back inside)
 is the setup for a rejection the other way.
