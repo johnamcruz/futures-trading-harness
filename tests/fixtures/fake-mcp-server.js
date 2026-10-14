@@ -4,7 +4,8 @@
 // FAKE_POSITIONS / FAKE_ORDERS / FAKE_TRADES / FAKE_SEARCH_ORDERS (default []); every other request
 // is answered with the method and tool name it received, so tests can see what
 // the gateway forwarded. FAKE_DELAY_MS delays those other replies; FAKE_DROP=<tool>
-// never answers that tool (a lost reply); FAKE_PLACE_ERROR=<text> answers place_order with an
+// never answers that tool (a lost reply); FAKE_ERROR=<tool> answers that tool with an isError result (a broker
+// error); FAKE_ACCOUNT_DELAY_MS delays the account tools' replies (a late reply); FAKE_PLACE_ERROR=<text> answers place_order with an
 // isError result of that text; FAKE_ARGS=<file> logs each tools/call as a JSON line. When set, FAKE_SERVER_CONFIG,
 // FAKE_CONTRACTS, FAKE_PLACE_RESULT, FAKE_CLOSE_RESULT and FAKE_BARS answer get_server_config, search_contracts, place_order,
 // close_position and get_bars.
@@ -26,10 +27,11 @@ process.stdin.on('data', chunk => {
       if (name && name === process.env.FAKE_DROP) continue;
       const text = ACCOUNT[name] ? (process.env[ACCOUNT[name]] || '[]')
         : OPTIONAL[name] && process.env[OPTIONAL[name]] ? process.env[OPTIONAL[name]] : `forwarded:${msg.method}${name ? `:${name}` : ''}`;
-      const isError = name === 'place_order' && process.env.FAKE_PLACE_ERROR ? true : undefined;
-      const body = isError ? process.env.FAKE_PLACE_ERROR : text;
+      const failed = Boolean(name) && name === process.env.FAKE_ERROR;
+      const isError = failed || (name === 'place_order' && process.env.FAKE_PLACE_ERROR) ? true : undefined;
+      const body = failed ? `${name} failed: upstream error` : isError ? process.env.FAKE_PLACE_ERROR : text;
       const reply = () => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: body }], isError } })}\n`);
-      const delay = ACCOUNT[name] || name === 'get_server_config' ? 0 : Number(process.env.FAKE_DELAY_MS || 0);
+      const delay = ACCOUNT[name] ? Number(process.env.FAKE_ACCOUNT_DELAY_MS || 0) : name === 'get_server_config' ? 0 : Number(process.env.FAKE_DELAY_MS || 0);
       if (delay) setTimeout(reply, delay);
       else reply();
     }

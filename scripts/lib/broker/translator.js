@@ -13,7 +13,13 @@
  * come from its ticker (`name`), the exchange's form: root + month code + year,
  * e.g. NQZ5 or MNQH26. Answers are cached per broker (contracts-<broker>.json
  * in the harness home). The front month is looked up once per trading day, so
- * a name never changes meaning during a session (the harness is flat overnight).
+ * a name never changes meaning during a session (the harness is flat overnight):
+ * the first one recorded for a day stays for that day, across processes. A
+ * contract the broker marks active in a search_contracts answer (the
+ * agent's or the translator's own search) sets the day's front month when
+ * the one recorded is an earlier day's; get_contract and
+ * list_available_contracts answers record contracts but never a front month. Only today's front month names a contract
+ * by its root: when today's lookup fails, a result is named by its month.
  * Each contract the broker describes also records its root's tick spec there
  * (`specs`: { tickSize, tickValue, name, description, id, readAt }), the one
  * source of tick specs for live and replay trading (trading/broker-specs.js
@@ -50,6 +56,9 @@ const TICKER = /^((?=[A-Z0-9]*?[A-Z])[A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$/;
 const { tradingDayKey } = require('../trading/clock');
 // Tools whose result lists contracts: their `id` is a contract id too.
 const CONTRACT_TOOLS = new Set(['search_contracts', 'get_contract', 'list_available_contracts']);
+// The one contract answer that may set the day's front month from its activeContract flags: a search of the root,
+// the agent's or the translator's own. A get_contract answer (one contract, possibly a stale flag) never does.
+const FRONT_TOOLS = new Set(['search_contracts']);
 // Tools whose contractId input is the agent's own label, never a broker id (the journal).
 const KEEP_ARGS = new Set(['journal_add', 'journal_read']);
 
@@ -139,13 +148,15 @@ function serverLimits(data, readAt) {
 /**
  * Merge into the file: the gateway's and the runner's translators share it, and
  * hooks read it, so one process never drops another's ids. Per root, the front
- * month of the later trading day wins.
+ * month of the later trading day wins; within one trading day the first one
+ * recorded (`into`, the file's) stays, so every process names one front month
+ * for the whole day even if the broker's active flag moves during it.
  */
 function mergeCache(into, from) {
   Object.assign(into.ids, from.ids);
   const valid = f => Boolean(f && f.id && typeof f.day === 'string');
   for (const [root, f] of Object.entries(from.front)) {
-    if (valid(f) && (!valid(into.front[root]) || f.day >= into.front[root].day)) into.front[root] = f;
+    if (valid(f) && (!valid(into.front[root]) || f.day > into.front[root].day)) into.front[root] = f;
   }
   // Per root, the spec read later wins (a process's older read never replaces a newer one).
   const read = sp => Boolean(sp && typeof sp.readAt === 'string');
@@ -168,18 +179,49 @@ function writeCache(file, cache) {
 
 /**
  * The one standard name for a contract the caller may name several ways: a
- * month that is the cache's front month becomes its root (MNQ:2026-12 ->
- * MNQ), and a broker id the cache knows becomes its standard name. Anything
- * else comes back as given. Local; no lookup.
+ * month that is the cache's front month of trading day `day` becomes its root
+ * (MNQ:2026-12 -> MNQ), and a broker id the cache knows becomes its standard
+ * name. A front month recorded on another trading day (yesterday's, before a
+ * roll) names nothing: its month keeps its own name, so a month is never taken
+ * for whatever the root means today. Anything else comes back as given. Local;
+ * no lookup.
  */
-function canonicalName(id, cache) {
+function canonicalName(id, cache, day) {
   if (typeof id !== 'string') return id;
   const std = parseStandardName(id);
   const known = std ? std.month && { root: std.root, month: std.month } : cache.ids[id];
   if (!known) return id;
-  const front = cache.front[known.root];
-  if (front && (front.month === known.month || front.id === id)) return known.root;
+  if (frontMonth(cache, known.root, day) === known.month) return known.root;
   return `${known.root}:${known.month}`;
+}
+
+/**
+ * The month (YYYY-MM) of a root's front month recorded for trading day `day`, from the id the translator sends the
+ * root to (cache.ids[front.id]), or null: none recorded that day, its id unknown, or a file whose front month says
+ * another root or month than its id (a corrupt file never merges two months).
+ */
+function frontMonth(cache, root, day) {
+  const front = cache.front[root];
+  if (!front || front.day !== day) return null;
+  const known = cache.ids[front.id];
+  if (!idEntry(known) || known.root !== root || (front.month !== undefined && front.month !== known.month)) return null;
+  return known.month;
+}
+
+/**
+ * The month name (ROOT:YYYY-MM) of a contract named any way: a root is the front month recorded for trading day
+ * `day` (as it is when the name is resolved), a broker id the cache knows is its month. Anything else comes back as
+ * given. What the gateway's ledger and order records keep, so a root never changes meaning under them. Local.
+ */
+function monthName(id, cache, day) {
+  if (typeof id !== 'string') return id;
+  const std = parseStandardName(id);
+  if (std && !std.month) {
+    const m = frontMonth(cache, std.root, day);
+    return m ? `${std.root}:${m}` : id;
+  }
+  const known = std || cache.ids[id];
+  return idEntry(known) ? `${known.root}:${known.month}` : id;
 }
 
 /** The root of a broker id, from the cache (local; no lookup), or null. */
@@ -245,12 +287,18 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
     const active = mine.filter(c => c.activeContract);
     // The broker's own front month; without the flag, the nearest month.
     const front = (active.length ? active : mine).slice().sort((a, b) => cache.ids[a.id].month.localeCompare(cache.ids[b.id].month))[0];
-    if (front) cache.front[root] = { id: front.id, month: cache.ids[front.id].month, day: tradingDayKey(now()) };
+    // Today's front month, once recorded, stays for the day (a lookup by month never moves it).
+    if (front && !frontFresh(root)) cache.front[root] = { id: front.id, month: cache.ids[front.id].month, day: tradingDayKey(now()) };
     save();
     return mine;
   }
 
   const frontFresh = root => Boolean(cache.front[root]) && cache.front[root].day === tradingDayKey(now());
+  // A contract a search_contracts answer marks active is its root's front month: it replaces one recorded on an
+  // earlier day (yesterday's, before a roll). Within a trading day the front month stays fixed.
+  const refreshFront = (root, id, month) => {
+    if (!frontFresh(root)) cache.front[root] = { id, month, day: tradingDayKey(now()) };
+  };
 
   /**
    * Today's front month of a root. Another process (gateway or runner) may have
@@ -299,10 +347,11 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
     try {
       await ensureFront(known.root);
     } catch (_err) {
-      // the search failed: yesterday's front month if there is one, else the month's own name (both translate back)
+      // the search failed: the month's own name, which translates back without one. Never yesterday's front month
+      // by the root: after a roll the root means another month today, and the gate would match the two.
     }
     const front = cache.front[known.root];
-    return front && front.id === id ? known.root : `${known.root}:${known.month}`;
+    return frontFresh(known.root) && front.id === id ? known.root : `${known.root}:${known.month}`;
   }
 
   async function translateArgs(tool, args = {}) {
@@ -345,10 +394,16 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
       const items = (Array.isArray(data) ? data : [data]).filter(c => c && typeof c.id === 'string' && c.name !== undefined);
       let learned = false;
       const at = now().toISOString(); // one read time for the whole answer: its front month's spec is kept
+      const active = {};
       for (const c of items) {
-        if (remember(c, at)) learned = true;
+        const t = remember(c, at);
+        if (t) learned = true;
         else notTicker.add(c.id);
+        if (t && FRONT_TOOLS.has(tool) && c.activeContract === true && (!active[t.root] || t.month < active[t.root].month)) active[t.root] = { id: c.id, month: t.month };
       }
+      // Only the answers whose activeContract the interface defines refresh a front month: a root's nearest active
+      // month, as a lookup takes it.
+      for (const [root, f] of Object.entries(active)) refreshFront(root, f.id, f.month);
       if (learned) save();
     }
     return walk(data, contractList);
@@ -359,5 +414,5 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
 
 module.exports = {
   CONTRACT_TOOLS, TranslationError,
-  isStandardName, parseStandardName, parseTicker, readCache, serverLimits, standardRoot, canonicalName, createTranslator,
+  isStandardName, parseStandardName, parseTicker, readCache, serverLimits, standardRoot, canonicalName, frontMonth, monthName, createTranslator,
 };

@@ -120,3 +120,45 @@ test('tracker: its records carry the contract by the gate\'s name (canon), whate
   assert.strictEqual(out.msg.params.arguments.contractId, 'MNQ:2026-12', 'sent as the client named it');
   assert.deepStrictEqual(markers.readMarkers(env).map(x => x.contractId), ['MNQ']);
 });
+
+test('a record written under a bare root (no front month recorded yet) is named by its month once the order has gone out: on an error reply and when the reply is overdue', () => {
+  const { canonicalArgs } = require('../../scripts/lib/trading/mcp-gateway');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'] } } }));
+  const file = path.join(home, 'contracts-sim.json');
+  const ids = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T14:30:00Z' };
+  const now = new Date('2026-10-07T14:30:00Z');
+  const tracker = createOrderTracker({ env, graceMs: 120000, searchOrders: async () => [], canon: a => canonicalArgs(a, env) });
+  const place = (id, rationale) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'place_order', arguments: { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale } } });
+  const kept = () => markers.readMarkers(env).map(m => m.contractId).sort();
+  for (const [id, settle] of [[1, () => tracker.onReply(1, { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'HTTP 504' }], isError: true } })], [2, () => tracker.onOverdue(2)]]) {
+    fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-06' } } })); // yesterday's
+    assert.ok(!tracker.tagRequest(place(id, '[exit] flatten'), { now }).refuse);
+    assert.ok(kept().includes('MNQ'), 'written before the translator looked today\'s front month up');
+    fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-07' } } })); // looked up to send it
+    settle();
+    assert.ok(!kept().includes('MNQ'), `request ${id}: renamed`);
+  }
+  assert.deepStrictEqual(kept(), ['MNQ:2027-03', 'MNQ:2027-03']);
+});
+
+test('a record written under a bare root before 18:00 ET is never named after 18:00 by the next trading day\'s front month: the naming is the one the record was written with', () => {
+  const { canonicalArgs } = require('../../scripts/lib/trading/mcp-gateway');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'] } } }));
+  const file = path.join(home, 'contracts-sim.json');
+  const ids = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
+  // 17:59:50 ET: no front month recorded for 2026-10-07 (yesterday's only), so the record keeps the root.
+  fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-06' } } }));
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T21:59:50Z' };
+  const tracker = createOrderTracker({ env, graceMs: 120000, searchOrders: async () => [], canon: a => canonicalArgs(a, env) });
+  const place = { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'place_order', arguments: { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' } } };
+  assert.ok(!tracker.tagRequest(place, { now: new Date('2026-10-07T21:59:50Z') }).refuse);
+  assert.deepStrictEqual(markers.readMarkers(env).map(m => m.contractId), ['MNQ']);
+  // 18:00:21 ET: March recorded for 2026-10-08. The reply is overdue: the record stays as written, never March.
+  env.FTH_TEST_NOW = '2026-10-07T22:00:21Z';
+  fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-08' } } }));
+  tracker.onOverdue(5);
+  assert.deepStrictEqual(markers.readMarkers(env).map(m => m.contractId), ['MNQ']);
+});
