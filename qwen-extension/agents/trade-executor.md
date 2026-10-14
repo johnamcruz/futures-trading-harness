@@ -14,6 +14,7 @@ tools:
   - mcp__broker__close_position
   - mcp__broker__partial_close_position
   - mcp__broker__journal_add
+  - mcp__harness__skill_lookup
 approvalMode: default
 background: false
 ---

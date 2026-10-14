@@ -165,11 +165,18 @@ function agentPrompt(agent) {
     '',
     '## Your skills (already loaded)',
     '',
-    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${notAgain(agent, plan)}`,
+    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${plan && deniesSkillTool(agent.tools || [], plan.mode) ? NO_INDEX_LOOKUP : notAgain(agent, plan)}`,
     '',
     ...docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']),
   ].join('\n');
 }
+
+/**
+ * A role with no index denied the skill tool (deniesSkillTool: it holds skill_lookup): its skills are below, and another
+ * one they name is a skill_lookup away, so opencode's listing of every skill stays out of its prompt (shorter than
+ * notAgain's sentence it replaces).
+ */
+const NO_INDEX_LOOKUP = 'Read them here; others they name: skill_lookup.';
 
 /** The skill_lookup call a role makes, with its own name (the order gate counts a lookup by it). */
 const lookupCall = role => `\`skill_lookup {"skill": "<skill>", "role": "${role}"}\``;
