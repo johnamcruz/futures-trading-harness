@@ -31,9 +31,8 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 15m | the working structure and the session levels | more |
 | 60m | HTF levels (prior day, overnight, CRT) | most |
 
-**Strongest**: a 15m or 60m rejection confirmed by a 3m or 5m candle
-(step 6), inside the HTF bias (step 1); a lone 3m or 5m one against the
-HTF is counter-trend.
+**Strongest**: a 15m or 60m rejection confirmed on 3m or 5m (step 6),
+with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
 
 By PLAN step:
 
@@ -57,8 +56,9 @@ By PLAN step:
    pullback structure (`m3.lastBreak.last`). Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick; the stop is the
    strategy's (`candidate.stopPoints`, `order_plan`): check it sits beyond
-   the wick (`invalidation`). The target is the next swing in its way
-   (the room: `candidate.inTheWay`); the exit stays the strategy's. Size: the priority order and the rulebook.
+   the wick (`invalidation`). Aim for the next swing; the room to the next level
+   (`candidate.inTheWay`, `candidate.ahead`) is step 3's; the target and
+   exit stay the strategy's.
 - **9 Manage**: invalidation is a close back through the level against the
    trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 
@@ -73,8 +73,8 @@ evidence in general.
 ```text
 Take: at the RTH VWAP 21520.50, 60m and 15m up: on the 15m close a wick to 21517.25, close 21523.00
   (top third); then on the 3m close a displacement up. vwap_reclaim long fired. Priority order -> take.
-Skip: at the swing high 21588.25 (3m, a minor level), 60m and 15m up: on the 5m close a shooting star
-  (H 21590.75, C 21585.50). crt_1h short fired. Priority order (step 2, a fade only at an HTF level): skip.
+Skip: at the swing high 21588.25 (3m, a minor level), 60m and 15m up: on the 3m close a shooting star
+  (H 21590.75, C 21585.50). ofi_absorption short fired. Priority order (step 2, a fade only at an HTF level): skip.
 Loser: at the prior RTH low 21402.00: on the 60m close a rejection (L 21396.75, C 21405.50), on the
   3m close a displacement. crt_1h long at 21407.25, stop 21396.25 (11.00 pts = 44 ticks,
   $22.00 on 1 MNQ); the next 15m closed back below 21402.00. -44 ticks, -$22.00.

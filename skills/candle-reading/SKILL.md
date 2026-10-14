@@ -69,7 +69,7 @@ general, none measured in our data yet. Confirmation only.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 60m close (bars_fetch) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  on the 60m close (a bars_fetch file) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   crt_1h short. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); the 15m still forming.
   orb long; candidate.inTheWay session VAH at 0.4R. Priority order (step 3, room): skip.
