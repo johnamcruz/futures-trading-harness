@@ -821,3 +821,22 @@ test('the briefing at a new session\'s first candle (18:00 ET, Sunday too) agree
     }
   }
 });
+
+test('an 18:00 candle that trades through the last session\'s overnight range shows no stale overnight, IB or opening-range reaction (the session guard)', () => {
+  const G = require('../fixtures/golden-bars');
+  const s = G.SERIES.find(x => x.label === 'MNQ 3m');
+  // A copy of the fixture's bars (never the golden data): Sunday's 18:00 bar's low pushed down through Friday's
+  // overnight high and IB, so without the guard the bar would read as rejecting them.
+  const bars = G.load(s).map(({ ms: _ms, ...x }) => ({ ...x }));
+  const etOf = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const i = bars.findIndex(b => etOf(b.t) === 'Sun 18:00');
+  assert.ok(i > 0, 'a Sunday open in the fixture');
+  bars[i] = { ...bars[i], l: 27360 };
+  const { levelsAsOf } = require('../../scripts/lib/trading/market-snapshot');
+  const before = levelsAsOf(bars, i - 1);
+  // The edit makes the bar trade through the last session's overnight high (its open above it, its close above it).
+  assert.ok(before.overnight && bars[i].l < before.overnight.high && bars[i].c > before.overnight.high && bars[i].o > before.overnight.high, JSON.stringify(before.overnight));
+  const c = B.buildBriefing({ symbol: s.symbol, bars: bars.slice(0, i + 1), minutes: 3, blackouts: { items: [] } }).sections.m3.data.candles['3m'];
+  assert.match(etOf(c.t), /^Sun 18:00$/);
+  assert.ok(!Object.keys(c.levels).some(n => /^(overnight|IB|opening range)/.test(n)), JSON.stringify(c.levels));
+});
