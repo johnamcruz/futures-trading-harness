@@ -305,6 +305,21 @@ left out:
 To be filled in after the census, below this line, without changing
 anything above it.
 
+**Errata to the pre-registered text** (from review; the text above is
+left as committed, and no rule or result depends on these):
+
+- Gap 2 ("Higher-timeframe indicators") lists only `htf_*` and
+  `mtf_bias` as what exists on the higher timeframes. It leaves out
+  `htfc_*(m)` (the candle in progress) and `crt_dir(m)`, `crt_risk(m)`,
+  `crt_target(m)` (the CRT detector on the m-minute candle). The gap
+  stands: there is still no EMA, ATR or swing point on those timeframes.
+- Gap 6 ("Daily bias") says a daily trend never gets its EMA votes.
+  Wrong: `ema` seeds from the first value, so the close-vs-EMA20 vote is
+  cast (and the structure vote too); only the EMA20-vs-EMA50 vote is
+  missing, since 240 hours hold about 10 daily candles and that vote
+  needs 50. So `mtf_bias(1440)` is a two-vote read on few candles: weak,
+  not absent.
+
 **Verdict: nothing survives.** Every variant's BH-adjusted p is 1.000 (the
 smallest raw one-sided p is F8B's 0.082), and no 95% interval's lower bound is above zero. No
 strategy document is written; every family stays in this catalog only.
@@ -353,19 +368,22 @@ year; BH-adjusted p over the 27 variants.
 | F9C | 57 | -0.032 [-0.356, 0.313] | 0.86 | 40% | 2.2 | 57 / -0.032 | 0 / - | -0.25 / 0.19 / -0.20 | 1.000 |
 | `crt_1h` (reference) | 241 | -0.074 [-0.239, 0.098] | 1.17 | 35% | 9.3 | 212 / -0.060 | 29 / -0.172 | -0.38 / -0.01 / 0.14 | not in the set |
 
-No variant has the same positive sign in all three years except F8B (38
-trades, interval from -0.12 to 0.70), which is where 27 tries are
-expected to put one by chance.
+Only F8B (38 trades, interval from -0.12 to 0.70) has a positive mean in
+all three years. That is no more than chance: with no edge, a variant's
+yearly means are each positive about half the time, so all three are
+positive with odds of about 1 in 8, and 27 variants would give about 3
+such variants (27 / 8).
 
 ### F1 beside `crt_1h`
 
 - F1 trades far more often than `crt_1h` (34 to 93 trades a month against
   9) and does worse: every F1 variant's interval lies wholly below zero,
-  while `crt_1h`'s straddles it. The conditions F1 drops (a hourly range
-  of at least 3 ATR, a sweep at most half the range deep and at most 10
-  bars old, one setup per candle, New York hours) are what keep
-  `crt_1h` near break-even; a plain "hour swept, close back inside" is a
-  losing trade after costs.
+  while `crt_1h`'s straddles it. A plain "hour swept, close back inside"
+  is a losing trade after costs here. A hypothesis, not a finding: the
+  conditions F1 drops (an hourly range of at least 3 ATR, a sweep at most
+  half the range deep and at most 10 bars old, one setup per candle, New
+  York hours) are what keep `crt_1h` near break-even. They were not
+  tested one at a time, so which of them matter (if any) is unknown.
 - **The session matters more than the trigger.** A and B trade the whole
   session, and the gate's daily limits (3 losing trades, 6 entries per
   trading day, by default) are used up overnight, where the 3-minute ATR
@@ -401,9 +419,15 @@ These are not findings (nothing survived); they are where a next round
 might look, each to be pre-registered and measured again on Train
 before it is believed:
 
-- The with-trend pullbacks in RTH (F3A, F3B: 1h trend, VWAP touch, 3m
-  shift) and the HTF sweep before a CISD/OTE entry (F6) are the only
-  families near zero rather than below it; F3's 2023 is negative in both.
+- The variants whose mean is above zero, all with intervals that
+  straddle it: the with-trend pullbacks in RTH (F3A, 379 trades, +0.025R;
+  F3B, 248, +0.037R; 1h trend, VWAP touch, 3m shift; 2023 negative in
+  both), the HTF sweep before a CISD/OTE entry (F6A, 316, +0.021R; F6B,
+  323, +0.071R; F6C, 259, +0.008R), and, with higher means on small
+  samples, the session-level sweep with the bias (F7A, 35 trades,
+  +0.112R; F7C, 64, +0.098R), the initial-balance retest (F8B, 38,
+  +0.281R), and F4C (14 trades, +0.423R, too few for an interval). The
+  small-sample ones are the likeliest to be noise.
 - The same F3 rules over the whole session with the session VWAP (F3C)
   lose -0.11R: as for F1, the overnight trades and the daily limits they
   use up decide the result.
