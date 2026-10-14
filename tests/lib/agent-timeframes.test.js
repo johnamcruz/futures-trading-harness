@@ -95,9 +95,10 @@ test('a briefing on an analyst\'s timeframe: its bar part on its own bars, the g
   const q = frame(f, 15);
   assert.strictEqual(h.minutes, 60);
   assert.match(h.sections.bar.version, /^bar60m@/);
-  assert.strictEqual(h.sections.bar.data.trendRule, f.sections.m3.data.trendRule, 'the trend rule is the gate\'s, never one read off 1h bars');
+  // No trend rule: neither one read off 1h bars nor the gate's copied (it would be served as current for the hour).
+  assert.match(h.sections.bar.data.trendRule, /^Trend rule: not in a 60m briefing \(it would be up to a 60m bar old\): the order gate's current rule is in the runner's 3m bar briefing/);
   const gate = { ...f, sections: { ...f.sections, m3: { ...f.sections.m3, data: { ...f.sections.m3.data, trendRule: 'Trend rule: the gate\'s own line' } } } };
-  assert.strictEqual(frame(gate, 60).sections.bar.data.trendRule, 'Trend rule: the gate\'s own line');
+  assert.doesNotMatch(JSON.stringify(frame(gate, 60)), /the gate's own line/);
   assert.ok(!('candidates' in h.sections.bar.data) && /not scanned on 60m bars/.test(h.sections.bar.data.setups));
   assert.deepStrictEqual(Object.keys(h.sections), ['bar'], 'the shared parts are read from the runner\'s briefing, never copied');
   assert.deepStrictEqual([B.sharedParts(1), B.sharedParts(15), B.sharedParts(30), B.sharedParts(60)], [['m15', 'h1', 'day'], ['m15', 'h1', 'day'], ['h1', 'day'], ['h1', 'day']]);
@@ -359,4 +360,25 @@ test('the cycle\'s environment and prompt: the briefing\'s bar per symbol, the c
   assert.doesNotMatch(p, /15m-and-up view/, 'no legacy report served: no legacy line');
   // Lean cycles launch no analysts: nothing said.
   assert.doesNotMatch(prompts({ ...cfg, cycle: 'lean' }, now, '/r').trade(items, { frames }), /own timeframe/);
+});
+
+test('wholeBars: a higher-timeframe bar opens on its own boundary, whichever of its sub-bars is missing (first, middle, last)', () => {
+  const edt = (h, mi) => ET(2026, 4, 27, h, mi, 4);
+  const all = sessionBars(edt(11, 0), edt(16, 0)); // 11:00 .. 15:57 ET 3m bars
+  const without = t => all.filter(b => b.t !== iso(t));
+  for (const [label, missing] of [['first', edt(14, 0)], ['middle', edt(14, 30)], ['last', edt(14, 57)]]) {
+    const bars = without(missing);
+    const h1 = B.wholeBars(bars, 60);
+    assert.deepStrictEqual(h1.map(b => b.t), [11, 12, 13, 14, 15].map(h => iso(edt(h, 0))), label);
+    // The briefing built on them: the 14:00 bar closes at 15:00, never 15:03.
+    const upTo15 = bars.filter(b => Date.parse(b.t) < edt(15, 3));
+    const first15 = B.buildBriefing({ symbol: 'MNQ', contractId: C, bars: upTo15, minutes: 3 });
+    const f = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: B.wholeBars(upTo15, 60), minutes: 60, first: first15 });
+    assert.deepStrictEqual([f.asOf, f.closedAt, f.sections.bar.validUntil], [iso(edt(14, 0)), iso(edt(15, 0)), iso(edt(16, 0))], label);
+    assert.ok(B.frameHolds(f, new Date(edt(15, 3))), label);
+  }
+  // Not vacuous: the raw candles take the first sub-bar's time.
+  assert.strictEqual(whole(without(edt(14, 0)), 60)[3].t, iso(edt(14, 3)));
+  // The same OHLCV as the candles.
+  assert.deepStrictEqual(B.wholeBars(all, 15).map(({ o, h, l, c, v }) => [o, h, l, c, v]), whole(all, 15).map(({ o, h, l, c, v }) => [o, h, l, c, v]));
 });

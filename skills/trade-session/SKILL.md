@@ -164,7 +164,7 @@ the parts it rests on (`m15`, `h1`, `day`) are still current, so it counts.
 reads its own timeframe" (the runner config's `agents`, e.g. a 15m trend
 analyst and a 1h structure analyst), give that analyst its timeframe with the
 symbol ("timeframe 15m"): it reads `bar_briefing` with that `timeframe` (its
-own bar, the gate's trend rule, and the runner's m15, h1 and day parts it
+own bar and the runner's m15, h1 and day parts it
 shares) and the bars file named there, and its `Data:` line names those
 versions (`bar15m@...`, then the shared parts). The analysts the prompt
 doesn't name read the runner's bars and briefing as above. Such a report,

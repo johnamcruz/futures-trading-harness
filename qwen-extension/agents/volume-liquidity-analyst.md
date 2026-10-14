@@ -40,8 +40,8 @@ timeframe, e.g. 3m) and its briefing. When the caller gives you a timeframe
 of your own (the runner config's `agents`, e.g. "timeframe 15m" or "1h"),
 read `bar_briefing {"symbol": "<SYMBOL>", "timeframe": "15m"}` (with yours) instead: its
 `bar` part is your timeframe's last closed bar (the `m3` facts computed on
-your bars, the gate's trend rule; the setups are the runner's briefing's
-unless a lane trades your bars), with the runner's `m15`, `h1` and `day`
+your bars; the trend rule is the runner's briefing's, and so are the
+setups unless a lane trades your bars), with the runner's `m15`, `h1` and `day`
 parts that change no faster than your bars, and it names your bars file.
 Report on your timeframe (put it first where a step below says 3m), and name
 those versions: `Data: bar_briefing <tf> bar<minutes>m@<...>, <the shared

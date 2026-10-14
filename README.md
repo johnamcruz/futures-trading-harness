@@ -498,7 +498,7 @@ More runner settings:
   writes them as `<dataDir>/<SYMBOL>-<minutes>m.json`, OHLCV only); anything
   else is refused at start. Such an analyst gets a bar briefing of its
   timeframe (`bar_briefing` with `"timeframe": "15m"`: its own bar's facts,
-  the gate's trend rule, and the first lane's m15, h1 and day parts that
+  the first lane's m15, h1 and day parts that
   change no faster than its bars), the prompt tells the head trader which
   analyst reads which timeframe, and its report is cached on that briefing
   until its own next bar close (a 15m analyst re-runs at most every 15

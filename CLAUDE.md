@@ -36,8 +36,8 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
 ## Layout
 
 - `agents/` (canonical roles, Claude format: `name`, `description`, `tools`, `model`, plus
-  `role-skills` and an optional `timeframe`, the bars the role reads; none means the runner lane's,
-  and no adapter carries it). Only `trade-executor` may hold order-writing MCP tools; a test enforces it.
+  `role-skills` and an optional `timeframe`, the bars the role reads; none means the first lane's,
+  only the three analysts may set one, and no adapter carries it). Only `trade-executor` may hold order-writing MCP tools; a test enforces it.
   `role-skills` lists the skills the role's body says to load (a test keeps them equal); no
   harness interprets the key: opencode's generated roles carry those skills in full in their
   prompt, and the other adapters load them as the body says.

@@ -54,6 +54,8 @@
  *                                                                its `bar` part (first: the runner's briefing)
  *   sharedParts(minutes)                                         the runner's parts it shares: ['m15', 'h1', 'day'] up to 15m
  *   frameHolds(f, at)                                            its bar is the one holding at `at`
+ *   wholeBars(bars, minutes)                                     the completed `minutes` bars built from `bars`, each opening on
+ *                                                                its boundary (a missing first sub-bar never moves it)
  *   frameUntil(closedAt, minutes)                                its bar's end: the next bar's close in market hours (the
  *                                                                last 1h bar before the 16:00 ET break holds to 19:00 ET)
  *   renderFrameBriefing(f, first, { now })                       as text, its `bar` part and the shared parts
@@ -568,7 +570,7 @@ const sharedParts = minutes => Object.keys(SHARED_CLOCK).filter(p => SHARED_CLOC
 
 /**
  * The briefing on an analyst's own timeframe: `bars` are its closed `minutes`-minute bars (a lane's, or built from
- * the first lane's), `first` the runner's briefing (its trend rule is the gate's; its parts are shared, see
+ * the first lane's), `first` the runner's briefing (its parts are shared, see
  * sharedParts). `lane`: the bars are a lane's, so `scan` is that lane's scan and its candidates are this bar's;
  * else no strategy trades these bars and the setups are the runner's briefing's.
  */
@@ -577,7 +579,9 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
   if (first.symbol !== symbol || (first.contractId || null) !== contractId) throw new Error(`the runner's bar briefing is for ${first.symbol} ${first.contractId || ''}, not ${symbol} ${contractId || ''}`);
   const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, now });
   const base = b.sections.m3;
-  const data = { ...base.data, trendRule: first.sections.m3.data.trendRule };
+  // No trend rule: one read off these bars isn't the gate's, and the gate's, copied here, would be served as current
+  // for this bar's whole life (and in a report cached on it). The gate's current rule is the runner's briefing's.
+  const data = { ...base.data, trendRule: `Trend rule: not in a ${minutes}m briefing (it would be up to a ${minutes}m bar old): the order gate's current rule is in the runner's ${first.minutes}m bar briefing and the cycle prompt` };
   if (!lane) {
     delete data.candidates;
     delete data.scanError;
@@ -600,6 +604,16 @@ function frameUntil(closedAt, minutes) {
   // At most a week of bars: a week always has market hours.
   for (let k = 0; k <= Math.ceil(10080 / minutes) && !inMarketHours(new Date(open)); k += 1) open += step;
   return new Date(open + step);
+}
+
+/**
+ * The completed `minutes`-minute bars in `bars` (mtf.js candles, aligned to the 18:00 ET open), OHLCV only, each
+ * stamped with its own boundary's open (nextClose of its first sub-bar, less its minutes), never its first sub-bar's
+ * time: a 1h bar whose 14:00 sub-bar is missing still opens at 14:00 and closes at 15:00.
+ */
+function wholeBars(bars, minutes) {
+  return candles(normalizeBars(bars), minutes).filter(c => c.complete)
+    .map(({ t, o, h, l, c, v }) => ({ t: new Date(nextClose(new Date(t), minutes).getTime() - minutes * 60000).toISOString(), o, h, l, c, v }));
 }
 
 /** Whether the briefing's bar is the one holding at `at` (closed by then, its next bar not yet). */
@@ -651,5 +665,5 @@ function removeFrameBriefing(home, root, minutes) {
 
 module.exports = {
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
-  sharedParts, buildFrameBriefing, frameHolds, frameUntil, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
+  sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
 };

@@ -39,12 +39,11 @@ const { readRecord, liveRecord, describeRecord, excursionNote } = require('./tra
 const { loadStrategies, scan } = require('./trading/strategies');
 const { lanesOf, laneStrategies, analystFrames } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
-const { candles } = require('./trading/mtf');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-state');
-const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBriefing, readFrameBriefing, writeFrameBriefing, removeFrameBriefing } = require('./trading/briefing');
+const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBriefing, wholeBars, readFrameBriefing, writeFrameBriefing, removeFrameBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
 const RC = require('./trading/report-cache');
 const { tradingDayKey } = require('./trading/clock');
@@ -175,14 +174,13 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       log(`${item.symbol}: no ${minutes}m bar briefing this bar (${err.message}); the ${minutes}m analysts read the bars themselves`, 'error');
     }
   };
-  const whole = (bars, minutes) => candles(bars, minutes).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
   return (item, results, scanError = null) => {
     if (item.lane > 0) {
       if (laned.has(item.minutes)) frame(item, item.minutes, { bars: () => item.bars, lane: true, scan: results, scanError, barsFile: (item.bar && item.bar.file) || null });
       return null;
     }
     const file = firstBriefing(item, results, scanError);
-    for (const m of built) frame(item, m, { bars: () => whole(item.bars, m) });
+    for (const m of built) frame(item, m, { bars: () => wholeBars(item.bars, m) });
     return file;
   };
 
