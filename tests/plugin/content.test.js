@@ -325,7 +325,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ts, /\*\*Every cycle, first:\*\* the bar briefing \(`bar_briefing \{"symbol": "<SYMBOL>"\}`/);
   assert.match(ts, /Read it once per role and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
   assert.match(ts, /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
-  assert.match(read('skills/timeframe-sources/SKILL.md'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`\s+skill \(use a current briefing; `mtf_read`[^)]*only for what it lacks\)/);
+  assert.match(read('skills/timeframe-sources/SKILL.md'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`\s+skill \(use a current briefing; `mtf_read`[^)]*only for what it lacks:\s[^]*?`mtf_read` json's\)/);
   assert.match(read('skills/htf-to-ltf/SKILL.md'), /The alignment and the trend rule in a trade plan are the briefing's \(intraday\s+frames\); a daily read, if you have one \(premarket's\), is context only, never a\s+second alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
   const ht = read('skills/bar-briefing/SKILL.md');

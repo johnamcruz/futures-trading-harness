@@ -24,7 +24,7 @@ scripts. None places, changes, or cancels an order.
 
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
-| `skill_lookup` | `skill`?, `role`?, `query`? | a skill in full: one your skill index lists, read only when the cycle needs it. With `role` (your role's name), in an autonomous cycle, the lookup is recorded: when your prompt says the bar requires a skill of your index, your report counts for an entry only once you looked it up in the call that reports. An unknown skill is refused. No `skill`: the list (`query` filters). Read-only | `skill-lookup.js --skill <name> [--role <role>] \| --query <text>` |
+| `skill_lookup` | `skill`?, `role`?, `query`? | a skill in full: one your skill index lists, read only when the cycle needs it. With `role` (your role's name), in an autonomous cycle, the lookup is recorded: when your prompt says the bar requires a skill of your index, your report counts for an entry only once you looked it up in one of your calls this cycle. An unknown skill is refused. No `skill`: the list (`query` filters). Read-only | `skill-lookup.js --skill <name> [--role <role>] \| --query <text>` |
 
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`

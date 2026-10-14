@@ -55,7 +55,7 @@ const ALLOWED = [
     now: '`mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the `strategy-authoring` skill defines it).',
     reason: 'a restatement of strategy-authoring\'s definition of mtf_bias (as of the last completed candle; 1 up, -1 down, 0 range): now a pointer' },
   { old: 'In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing` skill) already holds this read for the bar: the 15m frame and the alignment per side (`m15`), the 1h and 4h frames (`h1` `h1` and `h4`), and the trend rule (`m3` `trendRule`).',
-    now: 'The briefing\'s fields per timeframe and the `mtf_read` calls: the `bar-briefing` skill (use a current briefing; `mtf_read`, on the files `tool-arguments` names, only for what it lacks).',
+    now: 'The briefing\'s fields per timeframe and the `mtf_read` calls: the `bar-briefing` skill (use a current briefing; `mtf_read`, on the files `tool-arguments` names, only for what it lacks: the close\'s place in the range, the frame\'s swing high and low, the previous candle\'s high and low are `mtf_read` json\'s).',
     reason: 'the briefing\'s fields are bar-briefing\'s (its bar_briefing and mtf_read rows): timeframe-sources keeps its source table and points there' },
   { old: 'Run the read', copies: 0, reason: 'its section is now the one pointer line after the table, under "Get the bars"' },
   ...[

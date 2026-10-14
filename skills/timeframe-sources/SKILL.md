@@ -29,7 +29,9 @@ than two requests:
 | Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (the runner's default, 5000 3-minute bars, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate) |
 
 The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`
-skill (use a current briefing; `mtf_read`, on the files `tool-arguments` names, only for what it lacks).
+skill (use a current briefing; `mtf_read`, on the files `tool-arguments` names, only for what it lacks:
+the close's place in the range, the frame's swing high and low, the previous candle's high and low are
+`mtf_read` json's).
 
 ## Examples
 
