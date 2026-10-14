@@ -198,3 +198,23 @@ test('index: examples per skill signature and month, latest first, compact, the 
   assert.strictEqual(withReads.reads[0].why.length, 160);
   assert.deepStrictEqual(Object.keys(ex[0]), ['day', 'decision', 'side', 'context', 'reads', 'R', 'grade']);
 });
+
+test('a row is dated by the day its outcome came: a trade carried into the next session counts only after it', () => {
+  const ds = decisions(25, 12, () => 1);
+  // Decided on 2022-03-01, exited on 2022-03-02's session.
+  ds[0] = { ...ds[0], outcome: { R: 9, exitTime: '2022-03-02T15:00:00.000Z' } };
+  assert.strictEqual(X.knownDay(ds[0]), '2022-03-02');
+  const doc = X.buildIndex(ds, { reps: 50 });
+  assert.ok(doc.cells[ALL].some(r => r[0] === '2022-03-02' && r[1] === 9));
+  assert.strictEqual(X.cellAt(doc, ALL, '2022-03-02').n, 2, 'on 03-02 only the two 03-01 decisions known then, not the carried one');
+  // An outcome that came in practice-validate is leakage.
+  const late = decisions(25, 12, () => 1, { from: '2024-06-03T00:00:00Z' });
+  late[0] = { ...late[0], outcome: { R: 1, exitTime: '2024-07-01T15:00:00.000Z' } };
+  assert.throws(() => X.buildIndex(late), /1 decision\(s\) in practice-validate/);
+});
+
+test('a decision counts once; the same log given twice is refused', () => {
+  const ds = decisions(25, 12, () => 1);
+  assert.strictEqual(X.buildIndex([...ds, ...ds], { reps: 50 }).decisions, 25);
+  assert.throws(() => X.buildIndex(ds, { runs: [{ runId: 'a', sha256: 'h1' }, { runId: 'b', sha256: 'h1' }] }), /the same experience log given twice/);
+});

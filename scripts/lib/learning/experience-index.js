@@ -25,7 +25,9 @@
  * examples across signatures, so the record shows numbers that belong to other combinations; it is part of the hash.
  *
  * No leakage: an index is built only from practice-train decisions (learning/splits.js), the day recomputed from
- * the decision's bar (its cycle for a plain pass), never the line's own label.
+ * the decision's bar (its cycle for a plain pass), never the line's own label, and the day its outcome came (its
+ * exit's session) practice-train too. Rows are dated by the later of the two (knownDay). A decision counts once (by
+ * its id); the same log given twice (its sha256) is refused.
  *
  *   buildIndex(decisions, { runs, seed, reps, shuffle, now })   the index document, with its hash
  *   cellStats(rows, { before, seed, reps, key })   the statistics of a cell's rows before a day (null: every row)
@@ -35,7 +37,7 @@
  *   pinIndex(runHome, file)             the run's own frozen copy (pinned.json); a run keeps the index it pinned
  *   loadPinned(home)                    the pinned index, its hash checked; null when none is pinned or the run is
  *                                       declared not learning
- *   cellKey(kind, sig, ctx), contextKey(ctx), decisionDay(d)
+ *   cellKey(kind, sig, ctx), contextKey(ctx), decisionDay(d), knownDay(d)
  */
 
 const crypto = require('crypto');
@@ -64,6 +66,19 @@ const hasR = d => d.outcome && Number.isFinite(d.outcome.R);
 function decisionDay(d) {
   const t = Date.parse(d.bar || d.cycleAt || '');
   return Number.isFinite(t) ? sessionDate(t) : d.day;
+}
+
+/**
+ * The day a decision's outcome is known: the later of its own session and its exit's (a position carried into a later
+ * session settles there), recomputed from its outcome, never the line's label. Rows and examples are dated by it, so
+ * a walk-forward statistic never counts a trade whose outcome came on or after the day it is shown on.
+ */
+function knownDay(d) {
+  const day = decisionDay(d);
+  const t = d.outcome && d.outcome.exitTime ? Date.parse(d.outcome.exitTime) : NaN;
+  if (!Number.isFinite(t)) return day;
+  const exit = sessionDate(t - 1);
+  return exit > day ? exit : day;
 }
 
 /** Ratio statistics over resampled whole days: { lo, hi } of sum(num) / sum(den) at LEVEL. */
@@ -141,16 +156,19 @@ const examplesBefore = (index, sig, before = null) => ((index.examples || {})[si
 function assertPracticeTrain(decisions) {
   const bad = new Map();
   for (const d of decisions) {
-    let role;
-    try { role = roleOf(decisionDay(d)); } catch (_err) { role = 'no role'; }
-    if (role !== 'practice-train') bad.set(role, (bad.get(role) || 0) + 1);
+    // Its own day and the day its outcome came: both practice-train.
+    for (const day of new Set([decisionDay(d), knownDay(d)])) {
+      let role;
+      try { role = roleOf(day); } catch (_err) { role = 'no role'; }
+      if (role !== 'practice-train') { bad.set(role, (bad.get(role) || 0) + 1); break; }
+    }
   }
   if (bad.size) throw new Error(`index refused (leakage): ${[...bad].map(([r, k]) => `${k} decision(s) in ${r}`).join(', ')}; an index is built from practice-train months only`);
 }
 
 function examplesOf(scored) {
   const by = new Map();
-  const withR = scored.filter(hasR).map(d => ({ d, day: decisionDay(d) }))
+  const withR = scored.filter(hasR).map(d => ({ d, day: knownDay(d) }))
     .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : String(a.d.id).localeCompare(String(b.d.id))));
   for (const { d, day } of withR) {
     const k = d.signatures.skill;
@@ -188,12 +206,17 @@ function indexHash(doc) {
 function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = null, now = new Date() } = {}) {
   if (shuffle !== null && !Number.isInteger(shuffle)) throw new Error('shuffle: a whole-number seed');
   if (decisions.some(d => d && !d.bar && !d.cycleAt && !d.day)) throw new Error('index refused: a decision without its bar or day can\'t be placed in the split');
+  // The same log twice would count every decision twice: refused; a decision in two logs counts once (its id).
+  const hashes = runs.map(r => r.sha256).filter(Boolean);
+  if (new Set(hashes).size !== hashes.length) throw new Error('index refused: the same experience log given twice (its sha256 repeats)');
+  const ids = new Set();
+  decisions = decisions.filter(d => !d || !d.id || (ids.has(d.id) ? false : (ids.add(d.id), true)));
   assertPracticeTrain(decisions.filter(Boolean));
   const scored = decisions.filter(d => d && d.signatures && d.signatures.skill && d.decision !== 'none' && !d.hidden);
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
   for (const d of scored) {
-    const row = [decisionDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-'];
+    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-'];
     for (const kind of KINDS) {
       const sig = d.signatures[kind];
       if (!sig) continue;
@@ -213,7 +236,7 @@ function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = nul
     const lists = permuted(sigs.map(s => examples[s]), rand);
     examples = Object.fromEntries(sigs.map((s, i) => [s, lists[i]]));
   } else cells = Object.fromEntries(keys.map(k => [k, cells[k]]));
-  const days = [...new Set(scored.map(decisionDay))].sort();
+  const days = [...new Set(scored.map(knownDay))].sort();
   const doc = {
     v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true,
     runs: runs.map(r => ({ runId: r.runId || null, file: r.file ? path.basename(r.file) : null, sha256: r.sha256 || null })),
@@ -278,5 +301,5 @@ function loadPinned(home) {
 
 module.exports = {
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned,
-  cellKey, contextKey, decisionDay, assertPracticeTrain,
+  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain,
 };
