@@ -43,7 +43,8 @@ const PINS = {
     '`range`: neither, and ADX under 18 or 5 or more crosses.',
     '`m3.trendRule` wins where they differ.',
     'the breaks a sequence of BOS that way;',
-    'alternating breaks (the last two opposite CHoCHs) or none;',
+    'alternating breaks on that timeframe (its last two opposite CHoCHs) or none;',
+    'a lower-timeframe CHoCH back the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
   ],
   'pullback-vs-reversal': [
     'A 15m or 1h CHoCH against the trend weighs most: then the read is a reversal attempt.',
@@ -136,7 +137,7 @@ const PINS = {
     'No one timeframe is the signal; read them top-down.',
     '| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
-    '| 1h (4h swings) | the HTF trend continues | an HTF change of trend |',
+    '| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |',
     'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
     'a CHoCH against an open trade on its timeframe or higher is significant (`invalidation`); lower is mostly noise.',
   ],
@@ -428,6 +429,11 @@ test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exa
   assert.strictEqual(twoHomes(MOVED[2]), 2);
   // The pointers: market-structure and the reads that use structure breaks.
   assert.match(ms, /\*\*Events\*\*: BOS and CHoCH[^]*the\s+`bos-vs-choch` skill/);
+  const MS_POINTERS = ['1. **Swings**: how they are confirmed, the `bos-vs-choch` skill.', '6. **Higher timeframe wins** (`bos-vs-choch`, by timeframe).'];
+  for (const p of MS_POINTERS) {
+    assert.ok(flat(ms).includes(p), p);
+    assert.ok(!flat(ms).replace(p, '').includes(p), `removing: ${p}`);
+  }
   for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'mtf-rejection', 'mtf-breakout', 'confluence-counting', 'invalidation']) {
     assert.ok(read(file(s)).includes('`bos-vs-choch`'), s);
   }

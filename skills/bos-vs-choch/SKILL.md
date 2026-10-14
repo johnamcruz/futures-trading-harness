@@ -47,7 +47,7 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 |---|---|---|
 | 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
-| 1h (4h swings) | the HTF trend continues | an HTF change of trend |
+| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
 A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.
 CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal

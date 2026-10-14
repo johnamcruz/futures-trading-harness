@@ -41,8 +41,10 @@ break (`bos-vs-choch`): `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `
 
 - trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the breaks
   a sequence of BOS that way;
-- range: regime `range`, swings `mixed`, alternating breaks (the last two
-  opposite CHoCHs) or none;
+- range: regime `range`, swings `mixed`, alternating breaks on that
+  timeframe (its last two opposite CHoCHs) or none; a lower-timeframe
+  CHoCH back the HTF way inside an HTF trend is the pullback ending
+  (`pullback-vs-reversal`), not a range;
 - transition: regime `transition`, or regime and structure disagree.
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend`, `m15.frame.trend`;
