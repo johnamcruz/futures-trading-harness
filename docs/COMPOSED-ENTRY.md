@@ -254,14 +254,14 @@ So every change replaces text; the detail goes into a skill read with
 
 | Skill | Today | Becomes |
 |---|---|---|
-| `trader-process:19-21` | "No setup without a fired strategy. ... never make a trade on their own." | "No setup without verified reads: a fired strategy, or a combination `compose_check` verifies (`composed-entry`)." |
+| `trader-process:19-21` | "No setup without a fired strategy. ... never make a trade on their own." | "No setup without verified reads: a fired strategy, or a combination `compose_check` verifies (composed-entry)." |
 | `trader-process:37, 44` (steps 4, 6) and the PLAN block (`:83, 85-86`) | The setup is a fired strategy; the trigger fired | The setup is a fired strategy or the record's setup read; line 4 may say `composed <signature>` |
 | `rejection:16-19`, `breakout:16-19` | "never a reason to enter without a fired strategy" | "a setup read for a strategy or a composed entry, never an entry alone" |
 | `top-down-entry:30` | "A fired strategy is the entry." | "A fired strategy, or a verified composed entry, is the entry." |
 | `absorption:48`, `fib-retracement:65`, `cisd:53` | "No setup without a fired strategy" | Same replacement |
 | `risk-manager.md:84-91` (step 0) | Candidate or veto | Candidate, policy verdict, or an `ok` composed record for this bar; else veto |
 | `trade-plan` | `order_plan` with a strategy | Unchanged rule; one example with `strategy: "composed"` |
-| New `composed-entry` skill (index only) | | The read forms, the stop and target rules, one worked example per scenario |
+| A new skill, composed-entry (index only) | | The read forms, the stop and target rules, one worked example per scenario |
 
 Each change is synced to every harness by `node scripts/sync-harness.js`.
 
@@ -300,7 +300,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 4. **order_plan and the prop verdict.** `strategy: "composed"`, and a
    verdict from the record inside an attempt.
 5. **Skills and the risk manager.** Section 5's text, the new
-   `composed-entry` skill, synced.
+   skill, composed-entry, synced.
 6. **Records.** Decision history, cycle log, labels, scorecard,
    counterfactual.
 7. **Scenario 1 end to end.** An e2e test on real bars: the model's reads,
@@ -317,7 +317,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
   not the edge. Paper and replay first; the outcome log decides later.
 - **Stops at noise.** A stop at the nearest candle low can be tight; the
   `risk.min_rr`, the budget and the zero-blow rules still bound the loss.
-- **A 9B model writing closed forms.** Malformed reads refuse; the cycle
+- **A small local model writing closed forms.** Malformed reads refuse; the cycle
   log counts them, so the forms can be simplified from evidence.
 - **Prompt size.** The new skill is index-only; the embedded text only
   swaps sentences.
