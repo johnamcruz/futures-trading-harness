@@ -292,7 +292,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   }
   assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this step agrees and it isn't\s+`blocked`[^]*?The priority order below decides: a policy strategy's verdict\s+too\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /### The priority order: the rule for every setup[^]*?A\s+verdict\s+is\s+a\s+ceiling\s+on\s+size,\s+never\s+an\s+order\.\s+Contradicting\s+facts\s+mean\s+no\s+trade;\s+confluence\s+means\s+trade\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
-  for (const f of ['skills/trade-session/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
+  for (const f of ['skills/trade-session/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
     assert.doesNotMatch(read(f), /Place exactly the verdict|the facts never\s+change it|doesn't halve the verdict|is already sized: don't halve it|Never argue with\s+it/, f);
   }
   assert.match(read('agents/risk-manager.md'), /Judge every setup, a policy verdict too, by the priority order \(the\s+strategy-library skill, "The priority order"\)/);
@@ -303,14 +303,14 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/risk-manager.md'), /`confluence\.against`\):\s+its step 6\./);
   assert.match(read('skills/trade-session/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
-  for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
+  for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');
   assert.match(rm, /the priority order's step 2 \(the gate refuses a trend\s+strategy against it anyway\)/);
   assert.match(rm, /within the verdict for a policy strategy; the priority order's size\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Halvings don't compound: however many\s+steps halve, the size is halved once\./);
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /crt_1h raid of the 1h high could short \(the priority order, step 2, decides it:\s+level, size, target\)\./);
   assert.match(rm, /`m3` `candidates` is `null` \(the scan failed or the bar wasn't\s+scanned\): VETO a rules strategy/);
-  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
+  assert.match(read('skills/htf-to-ltf/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /`pullback` → no trade until the trigger timeframe turns back with the\s+bias \(a shift, a reclaim\), then full; `mixed` → half;/);
   assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target\./);
@@ -321,7 +321,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ts, /\*\*Every cycle, first:\*\* the bar briefing \(`bar_briefing \{"symbol": "<SYMBOL>"\}`/);
   assert.match(ts, /Read it once per role and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
   assert.match(ts, /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
-  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing\. The alignment and the\s+trend rule in a trade plan are the briefing's \(intraday frames\); a daily\s+read, if you have one \(premarket's\), is context only, never a second\s+alignment/);
+  assert.match(read('skills/timeframe-sources/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing\./);
+  assert.match(read('skills/daily-bias/SKILL.md'), /The alignment and the\s+trend rule in a trade plan are the briefing's \(intraday frames\); a daily\s+read, if you have one \(premarket's\), is context only, never a second\s+alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
   const ht = read('skills/harness-tools/SKILL.md');
   assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the next swing targets, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
