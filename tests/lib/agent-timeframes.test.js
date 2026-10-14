@@ -382,3 +382,39 @@ test('wholeBars: a higher-timeframe bar opens on its own boundary, whichever of 
   // The same OHLCV as the candles.
   assert.deepStrictEqual(B.wholeBars(all, 15).map(({ o, h, l, c, v }) => [o, h, l, c, v]), whole(all, 15).map(({ o, h, l, c, v }) => [o, h, l, c, v]));
 });
+
+test('wholeBars and nextClose agree for 15m, 30m and 1h (the candles 18:00 ET grid and the clock.js trading-day start), across both DST weekends', () => {
+  for (const [from, to] of [[ET(2026, 3, 5, 9, 0, 5), ET(2026, 3, 10, 12, 0, 4)], [ET(2026, 10, 29, 9, 0, 4), ET(2026, 11, 3, 12, 0, 5)]]) {
+    const bars = sessionBars(from, to);
+    for (const m of [15, 30, 60]) {
+      const raw = whole(bars, m);
+      const stamped = B.wholeBars(bars, m);
+      assert.ok(raw.length > 50, `${m}m`);
+      // With no sub-bar missing, each candle's first sub-bar is its boundary: the nextClose stamp must be it.
+      assert.deepStrictEqual(stamped.map(b => b.t), raw.map(b => b.t), `${m}m`);
+      for (const b of stamped) assert.strictEqual(B.nextClose(new Date(b.t), m).getTime(), Date.parse(b.t) + m * 60000, `${m}m ${b.t}`);
+    }
+  }
+});
+
+test('the runner\'s recorder with a missing sub-bar: the 1h bars file and the served 1h briefing are boundary-stamped (14:00-15:00, not 14:03-15:03)', () => {
+  const home = tmpDir();
+  const dataDir = path.join(home, 'bars');
+  try {
+    const edt = (h, mi) => ET(2026, 4, 27, h, mi, 4);
+    // 3m bars to the 15:00 close, the 14:00 one missing.
+    const bars = sessionBars(edt(9, 0), edt(15, 0)).filter(b => b.t !== iso(edt(14, 0)));
+    const cfg = validateConfig({ harness: 'opencode', symbols: ['MNQ'], account: '7', timeframe: 3, premarketAt: '' });
+    const rec = briefingRecorder(home, cfg, () => new Date(edt(15, 0) + 2000), { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'none.json') }, { frames: [{ role: ANALYSTS[2], minutes: 60, lane: -1 }], dataDir, log: () => {} });
+    rec({ symbol: 'MNQ', contractId: C, lane: 0, minutes: 3, bars, bar: { t: bars.at(-1).t } }, [], null);
+    const file = JSON.parse(fs.readFileSync(path.join(dataDir, 'MNQ-60m.json'), 'utf8'));
+    assert.strictEqual(file.bars.at(-1).t, iso(edt(14, 0)));
+    assert.ok(file.bars.every(b => Date.parse(b.t) % 3600000 === 0), 'every 1h bar on the hour');
+    const f = B.readFrameBriefing(home, 'MNQ', 60);
+    assert.deepStrictEqual([f.asOf, f.closedAt], [iso(edt(14, 0)), iso(edt(15, 0))]);
+    const env = { FTH_HOME: home, FTH_CYCLE_BARS: JSON.stringify({ MNQ: bars.at(-1).t }), FTH_CYCLE_AT: iso(edt(15, 0) + 2000) };
+    assert.match(barBriefing({ symbol: 'MNQ', timeframe: '1h' }, { env, now: () => new Date(edt(15, 0) + 2000), replayAt: () => null }).text, /^Bar briefing MNQ 60m .*bar 14:00 ET closed 15:00 ET/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

@@ -607,9 +607,11 @@ function frameUntil(closedAt, minutes) {
 }
 
 /**
- * The completed `minutes`-minute bars in `bars` (mtf.js candles, aligned to the 18:00 ET open), OHLCV only, each
- * stamped with its own boundary's open (nextClose of its first sub-bar, less its minutes), never its first sub-bar's
- * time: a 1h bar whose 14:00 sub-bar is missing still opens at 14:00 and closes at 15:00.
+ * The completed `minutes`-minute bars in `bars`, OHLCV only, each stamped with its own boundary's open (nextClose of
+ * its first sub-bar, less its minutes), never its first sub-bar's time: a 1h bar whose 14:00 sub-bar is missing still
+ * opens at 14:00 and closes at 15:00. Two anchors meet here: mtf.js candles group the sub-bars on the 18:00
+ * America/New_York grid, and nextClose counts from the trading day's start (clock.js tradingDayStart, in its
+ * own zone): the same instant all year, and a test pins that they agree.
  */
 function wholeBars(bars, minutes) {
   return candles(normalizeBars(bars), minutes).filter(c => c.complete)
