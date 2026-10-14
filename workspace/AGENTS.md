@@ -154,6 +154,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `bos-vs-choch` (skills/bos-vs-choch/SKILL.md): Structure breaks as computed - confirmed swings, BOS (continuation), CHoCH (a possible reversal) - and what each means by timeframe, for PLAN steps 1, 4 and 9.
 - `breakout` (skills/breakout/SKILL.md): Use when a strategy fired at a key level and a completed candle, on any timeframe, may have closed beyond it. A read, never an entry by itself.
 - `breakout-vs-fakeout` (skills/breakout-vs-fakeout/SKILL.md): Trader-process step 3, price through or at a level - accepted (closes hold, a retest holds) or a fakeout (a sweep closed back inside). A read, never a veto.
+- `broker-bar-fields` (skills/broker-bar-fields/SKILL.md): Use when a briefing has broker bar fields. Confirmation only.
 - `broker-mcp` (skills/broker-mcp/SKILL.md): The broker MCP server - its tools (mcp__broker__<tool>), what each is for, and the session loop that calls them. Use before calling any mcp__broker__ tool.
 - `broker-refusals` (skills/broker-refusals/SKILL.md): What the broker's own refusal or error reply means - success:false, errorCode 4/5/6/7, a risk-guardrail block, a lost reply - and what to do for each.
 - `candle-reading` (skills/candle-reading/SKILL.md): Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.

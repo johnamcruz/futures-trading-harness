@@ -209,7 +209,12 @@ for (const s of SERIES) {
   test(`${s.label}: the runner's compact scan, the market snapshot and the bar briefing the model reads are pinned; the neutral field changes none of it`, () => {
     const idx = s.label === 'MNQ 1m' ? minuteViews(s) : VIEWS[s.label];
     const text = idx.map(i => viewAt(s, s.broker, i)).join('\n');
-    assert.strictEqual(idx.map(i => viewAt(s, G.withFlow(s.plain), i)).join('\n'), text, 'the same without the field no strategy reads');
+    // The field no strategy reads changes no decision and no fact; the briefing's "Broker bar fields" line (the broker's
+    // own fields, passed through) is the one line that lists it.
+    const fieldsLine = /^- Broker bar fields .*$\n?/gm;
+    const plain = idx.map(i => viewAt(s, G.withFlow(s.plain), i)).join('\n');
+    assert.strictEqual(plain.replace(fieldsLine, ''), text.replace(fieldsLine, ''), 'the same without the field no strategy reads');
+    assert.ok(!idx.length || /^- Broker bar fields .*ext\.a /m.test(text), 'the line lists the broker\'s fields');
     assertGolden(GOLDEN[s.label].views, text);
   });
 }
