@@ -818,7 +818,8 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
-      c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null].filter(Boolean).join(', ');
+      c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
+      c.momentum === 'up' || c.momentum === 'down' ? `momentum ${c.momentum}` : null].filter(Boolean).join(', ');
     out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };

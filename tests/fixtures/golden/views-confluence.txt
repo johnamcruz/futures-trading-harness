@@ -31,7 +31,7 @@ Summary (MNQ 3m, 00:48 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): VWAP (session) 27073.3 (19.55 pts, 3.81R), prior VAH 27075.25 (21.42 pts, 4.18R), round number 27100 (46.25 pts, 9.02R).
 - Room below (R = the 3m reference stop): last 3m swing high 27046.25 (7.5 pts, 1.46R), session POC 27035.75 (17.91 pts, 3.49R), session VAL 27019.25 (34.44 pts, 6.72R).
-- 3m (closed 00:48): displacement up, close top third, range 1.56 ATR, vol 1.79x; traded beyond the previous 3m high, closed above its high; broke above previous 3m high.
+- 3m (closed 00:48): displacement up, close top third, range 1.56 ATR, vol 1.79x, momentum up; traded beyond the previous 3m high, closed above its high; broke above previous 3m high.
 - 15m (closed 00:45): inside, close top third, range 0.53 ATR, vol 0.45x; touched session POC.
 - 1h (closed 00:00): none, close bottom third, range 0.58 ATR, vol 0.16x; traded beyond the previous 1h low, closed below its low; rejected VWAP (session) (closed back below), rejected prior VAH (closed back below), broke below previous 1h low, touched session POC.
 - Next swing above (R = the 3m reference stop): 3m 27078.25 (24.5 pts, 98 ticks, 4.78R), 15m/1h 27135.75 (82 pts, 328 ticks, 15.99R), 4h 27155.75 (102 pts, 408 ticks, 19.89R); below: 3m 27016.25 (37.5 pts, 150 ticks, 7.31R), 15m 26840.25 (213.5 pts, 854 ticks, 41.63R), 1h/4h 26681.75 (372 pts, 1488 ticks, 72.54R).
@@ -125,9 +125,9 @@ Summary (MNQ 3m, 10:33 ET):
 - Room above (R = the 3m reference stop): overnight low 27344.25 (18.75 pts, 1.29R), session VAL 27344.75 (19.36 pts, 1.33R), last 3m swing low 27352.5 (27 pts, 1.86R).
 - Room below (R = the 3m reference stop): round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
 - This bar's close: crossed below the opening range low.
-- 3m (closed 10:33): none, close bottom third, range 1.31 ATR, vol 1.17x; traded beyond the previous 3m low, closed below its low; broke below overnight low, broke below opening range low, broke below session VAL, broke below previous 3m low.
-- 15m (closed 10:30): inside, close bottom third, range 1.04 ATR, vol 2.44x; rejected opening range low (closed back above), broke below session POC, touched VWAP (rth).
-- 1h (closed 10:00): hammer, close top third, range 2.17 ATR, vol 5.55x; swept the previous 1h low, closed back inside; rejected prior RTH close (closed back below), rejected overnight low (closed back above), rejected VWAP (rth) (closed back above), rejected session VAL (closed back above), +9 more.
+- 3m (closed 10:33): none, close bottom third, range 1.31 ATR, vol 1.17x, momentum down; traded beyond the previous 3m low, closed below its low; broke below overnight low, broke below opening range low, broke below session VAL, broke below previous 3m low.
+- 15m (closed 10:30): inside, close bottom third, range 1.04 ATR, vol 2.44x, momentum down; rejected opening range low (closed back above), broke below session POC, touched VWAP (rth).
+- 1h (closed 10:00): hammer, close top third, range 2.17 ATR, vol 5.55x, momentum up; swept the previous 1h low, closed back inside; rejected prior RTH close (closed back below), rejected overnight low (closed back above), rejected VWAP (rth) (closed back above), rejected session VAL (closed back above), +9 more.
 - 4h (closed 10:00): bearish engulfing, close middle third, range 1.15 ATR, vol 1.24x; swept the previous 4h high and low, closed back inside; rejected prior RTH high (closed back below), rejected overnight low (closed back above), rejected VWAP (rth) (closed back above), rejected prior VAH (closed back below), +12 more.
 - Next swing above (R = the 3m reference stop): 3m 27383.25 (57.75 pts, 231 ticks, 3.98R), 15m 27435 (109.5 pts, 438 ticks, 7.55R), 1h 27500.25 (174.75 pts, 699 ticks, 12.04R), 4h 27542.5 (217 pts, 868 ticks, 14.95R); below: 3m/15m 27298.5 (27 pts, 108 ticks, 1.86R), 1h 27130.25 (195.25 pts, 781 ticks, 13.45R), 4h 26681.75 (643.75 pts, 2575 ticks, 44.36R).
 - Prior candle range: 1h (closed 10:00) high 27435 (109.5 above, 7.55R), mid 27366.75 (41.25 above, 2.84R), low 27298.5 (27 below, 1.86R); 4h (closed 10:00) high 27500.25 (174.75 above, 12.04R), mid 27399.375 (73.88 above, 5.09R), low 27298.5 (27 below, 1.86R).
