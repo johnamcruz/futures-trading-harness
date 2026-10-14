@@ -34,15 +34,17 @@ the regime's count; `rthCrossesLast30`, the RTH VWAP's, can differ from it.
 fewer than two confirmed swings, no vote):
 `m15.frame.swingPattern`, `h1.h1.swingPattern`, `h1.h4.swingPattern`; on
 3m, from `m3.liquidity.swingHighs` and `m3.liquidity.swingLows`. Latest
-break: `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `barsAgo`),
+break (`bos-vs-choch`): `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `barsAgo`),
 `m3.lastBreak.previous`, `m15.lastBreak`, `h1.lastBreak`.
 
 **The read**, per timeframe:
 
-- trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the last
-  break a BOS that way;
-- range: regime `range`, swings `mixed`, the last two breaks opposite
-  CHoCHs;
+- trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the breaks
+  a sequence of BOS that way;
+- range: regime `range`, swings `mixed`, alternating breaks on that
+  timeframe (its last two opposite CHoCHs) or none; a lower-timeframe
+  CHoCH back the HTF way inside an HTF trend is the pullback ending
+  (`pullback-vs-reversal`), not a range;
 - transition: regime `transition`, or regime and structure disagree.
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend`, `m15.frame.trend`;

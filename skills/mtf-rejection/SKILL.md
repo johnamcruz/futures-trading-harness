@@ -32,11 +32,12 @@ By PLAN step:
    swing, previous candle high/low).
 - **4 Setup**: a completed 15m or 60m candle rejects the level: it trades
    through and closes back inside, with a long wick and the close in the
-   opposite third, or an engulfing at the level (`candle-reading`). At
-   the end of a pullback with the HTF (`pullback-vs-reversal`) it is a
-   continuation. Against the HTF, whether a structure break went its way
+   opposite third, or an engulfing at the level (`candle-reading`). After
+   an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
+   it is a continuation. Against the HTF, whether a structure break went its way
    (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1
-   of `confluence-counting`; the priority order decides.
+   of `confluence-counting`; the priority order decides. A reversal rejection
+   reads strongest with an HTF CHoCH its way (`bos-vs-choch`).
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
 - **6 Entry**: after the HTF rejection, a completed 3m or 5m candle confirms
@@ -46,7 +47,7 @@ By PLAN step:
    strategy's (`candidate.stopPoints`, `order_plan`): check it sits beyond
    the wick (`invalidation`). Size: the priority order and the rulebook.
 - **9 Manage**: invalidation is a close back through the level against the
-   trade.
+   trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 
 **Paired with `mtf-breakout`**: a failed breakout (a close back inside)
 is the setup for a rejection the other way.

@@ -1,7 +1,8 @@
 'use strict';
 
 // The trading-basics skills: small skills that teach a read each (trend vs range, pullback vs reversal, breakout vs
-// fakeout, levels and reactions, momentum and volume, absorption, invalidation, confluence counting, candle reading).
+// fakeout, levels and reactions, momentum and volume, absorption, invalidation, confluence counting, candle reading, BOS vs
+// CHoCH).
 // Each is a read, never a veto: the priority order (strategy-library) decides. These tests pin their structure, that
 // every briefing field they name resolves on a real briefing built by briefing.js, their take, skip and losing
 // examples (tick-correct), the absence of veto language, their key sentences (a mutation fails), and the roles that
@@ -18,14 +19,14 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch'];
 const SETUPS = ['mtf-rejection', 'mtf-breakout'];
 const file = s => `skills/${s}/SKILL.md`;
 
 // Who carries which (each role only what it uses; the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout'],
-  'trend-momentum-analyst': ['trend-vs-range', 'momentum-and-volume', 'pullback-vs-reversal'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout'],
+  'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
   'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
   'trade-executor': [],
@@ -41,12 +42,18 @@ const PINS = {
     'EMA(20) up at least 0.3 ATR(14) over 5 bars',
     '`range`: neither, and ADX under 18 or 5 or more crosses.',
     '`m3.trendRule` wins where they differ.',
+    'the breaks a sequence of BOS that way;',
+    'alternating breaks on that timeframe (its last two opposite CHoCHs) or none;',
+    'a lower-timeframe CHoCH back the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
   ],
   'pullback-vs-reversal': [
     'A 15m or 1h CHoCH against the trend weighs most: then the read is a reversal attempt.',
     'The pullback ends when its own minor structure breaks back: `m3.lastBreak.last` turns the trend\'s way',
     'up to about 50-62% of the leg (hypothesis)',
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
+    'A lower-timeframe CHoCH inside an intact higher-timeframe structure is a pullback.',
+    'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
+    'a lower-timeframe CHoCH back the HTF way at a level times the entry.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -77,6 +84,8 @@ const PINS = {
     'a fact, never a reason to change the stop.',
     'acting on it is management\'s call under trade-session, never a wider stop.',
     'Stops move toward the market only.',
+    'weighs by its timeframe against the trade\'s own: on the trade\'s timeframe or higher',
+    'on a lower one it is mostly noise.',
   ],
   'confluence-counting': [
     'each in exactly one bucket, so for + against + neutral = 6',
@@ -88,6 +97,7 @@ const PINS = {
     '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
     'The counts never overrule it.',
     '**Not counted**: the trend rule, the regime fit, the room, the window, the news',
+    'a 15m or 1h break its way (`bos-vs-choch`;',
   ],
   'candle-reading': [
     'A pattern away from a level is not evidence.',
@@ -104,6 +114,9 @@ const PINS = {
     'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
     'Never anticipate it.',
     '**Paired with `mtf-breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
+    'After an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`), it is a continuation.',
+    'A reversal rejection reads strongest with an HTF CHoCH its way (`bos-vs-choch`).',
+    'or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).',
   ],
   'mtf-breakout': [
     'The order gate allows an entry only when a strategy fired on the bar.',
@@ -114,6 +127,19 @@ const PINS = {
     'Never anticipate it.',
     'a close back inside the level means the breakout failed: invalidation.',
     '**Paired with `mtf-rejection`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
+    'A close beyond a level that is also a BOS on that timeframe (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure',
+    'A CHoCH against the trade on its timeframe or higher (`bos-vs-choch`) is one too.',
+  ],
+  'bos-vs-choch': [
+    'Confirmed fractal swings (k=2: a pivot with 2 strictly lower highs or higher lows on each side, confirmed 2 bars later).',
+    'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
+    'In the code, that is the previous break\'s direction (the first break too).',
+    'No one timeframe is the signal; read them top-down.',
+    '| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |',
+    '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
+    '| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |',
+    'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
+    'a CHoCH against an open trade on its timeframe or higher is significant (`invalidation`); lower is mostly noise.',
   ],
 };
 
@@ -308,7 +334,7 @@ test('basics skills: examples name existing active strategies, and never the ret
   for (const s of SKILLS) {
     const text = read(file(s));
     // As strategies: a briefing field named for the indicator (`m3.trend.supertrend`) is data.
-    assert.doesNotMatch(text, /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
+    assert.doesNotMatch(text.replace(/bos-vs-choch/g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
     for (const m of text.split('## Examples')[1].matchAll(/\b([a-z]+_[a-z0-9_]+|orb)\b (?:long|short)/g)) {
       assert.ok(names.includes(m[1]), `${s}: ${m[1]}`);
       assert.strictEqual(parseFrontmatter(read(`strategies/${m[1]}/STRATEGY.md`)).data.status, 'active', m[1]);
@@ -377,5 +403,86 @@ test('basics skills: each role carries exactly its own, says to load them, and t
       const body = parseFrontmatter(read(file(s))).body.trim();
       assert.strictEqual(oc.agent[role].prompt.includes(`<skill name="${s}">\n${body}\n</skill>`), mine.includes(s), `${role}: ${s}`);
     }
+  }
+});
+
+// The BOS and CHoCH definitions moved out of market-structure: each has exactly one home, bos-vs-choch.
+const MOVED = [
+  'The latest BOS or CHoCH (`lastBreak`) is computed there from confirmed swings: never call it by eye.',
+  'Confirmed fractal swings (k=2: a pivot with 2 strictly lower highs or higher lows on each side, confirmed 2 bars later).',
+  'BOS: a close beyond the last swing in the trend\'s direction.',
+  'CHoCH: the first close beyond the last swing against it, an early warning, not a reversal by itself (the `pullback-vs-reversal` skill).',
+  'A wick through a swing that closes back inside is a sweep, not a break (the `breakout-vs-fakeout` skill).',
+  'A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.',
+];
+
+test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exactly one home, and the old skills point to it', () => {
+  const all = fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md')));
+  for (const sentence of MOVED) {
+    const homes = all.filter(d => flat(read(file(d))).includes(sentence));
+    assert.deepStrictEqual(homes, ['bos-vs-choch'], sentence);
+  }
+  // A sentence still in market-structure (two homes) fails.
+  const ms = read(file('market-structure'));
+  assert.ok(!flat(ms).includes('BOS: a close'));
+  const twoHomes = d => [flat(read(file('bos-vs-choch'))), flat(`${ms} ${MOVED[2]}`)].filter(x => x.includes(d)).length;
+  assert.strictEqual(twoHomes(MOVED[2]), 2);
+  // The pointers: market-structure and the reads that use structure breaks.
+  assert.match(ms, /\*\*Events\*\*: BOS and CHoCH[^]*the\s+`bos-vs-choch` skill/);
+  const MS_POINTERS = ['1. **Swings**: how they are confirmed, the `bos-vs-choch` skill.', '6. **Higher timeframe wins** (`bos-vs-choch`, by timeframe).'];
+  for (const p of MS_POINTERS) {
+    assert.ok(flat(ms).includes(p), p);
+    assert.ok(!flat(ms).replace(p, '').includes(p), `removing: ${p}`);
+  }
+  for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'mtf-rejection', 'mtf-breakout', 'confluence-counting', 'invalidation']) {
+    assert.ok(read(file(s)).includes('`bos-vs-choch`'), s);
+  }
+});
+
+test('bos-vs-choch: the description is short, and the swings and breaks are the code\'s', () => {
+  const { data } = parseFrontmatter(read(file('bos-vs-choch')));
+  assert.ok(String(data.description).length <= 160, `${String(data.description).length} characters`);
+  // Swings: strictly above (below) the k bars on each side, k = 2, confirmed k bars later; the 15m and 1h use the default.
+  const se = read('scripts/lib/trading/structure-events.js');
+  assert.match(se, /function pivots\(bars, k = 2\)/);
+  assert.match(se, /if \(!\(bars\[j\]\.h > bars\[m\]\.h\)\) hi = false;/);
+  assert.match(se, /confirmedAt: j \+ k/);
+  // Breaks: a close strictly beyond the last unbroken swing, once; BOS with the previous break's direction, else CHoCH.
+  assert.match(se, /\(direction === 'up' && c > swing\.price\) \|\| \(direction === 'down' && c < swing\.price\)/);
+  assert.match(se, /kind: prev && prev\.direction !== direction \? 'CHoCH' : 'BOS'/);
+  assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
+  const br = read('scripts/lib/trading/briefing.js');
+  assert.match(br, /lastBreak: lastBreaks\(bars\),/);
+  assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
+  assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
+  // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.
+  const bs = briefings();
+  let n = 0;
+  for (const b of bs) {
+    for (const [sec, k] of [['m3', null], ['m15', 'knownAt'], ['h1', 'knownAt']]) {
+      for (const x of [b.sections[sec].data.lastBreak.last, b.sections[sec].data.lastBreak.previous].filter(Boolean)) {
+        n += 1;
+        assert.ok(['BOS', 'CHoCH'].includes(x.kind) && ['up', 'down'].includes(x.direction) && Number.isInteger(x.barsAgo), sec);
+        if (k) assert.ok(x[k], `${sec} ${k}`);
+      }
+    }
+    assert.ok(!resolves(b, 'h1.h4.lastBreak') && resolves(b, 'h1.h4.swingPattern'));
+  }
+  assert.ok(n >= 6, `${n} breaks checked`);
+  // Wicks are no break: a bar trading through the swing and closing back inside makes none.
+  const { lastBreaks } = require('../../scripts/lib/trading/structure-events');
+  const bar = (h, l, c) => ({ t: new Date(Date.UTC(2026, 0, 5, 15, 0) + 180000 * bar.n++).toISOString(), o: c, h, l, c });
+  bar.n = 0;
+  const base = [bar(10, 9, 9.5), bar(11, 9.5, 10), bar(13, 10, 12), bar(12, 10.5, 11), bar(11.5, 10, 10.5)];
+  assert.strictEqual(lastBreaks([...base, bar(13.5, 11, 12.75)]).last, null);
+  assert.strictEqual(lastBreaks([...base, bar(13.5, 11, 13.25)]).last.kind, 'BOS');
+});
+
+test('bos-vs-choch: the timeframes are read top-down, the same logic in the setups and invalidation', () => {
+  const t = flat(read(file('bos-vs-choch')));
+  for (const tf of ['| 3m, 5m |', '| 15m |', '| 1h (4h swings) |']) assert.ok(t.includes(tf), tf);
+  assert.doesNotMatch(t, /\bthe (?:key|main) (?:structural )?(?:signal|evidence)\b/);
+  for (const s of ['bos-vs-choch', 'mtf-rejection', 'mtf-breakout', 'invalidation']) {
+    assert.match(flat(read(file(s))), /timeframe or higher/, s);
   }
 });

@@ -26,10 +26,14 @@ prompt's line (`V` and the `(c-o)` per bar).
 | Bars | shrinking | wide bars closing at their extreme against the trend | last 10 bars, `m3.bar.rangeAtr` |
 | Absorption | against the pullback (`absorption`) | none | last 10 bars |
 
-A 15m or 1h CHoCH against the trend weighs most: then the read is a
-reversal attempt. The pullback ends when its own minor structure breaks
-back: `m3.lastBreak.last` turns the trend's way (the shift or reclaim of
-multi-timeframe-analysis).
+**Read the breaks top-down** (`bos-vs-choch`). A lower-timeframe CHoCH
+inside an intact higher-timeframe structure is a pullback. CHoCHs
+stacking up the timeframes (3m, then 15m, then 1h) are a reversal
+developing. A 15m or 1h CHoCH against the trend weighs most: then the
+read is a reversal attempt. The pullback ends when its own minor
+structure breaks back: `m3.lastBreak.last` turns the trend's way (the
+shift or reclaim of multi-timeframe-analysis): a lower-timeframe CHoCH
+back the HTF way at a level times the entry.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): depth alone is no
 edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).
@@ -41,7 +45,7 @@ zero: not a finding.
 ```text
 Take: 15m up, BOS up; range 21480.00-21560.00, price 21521.50 = 48% retrace; V 1,840 -> 960;
   m3 CHoCH up 0 bars ago: pullback ended. vwap_reclaim long. Priority order: aligned -> take.
-Skip: 15m CHoCH down; 15m swing low 21480.00 brokenAt set; wide down bars on rising V.
+Skip: m3, then 15m CHoCH down; 15m swing low 21480.00 brokenAt set; wide down bars on rising V.
   Read: reversal attempt. vwap_reclaim long; the priority order (step 4, counter) decided skip.
 Loser: read pullback; vwap_reclaim long at 21522.75, stop 21514.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   15m CHoCH down, stopped: -34 ticks, -$17.00. The stop held it to 1R; the read never widens it.

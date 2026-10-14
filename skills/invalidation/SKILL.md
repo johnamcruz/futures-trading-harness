@@ -38,6 +38,12 @@ stop goes on line 9 as `invalidation hit`; acting on it is management's
 call under trade-session, never a wider stop. Stops move toward the
 market only.
 
+**A CHoCH against the trade** (`bos-vs-choch`) weighs by its timeframe
+against the trade's own: on the trade's timeframe or higher
+(`m3.lastBreak.last` for a 3m trade, `m15.lastBreak.last`,
+`h1.lastBreak.last`) it is an invalidation sign for line 9; on a lower
+one it is mostly noise.
+
 Line 9: `9 Manage: invalidation <price, what>, exit <the strategy's exit>`.
 
 ## Examples
