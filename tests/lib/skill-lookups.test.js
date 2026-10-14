@@ -142,7 +142,7 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   const task = (role, s, e) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: 'VERDICT: APPROVE - size 1', time: { start: T + s, end: T + e } } } });
   fs.writeFileSync(file, [task('market-structure-analyst', 1, 2), task('trend-momentum-analyst', 1, 2), task('volume-liquidity-analyst', 1, 2), task('risk-manager', 1, 2), task('risk-manager', 3, 4)].join('\n'));
   // A reversal candidate: the trend analyst indexes pullback-vs-reversal (and the structure analyst and risk manager theirs).
-  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data: m3([{ trendRule: 'reversal' }]) } } });
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { version: 'm3@2026-10-07T14:00:00.000Z', validUntil: '2026-10-07T14:03:00.000Z', data: m3([{ trendRule: 'reversal' }]) } } });
   const rule = () => L.lookupRule({ home, transcript: file, contractId: 'MNQ', now });
   const look = (role, skill) => L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + 1.5);
   look('market-structure-analyst', 'pullback-vs-reversal');
@@ -169,14 +169,24 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule()),
     /not returned yet: market-structure-analyst, trend-momentum-analyst[^]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
   assert.strictEqual(checkRolesRan(onlyP2, 'full', cached), null, 'full mode: the cache counts as before');
-  // The cached reports' own lookups: counted for that role only, and only the skills it looked up.
-  const both = { 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] };
+  // The cached reports' own lookups: counted for that role only, only the skills it looked up, and only under this
+  // order's facts key (the bar and lanes the requirement comes from).
+  const KEY = L.briefingFactsKey(home, 'MNQ', now, {});
+  assert.strictEqual(KEY, 'm3@2026-10-07T14:00:00.000Z');
+  assert.strictEqual(L.briefingFactsKey(home, 'MNQ', now, { MNQ: { 1: '2026-10-07T13:59:00.000Z' } }), 'm3@2026-10-07T14:00:00.000Z|1@2026-10-07T13:59:00.000Z');
+  assert.strictEqual(L.briefingFactsKey(home, 'MNQ', now, null), null, 'unreadable lanes');
+  assert.strictEqual(L.briefingFactsKey(home, 'MNQ', new Date('2026-10-07T15:00:00Z')), null, 'no current briefing');
+  const keyed = (o, key = KEY) => Object.fromEntries(Object.entries(o).map(([r, skills]) => [r, { skills, key }]));
+  const both = keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] });
   assert.strictEqual(checkRolesRan(onlyP2, 'full', cached, p2Rule(both)), null);
-  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule({ ...both, 'market-structure-analyst': ['pullback-vs-reversal'] })),
+  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule({ ...both, ...keyed({ 'market-structure-analyst': ['pullback-vs-reversal'] }) })),
     /not returned yet: market-structure-analyst \(market-structure-analyst was served from the report cache, which made no lookup of rejection/);
-  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] })),
+  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule(keyed({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] }))),
     /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/, 'another role\'s lookups never count');
-  for (const bad of [null, [], 'x', { 'market-structure-analyst': 'rejection' }]) {
+  // Made under another key (an earlier bar, or another lane's bar), or with none: not counted (the reviewer's case: a
+  // candidate that appeared after the report was made).
+  for (const bad of [null, [], 'x', { 'market-structure-analyst': 'rejection' }, { ...both, ...keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'] }, 'm3@2026-10-07T13:51:00.000Z') },
+    { ...both, 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'] } }, { ...both, 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'] }]) {
     assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule(bad)) || '', /market-structure-analyst was served from the report cache/, JSON.stringify(bad));
   }
 });
@@ -293,30 +303,49 @@ test('the runner\'s report cache in index mode: a cached report is served on a b
   // analyst looked nothing up.
   rc.record({ symbols, account: null, now, output: [ev(ms, 10, 20), ev(tm, 10, 20)].join('\n'), served: [], lookups: [{ at: T + 15, role: ms, skill: 'pullback-vs-reversal' }, { at: T + 15, role: ms, skill: 'rejection' }, { at: T + 30, role: tm, skill: 'pullback-vs-reversal' }] });
   assert.deepStrictEqual(RC.readCache(home).analysts[ms].lookups, ['pullback-vs-reversal', 'rejection']);
+  assert.strictEqual(RC.readCache(home).analysts[ms].lookupsKey, versions.m3, 'under the facts key of the cycle that made them');
   assert.deepStrictEqual(RC.readCache(home).analysts[tm].lookups, []);
   const served = rc.serve({ symbols, account: null, now });
   assert.deepStrictEqual(served.roles, [ms], 'the trend analyst runs: its report made no lookup');
-  // The gate's env for the cycle: the cached role's lookups (autotrader childEnv), and the gate config reads them back.
+  // The gate's env for the cycle: the cached role's lookups with their key (autotrader childEnv), read back by the gate.
   const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
-  const ctx = { action: 'trade', cachedRoles: served.roles, cachedLookups: Object.fromEntries(served.reports.map(r => [r.role, r.lookups])) };
+  const ctx = { action: 'trade', cachedRoles: served.roles, cachedLookups: Object.fromEntries(served.reports.map(r => [r.role, { skills: r.lookups, key: r.lookupsKey }])) };
   const env = childEnv(validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' }), '/r', { FTH_CYCLE_CACHED_LOOKUPS: 'stale' }, ctx);
-  assert.deepStrictEqual(JSON.parse(env.FTH_CYCLE_CACHED_LOOKUPS), { [ms]: ['pullback-vs-reversal', 'rejection'] });
+  const want = { [ms]: { skills: ['pullback-vs-reversal', 'rejection'], key: versions.m3 } };
+  assert.deepStrictEqual(JSON.parse(env.FTH_CYCLE_CACHED_LOOKUPS), want);
   const { loadConfig } = require('../../scripts/lib/trading/config');
-  assert.deepStrictEqual(loadConfig(env).cycleCachedLookups, { [ms]: ['pullback-vs-reversal', 'rejection'] });
+  assert.deepStrictEqual(loadConfig(env).cycleCachedLookups, want);
   assert.strictEqual(childEnv(validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' }), '/r', { FTH_CYCLE_CACHED_LOOKUPS: 'stale' }, { action: 'trade' }).FTH_CYCLE_CACHED_LOOKUPS, undefined, 'none cached: never inherited');
-  // The gate config: only cached roles, only skill names; unreadable: none.
-  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ [ms]: ['a', 'B c', 7], [tm]: ['x'] }) }).cycleCachedLookups, { [ms]: ['a'] });
-  for (const raw of ['{', '[]', '"x"', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: raw }).cycleCachedLookups, {}, raw);
-  // On a bar with no candidate both are served (nothing required); in full mode too.
+  // The gate config: only cached roles, only skill names, a key required; unreadable: none.
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ [ms]: { skills: ['a', 'B c', 7], key: 'k' }, [tm]: { skills: ['x'], key: 'k' } }) }).cycleCachedLookups, { [ms]: { skills: ['a'], key: 'k' } });
+  for (const raw of ['{', '[]', '"x"', 'null', JSON.stringify({ [ms]: ['a'] }), JSON.stringify({ [ms]: { skills: ['a'] } }), JSON.stringify({ [ms]: { skills: ['a'], key: '' } })]) {
+    assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: raw }).cycleCachedLookups, {}, raw);
+  }
+  // The same bar with another lane's bar closed (a 1m candidate since): another key, so the structure analyst runs.
+  assert.deepStrictEqual(rc.serve({ symbols, account: null, now, laneBars: { MNQ: { 1: '2026-10-07T13:59:00.000Z' } } }).roles, []);
+  // The next 3m bar, the 15m view unchanged: with a candidate (a new one since the report) it runs; with none, served.
+  const next = cands => ({ ...brief(cands), asOf: '2026-10-07T14:00:00.000Z', sections: { ...brief(cands).sections, m3: sec('m3@2026-10-07T14:00:00.000Z', m3(cands)) } });
+  const nextSym = [{ ...symbols[0], bar: '2026-10-07T14:00:00.000Z' }];
+  write(home, next([{ trendRule: 'reversal' }]));
+  assert.deepStrictEqual(rc.serve({ symbols: nextSym, account: null, now }).roles, [], 'a candidate after the report: credited to none');
+  write(home, next([]));
+  assert.deepStrictEqual(rc.serve({ symbols: nextSym, account: null, now }).roles.sort(), [ms, tm]);
+  // On the bar with no candidate both are served (nothing required); in full mode too.
   write(home, brief([]));
   assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles.sort(), [ms, tm]);
   write(home, brief([{ trendRule: 'reversal' }]));
   assert.deepStrictEqual(reportCacheFor(home, cfg, [], { FTH_ROLE_SKILLS: 'full' }).serve({ symbols, account: null, now }).roles.sort(), [ms, tm]);
-  // A cache entry recorded before lookups were kept (no lookups field): not served where a lookup is required.
-  const c = RC.readCache(home);
-  delete c.analysts[ms].lookups;
-  RC.writeCache(home, c);
-  assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles, []);
+  // A cache entry recorded before lookups were kept (no lookups field), or without its key: not served where required.
+  for (const drop of ['lookups', 'lookupsKey']) {
+    const c = RC.readCache(home);
+    const saved = c.analysts[ms][drop];
+    delete c.analysts[ms][drop];
+    RC.writeCache(home, c);
+    assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles, [], drop);
+    c.analysts[ms][drop] = saved;
+    RC.writeCache(home, c);
+  }
+  assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles, [ms]);
 });
 
 test('the head trader holds no skill_lookup: a lookup counts for the role it names, and only roles hold it', () => {

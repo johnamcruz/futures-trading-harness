@@ -2502,19 +2502,23 @@ test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cache
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
-  writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
+  // The bar's briefing, its m3 version the facts key the requirement comes from (skill-lookups.js factsKey).
+  const brief = version => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { version, validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
+  brief('m3@bar-n');
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
   // Only phase 2 ran this cycle: every other report came from the cache.
   fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
     ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
-  const met = { 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] };
+  const keyed = (o, key = 'm3@bar-n') => Object.fromEntries(Object.entries(o).map(([role, skills]) => [role, { skills, key }]));
+  const met = keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] });
   const run = extra => gate({ ...orderPayload(), transcript_path: transcript }, { ...env, ...extra });
   const none = run({});
   assert.strictEqual(none.code, 2);
   assert.match(none.stderr, /\[roles-ran\][^\n]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
-  for (const raw of ['not json', JSON.stringify({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'] }), JSON.stringify({ ...met, 'market-structure-analyst': ['rejection'] })]) {
+  for (const raw of ['not json', JSON.stringify(keyed({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'] })), JSON.stringify({ ...met, ...keyed({ 'market-structure-analyst': ['rejection'] }) }),
+    JSON.stringify({ ...met, 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'] }), JSON.stringify(keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] }, 'm3@bar-earlier'))]) {
     const r = run({ FTH_CYCLE_CACHED_LOOKUPS: raw });
     assert.strictEqual(r.code, 2, raw);
     assert.match(r.stderr, /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal/, raw);
@@ -2522,6 +2526,9 @@ test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cache
   // Not cached this cycle (FTH_CYCLE_CACHED without it): its lookups are ignored.
   assert.strictEqual(run({ FTH_CYCLE_CACHED: 'trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).code, 2);
   assert.doesNotMatch(run({ FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).stderr, /roles-ran/);
+  // A new bar with a candidate since the reports were made: their lookups are not credited to it.
+  brief('m3@bar-n3');
+  assert.match(run({ FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).stderr, /market-structure-analyst was served from the report cache/);
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });

@@ -75,6 +75,25 @@ test('an analyst\'s report is served while the briefing parts it was built on ho
   assert.deepStrictEqual(RC.serveReports({ cache, briefings: {}, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) }).roles, ['risk-manager']);
 });
 
+test('an analyst\'s entry keeps its own call\'s lookups and the facts key of the cycle that made them; a served report carries both; a kept entry keeps its key', () => {
+  const { a, b } = pair();
+  const T = 1.8e12;
+  const output = [task(ANALYSTS[0], `${data(a)}\nBias: long`, [T + 10, T + 20]), task(ANALYSTS[1], `${data(a)}\nBias: long`, [T + 10, T + 20])].join('\n');
+  const lookups = [{ at: T + 12, role: ANALYSTS[0], skill: 'rejection' }, { at: T + 25, role: ANALYSTS[1], skill: 'late' }, { at: T + 12, role: ANALYSTS[2], skill: 'other' }];
+  const c = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), lookups, lookupsKey: 'k-a' });
+  assert.deepStrictEqual([c.analysts[ANALYSTS[0]].lookups, c.analysts[ANALYSTS[0]].lookupsKey], [['rejection'], 'k-a']);
+  assert.deepStrictEqual(c.analysts[ANALYSTS[1]].lookups, [], 'a lookup after its call is not its report\'s');
+  const s = RC.serveReports({ cache: c, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(c) });
+  const r0 = s.reports.find(r => r.role === ANALYSTS[0]);
+  assert.deepStrictEqual([r0.lookups, r0.lookupsKey], [['rejection'], 'k-a']);
+  // Served on the next bar and recorded again: the entry is kept with its own key, not the new cycle's.
+  const kept = RC.recordReports({ prev: c, output: '', served: [ANALYSTS[0]], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(c), lookups: [], lookupsKey: 'k-b' });
+  assert.strictEqual(kept.analysts[ANALYSTS[0]].lookupsKey, 'k-a');
+  // An entry from before keys were kept: served with none.
+  const old = { ...c, analysts: { [ANALYSTS[0]]: { ...c.analysts[ANALYSTS[0]], lookupsKey: undefined } } };
+  assert.strictEqual(RC.serveReports({ cache: old, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(c) }).reports.find(r => r.role === ANALYSTS[0]).lookupsKey, null);
+});
+
 test('a first risk-manager report with a qualified verdict ("Final VERDICT: APPROVE") is phase 2, never cached as phase 1', () => {
   const { a } = pair();
   for (const verdict of ['Final VERDICT: APPROVE - size 1', 'Phase 2 VERDICT: APPROVE', '**Final Verdict:** APPROVE', '\u200bVERDICT: APPROVE']) {

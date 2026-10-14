@@ -32,6 +32,7 @@
  *   rolesOwn(records, transcript)               the records but the session's own
  *   lookupRule({ root, home, transcript, contractId, now, laneBars, cachedLookups })   (call) -> unmet skills, for checkRolesRan (the session's own lookups left out)
  *   lookupsInCall(records, role, call)          the skills the role looked up inside the call's times, sorted
+ *   factsKey(first, now, lanes), briefingFactsKey(home, root, now, laneBars)   what the requirement comes from, one key
  *   lookupStats({ calls, records, required, m3 })   per cycle: lookups, by role, calls with a requirement, met
  */
 
@@ -124,6 +125,26 @@ function briefingFacts(home, root, now, laneBars = {}) {
   });
 }
 
+/**
+ * What the cycle's lookup requirement comes from, as one key: the runner's bar briefing's m3 version (the bar its
+ * candidates are of) and each other lane's bar that closed this cycle (minutes@bar open): the same key, the same facts
+ * (cycleFacts reads nothing else), so the same requirement. A cached report's lookups count only under the key of the
+ * cycle that made them (lookupRule, runner-wiring.js): a candidate on a later bar or another lane's bar needs its own.
+ * null (nothing counts): no current briefing, no m3 version, or unreadable lanes.
+ */
+function factsKey(first, now, lanes = []) {
+  const v = first && current(first, now) && first.sections && first.sections.m3 ? first.sections.m3.version : null;
+  if (typeof v !== 'string' || !v) return null;
+  const others = (lanes || []).filter(l => Number.isInteger(l.minutes) && l.minutes !== first.minutes).map(l => `${l.minutes}@${l.t}`).sort();
+  return [v, ...others].join('|');
+}
+
+/** factsKey over the harness home for `root` (the gate's view, as briefingFacts). */
+function briefingFactsKey(home, root, now, laneBars = {}) {
+  if (laneBars === null) return null;
+  return factsKey(readBriefing(home, root), now, lanesFor(laneBars, root));
+}
+
 /** A call with the opencode transcript's wall-clock times (ms), not line positions. */
 const timed = c => Number.isFinite(c.start) && Number.isFinite(c.end) && c.start > 1e12;
 
@@ -199,14 +220,21 @@ function requiredFor(root) {
 /**
  * The gate's rule for checkRolesRan: (call, calls) -> the skills it should have looked up and didn't; `needs(role)`:
  * the skills required of a role served from the report cache on this bar that its cached report's own call didn't
- * look up (`cachedLookups`: role -> skills, the runner's FTH_CYCLE_CACHED_LOOKUPS; none recorded: every one required).
+ * look up (`cachedLookups`: role -> { skills, key }, the runner's FTH_CYCLE_CACHED_LOOKUPS): they count only when their
+ * key is this order's facts key (briefingFactsKey: the same bar and lanes the requirement comes from); none recorded,
+ * another key, or no key now: every one required.
  */
 function lookupRule({ root = PLUGIN_ROOT, home, transcript, contractId, now = new Date(), laneBars = {}, cachedLookups = {} }) {
   const required = requiredFor(root);
   const records = rolesOwn(readLookups(transcript), transcript);
-  const m3 = briefingFacts(home, contractRoot(contractId || ''), now, laneBars);
+  const orderRoot = contractRoot(contractId || '');
+  const m3 = briefingFacts(home, orderRoot, now, laneBars);
   const rule = (call, calls) => unmetLookups(call, { records, required, m3, calls });
-  const looked = role => (cachedLookups && Object.prototype.hasOwnProperty.call(cachedLookups, role) && Array.isArray(cachedLookups[role]) ? cachedLookups[role] : []);
+  const key = briefingFactsKey(home, orderRoot, now, laneBars);
+  const looked = role => {
+    const c = cachedLookups && Object.prototype.hasOwnProperty.call(cachedLookups, role) ? cachedLookups[role] : null;
+    return key && c && c.key === key && Array.isArray(c.skills) ? c.skills : [];
+  };
   rule.needs = role => needed(role, required, m3).map(r => r.skill).filter(s => !looked(role).includes(s));
   return rule;
 }
@@ -234,4 +262,4 @@ function lookupStats({ calls = [], records = [], required = new Map(), m3 = null
   return { lookups: records.length, byRole, requiredCalls, met };
 }
 
-module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };
+module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, factsKey, briefingFactsKey, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };

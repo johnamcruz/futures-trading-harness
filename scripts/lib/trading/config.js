@@ -79,9 +79,10 @@ function cycleLaneBarsOf(raw) {
 }
 
 /**
- * FTH_CYCLE_CACHED_LOOKUPS ({"market-structure-analyst": ["breakout"]}, set by the runner): for each role served from
- * the report cache, the skills its cached report's own call looked up (report-cache.js). Only roles in `cached` and
- * skill names; anything else, or an unreadable value, is none (every required lookup stays required: fails closed).
+ * FTH_CYCLE_CACHED_LOOKUPS ({"market-structure-analyst": {"skills": ["breakout"], "key": "<facts key>"}}, set by the
+ * runner): for each role served from the report cache, the skills its cached report's own call looked up and the facts
+ * key they were required under (report-cache.js, skill-lookups.js factsKey). Only roles in `cached`, skill names and a
+ * key; anything else, or an unreadable value, is none (every required lookup stays required: fails closed).
  */
 function cycleCachedLookupsOf(raw, cached = []) {
   if (raw === undefined || String(raw).trim() === '') return {};
@@ -90,8 +91,9 @@ function cycleCachedLookupsOf(raw, cached = []) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
   const out = {};
   for (const role of cached) {
-    const list = Object.prototype.hasOwnProperty.call(o, role) ? o[role] : null;
-    if (Array.isArray(list)) out[role] = list.filter(s => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(s));
+    const e = Object.prototype.hasOwnProperty.call(o, role) ? o[role] : null;
+    if (!e || typeof e !== 'object' || !Array.isArray(e.skills) || typeof e.key !== 'string' || !e.key) continue;
+    out[role] = { skills: e.skills.filter(s => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(s)), key: e.key };
   }
   return out;
 }

@@ -269,12 +269,11 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv });
   // The risk manager carries its situational skills in its core (no lookup required of it): phase 1 is served as in full mode.
   const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1]];
-  // A role served on such a bar: only with a cached report whose own call made the lookups (a role that runs makes them).
+  // A role served on such a bar only with a cached report whose own call made the lookups under the same facts key (the
+  // same 3m bar and lane bars): each 1m setup is a new lane bar, so the roles its lookups require run every time.
   const setupBars = indexed.cycles.filter(x => x.fired.includes('tick_up long') || x.fired.includes('tick_up short'));
-  for (const c of setupBars) {
-    for (const r of LOOKUP_ROLES.filter(x => c.served.includes(x))) assert.ok(c.before.analysts[r].lookups.includes('pullback-vs-reversal'), `${c.at}: ${r} served without its lookups`);
-  }
-  assert.ok(setupBars.some(c => LOOKUP_ROLES.every(r => c.served.includes(r))), 'a setup bar served from reports that made their lookups');
+  assert.ok(setupBars.length >= 3, `setup bars: ${setupBars.length}`);
+  for (const c of setupBars) for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a new setup`);
   assert.ok(indexed.cycles.some(c => !c.fired.some(f => f.startsWith('tick_up')) && c.served.includes(ANALYSTS[0])), 'a cycle without the lane\'s setup: served');
   // Full mode: the lanes' caching rule alone (no lookups required).
   const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });

@@ -609,8 +609,9 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
-  // Index mode: the skills each cached role's report looked up in its own call, which the gate counts for that role.
-  const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, s]) => cachedRoles.includes(r) && Array.isArray(s) && s.length) : [];
+  // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required
+  // under, which the gate counts for that role under that key only.
+  const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, e]) => cachedRoles.includes(r) && e && Array.isArray(e.skills) && e.skills.length && typeof e.key === 'string' && e.key) : [];
   if (looked.length) env.FTH_CYCLE_CACHED_LOOKUPS = JSON.stringify(Object.fromEntries(looked));
   else delete env.FTH_CYCLE_CACHED_LOOKUPS;
   // How the roles' prompts carry their skills (role-skills.js), which the gate reads (index mode enforces the lookups):
@@ -827,18 +828,33 @@ function cycleResult(output) {
  * An end-of-day run is judged by its exit alone, live and in replay alike: the day is judged by the runner's own
  * flatten (verified flat), never by the agents' result line or the workspace guard (its verdict is in the kill switch).
  */
-function cycleOutcome(res, { result, intact, action, lookups = [] }) {
+function cycleOutcome(res, { result, intact, action, lookups = [], reportedResult = null, resultNote = null }) {
   const line = cycleResult(agentOutput(res));
   const word = outcomeOf(line);
   const reported = word !== null && word !== 'error';
   // The agent's own error result: a decision (counted as live counts it), not an infrastructure failure.
   const agentError = Boolean(res.ok && word === 'error');
-  // A trade cycle's `blocked` with no order call in it: scored as no-trade, the line it wrote kept (scoredResult).
-  const scored = res.ok && (action === 'trade' || action === 'manage') ? scoredResult(result, agentOutput(res)) : null;
+  // `result`: the line as scored (scoreRun); `reportedResult`: the one the agent wrote, when scored otherwise.
   return {
-    ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result: scored ? scored.result : result, code: res.code ?? null, transcript: res.stdout || '',
-    ...(scored ? { reportedResult: result, resultNote: scored.note } : {}), ...(agentError ? { agentError: true } : {}), lookups: Array.isArray(lookups) ? lookups : [],
+    ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '',
+    ...(reportedResult ? { reportedResult, resultNote } : {}), ...(agentError ? { agentError: true } : {}), lookups: Array.isArray(lookups) ? lookups : [],
   };
+}
+
+// The harnesses whose transcripts show every trade-executor launch and order call the head trader makes (cycle-log.js
+// toolCalls, roles-ran.js roleCalls): a `blocked` line is scored only for them. Another (Codex launches with
+// spawn_agent, which neither parser reads) keeps its line as written.
+const SCORED_HARNESSES = ['opencode', 'claude'];
+
+/**
+ * The result a run is logged and scored with: runResult's line, and for a trade or manage cycle of a harness in
+ * SCORED_HARNESSES a `blocked` line rewritten as scoredResult says, the agent's own kept: { result, reportedResult?,
+ * resultNote? }.
+ */
+function scoreRun(res, { action, harness } = {}) {
+  const result = runResult(res);
+  const scored = res.ok && (action === 'trade' || action === 'manage') && SCORED_HARNESSES.includes(harness) ? scoredResult(result, agentOutput(res)) : null;
+  return scored ? { result: scored.result, reportedResult: result, resultNote: scored.note } : { result };
 }
 
 // The order tools (the broker interface's names, any server prefix) and the subagent that sends entries.
@@ -859,6 +875,8 @@ function scoredResult(result, output) {
   const calls = require('./cycle-log').toolCalls(text);
   if (!calls.length) return null;
   if (calls.some(c => ORDER_CALL.test(c.name) || (TASK_CALL.has(c.name) && /trade-executor/.test(String(c.input.subagent_type || ''))))) return null;
+  // The roles parser's launches too (a launch still running, in the background, or answered by a tool result).
+  if (require('./trading/roles-ran').roleCalls(text).launches.length) return null;
   const m = /^CYCLE RESULT:[\s*_`]*blocked[*_`]*\s*[:,.]?\s*(?:-\s*)?(.*)$/i.exec(String(result).replace(/^[\s*_`]+/, '').replace(/\s+/g, ' ').trim());
   const reason = m && m[1] ? m[1] : 'no order was refused';
   return { result: `CYCLE RESULT: no-trade - ${reason}`, note: 'reported blocked with no order call this cycle (blocked is a refused order): scored as no-trade' };
@@ -939,6 +957,8 @@ module.exports = {
   offDeskRoles,
   cycleOutcome,
   scoredResult,
+  scoreRun,
+  SCORED_HARNESSES,
   accountText,
   historyText,
   historyShownLines,

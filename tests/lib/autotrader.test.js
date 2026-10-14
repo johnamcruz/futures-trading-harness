@@ -1077,15 +1077,55 @@ test('scoredResult: a trade cycle\'s `blocked` with no order call in its transcr
   assert.strictEqual(scoredResult(line, ''), null);
   assert.strictEqual(scoredResult('CYCLE RESULT: no-trade - x', quiet), null);
   assert.strictEqual(scoredResult('CYCLE RESULT: blockedx - x', quiet), null);
-  // Through cycleOutcome: a trade or manage cycle only; the agent's line kept as reportedResult.
+  // Through scoreRun (what the CLI logs and the cycle log records) and cycleOutcome: a trade or manage cycle of a
+  // harness whose launches are parsed (opencode, Claude); the agent's line kept as reportedResult.
+  const { scoreRun } = require('../../scripts/lib/autotrader');
   const out = `${quiet}\n${JSON.stringify({ type: 'text', timestamp: 2, sessionID: 's', part: { type: 'text', text: line } })}`;
   const res = { ok: true, timedOut: false, code: 0, output: out, stdout: out };
-  const r = cycleOutcome(res, { result: line, intact: true, action: 'trade' });
+  const s = scoreRun(res, { action: 'trade', harness: 'opencode' });
+  assert.deepStrictEqual(s, { result: 'CYCLE RESULT: no-trade - the trend rule blocks longs', reportedResult: line, resultNote: 'reported blocked with no order call this cycle (blocked is a refused order): scored as no-trade' });
+  assert.strictEqual(scoreRun(res, { action: 'manage', harness: 'claude' }).result, 'CYCLE RESULT: no-trade - the trend rule blocks longs');
+  for (const [action, harness] of [['premarket', 'opencode'], ['eod', 'opencode'], ['trade', 'codex'], ['trade', 'qwen'], ['trade', undefined]]) {
+    assert.deepStrictEqual(scoreRun(res, { action, harness }), { result: line }, `${action} ${harness}`);
+  }
+  assert.deepStrictEqual(scoreRun({ ...res, ok: false }, { action: 'trade', harness: 'opencode' }), { result: 'CYCLE RESULT: error - exit 0' });
+  const r = cycleOutcome(res, { result: s.result, reportedResult: s.reportedResult, resultNote: s.resultNote, intact: true, action: 'trade' });
   assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - the trend rule blocks longs');
   assert.strictEqual(r.reportedResult, line);
   assert.strictEqual(r.ok, true);
-  assert.strictEqual(cycleOutcome(res, { result: line, intact: true, action: 'premarket' }).result, line);
-  assert.strictEqual(cycleOutcome({ ...res, ok: false }, { result: line, intact: true, action: 'trade' }).reportedResult, undefined);
+  assert.strictEqual(cycleOutcome(res, { result: line, intact: true, action: 'trade' }).reportedResult, undefined);
+  // A Codex transcript launching the trade-executor with spawn_agent: neither parser reads it, so Codex is never scored.
+  const codex = [JSON.stringify({ type: 'item.completed', item: { id: 'a', type: 'mcp_tool_call', server: 'harness', tool: 'bar_briefing', arguments: {} } }), JSON.stringify({ type: 'item.completed', item: { id: 'b', type: 'collab_tool_call', tool: 'spawn_agent', prompt: 'trade-executor: place the plan' } })].join('\n');
+  assert.ok(scoredResult(line, codex), 'the parsers miss the spawn_agent launch: why Codex is left out');
+  assert.deepStrictEqual(scoreRun({ ok: true, timedOut: false, code: 0, output: `${codex}\n${line}`, stdout: `${codex}\n${line}` }, { action: 'trade', harness: 'codex' }).reportedResult, undefined);
+});
+
+test('childEnv: FTH_CYCLE_CACHED_LOOKUPS is the run\'s own: set only for a cached role with lookups and a key, never inherited', () => {
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' });
+  const stale = { FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['rejection'], key: 'k' } }) };
+  const ms = 'market-structure-analyst';
+  // Nothing cached; cached without lookups; lookups without a key; lookups of a role not cached: dropped.
+  for (const ctx of [{ action: 'trade' }, { action: 'trade', cachedRoles: [ms] }, { action: 'trade', cachedRoles: [ms], cachedLookups: { [ms]: { skills: ['rejection'] } } },
+    { action: 'trade', cachedRoles: ['trend-momentum-analyst'], cachedLookups: { [ms]: { skills: ['rejection'], key: 'k' } } }, null]) {
+    assert.strictEqual(childEnv(cfg, '/r', stale, ctx).FTH_CYCLE_CACHED_LOOKUPS, undefined, JSON.stringify(ctx));
+  }
+  const set = childEnv(cfg, '/r', stale, { action: 'trade', cachedRoles: [ms], cachedLookups: { [ms]: { skills: ['pullback-vs-reversal'], key: 'k2' } } });
+  assert.deepStrictEqual(JSON.parse(set.FTH_CYCLE_CACHED_LOOKUPS), { [ms]: { skills: ['pullback-vs-reversal'], key: 'k2' } });
+});
+
+test('the cycle log records the result as scored and the agent\'s own line beside it (what replay labels read)', () => {
+  const { writeCycleLog } = require('../../scripts/lib/cycle-log');
+  const home = require('../helpers').tmpDir();
+  const at = new Date('2026-10-07T14:30:00Z');
+  const { file } = writeCycleLog(home, { at, action: 'trade', harness: 'opencode', prompt: 'p', output: '', result: 'CYCLE RESULT: no-trade - x', reportedResult: 'CYCLE RESULT: blocked - x' });
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.strictEqual(doc.result, 'CYCLE RESULT: no-trade - x');
+  assert.strictEqual(doc.reportedResult, 'CYCLE RESULT: blocked - x');
+  const line = JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim().split('\n').pop());
+  assert.strictEqual(line.result, 'CYCLE RESULT: no-trade - x');
+  assert.strictEqual(line.reportedResult, 'CYCLE RESULT: blocked - x');
+  const plain = writeCycleLog(home, { at, action: 'trade', harness: 'opencode', prompt: 'p', output: '', result: 'CYCLE RESULT: no-trade - y' });
+  assert.ok(!('reportedResult' in JSON.parse(fs.readFileSync(plain.file, 'utf8'))));
 });
 
 test('the runner\'s opencode plugin: loaded by every run config from the harness root, as opencode 1.x takes a CommonJS plugin ({ id, server }); it refuses a task call naming a denied role and nothing else', async () => {

@@ -137,7 +137,7 @@ function summarize(output, embedded = []) {
  * records, read before the run's lookups file is removed, for the report cache: report-cache.js recordReports).
  * Never throws (logging must not stop trading).
  */
-function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
+function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
   const day = tradingDayKey(at);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
   const att = headPrompt ? require('./head-prompt').parseAttestation(headPrompt) : null;
@@ -154,12 +154,13 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({
-      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, summary, factCheck,
+      // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
+      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck,
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2));
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
-      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, file,
+      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
       ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
     })}\n`);

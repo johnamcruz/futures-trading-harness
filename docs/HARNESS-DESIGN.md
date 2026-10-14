@@ -93,8 +93,10 @@ its bar, else its signal record on its bar, whose setups carry their trend
 rule; neither, or an unreadable list of the cycle's lanes: every lookup is
 required). The cycle prompt shows each lane setup's trend rule. Such a role is served from the
 report cache on that bar only when the call that produced its cached report
-looked up every skill the bar requires (the cache entry keeps that call's
-lookups; the gate counts them, and no others, through
+looked up every skill the bar requires under the same facts key (the bar
+briefing's m3 version and the other lanes' closed bars: a candidate that
+appeared since needs a fresh run; the cache entry keeps that call's lookups and
+key, and the gate counts them, and no others, under that key through
 `FTH_CYCLE_CACHED_LOOKUPS`), and with no current briefing every situational
 lookup of its index is required (fails closed). A role whose core embeds a
 situational skill (the risk manager's `confluence-counting` and `invalidation`)

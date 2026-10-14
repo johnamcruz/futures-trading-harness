@@ -349,24 +349,36 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   const roles = Object.fromEntries(frames.map(f => [f.role, f.minutes]));
   const tfs = [...new Set(frames.map(f => f.minutes))];
   const own = symbols => ({ frames: roles, frameBriefings: Object.fromEntries(symbols.map(s => [s.symbol, Object.fromEntries(tfs.map(m => [m, readFrameBriefing(home, s.symbol, m)]))])) });
+  // The facts key the cycle's lookup requirement comes from (skill-lookups.js factsKey): one-symbol cycles only (an
+  // analyst's report is cached in those alone); else null, under which no cached lookup counts.
+  const keyOf = (b, symbols, now, laneBars) => {
+    const { factsKey, lanesFor } = require('./trading/skill-lookups');
+    return symbols.length === 1 ? factsKey(b[symbols[0].symbol], now, lanesFor(laneBars, symbols[0].symbol)) : null;
+  };
   return {
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
     serve: ({ symbols, account, now, laneBars = {} }) => {
       const b = briefings(symbols);
+      const key = keyOf(b, symbols, now, laneBars);
       const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
       // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar is served only when
-      // the call that produced its cached report looked up every skill required; else it runs (the gate counts those
-      // lookups of a cached report, and no others: trading/skill-lookups.js lookupRule).
+      // the call that produced its cached report looked up every skill required, under this cycle's facts key (the same
+      // bar and lanes: a candidate that appeared since needs a fresh run); else it runs. The gate counts those lookups
+      // of a cached report under that key, and no others (trading/skill-lookups.js lookupRule).
       // Only opencode runs index their roles (autotrader.js childEnv gives every other harness full).
       const needs = cfg.harness === 'opencode' ? lookupNeeds(b, now, env, { home, laneBars }) : {};
-      const met = r => (needs[r.role] || []).every(skill => (r.lookups || []).includes(skill));
-      const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(met);
+      const credited = r => (key && r.lookupsKey === key && Array.isArray(r.lookups) ? r.lookups : []);
+      const met = r => (needs[r.role] || []).every(skill => credited(r).includes(skill));
+      const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(met)
+        .map(r => ({ ...r, lookups: credited(r), lookupsKey: credited(r).length ? key : null }));
       return { roles: reports.map(r => r.role), reports };
     },
-    // `lookups`: the cycle's skill_lookup records (skill-lookups.js), so each cached report keeps its own call's.
-    record: ({ symbols, account, now, output, served, lookups = [] }) => {
+    // `lookups`: the cycle's skill_lookup records (skill-lookups.js), so each cached report keeps its own call's, under
+    // the cycle's facts key (`laneBars` as serve takes them).
+    record: ({ symbols, account, now, output, served, lookups = [], laneBars = {} }) => {
       try {
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups }));
+        const b = briefings(symbols);
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars) }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;

@@ -190,10 +190,10 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
     if (m) {
       // On its own timeframe: its versions now, and never past their time.
       const f = r && r.tf === m ? frameNow({ briefings, frameBriefings, symbols, minutes: m, now }) : null;
-      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m`, lookups: lookupsOf(r) });
+      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m`, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
       continue;
     }
-    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until, lookups: lookupsOf(r) });
+    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
   }
   const p1 = cache.phase1;
   const key = accountKey(account);
@@ -210,9 +210,10 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
  * phase 1's report (the cycle's first risk-manager call, when phase 1 wasn't served from the cache) with the
  * account the cycle was given. Roles served from the cache keep their entry. Each analyst's entry carries the skills
  * that role looked up during the call whose report it holds (`lookups`: the cycle's skill_lookup records,
- * skill-lookups.js; a call without times shows none).
+ * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
+ * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [] }) {
+function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
   const { lookupsInCall } = require('./skill-lookups');
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
@@ -227,13 +228,13 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
       // On its own timeframe: built on its briefing's bar and the shared parts current now, reusable while they hold.
       const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, now });
       const named = f && last ? reportVersions(last.text, f.versions, frameParts(m)) : null;
-      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last) };
+      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
       else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && keep.analysts[role].tf === m) cache.analysts[role] = keep.analysts[role];
       continue;
     }
     const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
-    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last) };
+    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
     else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && !keep.analysts[role].tf) cache.analysts[role] = keep.analysts[role];
   }
   const key = accountKey(account);
