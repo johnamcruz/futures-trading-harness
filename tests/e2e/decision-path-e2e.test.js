@@ -90,7 +90,9 @@ test('decision path, skip: a setup on the table, the model passes; recorded as s
 });
 
 // Each trader-process step's skills (docs/COMPOSED-ENTRY.md section 1): a role embeds (role-skills) or indexes (role-index)
-// each, so in either mode (FTH_ROLE_SKILLS full or index) some role can read it. The head trader loads by the skill tool.
+// each, or a role's body points to it for skill_lookup (a sentence naming the skill and skill_lookup, in a role that holds
+// the tool: top-down-entry, the market-structure analyst's setup step), so in either mode (FTH_ROLE_SKILLS full or index)
+// some role can read it. The head trader loads by the skill tool.
 const STEP_SKILLS = {
   bias: ['daily-bias', 'htf-to-ltf', 'bos-vs-choch', 'multi-timeframe-analysis'],
   location: ['levels-and-reactions', 'vwap-volume-profile'],
@@ -100,22 +102,28 @@ const STEP_SKILLS = {
   target: ['top-down-entry'],
   risk: ['position-sizing', 'confluence-counting'],
 };
-// Step skills in no role's lists: a role's body names them for skill_lookup, but its role-index doesn't list them, so
-// index mode's prompt shows no index line for them (top-down-entry: agents/market-structure-analyst.md's body). A
-// finding for a separate change; delete the entry when the index lists it.
-const NOT_IN_A_ROLE_LIST = ['top-down-entry'];
-test('decision path: each trader-process step has a skill a role embeds or indexes (both modes), and skill_lookup reads it', () => {
+/** Whether a role's body points to skill `s` for skill_lookup: one sentence names both, and the role holds the tool. */
+const pointsTo = (r, s) => r.tools.some(t => /(^|__)skill_lookup$/.test(t))
+  && r.body.replace(/\s+/g, ' ').split(/(?<=\.)\s/).some(x => x.includes(`\`${s}\``) && x.includes('`skill_lookup`'));
+test('decision path: each trader-process step has a skill a role embeds, indexes or points to for skill_lookup (both modes), and skill_lookup reads it', () => {
   const roles = loadRoles(D.ROOT);
   const { skillLookup } = require('../../scripts/lib/harness-tools/skills');
   const nowhere = [];
   for (const [step, skills] of Object.entries(STEP_SKILLS)) {
     for (const s of skills) {
       assert.match(skillLookup({ skill: s }, { root: D.ROOT, env: {} }).text, new RegExp(`^<skill name="${s}">`), `${step}: ${s}`);
-      const by = roles.filter(r => r.skills.includes(s) || r.index.includes(s));
+      const by = roles.filter(r => r.skills.includes(s) || r.index.includes(s) || pointsTo(r, s));
       if (!by.length) nowhere.push(s);
     }
   }
-  assert.deepStrictEqual(nowhere, NOT_IN_A_ROLE_LIST);
+  assert.deepStrictEqual(nowhere, []);
+  // The pointer is read from the body's text: the market-structure analyst's setup step points to top-down-entry; a
+  // body without the sentence, or a role without the tool, points to nothing.
+  const msa = roles.find(r => r.name === 'market-structure-analyst');
+  assert.ok(pointsTo(msa, 'top-down-entry') && !msa.skills.includes('top-down-entry') && !msa.index.includes('top-down-entry'));
+  assert.ok(!pointsTo({ ...msa, body: msa.body.replace(/`top-down-entry`/g, 'the top-down skill') }, 'top-down-entry'));
+  assert.ok(!pointsTo({ ...msa, tools: msa.tools.filter(t => !/skill_lookup$/.test(t)) }, 'top-down-entry'));
+  assert.ok(!pointsTo(msa, 'position-sizing'));
 });
 
 test('decision path, veto: risk-manager phase 2 vetoes; no order is sent; recorded as a no-trade on the setup with the veto in its result', async () => {
