@@ -444,12 +444,20 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   assert.match(read('skills/liquidity-concepts/SKILL.md'), /`levels-and-reactions` skill's[^]*the `breakout-vs-fakeout` skill/);
   assert.match(read('skills/vwap-volume-profile/SKILL.md'), /`momentum-and-volume` skill's[^]*the `absorption` skill/);
   assert.match(read('skills/trend-momentum-indicators/SKILL.md'), /`trend-vs-range` skill's/);
-  // The generated opencode roles carry them in full.
+  // The generated opencode roles carry them: in full mode (FTH_ROLE_SKILLS=full) embedded; in the committed file
+  // (index, the default) embedded when in the role's core (role-skills), else one line of its skill index.
+  const { expectedFiles, loadAgents } = require('../../scripts/lib/harness-sync');
+  const full = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
   const oc = JSON.parse(read('workspace/opencode.json'));
+  const core = Object.fromEntries(loadAgents(ROOT).map(a => [a.name, a.skills]));
   for (const [role, mine] of Object.entries(ROLES)) {
     for (const s of SKILLS) {
       const body = parseFrontmatter(read(file(s))).body.trim();
-      assert.strictEqual(oc.agent[role].prompt.includes(`<skill name="${s}">\n${body}\n</skill>`), mine.includes(s), `${role}: ${s}`);
+      const embedded = p => p.includes(`<skill name="${s}">\n${body}\n</skill>`);
+      assert.strictEqual(embedded(full.agent[role].prompt), mine.includes(s), `${role}: ${s} (full)`);
+      const prompt = oc.agent[role].prompt;
+      assert.strictEqual(embedded(prompt), mine.includes(s) && core[role].includes(s), `${role}: ${s} (index: embedded)`);
+      assert.strictEqual(prompt.includes(`\n- ${s}: `), mine.includes(s) && !core[role].includes(s), `${role}: ${s} (index: listed)`);
     }
   }
 });

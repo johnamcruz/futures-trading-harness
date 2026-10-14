@@ -324,7 +324,10 @@ function framesText({ cycles, keysAfter }) {
 }
 
 test('analysts on 3m, 15m and 1h with a 1m signal lane: each reads its own timeframe\'s briefing; the hit/miss sequence and keys are pinned; slower analysts hit far more often', async () => {
-  const extraEnv = tickUp();
+  // Role skills full: the own-timeframe rule alone. In index mode, the default, a role a lookup is required of also
+  // runs on a bar where a setup fired (runner-wiring lookupRoles), pinned in runner-replay-cache.txt and
+  // runner-replay-lanes-cache.txt.
+  const extraEnv = { ...tickUp(), FTH_ROLE_SKILLS: 'full' };
   const one = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst });
   const multi = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst, agents: AGENT_TFS });
   assert.ok(multi.cycles.length >= 40, `cycles: ${multi.cycles.length}`);

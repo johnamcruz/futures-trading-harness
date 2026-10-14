@@ -7,7 +7,9 @@ const { loadConfig } = require('../../scripts/lib/trading/config');
 const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
-const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+// Role skills full (FTH_ROLE_SKILLS=full, as the runner sets for every harness but opencode): index mode's lookup rule,
+// the default, has its own tests (the "Index mode" section below, under the default with no FTH_ROLE_SKILLS set).
+const config = { ...loadConfig({ FTH_ROLE_SKILLS: 'full' }), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
 const checks = r => r.violations.map(v => v.check).sort();
 const evaluate = (input, entries, opts = {}) =>
   evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
@@ -1597,7 +1599,8 @@ test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript fro
   const { checkOrder } = require('../../scripts/lib/trading/check-order');
   const live = replaySetup({ replay: false });
   const file = path.join(require('../helpers').tmpDir(), 'cycle-transcript.jsonl');
-  const env = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
+  // Role skills full (the runner's FTH_ROLE_SKILLS for every harness but opencode): index mode's lookups have their own tests.
+  const env = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_ROLE_SKILLS: 'full' };
   assert.deepStrictEqual(loadConfig(env).cycle, 'full');
   assert.strictEqual(loadConfig({ FTH_CYCLE: 'fast' }).cycle, null);
   fs.writeFileSync(file, ocSkills.join('\n'));
@@ -1616,7 +1619,7 @@ test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED
   const live = replaySetup({ replay: false });
   const file = path.join(require('../helpers').tmpDir(), 'cycle-transcript.jsonl');
   const analysts = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
-  const base = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ' };
+  const base = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ', FTH_ROLE_SKILLS: 'full' };
   const refused = env => checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.find(v => v.check === 'roles-ran');
   // Only phase 2 ran this cycle: refused without the cache, accepted with every other role served from it.
   fs.writeFileSync(file, [...ocSkills, ocEvent('task', { subagent_type: 'risk-manager' })].join('\n'));
@@ -1916,7 +1919,7 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   assert.match(refused.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, risk-manager phase 1/);
   assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
   assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
-  // Full mode (the default): no lookup is required.
+  // Full mode (on request, FTH_ROLE_SKILLS=full): no lookup is required.
   assert.deepStrictEqual(run(entryOrder(), { ...index, roleSkills: 'full' }).violations, []);
   // Each role looked its own up during one of its calls (phase 2 for the risk manager): counted.
   const all = () => {
@@ -1953,6 +1956,58 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
   assert.deepStrictEqual(run(entryOrder({ rationale: '[protect] stop for the long' })).violations, []);
+});
+
+test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry needs the lookups its bar requires; exits, protective stops, stop moves, cancels and closes are never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { orderTool } = require('../../scripts/lib/trading/mcp-gateway');
+  const dir = require('../helpers').tmpDir();
+  const home = trendHome();
+  const file = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const T = 1.8e12;
+  const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
+  fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
+    timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
+  // A reversal candidate on this bar: every role that indexes its situational skills must look them up.
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  // The gate's config as the runner's environment gives it, with no FTH_ROLE_SKILLS: index.
+  const env = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
+  const fromEnv = loadConfig(env);
+  assert.strictEqual(fromEnv.roleSkills, 'index');
+  const cfg = { ...config, ...fromEnv, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home };
+  const run = input => {
+    const r = evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+    return { ...r, violations: r.violations.filter(v => v.check !== 'phase2-facts') };
+  };
+  // The entry: refused, the roles' reports don't count without their lookups.
+  const refused = run(entryOrder());
+  assert.deepStrictEqual(checks(refused), ['roles-ran']);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  // Never held by a missing lookup: an exit and a protective stop (place_order), a stop move and a risk-reducing size
+  // cut (modify_order), a cancel and a partial close (the gateway's account checks only), and close_position (never
+  // gated: not an order tool of the gateway's).
+  assert.deepStrictEqual(run(entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations, []);
+  assert.deepStrictEqual(run(entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long', stopLossBracket: undefined })).violations, []);
+  assert.deepStrictEqual(evaluateModify({ input: { accountId: 1, orderId: 7, stopPrice: 21490 }, config: cfg }).violations, []);
+  assert.deepStrictEqual(evaluateModify({ input: { accountId: 1, orderId: 7, size: 1, reason: '[exit] partial taken' }, config: cfg }).violations, []);
+  for (const tool of ['cancel_order', 'partial_close_position']) {
+    const r = checkOrder({ accountId: 1, orderId: 7, contractId: CONTRACT, size: 1 }, { env, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW, tool });
+    assert.strictEqual(r.allowed, true, `${tool}: ${r.message}`);
+  }
+  assert.strictEqual(orderTool({ method: 'tools/call', params: { name: 'mcp__broker__close_position', arguments: {} } }), null);
+  // The lookups made during the roles' calls: the entry goes.
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
+  look('market-structure-analyst', 'mtf-rejection', 11);
+  look('market-structure-analyst', 'pullback-vs-reversal', 12);
+  look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 32);
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
 });
 
 test('account gate across a contract roll: an [exit], [protect] or partial close matches the position\'s contract exactly, named from one read of today\'s front month; never by a stale root alias', () => {

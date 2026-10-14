@@ -6,9 +6,9 @@
  *   node scripts/sync-harness.js          write
  *   node scripts/sync-harness.js --check  exit 1 if anything is stale (CI)
  *
- * FTH_ROLE_SKILLS (full, the default; trimmed; index) picks how opencode's role prompts carry their skills
- * (scripts/lib/role-skills.js). The committed files are full: a checkout set to another mode is for a
- * paired replay, and its --check compares against that mode.
+ * FTH_ROLE_SKILLS (index, the default; full on request) picks how opencode's role prompts carry their skills
+ * (scripts/lib/role-skills.js). The committed files are index: a checkout set to full is for a paired replay
+ * or a run that asks for it, and its --check compares against that mode.
  */
 
 'use strict';

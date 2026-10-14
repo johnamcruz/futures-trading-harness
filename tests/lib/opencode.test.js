@@ -119,8 +119,11 @@ test('roles: everything denied, then their own tools; only trade-executor holds 
     const entry = config.agent[a.name];
     assert.strictEqual(entry.mode, 'subagent');
     assert.strictEqual(entry.description, a.description);
-    // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills.
-    assert.strictEqual(entry.prompt, oc.agentPrompt({ ...a, skillDocs: require('../../scripts/lib/harness-sync').agentSkills(ROOT, a) }), `${a.name}: its instructions are the prompt`);
+    // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills, in the default
+    // mode (role-skills.js: index, its core embedded and its index listed).
+    const skillDocs = require('../../scripts/lib/harness-sync').agentSkills(ROOT, a);
+    const RS = require('../../scripts/lib/role-skills');
+    assert.strictEqual(entry.prompt, oc.agentPrompt({ ...a, skillDocs, skillPlan: RS.skillPlan(a, skillDocs, RS.DEFAULT_MODE) }), `${a.name}: its instructions are the prompt`);
     assert.ok(entry.prompt.includes(a.body.slice(-200)), `${a.name}: its body in full`);
     assert.deepStrictEqual(Object.entries(entry.permission)[0], ['*', 'deny'], `${a.name}: denied first`);
     // A role's rules come after the session's: they decide alone.
@@ -205,9 +208,10 @@ test('the committed workspace/opencode.json is the generated one', () => {
   assert.strictEqual(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'), expectedFiles(ROOT)['workspace/opencode.json']);
 });
 
-test('each role\'s prompt carries its declared skills in full, so a role never decides without them', () => {
+test('each role\'s prompt carries its declared skills in full (full mode), so a role never decides without them', () => {
   const { agentSkills } = require('../../scripts/lib/harness-sync');
-  const generated = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
+  // Full mode, on request (FTH_ROLE_SKILLS=full; the committed file is index, the default: role-skills.test.js).
+  const generated = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
   for (const a of agents) {
     assert.ok(a.skills.length > 0, `agents/${a.file} declares its skills (frontmatter role-skills)`);
     // The declared list is the one its body tells other harnesses to load: they can't drift apart.

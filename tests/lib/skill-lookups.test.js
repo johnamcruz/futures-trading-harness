@@ -140,7 +140,8 @@ test('the runner\'s report cache: in index mode a role a lookup is required of o
   const now = new Date('2026-10-07T14:00:00Z');
   const b = data => ({ MNQ: { symbol: 'MNQ', sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data } } } });
   const index = { FTH_ROLE_SKILLS: 'index' };
-  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}), [], 'full mode: the cache as before');
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, { FTH_ROLE_SKILLS: 'full' }), [], 'full mode: the cache as before');
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst'], 'index is the default');
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'allows' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager']);
   assert.deepStrictEqual(lookupRoles(b(m3([])), now, index), [], 'no candidate: the cache serves every role');

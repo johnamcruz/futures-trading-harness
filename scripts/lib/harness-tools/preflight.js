@@ -43,20 +43,21 @@ function compareTools(got, want = listTools()) {
 }
 
 /**
- * An opencode run (FTH_ROLE_SKILLS set by the runner, PWD its directory): its opencode.json must be the one
- * generated for that mode (role-skills.js), else the role prompts and the gate's lookup check disagree. null when it is.
+ * An opencode run (its run config, OPENCODE_CONFIG_CONTENT, and FTH_ROLE_SKILLS set by the runner, PWD its directory):
+ * its opencode.json must be the one generated for that mode (role-skills.js), else the role prompts and the gate's
+ * lookup check disagree. null when it is, or when the run isn't opencode's (the runner sets full for the others).
  */
 const INDEX_MARK = '## Your skill index'; // opencode.js indexPrompt's heading: a role prompt in index mode
 function roleSkillsMismatch(root, env = {}) {
-  if (env.FTH_ROLE_SKILLS === undefined || !env.PWD) return null;
+  if (env.OPENCODE_CONFIG_CONTENT === undefined || env.FTH_ROLE_SKILLS === undefined || !env.PWD) return null;
   const mode = require('../role-skills').modeOf(env);
   const generated = m => require('../harness-sync').expectedFiles(root, { mode: m })['workspace/opencode.json'];
   let got = null;
   try { got = fs.readFileSync(path.join(env.PWD, 'opencode.json'), 'utf8'); } catch (_err) { /* missing */ }
-  // Full (the default): only a workspace with index-mode role prompts is refused (its roles would skip lookups the gate
-  // doesn't check), whatever checkout generated it; anything else is as before. Index: exactly the index-mode file.
+  // Full (on request): only a workspace with index-mode role prompts is refused (its roles would skip lookups the gate
+  // doesn't check), whatever checkout generated it. Index (the default): exactly the index-mode file.
   const bad = mode === 'full' ? got !== null && got.includes(INDEX_MARK) : got !== generated('index');
-  return bad ? `${path.join(env.PWD, 'opencode.json')} is not the one generated for FTH_ROLE_SKILLS=${mode}: run FTH_ROLE_SKILLS=${mode} node scripts/sync-harness.js (the committed file is full)` : null;
+  return bad ? `${path.join(env.PWD, 'opencode.json')} is not the one generated for FTH_ROLE_SKILLS=${mode}: run FTH_ROLE_SKILLS=${mode} node scripts/sync-harness.js (the committed file is index)` : null;
 }
 
 async function checkToolsServer({ root, env = process.env, timeoutMs = 15000, command = process.execPath, args = null } = {}) {

@@ -26,7 +26,7 @@
  * A harness that passes no transcript (Codex) carries the skills in the
  * workspace instructions (AGENTS.md); for it the check doesn't apply.
  *
- * In index mode (FTH_ROLE_SKILLS=index, opencode only) the situational skills
+ * In index mode (the default, FTH_ROLE_SKILLS not full, opencode only) the situational skills
  * (SITUATIONAL) marked for the head trader that the bar briefing triggers are
  * required as well (the gate adds them to the list it checks), and a
  * skill_lookup in the session's transcript counts as a load.
@@ -44,7 +44,7 @@ const path = require('path');
 const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
 
 /*
- * Situational skills (index mode only, FTH_ROLE_SKILLS=index: role-skills.js): when the cycle's bar briefing shows
+ * Situational skills (index mode only, the default, FTH_ROLE_SKILLS not full: role-skills.js): when the cycle's bar briefing shows
  * the situation, the skill is read before an entry by each role whose `role-index` lists it (skill_lookup naming its
  * role during one of its calls this cycle: skill-lookups.js; a subagent's own tool calls, skill loads included, are
  * not in the session's transcript, so the harness tool records them), and, for an entry marked `head`, by the head

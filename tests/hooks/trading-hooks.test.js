@@ -2074,7 +2074,7 @@ test('order gate wiring: the gateway, behind the translator, refuses an entry un
 
 test('order gate: in an autonomous full cycle, an entry waits until the analysts and both risk-manager phases returned (Claude transcript)', () => {
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
-    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
   const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
@@ -2117,7 +2117,7 @@ test('order gate hook: a room fact is about the order\'s own setup tag (phase2-f
   const B = require('../../scripts/lib/trading/briefing');
   const BAR = '2026-10-07T14:24:00.000Z';
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
-    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
   // The order's setup:anytime long is short of room; vx long has room.
   B.writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T14:27:00.000Z', sections: {
     m3: { version: 'a', validUntil: '2026-10-07T14:30:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', candidates: [
@@ -2144,7 +2144,7 @@ test('order gate: in an autonomous cycle, an entry approved on a fact the bar br
   const B = require('../../scripts/lib/trading/briefing');
   const BAR = '2026-10-07T14:24:00.000Z';
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
-    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
   B.writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T14:27:00.000Z', sections: {
     m3: { version: 'a', validUntil: '2026-10-07T14:30:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', vwap: { side: 'below' } } },
     m15: { version: 'b', validUntil: '2026-10-07T14:30:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
@@ -2367,7 +2367,7 @@ test('order gate wiring: outside a runner, a live broker whose API URL variable 
   assert.strictEqual(exit.code, 0, 'exits are always allowed');
 });
 
-test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report counts only with the lookups its bar requires; an exit is never held', () => {
+test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a role\'s report counts only with the lookups its bar requires; an exit, a protective stop and a stop move are never held', () => {
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
   const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
@@ -2381,15 +2381,25 @@ test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report co
   fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ev('skill', { name })),
     ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
       .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
-  const index = { ...env, FTH_ROLE_SKILLS: 'index' };
+  // The default: no FTH_ROLE_SKILLS in the hook's environment is index mode.
+  assert.strictEqual(env.FTH_ROLE_SKILLS, undefined);
+  const index = env;
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
   look('risk-manager', 'confluence-counting', 31);
   look('risk-manager', 'invalidation', 31);
   const r = gate({ ...orderPayload(), transcript_path: transcript }, index);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, breakout(?![\w-])/);
-  // The default (full): not required.
-  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, { ...env, FTH_ROLE_SKILLS: 'index' }).stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up/);
+  // Full, on request (as the runner sets for every harness but opencode): not required.
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, { ...env, FTH_ROLE_SKILLS: 'full' }).stderr, /roles-ran/);
+  // Never held by the missing lookup: an exit, a protective stop, a stop move (modify_order).
+  for (const order of [{ ...ORDER, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
+    const r2 = gate({ ...orderPayload(order), transcript_path: transcript }, index);
+    assert.strictEqual(r2.code, 0, r2.stderr);
+  }
+  const moved = gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: ORDER.accountId, orderId: 7, stopPrice: 21490 }, transcript_path: transcript }, index);
+  assert.strictEqual(moved.code, 0, moved.stderr);
   // Looked up during its call (the harness tool records it next to the transcript): counted.
   look('market-structure-analyst', 'breakout-vs-fakeout', 15);
   look('market-structure-analyst', 'breakout', 15);

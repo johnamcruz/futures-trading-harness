@@ -2,7 +2,7 @@
 
 /**
  * The roles' skill lookups in an autonomous cycle, and the order gate's check of the required ones (index mode,
- * FTH_ROLE_SKILLS=index: role-skills.js).
+ * the default, FTH_ROLE_SKILLS not full: role-skills.js).
  *
  * The harness tool skill_lookup records each lookup that names its role, while the runner's cycle runs
  * (FTH_CYCLE_TRANSCRIPT set): one JSON line { at (wall-clock ms), role, skill } in

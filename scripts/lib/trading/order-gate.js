@@ -331,11 +331,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
   const transcript = transcriptPath || config.cycleTranscript;
-  // In index mode (FTH_ROLE_SKILLS=index) the situational skills this bar's briefing triggers too (skills-loaded.js).
+  // In index mode (the default, FTH_ROLE_SKILLS not full) the situational skills this bar's briefing triggers too (skills-loaded.js).
   const situational = config.autonomous && config.roleSkills === 'index' ? situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now)) : [];
   add('skills-loaded', checkSkillsLoaded(transcript, [...REQUIRED_FOR_ENTRY, ...situational.filter(s => !REQUIRED_FOR_ENTRY.includes(s))]));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
-  // In index mode (FTH_ROLE_SKILLS=index), a role's report counts only with the lookups this bar requires of it.
+  // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now }) : null;
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a

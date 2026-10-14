@@ -17,11 +17,11 @@
 - Agents: `agents/<name>.md` with `name`, `description`, `tools`, `model`; fewest
   tools that work; order tools belong to `trade-executor` only. `role-skills` lists
   the skills the role uses every call; `role-index`, optional, the ones it reads only
-  when a cycle needs them in opencode's index mode (the role holds
+  when a cycle needs them in opencode's index mode, the default (the role holds
   `mcp__harness__skill_lookup`). Its body's "Load the skills ..." sentence names both
-  lists together: every adapter that reads the body loads them all, and only
-  `FTH_ROLE_SKILLS=index` splits them (the core embedded, "Look up as needed: ..." for
-  the index).
+  lists together: every adapter that reads the body loads them all, and opencode's
+  prompts split them (the core embedded, "Look up as needed: ..." for the index) unless
+  `FTH_ROLE_SKILLS=full`.
   A skill goes in the index when the role needs it only in some situations; when a
   situation makes it necessary, add the trigger to `SITUATIONAL` in
   `scripts/lib/trading/skills-loaded.js` (a small vocabulary over the bar briefing's

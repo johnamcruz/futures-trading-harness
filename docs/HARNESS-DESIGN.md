@@ -72,13 +72,17 @@ environment. Each role's prompt is its agent body followed by the skills its
 every call without a skill-load turn, as part of its fixed prompt prefix that
 a local model server caches, and its "Load the skills" sentence says they are
 below. A role's optional `role-index` (skills its "Load the skills" sentence
-names with the core: Claude Code, Codex and Qwen Code load them all) is
-embedded in full too by default; with `FTH_ROLE_SKILLS=index` (generated with
-`FTH_ROLE_SKILLS=index node scripts/sync-harness.js`; the runner's start check
-refuses a workspace generated for another mode) it becomes one line per skill
-(its description), which the role reads with the harness tool `skill_lookup`
-only when the cycle needs it, and the prompt's load sentence becomes two (the
-core below; "Look up as needed: ..." for the index). Where a bar's briefing makes an indexed skill
+names with the core: Claude Code, Codex and Qwen Code load them all) is, by
+default (`FTH_ROLE_SKILLS` unset or `index`, the committed file), one line per
+skill (its description), which the role reads with the harness tool
+`skill_lookup` only when the cycle needs it, and the prompt's load sentence
+becomes two (the core below; "Look up as needed: ..." for the index). With
+`FTH_ROLE_SKILLS=full` (generated with `FTH_ROLE_SKILLS=full node
+scripts/sync-harness.js`; the runner's start check refuses a workspace
+generated for another mode) the index is embedded in full too. The runner
+passes opencode's mode to its run and `full` to every other harness's run,
+whose roles load all their skills as their body says, so the gate never waits
+on a lookup those roles don't make. Where a bar's briefing makes an indexed skill
 necessary (`SITUATIONAL`, `scripts/lib/trading/skills-loaded.js`), the order
 gate counts the role's report for an entry only if the role looked it up
 during that call: the harness tool records each lookup with the role it names

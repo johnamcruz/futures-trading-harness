@@ -10,17 +10,18 @@
  *
  * The switch FTH_ROLE_SKILLS picks the mode (sync-harness generates for it; the runner and the order gate read it):
  *
- *   full    (the default, until a paired replay proves index) every skill of both lists embedded in full
- *   index   the core embedded in full; the index as one line per skill (its name and description), read whole
- *           with the harness tool skill_lookup only when the cycle needs it; the load sentence becomes two (the core
- *           below; "Look up as needed: ..." for the index)
+ *   index   (the default) the core embedded in full; the index as one line per skill (its name and description),
+ *           read whole with the harness tool skill_lookup only when the cycle needs it; the load sentence becomes two
+ *           (the core below; "Look up as needed: ..." for the index)
+ *   full    (on request, FTH_ROLE_SKILLS=full) every skill of both lists embedded in full
  *
  * In index mode the situational skills (trading/skills-loaded.js SITUATIONAL) a role's index lists are required
  * when the cycle's bar briefing triggers them: the role's report counts for an entry only once it looked the
  * skill up in the call that reported (trading/skill-lookups.js). Other adapters (Claude Code, Codex, Qwen Code)
  * load the skills themselves, as the body says.
  *
- *   modeOf(env)                          'full' | 'index' (throws on another value)
+ *   DEFAULT_MODE                         'index' (FTH_ROLE_SKILLS unset or blank)
+ *   modeOf(env)                          'index' | 'full' (throws on another value)
  *   skillPlan(agent, docs, mode)         { mode, docs, indexed, required } for the role's prompt
  *   loadRoles(root)                      agents/*.md as { name, skills, index, tools, body }
  *   requiredByRole(root, mode)           Map role -> [{ skill, when: [trigger] }] (index mode only; else empty)
@@ -34,10 +35,11 @@ const { SITUATIONAL, parseTrigger } = require('./trading/skills-loaded');
 
 const SWITCH = 'FTH_ROLE_SKILLS';
 const MODES = ['full', 'index'];
+const DEFAULT_MODE = 'index';
 
 function modeOf(env = process.env) {
   const v = String(env[SWITCH] || '').trim();
-  if (!v) return 'full';
+  if (!v) return DEFAULT_MODE;
   if (!MODES.includes(v)) throw new Error(`${SWITCH}: one of ${MODES.join(', ')} (got "${v}")`);
   return v;
 }
@@ -106,4 +108,4 @@ function planErrors(agents, skillNames, strategyNames = null) {
   return errors;
 }
 
-module.exports = { SWITCH, MODES, SITUATIONAL, modeOf, requiredOf, skillPlan, loadRoles, requiredByRole, planErrors };
+module.exports = { SWITCH, MODES, DEFAULT_MODE, SITUATIONAL, modeOf, requiredOf, skillPlan, loadRoles, requiredByRole, planErrors };

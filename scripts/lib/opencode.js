@@ -41,9 +41,9 @@
  * its project from PWD, not the process's working directory.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
- *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs: role-skills,
- *                                then role-index), or in index mode (skillPlan, FTH_ROLE_SKILLS=index:
- *                                role-skills.js) its core skills and an index of the rest (skill_lookup)
+ *   agentPrompt(agent)           a role's prompt: in index mode, the default (skillPlan: role-skills.js), its
+ *                                body, its core skills and an index of the rest (skill_lookup); in full mode
+ *                                (FTH_ROLE_SKILLS=full, or no skillPlan) its body and every skill in full
  *   agentConfig(agent)           a role as an opencode agent entry
  *   workspaceConfig(agents)      workspace/opencode.json's object
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch

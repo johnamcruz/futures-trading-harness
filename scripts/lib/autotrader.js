@@ -554,7 +554,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
-  delete env.FTH_ROLE_SKILLS;
+  // How the roles' prompts carry their skills (role-skills.js), which the gate reads (index mode enforces the lookups):
+  // only opencode embeds skills in its roles (its mode, index by default, below); every other harness's roles load
+  // all their skills as their body says, which is full.
+  env.FTH_ROLE_SKILLS = 'full';
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -562,8 +565,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
   }
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
-    // How its roles' prompts carry their skills (role-skills.js): the gate enforces index mode's lookups. Only opencode
-    // embeds skills in its roles, so no other harness's run carries it.
+    // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups.
     env.FTH_ROLE_SKILLS = require('./role-skills').modeOf(base);
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
     return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context) });
