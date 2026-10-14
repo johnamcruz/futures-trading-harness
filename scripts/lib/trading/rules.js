@@ -52,6 +52,39 @@
  *   htfc_open(m) htfc_high(m) htfc_low(m)
  *               the m-minute candle in progress, up to and including this bar
  *               (htfc_low(60) < htf_low(60): this hour swept the last hour's low)
+ *   htfd_open(m) htfd_high(m) htfd_low(m) htfd_close(m) htfd_volume(m)
+ *               the last m-minute candle COMPLETED by this bar's close (d = done;
+ *               scripts/lib/trading/candle-facts.js): on the bar that closes a
+ *               candle it is that candle (htf_* is still the one before it until
+ *               the next candle opens); never the candle forming. m = 3, 5, 15, 60
+ *               (any m dividing a day) made of whole bars of the strategy's own
+ *               timeframe (the bar size is given, never guessed): 5m from 3m bars
+ *               has no value (never approximated)
+ *   htfd_prev_high(m) htfd_prev_low(m)   the candle before it
+ *   htfd_body(m) htfd_upper_wick(m) htfd_lower_wick(m)   shares of its range (0-1)
+ *   htfd_close_loc(m)  where it closed: 1 top third, 0 middle, -1 bottom third
+ *   htfd_range_atr(m)  its range in the timeframe's ATR(14) as of the candle before
+ *   htfd_vol_ratio(m)  its volume against the 20 candles before it (average)
+ *   htfd_doji(m) htfd_hammer(m) htfd_shooting_star(m) htfd_inside(m) htfd_outside(m)
+ *               1 when its pattern definition holds (candle-facts.js), else 0
+ *   htfd_engulfing(m) htfd_displacement(m)   1 bullish, -1 bearish, 0
+ *   htfd_rejected(m, level) htfd_broke(m, level) htfd_touched(m, level)
+ *               how it met a level: a fixed level counts when it was complete by
+ *               the candle's open (its last bar closed at or before the open), at
+ *               its value then (one its own bars made, or one formed later, has
+ *               none, so no relation); a moving one (vwap_*, session_*) at the
+ *               candle's close:
+ *               rejected 1 (traded
+ *               below, closed back above) / -1 (above, back below) / 0; broke 1 up /
+ *               -1 down / 0 (closed beyond, most of the body beyond); touched 1 when
+ *               it traded at the level otherwise, else 0. level (THE vocabulary, LEVEL_ARGS; any other name is refused): prior_high
+ *               prior_low prior_close overnight_high overnight_low or_high or_low
+ *               ib_high ib_low rth_open vwap_session vwap_rth swing_high swing_low
+ *               prior_poc prior_vah prior_val session_poc session_vah session_val,
+ *               or previous_high previous_low (the candle before it)
+ *   htfd_next_swing_high(m) htfd_next_swing_low(m)   the next swing target: the
+ *               nearest confirmed m-minute swing high above (low below) the close
+ *               that no bar has traded beyond since
  *   crt_dir(m)  1 / -1 on the bar a Candle Range Theory sweep of the previous
  *               m-minute candle confirms (scripts/lib/trading/crt.js), else 0;
  *               one per candle
@@ -111,6 +144,7 @@ const mtf = require('./mtf');
 const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
+const candleFacts = require('./candle-facts');
 
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
@@ -118,7 +152,28 @@ const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
 const CISD_FUNCS = ['cisd_dir', 'cisd_level', 'cisd_sweep', 'ote_top', 'ote_bot', 'in_ote', 'cisd_entry', 'cisd_risk'];
-const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias', ...CISD_FUNCS]);
+// The last completed candle (candle-facts.js): its OHLCV and facts, its relation to a level, the next swing targets.
+const HTFD = ['htfd_open', 'htfd_high', 'htfd_low', 'htfd_close', 'htfd_volume', 'htfd_prev_high', 'htfd_prev_low', 'htfd_body', 'htfd_upper_wick',
+  'htfd_lower_wick', 'htfd_close_loc', 'htfd_range_atr', 'htfd_vol_ratio', 'htfd_doji', 'htfd_hammer', 'htfd_shooting_star', 'htfd_inside',
+  'htfd_outside', 'htfd_engulfing', 'htfd_displacement'];
+const HTFD_TARGETS = { htfd_next_swing_high: 'high', htfd_next_swing_low: 'low' };
+const HTFD_REL = { htfd_rejected: 'rejected', htfd_broke: 'broke', htfd_touched: 'touched' };
+// The level vocabulary of htfd_rejected/broke/touched(m, level): fixed, listed in the header above (a test keeps the two equal); any other name is refused at compile, so at strategy load.
+// The moving ones among them: read at the candle's close; every other is read as it stood when the candle opened.
+const MOVING_LEVELS = new Set(['vwap_session', 'vwap_rth', 'session_poc', 'session_vah', 'session_val']);
+// A fixed level counts when it was complete by the candle's open (its last bar closed at or before it). These series
+// hold a value made of earlier bars only (set on the bar after they complete: the prior day at the first bar past
+// 16:00 ET, the overnight range up to the bar before), so they are read on the candle's first bar; every other fixed
+// one has its value on its completing bar (or_*, ib_*, swings, rth_open), so it is read on the bar before.
+// A session's own levels: at a new session's first candle (18:00 ET, Sunday's open) the last session's are stale and
+// give no relation (the prior RTH day is not one: it is the day that just closed).
+const SESSION_LEVELS = new Set(['or_high', 'or_low', 'ib_high', 'ib_low', 'overnight_high', 'overnight_low', 'rth_open']);
+const FROM_PRIOR_BARS = new Set(['prior_high', 'prior_low', 'prior_close', 'prior_poc', 'prior_vah', 'prior_val', 'overnight_high', 'overnight_low']);
+const LEVEL_ARGS = new Set(['prior_high', 'prior_low', 'prior_close', 'overnight_high', 'overnight_low', 'or_high', 'or_low', 'ib_high', 'ib_low',
+  'rth_open', 'vwap_session', 'vwap_rth', 'swing_high', 'swing_low', 'prior_poc', 'prior_vah', 'prior_val', 'session_poc', 'session_vah',
+  'session_val', 'previous_high', 'previous_low']);
+const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias',
+  ...CISD_FUNCS, ...HTFD, ...Object.keys(HTFD_TARGETS), ...Object.keys(HTFD_REL)]);
 // Volume profile fields: levels, and the nearest node above/below the close.
 const VP_LEVELS = ['poc', 'vah', 'val'];
 const VP_NODES = ['hvn_above', 'hvn_below', 'lvn_above', 'lvn_below'];
@@ -184,7 +239,7 @@ function valuesFor(rule, bars, i = bars.length - 1) {
 
 function tokenize(text) {
   const tokens = [];
-  const re = /\s*(?:(\d+(?:\.\d+)?)|([a-z_][a-z0-9_]*)\s*\(\s*(\d+)\s*\)(?:\[(\d+)\])?|([a-z_][a-z0-9_]*)(?:\[(\d+)\])?|(>=|<=|>|<)|([+\-*]))/gy;
+  const re = /\s*(?:(\d+(?:\.\d+)?)|([a-z_][a-z0-9_]*)\s*\(\s*(\d+)\s*(?:,\s*([a-z_][a-z0-9_]*)\s*)?\)(?:\[(\d+)\])?|([a-z_][a-z0-9_]*)(?:\[(\d+)\])?|(>=|<=|>|<)|([+\-*]))/gy;
   let pos = 0;
   const src = String(text).trim();
   while (pos < src.length) {
@@ -201,12 +256,12 @@ function tokenize(text) {
     if (!m || m.index !== pos) throw new Error(`cannot read "${src.slice(pos)}"`);
     pos = re.lastIndex;
     if (m[1]) tokens.push({ type: 'num', value: Number(m[1]) });
-    else if (m[2]) tokens.push({ type: 'func', name: m[2], arg: Number(m[3]), shift: Number(m[4] || 0) });
-    else if (m[5]) {
-      if (OPS.includes(m[5]) && m[6] === undefined) tokens.push({ type: 'op', value: m[5] });
-      else tokens.push({ type: 'name', name: m[5], shift: Number(m[6] || 0) });
-    } else if (m[7]) tokens.push({ type: 'op', value: m[7] });
-    else tokens.push({ type: 'arith', value: m[8] });
+    else if (m[2]) tokens.push({ type: 'func', name: m[2], arg: Number(m[3]), level: m[4] || null, shift: Number(m[5] || 0) });
+    else if (m[6]) {
+      if (OPS.includes(m[6]) && m[7] === undefined) tokens.push({ type: 'op', value: m[6] });
+      else tokens.push({ type: 'name', name: m[6], shift: Number(m[7] || 0) });
+    } else if (m[8]) tokens.push({ type: 'op', value: m[8] });
+    else tokens.push({ type: 'arith', value: m[9] });
   }
   return tokens;
 }
@@ -229,6 +284,12 @@ function parseFactor(tok) {
     // ADX needs 2n bars; keep it inside the 500-bar look-back.
     if (tok.name === 'adx' && tok.arg > 250) throw new Error(`adx(${tok.arg}): length must be 1-250 (ADX needs 2n bars; look-backs stop at 500)`);
     if (HTF.has(tok.name) && 1440 % tok.arg !== 0) throw new Error(`${tok.name}(${tok.arg}): minutes must divide a day (e.g. 60, 120, 240)`);
+    if (HTFD_REL[tok.name]) {
+      if (!tok.level) throw new Error(`${tok.name}(${tok.arg}, level): name the level, e.g. ${tok.name}(${tok.arg}, prior_high)`);
+      if (!LEVEL_ARGS.has(tok.level)) throw new Error(`${tok.name}(${tok.arg}, ${tok.level}): the level is one of ${[...LEVEL_ARGS].join(', ')}`);
+      return { kind: 'series', key: `${tok.name}(${tok.arg},${tok.level})`, shift: tok.shift };
+    }
+    if (tok.level) throw new Error(`${tok.name}(${tok.arg}, ${tok.level}): only ${Object.keys(HTFD_REL).join(', ')} take a level`);
     return { kind: 'series', key: `${tok.name}(${tok.arg})`, shift: tok.shift };
   }
   throw new Error(`unexpected "${tok.value}"`);
@@ -382,7 +443,7 @@ function causalLevels(bars) {
 }
 
 /** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
-function seriesSource(bars, params) {
+function seriesSource(bars, params, { barMinutes = null } = {}) {
   const cache = new Map();
   const n = bars.length;
   let lv = null;
@@ -428,6 +489,17 @@ function seriesSource(bars, params) {
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
     if (key.startsWith(FIELD_PREFIX)) { const p = key.slice(FIELD_PREFIX.length); return bars.map(b => readField(b, p)); }
+    const rel = /^([a-z_]+)\((\d+),([a-z_]+)\)$/.exec(key);
+    if (rel && HTFD_REL[rel[1]] && LEVEL_ARGS.has(rel[3])) {
+      const m = Number(rel[2]);
+      const own = rel[3] === 'previous_high' || rel[3] === 'previous_low';
+      const lvl = own ? get(`htfd_prev_${rel[3].slice('previous_'.length)}(${m})`) : get(rel[3]);
+      // A key level as it stood at the candle's close (a level formed later has no value then: no relation).
+      // A fixed level as it stood when the candle opened (never one its own bars made), a moving one (VWAP, the
+      // developing session profile) at its close, the candle's previous candle on this bar.
+      const at = own ? 'now' : MOVING_LEVELS.has(rel[3]) ? 'close' : FROM_PRIOR_BARS.has(rel[3]) ? 'first' : 'open';
+      return candleFacts.relationSeries(bars, m, barMinutes, lvl, { at, session: SESSION_LEVELS.has(rel[3]) })[HTFD_REL[rel[1]]];
+    }
     const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
     if (fn) {
       const len = Number(fn[2]);
@@ -459,8 +531,10 @@ function seriesSource(bars, params) {
         case 'in_ote': return cisdField(len, 'inOte');
         case 'cisd_entry': return cisdField(len, 'entry');
         case 'cisd_risk': return cisdField(len, 'risk');
+        case 'htfd_next_swing_high': case 'htfd_next_swing_low': return candleFacts.swingTargetSeries(bars, len, barMinutes)[HTFD_TARGETS[fn[1]]];
         case 'adr': return dayOf(len).adr;
         default:
+          if (HTFD.includes(fn[1])) return candleFacts.candleSeries(bars, len, barMinutes)[fn[1]];
           if (VP_FUNCS.includes(fn[1])) return profileOf('rolling', len)[fn[1].replace(/^vp_/, '')];
           break;
       }
@@ -566,6 +640,14 @@ function seriesSource(bars, params) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];
     }
+    // A completed-candle value (or a swing target) starts over when the next candle completes (or a swing is taken or
+    // confirmed): a jump, never a cross.
+    const d = /^(htfd_[a-z_]+)\((\d+)(?:,[a-z_]+)?\)$/.exec(key);
+    if (d) {
+      if (HTFD_TARGETS[d[1]]) { const s = get(key); return !(s[i - 1] === s[i]); }
+      const k = candleFacts.completedSeries(bars, Number(d[2]), barMinutes).lastAt;
+      return k[i] !== k[i - 1];
+    }
     if (LEVELS.has(key)) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];
@@ -668,8 +750,9 @@ const sideValuesText = (results, cap = VALUES_PER_STRATEGY) => valuesText(Object
  * value isn't there yet, `parts` for a group, and `values` (fieldValues) for one that reads a broker's field
  * (`values: false` leaves them out; they never change a result's direction or ok).
  */
-function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: source = null, values: withValues = true } = {}) {
-  const get = source || seriesSource(bars, params);
+function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: source = null, values: withValues = true, barMinutes = null } = {}) {
+  // barMinutes: the bars' size (the completed-candle series need it; never guessed).
+  const get = source || seriesSource(bars, params, { barMinutes });
   const i = index;
   const missing = c => [c.left, c.right].some(e => valueAt(e, get, i) === null)
     || (c.op.startsWith('crosses_') && [c.left, c.right].some(e => valueAt(e, get, i - 1) === null));
@@ -698,4 +781,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, valuesFor, fieldValues, valuesText, sideValuesText, VALUES_PER_STRATEGY, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, LEVEL_ARGS, HTFD_REL, readField, fieldPathsIn, valuesFor, fieldValues, valuesText, sideValuesText, VALUES_PER_STRATEGY, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

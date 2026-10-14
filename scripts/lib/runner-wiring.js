@@ -22,7 +22,9 @@
  *                                         cycle output doesn't carry its roles' reports
  *   briefingRecorder(home, cfg, now, env, { frames, dataDir, log })   the bar briefing of each bar, and of each
  *                                         analyst's own timeframe (frames: lanes.js analystFrames); on a lane's bar
- *                                         whose briefing can't be built, { error } (the runner allows no entry on it)
+ *                                         whose briefing can't be built, { error } (the runner allows no entry on it);
+ *                                         its `fine(item)` notes a 1m lane's closed bars, from which the runner's
+ *                                         briefing builds 5m candles its own 3m bars can't
  *
  * An analyst on its own timeframe (the runner config's `agents`, an agent file's `timeframe`): its briefing is built
  * from that lane's bars, or from the first lane's whole bars (15m and 1h from 3m: their bars file is written next to
@@ -270,7 +272,10 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       return err.message;
     }
   };
-  return (item, results, scanError = null) => {
+  // The latest closed 1m bars per symbol (a 1m lane's, this pass's when it closed with the first lane's bar): the
+  // runner's briefing builds the timeframes its own bars can't (5m from 3m) from them; another contract's never.
+  const fine = new Map();
+  const record = (item, results, scanError = null) => {
     if (item.lane > 0) {
       const roundSteps = roundStepsAt(closeOf(item.bars, item.minutes));
       // A lane's briefing that can't be built: the lane's setups have no room read (fail closed: no entry on this bar).
@@ -282,11 +287,17 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
     for (const m of built) frame(item, m, { bars: () => wholeBars(item.bars, m), roundSteps });
     return file;
   };
+  record.fine = item => {
+    if (item && item.minutes === 1 && Array.isArray(item.bars) && cfg.timeframe !== 1) fine.set(item.symbol, { contractId: item.contractId || null, bars: item.bars });
+  };
+  return record;
 
   function firstBriefing(item, results, scanError, roundSteps) {
     try {
       const { blackouts, clock } = facts();
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now() }));
+      const f = fine.get(item.symbol);
+      const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.
@@ -384,6 +395,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
   const journal = () => readJournal(resolveJournalPath(env));
   const record = barRecorder({ cfg, home, env, now, log, onBarClosed });
+  const recorder = briefingRecorder(home, cfg, now, env, { frames, dataDir, log });
   return createRunner({
     cfg,
     prop,
@@ -422,7 +434,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
-    recordBriefing: briefingRecorder(home, cfg, now, env, { frames, dataDir, log }),
+    recordBriefing: recorder,
+    // A 1m lane's closed bars, noted before the pass's briefings: the runner's briefing builds 5m candles from them.
+    recordFineBars: recorder.fine,
     reportCache: reportCacheFor(home, cfg, frames),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.

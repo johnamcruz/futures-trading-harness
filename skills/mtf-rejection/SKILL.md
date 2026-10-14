@@ -29,10 +29,11 @@ By PLAN step:
    `trend-vs-range`.
 - **3 Location**: price at a key level (`levels-and-reactions`: POC,
    VAH/VAL, CRT high/low, prior-day and overnight high/low, VWAP, IB/OR,
-   swing, previous candle high/low: `mtf_read` `json`, not the briefing).
+   swing, previous candle high/low; `m3.candles` has them).
 - **4 Setup**: a completed 15m or 60m candle rejects the level: it trades
    through and closes back inside, with a long wick and the close in the
-   opposite third, or an engulfing at the level (`candle-reading`). After
+   opposite third, or an engulfing at the level (`candle-reading`; the
+   15m and 1h entries of `m3.candles`: `rejected`). After
    an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
    it is a continuation. Against the HTF, whether a structure break went its way
    (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1
@@ -45,7 +46,8 @@ By PLAN step:
    structure (`m3.lastBreak.last`). Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick; the stop is the
    strategy's (`candidate.stopPoints`, `order_plan`): check it sits beyond
-   the wick (`invalidation`). Size: the priority order and the rulebook.
+   the wick (`invalidation`). Target: the next swing, `m3.swingTargets`.
+   Size: the priority order and the rulebook.
 - **9 Manage**: invalidation is a close back through the level against the
    trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 

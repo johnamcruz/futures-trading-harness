@@ -19,6 +19,9 @@ const { parseWindows, inWindow } = require('./clock');
 const ind = require('./indicators');
 const mtf = require('./mtf');
 
+// A timeframe ('3m', '1h') in minutes; null when it isn't one.
+const tfMinutes = tf => { const m = /^(\d+)(m|h)$/.exec(String(tf || '')); return m ? Number(m[1]) * (m[2] === 'h' ? 60 : 1) : null; };
+
 const DEFAULT_WINDOW = 500; // bars per evaluation, as the original bot's BARS_WINDOW
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
@@ -72,9 +75,11 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
     if (!seriesCache.has(key)) seriesCache.set(key, signalSeries(bars, s.params || {}));
     return seriesCache.get(key);
   };
+  // The strategy's own timeframe is its bars' size (the completed-candle series read it; never guessed from gaps).
   const rulesSource = s => {
-    const key = JSON.stringify(s.params || {});
-    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s)));
+    const barMinutes = tfMinutes(s.timeframe);
+    const key = `${JSON.stringify(s.params || {})}|${barMinutes}`;
+    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s), { barMinutes }));
     return rulesCache.get(key);
   };
   const windowStart = i => Math.max(0, i - window + 1);

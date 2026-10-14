@@ -49,9 +49,11 @@ const same = (a, b) => (Number.isNaN(a) && Number.isNaN(b)) || Object.is(a, b) |
 // 240 minutes), and field() paths (one-level, nested, a digit key) at look-backs 0 to 500.
 const SERIES = [
   ...rules.NAMES,
-  ...[...rules.FUNCS].flatMap(f => (/^(htf|htfc|crt|mtf)/.test(f) ? [`${f}(60)`, `${f}(240)`]
-    // The CISD series on completed 3m, 15m and 60m candles (cisd.js).
-    : /^(cisd|ote|in_ote)/.test(f) ? [`${f}(3)`, `${f}(15)`, `${f}(60)`] : [`${f}(5)`, `${f}(20)`])),
+  ...[...rules.FUNCS].flatMap(f => (rules.HTFD_REL[f] ? [`${f}(15,prior_high)`, `${f}(60,vwap_session)`, `${f}(3,previous_low)`]
+    : /^htfd_/.test(f) ? [`${f}(3)`, `${f}(15)`, `${f}(60)`]
+      : /^(htf|htfc|crt|mtf)/.test(f) ? [`${f}(60)`, `${f}(240)`]
+      // The CISD series on completed 3m, 15m and 60m candles (cisd.js).
+        : /^(cisd|ote|in_ote)/.test(f) ? [`${f}(3)`, `${f}(15)`, `${f}(60)`] : [`${f}(5)`, `${f}(20)`])),
   'field:flow.x', 'field:flow.windows.3.x', 'field:flow.windows.5.x',
 ];
 const LOOKBACKS = [0, 1, 2, 3, 5, 20, 500];
@@ -60,9 +62,9 @@ test('every rules series at bar t (every name, function and field()) is unchange
   const params = { ...PARAMS };
   const bad = [];
   for (const t of CUTS) {
-    const now = rules.seriesSource(BARS.slice(0, t + 1), params);
+    const now = rules.seriesSource(BARS.slice(0, t + 1), params, { barMinutes: 3 });
     for (const future of futures(t)) {
-      const later = rules.seriesSource(future, params);
+      const later = rules.seriesSource(future, params, { barMinutes: 3 });
       for (const key of SERIES) {
         const a = now(key);
         const b = later(key);
@@ -74,6 +76,11 @@ test('every rules series at bar t (every name, function and field()) is unchange
     }
   }
   assert.deepStrictEqual(bad, []);
+  // The completed-candle series have values here (the bar size given): the check above is not on empty series.
+  const all = rules.seriesSource(BARS, params, { barMinutes: 3 });
+  for (const key of SERIES.filter(k => /^htfd_/.test(k) && !/next_swing|\(3,previous_low\)/.test(k))) {
+    assert.ok(all(key).some(Number.isFinite), `${key} has values`);
+  }
 });
 
 test('field() at every look-back reads bar t - n, never a later bar, and a missing look-back has no value', () => {

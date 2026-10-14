@@ -76,6 +76,46 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    the last m-minute candle completed before the bar (1 up, -1 down, 0 range;
    the `multi-timeframe-analysis` skill): `mtf_bias(240) >= 0` keeps a long
    out of a 4-hour downtrend.
+   Completed candles (`htfd_*`, d = done): the last m-minute candle
+   completed by the bar's close, never the one forming. On the bar that
+   closes a candle it is that candle (`htf_*` still shows the one before
+   until the next opens). m is 3, 5, 15 or 60 (any that divides a day), made
+   of whole bars: `htfd_close(5)` on 3m bars has no value (never
+   approximated). `htfd_open(m) htfd_high(m) htfd_low(m) htfd_close(m)
+   htfd_volume(m)`, `htfd_prev_high(m) htfd_prev_low(m)` (the candle before
+   it), `htfd_body(m) htfd_upper_wick(m) htfd_lower_wick(m)` (shares of its
+   range, 0-1), `htfd_close_loc(m)` (1 top third, 0 middle, -1 bottom),
+   `htfd_range_atr(m)` (range in that timeframe's ATR(14) as of the candle
+   before), `htfd_vol_ratio(m)` (volume against the 20 candles before);
+   patterns `htfd_doji(m) htfd_hammer(m) htfd_shooting_star(m)
+   htfd_inside(m) htfd_outside(m)` (1 or 0) and `htfd_engulfing(m)
+   htfd_displacement(m)` (1 bullish, -1 bearish, 0), each defined in
+   `scripts/lib/trading/candle-facts.js` (hypotheses, not edges). How it met
+   a level, `htfd_rejected(m, level)` (1: traded below and closed back
+   above, -1: above and back below), `htfd_broke(m, level)` (1 up, -1 down:
+   closed beyond with most of the body beyond), `htfd_touched(m, level)` (1:
+   traded at it otherwise). The level is a name from the one fixed
+   vocabulary, `LEVEL_ARGS` in `scripts/lib/trading/rules.js` (listed in its
+   header; e.g. `prior_high`, `vwap_session`, `session_poc`, `ib_low`, and
+   `previous_high previous_low`: the candle before it); validation refuses
+   any other name, and a second argument on any other function. A fixed
+   level counts when it was complete by the candle's open, that is its last
+   bar closed at or before the open, at its value then (the opening range
+   that completes at 09:45 ET counts for the candle opening at 09:45; one
+   the candle's own bars made, or one formed later, gives no relation); a
+   moving one (`vwap_*`, `session_*`) at the candle's close. At a new
+   session's first candle (18:00 ET, Sunday's open) the last session's
+   opening range, IB, overnight range and `rth_open` give no relation; its
+   prior day is the RTH day that just closed. The briefing reads them the
+   same way. The bar size is the
+   strategy's `timeframe` (never guessed).
+   `htfd_next_swing_high(m) htfd_next_swing_low(m)`: the next swing target,
+   the nearest confirmed m-minute swing above (below) the close that no bar
+   has traded beyond since; any bar trading beyond it (its high above a
+   swing high, its low below a swing low) takes it, so it never crosses
+   (compare with `htfd_high`, not the target). A 60m rejection of
+   the prior day's high: `htfd_rejected(60, prior_high) < 0`; its target:
+   `exit.target: close - htfd_next_swing_low(60)`.
    Volume profile (bar-based; the `vwap-volume-profile` skill): `prior_poc
    prior_vah prior_val` (the last complete RTH day, fixed for the day),
    `session_poc session_vah session_val` (this Globex session, developing),

@@ -149,8 +149,9 @@ one. The briefing shows: the 15m and 1h swing highs and lows against price
 (`m15` `frame.range`, `h1` `h1.range` and `h4.range`), and the prior RTH
 day's high and low (`day` `priorRth`). The daily and 4-hour swing highs and
 lows are not in it: take them from `mtf_read` (premarket's daily read).
-Each timeframe's previous-candle high and low is not in the briefing yet; it
-is coming as a separate feature.
+Each timeframe's last completed candle (3m, 5m, 15m, 1h), with the levels it
+met, its previous candle's high and low among them, is in `m3` `candles`; the
+next swing high and low each side is in `m3` `swingTargets`.
 
 ### 6. Write it down
 

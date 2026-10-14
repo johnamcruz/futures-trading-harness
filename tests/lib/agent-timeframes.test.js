@@ -627,3 +627,25 @@ test('a frame\'s round numbers use the configured steps, as the runner\'s briefi
     assert.ok([...none.above, ...none.below].every(x => !x.name.split(' / ').includes('round number')), `${m}m without steps`);
   }
 });
+
+test('the runner\'s recorder builds 5m candles from a 1m lane\'s noted bars (same contract only); without them 5m is unavailable, and why', () => {
+  const home = tmpDir();
+  try {
+    const cfg = validateConfig({ harness: 'opencode', symbols: ['MNQ'], account: '7', timeframe: 3, premarketAt: '' });
+    const rec = briefingRecorder(home, cfg, () => new Date(Date.parse(BARS[1300].t)), { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'none.json') }, {});
+    const bars3 = BARS.slice(0, 1300);
+    const ones = bars3.slice(-60).flatMap(b => [0, 1, 2].map(k => ({ t: iso(Date.parse(b.t) + k * 60000), o: b.o, h: b.h, l: b.l, c: b.c, v: 1 })));
+    const item = { symbol: 'MNQ', contractId: C, lane: 0, minutes: 3, bars: bars3, bar: { t: bars3.at(-1).t } };
+    rec(item, [], null);
+    assert.match(B.readBriefing(home, 'MNQ').sections.m3.data.candles['5m'].unavailable, /no 1m bars configured/);
+    rec.fine({ symbol: 'MNQ', contractId: 'MNQ:2026-09', lane: 1, minutes: 1, bars: ones });
+    rec(item, [], null);
+    assert.match(B.readBriefing(home, 'MNQ').sections.m3.data.candles['5m'].unavailable, /no 1m bars configured/, 'another contract\'s 1m bars are never read');
+    rec.fine({ symbol: 'MNQ', contractId: C, lane: 1, minutes: 1, bars: ones });
+    rec(item, [], null);
+    const c5 = B.readBriefing(home, 'MNQ').sections.m3.data.candles['5m'];
+    assert.ok(c5.closedAt && !c5.unavailable, JSON.stringify(c5));
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

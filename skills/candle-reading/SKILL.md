@@ -15,7 +15,7 @@ description: Read completed candles as a stack (3m, 5m, 15m, 60m) from OHLC - bo
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
 low and a CRT range (the previous higher-timeframe candle's high and low;
-not in the briefing yet: `mtf_read` `json`, `levels.prevHigh`/`prevLow`).
+`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -32,15 +32,13 @@ timeframe. 15m and 60m weigh more at a higher-timeframe level (a 60m
 rejection of the prior day's high outweighs a 3m one); 3m and 5m time the
 entry.
 
-- 3m: `m3.bar.o`, `m3.bar.h`, `m3.bar.l`, `m3.bar.c`, `m3.bar.rangeAtr`,
-  and the cycle prompt's last 10 bars line (closed 3m bars:
-  `O H L C V (c-o)`).
-- 15m: build it from the five closed 3m bars of that quarter hour in the
-  last 10 bars line, once its last 3m bar has closed.
-- 5m and 60m: not in the briefing yet (`m15.frame.close` and
-  `h1.h1.close` are closes only): read the last closed candle from a
-  `bars_fetch` file of that timeframe, else `unknown`. Computed
-  per-timeframe candle facts are coming.
+- 3m, 5m, 15m and 60m: `m3.candles` and a summary line each: the last
+  completed candle (OHLCV, close time, body and wick shares, close third,
+  range in ATR, volume against its average, `pattern`) and the levels it
+  met (`rejected`, `broke`, `touched`), only levels that existed before it
+  opened. `unavailable` or missing (5m without 1m bars) is `unknown`.
+- The targets: `m3.swingTargets`, the next swing each side.
+- In strategy rules the same candle is `htfd_*` (strategy-authoring).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body share |c - o| /
 range; wick shares (h - max(o, c)) / range and (min(o, c) - l) / range;
@@ -69,7 +67,7 @@ general, and none is measured in our data yet. Confirmation only.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 60m close (a bars_fetch file) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  on the 60m close (`m3.candles`) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   crt_1h short. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); the 15m still forming.
   orb long; candidate.inTheWay session VAH at 0.4R. Priority order (step 3, room): skip.

@@ -685,6 +685,27 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
   assert.doesNotMatch(flat1.prompt, /planned: slow/);
 });
 
+test('lanes: a 1m lane\'s closed bars are noted before any briefing of the same pass (the runner\'s briefing builds 5m candles from them)', async () => {
+  const seen = [];
+  await simulate({
+    cfg: { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }] }, from: START, to: et(10, 4, 30), mkt: market(),
+    deps: {
+      recordFineBars: item => seen.push(['fine', item.minutes, item.bar.t]),
+      recordBriefing: item => seen.push(['brief', item.minutes, item.bar.t]),
+    },
+  });
+  const fine = seen.filter(x => x[0] === 'fine');
+  assert.ok(fine.length >= 2 && fine.every(x => x[1] === 1), JSON.stringify(seen));
+  // At a close both lanes share (the 3m bar's), the 1m bar ending on it is noted before the 3m briefing.
+  for (const [k, x] of seen.entries()) {
+    if (x[0] !== 'brief' || x[1] !== 3) continue;
+    const close = Date.parse(x[2]) + 180000;
+    const oneAt = seen.findIndex(y => y[0] === 'fine' && Date.parse(y[2]) + 60000 === close);
+    if (oneAt >= 0) assert.ok(oneAt < k, `the 1m bar closing with the 3m ${x[2]} is noted first`);
+  }
+  assert.ok(seen.some((x, k) => x[0] === 'brief' && x[1] === 3 && seen.slice(0, k).some(y => y[0] === 'fine' && Date.parse(y[2]) + 60000 === Date.parse(x[2]) + 180000)), 'a shared close was seen');
+});
+
 test('lanes: another lane\'s bar is briefed only for an analyst on that lane\'s timeframe; the context names the briefing\'s bar and, with own timeframes, the cycle\'s start', async () => {
   const run = async analystFrames => {
     const briefed = [];

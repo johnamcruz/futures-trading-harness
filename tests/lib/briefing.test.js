@@ -648,3 +648,176 @@ test('news: a blackout entry without a valid start and end is unknown (the gate 
   assert.match(d.news.error, /an entry without a valid start and end\): the order gate refuses entries/);
   assert.strictEqual(d.candidates[0].blocked, 'news unknown (the blackouts file can\'t be read)');
 });
+
+test('completed-candle facts: per timeframe in m3 and a summary line each, the levels at the briefing\'s own values, 5m unavailable on 3m bars; frames share the runner\'s', () => {
+  const b = build(1300);
+  const d = b.sections.m3.data;
+  assert.deepStrictEqual(Object.keys(d.candles), ['3m', '5m', '15m', '1h']);
+  assert.match(d.candles['5m'].unavailable, /not whole 3m bars/);
+  const c15 = d.candles['15m'];
+  // The last completed 15m candle: closed by this bar's close, never the one forming.
+  assert.ok(Date.parse(c15.closedAt) <= Date.parse(b.closedAt) && Date.parse(c15.closedAt) > Date.parse(b.closedAt) - 15 * 60000);
+  assert.strictEqual(d.candles['3m'].closedAt, b.closedAt, 'the 3m candle is the bar itself');
+  // Every level it met is one the briefing names (at that value), its previous candle, or a CRT range.
+  for (const tf of ['3m', '15m', '1h']) {
+    for (const [name, rel] of Object.entries(d.candles[tf].levels)) {
+      assert.match(rel, /^(touched|broke (above|below)|rejected: closed back (above|below))$/, `${tf} ${name}`);
+      assert.match(name, /^(prior|session|VWAP|overnight|IB|opening range|15m swing|1h swing|round number|previous|CRT)/);
+    }
+  }
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  assert.match(text, /\n- 15m \(closed \d\d:\d\d\): [a-z ]+/);
+  // No 1m lane: the 5m line is left out of the summary (the JSON says why).
+  assert.ok(!/\n- 5m/.test(text));
+  // The detail leaves out the 3m candle's OHLCV (it is the bar above) and the unavailable 5m.
+  const detail = JSON.parse(text.split('\n').find(l => l.startsWith('  candles: ')).slice('  candles: '.length));
+  assert.deepStrictEqual([Object.keys(detail), 'o' in detail['3m'], 'o' in detail['15m']], [['3m', '15m', '1h'], false, true]);
+  assert.match(text, /\n- Next swing above \(R = the reference stop\): .*; below: /);
+  // The detail leaves out what the summary says in full.
+  assert.ok(!/\n {2}swingTargets: /.test(text));
+  // An analyst's 15m briefing points to the runner's candle facts and swing targets (they read the session's levels,
+  // one value each, on the runner's bars), whether or not it closed with the runner's bar.
+  const n = BARS.findIndex((x, i) => i > 1300 && new Date(Date.parse(x.t) + 180000).getUTCMinutes() % 15 === 0) + 1;
+  const first = build(n);
+  const whole = B.wholeBars(at(n), 15);
+  for (const f of [B.buildFrameBriefing({ symbol: 'NQ', bars: whole, minutes: 15, first }), B.buildFrameBriefing({ symbol: 'NQ', bars: whole.slice(0, -1), minutes: 15, first })]) {
+    assert.match(f.sections.bar.data.candles, /in the runner's 3m bar briefing \(bar_briefing without a timeframe\)/);
+    assert.ok(!('swingTargets' in f.sections.bar.data));
+    assert.match(B.renderFrameBriefing(f, first, { now: new Date(f.closedAt) }), /- Completed candles and swing targets: in the runner's 3m bar briefing/);
+  }
+});
+
+test('completed candles read the levels as they stood at their close: an hour that closed before the opening range has none of it; the snapshot\'s levels as of a bar are the briefing\'s own on that bar', () => {
+  const { levelsAsOf } = require('../../scripts/lib/trading/market-snapshot');
+  const etHm = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const i = BARS.findIndex((x, k) => k > 1000 && etHm(x.t) === '09:48');
+  const bars = at(i + 1);
+  const pre = BARS.findIndex((x, k) => k > i - 30 && etHm(x.t) === '08:57');
+  // At the 08:57 bar: no opening range, no IB, the session VWAP applies.
+  const x = levelsAsOf(bars, pre);
+  assert.deepStrictEqual([x.openingRange, x.vwapApplies], [null, 'session']);
+  assert.ok(!x.ib || x.ib.high === null || x.ib.high === undefined);
+  // At the 09:48 bar the opening range exists; the last completed hour (08:00-09:00) never meets it.
+  const b = build(i + 1);
+  const d = b.sections.m3.data;
+  assert.ok(d.today.openingRange, 'the opening range exists now');
+  assert.strictEqual(etHm(d.candles['1h'].closedAt), '09:00');
+  assert.ok(Object.keys(d.candles['1h'].levels).every(n => !/^(opening range|IB|VWAP \(rth\))/.test(n)), JSON.stringify(d.candles['1h'].levels));
+  // The snapshot's levels as of the last bar are the briefing's own (one value per level).
+  const now = levelsAsOf(bars, i);
+  assert.strictEqual(now.vwapApplies, d.vwap.applies);
+  assert.strictEqual(Math.round(now.vwapSession * 100) / 100, d.vwap.session);
+  assert.deepStrictEqual(now.openingRange, { high: d.today.openingRange.high, low: d.today.openingRange.low });
+  assert.deepStrictEqual(now.overnight, d.overnight);
+  // The profiles are shown on the tick (the computed level is to the cent): the same level within half a tick.
+  const near = (x, y, what) => assert.ok(Math.abs(x - y) <= 0.125 + 1e-9, `${what}: ${x} vs ${y}`);
+  const pp = b.sections.day.data.priorProfile;
+  for (const k of ['poc', 'vah', 'val']) { near(now.sessionProfile[k], d.sessionProfile[k], `session ${k}`); near(now.priorProfile[k], pp[k], `prior ${k}`); }
+});
+
+test('5m from 1m bars in the briefing: with them the 5m candle, without them unavailable and why; 1m bars after the close never read', () => {
+  const n = 1300;
+  const b3 = at(n);
+  const ones = b3.slice(-60).flatMap(x => [0, 1, 2].map(k => ({ t: new Date(Date.parse(x.t) + k * 60000).toISOString(), o: x.o, h: x.h, l: x.l, c: x.c, v: 1 })));
+  const plain = B.buildBriefing({ symbol: 'NQ', bars: b3, minutes: 3 });
+  const withFine = B.buildBriefing({ symbol: 'NQ', bars: b3, minutes: 3, fineBars: ones }).sections.m3.data.candles['5m'];
+  assert.ok(withFine.closedAt && !withFine.unavailable);
+  assert.ok(Date.parse(withFine.closedAt) <= Date.parse(plain.closedAt));
+  const later = [...ones, { t: new Date(Date.parse(ones.at(-1).t) + 60000).toISOString(), o: 1, h: 99999, l: 1, c: 2, v: 9 }];
+  assert.deepStrictEqual(B.buildBriefing({ symbol: 'NQ', bars: b3, minutes: 3, fineBars: later }).sections.m3.data.candles['5m'], withFine);
+  assert.match(plain.sections.m3.data.candles['5m'].unavailable, /no 1m bars configured/);
+});
+
+test('a completed candle never reacts to a fixed level its own bars made: fixed levels as of its open, moving ones at its close', () => {
+  const { levelsAsOf } = require('../../scripts/lib/trading/market-snapshot');
+  const { relation, RELATION_TEXT } = require('../../scripts/lib/trading/candle-facts');
+  let checked = 0;
+  for (let n = 400; n < BARS.length; n += 23) {
+    const bars = at(n);
+    const d = build(n).sections.m3.data;
+    for (const tf of ['15m', '1h']) {
+      const c = d.candles[tf];
+      if (!c || c.unavailable) continue;
+      const first = bars.findIndex(x => Date.parse(x.t) >= Date.parse(c.t));
+      if (first <= 0) continue;
+      const open = levelsAsOf(bars, first - 1);
+      const close = levelsAsOf(bars, bars.findIndex(x => Date.parse(x.t) + 180000 >= Date.parse(c.closedAt)));
+      for (const [side, k] of [['high', 'overnight high'], ['low', 'overnight low']]) {
+        const made = close.overnight && (!open.overnight || open.overnight[side] !== close.overnight[side]) && close.overnight[side] === (side === 'high' ? c.h : c.l);
+        // A candle that made the overnight extreme is read against the one before it (as it stood at its open), never
+        // its own: the relation shown is the one to that earlier value, and none without one.
+        if (made && k in c.levels) {
+          assert.ok(open.overnight, `${tf} ${c.t}: no ${k} before it`);
+          const r = relation(c, open.overnight[side], NaN);
+          assert.notStrictEqual(r.relation, 'none');
+          if (r.relation !== 'touched' && c.o !== open.overnight[side]) assert.strictEqual(c.levels[k], RELATION_TEXT[r.relation][r.dir], `${tf} ${c.t}`);
+        }
+        checked += 1;
+      }
+      // The opening range or IB that formed inside it is no level for it.
+      if (!open.openingRange) assert.ok(!Object.keys(c.levels).some(x => /^opening range/.test(x)), `${tf} ${c.t}: ${JSON.stringify(c.levels)}`);
+      if (!open.ib || open.ib.high === null || open.ib.high === undefined) assert.ok(!Object.keys(c.levels).some(x => /^IB/.test(x)), `${tf} ${c.t}`);
+      assert.ok(Object.keys(c.levels).length <= 4, 'at most four relations');
+    }
+  }
+  assert.ok(checked > 50, `${checked}`);
+});
+
+test('the first candles after the opening range forms react to it (complete at their open): the 09:45 candles on the golden days, the 04-23 and 04-24 rejections', () => {
+  const G = require('../fixtures/golden-bars');
+  const s = G.SERIES.find(x => x.label === 'MNQ 3m');
+  const bars = G.load(s).map(({ ms: _ms, ...x }) => x);
+  const etOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const at957 = day => bars.findIndex(b => etOf(b.t) === `${day}, 09:57`);
+  const brief = i => B.buildBriefing({ symbol: s.symbol, bars: bars.slice(0, i + 1), minutes: 3, blackouts: { items: [] } }).sections.m3.data;
+  // 04-23: the 09:45-10:00 15m candle traded to 27102.75 and closed 27016.75, back below the opening range high 27068.
+  const d23 = brief(at957('04-23'));
+  assert.strictEqual(d23.today.openingRange.high, 27068);
+  assert.deepStrictEqual([d23.candles['15m'].h, d23.candles['15m'].c], [27102.75, 27016.75]);
+  assert.strictEqual(d23.candles['15m'].levels['opening range high'], 'rejected: closed back below');
+  // 04-24: down to 27130.25, closed 27193.75, back above the opening range low 27176.25.
+  const d24 = brief(at957('04-24'));
+  assert.strictEqual(d24.candles['15m'].levels['opening range low'], 'rejected: closed back above');
+  // Every 09:45 candle (3m on the 09:45 bar, 15m on the 09:57 bar) whose range holds an opening-range edge lists it,
+  // unless the cap of four took its place.
+  let seen = 0;
+  for (const day of ['04-23', '04-24', '04-27']) {
+    for (const [i, tf] of [[at957(day) - 4, '3m'], [at957(day), '15m']]) {
+      const d = brief(i);
+      const c = d.candles[tf];
+      assert.match(etOf(c.t), /09:45$/);
+      const edges = ['high', 'low'].filter(k => d.today.openingRange[k] >= c.l && d.today.openingRange[k] <= c.h);
+      for (const k of edges) {
+        assert.ok(`opening range ${k}` in c.levels || c.moreLevels > 0, `${day} ${tf}: ${JSON.stringify(c.levels)}`);
+        seen += 1;
+      }
+    }
+  }
+  assert.ok(seen >= 4, `${seen}`);
+});
+
+test('the briefing at a new session\'s first candle (18:00 ET, Sunday too) agrees with the rules: no last-session opening range, IB or overnight; the prior RTH day is the one that just closed', () => {
+  const { levelsAsOf } = require('../../scripts/lib/trading/market-snapshot');
+  const { relation, RELATION_TEXT } = require('../../scripts/lib/trading/candle-facts');
+  const etHm = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const opens = BARS.map((b, i) => [i, etHm(b.t)]).filter(([, e]) => /18:00$/.test(e));
+  assert.ok(opens.some(([, e]) => /^Sun/.test(e)));
+  for (const [i, e] of opens) {
+    const bars = at(i + 1);
+    const c = build(i + 1).sections.m3.data.candles['3m'];
+    assert.match(etHm(c.t), /18:00$/);
+    assert.ok(!Object.keys(c.levels).some(n => /^(opening range|IB|overnight)/.test(n)), `${e}: ${JSON.stringify(c.levels)}`);
+    // Its prior day: the RTH day that just closed (as the 18:00 bar's snapshot reads it), never the one before.
+    const prior = levelsAsOf(bars, i).priorRth;
+    const last = BARS.findLastIndex((x, k) => k < i && /15:57$/.test(etHm(x.t)));
+    const before = last >= 0 ? levelsAsOf(bars, last).priorRth : null;
+    assert.ok(prior, `${e}: a prior day`);
+    if (before) assert.notStrictEqual(prior.day, before.day, `${e}: the prior day is the one that closed at 16:00`);
+    for (const k of ['high', 'low', 'close']) {
+      const r = relation(c, prior[k], NaN);
+      const name = `prior RTH ${k}`;
+      if (r.relation === 'none') assert.ok(!(name in c.levels));
+      else if (r.relation !== 'touched' && c.o !== prior[k]) assert.ok(!(name in c.levels) ? c.moreLevels > 0 : c.levels[name] === RELATION_TEXT[r.relation][r.dir], `${e} ${name}`);
+    }
+  }
+});
