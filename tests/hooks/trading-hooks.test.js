@@ -453,6 +453,16 @@ test('order gate blocks unknown strategies and instruments the strategy does not
   assert.match(mes.stderr, /does not trade MES/);
 });
 
+test('order gate: a trade-lifecycle entry (signal: composed) is refused until the gate checks its reads; its exit goes', () => {
+  // The shipped strategies, trade_lifecycle among them.
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies') });
+  const entry = gate(orderPayload({ ...ORDER, rationale: 'setup:trade_lifecycle long, stop 21480' }), env);
+  assert.strictEqual(entry.code, 2);
+  assert.match(entry.stderr, /\[strategy\] setup:trade_lifecycle is the trade lifecycle \(signal: composed\): the order gate doesn't check its reads yet, so it places no entries/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
   const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);

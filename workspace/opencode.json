@@ -157,6 +157,7 @@
         "harness_bar_briefing": "allow",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "allow",
+        "harness_compose_check": "deny",
         "skill": "deny"
       }
     },
@@ -212,6 +213,7 @@
         "harness_bar_briefing": "deny",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "deny",
+        "harness_compose_check": "deny",
         "websearch": "allow",
         "skill": "allow"
       }
@@ -268,6 +270,7 @@
         "harness_bar_briefing": "allow",
         "harness_reason_check": "allow",
         "harness_skill_lookup": "allow",
+        "harness_compose_check": "deny",
         "read": {
           "*": "allow",
           "*.env": "deny",
@@ -329,6 +332,7 @@
         "harness_bar_briefing": "deny",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "deny",
+        "harness_compose_check": "deny",
         "read": {
           "*": "allow",
           "*.env": "deny",
@@ -392,6 +396,7 @@
         "harness_bar_briefing": "deny",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "allow",
+        "harness_compose_check": "deny",
         "skill": "deny"
       }
     },
@@ -447,6 +452,7 @@
         "harness_bar_briefing": "deny",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "deny",
+        "harness_compose_check": "deny",
         "read": {
           "*": "allow",
           "*.env": "deny",
@@ -508,6 +514,7 @@
         "harness_bar_briefing": "allow",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "allow",
+        "harness_compose_check": "deny",
         "skill": "deny"
       }
     },
@@ -563,6 +570,7 @@
         "harness_bar_briefing": "allow",
         "harness_reason_check": "deny",
         "harness_skill_lookup": "allow",
+        "harness_compose_check": "deny",
         "skill": "deny"
       }
     }
