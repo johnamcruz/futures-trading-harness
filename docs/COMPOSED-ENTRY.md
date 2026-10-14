@@ -316,9 +316,9 @@ decide whether to trade.
   <tf> fvg high|low <price>`: an open gap's edges, a partly filled one's
   unfilled part), or a named key level, floored toward the entry. A prior
   candle's side the candle forming has already taken is spent: no target.
-  The new skill for take-profit targets (in flight) teaches how the model
-  picks the swing and prior-candle targets; no skill teaches a gap's edge as
-  a target yet.
+  The `take-profit` skill teaches how the model picks the swing and
+  prior-candle targets (an off-tick mid's distance to the tick toward price,
+  as the briefing's `ticks`); no skill teaches a gap's edge as a target yet.
 - **Checks.** R:R at least the composed document's `risk.min_rr`; the first
   level in the way and its R are recorded and are what a phase-2 room fact
   is checked against (section 3.6).

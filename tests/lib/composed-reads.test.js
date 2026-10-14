@@ -578,6 +578,8 @@ test('on briefings built from the fixture bars: every range target and gap edge 
         assert.strictEqual(c.check, true, `${i} ${tf} ${part}`);
         assert.ok(Math.abs(c.price - r[part].price) < 0.25 && Number.isInteger(c.price / 0.25), `${i} ${tf} ${part}: on the tick`);
         assert.strictEqual(c.dir, sideOf(c.price), `${i} ${tf} ${part}`);
+        // The same tick the briefing counts to (candle-facts.js targetAt floors the distance toward price).
+        assert.strictEqual(Math.round(Math.abs(c.price - m3.price) / 0.25), r[part].ticks, `${i} ${tf} ${part}: the briefing's ticks`);
         checked += 1;
       }
     }
