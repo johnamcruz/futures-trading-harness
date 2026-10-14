@@ -234,7 +234,7 @@ test('autonomous-trading split: the per-cycle load shrinks; no role and no gate 
   for (const a of loadRoles(ROOT)) for (const s of HOMES) assert.ok(!a.skills.includes(s) && !a.index.includes(s), `${a.name}: ${s}`);
   // The gate's skill lists are unchanged: the core stays out of them (the prompt says to follow it), and so do the pieces.
   const { REQUIRED_FOR_ENTRY, SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
-  assert.deepStrictEqual(REQUIRED_FOR_ENTRY, ['trade-session', 'multi-timeframe-analysis', 'strategy-library']);
+  assert.deepStrictEqual(REQUIRED_FOR_ENTRY, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
   for (const s of HOMES) assert.ok(!SITUATIONAL.some(x => x.skill === s), s);
   // Every prompt still names the core.
   const A = require('../../scripts/lib/autotrader');
