@@ -668,10 +668,10 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   // 4700: 4500 plus the required last-line instruction (RESULT_LINE, ~220 characters, with its plain-text rule).
   // 4900: the full cycle's roster (the roles the gate requires) is decision context too.
   // 4950: the load sentence names the two skills strategy-library was split into (an entry needs them loaded).
-  // 4970: and "; also load htf-to-ltf" (ALSO_LOAD: the alignment labels split from multi-timeframe-analysis, which
-  // shrank by more than the head trader now reads; 4941 before it).
+  // Still 4950 with "; also load htf-to-ltf" (ALSO_LOAD): the bar line's "use that file for the 3-minute timeframe
+  // instead of fetching it" became "use that file; don't fetch 3-minute bars".
   if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
-  assert.ok(p.length < 4970, `the prompt grew to ${p.length} characters`);
+  assert.ok(p.length < 4950, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /no-trade ×\d @|no-trade ×\d:/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);

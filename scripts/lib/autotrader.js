@@ -474,7 +474,7 @@ function prompts(cfg, now, root = '') {
       // already described this cycle, which adds only its own bars and signals.
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
-        ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file for the ${minutes}-minute timeframe instead of fetching it.`
+        ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
         + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')

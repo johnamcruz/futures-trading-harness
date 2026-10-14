@@ -102,8 +102,8 @@ test('the trade prompt: each lane\'s bar file and minutes; a symbol\'s further l
   ];
   const text = prompts(cfg, now).trade(items, { lanes: LC.lanesLine(cfg.lanes) });
   assert.match(text, /Lanes closed this cycle: 3m \(every bar\), 1m \(every bar\)/);
-  assert.match(text, /MNQ: a 3-minute bar just closed .* in \/b\/MNQ-3m\.json .* for the 3-minute timeframe/);
-  assert.match(text, /MNQ: a 1-minute bar just closed .* in \/b\/MNQ-1m\.json .* for the 1-minute timeframe/);
+  assert.match(text, /MNQ: a 3-minute bar just closed .* in \/b\/MNQ-3m\.json .* - use that file; don't fetch 3-minute bars\./);
+  assert.match(text, /MNQ: a 1-minute bar just closed .* in \/b\/MNQ-1m\.json .* - use that file; don't fetch 1-minute bars\./);
   assert.strictEqual(text.split('trend rule: 4h up').length - 1, 1, 'the trend line once');
   assert.strictEqual(text.split('Plan: buy dips').length - 1, 1, 'the plan once');
   assert.match(text, /MNQ 1m fired on this bar .*quick long \(trend rule: reversal\)/, 'another lane\'s setup with its trend rule (the roles\' lookups read it)');
