@@ -418,3 +418,205 @@ test('the runner\'s recorder with a missing sub-bar: the 1h bars file and the se
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+// One value per fact: the session's facts (computed on the runner's bars) are never in a frame. On 1h bars they would
+// be wrong (no 1h bar opens at 09:30 ET: the 09:00 bar counted as overnight, no whole RTH day, the RTH VWAP without
+// its 09:00 bar), and on 15m bars another number (a VWAP or a profile on coarser bars).
+const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
+const SESSION_NAMES = /\b(day high|day low|IB high|IB low|opening range|session high|session low|VWAP|prior RTH|overnight|prior VA[HL]|prior POC|session VA[HL]|session POC)\b/;
+// The fixture's 3m bars through the one closing at hh:mm ET on Monday 2026-04-27 (EDT).
+const upTo = (h, mi) => BARS.findIndex(b => Date.parse(b.t) + 180000 === ET(2026, 4, 27, h, mi, 4)) + 1;
+
+test('one value per fact: the 15m and 1h frames on the fixture carry no session fact of their own; the ones they show are the runner\'s, the same values', () => {
+  for (const [h, mi] of [[9, 33], [10, 0], [10, 45], [13, 15], [15, 57]]) {
+    const f = first(upTo(h, mi));
+    for (const m of [15, 60]) {
+      const fr = frame(f, m);
+      const d = fr.sections.bar.data;
+      const label = `${m}m at ${h}:${mi}`;
+      for (const k of SESSION_FIELDS) assert.ok(!(k in d), `${label}: no ${k} of its own`);
+      assert.match(d.sessionLevels, new RegExp(`^not in a ${m}m briefing: .* computed on the runner's 3m bars only, one value each: in the runner's 3m bar briefing \\(bar_briefing without a timeframe\\); the prior RTH day and its profile are the \\[day\\] part below$`));
+      // Its levels and sweeps are its own: no session level named in its room or its sweeps.
+      for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below, ...d.sweeps]) assert.doesNotMatch(x.name, SESSION_NAMES, label);
+      const text = B.renderFrameBriefing(fr, f, { now: new Date(fr.closedAt) });
+      // The session facts it shows are the runner's day part: the same values as the 3m briefing's.
+      for (const k of ['priorRth', 'priorProfile']) assert.ok(text.includes(`  ${k}: ${JSON.stringify(f.sections.day.data[k])}`), `${label}: ${k}`);
+      assert.match(text, /^- VWAP and the session's levels \(today, overnight, opening range, IB, profile\): each is in the runner's bar briefing \(bar_briefing without a timeframe\), one value in every briefing/m);
+      // Above the [day] part, no prior-day level of its own.
+      assert.doesNotMatch(text.split(/^\[day\]/m)[0], /prior (POC|VAH|VAL)|prior RTH (high|low|close)/, `${label}: no prior day of its own`);
+    }
+  }
+  // The values the audit found at 13:15 on 1h bars (overnight low 27298.5, RTH VWAP 27364.53, prior POC 27406.26) and
+  // on 15m bars (prior POC 27411) are in no frame; the runner's are: overnight low 27344.25, prior POC 27414.25 (on the tick).
+  const f = first(upTo(13, 15));
+  assert.deepStrictEqual([f.sections.m3.data.overnight.low, f.sections.day.data.priorProfile.poc], [27344.25, 27414.25]);
+  const h = JSON.stringify(frame(f, 60));
+  const q = JSON.stringify(frame(f, 15));
+  for (const v of ['27364.53', '27406.26', '27406.25']) assert.ok(!h.includes(v), v);
+  assert.ok(!/\b27411\b/.test(q));
+  assert.ok(!/overnight low|"overnight"/.test(h + q));
+});
+
+test('one value per fact: a frame\'s higher-timeframe swings are only those at or above its own, and a break through one names the close that made it', () => {
+  const f = first(upTo(13, 15));
+  const h = frame(f, 60).sections.bar.data;
+  const q = frame(f, 15).sections.bar.data;
+  assert.ok(h.htfLevels.length && h.htfLevels.every(x => /^1h swing/.test(x.name) && x.brokenBy === 'a 60m close'), 'no "15m swing" made of 1h bars');
+  assert.ok(q.htfLevels.some(x => /^15m swing/.test(x.name)) && q.htfLevels.every(x => x.brokenBy === 'a 15m close'));
+  assert.ok(f.sections.m3.data.htfLevels.every(x => !('brokenBy' in x)), 'the runner\'s are its own closes, as before');
+  assert.ok([...h.nearestLiquidity.above, ...h.nearestLiquidity.below].every(x => !/3m/.test(x.name)), 'its own swings are named by its timeframe');
+});
+
+test('every R and ATR names its timeframe: 1R in a frame is its own bars\' reference stop, labelled so; the runner\'s is labelled 3m', () => {
+  const f = first(upTo(13, 15));
+  const fText = B.renderBriefing(f, { now: new Date(f.closedAt) });
+  assert.deepStrictEqual(f.sections.m3.data.oneR, { points: 7.91, basis: '0.5 x 3m ATR(20) 15.83, the 3m reference stop' });
+  assert.match(fText, /^- Price [\d.]+\. 1R = 7\.91 pts \(0\.5 x 3m ATR\(20\) 15\.83, the 3m reference stop\)/m);
+  assert.match(fText, /^- VWAP \(rth\): price above, 3\.18 x 3m ATR\(14\) away/m);
+  assert.match(fText, /^- Room above \(R = the 3m reference stop\): /m);
+  const q = frame(f, 15);
+  const qText = B.renderFrameBriefing(q, f, { now: new Date(q.closedAt) });
+  assert.deepStrictEqual(q.sections.bar.data.oneR, { points: 18.43, basis: '0.5 x 15m ATR(20) 36.87, the 15m reference stop' });
+  assert.match(qText, /^- Price [\d.]+\. 1R = 18\.43 pts \(0\.5 x 15m ATR\(20\) 36\.87, the 15m reference stop\)/m);
+  assert.match(qText, /^- Room above \(R = the 15m reference stop\): /m);
+  assert.match(qText, /^- Room below \(R = the 15m reference stop\): /m);
+  const h = frame(f, 60);
+  assert.match(B.renderFrameBriefing(h, f, { now: new Date(h.closedAt) }), /^- Price [\d.]+\. 1R = [\d.]+ pts \(0\.5 x 60m ATR\(20\) [\d.]+, the 60m reference stop\)/m);
+  // A frame's room is in its own R: the points over its own 1R.
+  for (const x of q.sections.bar.data.nearestLiquidity.above) assert.ok(Math.abs(x.R - x.points / 18.43) < 0.01);
+  // A lane's candidates: the VWAP side is against the runner's VWAP (its one value), never a VWAP off the lane's bars.
+  const lane = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: BARS.slice(0, upTo(13, 15)), minutes: 5, first: f, lane: true, scan: [{ name: 'x', direction: 'long', candidate: true, stopDistance: 10, exit: {} }] });
+  const c = lane.sections.bar.data.candidates[0];
+  const vwap = f.keyLevels.find(([n]) => n === 'VWAP (rth)')[1];
+  assert.strictEqual(vwap, f.sections.m3.data.vwap.rth);
+  assert.strictEqual(c.vwapSide, lane.price > vwap ? 'above' : lane.price < vwap ? 'below' : 'at');
+});
+
+// A lane's frame trades its setups: their room (the first level in the way, the levels ahead) and the frame's room
+// take every key level, the session's from the runner's briefing (keyLevels, its values), never computed without them.
+// The fixture's bars through the last 3m bar closing on a 15m close at or before bar n: a 15m lane bar closes with it.
+const at15 = n => { let k = n; while (k > 0 && (Date.parse(BARS[k - 1].t) + 180000) % 900000 !== 0) k -= 1; return k; };
+const laneAt = (f, n, scan) => B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: whole(BARS.slice(0, n), 15), minutes: 15, first: f, lane: true, scan });
+const both = [{ name: 'x', direction: 'long', candidate: true, stopDistance: 10, exit: { trailActivateR: 2 } }, { name: 'y', direction: 'short', candidate: true, stopDistance: 10, exit: { trailActivateR: 2 } }];
+
+test('a lane\'s traded setups: their room includes the runner\'s session levels (the same values), so a session level in the way is never skipped', () => {
+  let sessionFirst = 0;
+  let flips = 0;
+  for (let n0 = 1100; n0 <= upTo(15, 57); n0 += 7) {
+    const n = at15(n0);
+    const f = first(n);
+    const fr = laneAt(f, n, both);
+    const d = fr.sections.bar.data;
+    const keys = f.keyLevels.filter(([, p]) => Number.isFinite(p));
+    // The session levels it uses are exactly the runner's: each one in its room has the runner's price.
+    for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below]) {
+      for (const name of x.name.split(' / ').filter(s => SESSION_NAMES.test(s))) assert.ok(keys.some(([k, p]) => k === name && Math.abs(p - x.price) <= 0.25), `${name} ${x.price}`);
+    }
+    // Each candidate's room equals the one computed with every key level: the runner's session levels and its own.
+    const bare = laneAt({ ...f, keyLevels: [] }, n, both).sections.bar.data;
+    for (const [i, c] of d.candidates.entries()) {
+      const up = c.direction === 'long';
+      const ahead = keys.filter(([, p]) => (up ? p > fr.price : p < fr.price)).sort(([, a], [, b]) => (up ? a - b : b - a));
+      if (ahead.length) {
+        const dist = Math.abs(ahead[0][1] - fr.price);
+        // The nearest session level is in its levels ahead, or three nearer levels come first; never past the first.
+        assert.ok(c.inTheWay.points <= dist + 1e-9, `${c.name} at ${n}: in the way ${c.inTheWay.name} ${c.inTheWay.points} pts, a session level at ${dist}`);
+        assert.ok(c.ahead.some(x => Math.abs(x.price - ahead[0][1]) <= 0.25) || c.ahead.length === 3 && c.ahead.every(x => x.points <= dist + 0.25));
+        if (SESSION_NAMES.test(c.inTheWay.name)) sessionFirst += 1;
+      }
+      if (bare.candidates[i].inTheWay.name !== c.inTheWay.name) flips += 1;
+    }
+  }
+  // The check has teeth: session levels come first for some setups, and without them their room would differ.
+  assert.ok(sessionFirst > 5 && flips > 5, `${sessionFirst} with a session level first, ${flips} that differ without them`);
+});
+
+test('a lane\'s candidates: the VWAP side is against the runner\'s VWAP (its one value), never a VWAP computed on the lane\'s bars', () => {
+  const sideOf = (p, v) => (p > v ? 'above' : p < v ? 'below' : 'at');
+  let differs = 0;
+  for (let n0 = 1000; n0 <= upTo(15, 57); n0 += 5) {
+    const n = at15(n0);
+    const f = first(n);
+    const fr = laneAt(f, n, both);
+    const vw = f.keyLevels.find(([k]) => /^VWAP /.test(k));
+    // The lane's own bars' VWAP side (what a VWAP computed on them would say).
+    const own = B.buildBriefing({ symbol: 'MNQ', contractId: C, bars: whole(BARS.slice(0, n), 15), minutes: 15 }).sections.m3.data.vwap.side;
+    for (const c of fr.sections.bar.data.candidates) {
+      assert.strictEqual(c.vwapSide, vw ? sideOf(fr.price, vw[1]) : null, `${c.name} at ${n}`);
+      if (c.vwapSide !== own) differs += 1;
+    }
+  }
+  assert.ok(differs > 0, 'the fixture has bars where the lane\'s own VWAP is on the other side: the check has teeth');
+});
+
+test('a lane\'s briefing takes the session levels only from the runner\'s bar holding at its close: a bar behind, hours old or a later one is refused', () => {
+  const n = upTo(13, 15);
+  const refused = /the runner's bar briefing \(closed .*\) isn't the one holding at the 15m lane bar's close \(2026-04-27T17:15:00.000Z\): its session levels aren't this bar's/;
+  for (const k of [upTo(8, 15), upTo(13, 12), upTo(13, 18)]) assert.throws(() => laneAt(first(k), n, both), refused, `runner bar closing ${BARS[k - 1].t}`);
+  assert.ok(laneAt(first(n), n, both).sections.bar.data.candidates.length === 2, 'the runner\'s bar closing with it');
+  // A faster lane inside the runner's bar: a 5m lane bar closing 13:17 reads the runner's 13:15 bar (it holds to 13:18).
+  const five = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: BARS.slice(0, n), minutes: 5, first: first(n), lane: true, scan: both });
+  assert.strictEqual(five.closedAt, '2026-04-27T17:17:00.000Z');
+  assert.throws(() => B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: BARS.slice(0, n), minutes: 5, first: first(upTo(13, 12)), lane: true, scan: both }), /isn't the one holding/);
+  // An analyst's frame (no traded setups) builds as before.
+  assert.ok(frame(first(n), 15).sections.bar);
+});
+
+test('a lane\'s briefing on a runner briefing without session levels (an older file) is refused: never a traded room without them; an analyst\'s frame needs none', () => {
+  const f = first(upTo(13, 15));
+  const { keyLevels, ...old } = f;
+  assert.ok(Array.isArray(keyLevels) && keyLevels.length > 5);
+  assert.throws(() => laneAt(old, upTo(13, 15), both), /no session levels for the 15m lane's room/);
+  assert.ok(frame(old, 15).sections.bar.data.sessionLevels);
+  // Rendered: a lane's summary says its room has them; an analyst's that its room is its own.
+  const lane = laneAt(f, upTo(13, 15), both);
+  assert.match(B.renderFrameBriefing(lane, f, { now: new Date(lane.closedAt) }), /the room below and the setups' levels include them \(the runner's values\), with this 15m bar's own\./);
+  assert.match(lane.sections.bar.data.sessionLevels, /the room and the setups' levels below include the runner's session levels \(its values\)$/);
+  const q = frame(f, 15);
+  assert.match(B.renderFrameBriefing(q, f, { now: new Date(q.closedAt) }), /the room below is this 15m bar's own levels\./);
+});
+
+test('a frame never sweeps a session level computed on its own bars (prior RTH, overnight): where its bars would, the sweep is not in it', () => {
+  // Sunday 21:03 ET (the 15m bars' own prior RTH high swept) and Monday 10:03 ET (their own overnight low swept).
+  for (const n of [at15(975), at15(1235)]) {
+    const own = B.buildBriefing({ symbol: 'MNQ', contractId: C, bars: whole(BARS.slice(0, n), 15), minutes: 15 }).sections.m3.data.sweeps;
+    assert.ok(own.some(x => /^(prior RTH|overnight) /.test(x.name)), `${n}: the 15m bars sweep one of their own session levels`);
+    const f = first(n);
+    for (const fr of [frame(f, 15), laneAt(f, n, both)]) assert.ok(fr.sections.bar.data.sweeps.every(x => !SESSION_NAMES.test(x.name)), `${n}`);
+  }
+});
+
+test('no look-ahead: a frame is built from completed bars only; the sub-bars of the bar still forming, or any later bar, never change it', () => {
+  for (const m of [15, 60]) {
+    const f = first(upTo(13, 15));
+    const fr = frame(f, m);
+    assert.ok(Date.parse(fr.closedAt) <= Date.parse(f.closedAt), `${m}m: closed by the runner's bar`);
+    assert.strictEqual(Date.parse(fr.asOf) + m * 60000, Date.parse(fr.closedAt));
+    // The same frame bar with the forming bar's sub-bars (up to one 3m bar short of its close) added.
+    const lastIn = m === 15 ? upTo(13, 27) : upTo(13, 57);
+    const later = frame(first(lastIn), m);
+    assert.strictEqual(later.asOf, fr.asOf, `${m}m: the forming bar isn't in it`);
+    assert.deepStrictEqual(later.sections.bar.data, fr.sections.bar.data, `${m}m: nothing from the forming bar`);
+    // Bending every bar after its close changes nothing in it.
+    const close = Date.parse(fr.closedAt);
+    const bent = BARS.slice(0, lastIn).map(b => (Date.parse(b.t) >= close ? { ...b, h: b.h + 500, l: b.l - 500, c: b.c + 100 } : b));
+    assert.deepStrictEqual(frame(f, m, bent).sections.bar.data, fr.sections.bar.data, `${m}m: no later bar read`);
+  }
+});
+
+test('a frame\'s round numbers use the configured steps, as the runner\'s briefing (none without them)', () => {
+  const { defaultRoundSteps, roundStepFor } = require('../../scripts/lib/trading/round-numbers');
+  const steps = defaultRoundSteps();
+  const step = roundStepFor('MNQ', steps);
+  assert.ok(step > 0);
+  const n = upTo(13, 15);
+  const f = B.buildBriefing({ symbol: 'MNQ', contractId: C, bars: BARS.slice(0, n), minutes: 3, roundSteps: steps });
+  for (const m of [15, 60]) {
+    const fr = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: whole(BARS.slice(0, n), m), minutes: m, first: f, roundSteps: steps });
+    const room = fr.sections.bar.data.nearestLiquidity;
+    const rounds = [...room.above, ...room.below].filter(x => x.name.split(' / ').includes('round number'));
+    assert.ok(rounds.length >= 1 && rounds.every(x => Math.abs(x.price / step - Math.round(x.price / step)) < 1e-9), `${m}m: ${JSON.stringify(rounds)}`);
+    const none = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: whole(BARS.slice(0, n), m), minutes: m, first: f }).sections.bar.data.nearestLiquidity;
+    assert.ok([...none.above, ...none.below].every(x => !x.name.split(' / ').includes('round number')), `${m}m without steps`);
+  }
+});

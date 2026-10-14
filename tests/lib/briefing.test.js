@@ -346,8 +346,8 @@ test('the rendered briefing opens with a plain-language summary: price and 1R, t
   const b = build(1300, null, { scan, blackouts: { items: [{ start: '2099-01-01T14:00:00Z', end: '2099-01-01T15:00:00Z', reason: 'CPI' }] } });
   const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
   const summary = text.split('Detail by timeframe:')[0];
-  for (const re of [/^Summary \(NQ 3m, \d{2}:\d{2} ET\):$/m, /^- Session: [a-z ]+ \(market (open|closed), (entries allowed|no entries)\) until \d{2}:\d{2} ET\.$/m, /^- Price [\d.]+\. 1R = ([\d.]+) pts \(0\.5 x ATR\(20\) ([\d.]+), the reference stop\)/m, /^- Trend rule: /m,
-    /^- Alignment: long \w+, short \w+\. Regime: /m, /^- VWAP \(\w+\): price (above|below|at), [\d.]+ ATR away/m, /^- News: next CPI at /m, /^- Room above \(R = the reference stop\): /m, /^- Room below \(R = the reference stop\): /m,
+  for (const re of [/^Summary \(NQ 3m, \d{2}:\d{2} ET\):$/m, /^- Session: [a-z ]+ \(market (open|closed), (entries allowed|no entries)\) until \d{2}:\d{2} ET\.$/m, /^- Price [\d.]+\. 1R = ([\d.]+) pts \(0\.5 x 3m ATR\(20\) ([\d.]+), the 3m reference stop\)/m, /^- Trend rule: /m,
+    /^- Alignment: long \w+, short \w+\. Regime: /m, /^- VWAP \(\w+\): price (above|below|at), [\d.]+ x 3m ATR\(14\) away/m, /^- News: next CPI at /m, /^- Room above \(R = the 3m reference stop\): /m, /^- Room below \(R = the 3m reference stop\): /m,
     /^ {2}- orb long: the trend rule allows a long; multi-timeframe read for a long: \w+; .+ Stop 10 pts \(its own 1R\); needs 2R of room; levels ahead in its R: /m]) assert.match(summary, re);
   assert.match(B.renderBriefing(build(1300, null, { scan: null }), { now: new Date(b.closedAt) }), /^- Setups: unknown \(the scan failed this bar\): no rules entry this bar\.$/m);
 });

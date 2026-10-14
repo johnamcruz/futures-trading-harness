@@ -21,7 +21,8 @@
  *   reportCacheFor(home, cfg, frames)     the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  *   briefingRecorder(home, cfg, now, env, { frames, dataDir, log })   the bar briefing of each bar, and of each
- *                                         analyst's own timeframe (frames: lanes.js analystFrames)
+ *                                         analyst's own timeframe (frames: lanes.js analystFrames); on a lane's bar
+ *                                         whose briefing can't be built, { error } (the runner allows no entry on it)
  *
  * An analyst on its own timeframe (the runner config's `agents`, an agent file's `timeframe`): its briefing is built
  * from that lane's bars, or from the first lane's whole bars (15m and 1h from 3m: their bars file is written next to
@@ -247,30 +248,34 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
     return steps.value;
   };
   const closeOf = (bars, minutes) => (bars && bars.length ? new Date(Date.parse(bars[bars.length - 1].t) + minutes * 60000).toISOString() : null);
-  // One timeframe's briefing; a failure removes it (an older bar's is never read as this one's) and is logged.
+  // One timeframe's briefing; a failure removes it (an older bar's is never read as this one's), is logged, and is
+  // returned (its message; null when built).
   const frame = (item, minutes, { bars: barsOf, lane = false, scan = null, scanError = null, barsFile = null, roundSteps }) => {
     try {
       const prev = readFrameBriefing(home, item.symbol, minutes);
       const bars = barsOf();
       if (!bars.length) throw new Error(`no whole ${minutes}m bar in the ${cfg.timeframe}m bars`);
       // Built from the first lane's bars: the same last whole bar is the same briefing (kept until its next close).
-      if (!lane && prev && prev.asOf === bars[bars.length - 1].t && (prev.contractId || null) === (item.contractId || null)) return;
+      if (!lane && prev && prev.asOf === bars[bars.length - 1].t && (prev.contractId || null) === (item.contractId || null)) return null;
       let file = barsFile;
       if (!lane && dataDir) {
         file = path.join(dataDir, `${item.symbol}-${minutes}m.json`);
         writeJsonAtomic(file, { contractId: item.contractId || null, barSize: `${minutes} minute`, builtFrom: `${cfg.timeframe} minute`, count: bars.length, bars });
       }
       writeFrameBriefing(home, buildFrameBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars, minutes, first: readBriefing(home, item.symbol), lane, scan, scanError, barsFile: file, ...facts(), roundSteps, now: now() }));
+      return null;
     } catch (err) {
       removeFrameBriefing(home, item.symbol, minutes);
       log(`${item.symbol}: no ${minutes}m bar briefing this bar (${err.message}); the ${minutes}m analysts read the bars themselves`, 'error');
+      return err.message;
     }
   };
   return (item, results, scanError = null) => {
     if (item.lane > 0) {
       const roundSteps = roundStepsAt(closeOf(item.bars, item.minutes));
-      if (laned.has(item.minutes)) frame(item, item.minutes, { bars: () => item.bars, lane: true, scan: results, scanError, barsFile: (item.bar && item.bar.file) || null, roundSteps });
-      return null;
+      // A lane's briefing that can't be built: the lane's setups have no room read (fail closed: no entry on this bar).
+      const error = laned.has(item.minutes) ? frame(item, item.minutes, { bars: () => item.bars, lane: true, scan: results, scanError, barsFile: (item.bar && item.bar.file) || null, roundSteps }) : null;
+      return error ? { error } : null;
     }
     const roundSteps = roundStepsAt(closeOf(item.bars, cfg.timeframe));
     const file = firstBriefing(item, results, scanError, roundSteps);

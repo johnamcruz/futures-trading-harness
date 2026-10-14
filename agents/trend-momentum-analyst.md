@@ -39,6 +39,12 @@ read `bar_briefing {"symbol": "<SYMBOL>", "timeframe": "15m"}` (with yours) inst
 your bars; the trend rule is the runner's briefing's, and so are the
 setups unless a lane trades your bars), with the runner's `m15`, `h1` and `day`
 parts that change no faster than your bars, and it names your bars file.
+Its 1R and ATR are your timeframe's ("0.5 x 15m ATR(20)"). The session's
+facts (today, overnight, opening range, IB, VWAP, session profile,
+`location`) are not in it: take them from the runner's briefing
+(`bar_briefing` without a timeframe), the one value of each; its levels and
+room are your bars' own (on a lane's bars, with the runner's session
+levels, for the setups it trades).
 Report on your timeframe (put it first where a step below says 3m), and name
 those versions: `Data: bar_briefing <tf> bar<minutes>m@<...>, <the shared
 parts' versions>`. Your report may be reused until your timeframe's next bar

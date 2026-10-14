@@ -19,13 +19,13 @@ One strategy's full result: name; every strategy's (large): detail true.
 Bar briefing MNQ 3m, bar 00:45 ET closed 00:48 ET (04-24), price 27053.75; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):
 Summary (MNQ 3m, 00:48 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
-- Price 27053.75. 1R = 5.13 pts (0.5 x ATR(20) 10.26, the reference stop); every distance below is in points and R.
+- Price 27053.75. 1R = 5.13 pts (0.5 x 3m ATR(20) 10.26, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
 - Alignment: long mixed, short mixed. Regime: transition, normal volatility.
-- VWAP (session): price below, 1.95 ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
+- VWAP (session): price below, 1.95 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
-- Room above (R = the reference stop): VWAP (session) 27073.3 (19.55 pts, 3.81R), prior VAH 27075.25 (21.42 pts, 4.18R), round number 27100 (46.25 pts, 9.02R).
-- Room below (R = the reference stop): last 3m swing high 27046.25 (7.5 pts, 1.46R), session POC 27035.75 (17.91 pts, 3.49R), session VAL 27019.25 (34.44 pts, 6.72R).
+- Room above (R = the 3m reference stop): VWAP (session) 27073.3 (19.55 pts, 3.81R), prior VAH 27075.25 (21.42 pts, 4.18R), round number 27100 (46.25 pts, 9.02R).
+- Room below (R = the 3m reference stop): last 3m swing high 27046.25 (7.5 pts, 1.46R), session POC 27035.75 (17.91 pts, 3.49R), session VAL 27019.25 (34.44 pts, 6.72R).
 - Setups: none fired on this bar.
 
 Detail by timeframe:
@@ -39,7 +39,7 @@ Detail by timeframe:
   marketOpen: true
   windowText: asia (market open, entries allowed) until 03:00 ET
   windowRefusal: null
-  oneR: {"points":5.13,"basis":"0.5 x ATR(20) 10.26, the reference stop"}
+  oneR: {"points":5.13,"basis":"0.5 x 3m ATR(20) 10.26, the 3m reference stop"}
   news: {"inBlackout":false,"next":null}
   regime: {"primary":"transition","volatility":"normal","tags":["transition","normal-vol"],"metrics":{"adx":27.04,"ema20SlopeAtr":0.207,"sessionVwapCrosses":0,"atrRatio":0.934,"closeAboveEma50":true}}
   trend: {"ema9":27037.44,"ema20":27037.12,"ema50":27050.02,"ema200":27043.26,"adx":27.04,"adxSlope":-7.79,"supertrend":{"direction":"up","line":27017.46},"keltner":{"upper":27052.51,"mid":27037.12,"lower":27021.74}}
@@ -98,13 +98,13 @@ One strategy's full result: name; every strategy's (large): detail true.
 Bar briefing MNQ 3m, bar 10:30 ET closed 10:33 ET (04-27), price 27325.5; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):
 Summary (MNQ 3m, 10:33 ET):
 - Session: opening drive (market open, entries allowed) until 11:00 ET.
-- Price 27325.5. 1R = 14.51 pts (0.5 x ATR(20) 29.03, the reference stop); every distance below is in points and R.
+- Price 27325.5. 1R = 14.51 pts (0.5 x 3m ATR(20) 29.03, the 3m reference stop); every distance below is in points and R.
 - Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too.
 - Alignment: long mixed, short mixed. Regime: trend-down, high volatility.
-- VWAP (rth): price below, 1.46 ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 6, the session VWAP 0 (the regime's count).
+- VWAP (rth): price below, 1.46 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 6, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
-- Room above (R = the reference stop): overnight low 27344.25 (18.75 pts, 1.29R), session VAL 27344.75 (19.36 pts, 1.33R), last 3m swing low 27352.5 (27 pts, 1.86R).
-- Room below (R = the reference stop): round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
+- Room above (R = the 3m reference stop): overnight low 27344.25 (18.75 pts, 1.29R), session VAL 27344.75 (19.36 pts, 1.33R), last 3m swing low 27352.5 (27 pts, 1.86R).
+- Room below (R = the 3m reference stop): round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
 - Setups:
   - orb short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level in its way: round number at 1.76R; it needs 2R (the level comes first); confluence: none with it; price below the VWAP (its side). Stop 14.51 pts (its own 1R); needs 2R of room; levels ahead in its R: round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
 
@@ -119,7 +119,7 @@ Detail by timeframe:
   marketOpen: true
   windowText: opening drive (market open, entries allowed) until 11:00 ET
   windowRefusal: null
-  oneR: {"points":14.51,"basis":"0.5 x ATR(20) 29.03, the reference stop"}
+  oneR: {"points":14.51,"basis":"0.5 x 3m ATR(20) 29.03, the 3m reference stop"}
   news: {"inBlackout":false,"next":null}
   regime: {"primary":"trend-down","volatility":"high","tags":["trend-down","trend","high-vol"],"metrics":{"adx":30.23,"ema20SlopeAtr":-0.387,"sessionVwapCrosses":0,"atrRatio":2.024,"closeAboveEma50":false}}
   trend: {"ema9":27358.87,"ema20":27371.37,"ema50":27397.45,"ema200":27431.77,"adx":30.23,"adxSlope":-2.44,"supertrend":{"direction":"down","line":27433.86},"keltner":{"upper":27414.9,"mid":27371.37,"lower":27327.83}}
@@ -178,13 +178,13 @@ One strategy's full result: name; every strategy's (large): detail true.
 Bar briefing MNQ 3m, bar 13:15 ET closed 13:18 ET (04-27), price 27394.25; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):
 Summary (MNQ 3m, 13:18 ET):
 - Session: lunch lull (market open, entries allowed) until 13:30 ET.
-- Price 27394.25. 1R = 8.15 pts (0.5 x ATR(20) 16.3, the reference stop); every distance below is in points and R.
+- Price 27394.25. 1R = 8.15 pts (0.5 x 3m ATR(20) 16.3, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
 - Alignment: long mixed, short mixed. Regime: range, low volatility.
-- VWAP (rth): price above, 1.72 ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 4, the session VWAP 5 (the regime's count).
+- VWAP (rth): price above, 1.72 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 4, the session VWAP 5 (the regime's count).
 - News: no blackout ahead.
-- Room above (R = the reference stop): round number 27400 (5.75 pts, 0.71R), last 3m swing high 27406.5 (12.25 pts, 1.5R), prior POC 27414.25 (20.07 pts, 2.46R).
-- Room below (R = the reference stop): last 3m swing low 27379 (15.25 pts, 1.87R), session POC 27373 (21.33 pts, 2.62R), VWAP (rth) 27368.55 (25.7 pts, 3.15R).
+- Room above (R = the 3m reference stop): round number 27400 (5.75 pts, 0.71R), last 3m swing high 27406.5 (12.25 pts, 1.5R), prior POC 27414.25 (20.07 pts, 2.46R).
+- Room below (R = the 3m reference stop): last 3m swing low 27379 (15.25 pts, 1.87R), session POC 27373 (21.33 pts, 2.62R), VWAP (rth) 27368.55 (25.7 pts, 3.15R).
 - Setups:
   - value_area short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level in its way: last 3m swing low at 0.54R; it needs 5.26R (the level comes first); confluence: none with it; price above the VWAP (the other side); lunch lull. Stop 28.07 pts (its own 1R); target 147.71 pts (5.26R); needs 5.26R of room; levels ahead in its R: last 3m swing low 27379 (15.25 pts, 0.54R), session POC 27373 (21.33 pts, 0.76R), VWAP (rth) 27368.55 (25.7 pts, 0.92R). Values: field("flow.windows.3.ofiTrade")=-0.239.
 
@@ -199,7 +199,7 @@ Detail by timeframe:
   marketOpen: true
   windowText: lunch lull (market open, entries allowed) until 13:30 ET
   windowRefusal: null
-  oneR: {"points":8.15,"basis":"0.5 x ATR(20) 16.3, the reference stop"}
+  oneR: {"points":8.15,"basis":"0.5 x 3m ATR(20) 16.3, the 3m reference stop"}
   news: {"inBlackout":false,"next":null}
   regime: {"primary":"range","volatility":"low","tags":["range","low-vol"],"metrics":{"adx":24.36,"ema20SlopeAtr":0.4,"sessionVwapCrosses":5,"atrRatio":0.65,"closeAboveEma50":true}}
   trend: {"ema9":27398.66,"ema20":27392.21,"ema50":27383.6,"ema200":27407.52,"adx":24.36,"adxSlope":0,"supertrend":{"direction":"up","line":27368.34},"keltner":{"upper":27416.66,"mid":27392.21,"lower":27367.76}}
@@ -256,13 +256,13 @@ One strategy's full result: name; every strategy's (large): detail true.
 Bar briefing MNQ 3m, bar 19:18 ET closed 19:21 ET (04-27), price 27488; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):
 Summary (MNQ 3m, 19:21 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
-- Price 27488. 1R = 4.63 pts (0.5 x ATR(20) 9.27, the reference stop); every distance below is in points and R.
+- Price 27488. 1R = 4.63 pts (0.5 x 3m ATR(20) 9.27, the 3m reference stop); every distance below is in points and R.
 - Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 - Alignment: long aligned, short counter. Regime: transition, normal volatility.
-- VWAP (session): price above, 1.4 ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
+- VWAP (session): price above, 1.4 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
-- Room above (R = the reference stop): session POC 27488 (0.09 pts, 0.02R), last 3m swing high 27489.75 (1.75 pts, 0.38R), session VAH 27499 (11.06 pts, 2.39R).
-- Room below (R = the reference stop): VWAP (session) 27475.89 (12.11 pts, 2.61R), last 3m swing low 27474.75 (13.25 pts, 2.86R), session VAL 27471.5 (16.56 pts, 3.57R).
+- Room above (R = the 3m reference stop): session POC 27488 (0.09 pts, 0.02R), last 3m swing high 27489.75 (1.75 pts, 0.38R), session VAH 27499 (11.06 pts, 2.39R).
+- Room below (R = the 3m reference stop): VWAP (session) 27475.89 (12.11 pts, 2.61R), last 3m swing low 27474.75 (13.25 pts, 2.86R), session VAL 27471.5 (16.56 pts, 3.57R).
 - Setups: none fired on this bar.
 
 Detail by timeframe:
@@ -276,7 +276,7 @@ Detail by timeframe:
   marketOpen: true
   windowText: asia (market open, entries allowed) until 03:00 ET
   windowRefusal: null
-  oneR: {"points":4.63,"basis":"0.5 x ATR(20) 9.27, the reference stop"}
+  oneR: {"points":4.63,"basis":"0.5 x 3m ATR(20) 9.27, the 3m reference stop"}
   news: {"inBlackout":false,"next":null}
   regime: {"primary":"transition","volatility":"normal","tags":["transition","normal-vol"],"metrics":{"adx":33.18,"ema20SlopeAtr":0.125,"sessionVwapCrosses":0,"atrRatio":0.731,"closeAboveEma50":true}}
   trend: {"ema9":27484.71,"ema20":27481.52,"ema50":27464.21,"ema200":27432.23,"adx":33.18,"adxSlope":-6.95,"supertrend":{"direction":"up","line":27465.5},"keltner":{"upper":27495.42,"mid":27481.52,"lower":27467.61}}

@@ -710,3 +710,59 @@ test('lanes: another lane\'s bar is briefed only for an analyst on that lane\'s 
     assert.ok(b3 % 180000 === 0 && b3 < Date.parse(m1.bar.t) && b3 + 2 * 180000 > Date.parse(m1.bar.t) + 60000, `the last 3m bar's open: ${c.context.cycleBars.MNQ} for ${m1.bar.t}`);
   }
 });
+
+test('lanes: a lane\'s bar whose briefing can\'t be built allows no entry on it (fail closed): nothing fired recorded for the gate, the cycle manage-only, the reason logged; managing goes on', async () => {
+  const fired = [{ name: 's1', signal: 'rules', candidate: true, direction: 'long', stopDistance: 5 }];
+  const LANES = { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }] };
+  const FRAMES = [{ role: 'market-structure-analyst', minutes: 1, lane: 1 }];
+  const run = async (positions, briefing = item => (item.lane > 0 ? { error: 'boom' } : null), publishMs = undefined) => {
+    const briefed = [];
+    const signals = [];
+    const logs = [];
+    const { cycles } = await simulate({
+      cfg: LANES, from: START, to: et(10, 4, 30), mkt: market({ positions, publishMs }),
+      deps: {
+        analystFrames: FRAMES,
+        scanFor: () => fired.map(r => ({ ...r })),
+        recordBriefing: item => { briefed.push(`${item.minutes}m ${item.bar.t}`); return briefing(item); },
+        recordSignals: (item, results) => signals.push({ lane: item.minutes, bar: item.bar.t, names: (results || []).filter(r => r.candidate).map(r => r.name) }),
+        log: (m, l) => logs.push([m, l]),
+      },
+    });
+    return { briefed, signals, logs, cycles };
+  };
+  const flat = await run({ net: 0, working: 0 });
+  // The gate's record for every 1m bar: nothing fired (it refuses an entry on them); the 3m bars keep what fired.
+  const m1 = flat.signals.filter(s => s.lane === 1);
+  assert.ok(m1.length >= 3 && m1.every(s => s.names.length === 0), JSON.stringify(m1));
+  assert.ok(flat.signals.filter(s => s.lane === 3).length >= 1 && flat.signals.filter(s => s.lane === 3).every(s => s.names.join() === 's1'));
+  assert.ok(flat.logs.some(([m, l]) => l === 'error' && /MNQ 1m: the 1m lane's bar briefing can't be built \(boom\): no entry on this bar, only managing what is open/.test(m)));
+  // Flat: the 1m bars run no cycle (nothing to manage, no entry on them); the 3m bars trade as before, without them.
+  assert.ok(flat.cycles.length >= 1 && flat.cycles.every(c => c.context.lanes.join() === '3m' && c.context.manageOnly === false), JSON.stringify(flat.cycles.map(c => c.context.lanes)));
+  // The first lane's bar is briefed before the other lane's at the same close (its session levels are the runner's),
+  // also when the 1m bar came first and was held for the 3m one (a carried item listed before it).
+  const late = await run({ net: 0, working: 0 }, () => null, m => (m === 3 ? 7000 : 1000));
+  let pairs = 0;
+  for (const { briefed } of [flat, late]) {
+    for (const b of briefed.filter(x => x.startsWith('1m'))) {
+      const close = Date.parse(b.slice(3)) + 60000;
+      const k = briefed.findIndex(x => x.startsWith('3m') && Date.parse(x.slice(3)) + 180000 === close);
+      if (k >= 0) { pairs += 1; assert.ok(k < briefed.indexOf(b), briefed.join(',')); }
+    }
+  }
+  assert.ok(pairs >= 2);
+  // A position open: the 1m bars still run their cycles, manage-only (exits and management go on), saying why; a
+  // shared close's cycle too (no entry while one of its bars has no briefing).
+  const open = await run({ net: 1, working: 1 });
+  const with1m = open.cycles.filter(c => c.context.lanes.includes('1m'));
+  assert.ok(with1m.some(c => c.context.lanes.join() === '1m') && with1m.some(c => c.context.lanes.length === 2));
+  for (const c of with1m) {
+    assert.strictEqual(c.context.manageOnly, true);
+    assert.match(c.prompt, /MNQ 1m: the 1m lane's bar briefing can't be built \(boom\): no entry on this bar, only managing what is open: this cycle is manage-only, no entry/);
+  }
+  assert.ok(open.signals.filter(s => s.lane === 1).every(s => s.names.length === 0));
+  // A lane briefing that builds: trade cycles, and the 1m bars record what fired.
+  const ok = await run({ net: 0, working: 0 }, () => null);
+  assert.ok(ok.cycles.length && ok.cycles.every(c => c.context.manageOnly === false));
+  assert.ok(ok.signals.filter(s => s.lane === 1).every(s => s.names.join() === 's1'));
+});

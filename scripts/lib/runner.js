@@ -588,7 +588,9 @@ function createRunner(deps) {
     // lane's bars brief only an analyst on that lane's timeframe.
     if (item.lane > 0 && !frameLanes.has(item.lane)) return;
     try {
-      recordBriefing(item, results, scanError);
+      // A lane's briefing that couldn't be built (its setups' room unread): no entry on that bar (laneBlocked).
+      const r = recordBriefing(item, results, scanError);
+      if (item.lane > 0 && r && r.error) item.briefError = r.error;
     } catch (err) {
       log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
     }
@@ -636,12 +638,37 @@ function createRunner(deps) {
     }
   }
 
+  /**
+   * A lane's bar whose briefing couldn't be built: its setups have no room read, so no entry on it (fail closed). The
+   * gate's signal record for the bar says nothing fired (it refuses an entry on it), no verdict is screened, and the
+   * cycle runs only to manage what is open (the cycle is manage-only: entryBlocked).
+   */
+  async function laneBlocked(item) {
+    const why = `the ${item.minutes}m lane's bar briefing can't be built (${item.briefError}): no entry on this bar, only managing what is open`;
+    item.verdicts = [];
+    item.entryBlocked = why;
+    log(`${item.symbol} ${item.minutes}m: ${why}`, 'error');
+    let decision;
+    if (!cfg.account) decision = { run: false, reason: why };
+    else {
+      try {
+        const [net, working] = await exposure(item);
+        decision = net !== 0 || working > 0 ? { run: true, reason: `manage only: ${why}` } : { run: false, reason: why };
+      } catch (err) {
+        decision = { run: true, reason: `manage only: account check failed (${err.message}); ${why}` };
+      }
+    }
+    logScan(item, [], decision);
+    return decision;
+  }
+
   async function wanted(item, manageOnly) {
     // Each lane's own trigger (one lane: the config's).
     // A lane that lists a retired strategy (lanes.js retireLanes) enters nothing: no cycle per bar, only to manage.
     if ((multi ? lanes[item.lane].trigger : cfg.trigger) === 'bar' && !manageOnly && !lanes[item.lane].retired) {
       // Every bar runs a cycle with what fired; a policy still records its verdicts for the gate.
       const results = scanItem(item);
+      if (item.briefError) return laneBlocked(item);
       if (results) {
         let screened = results;
         if (prop && cfg.account) {
@@ -675,6 +702,7 @@ function createRunner(deps) {
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       scanItem(item);
+      if (item.briefError) return laneBlocked(item);
       if (prop && item.scan) policyFailed(item, `account check failed: ${err.message}`);
       log(`${item.symbol}: account check failed (${err.message}); running the cycle to manage anything open`, 'error');
       const decision = { run: true, reason: `account check failed (${err.message})` };
@@ -686,6 +714,7 @@ function createRunner(deps) {
       return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
     }
     const results = scanItem(item);
+    if (item.briefError) return laneBlocked(item);
     // A failed scan: run the cycle (it says so) when there is something to manage, else wait for the next bar.
     if (!results) return net !== 0 || working > 0 ? { run: true, reason: 'manage (the scan failed)' } : { run: false, reason: 'the scan failed' };
     const screened = prop && net === 0 && working === 0 ? screenItem(item) : results;
@@ -1170,10 +1199,17 @@ function createRunner(deps) {
       if (again.action === 'trade' || again.action === 'manage') {
         let manageOnly = again.action === 'manage';
         const run = [];
-        for (const item of ready.filter(x => !x.stale)) {
-          const w = await wanted(item, manageOnly);
+        const due = ready.filter(x => !x.stale);
+        // The first lane's bars are decided (and briefed) first: a lane's briefing takes its session levels from the
+        // runner's briefing of the bar holding at its close, which a carried lane item listed first would miss.
+        const decided = new Map();
+        for (const item of [...due].sort((a, b) => a.lane - b.lane)) {
+          decided.set(item, await wanted(item, manageOnly));
           // A bar not scanned (manage only, or no cycle) still gets its briefing: the file is always this bar's.
           briefItem(item, null, 'not scanned this bar');
+        }
+        for (const item of due) {
+          const w = decided.get(item);
           const tag = `${item.symbol}${multi ? ` ${item.minutes}m` : ''}`;
           if (w.run) { run.push(item); log(`${tag} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
           else log(`${tag} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
@@ -1182,6 +1218,8 @@ function createRunner(deps) {
         const skipped = multi && run.length ? settlePolicies(run) : [];
         // A skip the gate can't read: no entry this cycle (fail closed), only managing what is open.
         if (skipped.some(k => k.unrecorded)) manageOnly = true;
+        // A lane's bar without its briefing: no entry this cycle (fail closed), only managing what is open.
+        if (run.some(x => x.entryBlocked)) manageOnly = true;
         // The cycle's budget: the fastest closed lane's (one lane: the runner's cycleTimeoutMinutes).
         const closedLanes = multi ? lanes.filter((l, li) => run.some(x => x.lane === li)) : [];
         const budgetMin = multi ? cycleTimeoutMin(cfg, closedLanes) : cfg.cycleTimeoutMinutes;
@@ -1252,6 +1290,7 @@ function createRunner(deps) {
             bars: x.bars,
           }));
           const symbolsOf = list => (multi ? [...new Set(list.map(x => x.symbol))] : list.map(x => x.symbol));
+          for (const x of run.filter(y => y.entryBlocked)) unavailable.push(`${x.symbol} ${x.minutes}m: ${x.entryBlocked}: this cycle is manage-only, no entry`);
           for (const k of skipped.filter(x => x.unrecorded)) unavailable.push(`${k.symbol} ${k.policy}'s skip for ${k.by} could not be recorded for the gate (${k.unrecorded}): this cycle is manage-only, no entry`);
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
           const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(symbolsOf(items), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
