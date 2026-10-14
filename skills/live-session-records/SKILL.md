@@ -1,6 +1,6 @@
 ---
 name: live-session-records
-description: Use when reading or scoring a live trading day's records.
+description: Use when reading or scoring a live trading day's records. User-run.
 ---
 
 # Live session records

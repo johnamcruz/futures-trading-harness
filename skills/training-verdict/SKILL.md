@@ -1,6 +1,6 @@
 ---
 name: training-verdict
-description: Use when reading why the training loop kept, rejected or blocked an edit.
+description: Use when reading why the training loop kept, rejected or blocked an edit. User-run.
 ---
 
 # Training verdict

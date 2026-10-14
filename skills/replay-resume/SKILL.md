@@ -1,6 +1,6 @@
 ---
 name: replay-resume
-description: Use when a replay run stopped or must resume - retries, the error limit, the kill switch.
+description: Use when a replay run stopped or must resume - retries, the error limit, the kill switch. User-run.
 ---
 
 # Replay resume

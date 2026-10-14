@@ -1,6 +1,6 @@
 ---
 name: replay-labels
-description: Use when turning a finished replay or live session into labels.
+description: Use when turning a finished replay or live session into labels. User-run.
 ---
 
 # Replay labels

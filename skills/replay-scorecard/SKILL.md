@@ -1,6 +1,6 @@
 ---
 name: replay-scorecard
-description: Use when scoring a finished replay or live session against the trader's rules.
+description: Use when scoring a finished replay or live session against the trader's rules. User-run.
 ---
 
 # Replay scorecard
