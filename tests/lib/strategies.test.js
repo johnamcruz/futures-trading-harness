@@ -38,8 +38,10 @@ test('the shipped strategies: prop_portfolio alone, valid; an old detector signa
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
-  // Every rules strategy and prop_flow_1m retired on 2026-10-14: the policy strategy is all that ships.
-  assert.deepStrictEqual(strategies.map(s => s.name), ['prop_portfolio']);
+  // Every rules strategy and prop_flow_1m retired on 2026-10-14: the policy strategy and the trade lifecycle (the
+  // model composes it: signal: composed) are all that ship.
+  assert.deepStrictEqual(strategies.map(s => s.name), ['prop_portfolio', 'trade_lifecycle']);
+  assert.deepStrictEqual(strategies.filter(x => x.signal === 'composed').map(x => x.name), ['trade_lifecycle']);
   const portfolio = strategies.find(s => s.name === 'prop_portfolio');
   assert.strictEqual(portfolio.account, 'topstep_100k');
   // A detector signal that is now rules: the hint never points at a strategy document that is gone.

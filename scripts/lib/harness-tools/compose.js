@@ -15,7 +15,7 @@
  */
 
 const { harnessHome } = require('../paths');
-const { context } = require('./cli');
+const { context, say } = require('./cli');
 const { cycleBarOf } = require('./briefing');
 const { skillCatalog } = require('./skills');
 const { briefingFor } = require('../trading/fact-claims');
@@ -31,9 +31,11 @@ const ROOT = /^[A-Z0-9]{1,8}$/;
 
 function composeCheck({ symbol = null, side = null, reads = null, size = null } = {}, ctx) {
   const c = context(ctx);
-  if (!ROOT.test(String(symbol || ''))) throw new Error(`--symbol: a contract root, e.g. MNQ (${USAGE})`);
-  if (!['long', 'short'].includes(side)) throw new Error(`--side: long or short (${USAGE})`);
-  if (!Array.isArray(reads)) throw new Error(`--reads: a JSON array of reads (${USAGE})`);
+  // Messages name the tool's arguments to a tool caller, the script's flags on the command line.
+  const arg = name => say(c, `--${name}`, name);
+  if (!ROOT.test(String(symbol || ''))) throw new Error(`${arg('symbol')}: a contract root, e.g. MNQ`);
+  if (!['long', 'short'].includes(side)) throw new Error(`${arg('side')}: long or short`);
+  if (!Array.isArray(reads)) throw new Error(`${arg('reads')}: an array of reads, each { step, skill, read, why }`);
   const home = harnessHome(c.env);
   const at = c.now().toISOString();
   const refused = problems => {
@@ -76,7 +78,7 @@ function parseArgv(argv) {
     else if (flag === '--side') o.side = val();
     else if (flag === '--size') o.size = Number(val());
     else if (flag === '--reads') {
-      try { o.reads = JSON.parse(val()); } catch (err) { throw new Error(`--reads: JSON (${err.message})`, { cause: err }); }
+      try { o.reads = JSON.parse(val()); } catch (err) { throw new Error(`${flag}: JSON (${err.message})`, { cause: err }); }
     } else throw new Error(`unknown argument: ${argv[i]} (${USAGE})`);
   }
   return o;

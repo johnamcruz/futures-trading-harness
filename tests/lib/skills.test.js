@@ -225,8 +225,12 @@ test('skills: every harness tool the docs name exists, and a skill lists every t
   // only the people's mirror (user-commands): their arguments are in their MCP schemas.
   const rows = DOCS.filter(d => d.rel.startsWith('skills/')).flatMap(d => d.text.split('\n'));
   const MIRROR_ONLY = new Set(['lessons', 'reconcile']);
+  // compose_check gets its row with the skills that teach the trade lifecycle (the skills stay as they are until then:
+  // the owner's call); its MCP schema carries its arguments. Drop it here once its row is written.
+  const NO_ROW_YET = new Set(['compose_check']);
   for (const t of HARNESS_TOOLS) {
     const row = rows.find(l => l.startsWith(`| \`${t.name}\` |`));
+    if (NO_ROW_YET.has(t.name)) { assert.ok(!row, `${t.name} has its row now: drop the exception`); continue; }
     assert.ok(row, `a skill lists ${t.name} in a tool table`);
     if (MIRROR_ONLY.has(t.name)) continue;
     for (const arg of Object.keys(t.inputSchema.properties)) assert.ok(row.includes(`\`${arg}\``), `${t.name}: argument ${arg} in its row`);
