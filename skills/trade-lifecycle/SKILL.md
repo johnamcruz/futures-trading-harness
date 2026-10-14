@@ -60,6 +60,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |
 | `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED and with or against your side, then the plan in code; recorded for this bar, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
+| `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 ## Examples
 

@@ -275,7 +275,7 @@ const ROW_HOME = {
   blackouts_list: 'bar-briefing', blackouts_add: 'news-blackouts', order_plan: 'order-plan', reason_check: 'reason-check',
   combine_status: 'prop-challenge-pacing', strategies_list: 'strategy-tools', strategies_show: 'strategy-tools',
   strategies_validate: 'strategy-tools', strategies_scan: 'strategy-tools', strategies_recent: 'strategy-tools',
-  skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands', compose_check: 'trade-lifecycle',
+  skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands', compose_check: 'trade-lifecycle', experience_lookup: 'trade-lifecycle',
 };
 
 
