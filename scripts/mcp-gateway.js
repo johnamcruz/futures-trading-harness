@@ -154,7 +154,7 @@ function main(argv) {
   // Responses the order lane is waiting for, by client request id.
   const waiting = new Map();
   const awaitResponse = id => new Promise(resolve => {
-    const timer = setTimeout(() => { overdue.add(id); resolve(null); }, LANE_TIMEOUT_MS);
+    const timer = setTimeout(() => { overdue.add(id); tracker.onOverdue(id); resolve(null); }, LANE_TIMEOUT_MS);
     waiting.set(id, msg => {
       clearTimeout(timer);
       tracker.onReply(id, msg);

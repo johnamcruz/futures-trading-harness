@@ -64,6 +64,20 @@ function graceFor(env, laneTimeoutMs) {
 }
 
 function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, canon = a => a }) {
+  // A record kept under a bare root (no front month recorded when it was written): named by the month it went to,
+  // once the translator has looked the front month up to send it.
+  const pinName = t => {
+    if (typeof t.name !== 'function') return;
+    try {
+      const m = markers.readMarkers(env).find(x => x.tag === t.tag && String(x.accountId) === String(t.accountId));
+      const std = m && require('../broker/translator').parseStandardName(m.contractId);
+      if (!std || std.month) return;
+      const named = t.name();
+      if (named !== m.contractId) markers.writeMarker(env, { ...Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'file')), contractId: named });
+    } catch (err) {
+      onError(`could not name the record of order ${t.tag} by its month: ${err.message}`);
+    }
+  };
   // Client request id -> { accountId, tag } of the place_order it carries, until its reply.
   const tagOf = new Map();
   const ownCall = m => [...tagOf.entries()].find(([, t]) => t.tag === m.tag && String(t.accountId) === String(m.accountId));
@@ -83,11 +97,13 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
       }
       const inUse = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId));
       // Its record carries the contract by its month in the gate's naming (canon, ledgerName), so exits and stops
-      // count it, and a root that means another month from the next trading day never moves it.
-      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: require('./account-gate').ledgerName(canon(args)) });
+      // count it, and a root that means another month from the next trading day never moves it. A root not yet
+      // resolvable (no front month recorded today) is resolved again once the call has gone out (pinName).
+      const name = () => require('./account-gate').ledgerName(canon(args));
+      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: name() });
       if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
-      if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag });
+      if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag, name });
       return prep;
     },
 
@@ -112,14 +128,23 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
     onReply(id, msg) {
       const t = tagOf.get(id);
       tagOf.delete(id);
-      if (!t || !msg || msg.error) return;
-      const r = msg.result;
-      if (r && r.isError && !markers.definitelyRefused(r.content && r.content[0] ? r.content[0].text : '')) return;
+      if (!t) return;
+      const r = msg && msg.result;
+      if (!msg || msg.error || (r && r.isError && !markers.definitelyRefused(r.content && r.content[0] ? r.content[0].text : ''))) {
+        pinName(t); // the record stays: by its month
+        return;
+      }
       try {
         markers.removeMarker(env, t);
       } catch (err) {
         onError(`could not clear the record of order ${t.tag}: ${err.message}`);
       }
+    },
+
+    /** A place_order whose reply is overdue: its record stays, by its month once the translator has resolved it. */
+    onOverdue(id) {
+      const t = tagOf.get(id);
+      if (t) pinName(t);
     },
 
     /**

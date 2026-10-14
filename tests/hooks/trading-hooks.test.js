@@ -828,7 +828,8 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
 const ROLL_IDS = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
 const rollContracts = active => JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-Z6' }, { id: 'sim-H7', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-H7' }]);
 // `dir`: a home an earlier run used (its contract cache and order records are kept).
-async function liveRollRun({ now, front, active, position, messages, extra = {}, dir: given = null, waitMs = 40000 }) {
+// `gaps`: ms to wait before sending the message of that id (FTH_TEST_NOW's clock runs on from its start).
+async function liveRollRun({ now, front, active, position, messages, extra = {}, dir: given = null, waitMs = 40000, gaps = {} }) {
   const { spawn } = require('child_process');
   const dir = given || tmpDir();
   const home = path.join(dir, '.futures-trading-harness');
@@ -845,6 +846,7 @@ async function liveRollRun({ now, front, active, position, messages, extra = {},
   gw.stdout.on('data', c => { out += c; });
   const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
   for (const m of messages) {
+    if (gaps[m.id]) await new Promise(r => setTimeout(r, gaps[m.id]));
     gw.stdin.write(`${JSON.stringify(m)}\n`);
     for (let t = 0; t < waitMs / 25 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
   }
@@ -915,6 +917,17 @@ test('MCP gateway wiring, live: crossing 18:00 ET starts a new trading day, so t
   assert.deepStrictEqual([post.cache.front.MNQ.id, post.cache.front.MNQ.day], ['sim-H7', '2026-10-08']);
   const partial = await liveRollRun({ ...before, now: '2026-10-07T22:01:00.000Z', messages: [rollPartial(1, 'MNQ:2027-03')] });
   assert.deepStrictEqual(partial.sent, ['partial_close_position sim-H7'], partial.texts[1]);
+});
+
+test('MCP gateway wiring, live: an exit by the root answered just before 18:00 ET is counted by its month, so just after 18:00 (March the new front month) the March long\'s only stop still can\'t be cancelled', { timeout: 60000 }, async () => {
+  // 17:59:58.5 ET, December the front month (looked up today); long 1 December and long 1 March, March's stop order 9.
+  // The exit sell by MNQ (December) is allowed and answered; 3.5 s later, past 18:00 ET, March's stop is cancelled.
+  const r = await liveRollRun({ now: '2026-10-07T21:59:58.500Z', front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-H7', position: ['sim-Z6', 'sim-H7'],
+    extra: { FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'sim-H7', type: 4, side: 1, size: 1, stopPrice: 21480 }]) },
+    gaps: { 2: 3500 }, messages: [rollExit(1, 'MNQ'), call(2, 'cancel_order', { accountId: 1, orderId: 9 })] });
+  assert.deepStrictEqual(r.sent, ['place_order sim-Z6'], JSON.stringify(r.texts));
+  assert.match(r.texts[2], /\[cancel-protection\]/, 'kept under the root, the December exit would count against March and let its only stop go');
+  assert.deepStrictEqual([r.cache.front.MNQ.id, r.cache.front.MNQ.day], ['sim-H7', '2026-10-08'], 'the cancel was judged on the new trading day');
 });
 
 test('MCP gateway wiring, live: an exit of unknown outcome sent by the root before 18:00 ET is kept by its month, so after 18:00 (a new front month) it is never counted against the new month\'s position', async () => {

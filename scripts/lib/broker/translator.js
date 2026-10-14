@@ -15,9 +15,10 @@
  * in the harness home). The front month is looked up once per trading day, so
  * a name never changes meaning during a session (the harness is flat overnight):
  * the first one recorded for a day stays for that day, across processes. A
- * contract the broker marks active in a search_contracts or get_contract
- * answer (the agent's or the translator's own) refreshes a front month
- * recorded on an earlier day; list_available_contracts never does. Only today's front month names a contract
+ * contract the broker marks active in a search_contracts answer (the
+ * agent's or the translator's own search) sets the day's front month when
+ * the one recorded is an earlier day's; get_contract and
+ * list_available_contracts answers record contracts but never a front month. Only today's front month names a contract
  * by its root: when today's lookup fails, a result is named by its month.
  * Each contract the broker describes also records its root's tick spec there
  * (`specs`: { tickSize, tickValue, name, description, id, readAt }), the one
@@ -55,8 +56,9 @@ const TICKER = /^((?=[A-Z0-9]*?[A-Z])[A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$/;
 const { tradingDayKey } = require('../trading/clock');
 // Tools whose result lists contracts: their `id` is a contract id too.
 const CONTRACT_TOOLS = new Set(['search_contracts', 'get_contract', 'list_available_contracts']);
-// Contract answers whose activeContract the interface defines: the ones that may refresh a front month.
-const FRONT_TOOLS = new Set(['search_contracts', 'get_contract']);
+// The one contract answer that may set the day's front month from its activeContract flags: a search of the root,
+// the agent's or the translator's own. A get_contract answer (one contract, possibly a stale flag) never does.
+const FRONT_TOOLS = new Set(['search_contracts']);
 // Tools whose contractId input is the agent's own label, never a broker id (the journal).
 const KEEP_ARGS = new Set(['journal_add', 'journal_read']);
 
@@ -292,8 +294,8 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   }
 
   const frontFresh = root => Boolean(cache.front[root]) && cache.front[root].day === tradingDayKey(now());
-  // A contract the broker marks active (search_contracts, get_contract) is its root's front month: it replaces one
-  // recorded on an earlier day (yesterday's, before a roll). Within a trading day the front month stays fixed.
+  // A contract a search_contracts answer marks active is its root's front month: it replaces one recorded on an
+  // earlier day (yesterday's, before a roll). Within a trading day the front month stays fixed.
   const refreshFront = (root, id, month) => {
     if (!frontFresh(root)) cache.front[root] = { id, month, day: tradingDayKey(now()) };
   };
@@ -338,7 +340,6 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
         c = null; // a failed lookup is tried again next time
       }
       known = c ? remember(c) : null;
-      if (known && c.activeContract === true) refreshFront(known.root, c.id, known.month);
       if (known) save();
       else if (c) notTicker.add(id);
     }

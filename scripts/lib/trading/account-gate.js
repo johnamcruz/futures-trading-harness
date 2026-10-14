@@ -479,14 +479,17 @@ function renamed(args, positions, orders = []) {
  */
 function ledgerName(args) {
   if (!args || typeof args.contractId !== 'string') return args ? args.contractId : undefined;
-  if (typeof args[MONTH] === 'string') return args[MONTH];
-  if (typeof args[RENAME] === 'function') {
-    try {
-      const names = args[RENAME]();
-      if (typeof names.month === 'function') return names.month(args.contractId);
-    } catch (_err) { /* the trading day changed: the name as given */ }
-  }
-  return args.contractId;
+  const { parseStandardName } = require('../broker/translator');
+  const bare = n => { const s = parseStandardName(n); return Boolean(s) && !s.month; };
+  const checked = typeof args[MONTH] === 'string' ? args[MONTH] : args.contractId;
+  if (!bare(checked) || typeof args[RENAME] !== 'function') return checked;
+  // A root the check couldn't resolve (the day's first call on a flat account: no front month recorded yet) is
+  // resolved again now, from the front month the translator has looked up since; kept bare only if that can't be.
+  try {
+    const names = args[RENAME]();
+    if (typeof names.month === 'function') return names.month(args.contractId);
+  } catch (_err) { /* the trading day changed: the name as checked */ }
+  return checked;
 }
 
 /** The gate's ledger named as the call was (NAMES, set by accountFacts), else as given. */

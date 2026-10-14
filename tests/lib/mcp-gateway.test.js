@@ -190,6 +190,20 @@ test('canonicalArgs live, the first call after a roll: yesterday\'s cached front
   await AG.accountFacts(byRoot, caller);
   assert.deepStrictEqual([byRoot.contractId, ledgerName(byRoot)], ['MNQ', 'MNQ:2027-03'], 'as the account check resolved it');
   assert.strictEqual(ledgerName({ contractId: 'MNQ' }), 'MNQ', 'no naming (a server from the command line): as given');
+  // The day's first call on a flat account: no front month recorded when it was checked, so the check kept the root;
+  // the translator looks it up to send the order, and the entry is then kept by that month.
+  fs.writeFileSync(file, JSON.stringify(yesterday));
+  const first = canonicalArgs(exitOn('MNQ'), env);
+  await AG.accountFacts(first, { call: async () => reply([]) });
+  assert.strictEqual(first.contractId, 'MNQ');
+  assert.strictEqual(ledgerName(first), 'MNQ', 'not resolvable yet: kept as checked');
+  fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-07' } } }));
+  assert.strictEqual(ledgerName(first), 'MNQ:2027-03', 'resolved again at record time');
+  // The trading day changed since: kept as checked, never resolved against the next day's front month.
+  const crossed = { ...env, FTH_TEST_NOW: '2026-10-07T21:59:59Z' };
+  const late = canonicalArgs(exitOn('MNQ'), crossed);
+  crossed.FTH_TEST_NOW = '2026-10-07T22:00:30Z';
+  assert.strictEqual(ledgerName(late), 'MNQ');
 });
 
 test('canonicalArgs for a call without a contract (cancel_order, modify_order): the positions and orders are named from one read, so the last stop of a position is never cancelled because two lists named it two ways', async () => {

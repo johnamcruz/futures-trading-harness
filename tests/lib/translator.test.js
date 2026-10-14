@@ -468,7 +468,7 @@ test('the front month across a roll: refreshed from the broker\'s active contrac
   assert.strictEqual(readJson(raced).front.MNQ.id, 'b-102');
 });
 
-test('only search_contracts and get_contract answers refresh a front month: a list_available_contracts marking every month active never does, and the translator\'s own get_contract does', async () => {
+test('only a search_contracts answer sets the day\'s front month: a list_available_contracts marking every month active never does, nor a get_contract flagged active (the agent\'s or the translator\'s own)', async () => {
   const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8'));
   const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
   const ids = { 'b-101': { root: 'MNQ', month: '2026-12' }, 'b-102': { root: 'MNQ', month: '2027-03' } };
@@ -478,11 +478,17 @@ test('only search_contracts and get_contract answers refresh a front month: a li
   // Every month marked active (the list's fields are not the interface's): the expiring month is never pinned.
   await t.translateResult('list_available_contracts', CONTRACTS.slice(0, 2).map(c => ({ ...c, activeContract: true })));
   assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-102', month: '2027-03', day: '2026-10-06' });
-  // The translator's own get_contract of an unseen id marked active refreshes it, as the agent's would.
+  // A get_contract flagged active (a stale flag, or two months flagged during the roll) records the contract only.
   const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
-  const own = createTranslator({ call: async (name, a) => (name === 'get_contract' ? reply({ id: a.contractId, name: 'MNQM7', tickSize: 0.25, tickValue: 0.5, activeContract: true }) : down()), cacheFile, now: () => NOW });
-  assert.strictEqual(await own.toStandard('b-103'), 'MNQ');
-  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-103', month: '2027-06', day: '2026-10-07' });
+  const june = { id: 'b-103', name: 'MNQM7', tickSize: 0.25, tickValue: 0.5, activeContract: true };
+  const own = createTranslator({ call: async (name, a) => (name === 'get_contract' ? reply({ ...june, id: a.contractId }) : down()), cacheFile, now: () => NOW });
+  assert.strictEqual(await own.toStandard('b-103'), 'MNQ:2027-06', 'the translator\'s own get_contract: named by its month');
+  await own.translateResult('get_contract', june);
+  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-102', month: '2027-03', day: '2026-10-06' }, 'March stays: the day\'s first search decides');
+  assert.deepStrictEqual(readJson(cacheFile).ids['b-103'], { root: 'MNQ', month: '2027-06' }, 'recorded');
+  // The day's first search answer sets it.
+  await own.translateResult('search_contracts', [{ ...CONTRACTS[1], activeContract: true }, { ...CONTRACTS[0], activeContract: false }]);
+  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-102', month: '2027-03', day: '2026-10-07' });
 });
 
 test('canonicalName and monthName take the front month from the id the root is sent to: a cache file whose front month contradicts its id merges no months', () => {
