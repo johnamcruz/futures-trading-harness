@@ -2,96 +2,90 @@
 
 // prop-challenge-pacing and position-sizing were split by job. prop-challenge-pacing keeps the harness-tracked attempt
 // (its state, its verdicts, what the gate refuses); prop-evaluator takes scoring a policy on history, and
-// prop-pacing-judgment pacing an account with no profile. position-sizing keeps the sizing steps; micro-mini-specs takes
+// prop-pacing-judgment pacing with no running attempt. position-sizing keeps the sizing steps; micro-mini-specs takes
 // the micro and mini spec table. These tests prove nothing was lost or doubled: every sentence (and every table cell
 // and code line) of each skill as it was (tests/fixtures/skill-split/*.before.txt, frozen) is in its new homes exactly
-// as many times as before, byte-for-byte after whitespace is normalised, in its old order within each home. The only
-// exceptions are listed, each with its reason; an exception that no longer differs fails too, so the lists only shrink.
+// as many times as before, byte-for-byte after whitespace is normalised, in the home its old section maps to, in its
+// old order within each home. The only exceptions are listed, each with its reason; an exception that no longer
+// differs fails too, so the lists only shrink.
 
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { units, count, differences, STRUCTURE } = require('./skill-split');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const sha = rel => crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
 const skill = s => read(`skills/${s}/SKILL.md`);
 
-/**
- * A skill's units: its body (no frontmatter) in blocks (a heading, a list item, a table row, a paragraph, a code
- * line), whitespace normalised, list and heading markers dropped; table rows split into cells; prose into sentences.
- * The same units as tests/plugin/broker-mcp-split.test.js.
- */
-function units(md) {
-  const body = md.replace(/^---\n[^]*?\n---\n/, '');
-  const blocks = [];
-  let cur = null;
-  let fence = false;
-  for (const line of body.split('\n')) {
-    if (/^```/.test(line)) { fence = !fence; cur = null; continue; }
-    if (fence) { if (line.trim()) blocks.push(line); cur = null; continue; }
-    if (!line.trim()) { cur = null; continue; }
-    if (cur === null || /^(#{1,6} |- |\d+\. |\|)/.test(line)) { cur = [line]; blocks.push(cur); } else cur.push(line);
-  }
-  const out = [];
-  for (const b of blocks) {
-    const text = (Array.isArray(b) ? b.join(' ') : b).replace(/\s+/g, ' ').trim();
-    if (!Array.isArray(b)) { out.push(text); continue; } // a code line, whole
-    if (text.startsWith('|')) {
-      for (const cell of text.replace(/^\|\s*|\s*\|$/g, '').split(/\s+\|\s+/)) if (!/^[-|: ]+$/.test(cell)) out.push(cell);
-      continue;
-    }
-    const prose = text.replace(/^#{1,6} /, '').replace(/^(?:- |\d+\. )/, '');
-    for (const s of prose.split(/(?<=[.!?])\s+(?=[A-Z`*[("])/)) if (s) out.push(s);
-  }
-  return out;
-}
-
-const count = list => list.reduce((m, u) => m.set(u, (m.get(u) || 0) + 1), new Map());
-
-// The skill format's own section headings: every new skill has them (CLAUDE.md, skill format).
-const STRUCTURE = ['When to Use', 'How It Works', 'Examples'];
-
 // Each old skill, as main had it before the split (at e7433091): pinned, so a sentence can't be dropped from the
-// fixture and from its new home together.
+// fixture and from its new home together. `moved`: the homes other than the kept skill (homes[0]), each with the old
+// fixture's line ranges (1-based, inclusive) that go to it, and single units moved out of a block that stays; every
+// other unit of the old skill belongs to the kept skill.
 const SPLITS = {
   'prop-challenge-pacing': {
     before: 'tests/fixtures/skill-split/prop-challenge-pacing.before.txt',
     sha256: '15ec75fd42eea551f6a3994197488de1bb1b26592d429e09f642426d7f5d4d30',
     homes: ['prop-challenge-pacing', 'prop-evaluator', 'prop-pacing-judgment'],
+    moved: {
+      // "Scoring a policy strategy on history (the evaluator)", its body.
+      'prop-evaluator': { lines: [[120, 142]] },
+      // When to Use (start of day, after a big win or a drawdown), "Pacing by judgment", and its example.
+      'prop-pacing-judgment': { lines: [[10, 11], [146, 172], [193, 197]] },
+    },
     allowed: [
       // Section headings dropped: each section is now a skill, named by its own heading.
       { old: 'Scoring a policy strategy on history (the evaluator)', reason: 'now the prop-evaluator skill' },
-      { old: 'Pacing by judgment (no account profile)', reason: 'now the prop-pacing-judgment skill' },
+      { old: 'Pacing by judgment (no account profile)', reason: 'now the prop-pacing-judgment skill, whose When to Use and How It Works state its scope' },
     ],
   },
   'position-sizing': {
     before: 'tests/fixtures/skill-split/position-sizing.before.txt',
     sha256: '744ff368b4011358e016478be0db4aa625aa6461ce5990f058881ae996804db0',
     homes: ['position-sizing', 'micro-mini-specs'],
+    moved: {
+      // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.
+      'micro-mini-specs': { lines: [[18, 28]], units: ['The table is for sanity checks only:'] },
+    },
     allowed: [],
   },
 };
 
-/** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
-function differences(beforeText, homeTexts, allowed) {
-  const before = count(units(beforeText));
-  const after = count(homeTexts.flatMap(units));
-  const byOld = new Map(allowed.map(a => [a.old, a]));
+/** The old units each home must hold: Map home -> Map unit -> count (the kept skill takes every unit not moved). */
+function expectedHomes(s, beforeText) {
+  const lines = beforeText.split('\n');
+  const dropped = new Set(s.allowed.filter(a => !a.copies && !a.now).map(a => a.old));
+  const all = count(units(beforeText).filter(u => !STRUCTURE.includes(u) && !dropped.has(u)));
+  const out = new Map();
+  const rest = new Map(all);
+  for (const [home, m] of Object.entries(s.moved)) {
+    const text = (m.lines || []).map(([a, b]) => lines.slice(a - 1, b).join('\n')).join('\n\n');
+    const want = count([...units(text), ...(m.units || [])].filter(u => !STRUCTURE.includes(u)));
+    for (const [u, n] of want) {
+      if ((rest.get(u) || 0) < n) throw new Error(`${home}: "${u}" is not in the old skill ${n} time(s)`);
+      rest.set(u, rest.get(u) - n);
+    }
+    out.set(home, want);
+  }
+  out.set(s.homes[0], new Map([...rest].filter(([, n]) => n > 0)));
+  return out;
+}
+
+/** Old units in a home their old section doesn't map to (or missing from the one it does): [] when each is home. */
+function homeErrors(s, beforeText, homeTexts) {
+  const expected = expectedHomes(s, beforeText);
+  const old = new Set(units(beforeText));
   const bad = [];
-  for (const [u, n] of before) {
-    if (STRUCTURE.includes(u)) continue;
-    const a = byOld.get(u);
-    const want = a ? (a.copies || 0) : n;
-    if ((after.get(u) || 0) !== want) bad.push(`${JSON.stringify(u)}: ${n} before, ${after.get(u) || 0} after${a ? ` (allowed: ${want})` : ''}`);
-  }
-  for (const a of allowed) {
-    if (!before.has(a.old)) bad.push(`allow-list entry not in the old skill: ${a.old}`);
-    for (const now of [a.now || []].flat()) if (after.get(now) !== 1) bad.push(`changed sentence in ${after.get(now) || 0} homes, not 1: ${now}`);
-  }
-  for (const h of STRUCTURE) if (after.get(h) !== homeTexts.length) bad.push(`"${h}" heading: ${after.get(h) || 0}, not one per skill`);
+  s.homes.forEach((home, i) => {
+    const got = count(units(homeTexts[i]).filter(u => old.has(u) && !STRUCTURE.includes(u)));
+    const want = expected.get(home);
+    for (const u of new Set([...got.keys(), ...want.keys()])) {
+      if ((got.get(u) || 0) !== (want.get(u) || 0)) bad.push(`${home}: ${JSON.stringify(u)} ${got.get(u) || 0} time(s), its old section maps ${want.get(u) || 0} here`);
+    }
+  });
   return bad;
 }
 
@@ -119,45 +113,60 @@ function orderErrors(beforeText, homeTexts, homes, allowed) {
 }
 
 for (const [name, s] of Object.entries(SPLITS)) {
-  test(`${name} split: every unit of the old skill is in exactly one new home, byte-for-byte, in its old order`, () => {
+  test(`${name} split: every unit of the old skill is in exactly one new home, the one its section maps to, byte-for-byte, in its old order`, () => {
     assert.strictEqual(sha(s.before), s.sha256, 'the fixture is the old skill, unchanged');
     const homes = s.homes.map(skill);
     assert.deepStrictEqual(differences(read(s.before), homes, s.allowed), []);
+    assert.deepStrictEqual(homeErrors(s, read(s.before), homes), [], 'each unit is in the home its old section maps to');
     assert.deepStrictEqual(orderErrors(read(s.before), homes, s.homes, s.allowed), [], 'moved text keeps its old order in each home');
     for (const a of s.allowed) assert.ok(a.reason, a.old);
   });
 }
 
-test('prop and sizing splits: the comparison catches a lost, a doubled, an edited or a reordered unit, and a stale exception', () => {
+test('prop and sizing splits: the comparison catches a lost, a doubled, an edited, a misplaced or a reordered unit, and a stale exception', () => {
   const P = SPLITS['prop-challenge-pacing'];
   const old = read(P.before);
   assert.ok(units(old).length > 80, `the units are fine-grained (${units(old).length})`);
   const homes = P.homes.map(skill);
-  const swap = (name, text) => homes.map((h, i) => (i === P.homes.indexOf(name) ? text : h));
-  const pj = homes[P.homes.indexOf('prop-pacing-judgment')];
+  const at = name => P.homes.indexOf(name);
+  const swap = (...pairs) => homes.map((h, i) => { const p = pairs.find(([n]) => at(n) === i); return p ? p[1] : h; });
+  const pj = homes[at('prop-pacing-judgment')];
+  const ev = homes[at('prop-evaluator')];
+  const pp = homes[at('prop-challenge-pacing')];
   const RED = '**After a red day,** the next day\'s budget is half until a green day.';
   assert.ok(units(pj).includes(RED), 'a list item is a unit');
   // Lost: a sentence dropped from its home.
-  assert.notDeepStrictEqual(differences(old, swap('prop-pacing-judgment', pj.replace('4. **After a red day,** the next day\'s budget is half until a green day.\n', '')), P.allowed), [], 'lost');
+  assert.notDeepStrictEqual(differences(old, swap(['prop-pacing-judgment', pj.replace(`4. ${RED}\n`, '')]), P.allowed), [], 'lost');
   // Doubled: the same sentence in a second home.
-  assert.notDeepStrictEqual(differences(old, swap('prop-evaluator', `${homes[1]}\n${RED}\n`), P.allowed), [], 'doubled');
+  assert.notDeepStrictEqual(differences(old, swap(['prop-evaluator', `${ev}\n${RED}\n`]), P.allowed), [], 'doubled');
   // Edited: one number changed.
-  assert.notDeepStrictEqual(differences(old, swap('prop-pacing-judgment', pj.replace('≤ 10% of the cushion', '≤ 15% of the cushion')), P.allowed), [], 'edited');
+  assert.notDeepStrictEqual(differences(old, swap(['prop-pacing-judgment', pj.replace('≤ 10% of the cushion', '≤ 15% of the cushion')]), P.allowed), [], 'edited');
+  // Misplaced: a gate-refusal bullet moved from prop-challenge-pacing (core) to prop-evaluator (read by no role), or to
+  // prop-pacing-judgment: nothing is lost or doubled, but it left its home.
+  const MARKETS = /^- \*\*Several markets, one account\*\*[^]*?whole cushion\.\n/m.exec(pp)[0];
+  for (const to of ['prop-evaluator', 'prop-pacing-judgment']) {
+    const moved = swap(['prop-challenge-pacing', pp.replace(MARKETS, '')], [to, homes[at(to)].replace('\n## Examples', `\n${MARKETS}\n## Examples`)]);
+    assert.deepStrictEqual(differences(old, moved, P.allowed), [], `a move to ${to} loses nothing`);
+    assert.notDeepStrictEqual(homeErrors(P, old, moved), [], `but a move to ${to} leaves its home`);
+  }
   // Reordered: two rules of thumb swapped (the content is all there, the order is not).
   const R4 = /4\. \*\*After a red day,\*\*[^\n]*\n/.exec(pj)[0];
   const R5 = /5\. \*\*Near the target,\*\*[^\n]*\n/.exec(pj)[0];
-  const swapped = swap('prop-pacing-judgment', pj.replace(`${R4}${R5}`, `${R5}${R4}`));
+  const swapped = swap(['prop-pacing-judgment', pj.replace(`${R4}${R5}`, `${R5}${R4}`)]);
   assert.deepStrictEqual(differences(old, swapped, P.allowed), [], 'a swap loses nothing');
   assert.notDeepStrictEqual(orderErrors(old, swapped, P.homes, P.allowed), [], 'but changes the order');
   // A stale exception: a dropped heading put back.
-  assert.notDeepStrictEqual(differences(old, swap('prop-evaluator', homes[1].replace('## How It Works\n', '## How It Works\n\n### Scoring a policy strategy on history (the evaluator)\n')), P.allowed), [], 'stale');
+  assert.notDeepStrictEqual(differences(old, swap(['prop-evaluator', ev.replace('## How It Works\n', '## How It Works\n\n### Scoring a policy strategy on history (the evaluator)\n')]), P.allowed), [], 'stale');
   // A section heading dropped: each new skill keeps the format's three sections.
-  assert.notDeepStrictEqual(differences(old, swap('prop-evaluator', homes[1].replace('## Examples', '## Example')), P.allowed), [], 'structure');
-  // The sizing split: a table cell lost from micro-mini-specs.
+  assert.notDeepStrictEqual(differences(old, swap(['prop-evaluator', ev.replace('## Examples', '## Example')]), P.allowed), [], 'structure');
+  // The sizing split: a table cell edited, and the table moved back into position-sizing.
   const S = SPLITS['position-sizing'];
   const sh = S.homes.map(skill);
   assert.ok(units(read(S.before)).includes('12.50'), 'a table cell is a unit');
   assert.notDeepStrictEqual(differences(read(S.before), [sh[0], sh[1].replace('| 12.50 |', '| 12.00 |')], S.allowed), [], 'cell edited');
+  const ROW = '   | MCL | CL | 0.01 | 1.00 | 10.00 |\n';
+  assert.ok(sh[1].includes(ROW));
+  assert.notDeepStrictEqual(homeErrors(S, read(S.before), [`${sh[0]}\n${ROW}`, sh[1].replace(ROW, '')]), [], 'a row moved back');
 });
 
 test('prop and sizing splits: each new skill answers one question in a short index line, and the old skills point to the new', () => {
@@ -173,15 +182,23 @@ test('prop and sizing splits: each new skill answers one question in a short ind
   assert.doesNotMatch(pp, /evaluate\.js|Rules of thumb|Target remaining/, 'the evaluator and judgment pacing left it');
   assert.match(skill('position-sizing'), /the\s+`micro-mini-specs`\s+skill/);
   assert.doesNotMatch(skill('position-sizing'), /\| MNQ \| NQ \|/, 'the table left position-sizing');
-  // The risk manager reads judgment pacing and the spec table only when a cycle needs them; the evaluator is the
-  // user's command, read by no role.
+  // Judgment pacing says in its own text (full mode doesn't embed descriptions) that a running attempt isn't its.
+  const pj = skill('prop-pacing-judgment').replace(/^---\n[^]*?\n---\n/, '').replace(/\s+/g, ' ');
+  for (const sec of ['## When to Use', '## How It Works']) {
+    const body = pj.slice(pj.indexOf(sec), pj.indexOf('## ', pj.indexOf(sec) + 3));
+    assert.match(body, /no harness-tracked attempt is running \(`combine_status` lists none[^.]*the `prop-challenge-pacing` skill/, sec);
+  }
+  // The risk manager carries judgment pacing in its core (stand-down rules with no trigger) and reads the spec table
+  // only when a cycle needs it (the gate checks specs in code); the evaluator is the user's command, read by no role.
   const rm = read('agents/risk-manager.md');
-  assert.match(rm, /^role-index: \[[^\]]*\bmicro-mini-specs\b[^\]]*\bprop-pacing-judgment\b/m);
-  assert.match(rm, /^role-skills: \[position-sizing, prop-challenge-pacing,/m);
+  assert.match(rm, /^role-skills: \[position-sizing, prop-challenge-pacing, prop-pacing-judgment,/m);
+  assert.match(rm, /^role-index: \[[^\]]*\bmicro-mini-specs\b/m);
+  assert.doesNotMatch(rm, /^role-index: \[[^\]]*\bprop-pacing-judgment\b/m);
+  assert.match(rm.replace(/\s+/g, ' '), /no running attempt \(`combine_status` lists none[^.]*the `prop-pacing-judgment` skill/);
   for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) assert.doesNotMatch(read(`agents/${f}`), /prop-evaluator/, f);
 });
 
-test('micro-mini-specs: every row the harness\'s own table lists agrees with it (scripts/lib/trading/contracts.js)', () => {
+test('micro-mini-specs: every row whose roots contracts.js lists agrees with it (scripts/lib/trading/contracts.js)', () => {
   const { CONTRACT_SPECS } = require('../../scripts/lib/trading/contracts');
   const rows = skill('micro-mini-specs').split('\n').map(l => l.trim()).filter(l => /^\| M[A-Z0-9]+ \|/.test(l));
   assert.ok(rows.length >= 4, 'the table has rows');
@@ -190,7 +207,7 @@ test('micro-mini-specs: every row the harness\'s own table lists agrees with it 
     const [micro, mini, tick, microValue, miniValue] = row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
     for (const [root, value] of [[micro, microValue], [mini, miniValue]]) {
       const spec = CONTRACT_SPECS[root];
-      if (!spec) continue; // a root the harness's table doesn't list (the broker's specs decide)
+      if (!spec) continue; // a root contracts.js doesn't list (the broker's specs decide)
       assert.strictEqual(Number(tick), spec.tickSize, `${root} tick size`);
       assert.strictEqual(Number(value), spec.tickValue, `${root} tick value`);
       checked += 1;

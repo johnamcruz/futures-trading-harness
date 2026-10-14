@@ -1,16 +1,23 @@
 ---
 name: prop-pacing-judgment
-description: Use when pacing a prop account with no account profile (daily budget, pace, consistency, stand-downs).
+description: Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
 ---
 
 # Prop Pacing by Judgment
 
 ## When to Use
 
+Only while no harness-tracked attempt is running (`combine_status` lists none;
+for a running one, the `prop-challenge-pacing` skill):
+
 - Start of each trading day: set today's risk budget.
 - After a large win (protect it) or a drawdown (de-risk).
 
 ## How It Works
+
+Only while no harness-tracked attempt is running (`combine_status` lists none): a
+running attempt is paced by its verdicts (the `prop-challenge-pacing` skill), never
+by these rules.
 
 Ask the user for the account's current rules; don't assume them. Track these
 numbers each morning (from `get_account_snapshot` and the user):

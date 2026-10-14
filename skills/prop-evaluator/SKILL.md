@@ -38,6 +38,6 @@ and the promotion gate's verdict. When you read or report its result:
 ## Examples
 
 ```text
-pass 30% (interval 11-60%, effective sample 9): can't tell a 25% policy from a 40% one.
+pass 30% (interval 10-62%, effective sample 9): can't tell a 25% policy from a 40% one.
 Blows: 0 real, 1 on a resampled path: a failure.
 ```
