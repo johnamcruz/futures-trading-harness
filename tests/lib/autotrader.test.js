@@ -358,7 +358,8 @@ test('every cycle prompt ends with the exact result line the runner reads', () =
 test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run prints the command', () => {
   const dir = tmpDir();
   const config = path.join(dir, 'auto.json');
-  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'] }));
+  // Paper: a live manual run names its account and takes its lock (runner-wiring.js manualRunBroker).
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], paper: true }));
   const env = { ...process.env, HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
   const cli = path.join(ROOT, 'scripts', 'autotrader.js');
   const run = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--symbol', 'MES'], { encoding: 'utf8', env });

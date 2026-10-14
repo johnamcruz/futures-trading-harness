@@ -61,4 +61,4 @@ function liveRunner(env = process.env, opts = {}) {
   return lockHolderAlive(lock, { self: null, ...opts }) ? lock.pid : null;
 }
 
-module.exports = { lockFile, processCommand, lockHolderAlive, liveRunner };
+module.exports = { lockFile, processCommand, lockHolderAlive, liveRunner, AUTOTRADER };

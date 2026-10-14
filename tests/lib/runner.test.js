@@ -339,7 +339,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false, killFile = null, beforeStep = null }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -391,7 +391,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
-    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; if (realKill) killed = true; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
+    isKillSwitchOn: () => killed || (killFile !== null && require('fs').existsSync(killFile)), createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; if (realKill) killed = true; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan,
     entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
@@ -402,7 +402,10 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   // `clockRef.t += await step()` adds the pause to the time the pass started (what a cycle took is not kept);
   // keepCycleTime: the pause counts from where the pass ended, as the live loop's does.
   if (keepCycleTime) while (clockRef.t < until) { const ms = await runner.step(); clockRef.t += Math.max(0, ms); }
-  while (clockRef.t < until) clockRef.t += await runner.step();
+  while (clockRef.t < until) {
+    if (beforeStep) await beforeStep(clockRef.t);
+    clockRef.t += await runner.step();
+  }
   return { ...calls, runner, cycles };
 }
 
@@ -1530,4 +1533,71 @@ test('in the session a missing premarket is given up on the pass itself, even wi
   assert.ok(trade.length >= 1);
   for (const p of trade) assert.match(p[1], /premarket plan unavailable/);
   assert.ok(!prompts.some(p => p[0] === 'premarket'), 'no premarket run in the session but as a retry when due');
+});
+
+
+test('account lock unknown: no new entries from the next pass, full risk management of the account (its trailing, every position flattened at end of day), an alert every pass; held again with the kill switch removed, it trades again without a restart', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { holdAccountLock } = require('../../scripts/lib/runner-wiring');
+  const lostAt = et(10, 15);
+  const backAt = et(11, 0);
+  const stop = path.join(require('../helpers').tmpDir(), 'STOP');
+  const logs = [];
+  const events = [];
+  const client = { ensureLock: async () => 'held' };
+  const r = await trailSim({
+    tape: { 30: [21525, 21521, 21524] }, until: et(15, 52), otherMonth: 'MNQ:2027-03', killFile: stop,
+    beforeStep: async t => {
+      client.ensureLock = async () => (t >= lostAt && t < backAt ? 'unknown' : 'held');
+      if (t >= backAt && fs.existsSync(stop)) fs.rmSync(stop); // the user, once it is sorted out
+      await holdAccountLock(client, { killSwitchFile: stop, log: (m, l) => logs.push([t, l, m]), event: e => events.push(e) });
+    },
+  });
+  const during = r.limits.filter(([, t]) => t >= lostAt && t < backAt).map(([a]) => a);
+  assert.ok(r.limits.some(([a, t]) => a === 'trade' && t < lostAt), 'trading before');
+  assert.ok(!during.includes('trade'), 'no trade cycle while the lock is unknown');
+  assert.ok(r.limits.some(([a, t]) => a === 'trade' && t >= backAt), 'held again and the kill switch removed: trading again, no restart');
+  assert.ok(r.modified.length >= 1, 'the trailing stop still tightened (10:30 bar)');
+  assert.ok(r.closedIds.includes('MNQ') && r.closedIds.includes('MNQ:2027-03'), 'end of day flattens every position, as before the lock');
+  const alerts = logs.filter(([, l, m]) => l === 'error' && /^ALERT: the account lock can't be confirmed/.test(m));
+  assert.ok(alerts.length >= 3, `an alert every pass (${alerts.length})`);
+  assert.ok(alerts.every(([t]) => t >= lostAt && t < backAt));
+  assert.deepStrictEqual(events.map(e => e.kind), ['account_lock_unknown'], 'recorded once for the episode');
+  assert.ok(!fs.existsSync(stop), 'not re-armed once held');
+});
+
+test('holdAccountLock: relinked is logged; taken is logged and recorded, nothing armed; unknown (or a check that fails) re-arms the kill switch every pass; never rejects', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { holdAccountLock } = require('../../scripts/lib/runner-wiring');
+  const stop = path.join(require('../helpers').tmpDir(), 'STOP');
+  const logs = [];
+  const events = [];
+  const log = (m, l) => logs.push([l || 'info', m]);
+  const opts = { killSwitchFile: stop, log, event: e => events.push(e) };
+  assert.strictEqual(await holdAccountLock({}, opts), 'none');
+  let asked = null;
+  assert.strictEqual(await holdAccountLock({ ensureLock: async o => { asked = o; return 'relinked'; } }, { ...opts, stableMs: 0, command: () => 'x' }), 'relinked');
+  assert.strictEqual(asked.stableMs, 0);
+  assert.match(logs[0][1], /its file had vanished and stayed gone: linked it back/);
+  assert.strictEqual(await holdAccountLock({ ensureLock: async () => 'taken' }, opts), 'taken');
+  assert.match(logs.at(-1)[1], /held by another runner now .*it manages the account. This runner takes no broker action .* and exits/);
+  assert.deepStrictEqual(events.map(e => e.kind), ['account_lock_taken']);
+  assert.ok(!fs.existsSync(stop), 'nothing armed: the runner exits');
+  assert.strictEqual(await holdAccountLock({ ensureLock: async () => 'taken' }, { ...opts, event: () => { throw new Error('disk'); } }), 'taken', 'a failing record never stops the exit');
+  const unknown = { ensureLock: async () => 'unknown' };
+  assert.strictEqual(await holdAccountLock(unknown, opts), 'unknown');
+  fs.rmSync(stop); // removed while the lock is still unknown
+  await holdAccountLock(unknown, opts);
+  assert.ok(fs.existsSync(stop), 're-armed');
+  fs.writeFileSync(stop, 'another reason\n');
+  await holdAccountLock(unknown, opts);
+  assert.match(fs.readFileSync(stop, 'utf8'), /^another reason\nALERT: the account lock can't be confirmed/, 'appended to a kill switch already on');
+  // The check itself rejecting or throwing, or the kill switch unwritable: unknown, logged, never a rejection.
+  for (const ensureLock of [async () => { throw new Error('EIO'); }, () => { throw new Error('EIO'); }]) {
+    assert.strictEqual(await holdAccountLock({ ensureLock }, { ...opts, killSwitchFile: path.join(stop, 'nope', 'STOP') }), 'unknown');
+  }
+  assert.ok(logs.some(([l, m]) => l === 'error' && /the check failed \(EIO\)/.test(m)));
+  assert.ok(logs.some(([l, m]) => l === 'error' && /could not write the kill switch/.test(m)));
 });

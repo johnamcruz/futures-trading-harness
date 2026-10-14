@@ -39,7 +39,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   const dataDir = path.join(home, 'bars');
   const journal = writeJournal(home, []);
   const env = {
-    FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
+    FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'),
   };
   const strategies3m = loadStrategies(ROOT, {}).strategies.filter(s => s.timeframe === '3m');

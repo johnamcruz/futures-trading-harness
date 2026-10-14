@@ -27,6 +27,7 @@ function world() {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: SERVER,
     FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl'), FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7', FAKE_ARGS: args,
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_ENV_FILE: path.join(home, 'none.env'),
+    FTH_LOCK_DIR: path.join(home, 'locks'), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test',
   };
   // The prop profile the repo's policy strategies trade, and its size as the account's balance.
   const profiles = propProfiles(loadStrategies(ROOT, {}).strategies, loadAccounts(ROOT, {}).accounts, { symbols: ['MNQ'], timeframe: TIMEFRAME });
@@ -52,7 +53,7 @@ test('preflight e2e: ready (allow-list, broker through the translator, account, 
   const r = run(w, { FAKE_BARS: path.join(w.home, 'bars.json') });
   assert.strictEqual(r.code, 0, r.out + r.err);
   assert.match(r.out, /preflight passed/);
-  for (const check of ['runner config', 'eodAt and sessions', 'allow-list', 'harness command', 'harness version', 'kill switch', 'broker trading', 'clock', 'account', 'account can trade', 'balance']) {
+  for (const check of ['runner config', 'eodAt and sessions', 'allow-list', 'harness command', 'harness version', 'kill switch', 'broker trading', 'clock', 'account lock', 'account', 'account can trade', 'balance']) {
     assert.match(line(r.out, check), /^ok {3}/, `${check}\n${r.out}`);
   }
   assert.match(r.out, /ok {3}broker: tools\/list/);

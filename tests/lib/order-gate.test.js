@@ -1085,7 +1085,10 @@ test('allowed accounts: a live entry needs the broker\'s allow-list holding its 
   refused(at({ SIM_ALLOWED_ACCOUNTS: '' }), /SIM_ALLOWED_ACCOUNTS is empty/);
   refused(at({ SIM_ALLOWED_ACCOUNTS: 'any' }), /never empty or "any"/);
   refused(at({ SIM_ALLOWED_ACCOUNTS: '2,3' }), /account 1 is not in SIM_ALLOWED_ACCOUNTS \(2, 3\)/);
-  refused(at({}), /names no valid accountId/, { ...ANYTIME, accountId: undefined });
+  // No account id: refused by the allow-list and by the lock check (whether a runner trades it can't be told).
+  const noId = checkOrder({ ...ANYTIME, accountId: undefined }, { env: at({}), pluginRoot: live.root });
+  assert.deepStrictEqual(noId.violations.map(v => v.check), ['allowed-accounts', 'account-lock'], noId.message);
+  assert.match(noId.message, /names no valid accountId/);
   // Not skippable, autonomous or not (an autonomous run adds its own checks; this one is among them).
   for (const extra of [{ FTH_ORDER_GATE_SKIP: 'allowed-accounts' }, { FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'allowed-accounts' }]) {
     assert.ok(checkOrder(ANYTIME, { env: at({ SIM_ALLOWED_ACCOUNTS: '', ...extra }), pluginRoot: live.root }).violations.some(v => v.check === 'allowed-accounts'), JSON.stringify(extra));
@@ -1556,4 +1559,98 @@ test('contract-specs: a replayed day whose file has tick specs but no front mont
   fs.writeFileSync(live, fs.readFileSync(day, 'utf8').replace(/"front":\{[^}]*\}\}/, '"front":{}'));
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(live, 'utf8')).front, {});
   assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: live } }).violations, []);
+});
+
+test('account lock (hard): a runner\'s cycle enters only while the runner holds its account\'s lock; exits always pass', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const L = require('../../scripts/lib/account-lock');
+  const env = { FTH_LOCK_DIR: require('../helpers').tmpDir(), FTH_TEST_LOCKS: '1' };
+  const lock = L.acquireAccountLocks({ env, broker: { name: 'live' }, servers: ['cmd:/s', 'api:https://api.example.test'], accountId: String(entryOrder().accountId) });
+  try {
+    const held = { ...config, accountLock: L.lockSpec(lock), skipChecks: new Set(['account-lock']) };
+    assert.ok(!checks(evaluate(entryOrder(), [plan()], { config: held })).includes('account-lock'), 'held: no refusal (and the check is not skippable)');
+    const none = { ...config, accountLock: L.lockSpec(null), skipChecks: new Set(['account-lock']) };
+    assert.ok(checks(evaluate(entryOrder(), [plan()], { config: none })).includes('account-lock'), 'a run without the lock (end of day): refused');
+    assert.deepStrictEqual(evaluate(entryOrder({ rationale: '[exit] flatten' }), [], { config: none }).violations, []);
+    assert.deepStrictEqual(evaluate(entryOrder({ rationale: '[protect] stop at 21480' }), [], { config: none }).violations, []);
+    // Another runner took one of its files over: refused at once, whatever the runner has noticed.
+    fs.writeFileSync(lock.files[1], JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'theirs' }));
+    const v = evaluate(entryOrder(), [plan()], { config: held }).violations.find(x => x.check === 'account-lock');
+    assert.match(v.message, new RegExp(`no longer holds its account's lock \\(${path.basename(lock.files[1]).replace('.', '\\.')}|no longer holds`));
+    for (const bad of ['junk', '{}', JSON.stringify({ files: [], token: 'x' }), JSON.stringify({ files: ['/x'], token: '' })]) {
+      assert.match(L.lockGateRefusal(bad), /not a readable lock spec/, bad);
+    }
+    assert.strictEqual(L.lockGateRefusal(''), null, 'unset: no runner lock in play');
+    assert.strictEqual(config.accountLock, null, 'loadConfig: unset');
+    assert.strictEqual(loadConfig({ FTH_ACCOUNT_LOCK: 'none' }).accountLock, 'none');
+  } finally {
+    lock.release();
+  }
+});
+
+test('account lock (hard): inside a runner, an entry on any account but the one it holds the lock for is refused; an unreadable account or spec too; exits on any account pass', () => {
+  const L = require('../../scripts/lib/account-lock');
+  const env = { FTH_LOCK_DIR: require('../helpers').tmpDir(), FTH_TEST_LOCKS: '1' };
+  const mine = String(entryOrder().accountId);
+  const lock = L.acquireAccountLocks({ env, broker: { name: 'live' }, servers: ['cmd:/s'], accountId: mine });
+  try {
+    const held = { ...config, accountLock: L.lockSpec(lock) };
+    const other = Number(mine) + 7;
+    const v = evaluate(entryOrder({ accountId: other }), [plan()], { config: held }).violations.find(x => x.check === 'account-lock');
+    assert.match(v.message, new RegExp(`This runner holds account ${mine}'s lock, not account ${other}'s`));
+    assert.ok(!checks(evaluate(entryOrder({ accountId: `00${mine}` }), [plan()], { config: held })).includes('account-lock'), 'its own account, as the gate normalizes it');
+    for (const bad of [undefined, '', 'x']) {
+      assert.match(evaluate(entryOrder({ accountId: bad }), [plan()], { config: held }).violations.find(x => x.check === 'account-lock').message, /names no valid accountId/, String(bad));
+    }
+    for (const rationale of ['[exit] flatten', '[protect] stop at 21480']) {
+      assert.deepStrictEqual(evaluate(entryOrder({ accountId: other, rationale }), [], { config: held }).violations, [], rationale);
+    }
+    const noAccount = JSON.stringify({ files: lock.files, token: lock.token });
+    assert.match(L.lockGateRefusal(noAccount, mine), /not a readable lock spec/, 'a spec that names no account');
+  } finally {
+    lock.release();
+  }
+});
+
+test('account lock outside a runner (heldByRunner, the gate\'s check): an entry with no valid account id is refused; a lock dir override outside tests is ignored (the default dir is checked), never a pass', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { spawn } = require('child_process');
+  const L = require('../../scripts/lib/account-lock');
+  const broker = { name: 'live', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_API_URL'] };
+  const home = require('../helpers').tmpDir();
+  const env = { FTH_LOCK_DIR: require('../helpers').tmpDir(), LIVE_API_URL: 'https://api.example.test' }; // no FTH_TEST_LOCKS: an override outside tests
+  for (const bad of [undefined, null, '', 'x', 1.5]) assert.match(L.heldByRunner({ env, broker, accountId: bad, home }), /names no valid accountId/, String(bad));
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
+  try {
+    // The override's dir holds nothing; the default one (under the OS home) holds a live runner's lock.
+    const dflt = L.lockFileFor({ env: {}, server: 'api:https://api.example.test', accountId: '7', home });
+    fs.mkdirSync(path.dirname(dflt), { recursive: true });
+    fs.writeFileSync(dflt, JSON.stringify({ pid: runner.pid, host: os.hostname(), home: '/homes/a', startedAt: 't', token: 'x' }));
+    assert.match(L.heldByRunner({ env, broker, accountId: '7', home }), /already traded by another runner/);
+    assert.strictEqual(L.heldByRunner({ env: { ...env, FTH_TEST_LOCKS: '1' }, broker, accountId: '7', home }), null, 'with FTH_TEST_LOCKS=1 the override is the dir read');
+  } finally {
+    runner.kill();
+  }
+});
+
+test('account lock outside a runner: a live broker (apiUrlEnv) whose API URL is unset or no URL refuses entries, naming the variable; exits pass; a broker without apiUrlEnv is unaffected', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const L = require('../../scripts/lib/account-lock');
+  const live = { name: 'live', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_API_URL'] };
+  const home = require('../helpers').tmpDir();
+  for (const [value, what] of [[undefined, 'is not set'], ['', 'is not set'], ['nonsense', 'is not a URL with a host']]) {
+    assert.match(L.heldByRunner({ env: { LIVE_API_URL: value }, broker: live, accountId: '7', home }), new RegExp(`LIVE_API_URL ${what}, .*no entry\\. Set LIVE_API_URL`), String(value));
+  }
+  assert.strictEqual(L.heldByRunner({ env: { LIVE_API_URL: 'https://api.example.test' }, broker: live, accountId: '7', home }), null);
+  assert.strictEqual(L.heldByRunner({ env: {}, broker: { name: 'sim', command: ['sim-mcp'] }, accountId: '7', home }), null, 'no apiUrlEnv: the command key alone');
+  // Through the gate (the tests' fake live broker names FAKE_BROKER_API_URL): an entry refused, an exit not.
+  const env = { FTH_BROKERS_FILE: require('../helpers').FAKE_BROKERS, FTH_HOME: home, FTH_LOCK_DIR: require('../helpers').tmpDir(), FTH_TEST_LOCKS: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1' };
+  const entry = checkOrder(entryOrder(), { env, pluginRoot: require('path').resolve(__dirname, '..', '..') });
+  assert.ok(entry.violations.some(v => v.check === 'account-lock' && /FAKE_BROKER_API_URL is not set/.test(v.message)), entry.message);
+  const exit = checkOrder(entryOrder({ side: 'sell', rationale: '[exit] flatten' }), { env, pluginRoot: require('path').resolve(__dirname, '..', '..') });
+  assert.ok(!exit.violations.some(v => v.check === 'account-lock'), exit.message);
 });

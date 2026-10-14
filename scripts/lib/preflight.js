@@ -13,6 +13,7 @@
  *   harnessChecks(cfg, root, env, deps)       the CLI harness command resolves (and answers --version)
  *   conformanceChecks(mcp, opts)              the broker MCP interface, through the translator (conformance.js)
  *   serverChecks({ cfg, broker, config, env, now })   the server trades the account; its clock agrees
+ *   accountLockChecks({ cfg, broker, config, env, status })   no other runner (any harness home) trades the account
  *   accountChecks({ cfg, accounts, profiles, home })  the account exists, can trade, balance read, profile size
  *   laneChecks(cfg, strategies, home)        each lane: bar, trigger, strategies, policies; listed names on their lane's timeframe
  *   agentChecks(cfg, agents)                 each agent role's effective timeframe; a non-analyst off the first lane's, or an analyst on one it can't be given, fails
@@ -31,6 +32,7 @@ const { validateConfig, buildCommand } = require('./autotrader');
 const { activeBroker, translatedCommand } = require('./broker/config');
 const { allowListProblem, allowList, normId } = require('./broker/allow-list');
 const { liveRunBlocked, createAdapter } = require('./broker/adapter');
+const { lockExemption, lockStatus, lockRefusal, serverIdentities, lockDir, lockDirProblem, lockDirWritable, apiUrlEnvProblem, normApi } = require('./account-lock');
 const { createMcpClient } = require('./broker/mcp-client');
 const { checkConformance } = require('./broker/conformance');
 const { loadStrategies } = require('./trading/strategies');
@@ -117,6 +119,28 @@ function serverChecks({ cfg, broker, config, env, now }) {
     out.push(r('clock', skew <= SERVER_TIME_TOLERANCE_MS ? 'ok' : 'fail', `harness ${now.toISOString()}, server ${new Date(t).toISOString()} (${Math.round(skew / 1000)} s apart, limit ${SERVER_TIME_TOLERANCE_MS / 60000} min)`));
   }
   return out;
+}
+
+/**
+ * One runner per broker account (account-lock.js), read only: a live runner holding the account's lock (any of
+ * its keys), from any harness home, an unreadable lock, a lock directory override outside tests, or a lock
+ * directory that can't be written fails the check; a stale lock (its runner gone) is a warning, taken over at start.
+ */
+function accountLockChecks({ cfg, broker, config, env, status = lockStatus, writable = lockDirWritable }) {
+  const exempt = lockExemption({ paper: cfg.paper, broker, config });
+  if (exempt) return [r('account lock', 'ok', `${exempt}: no account lock taken (a ${exempt} run never blocks a live one)`)];
+  if (normId(cfg.account) === null) return [];
+  const problem = lockDirProblem(env) || writable(lockDir(env));
+  if (problem) return [r('account lock', 'fail', `the account lock directory: ${problem}`)];
+  const apiProblem = apiUrlEnvProblem(broker, env);
+  if (apiProblem) return [r('account lock', 'fail', apiProblem)];
+  if (!normApi(config && config.apiUrl)) return [r('account lock', 'fail', `the broker server reports no apiUrl that is a URL with a host (get_server_config: ${JSON.stringify(config && config.apiUrl)}), so its account can't be locked against another install of it: a live run refuses`)];
+  const sts = serverIdentities({ broker, config, env }).map(server => status({ env, server, accountId: cfg.account }));
+  const bad = sts.find(st => st.state === 'held' || st.state === 'unreadable');
+  if (bad) return [r('account lock', 'fail', lockRefusal(bad.lock, bad.file, { broker, accountId: cfg.account }))];
+  const stale = sts.find(st => st.state === 'stale');
+  if (stale) return [r('account lock', 'warn', `${stale.file} is left by pid ${stale.lock.pid} (harness home ${stale.lock.home || '?'}), which is gone: the runner takes it over at start`)];
+  return [r('account lock', 'ok', `no other runner trades account ${normId(cfg.account)} (${sts.map(st => st.file).join(', ')})`)];
 }
 
 /** The account named by the runner (else none), its trading flag and balance, and the size of the prop profile it trades. */
@@ -251,6 +275,7 @@ async function runPreflight({ raw, root, env = process.env, home = loadConfig(en
     results.push(...await conformanceChecks(opened.mcp, { accountId: cfg.account || null, symbol: cfg.symbols[0], now }));
     const config = await opened.adapter.serverConfig().catch(err => ({ error: err.message }));
     results.push(...serverChecks({ cfg, broker, config, env, now }));
+    results.push(...accountLockChecks({ cfg, broker, config, env, status: deps.lockStatus }));
     const accounts = await opened.mcp.call('list_accounts', { onlyActiveAccounts: false }).catch(() => null);
     results.push(...accountChecks({ cfg, accounts, profiles }));
     const barsBySymbol = {};
@@ -280,4 +305,4 @@ function formatReport({ ok, results }) {
   return `${lines.join('\n')}\n`;
 }
 
-module.exports = { laneChecks, agentChecks, propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountChecks, propChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };
+module.exports = { laneChecks, agentChecks, propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountLockChecks, accountChecks, propChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };

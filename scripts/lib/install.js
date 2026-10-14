@@ -30,6 +30,8 @@ const FTH_ENV = [
   'FTH_NO_ENTRY_WINDOWS', 'FTH_ENTRY_HOURS', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_LOSS_COOLDOWN_MIN',
   'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP', 'FTH_ACCOUNTS_DIRS',
   'FTH_HOME', 'FTH_REPLAY_NOW',
+  // The runner's account lock: the gate refuses a cycle's entries once the runner no longer holds it.
+  'FTH_ACCOUNT_LOCK',
   // The exchange calendar the runner configures (closedDates, earlyCloseDates): the gate's session checks read it.
   'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES',
   // The contracts the runner's symbols select (one per index): the gate and order_plan trade only those legs.

@@ -10,7 +10,7 @@ const prop = require('../../scripts/lib/trading/prop-state');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const NOW = new Date('2026-10-07T14:00:00Z'); // Wednesday 10:00 ET: market open
-const LIVE = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', paperEnv: { LIVE_TRADING: 'false' } };
+const LIVE = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'], paperEnv: { LIVE_TRADING: 'false' } };
 const RAW = { harness: 'custom', command: ['agent', '{prompt}'], symbols: ['MNQ'], account: '7', paper: false, timeframe: 3 };
 const PROFILE = { name: 'p100', starting_balance: 100000, max_loss: 3000, profit_target: 6000 };
 const status = (results, check) => (results.find(x => x.check === check) || {}).status;
@@ -128,14 +128,14 @@ test('preflight local: market hours (a warning when closed) and the kill switch 
 
 test('preflight run: every check through fakes, read-only (no order tool is ever called); any failure fails it', async () => {
   const home = tmpDir();
-  const env = { PATH: tmpDir(), FTH_HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), LIVE_ALLOWED: '7' };
-  homeBrokers(home, { live: { command: ['live-mcp'], allowedAccountsEnv: 'LIVE_ALLOWED' } }, { env });
+  const env = { PATH: tmpDir(), FTH_HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), LIVE_ALLOWED: '7', LIVE_API_URL: 'https://api.example.test', FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
+  homeBrokers(home, { live: { command: ['live-mcp'], allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'] } }, { env });
   const calls = [];
   const mcp = {
     listTools: async () => { throw new Error('down'); },
     call: async name => {
       calls.push(name);
-      if (name === 'get_server_config') return { tradingEnabled: true, allowedAccountIds: [7], serverTime: NOW.toISOString() };
+      if (name === 'get_server_config') return { apiUrl: 'https://api.example.test', tradingEnabled: true, allowedAccountIds: [7], serverTime: NOW.toISOString() };
       if (name === 'list_accounts') return [{ id: 7, name: 'A', balance: 50000, canTrade: true, mcpTradingAllowed: true }];
       if (name === 'search_contracts') return [{ id: 'MNQ', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }];
       if (name === 'get_bars') return { bars: [] };
@@ -159,6 +159,7 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   assert.match(report.results.find(x => x.check === 'lane 3m').detail, /^3m bars, trigger bar; strategies: .*ema_cross.*; policies: prop_portfolio \(from timeframe and trigger\)$/);
   assert.strictEqual(status(report.results, 'agent timeframes'), 'ok');
   assert.match(report.results.find(x => x.check === 'agent timeframes').detail, /risk-manager 3m/);
+  assert.strictEqual(status(report.results, 'account lock'), 'ok');
   assert.ok(!calls.some(n => /order|close_position|journal_add/.test(n)), calls.join(', '));
   assert.ok(calls.includes('close'), 'the server is closed after');
   assert.match(P.formatReport(report), /FAIL broker: tools\/list[\s\S]*preflight FAILED: \d+ check\(s\)/);
@@ -198,4 +199,60 @@ test('preflight prop: only the profiles of policy strategies this run trades (no
   assert.deepStrictEqual(P.propProfiles(strategies, accounts, { ...cfg1, symbols: ['MES'] }).map(a => a.name), ['c']);
   assert.deepStrictEqual(P.propProfiles(strategies, accounts, P.configChecks(RAW).cfg).map(a => a.name), ['b']);
   assert.deepStrictEqual(P.propProfiles([pol({ status: 'paper' })], accounts, cfg1).map(a => a.name), ['a'], 'paper is not disabled');
+});
+
+test('preflight account lock: another runner (any harness home) on the account fails; a stale lock warns; paper and a confirmed replay are exempt; read only', async () => {
+  const L = require('../../scripts/lib/account-lock');
+  const os = require('os');
+  const env = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1', LIVE_API_URL: 'https://api.example.test' };
+  const cfg = { account: '7', paper: false };
+  const check = (over = {}) => P.accountLockChecks({ cfg, broker: LIVE, config: { replay: false, apiUrl: 'https://api.example.test' }, env, ...over });
+  assert.deepStrictEqual(check().map(x => x.status), ['ok']);
+  assert.deepStrictEqual(fs.readdirSync(env.FTH_LOCK_DIR), [], 'reads only');
+  const held = L.acquireAccountLock({ env, broker: LIVE, accountId: '7', home: '/homes/a' });
+  try {
+    // Held by a live runner (this process stands in for it).
+    const [res] = check({ status: o => L.lockStatus({ ...o, command: () => 'node /x/scripts/autotrader.js' }) });
+    assert.strictEqual(res.status, 'fail');
+    assert.match(res.detail, new RegExp(`account 7 on broker "live" is already traded by another runner \\(pid ${process.pid} on host .*, harness home /homes/a, started .*\\): one runner per broker account`));
+    for (const [over, why] of [[{ cfg: { ...cfg, paper: true } }, /^paper/], [{ broker: { ...LIVE, replay: true }, config: { replay: true } }, /^replay/]]) {
+      const [x] = check(over);
+      assert.strictEqual(x.status, 'ok');
+      assert.match(x.detail, why);
+    }
+    assert.strictEqual(check({ broker: { ...LIVE, replay: true }, config: { replay: false, apiUrl: 'https://api.example.test' }, status: o => L.lockStatus({ ...o, command: () => 'autotrader' }) })[0].status, 'fail', 'an unconfirmed replay is live');
+  } finally {
+    held.release();
+  }
+  const gone = require('child_process').spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+  fs.writeFileSync(held.file, JSON.stringify({ pid: Number(gone), host: os.hostname(), home: '/homes/old' }));
+  const [stale] = check();
+  assert.strictEqual(stale.status, 'warn');
+  assert.match(stale.detail, /left by pid \d+ \(harness home \/homes\/old\), which is gone: the runner takes it over at start/);
+  assert.ok(fs.existsSync(held.file), 'preflight never removes it');
+  assert.deepStrictEqual(P.accountLockChecks({ cfg: { account: '', paper: false }, broker: LIVE, config: {}, env }), [], 'no account: the account check fails instead');
+  const noApi = P.accountLockChecks({ cfg, broker: LIVE, config: { replay: false }, env });
+  assert.deepStrictEqual(noApi.map(x => x.status), ['fail']);
+  assert.match(noApi[0].detail, /reports no apiUrl/);
+  const noEnv = P.accountLockChecks({ cfg, broker: { name: 'live' }, config: { apiUrl: 'https://api.example.test' }, env });
+  assert.deepStrictEqual(noEnv.map(x => x.status), ['fail']);
+  assert.match(noEnv[0].detail, /names no apiUrlEnv/);
+  // An unreadable lock can't be judged: a failure, as at start.
+  fs.writeFileSync(held.file, 'junk');
+  const [unreadable] = check();
+  assert.strictEqual(unreadable.status, 'fail');
+  assert.match(unreadable.detail, /its lock file is unreadable/);
+  // The lock directory: an override outside tests, or one that can't be written, fails.
+  assert.match(P.accountLockChecks({ cfg, broker: LIVE, config: {}, env: { FTH_LOCK_DIR: env.FTH_LOCK_DIR } })[0].detail, /FTH_LOCK_DIR is set .*for tests only/);
+  const unwritable = P.accountLockChecks({ cfg, broker: LIVE, config: {}, env, writable: () => '/x can\'t be written (EACCES)' });
+  assert.deepStrictEqual(unwritable.map(x => [x.status, x.detail]), [['fail', 'the account lock directory: /x can\'t be written (EACCES)']]);
+  // A run on the same API through another install (its apiUrl key held): a failure.
+  fs.rmSync(held.file);
+  const api = L.acquireAccountLocks({ env, broker: LIVE, servers: ['cmd:/elsewhere', 'api:https://api.example.test'], accountId: '7' });
+  try {
+    const [x] = check({ config: { apiUrl: 'https://api.example.test' }, status: o => L.lockStatus({ ...o, command: () => 'autotrader' }) });
+    assert.strictEqual(x.status, 'fail');
+  } finally {
+    api.release();
+  }
 });

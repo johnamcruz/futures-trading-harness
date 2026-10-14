@@ -47,7 +47,7 @@ const os = require('os');
 const path = require('path');
 const { validateConfig, prompts, buildCommand, childEnv, decide, runResult, cycleOutcome, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
-const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
+const { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/prop/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { lanesOf, startErrors } = require('./lib/lanes');
@@ -269,7 +269,7 @@ async function replayStep(cfg, dataDir, opts, asked) {
   const log = tap.log(runnerLog(() => {}));
   let client;
   try {
-    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
+    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env, log });
     const why = replayUnattested(await client.serverConfig(), runnerNow());
     if (why) throw new Error(why);
   } catch (err) {
@@ -317,20 +317,20 @@ async function main(rawArgv) {
   // Codex may write the blackouts directory from its sandbox, but can't create it.
   fs.mkdirSync(path.dirname(loadConfig(process.env).blackoutsFile), { recursive: true });
   workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
-
   const once = arg(argv, '--once');
   if (once) {
     // A replay broker's clock: the live loop's pass at that time (its schedule decides what runs), not a manual run.
     if (!opts.dryRun && resolveClock(process.env, { testClock: false }).replay) return replayStep(cfg, dataDir, opts, once);
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
     if (once !== 'eod' && fs.existsSync(killSwitchFile)) throw new Error(`kill switch is on (${killSwitchFile})`);
+    const held = opts.dryRun ? null : await manualRunBroker({ cfg, once, root: ROOT, env: process.env, log: m => process.stdout.write(`[autotrader] ${m}\n`) }); // a live account's lock, as the loop's
     const p = prompts(cfg, once === 'eod' ? require('./lib/trading/harness-now').recordNow(process.env, { testClock: false }) : runnerNow(), ROOT);
     // A manual trade run reads nothing for the prompt: it says so instead of claiming an empty journal.
     const manual = { journalRead: false, unavailable: ['a manual run (--once): no bars, account, journal, news, premarket plan, or strategy scan were read; read them yourself'] };
     const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })), manual)] : symbols.map(s => p.premarket(s));
     let ok = true;
     // A manual run has no bars or account read: its cycle log says so.
-    for (const prompt of jobs) ok = (await runCycle(cfg, once, prompt, opts, { context: { action: once, manual: true, symbols } })).ok && ok;
+    try { for (const prompt of jobs) ok = (await runCycle(cfg, once, prompt, opts, { context: { action: once, manual: true, symbols } })).ok && ok; } finally { if (held) held.close(); }
     return ok ? 0 : 1;
   }
 
@@ -349,7 +349,7 @@ async function main(rawArgv) {
   // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
   let client;
   try {
-    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
+    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env, log });
   } catch (err) {
     log(`broker: can't start (${err.message})`, 'error');
     return 1;
@@ -363,6 +363,7 @@ async function main(rawArgv) {
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   const beat = () => writeHeartbeat(HOME_DIR, { symbols: cfg.symbols, timeframe: cfg.timeframe, killSwitch: fs.existsSync(killSwitchFile) });
   for (;;) {
+    if (await holdAccountLock(client, { killSwitchFile, log, event: tap.event(writeEvent) }) === 'taken') process.exit(1); // another runner manages the account
     const ms = await session.pass(runner);
     beat();
     // Long waits (the daily break, the weekend) in one-minute pieces, so the heartbeat stays fresh.
