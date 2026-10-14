@@ -92,6 +92,12 @@ function pairUp(baseline, candidate) {
     const c = recs.map(r => mine.find(x => x.repeat === r.repeat) || { key, repeat: r.repeat, category: NO_DECISION, blow: false });
     out.push({ key, base: collapse(recs, { tieTo: 'right' }), cand: collapse(c) });
   }
+  // A decision only the candidate made (it ran on in a trade the champion never opened): paired with a right
+  // champion, so a failure there counts as broken and a blow there counts; nothing there counts as a fix.
+  const seen = new Set(out.map(p => p.key));
+  for (const [key, recs] of cand) {
+    if (!seen.has(key)) out.push({ key, base: { key, category: 'right', blow: false, implicit: true }, cand: collapse(recs) });
+  }
   return out;
 }
 
@@ -119,6 +125,9 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   const reasons = [];
   const targetSet = new Set(targets || []);
   if (!targetSet.size) throw new Error('judge: a proposal names the failure categories it targets');
+  // The decisions both sides made: the sample the minimums, the effect and the tolerance are counted on. Decisions
+  // only the candidate made (pairUp) still count as broken and for blows, never toward the sample.
+  const n0 = pairs.filter(p => !p.base.implicit).length;
   // Fixed: a targeted failure the candidate decides right (never one it turns into another failure or unchecked).
   // Broken: a right decision the candidate decides otherwise.
   let b = 0;
@@ -127,13 +136,15 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
     if (targetSet.has(p.base.category) && p.cand.category === 'right') b += 1;
     else if (p.base.category === 'right' && p.cand.category !== 'right') c += 1;
   }
-  const target = { b, c, n: b + c, effect: pairs.length ? round((b - c) / pairs.length) : 0, pBetter: round(mcnemar(b, c)), pWorse: round(mcnemar(c, b)) };
+  const target = { b, c, n: b + c, effect: n0 ? round((b - c) / n0) : 0, pBetter: round(mcnemar(b, c)), pWorse: round(mcnemar(c, b)) };
   const harm = {};
-  const tol = rule.harmTolerance > 0 ? Math.max(1, Math.floor(rule.harmTolerance * pairs.length)) : 0;
+  // The tolerance as stated, never looser: floor(harmTolerance x decisions), so under 50 decisions at 2% no decision
+  // of a category may break.
+  const tol = Math.floor(rule.harmTolerance * n0);
   for (const k of [...new Set([...(failures || []), 'unchecked', NO_DECISION])]) harm[k] = tally(pairs, r => r.category === k);
   harm['any failure'] = tally(pairs, r => r.category !== 'right');
   const blows = pairs.filter(p => p.cand.blow === true).length;
-  const tests = { pairs: pairs.length, target, harm, harmTolerance: tol, blows, rule };
+  const tests = { pairs: n0, onlyCandidate: pairs.length - n0, target, harm, harmTolerance: tol, blows, rule };
   if (blows) reasons.push(`${blows} blow(s) on the candidate's side: zero blows, no exception`);
   for (const [k, t] of Object.entries(harm)) {
     if (t.c - t.b > tol) reasons.push(`${k}: ${t.c} decision(s) broken against ${t.b} fixed, worse by more than the tolerance (${tol})`);
@@ -148,12 +159,12 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   } else if (mechanical) {
     return { verdict: 'blocked', reasons: [`a strategy or rulebook change is screened by the evaluator first (R28): ${(evaluator && evaluator.why) || 'none available'}`], tests };
   }
-  if (pairs.length < rule.minPairs) return { verdict: 'inconclusive', reasons: [`${pairs.length} pairs; at least ${rule.minPairs}`], tests };
+  if (n0 < rule.minPairs) return { verdict: 'inconclusive', reasons: [`${n0} pairs; at least ${rule.minPairs}`], tests };
   if (target.n < rule.minDiscordant) return { verdict: 'inconclusive', reasons: [`${target.n} discordant pairs on the targeted measure; at least ${rule.minDiscordant}`], tests };
   if (target.effect < rule.minEffect) reasons.push(`effect ${target.effect} is under ${rule.minEffect}`);
   if (target.pBetter > rule.alpha) reasons.push(`no significant gain on the targeted measure (p ${target.pBetter} > ${rule.alpha})`);
   if (reasons.length) return { verdict: 'rejected', reasons, tests };
-  return { verdict: 'kept', reasons: [`fixed ${target.b}, broke ${target.c} of ${pairs.length} pairs (effect ${target.effect}, p ${target.pBetter})`], tests };
+  return { verdict: 'kept', reasons: [`fixed ${target.b}, broke ${target.c} of ${n0} pairs (effect ${target.effect}, p ${target.pBetter})`], tests };
 }
 
 module.exports = { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, collapse, pairUp, tally, judge };

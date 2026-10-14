@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
 const E = require('../../scripts/lib/train/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
@@ -96,6 +96,9 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
     .replace(/^name: test_50k$/m, 'name: eval_acct').replace(/^sessions: 30\b/m, 'sessions: 2').replace(/^profit_target: 3000\b/m, 'profit_target: 300'));
+  // Its rulebook (the fixture's, renamed), listing the policy (section 10 step 7: one place for its numbers).
+  fs.writeFileSync(path.join(acct, 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace(/^name: test_50k$/m, 'name: eval_acct'));
+  listPolicies(acct, ['eval_fixture']);
   const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_STRATEGIES_DIRS: path.join(home, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   const to = new Date(Date.parse(`${sessions[sessions.length - 1]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);

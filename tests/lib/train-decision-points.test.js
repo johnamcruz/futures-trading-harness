@@ -30,7 +30,7 @@ function champion() {
   for (const [t, kind] of [['2022-03-09T14:33:02.000Z', 'trade'], ['2022-03-09T14:36:02.000Z', 'trade'], ['2022-03-09T14:45:00.000Z', 'eod']]) {
     store.appendRecord(paths, manifest, { t, day: '2022-03-09', kind, ran: [] });
   }
-  const derived = { harness: 'custom', symbols: ['MNQ'], dataDir: paths.bars, workdir: paths.workspace };
+  const derived = { harness: 'custom', symbols: ['MNQ'], account: '7', dataDir: paths.bars, workdir: paths.workspace };
   return { runId: 'r1', broker: 'sim', brokerEnv: { clockFile: 'SIM_CLOCK', stateDir: 'SIM_STATE', runId: null, start: null, end: null }, start: new Date('2022-03-09T00:00:00Z'), end: new Date('2022-03-10T00:00:00Z'), paths, derived, cfg: { ...derived, cycleTimeoutMinutes: 3 }, propDailyLoss: null };
 }
 
@@ -111,6 +111,18 @@ test('runPoint: from the checkpoint, in a fresh home, re-based, with the tree\'s
   assert.ok(res.runDir.startsWith(home));
   // The champion's own home is untouched.
   assert.strictEqual(store.readRun(run.paths.runDir).days['2022-03-09'].length, 3);
+  // Not in a trade at the point, but this side holds one after a step (or the read fails): it runs on; the
+  // champion's own times (mustRun) are always run.
+  const base = { PATH: process.env.PATH, FTH_BROKERS_FILE: path.join(tmpDir(), 'none.json') };
+  const flat = { ...point, inTrade: false };
+  const followers = D.followersOf(run.paths.runDir, point);
+  const withTrade = inTrade => (pr, root) => ({ ...stepDeps(pr, root), inTrade });
+  const opened = await D.runPoint({ run, checkpoint: D.checkpointOf(dir, t), home, tree, point: flat, followers, repeat: 0, seed: 1, baseEnv: base, stepDeps: withTrade(async () => true) });
+  assert.strictEqual(opened.times.length, 3);
+  const unread = await D.runPoint({ run, checkpoint: D.checkpointOf(dir, t), home, tree, point: flat, followers, repeat: 0, seed: 1, baseEnv: base, stepDeps: withTrade(async () => { throw new Error('broker down'); }) });
+  assert.strictEqual(unread.times.length, 3, 'a failed read is taken as in a trade');
+  const must = await D.runPoint({ run, checkpoint: D.checkpointOf(dir, t), home, tree, point: flat, followers, mustRun: ['2022-03-09T14:36:02.000Z'], repeat: 0, seed: 1, baseEnv: base, stepDeps: withTrade(async () => false) });
+  assert.deepStrictEqual(must.times, ['2022-03-09T14:33:02.000Z', '2022-03-09T14:36:02.000Z']);
   // Not in a trade: the point alone. No checkpoint: refused.
   const one = await D.runPoint({ run, checkpoint: D.checkpointOf(dir, t), home, tree, point: { ...point, inTrade: false }, followers: [], repeat: 0, seed: 1, baseEnv: { PATH: process.env.PATH, FTH_BROKERS_FILE: path.join(tmpDir(), 'none.json') }, stepDeps });
   assert.deepStrictEqual(one.times, ['2022-03-09T14:33:02.000Z']);

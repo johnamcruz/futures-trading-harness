@@ -23,7 +23,7 @@ const TIMES = Array.from({ length: 20 }, (_, i) => new Date(Date.parse('2022-03-
 const fix = { targets: ['wrong stated reason'], expects: 'fixed', edits: [{ file: SKILL, find: '# A', replace: '# A\nFIX' }] };
 const harm = { targets: ['wrong stated reason'], expects: 'harm', edits: [{ file: SKILL, find: '# A', replace: '# A\nHARM' }] };
 const RESULT = text => (text.includes('FIX') ? 'planted fix' : text.includes('HARM') ? 'planted harm' : 'planted failure');
-const CATEGORY = { 'planted failure': 'wrong stated reason', 'planted harm': 'wrong-side entry', 'planted fix': 'right' };
+const CATEGORY = { 'planted failure': 'wrong stated reason', 'planted harm': 'wrong-side entry', 'planted fix': 'right', 'planted blow': 'right' };
 
 function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}) {
   const user = tmpDir();
@@ -73,7 +73,7 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
         return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true, result: RESULT(fs.readFileSync(path.join(tree, SKILL), 'utf8')) }] })}` };
       },
     }),
-    scorecard: ({ runDir }) => Object.values(store.readRun(runDir).days).flat().map(l => ({ key: `${l.t}|MNQ`, t: l.t, day: l.day, symbol: 'MNQ', category: CATEGORY[l.ran[0].result], inTrade: false, blow: false })),
+    scorecard: ({ runDir }) => Object.values(store.readRun(runDir).days).flat().map(l => ({ key: `${l.t}|MNQ`, t: l.t, day: l.day, symbol: 'MNQ', category: CATEGORY[l.ran[0].result], inTrade: false, blow: l.ran[0].result === 'planted blow' })),
     propose: async () => { calls.propose += 1; return { proposals: proposals.map(proposal => ({ proposal })) }; },
     evaluator: async () => { calls.evaluator += 1; return { available: false, why: 'stub' }; },
     writeBranch: opts => { calls.branches.push(opts); return 'deadbeef'.repeat(5); },
@@ -255,7 +255,7 @@ test('a held-out judging resumed without its ledger snapshot is refused, saying 
   w.steps.evaluator = evaluator;
   const steps = w.calls.steps.length;
   const looks = S.readLedger(w.paths.ledger).length;
-  await assert.rejects(judge(), /the held-out ledger snapshot .*ledger-before\.jsonl is missing: this judging's look was already logged[^]*Restore the file from a backup, or judge the change again under a new loopId/);
+  await assert.rejects(judge(), /the held-out ledger snapshot .*ledger-before\.jsonl is missing: this judging's look was already logged[^]*Restore the file from a backup to resume\. Otherwise the held-out months 2023-09-13\.\.2023-09-14 are spent \(each judges once, in any loop\): judging needs held-out months not yet used/);
   assert.strictEqual(w.calls.steps.length, steps, 'nothing ran');
   assert.strictEqual(S.readLedger(w.paths.ledger).length, looks, 'no look logged');
   assert.strictEqual(readArchive(w.paths.archive).filter(e => e.phase === 'held-out').length, 0);
@@ -300,6 +300,38 @@ test('a held-out ledger snapshot removed while the judging runs stops it at the 
   const replay = w.steps.runReplay;
   w.steps.runReplay = async opts => { fs.rmSync(snapshot, { force: true }); return replay(opts); };
   await assert.rejects(L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /the held-out ledger snapshot .* is missing/);
+});
+
+test('a candidate that enters where the champion was flat is followed into its trade: a blow there rejects it', async () => {
+  const enter = { targets: ['wrong stated reason'], expects: 'enters', edits: [{ file: SKILL, find: '# A', replace: '# A\nFIX ENTER' }] };
+  for (const marker of ['ENTER', 'none']) {
+    const w = world({ proposals: [marker === 'ENTER' ? enter : fix] });
+    const base = w.steps.stepDeps;
+    const steps = new Map();
+    w.steps.stepDeps = (r, tree) => {
+      const d = base(r, tree);
+      const entering = fs.readFileSync(path.join(tree, SKILL), 'utf8').includes('ENTER');
+      return {
+        ...d,
+        // The champion is flat after every point; the candidate holds the trade it entered.
+        inTrade: async () => entering,
+        step: async p => {
+          const n = (steps.get(r.paths.runHome) || 0) + 1;
+          steps.set(r.paths.runHome, n);
+          if (entering && n > 1) return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true, result: 'planted blow' }] })}` };
+          return d.step(p);
+        },
+      };
+    };
+    await run(w, { dryRun: true });
+    const [e] = readArchive(w.paths.archive);
+    if (marker === 'ENTER') {
+      assert.strictEqual(e.verdict, 'rejected', JSON.stringify(e.reasons));
+      assert.match(e.reasons[0], /blow\(s\) on the candidate's side/);
+      assert.ok(e.tests.onlyCandidate > 0, 'it ran on past the champion');
+      assert.strictEqual(e.tests.pairs, 20, 'the sample is the decisions both sides made');
+    } else assert.strictEqual(e.verdict, 'kept', 'a candidate that stays flat runs only the points');
+  }
 });
 
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {

@@ -73,6 +73,43 @@ test('budgetLeft: model calls across resumes, wall time this run, iterations bef
   assert.strictEqual(S.budgetLeft({ iterations: [{ done: true }, { done: true }], modelCalls: 0 }, LIMITS, { startedMs: 0, nowMs: 0 }), null, 'a running iteration finishes');
 });
 
+test('takeJudgingLook: two judgings at once (two harness homes, one ledger) - exactly one takes the held-out month', async () => {
+  const { spawn: run } = require('child_process');
+  const STATE = path.join(__dirname, '..', '..', 'scripts', 'lib', 'train', 'state.js');
+  for (let trial = 0; trial < 5; trial += 1) {
+    const dir = tmpDir();
+    const ledger = path.join(dir, 'training', 'looks.jsonl');
+    const startAt = Date.now() + 400;
+    const child = k => new Promise(resolve => {
+      const code = `const S = require(${JSON.stringify(STATE)}); while (Date.now() < ${startAt}); try { S.takeJudgingLook(${JSON.stringify(ledger)}, { candidate: 'loop${k}/x', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] }, { snapshot: ${JSON.stringify(path.join(dir, `snap${k}.jsonl`))} }); process.stdout.write('took'); } catch (e) { process.stdout.write('refused: ' + e.message); }`;
+      const p = run(process.execPath, ['-e', code], { stdio: ['ignore', 'pipe', 'inherit'] });
+      let out = '';
+      p.stdout.on('data', d => { out += d; });
+      p.on('exit', () => resolve(out));
+    });
+    const outs = await Promise.all([child(1), child(2)]);
+    assert.strictEqual(outs.filter(o => o === 'took').length, 1, outs.join(' | '));
+    assert.ok(outs.some(o => /refused: (held-out months already used for judging: 2023-09|the ledger is locked by another run)/.test(o)), outs.join(' | '));
+    assert.strictEqual(S.readLedger(ledger).filter(l => l.purpose === 'judging').length, 1);
+  }
+});
+
+test('takeJudgingLook: a used month refused (recorded looks too); the snapshot is the ledger before the look; a held lock refuses', () => {
+  const dir = tmpDir();
+  const ledger = path.join(dir, 'training', 'looks.jsonl');
+  const snap = path.join(dir, 'snap.jsonl');
+  const look = { candidate: 'l/x', purpose: 'judging', ranges: [{ from: '2023-09-13', to: '2023-09-14' }] };
+  S.logLook(ledger, { candidate: 'l/t', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] });
+  const before = fs.readFileSync(ledger, 'utf8');
+  S.takeJudgingLook(ledger, look, { snapshot: snap });
+  assert.strictEqual(fs.readFileSync(snap, 'utf8'), before);
+  assert.throws(() => S.takeJudgingLook(ledger, { ...look, candidate: 'other/y' }, { snapshot: snap }), /already used for judging: 2023-09/);
+  assert.throws(() => S.takeJudgingLook(ledger, { ...look, ranges: [{ from: '2024-04-22', to: '2024-04-27' }] }, { snapshot: snap }), /already used for judging: 2024-04/);
+  fs.writeFileSync(`${ledger}.lock`, '');
+  assert.throws(() => S.logLook(ledger, { candidate: 'l/t2', purpose: 'tuning', ranges: [{ from: '2022-03-07', to: '2022-03-12' }] }), /ledger is locked by another run/);
+  assert.deepStrictEqual(S.monthsOf('2023-09-25', '2023-11-02'), ['2023-09', '2023-10', '2023-11']);
+});
+
 test('the look ledger: a look is checked before it is logged; a refused one logs nothing; an unreadable ledger allows none', () => {
   const file = path.join(tmpDir(), 'training', 'looks.jsonl');
   assert.deepStrictEqual(S.readLedger(file), []);

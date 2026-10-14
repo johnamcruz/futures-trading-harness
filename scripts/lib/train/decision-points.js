@@ -15,17 +15,20 @@
  *    puts the given tree's workspace operator files in it (the tree's generated adapters), and runs the
  *    driver's step there (autotrader.js --once from the given tree, at the point's time, through the
  *    order gate to the replay broker), then records the line as the driver does (store.appendRecord).
- *    A point inside a trade runs on, at the champion's later decision times that day, until the day's
- *    end of day (the trade ends by then at the latest), so its management is judged (R30 item 3).
+ *    A point runs on, at the champion's later decision times that day, while EITHER side is in a trade:
+ *    the champion was in one at the point, the side's own account holds a position or a working order
+ *    after a step (deps.inTrade; a read that fails counts as in one), or the champion's run of the same
+ *    point and repeat reached that time (mustRun: a candidate runs at least the champion's times). So a
+ *    trade either side opens is followed to its end (by end of day at the latest) and judged (R30 item 3).
  * 3. Seeds. Each point and repeat has its own seed, the same for the champion and every candidate
  *    (pointSeed), given to the harness process as FTH_TRAIN_SEED for a harness CLI config that uses one.
  *
  *   checkpointDeps(deps, { run, dir })              the driver's deps, taking a checkpoint before each trade step
  *   checkpointOf(dir, t)                            the checkpoint folder for a decision time
  *   choosePanel({ decisions, used, maxFlagged, control, seed })   { flagged, control, points }
- *   followersOf(runDir, point)                      the champion's later times on the point's day (in a trade)
+ *   followersOf(runDir, point)                      the champion's later times on the point's day
  *   pointSeed(seed, t, repeat)                      a whole number, the same for both sides of a pair
- *   runPoint({ run, checkpoint, home, tree, point, followers, repeat, seed, baseEnv, stepDeps, onCall })
+ *   runPoint({ run, checkpoint, home, tree, point, followers, mustRun, repeat, seed, baseEnv, stepDeps, onCall })
  *                                                   { t, repeat, seed, runDir, times, error }
  */
 
@@ -135,7 +138,22 @@ function seedPointHome(pr, tree) {
   }
 }
 
-async function runPoint({ run, checkpoint, home, tree, point, followers = [], repeat, seed, baseEnv = process.env, stepDeps, onCall = () => {} }) {
+/**
+ * Whether the run goes on past a time: a time it must run (the champion's own run of this point reached it, or the
+ * champion was in a trade at the point), or this side's account holds a position or a working order now (its
+ * trade's outcome must be seen, R30 item 3). A read that fails is taken as in a trade: the run goes on.
+ */
+async function goesOn(deps, env, account, next, mustRun) {
+  if (mustRun.has(next.t)) return true;
+  if (!deps.inTrade || !account) return false;
+  try {
+    return Boolean(await deps.inTrade(env, account));
+  } catch (_err) {
+    return true;
+  }
+}
+
+async function runPoint({ run, checkpoint, home, tree, point, followers = [], mustRun = [], repeat, seed, baseEnv = process.env, stepDeps, onCall = () => {} }) {
   if (!fs.existsSync(checkpoint)) throw new Error(`no checkpoint for ${point.t} (${checkpoint}): the champion's run must be taken with checkpoints`);
   fs.rmSync(home, { recursive: true, force: true });
   fs.cpSync(checkpoint, home, { recursive: true, verbatimSymlinks: true });
@@ -145,7 +163,9 @@ async function runPoint({ run, checkpoint, home, tree, point, followers = [], re
   const manifest = readJson(pr.paths.manifest, null);
   if (!manifest) throw new Error(`${checkpoint}: no run manifest in the checkpoint`);
   delete manifest.pending;
-  const times = [{ t: point.t, day: point.day, kind: 'trade' }, ...(point.inTrade ? followers : [])];
+  // Every later time of the day is a candidate time; which ones run is decided as the run goes (goesOn).
+  const times = [{ t: point.t, day: point.day, kind: 'trade' }, ...followers];
+  const must = new Set([...(point.inTrade ? followers.map(f => f.t) : []), ...mustRun]);
   const env0 = { ...replayEnv(baseEnv, pr, { at: new Date(times[0].t) }), FTH_TRAIN_SEED: String(seed) };
   writeJsonAtomic(pr.paths.clockFile, { now: new Date(times[0].t).toISOString() });
   const why = await deps.serverCheck(env0, new Date(times[0].t));
@@ -153,7 +173,8 @@ async function runPoint({ run, checkpoint, home, tree, point, followers = [], re
   const timeoutMs = (pr.cfg.cycleTimeoutMinutes * Math.max(1, pr.cfg.symbols.length) + 2) * 60000;
   const done = [];
   let error = null;
-  for (const x of times) {
+  for (const [i, x] of times.entries()) {
+    if (i > 0 && !(await goesOn(deps, { ...replayEnv(baseEnv, pr, { at: new Date(times[i - 1].t) }), FTH_TRAIN_SEED: String(seed) }, pr.cfg.account, x, must))) break;
     const at = new Date(x.t);
     writeJsonAtomic(pr.paths.clockFile, { now: at.toISOString() });
     const env = { ...replayEnv(baseEnv, pr, { at }), FTH_TRAIN_SEED: String(seed) };

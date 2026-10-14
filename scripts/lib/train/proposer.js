@@ -65,7 +65,7 @@ function selfReviewPrompt({ template, flagged, files, maxProposals }) {
 function editableFiles(tree) {
   const { kindOf } = require('./proposal');
   const out = [];
-  for (const dir of ['skills', 'strategies', 'rulebooks']) {
+  for (const dir of ['skills', 'strategies', 'accounts']) {
     let names;
     try { names = fs.readdirSync(path.join(tree, dir)).sort(); } catch (_err) { continue; }
     for (const n of names) {

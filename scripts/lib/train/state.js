@@ -20,7 +20,11 @@
  *   saveState(paths, state)
  *   budgetLeft(state, limits, { startedMs, nowMs })   null, or why the loop must stop now (a resource limit)
  *   spend(state, n)                           counts n model calls
- *   readLedger(file) / logLook(file, look)    the look ledger: a look is checked (prop/looks.js) before it is logged
+ *   readLedger(file) / logLook(file, look)    the look ledger: a look is checked (prop/looks.js) before it is logged,
+ *                                             under the ledger's lock (the evaluator's lock too)
+ *   takeJudgingLook(file, look, { snapshot })  a held-out judging's months checked unused, the snapshot written and
+ *                                             the look logged, as one step under the lock
+ *   monthsOf(from, to)                        the months a range of session dates touches
  */
 
 const crypto = require('crypto');
@@ -30,6 +34,8 @@ const os = require('os');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { checkLook } = require('../prop/looks');
+const { RECORDED_LOOKS } = require('../prop/splits');
+const { withLedgerLock } = require('../prop/evaluate-run');
 
 const VERSION = 1;
 
@@ -151,13 +157,55 @@ function readLedger(file) {
   });
 }
 
-/** Checks the look against the ledger (prop/looks.js), then appends it; throws, logging nothing, when it is refused. */
-function logLook(file, look, now = new Date()) {
+/** fn holding the ledger's lock (`<ledger>.lock`, prop/evaluate-run.js withLedgerLock, as the evaluator takes it). */
+function locked(file, fn) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  return withLedgerLock(file, fn);
+}
+
+function appendChecked(file, look, now) {
   const verdict = checkLook(look, readLedger(file));
   if (!verdict.ok) throw new Error(`look refused:\n- ${verdict.refusals.join('\n- ')}`);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   fs.appendFileSync(file, `${JSON.stringify({ ...look, at: now.toISOString() })}\n`);
   return verdict;
 }
 
-module.exports = { VERSION, loopPaths, acquireLock, lockHolder, openState, saveState, budgetLeft, spend, readLedger, logLook };
+/**
+ * Checks the look against the ledger (prop/looks.js), then appends it, both under the ledger's lock; throws,
+ * logging nothing, when it is refused.
+ */
+function logLook(file, look, now = new Date()) {
+  return locked(file, () => appendChecked(file, look, now));
+}
+
+/** The months ('YYYY-MM') a [from, to) range of session dates touches. */
+function monthsOf(from, to) {
+  const out = [];
+  const last = new Date(Date.parse(`${to}T00:00:00Z`) - 86400000).toISOString().slice(0, 7);
+  for (let m = String(from).slice(0, 7); m <= last;) {
+    out.push(m);
+    const [y, mo] = m.split('-').map(Number);
+    m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+  }
+  return out;
+}
+
+/**
+ * A held-out judging's one look, atomically under the ledger's lock: refused when any of its months was used by an
+ * earlier judging look or a recorded look (each held-out month judges once, section 4); else the ledger as it is
+ * now is written to `snapshot` (the judging's checks run against it), and the look is checked and appended.
+ */
+function takeJudgingLook(file, look, { snapshot, now = new Date() }) {
+  return locked(file, () => {
+    const months = ws => new Set(ws.flatMap(w => monthsOf(w.from, w.to)));
+    const mine = months(look.ranges);
+    const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...readLedger(file).filter(l => l.purpose === 'judging')]
+      .flatMap(l => [...months(Array.isArray(l.ranges) ? l.ranges : [l])]).filter(m => mine.has(m));
+    if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
+    fs.mkdirSync(path.dirname(snapshot), { recursive: true });
+    fs.writeFileSync(snapshot, fs.existsSync(file) ? fs.readFileSync(file) : '');
+    return appendChecked(file, look, now);
+  });
+}
+
+module.exports = { VERSION, loopPaths, acquireLock, lockHolder, openState, saveState, budgetLeft, spend, readLedger, logLook, takeJudgingLook, monthsOf };

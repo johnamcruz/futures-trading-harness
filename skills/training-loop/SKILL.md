@@ -80,9 +80,13 @@ proposal.json --approved-by <name>`, and it is judged like any other.
 **Safety.** One loop at a time (`<FTH_HOME>/training/loop.lock`). It
 refuses to run while a live runner holds the account. The limits stop it
 between model calls; a re-run resumes where it stopped. Proposals may edit
-only skills, strategies (never a `name:` or `status:` line) and rulebooks:
-never code, accounts, agents, rules, or the loop's own skills. The
-proposer runs with its kill switch on and every live broker disabled.
+only skills, strategies (never a `name:` or `status:` line, nor a policy's
+account, sizing, contracts or exit) and rulebooks
+(`accounts/<account>/RULEBOOK.md`): never code, account profiles
+(`ACCOUNT.md`), agents, rules, or the loop's own skills. The proposer runs
+with its kill switch on and every live broker disabled. A trade either
+side opens at a decision point is followed to its end, so a candidate that
+enters where the champion stayed flat is judged on that trade too.
 **Never run `npm run verify` or any tests while the loop or a replay
 runs**: the local model server runs out of memory. Run them after.
 

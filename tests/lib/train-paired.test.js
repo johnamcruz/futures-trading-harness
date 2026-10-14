@@ -77,9 +77,29 @@ test('judge: a fix that breaks another category beyond the tolerance is rejected
   const v = judge({ pairs: pairs([...many(10, 'wrong stated reason'), ...many(10, 'right')], [...many(10, 'right'), ...many(2, 'bad size'), ...many(8, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
   assert.strictEqual(v.verdict, 'rejected');
   assert.match(v.reasons.join(), /bad size: 2 decision\(s\) broken against 0 fixed/);
-  // One broken decision is within the tolerance (at least 1 decision) and not significant: kept.
-  const ok = judge({ pairs: pairs([...many(10, 'wrong stated reason'), ...many(10, 'right')], [...many(10, 'right'), 'bad size', ...many(9, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
-  assert.strictEqual(ok.verdict, 'kept');
+  // The tolerance is floor(2% of the decisions), never a minimum of one: at 20 decisions none may break...
+  const one = judge({ pairs: pairs([...many(10, 'wrong stated reason'), ...many(10, 'right')], [...many(10, 'right'), 'bad size', ...many(9, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(one.verdict, 'rejected');
+  assert.match(one.reasons.join(), /bad size: 1 decision\(s\) broken against 0 fixed, worse by more than the tolerance \(0\)/);
+  assert.strictEqual(one.tests.harmTolerance, 0);
+  // ...at 50, one may (and two may not).
+  const at50 = broken => judge({ pairs: pairs([...many(25, 'wrong stated reason'), ...many(25, 'right')], [...many(25, 'right'), ...many(broken, 'bad size'), ...many(25 - broken, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([at50(1).verdict, at50(1).tests.harmTolerance], ['kept', 1]);
+  assert.strictEqual(at50(2).verdict, 'rejected');
+  // A tighter config: 1% at 50 decisions is floor(0.5) = 0.
+  assert.strictEqual(judge({ pairs: pairs([...many(25, 'wrong stated reason'), ...many(25, 'right')], [...many(25, 'right'), 'bad size', ...many(24, 'right')]), targets: ['wrong stated reason'], failures: FAILURES, rule: ruleFrom({ harmTolerance: 0.01 }) }).verdict, 'rejected');
+});
+
+test('decisions only the candidate made (a trade the champion never opened) count as broken and for blows, never toward the sample', () => {
+  const base = many(20, 'wrong stated reason').map((c, i) => ({ key: `t${i}`, repeat: 0, category: c }));
+  const cand = [...base.map(r => ({ ...r, category: 'right' })), { key: 'extra', repeat: 0, category: 'right', blow: true }];
+  const p = pairUp(base, cand);
+  assert.deepStrictEqual([p.length, p[20].base.implicit], [21, true]);
+  const v = judge({ pairs: p, targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([v.verdict, v.tests.pairs, v.tests.onlyCandidate, v.tests.blows], ['rejected', 20, 1, 1]);
+  const harm = judge({ pairs: pairUp(base, [...cand.slice(0, 20), { key: 'extra', repeat: 0, category: 'wrong-side entry' }]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(harm.verdict, 'rejected');
+  assert.match(harm.reasons.join(), /wrong-side entry: 1 decision\(s\) broken/);
 });
 
 test('judge: a single blow on the candidate rejects', () => {
@@ -112,9 +132,9 @@ test('judge: a mechanical change waits for the evaluator; an evaluator\'s blow o
   assert.strictEqual(judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, evaluator: { available: true, blows: 0, failures: ['pass-rate bound'] } }).verdict, 'rejected');
   assert.throws(() => judge({ pairs: good, targets: [], failures: FAILURES }), /names the failure categories/);
   // A strategy or rulebook the evaluator's streams never read is not screened.
-  const un = judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, mechanical: true, evaluator: { available: true, blows: 0, failures: [], uncovered: ['rulebooks/x/RULEBOOK.md'] } });
+  const un = judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, mechanical: true, evaluator: { available: true, blows: 0, failures: [], uncovered: ['accounts/x/RULEBOOK.md'] } });
   assert.strictEqual(un.verdict, 'blocked');
-  assert.match(un.reasons[0], /scored no stream that reads rulebooks\/x\/RULEBOOK\.md/);
+  assert.match(un.reasons[0], /scored no stream that reads accounts\/x\/RULEBOOK\.md/);
 });
 
 test('judge: a candidate that stops deciding never reads as a fix', () => {

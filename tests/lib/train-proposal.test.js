@@ -58,7 +58,9 @@ test('validateProposal: never code, accounts, the loop\'s own skills, a path out
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'paper', replace: 'active' }), /status is the owner's/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nregime_gate: false\n' }), /regime_gate is the owner's/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: '---\n# ORB', replace: '# ORB' }), /frontmatter no longer parses/);
-  assert.ok(LOCKED_KEYS.includes('sizing') && LOCKED_KEYS.includes('account') && LOCKED_KEYS.includes('strategies'));
+  assert.ok(['account', 'sizing', 'contracts', 'exit', 'strategies'].every(k => LOCKED_KEYS.includes(k)));
+  // A policy's exit (CLAUDE.md: account, sizing, contracts, exit), however worded.
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nexit:\n  trail_r: 1\n' }), /exit is the owner's/);
   // A symbolic link out of the tree is refused.
   fs.mkdirSync(path.join(root, 'skills', 'linked'));
   fs.symlinkSync(path.join(root, 'accounts', 'a', 'ACCOUNT.md'), path.join(root, 'skills', 'linked', 'SKILL.md'));
@@ -90,7 +92,9 @@ test('proposalId: the same change is the same id; isMechanical: a strategy or ru
   assert.notStrictEqual(proposalId(ok()), proposalId(ok({ targets: ['bad size'] })));
   assert.strictEqual(isMechanical(ok()), false);
   assert.strictEqual(isMechanical(ok({ edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'a', replace: 'b' }] })), true);
-  assert.strictEqual(kindOf('rulebooks/test_50k/RULEBOOK.md'), 'rulebook');
+  assert.strictEqual(kindOf('accounts/test_50k/RULEBOOK.md'), 'rulebook');
+  assert.strictEqual(kindOf('accounts/test_50k/ACCOUNT.md'), null);
+  assert.strictEqual(kindOf('rulebooks/test_50k/RULEBOOK.md'), null);
   assert.strictEqual(kindOf('agents/risk-manager.md'), null);
   assert.ok(FAILURES.includes('wrong stated reason') && !FAILURES.includes('right') && !FAILURES.includes('unchecked'));
 });

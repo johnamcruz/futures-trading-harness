@@ -12,7 +12,7 @@
  *
  * Only these files: a skill's SKILL.md (not the loop's own skills), a strategy's STRATEGY.md (never its
  * `name:` or `status:` line, nor any LOCKED_KEYS value however the edit is worded: a status flip is the owner's
- * decision, R33), a rulebook's RULEBOOK.md.
+ * decision, R33), a rulebook (accounts/<account>/RULEBOOK.md; never ACCOUNT.md).
  * Never code, accounts (firm rules), agents, rules, commands, generated adapters, or the promotion gate.
  *
  *   parseProposals(output)              [{ proposal } | { error, line }] from PROPOSAL lines
@@ -36,12 +36,13 @@ const LOOP_SKILLS = Object.freeze(['training-loop', 'design-self-review']);
 const ALLOWED = Object.freeze([
   { re: /^skills\/([a-z0-9-]+)\/SKILL\.md$/, kind: 'skill' },
   { re: /^strategies\/([a-z0-9_]+)\/STRATEGY\.md$/, kind: 'strategy' },
-  { re: /^rulebooks\/([a-z0-9_]+)\/RULEBOOK\.md$/, kind: 'rulebook' },
+  // The rulebook beside its account (section 10 step 7): never the account's ACCOUNT.md (firm rules).
+  { re: /^accounts\/([a-z0-9_]+)\/RULEBOOK\.md$/, kind: 'rulebook' },
 ]);
 const LOCKED_KEY = /^\s*(name|status)\s*:/m;
 // A strategy's keys a proposal never changes: its identity, status and kind, and a policy's account, sizing,
-// contracts, markets, timeframe and component list, and the regime gate (the owner's, or the rulebook's, R1).
-const LOCKED_KEYS = Object.freeze(['name', 'status', 'signal', 'account', 'sizing', 'contracts', 'instruments', 'timeframe', 'strategies', 'regime_gate']);
+// contracts, exit, markets, timeframe and component list, and the regime gate (the owner's, or the rulebook's, R1).
+const LOCKED_KEYS = Object.freeze(['name', 'status', 'signal', 'account', 'sizing', 'contracts', 'exit', 'instruments', 'timeframe', 'strategies', 'regime_gate']);
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const str = (x, max) => typeof x === 'string' && x.trim().length > 0 && x.length <= max;

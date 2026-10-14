@@ -1183,7 +1183,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     same points, seeds and repeats, each decision's repeats counted once;
     an exact McNemar test with a minimum
     pair count, discordant count and effect, a per-category harm check with
-    a tolerance, zero blows; frozen, a config may only tighten it); the
+    a tolerance of floor(2% of the decisions), so none under 50, zero
+    blows; frozen, a config may only tighten it; a trade either side opens
+    is followed to its end); the
     archive; every look logged through `prop/looks.js`, tuning windows only,
     held-out judging a separate step that spends the budget, each held-out
     month once, in one ledger whatever the harness home; a kept change

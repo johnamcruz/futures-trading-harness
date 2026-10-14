@@ -38,6 +38,7 @@ const path = require('path');
 const { readJson, writeJsonAtomic, dirDigest, fileDigest } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
+const { withAdapter } = require('../broker/adapter');
 const { resolveReplay } = require('../replay/config');
 const driver = require('../replay/driver');
 const { scoreRun, lookAt } = require('../replay/scorecard');
@@ -53,19 +54,7 @@ const A = require('./archive');
 const proposer = require('./proposer');
 const E = require('./evaluator');
 const { replayFor } = require('./config');
-const { unitContaining, RECORDED_LOOKS } = require('../prop/splits');
-
-/** The months ('YYYY-MM') a [from, to) range of session dates touches. */
-function monthsOf(from, to) {
-  const out = [];
-  const last = new Date(Date.parse(`${to}T00:00:00Z`) - 86400000).toISOString().slice(0, 7);
-  for (let m = String(from).slice(0, 7); m <= last;) {
-    out.push(m);
-    const [y, mo] = m.split('-').map(Number);
-    m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
-  }
-  return out;
-}
+const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 
 class Stop extends Error {}
@@ -110,7 +99,14 @@ function defaultSteps({ root, env = process.env }) {
     // The champion: HEAD (a clean repository); a candidate or the proposer: the champion's own commit, whatever HEAD is now.
     makeTree: (dir, commit) => T.exportTree(root, dir, { commit }),
     prepareTree: (dir, opts) => T.prepareTree(dir, opts),
-    stepDeps: (run, tree) => driver.defaultDeps(run, tree),
+    // The driver's step, plus whether the side's replay account holds a position or a working order (a point runs on).
+    stepDeps: (run, tree) => ({
+      ...driver.defaultDeps(run, tree),
+      inTrade: (stepEnv, account) => withAdapter({ root: tree, env: stepEnv }, async a => {
+        const s = await a.accountState(account);
+        return s.positions.length > 0 || s.orders.length > 0;
+      }),
+    }),
     seedRunHome: (run, opts) => driver.seedRunHome(run, opts),
     runReplay: opts => driver.runReplay(opts),
     // Step 2's scorecard (replay/scorecard.js) as decisions; a run still open is scored as it stands.
@@ -225,19 +221,21 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
 }
 
 /** One side's point runs (champion or a candidate), scored: [{ key, repeat, category, blow }]. */
-async function sideRuns(ctx, { side, dir, tree, panel, runs }) {
+async function sideRuns(ctx, { side, dir, tree, panel, runs, baselineSide = null }) {
   const out = [];
   for (const [pi, point] of panel.points.entries()) {
     const r = runs.find(x => x.label === point.run) || runs[0];
-    const followers = point.inTrade ? D.followersOf(r.runDir, point) : [];
+    const followers = D.followersOf(r.runDir, point);
     for (let k = 0; k < ctx.loop.repeats; k += 1) {
       const home = path.join(dir, side, `${pi}-r${k}`);
       const resultFile = path.join(dir, side, `${pi}-r${k}.json`);
       let result = readJson(resultFile, null);
       if (!result) {
         const seed = D.pointSeed(ctx.loop.seed, point.t, k);
+        // A candidate runs at least every time the champion's run of this point and repeat reached.
+        const champ = baselineSide ? readJson(path.join(dir, baselineSide, `${pi}-r${k}.json`), null) : null;
         result = await D.runPoint({
-          run: r.run, checkpoint: D.checkpointOf(r.checkpoints, point.t), home, tree, point, followers, repeat: k, seed, baseEnv: ctx.env,
+          run: r.run, checkpoint: D.checkpointOf(r.checkpoints, point.t), home, tree, point, followers, mustRun: champ ? champ.times : [], repeat: k, seed, baseEnv: ctx.env,
           stepDeps: ctx.steps.stepDeps, onCall: ctx.call,
         });
         const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor() });
@@ -345,7 +343,7 @@ async function iteration(ctx, n, { champion, champ }) {
   for (const x of runnable) {
     const cand = await phase(ctx, `${n}:candidate:${x.id}`, path.join(dir, `candidate-${x.id}.json`), async () => {
       const tree = await candidateTree(ctx, { dir: work, id: x.id, proposal: x.proposal, champion });
-      return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs }) };
+      return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
     });
     const v = await phase(ctx, `${n}:verdict:${x.id}`, path.join(dir, `verdict-${x.id}.json`), async () => {
       // Paired: the champion's tree and the candidate's, the same windows, bar files and seed.
@@ -441,30 +439,24 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     if (!entry) throw new Error(`${proposalId}: no change kept on tuning in this loop's archive`);
     if (archive.some(e => e.proposalId === proposalId && e.phase === 'held-out')) throw new Error(`${proposalId} was judged on held-out months already: each held-out month judges once`);
     const tag = `h-${proposalId}-`;
-    // Each held-out month judges once (section 4), across every loop and change: a month any earlier judging look
-    // or recorded look touched is used. (This judging's own look, logged before a stop, is its own.)
-    if (!ctx.state.done[`look:${tag}`]) {
-      const months = ws => new Set(ws.flatMap(w => monthsOf(w.from, w.to)));
-      const mine = months(loop.heldOutWindows);
-      const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...S.readLedger(ctx.paths.ledger).filter(l => l.purpose === 'judging')]
-        .flatMap(l => [...months(Array.isArray(l.ranges) ? l.ranges : [l])]).filter(m => mine.has(m));
-      if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
-    }
     const champion = await championTree(ctx);
     // The ledger as it was before this judging's one look: the evaluator checks the same look on copies of it, so a
     // judging spends one look, however many windows and scorings it holds.
     const before = path.join(ctx.paths.dir, `held-out-${proposalId}`, 'ledger-before.jsonl');
     // The scorecard checks the same judging look against that snapshot: it reads, it never logs.
     // Without it a check would run against the recorded looks alone: fail closed, never an empty ledger.
-    const missing = () => new Error(`the held-out ledger snapshot ${before} is missing: this judging's look was already logged, and its checks can't run without the ledger as it was before that look. Restore the file from a backup, or judge the change again under a new loopId (the look stays spent).`);
+    const missing = () => new Error(`the held-out ledger snapshot ${before} is missing: this judging's look was already logged, and its checks can't run without the ledger as it was before that look. Restore the file from a backup to resume. Otherwise the held-out months ${loop.heldOutWindows.map(w => `${w.from}..${w.to}`).join(', ')} are spent (each judges once, in any loop): judging needs held-out months not yet used.`);
     const snapshot = () => {
       if (!fs.existsSync(before)) throw missing();
       return S.readLedger(before);
     };
     ctx.lookFor = () => ({ purpose: 'judging', candidate: `${loop.loopId}/${proposalId}`, ledger: snapshot() });
     if (!ctx.state.done[`look:${tag}`]) {
-      fs.mkdirSync(path.dirname(before), { recursive: true });
-      fs.writeFileSync(before, fs.existsSync(ctx.paths.ledger) ? fs.readFileSync(ctx.paths.ledger) : '');
+      // Each held-out month judges once (section 4), across every loop and change. The month check, the snapshot
+      // and the look are one step under the ledger's lock, so two judgings can't both take a month.
+      S.takeJudgingLook(ctx.paths.ledger, { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' }, { snapshot: before });
+      ctx.state.done[`look:${tag}`] = true;
+      ctx.save();
     } else if (!fs.existsSync(before)) throw missing();
     const champ = await championRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
     const dir = path.join(ctx.paths.dir, `held-out-${proposalId}`);
@@ -474,7 +466,7 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     const baseline = await phase(ctx, `${tag}baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs }));
     const cand = await phase(ctx, `${tag}candidate`, path.join(dir, 'candidate.json'), async () => {
       const tree = await candidateTree(ctx, { dir: work, id: proposalId, proposal: entry.proposal, champion });
-      return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: proposalId, dir: work, tree: tree.dir, panel, runs: champ.runs }) };
+      return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: proposalId, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
     });
     // The candidate alone, a judging look the evaluator logs before it reads a bar (each scoring is a look).
     const evaluator = await phase(ctx, `${tag}evaluator`, path.join(dir, 'evaluator.json'), () => ctx.steps.evaluator({
