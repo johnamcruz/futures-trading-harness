@@ -273,9 +273,14 @@ broker.
    Scoring a run is a look at its days (`scripts/lib/prop/looks.js`):
    `--purpose reasoning-fix` (the default for a run in Recent and the only
    look Recent allows, e.g. the June 1-5, 2026 replay), `tuning` (the
-   default elsewhere) or `judging` (it needs `--ledger <file>`, a JSON
-   list; each allowed look is appended to a ledger given, so a budget
-   counts it), `--candidate <name>`; a look the schedule refuses (a reserve
+   default elsewhere) or `judging` (it needs `--ledger <file>`, the look
+   ledger the evaluator also uses: JSON lines, one look per line; an older
+   ledger written as one JSON list still reads and is converted to lines on
+   its next look. Each allowed look is appended to a ledger given, so the
+   scorecard's and the evaluator's looks spend one budget. Use the one
+   existing look ledger; never create, empty, replace or edit a ledger to
+   get more looks, and if the ledger is missing or refused, stop and report
+   it), `--candidate <name>`; a look the schedule refuses (a reserve
    half-year, a held-out quarter not judged) stops it before anything is
    read, and a live session is no look. On a reasoning-fix look every
    market outcome is hidden (owner, 2026-10-13): no trade results, no

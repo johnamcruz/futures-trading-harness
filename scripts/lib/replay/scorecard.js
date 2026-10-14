@@ -80,6 +80,7 @@ const { expandHome } = require('../paths');
 const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf } = require('../trading/reasons');
 const F = require('./failures');
 const { checkLook } = require('../prop/looks');
+const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
 const { roleOf } = require('../prop/splits');
 
 const VERSION = 1;
@@ -214,19 +215,22 @@ function lookAt(run, { purpose = null, candidate = null, ledger = null } = {}) {
 
 /**
  * The look checked against the ledger file and, when allowed, appended to it ({ candidate, purpose, ranges, at })
- * before anything is read, so the next look counts it (a budget spent once per look). A ledger file that is missing
- * or not a list refuses the look. A reasoning-fix look without a file is checked against the recorded looks only.
+ * before anything is read, so the next look counts it (a budget spent once per look). The file is the evaluator's
+ * (prop/ledger-file.js: one format, one lock), so a scorecard's looks and the evaluator's spend one budget. A ledger
+ * file that is missing or can't be read refuses the look. A reasoning-fix look without a file is checked against the
+ * recorded looks only.
  */
 function takeLook(dir, { purpose = null, candidate = null, ledgerFile = null } = {}, now = new Date()) {
   const run = readRun(dir);
   if (!ledgerFile) return lookAt(run, { purpose, candidate, ledger: null });
   const file = path.resolve(expandHome(ledgerFile));
-  let ledger;
-  try { ledger = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`the look ledger ${file} can't be read (${e.message}): no look without it (R16)`, { cause: e }); }
-  if (!Array.isArray(ledger)) throw new Error(`the look ledger ${file} is not a list: no look without it (R16)`);
-  const taken = lookAt(run, { purpose, candidate, ledger });
-  if (taken.purpose && taken.ranges && taken.ranges.length) writeJsonAtomic(file, [...ledger, { candidate: taken.candidate, purpose: taken.purpose, ranges: taken.ranges, at: now.toISOString() }]);
-  return taken;
+  return withLedgerLock(file, () => {
+    let ledger;
+    try { ledger = readLedger(file); } catch (e) { throw new Error(`the look ledger ${file} can't be read (${e.message}): no look without it (R16)`, { cause: e }); }
+    const taken = lookAt(run, { purpose, candidate, ledger });
+    if (taken.purpose && taken.ranges && taken.ranges.length) appendLook(file, { candidate: taken.candidate, purpose: taken.purpose, ranges: taken.ranges, at: now.toISOString() });
+    return taken;
+  });
 }
 
 /**

@@ -45,6 +45,45 @@
 
 const { RECORDED_LOOKS, unitContaining } = require('./splits');
 
+/*
+ * The ledger file's format, the one every writer uses (the evaluator, prop/evaluate-run.js, and the
+ * scorecard, replay/scorecard.js), so their looks count against one budget: JSON lines, one look
+ * ({ candidate, purpose, ranges, at, ... }) per line, appended. A file holding one JSON list of looks (the
+ * scorecard's earlier format) still reads, every look kept; the next append rewrites it as lines.
+ */
+
+/** Whether a ledger file's text is the earlier format, one JSON list of looks. */
+const isListFormat = text => String(text).trimStart().startsWith('[');
+
+/**
+ * The looks in a ledger file's text (either format), in order. Throws, naming the line, on anything else. An
+ * empty (or whitespace-only) text is refused: an existing ledger file with nothing in it may be a truncated one,
+ * and reading it as no looks would reset every budget. Only a missing file starts a ledger (on purpose).
+ */
+function parseLedger(text, where = 'the ledger') {
+  const src = String(text);
+  if (!src.trim()) throw new Error(`${where} is empty: an existing ledger with no looks may be truncated, so no look is checked against it (start a new ledger only as a new, missing file, on purpose)`);
+  if (isListFormat(src)) {
+    let list;
+    try { list = JSON.parse(src); } catch (e) { throw new Error(`${where}: not a JSON list of looks (${e.message})`, { cause: e }); }
+    if (!Array.isArray(list)) throw new Error(`${where}: not a JSON list of looks`);
+    list.forEach((e, k) => { if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${where}: entry ${k + 1} is not a look`); });
+    return list;
+  }
+  const out = [];
+  src.split('\n').forEach((l, k) => {
+    if (!l.trim()) return;
+    let e;
+    try { e = JSON.parse(l); } catch (err) { throw new Error(`${where}:${k + 1}: not a JSON look (${err.message})`, { cause: err }); }
+    if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${where}:${k + 1}: not a JSON look (not an object)`);
+    out.push(e);
+  });
+  return out;
+}
+
+/** The ledger file's text for these looks (JSON lines). */
+const formatLedger = looks => looks.map(e => `${JSON.stringify(e)}\n`).join('');
+
 /** Looks per budget (an out-of-sample window; the held-out quarters together) before it is retired (R16). */
 const LOOK_BUDGET = 3;
 const PURPOSES = Object.freeze(['tuning', 'judging', 'reasoning-fix']);
@@ -176,4 +215,4 @@ function checkLook(look, ledger) {
   return { ok: refusals.length === 0, refusals, units };
 }
 
-module.exports = { LOOK_BUDGET, PURPOSES, lookUsage, checkLook };
+module.exports = { LOOK_BUDGET, PURPOSES, lookUsage, checkLook, parseLedger, formatLedger, isListFormat };

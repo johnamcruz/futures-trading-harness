@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { createEnv, runAttempt, evaluate, tradingDays } = require('../../scripts/lib/prop/challenge');
+const { createEnv, runAttempt, evaluate, tradingDays, netR } = require('../../scripts/lib/prop/challenge');
 
 /** mulberry32 */
 function rng(seed) {
@@ -90,13 +90,26 @@ test('evaluate aggregates attempts overall and by start month: pass, blow, timeo
   assert.strictEqual(r.passed + r.blown + r.timeout + r.unfinished, 6);
   assert.strictEqual(Object.values(r.months).reduce((a, m) => a + m.attempts, 0), 6);
   assert.deepStrictEqual(evaluate(e, starts, Infinity), r, 'deterministic');
-  // Average win R, loss R, and expectancy come from the attempts' trades.
+  // Average win R, loss R, and expectancy come from the attempts' trades, in net R (net dollars over dollars at
+  // risk), the same net basis that counts a trade a win or a loss: never gross R next to net dollars.
   const trades = starts.flatMap(s => runAttempt(e, s, Infinity).trades);
   const avg = xs => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 1000) / 1000 : null);
-  assert.strictEqual(r.avgWinR, avg(trades.filter(t => t.net > 0).map(t => t.r)));
-  assert.strictEqual(r.avgLossR, avg(trades.filter(t => t.net < 0).map(t => t.r)));
-  assert.strictEqual(r.expectancyR, avg(trades.map(t => t.r)));
+  const net = t => t.net / t.riskUsd;
+  assert.ok(trades.every(t => t.riskUsd > 0 && Math.abs(t.riskUsd - (t.risk / 0.25) * 0.5 * t.size) < 0.01), 'riskUsd: stop ticks x tick value x size');
+  assert.strictEqual(r.avgWinR, avg(trades.filter(t => t.net > 0).map(net)));
+  assert.strictEqual(r.avgLossR, avg(trades.filter(t => t.net < 0).map(net)));
+  assert.strictEqual(r.expectancyR, avg(trades.map(net)));
+  assert.ok(r.expectancyR < avg(trades.map(t => t.r)), 'fees make net R lower than gross R');
   assert.strictEqual(r.losses, trades.filter(t => t.net < 0).length);
   assert.ok(trades.length > 0 && (r.avgWinR === null || r.avgWinR > 0) && (r.avgLossR === null || r.avgLossR < 0));
   assert.deepStrictEqual(evaluate(e, [], Infinity).passRate, null, 'no attempts: no rate');
+});
+
+test('netR: net dollars over dollars at risk, so a gross winner that fees turn into a loser is a loss in R too', () => {
+  // +1 tick gross on 1 MNQ ($0.50) with $0.74 round-trip fees: gross R +0.0125 on a 20-tick stop, net -$0.24.
+  const t = { r: 0.0125, pnl: 0.5, fees: 0.74, net: -0.24, riskUsd: 10, size: 1 };
+  assert.ok(netR(t) < 0, 'net R has the sign of the net dollars');
+  assert.strictEqual(netR(t), -0.024);
+  assert.strictEqual(netR({ ...t, riskUsd: 0 }), 0, 'unknown risk: 0, as before');
+  assert.strictEqual(netR({ ...t, net: NaN }), 0);
 });

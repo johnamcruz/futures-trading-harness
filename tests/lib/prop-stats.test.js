@@ -47,6 +47,21 @@ test('stats: the block bootstrap interval holds the rate and shrinks as the atte
   assert.throws(() => stats.blockBootstrap([1], { block: 0, rand: stats.rng(1) }), /block/);
 });
 
+test('stats: a block bootstrap with fewer than two whole blocks claims no information, never certainty', () => {
+  // block >= n: one block that wraps the whole sample; every resample is the same mean (a zero-width interval before).
+  const xs = [1, 0, 1, 1, 0, 1, 0, 1, 1, 0];
+  for (const block of [10, 25, 6]) {
+    const iv = stats.blockBootstrap(xs, { block, reps: 500, rand: stats.rng(3) });
+    assert.deepStrictEqual([iv.rate, iv.lo, iv.hi, iv.degenerate, iv.block, iv.reps], [0.6, 0, 1, true, block, 0], `block ${block}`);
+  }
+  // Two whole blocks: a real (non-degenerate) interval.
+  const ok = stats.blockBootstrap(xs, { block: 5, reps: 500, rand: stats.rng(3) });
+  assert.ok(!ok.degenerate && ok.reps === 500 && ok.lo <= 0.6 && ok.hi >= 0.6, JSON.stringify(ok));
+  // All passes on a short window: still [0, 1], not [1, 1].
+  const all = stats.blockBootstrap([1, 1, 1], { block: 5, rand: stats.rng(1) });
+  assert.deepStrictEqual([all.lo, all.hi], [0, 1]);
+});
+
 test('stats: the Wilson interval shrinks with n and stays in [0, 1]', () => {
   const a = stats.wilson(4, 10);
   const b = stats.wilson(40, 100);

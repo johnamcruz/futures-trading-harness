@@ -8,7 +8,7 @@
  * Config: { prop (a policy strategy), symbols, data ({ SYMBOL: file }, at the policy's timeframe; bars a broker
  * fetch kept its fields on), from, to (session dates, to exclusive), seed, paths, meanBlock, reps, every,
  * cuts, entryDelayMs, faults: { stopFault, outage, measured }, facts (default true), look: { candidate,
- * purpose } and ledger (a JSON-lines file, appended to) for a window outside train, and any backtest option
+ * purpose } and ledger (the look ledger file, prop/ledger-file.js, appended to) for a window outside train, and any backtest option
  * (gate, sessions, eodAt, slippageTicks, fill, window, ...) }.
  */
 
@@ -22,54 +22,7 @@ const { accountNamed } = require('../trading/accounts');
 const { loadConfig } = require('../trading/config');
 const { tradeStream } = require('./trade-stream');
 const { checkWindow, scoreStream, sessionStart } = require('./evaluator');
-
-/**
- * The ledger's looks (JSON lines). A missing file is refused unless `create` (a new ledger, named on purpose):
- * a mistyped path must not start a fresh look budget. Throws on a line it can't read.
- */
-function readLedger(file, { create = false } = {}) {
-  if (!fs.existsSync(file)) {
-    if (create) return [];
-    throw new Error(`no ledger at ${file}: a look is checked against the existing ledger (start a new one only on purpose: newLedger / --new-ledger)`);
-  }
-  return fs.readFileSync(file, 'utf8').split('\n').filter(l => l.trim()).map((l, k) => {
-    try { return JSON.parse(l); } catch (e) { throw new Error(`${file}:${k + 1}: not a JSON look (${e.message})`, { cause: e }); }
-  });
-}
-
-/** Append one look to the ledger file (append-only), synced before the look is taken. */
-function appendLook(file, entry) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const fd = fs.openSync(file, 'a');
-  try {
-    fs.writeSync(fd, `${JSON.stringify(entry)}\n`);
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/**
- * Run fn holding an exclusive lock beside the ledger (`<ledger>.lock`), so two runs can't both pass the check
- * on the last look of a budget. A lock left by a crashed run is refused, never broken: the user removes it.
- */
-function withLedgerLock(file, fn) {
-  const lock = `${file}.lock`;
-  let fd;
-  try {
-    fd = fs.openSync(lock, 'wx');
-  } catch (e) {
-    if (e.code === 'ENOENT') throw new Error(`no ledger at ${file}: its folder doesn't exist`, { cause: e });
-    if (e.code === 'EEXIST') throw new Error(`the ledger is locked by another run (${lock}); if no run is going, remove the lock`, { cause: e });
-    throw e;
-  }
-  try {
-    return fn();
-  } finally {
-    fs.closeSync(fd);
-    fs.rmSync(lock, { force: true });
-  }
-}
+const { readLedger, appendLook, withLedgerLock } = require('./ledger-file');
 
 /** Run the evaluator. Returns the result (prop/evaluator.js scoreStream) with the run's provenance. */
 function runEvaluation(raw, { root, baseDir = process.cwd(), env = process.env, log = () => {} }) {

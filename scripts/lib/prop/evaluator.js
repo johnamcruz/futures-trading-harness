@@ -218,7 +218,8 @@ function scoreStream(stream, opts) {
       pass: passBoot,
       blow: boot(real.map(o => (o.status === 'blown' ? 1 : 0)), 'interval:blow'),
       timeout: boot(gatePop.map(o => (o.status === 'timeout' ? 1 : 0)), 'interval:timeout'),
-      passAtEss: stats.wilson(Math.round((pop.attempts ? pop.passed / pop.attempts : 0) * ess), ess, level),
+      // The exact effective count (rate x ESS), never rounded: rounding moves the interval up as often as down.
+      passAtEss: stats.wilson(pop.attempts ? (pop.passed / pop.attempts) * ess : 0, ess, level),
     },
     ess, blows,
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },

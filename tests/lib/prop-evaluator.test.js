@@ -15,7 +15,7 @@ const { tradeStream, delayFromCycles, dayRegimes } = require('../../scripts/lib/
 const { readLedger, appendLook, withLedgerLock, runEvaluation } = require('../../scripts/lib/prop/evaluate-run');
 const at = require('../../scripts/lib/prop/attempts');
 const combine = require('../../scripts/lib/trading/combine');
-const { rng } = require('../../scripts/lib/prop/stats');
+const { rng, wilson } = require('../../scripts/lib/prop/stats');
 const { tmpDir } = require('../helpers');
 
 // ---- Synthetic streams (layer 2 and the statistics) ----
@@ -95,6 +95,28 @@ test('evaluator: the expectancy cuts lower a stream that passes into one that do
   // +30 ticks: $142.60 a day: 5 days $713 >= $700, a pass on day 5. Cut 25% (E 1.5 R x 0.25 x 20 = 7.5 ticks): $105.10 a day, a timeout.
   assert.deepStrictEqual([r.passRate, r.cuts['0.25'].real.passRate, r.cuts['0.5'].real.passRate], [1, 0, 0]);
   assert.strictEqual(r.inputs.expectancyR, 1.5);
+});
+
+test('evaluator: the Wilson interval at the ESS uses the exact effective count, never a rounded one', () => {
+  const list = sessionDays('2022-03-01', 47);
+  // +60 ticks three days in seven ($292.60 each at 10 micros): an attempt with three of them reaches $700.
+  const s = streamOf(list, (_, k) => [trade(k % 7 < 3 ? 60 : 0)]);
+  const r = scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[46]) }), { account: account({ profit_target: 700 }), cuts: [] }));
+  assert.deepStrictEqual([r.attempts, r.passed, r.ess], [42, 18, 9]);
+  // 18/42 x 9 = 3.857 effective passes: rounded to 4 the interval would claim a 0.444 rate, above the 0.4286 measured.
+  assert.deepStrictEqual(r.intervals.passAtEss, wilson((18 / 42) * 9, 9, 0.9));
+  assert.strictEqual(r.intervals.passAtEss.rate, r.passRate);
+});
+
+test('evaluator: hundreds of overlapping attempts with few independent ones fail the promotion gate as too small', () => {
+  const list = sessionDays('2023-07-03', 240).filter(d => d < '2024-07-01');
+  const s = streamOf(list, () => [trade(60)]);
+  const pass = checkWindow({ from: '2023-07-01', to: '2024-07-01', look: { candidate: 'overlap', purpose: 'judging' }, ledger: [], logLook: () => {} });
+  const r = scoreStream(s, opts(pass, { account: account({ sessions: 21 }), cuts: [], paths: 50 }));
+  assert.ok(r.attempts >= 200 && r.passed === r.attempts, `${r.passed}/${r.attempts}`);
+  assert.ok(r.ess < 20, `ESS ${r.ess}`);
+  assert.ok(gateFailures(r).some(f => /too small an out-of-sample test \(\d+ independent of \d+ attempts/.test(f)), gateFailures(r).join());
+  assert.strictEqual(r.promotion.passes, false);
 });
 
 test('evaluator: determinism under a seed; another seed moves only the random parts', () => {
