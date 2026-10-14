@@ -46,8 +46,8 @@ test('the fifteen are retired: no folder ships them, the policies list none, and
     assert.match(retiredNote(n), new RegExp(`retired on ${DATE(n)}`), n);
     assert.strictEqual(RETIRED[n], DATE(n), n);
   }
-  // Only prop_portfolio ships: active, valid, and listing no strategy.
-  assert.deepStrictEqual(SHIPPED.map(s => s.name), ['prop_portfolio']);
+  // prop_portfolio ships (active, valid, listing no strategy), and the trade lifecycle (signal: composed).
+  assert.deepStrictEqual(SHIPPED.map(s => s.name), ['prop_portfolio', 'trade_lifecycle']);
   assert.strictEqual(retiredNote('prop_portfolio'), '', 'a shipped strategy is not retired');
   assert.strictEqual(retiredNote('fx_orb'), '', 'a fixture under another name is not retired');
   assert.strictEqual(retiredNote('toString'), '', 'no prototype name');
