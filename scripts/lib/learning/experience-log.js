@@ -27,7 +27,8 @@
  *
  * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
- *   exitPrice, exitTime, exitReason, R }, grade, writtenAt }. `role` is the bar's learning role (learning/splits.js);
+ *   exitPrice, exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
+ *   dates it so), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
  *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick })   the counterfactual
@@ -98,6 +99,22 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
     last = b;
   }
   return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
+}
+
+/**
+ * A round trip split by its opening fills: one leg per fill (its own time and price, the trip's exit), so an add
+ * (a scale-in) is credited to the record that placed it, never folded into the first entry's.
+ */
+function legsOf(trips) {
+  return trips.flatMap(t => (t.opens.length > 1 ? t.opens.map(f => ({ ...t, openMs: Number.isFinite(f.ms) ? f.ms : Date.parse(f.creationTimestamp), opens: [f] })) : [t]));
+}
+
+/** The later of a decision's session and its exit's (a trade settled in a later session is dated by it). */
+function settledDay(day, outcome) {
+  const t = outcome && outcome.exitTime ? Date.parse(outcome.exitTime) : NaN;
+  if (!Number.isFinite(t)) return day;
+  const exit = tradingDayKey(new Date(t - 1));
+  return exit > day ? exit : day;
 }
 
 /** A round trip's real outcome in R of the record's stop. */
@@ -199,6 +216,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], gateRefusals = 
       ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
       role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
       reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
+      settledDay: settledDay(tradingDayKey(new Date(Date.parse(ok.bar))), outcome),
     });
   }
   return out;
@@ -233,4 +251,4 @@ function appendDecisions(file, lines) {
   return { added: fresh.length, kept: lines.length - fresh.length };
 }
 
-module.exports = { VERSION, limitOutcome, tripOutcome, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, limitOutcome, tripOutcome, legsOf, settledDay, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };

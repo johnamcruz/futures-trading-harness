@@ -115,6 +115,23 @@ test('limitOutcome: a target on the fill bar is never credited; the limit never 
   assert.deepStrictEqual([cross.filled, cross.exitReason], [false, 'unfilled']);
 });
 
+test('a scale-in is its own record\'s entry (legs of a round trip), and a decision is dated by the later of its and its exit\'s session', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  const A = fromLifecycleRecord(record({ at: t(0), expiresAt: t(1) }));
+  const B = fromLifecycleRecord(record({ at: t(1), expiresAt: t(2), skills: ['daily-bias', 'vwap-volume-profile', 'rejection', 'candle-reading', 'invalidation', 'top-down-entry'] }));
+  // One position: A's entry at 100, B's add at 101, both closed at 104.
+  const joined = { family: 'MNQ', side: 'buy', openMs: ms(t(0)) + 30000, closeMs: ms(t(3)), opens: [{ price: 100, size: 1, ms: ms(t(0)) + 30000 }, { price: 101, size: 1, ms: ms(t(1)) + 30000 }], closes: [{ price: 104, size: 2 }] };
+  const legs = E.legsOf([joined]);
+  assert.deepStrictEqual(legs.map(l => [l.openMs, l.opens.length, l.closes[0].price]), [[ms(t(0)) + 30000, 1, 104], [ms(t(1)) + 30000, 1, 104]]);
+  const out = E.buildDecisions({ cycles: [0, 1].map(i => ({ at: t(i), roots: ['MNQ'] })), records: [A, B], trips: legs, barsFor: () => [], tfMs: M3, tickOf: () => 0.25 });
+  assert.deepStrictEqual(out.map(d => [d.decision, d.outcome.entryPrice, d.outcome.R]), [['entered', 100, 2], ['entered', 101, 1.5]]);
+  // Settled in the next session (a position carried over): dated by the exit.
+  assert.strictEqual(E.settledDay('2023-03-15', { exitTime: '2023-03-16T15:00:00.000Z' }), '2023-03-16');
+  assert.strictEqual(E.settledDay('2023-03-15', { exitTime: '2023-03-15T19:00:00.000Z' }), '2023-03-15');
+  assert.strictEqual(E.settledDay('2023-03-15', null), '2023-03-15');
+  assert.strictEqual(out[0].settledDay, '2023-03-15');
+});
+
 test('appendDecisions: append-only, each id once; readDecisions skips a torn line', () => {
   const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
   assert.deepStrictEqual(E.appendDecisions(file, [{ id: 'a', x: 1 }, { id: 'b' }]), { added: 2, kept: 0 });
@@ -153,6 +170,10 @@ test('writeRunExperience: only a learning run that passed the gate; a reasoning-
   assert.deepStrictEqual([r.hidden, r.decisions[0].decision, r.decisions[0].outcome, r.decisions[0].grade, r.decisions[0].hidden], [true, 'passed', null, null, true]);
   const shown = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false } });
   assert.strictEqual(writeRunExperience(shown.dir).decisions[0].outcome.R, 2);
+  // The run record decides, not the run home's copy (the layout of folders never decides what is hidden).
+  const kept = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true } });
+  fs.writeFileSync(path.join(kept.home, 'learning-run.json'), JSON.stringify({ learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false }));
+  assert.strictEqual(writeRunExperience(kept.dir).hidden, true);
   const wrong = runDir({ day: '2025-03-14', times: [t0], barRows: rows, gate: { learning: true, role: 'practice-train', look: null, hideOutcomes: false } });
   assert.throws(() => writeRunExperience(wrong.dir), /started in practice-train but holds 2025-03-14 \(test\)/);
 });

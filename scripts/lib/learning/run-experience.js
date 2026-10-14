@@ -19,7 +19,7 @@ const { readRun } = require('../replay/store');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
-const { buildDecisions, appendDecisions, logFile } = require('./experience-log');
+const { buildDecisions, appendDecisions, logFile, legsOf } = require('./experience-log');
 const { roleOf } = require('./splits');
 const { readLearningRun } = require('./run-gate');
 
@@ -30,7 +30,8 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
   const home = path.resolve(dir, '..', '..');
   if (root && labels.inside(home, root)) throw new Error(`${home} is inside the repository (${root}): the experience log lives in the run home`);
   const { manifest, days } = readRun(dir);
-  const gate = readLearningRun(home);
+  // The run record keeps the gate's decision (run-gate.js); a run home's copy only for a run started before it did.
+  const gate = readLearningRun(dir) || readLearningRun(home);
   if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
   const why = labels.unfinishedWhy(manifest, days);
   if (why) throw new Error(`run ${manifest.runId} is not finished (${why}): the experience log holds outcomes, written after the run's last day`);
@@ -48,7 +49,7 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
     .filter(x => x && ENTRY_TOOL.test(String(x.tool || '')))
     .map(x => ({ cycleAt: r.t, root: null, check: (x.checks || []).join(',') || 'refused' })));
   const cache = labels.translatorCache(require('../broker/config').contractsCacheFiles(manifest.broker || '', { FTH_HOME: home }));
-  const trips = labels.roundTrips(labels.allFills(lines), cache);
+  const trips = legsOf(labels.roundTrips(labels.allFills(lines), cache));
   const outcomeBars = labels.outcomeBarsFor(dir, barsFiles);
   const bars = new Map();
   const barsFor = r => {

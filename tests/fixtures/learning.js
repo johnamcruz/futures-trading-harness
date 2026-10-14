@@ -48,7 +48,8 @@ function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], 
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId, finished: true, daysDone: [day], broker: 'replay' }));
   // The learning gate's decision (learning/run-gate.js): a learning run in its day's window by default; null: none.
   const g = gate === undefined ? { learning: true, role: require('../../scripts/lib/learning/splits').roleOf(day), look: null, hideOutcomes: false } : gate;
-  if (g) fs.writeFileSync(path.join(home, 'learning-run.json'), JSON.stringify(g));
+  // Kept with the run record (its run dir), with the run home's copy (run-gate.js).
+  if (g) for (const d of [dir, home]) fs.writeFileSync(path.join(d, 'learning-run.json'), JSON.stringify(g));
   fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify({ timeframe: 3, symbols: ['MNQ'] }));
   const lines = times.map((t, i) => ({ t, day, kind: 'trade', ran: [{ action: 'trade', ok: true }], cycles: [{ action: 'trade', at: t, ok: true }], refusals: refusals[t] || [], trades: i === times.length - 1 ? fills : [] }));
   fs.writeFileSync(path.join(dir, `${day}.jsonl`), lines.map(l => `${JSON.stringify(l)}\n`).join(''));
