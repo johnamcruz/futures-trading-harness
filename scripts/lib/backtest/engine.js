@@ -87,6 +87,12 @@ const DEFAULTS = {
   sizing: null, // combine sizing (combine.DEFAULT_SIZING keys)
   prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (the names of the strategies it trades: the only ones a setup is picked from), contracts (micro | mini | auto) }
   prepared: null, // from prepare(): reuse the evaluator across runs
+  // The evaluator's trade stream (prop/trade-stream.js): one position at a time across the markets without an
+  // account, as a prop attempt trades; an entry fills at the open of the first bar at least this long after the
+  // signal bar's close (the model's cycle delay; 0: the next bar's open); and each trade's adverse path (troughTicks).
+  onePosition: false,
+  entryDelayMs: 0,
+  tracePath: false,
 };
 
 function parseAt(spec) {
@@ -211,6 +217,7 @@ function runEngine(markets, strategies, opts = {}) {
       barsHeld: p.barsHeld, reason, pnl: round2(gross), fees: round2(fees), net: round2(net),
       confluence: p.confluence || 1, conflict: p.conflict || 0,
       target: p.target,
+      ...(p.troughPath ? { troughTicks: p.troughPath.slice() } : {}),
       // Why it was taken: the setup's stop and target distances and its detectors' state (trades.jsonl).
       ...(p.setup ? { setup: p.setup } : {}),
     };
@@ -283,11 +290,12 @@ function runEngine(markets, strategies, opts = {}) {
     const broker = book.broker;
     if (broker.position && broker.position.pending) {
       const q = broker.position;
+      const waiting = q.fillAt && bar.ms < q.fillAt; // the cycle is still running: no fill yet
       if (afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) broker.cancel();
-      else if (broker.fillAtOpen(bar)) q.entryTime = bar.t;
+      else if (!waiting && broker.fillAtOpen(bar)) q.entryTime = bar.t;
       // Gapped through its stop, or a target level the fill reached (or under the strategy's min_rr): dropped.
-      if (broker.position) entriesToday += 1;
-      else expired += 1;
+      if (!broker.position) expired += 1;
+      else if (!broker.position.pending) entriesToday += 1;
     }
 
     // 1. Broker: the resting stop and target against this bar (any position here was entered
@@ -329,7 +337,7 @@ function runEngine(markets, strategies, opts = {}) {
     // A prop attempt trades one position at a time across the whole account, as live (the gateway's
     // prop-one-position check): each size assumes no other open risk, so with several markets a
     // setup waits while another market's trade is open or about to fill.
-    if (cs && books.some(b => b.broker.position)) return;
+    if ((cs || o.onePosition) && books.some(b => b.broker.position)) return;
     if (o.gate) {
       if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) return;
       if (noEntry.some(w => inWindow(closeAt, w))) return;
@@ -384,6 +392,8 @@ function runEngine(markets, strategies, opts = {}) {
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(),
       confluence: pick.confluence || 1, conflict: pick.against || 0,
       setup: setupOf(book, pick, i),
+      ...(o.entryDelayMs > 0 && o.fill === 'next-open' ? { fillAt: closeAt.getTime() + o.entryDelayMs } : {}),
+      ...(o.tracePath ? { troughPath: [] } : {}),
     }, { price: bar.c, fill: o.fill === 'next-open' ? 'next-open' : 'close' });
     // next-open: fills at the next bar's open (step 0 there).
     if (pos && !pos.pending) entriesToday += 1;

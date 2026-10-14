@@ -344,6 +344,46 @@ Learning must see the broker fields a decision was made on, so:
 
 ## 5. The search: Monte Carlo combine attempts
 
+**Status of R6-R9 (step 9): built.** The code is `scripts/lib/prop/`
+(`trade-stream.js` is layer 1, `attempts.js` layer 2, `evaluator.js` the
+scoring and the window and look checks, `stats.js` the statistics,
+`evaluate-run.js` the run). The CLI is `scripts/evaluate.js`, and
+`docs/BACKTESTING.md` ("The two-layer evaluator") describes its use. Built
+as written, with these readings and inputs:
+
+- **Inputs, not defaults.** The rulebook's values (`rulebook.sizing`, and
+  `rulebook.multiplier` from the recorded facts) and the sizing function are
+  injected. They default to today's: the policy's `sizing`, the `full`
+  verdict, and `combine.contractPlan`. Steps 7 and 8 plug in there.
+- **Measured inputs still to come.** The cycle delay is an input
+  (`entryDelayMs`; `delayFromCycles` takes measured cycle times, a 90th
+  percentile by default) and defaults to 0, the next bar's open, until
+  replays measure it. The fault rates (stop faults per trade, runner
+  outages per day) are inputs, reported as unmeasured, and default to 0.
+- **Stricter readings.** The bound is the 5th percentile of a 90% two-sided
+  block bootstrap, not the 10th. A stop placed late, missing or refused is
+  modelled alike: the trade runs unprotected to its day's end. A runner
+  outage leaves the day's first trade taken unprotected and takes no more
+  that day. The top-level blow count, which the gate reads, counts blows on the
+  real paths, the resampled paths and both expectancy cuts. A held-out
+  scoring is a look each time it runs. A reasoning-fix look can't score.
+  The ledger file must already exist (a new one only with `--new-ledger`),
+  and a run holds a lock on it while it checks and logs its look.
+- **Known approximation.** Layer 1 takes every setup, one position at a
+  time, and applies the gate's count rules (losses a day, the loss-streak
+  cooldown, entries a day) to that stream. When layer 2 skips a trade (no
+  size, a block), two things can differ from the engine. A later setup that
+  the skipped trade's time blocked in layer 1 is not taken. And the skipped
+  trade still counts toward those rules. Without a skip, layer 2 reproduces
+  the engine's own attempts exactly. A unit test checks this start by
+  start, on bars with gaps that blow the account and trip the daily limit
+  too.
+- **The account's rules** are `combine.js`'s, the state machine that
+  `prop-state.js` drives live. Layer 2 prices each contract leg as the
+  engine does.
+- **Left to the search (R8, R9, step 11).** Choosing among candidates: the
+  lower bound as the objective, the trade-off report, and the flat region.
+
 **R6. Evaluator, in two layers.**
 
 1. **Trade generation (slow, deterministic).** For each set of strategy
@@ -1068,7 +1108,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    stop's expected slippage, so a stopped trade never ends past the floor or
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
-9. The two-layer evaluator and the attempt simulation (R6-R9).
+9. The two-layer evaluator and the attempt simulation (R6-R9). Built
+   (`scripts/lib/prop/`, `scripts/evaluate.js`; section 5 says how it reads
+   R6-R9, and what it still takes as inputs).
 10. Calibration: the registry, the measurements and the reports (R11-R13),
    the flow strategies' thresholds among them, on covered months (R34).
    It starts with the claims the June replay shows the LLM relies on most
