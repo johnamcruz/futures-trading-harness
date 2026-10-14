@@ -158,6 +158,16 @@ test('the runner\'s scripted replay: the report cache\'s hits, misses and keys p
   assert.ok(plain.written.every(f => f.every(b => !('ext' in b))));
   assertGolden('runner-replay-cache.txt', sequenceText(plain));
   assertGolden('runner-replay-prompts.txt', plain.cycles.map(c => `=== ${c.at} ${c.action} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+  // A stable prompt prefix (a local model server's prompt cache): every cycle starts with the same head, then its time;
+  // consecutive cycles share at least that head.
+  const marker = ' The cycle\'s time: ';
+  const heads = plain.cycles.map(c => c.prompt.slice(0, c.prompt.indexOf(marker)));
+  assert.ok(heads[0].length > 250 && heads.every(h => h === heads[0]), 'one head, before the time');
+  const common = (a, b) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n += 1; return n; };
+  for (let k = 1; k < plain.cycles.length; k += 1) {
+    const [a, b] = [plain.cycles[k - 1].prompt, plain.cycles[k].prompt];
+    assert.ok(common(a, b) >= heads[0].length + marker.length, `${plain.cycles[k].at}: ${common(a, b)} chars shared`);
+  }
 });
 
 test('one lane is the legacy timeframe: the same scripted replay gives the same cycles, cache keys and prompts, against the same goldens', async () => {

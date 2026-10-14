@@ -1,9 +1,10 @@
 === 2026-04-27T14:36:01.000Z trade 3m ===
-Autonomous cycle at 2026-04-27 10:36:01 ET (2026-04-27T14:36:01.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  The cycle's time: 2026-04-27 10:36:01 ET (2026-04-27T14:36:01.000Z).
   Lanes closed this cycle: 3m (every bar); one cycle covers them all (decide once for every lane's setups).
   MNQ: a 3-minute bar just closed (opened 10:33 ET); closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too (recorded for the order gate, which enforces it).
@@ -23,11 +24,12 @@ Autonomous cycle at 2026-04-27 10:36:01 ET (2026-04-27T14:36:01.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:37:02.000Z trade 1m ===
-Autonomous cycle at 2026-04-27 10:37:02 ET (2026-04-27T14:37:02.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  The cycle's time: 2026-04-27 10:37:02 ET (2026-04-27T14:37:02.000Z).
   Lanes closed this cycle: 1m (on a signal: a strategy fired or a position is open); one cycle covers them all (decide once for every lane's setups).
   MNQ: a 1-minute bar just closed (opened 10:36 ET); closed 1-minute bars, oldest first, are in <home>/bars/MNQ-1m.json (get_bars format; contractId MNQ) - use that file for the 1-minute timeframe instead of fetching it.
   MNQ Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too (recorded for the order gate, which enforces it).

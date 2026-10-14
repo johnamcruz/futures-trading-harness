@@ -441,11 +441,22 @@ const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry'
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
+/**
+ * The start of every cycle's prompt (premarket, trade, end of day): what the cycle is and where the harness is, the
+ * same every cycle of a run, so it is the shared prefix of consecutive prompts. Nothing that changes between cycles
+ * (the time, the bar, the account) belongs in it.
+ */
+function stableHead(root = '') {
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
+  return `Autonomous cycle. Follow the autonomous-trading skill. No user is present.${where}`;
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
+  // What every cycle's prompt starts with, the same each cycle (stableHead), then the cycle's time: consecutive prompts
+  // share this prefix, which a local model server's prompt cache reuses (nothing that changes between cycles before it).
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
-  const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
+  const head = `${stableHead(root)} The cycle's time: ${etStamp(now)} (${now.toISOString()}).`;
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.${RESULT_LINE}`,
     /**
@@ -831,6 +842,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   loadList,
+  stableHead,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,
