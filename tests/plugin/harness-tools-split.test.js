@@ -1,17 +1,25 @@
 'use strict';
 
-// The harness-tools skill was split by single responsibility, and each piece is referenced where a role needs it
-// rather than embedded where embedding would make a prompt grow (the owner's rule: no role and no head-trader cycle
-// grows). harness-tools keeps the server's general argument, path and refusal rules, the map of the moved rows, and
-// the rows whose topic skills are loaded by roles that never loaded harness-tools or by the head trader every cycle
-// (strategies, blackouts, lessons, reconcile, skill_lookup); bar-briefing, order-plan and reason-check are new;
-// combine_status went to prop-challenge-pacing. These tests prove nothing was lost, doubled or misplaced: every
-// sentence (and every table cell and code line) of the skill as it was (tests/fixtures/skill-split/
-// harness-tools.before.txt, frozen) is in the new homes exactly as many times as before, byte-for-byte after
-// whitespace is normalised, each in the home its old lines map to. position-sizing step 8 points to order-plan the
-// same way (tests/fixtures/skill-split/order-plan.before.txt). The only exceptions are listed, each with its reason;
-// an exception that no longer differs fails too, so the lists can only shrink. And every role still has the row of
-// every harness tool it holds, or a reasoned reference.
+// The harness-tools skill is retired: what it held is in single-responsibility skills, and a role references a piece
+// by name instead of embedding it wherever embedding would make its prompt grow (the owner's rule: no role and no
+// head-trader cycle grows).
+//
+//   tool-arguments          how the tools take arguments and paths, what they refuse, `record`; skill_lookup's row
+//   bar-briefing            the bar_briefing, bars_fetch, market_snapshot and mtf_read rows; the blackouts rows (the
+//                           briefing's `news`, and the no-briefing fallback it already names)
+//   order-plan, reason-check, prop-challenge-pacing   the order_plan, reason_check and combine_status rows
+//   strategy-tools          the five strategies rows and the scan example (strategy-scan and strategy-library are
+//                           loaded every head-trader cycle, so the rows would grow it there)
+//   user-commands           the user-only scripts and the people's scripts for lessons and reconcile (their
+//                           agent-facing rows are dropped: the tools' MCP descriptions and schemas carry them)
+//
+// These tests prove nothing was lost, doubled or misplaced: every sentence (and every table cell and code line) of the
+// skill as main had it (tests/fixtures/skill-split/harness-tools.before.txt, frozen at 0b1a2f79, unchanged since) is
+// in the new homes exactly as many times as before, byte-for-byte after whitespace is normalised, each in the home its
+// old lines map to. position-sizing step 8 points to order-plan the same way (order-plan.before.txt). The only
+// exceptions are listed, each with its reason; an exception that no longer differs fails too, so the lists can only
+// shrink. Every role still has the row of every harness tool it holds, or a reasoned reference, and no file but these
+// tests' fixture and this test names the retired skill.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -26,22 +34,25 @@ const sha = rel => crypto.createHash('sha256').update(fs.readFileSync(path.join(
 const skill = s => read(`skills/${s}/SKILL.md`);
 const flat = text => text.replace(/\s+/g, ' ');
 
-// skills/harness-tools/SKILL.md as main had it before the split (at 0b1a2f79): pinned, so a sentence can't be dropped
-// from the fixture and from its new home together.
 const BEFORE = 'tests/fixtures/skill-split/harness-tools.before.txt';
 const BEFORE_SHA256 = '1eb1759e1253d7b9032966b8c73fe73bccbedc22dbe13d26888a9025c6183576';
-const HOMES = ['harness-tools', 'bar-briefing', 'order-plan', 'reason-check', 'prop-challenge-pacing'];
-// The fixture's lines (1-based, inclusive) each home other than harness-tools takes; harness-tools keeps the rest.
+const HOMES = ['tool-arguments', 'bar-briefing', 'order-plan', 'reason-check', 'prop-challenge-pacing', 'strategy-tools', 'user-commands'];
+// The fixture's lines (1-based, inclusive), and single units, each home other than tool-arguments takes;
+// tool-arguments takes every other unit (the intro, the first two When to Use bullets, skill_lookup's row, the rules).
 const MOVED = {
-  // The bar_briefing, bars_fetch, market_snapshot and mtf_read rows and their example calls.
-  'bar-briefing': [[29, 29], [36, 37], [43, 43], [93, 94], [96, 96], [110, 110]],
-  'order-plan': [[35, 35], [107, 109]],
-  'reason-check': [[44, 44], [113, 119]],
+  'bar-briefing': { lines: [[29, 29], [36, 39], [43, 43], [93, 94], [96, 96], [110, 111]] },
+  'order-plan': { lines: [[35, 35], [107, 109]] },
+  'reason-check': { lines: [[44, 44], [113, 119]] },
   // The combine_status row and its example call (already prop-challenge-pacing's first example line).
-  'prop-challenge-pacing': [[40, 40], [112, 112]],
+  'prop-challenge-pacing': { lines: [[40, 40], [112, 112]] },
+  'strategy-tools': { lines: [[30, 34], [97, 106]] },
+  // The third When to Use bullet, the user-only scripts, the terminal example, and the lessons and reconcile rows'
+  // first and last cells (the people's mirror).
+  'user-commands': { lines: [[23, 23], [83, 88], [122, 123]], units: ['`lessons`', '`lessons.js [--top 10] [--json]`', '`reconcile`', '`reconcile.js --day <day> [--timeframe 3] [--json]`'] },
 };
-// The tool table's header: one in each home.
 const HEADER = ['Tool', 'Arguments', 'What it returns', 'Script (people)'];
+// The people's mirror table has two of the four columns.
+const HEADER_OF = home => (home === 'user-commands' ? ['Tool', 'Script (people)'] : HEADER);
 
 // The bar_briefing row's description, with the CISD block the briefing has carried since #125 (briefing.js
 // cisdBlock and its summary line) named where the old row lists the m3 fields.
@@ -53,31 +64,40 @@ const CISD = [
 
 // Deliberate differences, each with its reason.
 const ALLOWED = [
-  ...HEADER.map(old => ({ old, copies: HOMES.length, reason: `the tool table header, in each of the ${HOMES.length} homes` })),
+  ...HEADER.map(old => ({ old, copies: HOMES.filter(h => HEADER_OF(h).includes(old)).length, reason: 'the tool table header, in each home with a table' })),
+  { old: 'Harness Tools', reason: 'the retired skill\'s title: each home has its own' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
   { old: BRIEFING_CELL, now: CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || ''), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name' },
+  // lessons and reconcile: the agent-facing cells are dropped. The tools' MCP descriptions (registry.js) say what each
+  // returns, and their schemas list the arguments; only the reviewer and the head trader hold them, and embedding the
+  // rows in trade-review would grow the reviewer. The people's scripts are in user-commands.
+  { old: '`top`?, `json`?', reason: 'lessons\' arguments: its MCP schema' },
+  { old: 'the instincts the journal\'s reviews add up to', reason: 'what lessons returns: its MCP description' },
+  { old: '`day` (YYYY-MM-DD), `timeframe`?, `json`?', reason: 'reconcile\'s arguments: its MCP schema' },
+  { old: 'the day\'s signals against what was traded', reason: 'what reconcile returns: its MCP description' },
 ];
+const DROPPED = new Set(ALLOWED.filter(a => !a.copies && !a.now).map(a => a.old));
 
-/** The old units each home must hold: Map home -> Map unit -> count (harness-tools takes every unit not moved). */
+/** The old units each home must hold: Map home -> Map unit -> count (tool-arguments takes every unit not moved). */
 function expectedHomes(beforeText) {
   const lines = beforeText.split('\n');
   let fence = false;
   const fenced = lines.map(l => { if (/^```/.test(l)) { fence = !fence; return false; } return fence; });
-  const skip = u => STRUCTURE.includes(u) || HEADER.includes(u);
+  const skip = u => STRUCTURE.includes(u) || HEADER.includes(u) || DROPPED.has(u);
   const rest = count(units(beforeText).filter(u => !skip(u)));
   const out = new Map();
-  for (const [home, ranges] of Object.entries(MOVED)) {
+  for (const [home, m] of Object.entries(MOVED)) {
     // A range inside the Examples block is code: fence it, so its lines are code lines, as in the old skill.
     const text = ([a, b]) => { const t = lines.slice(a - 1, b).join('\n'); return fenced[a - 1] ? `\`\`\`\n${t}\n\`\`\`` : t; };
-    const want = count(units(ranges.map(text).join('\n\n')).filter(u => !skip(u)));
+    const want = count([...units((m.lines || []).map(text).join('\n\n')), ...(m.units || [])].filter(u => !skip(u)));
     for (const [u, n] of want) {
       if ((rest.get(u) || 0) < n) throw new Error(`${home}: "${u}" is not in the old skill ${n} time(s)`);
       rest.set(u, rest.get(u) - n);
     }
     out.set(home, want);
   }
-  out.set('harness-tools', new Map([...rest].filter(([, n]) => n > 0)));
+  out.set('tool-arguments', new Map([...rest].filter(([, n]) => n > 0)));
   return out;
 }
 
@@ -93,7 +113,8 @@ function homeErrors(beforeText, homeTexts) {
     for (const u of new Set([...got.keys(), ...want.keys()])) {
       if ((got.get(u) || 0) !== (want.get(u) || 0)) bad.push(`${home}: ${JSON.stringify(u.slice(0, 80))} ${got.get(u) || 0} time(s), its old lines map ${want.get(u) || 0} here`);
     }
-    for (const h of HEADER) if (count(units(homeTexts[i])).get(h) !== 1) bad.push(`${home}: the table header's "${h}" not once`);
+    const cells = count(units(homeTexts[i]));
+    for (const h of HEADER) if ((cells.get(h) || 0) !== (HEADER_OF(home).includes(h) ? 1 : 0)) bad.push(`${home}: the table header's "${h}" ${cells.get(h) || 0} time(s)`);
   });
   return bad;
 }
@@ -108,13 +129,20 @@ const OP_ALLOWED = [
     reason: 'what it shows is the order_plan row (stop and target in points and whole ticks, how the size was derived, $ risk) plus order-plan\'s "Its working includes the risk per contract."' },
 ];
 
-test('harness-tools split: every unit of the old skill is in exactly one new home, the one its old lines map to, byte-for-byte', () => {
+test('harness-tools retired: every unit of the old skill is in exactly one new home, the one its old lines map to, byte-for-byte', () => {
   assert.strictEqual(sha(BEFORE), BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.ok(BRIEFING_CELL, 'the old bar_briefing row');
   const homes = HOMES.map(skill);
   assert.deepStrictEqual(differences(read(BEFORE), homes, ALLOWED), []);
   assert.deepStrictEqual(homeErrors(read(BEFORE), homes), [], 'each unit is in the home its old lines map to');
   for (const a of ALLOWED) assert.ok(a.reason, a.old);
+  assert.ok(!fs.existsSync(path.join(ROOT, 'skills', 'harness-tools')), 'the skill is gone');
+  // The dropped lessons and reconcile cells: the tools' own descriptions and schemas carry them.
+  const { BY_NAME } = require('../../scripts/lib/harness-tools/registry');
+  assert.deepStrictEqual(Object.keys(BY_NAME.get('lessons').inputSchema.properties).sort(), ['json', 'top']);
+  assert.deepStrictEqual(Object.keys(BY_NAME.get('reconcile').inputSchema.properties).sort(), ['day', 'json', 'timeframe']);
+  assert.match(BY_NAME.get('lessons').description, /instincts/);
+  assert.match(BY_NAME.get('reconcile').description, /signals .* traded/);
 });
 
 test('order-plan: position-sizing step 8 points to it for what order_plan shows; order-plan holds the read rules', () => {
@@ -125,7 +153,7 @@ test('order-plan: position-sizing step 8 points to it for what order_plan shows;
   for (const s of ['Its working includes the risk per contract.', 'Never supply tick numbers of your own.', 'Round a stop away from the entry and a target toward it; bracket ticks = `ceil(distance / tickSize)`']) assert.ok(op.includes(s), s);
 });
 
-test('harness-tools split: the comparison catches a lost, a doubled, an edited or a misplaced unit, and a stale exception', () => {
+test('harness-tools retired: the comparison catches a lost, a doubled, an edited or a misplaced unit, and a stale exception', () => {
   const old = read(BEFORE);
   assert.ok(units(old).length > 100, 'the units are fine-grained');
   const homes = HOMES.map(skill);
@@ -137,49 +165,46 @@ test('harness-tools split: the comparison catches a lost, a doubled, an edited o
   assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace(ROW, '')]), ALLOWED), [], 'lost');
   assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', `${bb}\n${row}`]), ALLOWED), [], 'doubled');
   assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace('Reuse it; don\'t recompute what it holds.', 'Reuse it.')]), ALLOWED), [], 'edited');
-  // Misplaced: the market_snapshot row moved from bar-briefing (core for the analysts and the risk manager) to
-  // order-plan: nothing is lost or doubled, but it left its home.
+  // Misplaced: the market_snapshot row moved from bar-briefing to order-plan: nothing is lost or doubled, but it left
+  // its home.
   const op = homes[at('order-plan')];
   const moved = swap(['bar-briefing', bb.replace(ROW, '')], ['order-plan', op.replace(/^(\| `order_plan` \|.*\n)/m, `$1${row}`)]);
   assert.deepStrictEqual(differences(old, moved, ALLOWED), [], 'a cross-home move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved), [], 'but leaves its home');
-  // A stale exception: the example dropped from prop-challenge-pacing too.
+  // A rule moved out of tool-arguments into user-commands (nobody loads it) is caught too.
+  const ta = homes[at('tool-arguments')];
+  const RULE = /^- An unknown argument is refused, with the arguments the tool takes\.\n/m;
+  const rule = RULE.exec(ta)[0];
+  assert.notDeepStrictEqual(homeErrors(old, swap(['tool-arguments', ta.replace(RULE, '')], ['user-commands', `${homes[at('user-commands')]}\n${rule}`])), [], 'rule moved to user-commands');
+  // A stale exception: the example dropped from prop-challenge-pacing too; a dropped cell put back.
   const pp = homes[at('prop-challenge-pacing')];
   assert.notDeepStrictEqual(differences(old, swap(['prop-challenge-pacing', pp.replace('combine_status {}\n', '')]), ALLOWED), [], 'stale');
+  assert.notDeepStrictEqual(differences(old, swap(['user-commands', homes[at('user-commands')].replace('| `lessons` | `lessons.js', '| `lessons` | `top`?, `json`? | `lessons.js')]), ALLOWED), [], 'a dropped cell back');
   // The CISD exception reverted (the old row back) fails too.
-  assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace(ALLOWED[ALLOWED.length - 1].now, BRIEFING_CELL)]), ALLOWED), [], 'cisd reverted');
+  assert.notDeepStrictEqual(differences(old, swap(['bar-briefing', bb.replace(ALLOWED.find(a => a.now).now, BRIEFING_CELL)]), ALLOWED), [], 'cisd reverted');
 });
 
 const { TOOLS } = require('../../scripts/lib/harness-tools/registry');
 const SKILLS = fs.readdirSync(path.join(ROOT, 'skills')).filter(s => fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')));
 const rowOf = (text, tool) => text.split('\n').find(l => l.startsWith(`| \`${tool}\` |`));
 const homeOf = tool => SKILLS.filter(s => rowOf(skill(s), tool));
+// Each tool's row: its single home.
+const ROW_HOME = {
+  bar_briefing: 'bar-briefing', bars_fetch: 'bar-briefing', market_snapshot: 'bar-briefing', mtf_read: 'bar-briefing',
+  blackouts_list: 'bar-briefing', blackouts_add: 'bar-briefing', order_plan: 'order-plan', reason_check: 'reason-check',
+  combine_status: 'prop-challenge-pacing', strategies_list: 'strategy-tools', strategies_show: 'strategy-tools',
+  strategies_validate: 'strategy-tools', strategies_scan: 'strategy-tools', strategies_recent: 'strategy-tools',
+  skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands',
+};
 
-/** The map in harness-tools: tool -> the skill it references for the tool's row (a tool it doesn't list: below). */
-function namedHomes() {
-  const ht = skill('harness-tools');
-  const list = ht.slice(ht.indexOf('### Which skill has each tool\'s row'), ht.indexOf('### Arguments, paths and refusals'));
-  const named = new Map(TOOLS.map(t => [t.name, 'harness-tools']));
-  for (const item of list.split(/\n(?=- )/).filter(l => l.startsWith('- '))) {
-    const [tools, where] = item.split(/:\s+(?=the\s+`[a-z-]+`\s+skill\.)/);
-    const home = /^the\s+`([a-z-]+)`\s+skill\./.exec(where.trim())[1];
-    for (const m of tools.matchAll(/`([a-z_]+)`/g)) {
-      assert.ok(named.has(m[1]), `the map names a tool that doesn't exist: ${m[1]}`);
-      named.set(m[1], home);
-    }
-  }
-  return named;
-}
-
-test('every harness tool has its row in exactly one skill: the one the harness-tools map references, else harness-tools', () => {
-  const named = namedHomes();
-  for (const t of TOOLS) assert.deepStrictEqual(homeOf(t.name), [named.get(t.name)], `${t.name}: its row's skill`);
-  assert.deepStrictEqual([...new Set(named.values())].sort(), ['bar-briefing', 'harness-tools', 'order-plan', 'prop-challenge-pacing', 'reason-check']);
+test('every harness tool has its row in exactly one skill, its home', () => {
+  assert.deepStrictEqual(Object.keys(ROW_HOME).sort(), TOOLS.map(t => t.name).sort(), 'every tool has a home');
+  for (const t of TOOLS) assert.deepStrictEqual(homeOf(t.name), [ROW_HOME[t.name]], `${t.name}: its row's skill`);
 });
 
 test('every role has the row of every harness tool it holds in its core, or a reasoned reference', () => {
-  // Reasoned exceptions: a tool whose row is in a skill the role doesn't embed (the owner's rule: no role grows; the
-  // role references the skill instead, and the tool's MCP schema carries its arguments).
+  // Reasoned exceptions: a tool whose row is in a skill the role doesn't embed (no role grows; the role references the
+  // skill instead, and the tool's MCP schema carries its arguments).
   const REFERENCED = {
     // The risk manager calls order_plan; its arguments are in the tool's schema and its use is in its step 5, which
     // references the order-plan skill and states the two read rules it acts on.
@@ -188,7 +213,7 @@ test('every role has the row of every harness tool it holds in its core, or a re
     'trade-reviewer': ['bars_fetch', 'lessons', 'reconcile'],
     'strategy-researcher': ['strategies_validate', 'strategies_list', 'strategies_show'],
   };
-  const MAIN_HAD_HARNESS_TOOLS = ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
+  const HAD_HARNESS_TOOLS = ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
   for (const a of require('../../scripts/lib/role-skills').loadRoles(ROOT)) {
     const held = a.tools.filter(t => t.startsWith('mcp__harness__')).map(t => t.slice('mcp__harness__'.length));
     for (const tool of held) {
@@ -200,25 +225,54 @@ test('every role has the row of every harness tool it holds in its core, or a re
       }
       assert.ok(loaded, `${a.name}: holds ${tool} but embeds no skill with its row (${homeOf(tool)})`);
     }
-    if (MAIN_HAD_HARNESS_TOOLS.includes(a.name)) assert.ok(a.skills.includes('harness-tools') && a.skills.includes('bar-briefing'), `${a.name}: harness-tools and bar-briefing are core`);
+    // The roles that embedded harness-tools now embed its rules and the briefing's rows.
+    if (HAD_HARNESS_TOOLS.includes(a.name)) assert.ok(a.skills.includes('tool-arguments') && a.skills.includes('bar-briefing'), `${a.name}: tool-arguments and bar-briefing are core`);
+    // Every role holding skill_lookup reaches its row.
+    if (held.includes('skill_lookup')) assert.ok(a.skills.includes('tool-arguments'), `${a.name}: skill_lookup's row`);
   }
-  // The risk manager's step 5: it references order-plan and keeps the two rules it acts on.
   const rm = flat(read('agents/risk-manager.md'));
   assert.match(rm, /Approve the plan's numbers as order_plan shows them; never supply tick numbers of your own\. Its refusal \(the `order-plan` skill\) is a VETO\./);
-  assert.match(rm, /^.*role-skills: \[[^\]]*\breason-check\b/);
   assert.doesNotMatch(read('agents/risk-manager.md'), /^role-skills: \[[^\]]*\border-plan\b/m);
   assert.match(flat(skill('bar-briefing')), /Without one, the news blackouts are `blackouts_list`\./);
+  // The scan's tool calls in strategy-scan reference the rows' skill.
+  assert.match(skill('strategy-scan'), /With the harness tools \(the `strategy-tools` skill\):/);
 });
 
 test('the new skills answer one question in a short index line; the topic skills reference bar-briefing for the briefing', () => {
   const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
-  for (const s of ['harness-tools', 'bar-briefing', 'order-plan', 'reason-check']) {
+  for (const s of ['tool-arguments', 'bar-briefing', 'order-plan', 'reason-check', 'strategy-tools', 'user-commands']) {
     const d = parseFrontmatter(skill(s)).data.description;
-    assert.ok(d.length <= 120, `${s}: description ${d.length} chars, over 120`);
+    assert.ok(d.length <= 80, `${s}: description ${d.length} chars, over 80 (each is a line of the head trader's catalog)`);
   }
   for (const s of ['liquidity-concepts', 'vwap-volume-profile', 'market-structure', 'trend-momentum-indicators', 'market-snapshot', 'multi-timeframe-analysis']) {
     assert.match(skill(s), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/, s);
   }
+});
+
+test('no file names the retired harness-tools skill (the code module scripts/lib/harness-tools/ and its tests keep their name)', () => {
+  // The skill's name: backticked (not a path), "skills/harness-tools", "the harness-tools skill", or in a role's list.
+  const SKILL_REF = /`harness-tools`|skills\/harness-tools\b|harness-tools\s+skill|[[,]\s*harness-tools\s*[\],]/;
+  // Frozen: the skill-split fixtures (old skills as main had them, pinned by sha256), a recorded transcript of an old
+  // run, and this test.
+  const FROZEN = f => /^tests\/fixtures\/skill-split\/[a-z-]+\.before\.txt$/.test(f) || ['tests/fixtures/qwen-cycle-transcript.txt', 'tests/plugin/harness-tools-split.test.js',
+    // Their allow-lists quote the old sentence that pointed to it.
+    'tests/plugin/broker-mcp-split.test.js', 'tests/plugin/strategy-library-split.test.js'].includes(f);
+  // Every file in the tree (tracked or new), but not dependencies or the repository database, nor a symlinked directory.
+  const files = [];
+  const walk = dir => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      if (['node_modules', '.git'].includes(e.name)) continue;
+      const rel = dir === '.' ? e.name : `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel); else if (e.isFile()) files.push(rel);
+    }
+  };
+  walk('.');
+  const bad = files.filter(f => !FROZEN(f) && /\.(md|js|json|toml|txt)$/.test(f))
+    .filter(f => SKILL_REF.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+  assert.deepStrictEqual(bad, []);
+  // The check catches what it is for.
+  for (const s of ['the `harness-tools` skill', 'skills/harness-tools/SKILL.md', 'role-skills: [a, harness-tools, b]', 'the harness-tools skill']) assert.match(s, SKILL_REF);
+  for (const s of ['scripts/lib/harness-tools/registry.js', 'harness-tools-mcp.js', 'tests/lib/harness-tools-order-plan.test.js']) assert.doesNotMatch(s, SKILL_REF);
 });
 
 // trade-session step 4 as main had it (at 0b1a2f79): the head trader's own procedure, read every cycle, stays as it

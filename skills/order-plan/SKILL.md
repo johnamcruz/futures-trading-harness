@@ -1,6 +1,6 @@
 ---
 name: order-plan
-description: The order calculator (order_plan) and how to read its numbers.
+description: Reading order_plan's numbers and refusals.
 ---
 
 # Order Plan

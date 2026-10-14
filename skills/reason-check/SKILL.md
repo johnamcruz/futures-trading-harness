@@ -1,6 +1,6 @@
 ---
 name: reason-check
-description: Check stated reasons against this bar's facts (reason_check).
+description: Checking stated reasons against the facts.
 ---
 
 # Reason Check

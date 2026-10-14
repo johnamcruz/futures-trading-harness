@@ -72,6 +72,11 @@ const ALLOWED = [
   { old: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see Errors.)',
     now: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals-positions` skill.)',
     reason: 'the Errors table\'s row for it is in the gate-refusals-positions skill (gate-refusals was split later)' },
+  // A pointer to a skill retired later (tests/plugin/harness-tools-split.test.js): these tools' bars rows are
+  // bar-briefing's.
+  { old: 'Bars to a file: the runner\'s bars file, or the harness tool `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read`, and `strategies_scan` with `record` (the `harness-tools` skill).',
+    now: 'Bars to a file: the runner\'s bars file, or the harness tool `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read`, and `strategies_scan` with `record` (the `bar-briefing` skill).',
+    reason: 'harness-tools is retired; the bars tools\' rows are in bar-briefing (a pointer no longer than the old one: the trade executor loads broker-mcp and may not grow)' },
   // A truth fix in moved text: the kinds are the broker interface's (scripts/lib/broker/interface.js, JOURNAL), which
   // the old list left short (the trade-executor writes `exit`; the interface takes `entry` and `exit` too).
   { old: 'Kinds: `plan`, `note`, `review`, `lesson`; every `place_order` writes an `order_placed` entry by itself.',

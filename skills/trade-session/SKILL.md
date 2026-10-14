@@ -337,7 +337,7 @@ It orders the thinking and adds no filter: the priority order decides.
   own. A reason marked FALSE: name it, drop it, and decide again from the
   facts. Check UNCHECKED and UNPARSED reasons yourself; they aren't false
   for that alone. The order gate's checks still come first and don't
-  change. Its results: the `reason-check` skill.
+  change.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.

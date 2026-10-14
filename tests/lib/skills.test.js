@@ -179,21 +179,18 @@ const HARNESS_NAMES = new Set(HARNESS_TOOLS.map(t => t.name));
 // The scripts behind the harness tools: people run them; agents use the tools. Not after a hyphen:
 // compare-bars.js is a script of its own, not bars.js.
 const AGENT_RUN_SCRIPT = /(?<![\w-])(?:strategies|market-snapshot|mtf|blackouts|bars|lessons|reconcile)\.js\b|combine\.js status/;
-// Each tool's home, the skill the harness-tools skill names for it ("Which skill has each tool's row"): the tool's row
-// there names, in its last cell, the script a person runs for it. Only that row, in that skill, may name such a script.
+// Each tool's home: the one skill that holds its row (tests/plugin/harness-tools-split.test.js keeps it to one). The
+// row names, in its last cell, the script a person runs for the tool. Only that row, in that skill, may name such a script.
 const TOOL_HOMES = (() => {
-  const ht = DOCS.find(d => d.rel === 'skills/harness-tools/SKILL.md').text;
-  const list = ht.slice(ht.indexOf('### Which skill has each tool\'s row'), ht.indexOf('### Arguments, paths and refusals'));
-  // Map tool -> its home skill file, from each item ("- `a`, `b`: the `<skill>` skill."); a tool it doesn't list is
-  // harness-tools' own (that file is not scanned).
   const homes = new Map();
-  for (const item of list.split(/\n(?=- )/).filter(l => l.startsWith('- '))) {
-    const [tools, where] = item.split(/:\s+(?=the\s+`[a-z-]+`\s+skill\.)/);
-    const home = /^the\s+`([a-z-]+)`\s+skill\./.exec(where.trim());
-    for (const m of tools.matchAll(/`([a-z_]+)`/g)) homes.set(m[1], `skills/${home ? home[1] : 'harness-tools'}/SKILL.md`);
+  for (const t of HARNESS_TOOLS) {
+    const at = DOCS.filter(d => d.rel.startsWith('skills/') && d.text.split('\n').some(l => l.startsWith(`| \`${t.name}\` |`))).map(d => d.rel);
+    if (at.length === 1) homes.set(t.name, at[0]);
   }
   return homes;
 })();
+// The skill for people at a terminal (no role loads it): it names the scripts on purpose.
+const PEOPLE = 'skills/user-commands/SKILL.md';
 /** The lines of a doc that send an agent to a script a harness tool replaces (a home's tool row may name it in its last cell). */
 function agentScriptLines(rel, text) {
   const bad = [];
@@ -217,17 +214,20 @@ test('skills: every harness tool the docs name exists, and a skill lists every t
     for (const m of d.text.matchAll(/^([a-z_]+) \{/gm)) if (FAMILY.test(m[1]) && !HARNESS_NAMES.has(m[1])) bad.add(`${d.rel}: ${m[1]}`);
   }
   assert.deepStrictEqual([...bad], []);
-  // Each tool's row is in the skill of its topic, which the harness-tools skill names (tests/plugin/harness-tools-split.test.js).
+  // Each tool's row is in the skill of its topic (tests/plugin/harness-tools-split.test.js). lessons and reconcile have
+  // only the people's mirror (user-commands): their arguments are in their MCP schemas.
   const rows = DOCS.filter(d => d.rel.startsWith('skills/')).flatMap(d => d.text.split('\n'));
+  const MIRROR_ONLY = new Set(['lessons', 'reconcile']);
   for (const t of HARNESS_TOOLS) {
     const row = rows.find(l => l.startsWith(`| \`${t.name}\` |`));
     assert.ok(row, `a skill lists ${t.name} in a tool table`);
+    if (MIRROR_ONLY.has(t.name)) continue;
     for (const arg of Object.keys(t.inputSchema.properties)) assert.ok(row.includes(`\`${arg}\``), `${t.name}: argument ${arg} in its row`);
   }
 });
 
 test('skills: no doc sends an agent to a script a harness tool replaces; only user-only commands stay scripts', () => {
-  const bad = DOCS.filter(x => x.rel !== 'skills/harness-tools/SKILL.md').flatMap(d => agentScriptLines(d.rel, d.text));
+  const bad = DOCS.filter(x => x.rel !== PEOPLE).flatMap(d => agentScriptLines(d.rel, d.text));
   assert.deepStrictEqual(bad, []);
   // The exemption is only a tool's row in its own home skill, with the script in its last cell: the same row in a role, a script
   // in another cell, or a tool row in a skill that isn't the tool's home is caught.

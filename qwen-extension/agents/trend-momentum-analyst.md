@@ -72,7 +72,7 @@ replaces, and says when the last bar closed; the `bar-briefing` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `trend-momentum-indicators`, `market-snapshot`,
-   `strategy-library`, `strategy-scan`, `harness-tools`, `bar-briefing`, `trend-vs-range`,
+   `strategy-library`, `strategy-scan`, `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`,
    `bos-vs-choch`, `momentum-and-volume`, `pullback-vs-reversal`, and
    `strategy-gate-checks`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run

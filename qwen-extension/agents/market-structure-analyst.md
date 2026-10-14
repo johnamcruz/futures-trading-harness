@@ -77,7 +77,7 @@ never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
    `market-snapshot`, `strategy-library`,
-   `harness-tools`, `bar-briefing`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
+   `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
    `mtf-rejection`, `mtf-breakout`, `cisd`, `fib-retracement`, `strategy-scan`,
    and `strategy-gate-checks`.

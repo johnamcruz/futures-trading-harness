@@ -1,6 +1,6 @@
 ---
 name: bar-briefing
-description: This bar's briefing, field by field, and the bars and reads without one.
+description: The bar briefing's fields and bar tools.
 ---
 
 # Bar Briefing
@@ -20,6 +20,8 @@ blackouts are `blackouts_list`.
 | `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`?, `name`? | writes closed bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json`, this harness home's own scratch folder (`-1d.json` daily; with `name`, `<SYMBOL>-<tf>m-<name>.json`, a file of your own) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
 | `market_snapshot` | `bars`, `params`?, `symbol`? | the indicator and level snapshot (JSON, on one line; profile levels on the tick of `symbol`, default the root the bars file is named for) | `market-snapshot.js <bars> [--symbol=MNQ] [--name=value]` |
 | `mtf_read` | `bars`, `timeframes`?, `daily`?, `json`?, `record`?, `symbol`? | the multi-timeframe read; `record` (with `symbol`) records it; in an autonomous cycle whose bar briefing is current, the default read instead points to it (its `m15` and `h1` hold the frames and the alignment, `m3` `trendRule` the trend rule); `daily`, other `timeframes` or `json` still read | `mtf.js <bars> [--tf=15,60,240] [--daily=<file>] [--json] [--record --symbol MNQ]` |
+| `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
+| `blackouts_add` | `start`, `end` (ISO with a zone), `reason` | adds a window (append-only, at most 12 hours) | `blackouts.js add --start <ISO> --end <ISO> --reason <text>` |
 
 ## Examples
 
@@ -29,4 +31,5 @@ bars_fetch {"symbol": "MNQ", "timeframe": 15, "count": 160}
 
 market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-15m.json"}
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "daily": "/home/u/.futures-trading-harness/bars-scratch/MNQ-1d.json"}
+blackouts_add {"start": "2026-10-07T12:25:00Z", "end": "2026-10-07T12:40:00Z", "reason": "CPI 08:30 ET"}
 ```

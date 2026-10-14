@@ -60,7 +60,7 @@ mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}  
 
 `<trigger bars>` is the runner's bars file by absolute path (e.g.
 `/home/u/.futures-trading-harness/bars/MNQ-3m.json`; no `~`) or a
-`bars_fetch` file (the `harness-tools` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
+`bars_fetch` file (the `tool-arguments` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
 on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
 Only completed candles decide a trend; the one forming is reported apart.
 
