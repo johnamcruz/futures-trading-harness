@@ -34,6 +34,8 @@ test('take-profit: the target kinds, their weight by timeframe, the room in R; c
     '**Pivot highs and lows**: the next untaken confirmed swing per timeframe, `m3.swingTargets.above` and `m3.swingTargets.below`',
     '**The prior 1h and 4h candle\'s high, low and midpoint**: `m3.rangeTargets`',
     'A side the candle forming has already taken (`taken`) is spent as a target; the far side remains.',
+    '**Fair value gap edges**: the near edge of an open gap ahead of price; a partly filled gap, its unfilled part only (`fair-value-gaps`).',
+    '`target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low <price>` (a taken side reads false), `target <5m|15m|1h> fvg high|low <price>`.',
     'its midpoint moves until it closes, so it is a target only once completed.',
     '**Timeframe weight** (hypothesis, not measured)',
     'The briefing\'s `R` is against the reference stop (`m3.oneR`).',
@@ -42,7 +44,7 @@ test('take-profit: the target kinds, their weight by timeframe, the room in R; c
     'never a veto: the priority order (strategy-library) decides take, skip and size.',
   ]) assert.ok(t.includes(pin), pin);
   // Partials, runners and the exit are pointed to, never restated.
-  for (const s of ['manage-position', 'invalidation', 'trade-plan', 'levels-and-reactions']) {
+  for (const s of ['manage-position', 'invalidation', 'trade-plan', 'levels-and-reactions', 'fair-value-gaps']) {
     assert.ok(t.includes(`\`${s}\``), s);
     assert.ok(fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')), s);
   }
