@@ -20,9 +20,6 @@ The scheduled events that move equity index futures (ET; the clock: the
 | 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 
-Metals (MGC) and crude (MCL) have their own sessions: crude reacts to EIA
-inventory (Wednesday 10:30 ET); gold to US data and rates.
-
 **Blackouts.** The order gate reads `~/.futures-trading-harness/blackouts/blackouts.json`
 (or `FTH_BLACKOUTS_FILE`): a JSON array of `{ "start": ISO-8601, "end":
 ISO-8601, "reason": "CPI" }`. During premarket, after confirming the

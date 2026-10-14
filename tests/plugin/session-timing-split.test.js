@@ -78,7 +78,8 @@ test('session-timing split: each skill has a short "Use when" index line, and se
   }
   const st = read('skills/session-timing/SKILL.md').replace(/\s+/g, ' ');
   for (const s of HOMES.slice(1)) assert.match(st, new RegExp(`the \`${s}\` skill`), `session-timing points to ${s}`);
-  assert.doesNotMatch(st, /Holidays and early closes\.|Contract roll\.|Blackouts\.|Blackout 08:25/);
+  // The blackout tools' rows and example belong in news-blackouts (the harness-tools split adds them).
+  assert.doesNotMatch(st, /Holidays and early closes\.|Contract roll\.|Blackouts\.|Blackout 08:25|blackouts_add|blackouts_list/);
   for (const s of HOMES.slice(1)) assert.ok(!STRUCTURE.some(h => !read(`skills/${s}/SKILL.md`).includes(`## ${h}`)), s);
 });
 

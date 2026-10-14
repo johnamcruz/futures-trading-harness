@@ -143,6 +143,8 @@ rules like `cisd_entry(15)`.
 
 ## Examples
 
-`close crosses_above highest(20)[1]` on MNQ 3m bars: the 20-bar high before
-the bar is 21500.00; the bar before closed at 21499.75 and this one at
-21500.25, one tick ($0.50 per MNQ contract) above it: the condition holds.
+`close crosses_above highest(20)[1]` on MNQ 3m bars: on the bar before, the
+20-bar high before it (`highest(20)[1]` then) was 21500.00 and it closed at
+21499.75, its high 21499.75; on this bar the 20-bar high before it is still
+21500.00 and it closes at 21500.25, one tick ($0.50 per MNQ contract) above:
+the condition holds.

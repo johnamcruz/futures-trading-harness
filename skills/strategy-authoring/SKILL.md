@@ -47,8 +47,8 @@ description: Use when writing, porting or changing a STRATEGY.md - its keys, its
    setup-expectancy, and set `status: active` only with the user's approval.
 7. The trigger in `rules` (the language: conditions, groups, every
    series): the `strategy-rules` skill.
-8. Backtesting it, and checking a broker field or two bar sources: the
-   `strategy-backtest` skill.
+8. Before paper trading, backtest it (the `strategy-backtest` skill: also
+   checking a broker field or two bar sources).
 
 ## Examples
 

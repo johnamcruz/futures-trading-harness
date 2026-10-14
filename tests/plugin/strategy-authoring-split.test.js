@@ -85,6 +85,8 @@ test('strategy-authoring split: each skill has a short "Use when" index line, an
   }
   const sa = read('skills/strategy-authoring/SKILL.md').replace(/\s+/g, ' ');
   for (const s of HOMES.slice(1)) assert.match(sa, new RegExp(`the \`${s}\` skill`), `strategy-authoring points to ${s}`);
+  // The workflow keeps the backtest's place: before paper trading (old step 8's own text is in strategy-backtest).
+  assert.match(sa, /8\. Before paper trading, backtest it \(the `strategy-backtest` skill/);
   // The schema table stays; the language and the backtest left it.
   assert.match(sa, /\| `signal: policy` \|/);
   assert.doesNotMatch(sa, /htfd_rejected|crosses_above`, |field-study\.js|compare-bars\.js|backtest\.js --data/);

@@ -85,7 +85,7 @@ of a prop attempt (`combine.js start | stop | record-day`), backtests,
 and replays. In a trading run (autonomous or interactive) ask the
 user to run those. The one exception is authoring: the `strategy-researcher`
 role, which the user starts interactively for a new strategy, may run a
-backtest itself (the `strategy-authoring` skill); no trading role does.
+backtest itself (the `strategy-backtest` skill); no trading role does.
 
 ## Examples
 

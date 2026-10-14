@@ -65,6 +65,9 @@ refusals: the briefing states news blackouts on its own `News` line, and
 the gate states holidays and early closes when it refuses an entry (the
 briefing's window doesn't know them).
 
+Metals (MGC) and crude (MCL) have their own sessions: crude reacts to EIA
+inventory (Wednesday 10:30 ET); gold to US data and rates.
+
 News windows: the `news-blackouts` skill; holidays and early closes: the
 `exchange-holidays` skill; the quarterly roll: the `contract-roll` skill.
 
