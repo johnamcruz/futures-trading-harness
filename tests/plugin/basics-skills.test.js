@@ -565,3 +565,117 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   // pullback-vs-reversal points to both in a few words.
   assert.match(flat(read(file('pullback-vs-reversal'))), /A CISD \(`cisd`\) is an earlier sign than the CHoCH; depth in fib terms: `fib-retracement`\./);
 });
+
+// The two procedures of the multi-timeframe read: today's bias (daily-bias) and the top-down read to the entry
+// (htf-to-ltf). Not basics (no take/skip/loser format), but the same checks where they apply: every briefing field
+// named resolves on a real briefing, the ordered steps are pinned, the examples are tick-correct, and both stay reads.
+const PROCEDURES = {
+  'daily-bias': { section: '### Today\'s bias, step by step', steps: ['Prior day\'s candle', 'Price against the prior day', 'The open', '1h and 4h structure', 'Regime', 'Write it'] },
+  'htf-to-ltf': { section: '### 3. Top down to the entry', steps: ['HTF: side and level', '15m: the setup there', '3m/5m: the trigger', 'Stop: beyond the reaction', 'Target: the next HTF swing'] },
+};
+
+/** The procedure's numbered steps, in order, inside its section (before the next heading). */
+function stepsInOrder(text, { section, steps }) {
+  const at = text.indexOf(`\n${section}\n`);
+  if (at < 0) return false;
+  const body = text.slice(at).split(/\n#{2,3} /)[1];
+  let last = -1;
+  return steps.every((s, k) => {
+    const i = body.indexOf(`\n${k + 1}. **${s}.**`);
+    const ok = i > last;
+    last = i;
+    return ok;
+  }) && !body.includes(`\n${steps.length + 1}. **`);
+}
+
+test('daily-bias and htf-to-ltf: every briefing field named resolves on a briefing built by briefing.js; an invented one fails', () => {
+  const bs = briefings();
+  const named = Object.keys(PROCEDURES).flatMap(s => pathsIn(read(file(s))).map(p => [s, p]));
+  for (const [s, p] of named) assert.ok(bs.some(b => resolves(b, p)), `${s}: ${p}`);
+  const paths = named.map(([, p]) => p);
+  for (const p of ['day.priorRthCandle', 'm3.location.priorRthClose', 'm3.today.openType', 'h1.lastBreak.last', 'h1.h4.swingPattern', 'm3.swingTargets', 'candidate.inTheWay']) {
+    assert.ok(paths.includes(p), `named: ${p}`);
+  }
+  assert.ok(paths.length >= 12, `${paths.length} paths checked`);
+  // The candle's fields the skill names in backticks are the briefing's own.
+  const candle = bs.map(b => b.sections.day.data.priorRthCandle).find(Boolean);
+  for (const k of ['dir', 'closeLocation', 'closeVsDayBefore']) assert.ok(k in candle && read(file('daily-bias')).includes(`\`${k}\``), k);
+  assert.ok(!bs.some(b => resolves(b, 'day.priorRthCandle.pattern')) && !bs.some(b => resolves(b, 'h1.h4.lastBreak')));
+});
+
+test('daily-bias and htf-to-ltf: the procedures\' steps are pinned in order; a changed, dropped or reordered step fails', () => {
+  for (const [s, proc] of Object.entries(PROCEDURES)) {
+    const text = read(file(s));
+    assert.ok(stepsInOrder(text, proc), s);
+    assert.ok(!stepsInOrder(text.replace(`**${proc.steps[1]}.**`, '**Something else.**'), proc), `${s}: changed`);
+    assert.ok(!stepsInOrder(text.replace(`${proc.section}\n`, '### Elsewhere\n'), proc), `${s}: the section renamed`);
+    const one = new RegExp(`\\n1\\. \\*\\*${proc.steps[0].replace(/[/.]/g, '\\$&')}\\.\\*\\*`);
+    const two = new RegExp(`\\n2\\. \\*\\*${proc.steps[1].replace(/[/.]/g, '\\$&')}\\.\\*\\*`);
+    assert.ok(!stepsInOrder(text.replace(one, '\n2. **X.**').replace(two, `\n1. **${proc.steps[0]}.**`), proc), `${s}: reordered`);
+  }
+  // The bias's what-flips-it and neutral lines, and the top-down's disagreement line.
+  const db = flat(read(file('daily-bias')));
+  assert.ok(db.includes('**Flips intraday**: a 1h CHoCH against it, or closes back inside the prior range after a breakout of it.'));
+  assert.ok(db.includes('**Neutral**: only the range\'s extremes (prior range, value, overnight) toward the other side, or nothing.'));
+  assert.ok(db.includes('It weighs most: steps 1-3 lean, structure decides.'));
+  assert.ok(flat(read(file('htf-to-ltf'))).includes('Disagreeing: the table labels it; the HTF gives the side, the LTF the timing.'));
+  // The values the bias names are the code's: the candle's close against the day before, the open types, the regime.
+  const ms = read('scripts/lib/trading/market-snapshot.js');
+  for (const v of ['above its high', 'below its low', 'inside its range']) assert.ok(ms.includes(`'${v}'`), v);
+  assert.ok(read('scripts/lib/trading/day-context.js').includes("return 'open-auction';"));
+  assert.match(db, /an open-auction is two-sided/);
+  const { PRIMARY } = require('../../scripts/lib/trading/regime');
+  assert.ok(PRIMARY.includes('range') && PRIMARY.includes('transition'));
+});
+
+test('daily-bias and htf-to-ltf: reads that point to the skills they use; small; short "Use when" descriptions', () => {
+  const skills = new Set(fs.readdirSync(path.join(ROOT, 'skills')));
+  for (const s of Object.keys(PROCEDURES)) {
+    const text = read(file(s));
+    const { data, body } = parseFrontmatter(text);
+    assert.match(data.description, /^Use when /, s);
+    assert.ok(data.description.length <= 160, `${s}: description ${data.description.length}`);
+    assert.ok(Buffer.byteLength(body) <= 3400, `${s}: ${Buffer.byteLength(body)} bytes`);
+    // Every skill it names in backticks exists.
+    for (const m of text.matchAll(/`([a-z]+(?:-[a-z0-9]+)+)`/g)) {
+      if (/^(?:open|trend)-/.test(m[1])) continue; // values (an open type, a regime), not skills
+      assert.ok(skills.has(m[1]), `${s} names \`${m[1]}\``);
+    }
+    assert.ok(text.includes('back-adjusted CSV prices'), `${s}: the examples say their prices are back-adjusted`);
+  }
+  // The top-down steps point to the reads, never restate them.
+  const top = read(file('htf-to-ltf'));
+  for (const p of ['daily-bias', 'levels-and-reactions', 'mtf-rejection', 'mtf-breakout', 'cisd', 'pullback-vs-reversal', 'bos-vs-choch', 'candle-reading', 'momentum-and-volume', 'invalidation']) {
+    assert.ok(top.includes(`\`${p}\``), p);
+  }
+  assert.ok(flat(top).includes('Completed candles; the strategy and the gate decide entries.'));
+  assert.ok(flat(read(file('daily-bias'))).includes('A read: the trend rule and the priority order (strategy-library) decide entries.'));
+});
+
+/** A top-down example: long or short at E, stop S (P pts = T ticks, $D per MNQ); target X (Q pts, RR): all on the tick and consistent. */
+function topDownExample(text) {
+  const ex = text.slice(text.indexOf('## Examples'));
+  const m = /(long|short) (\d+\.\d\d), stop (\d+\.\d\d)[^(]*\((\d+\.\d\d) pts = (\d+)\s+ticks, \$(\d+\.\d\d) per MNQ\);\s+target[^(]*?(\d+\.\d\d) \((\d+\.\d\d) pts, (\d+\.\d\d)R\)/.exec(ex);
+  if (!m) return false;
+  const [, side, e, s, pts, ticks, usd, x, q, r] = m;
+  const [E, S, P, T, D, X, Q, R] = [e, s, pts, ticks, usd, x, q, r].map(Number);
+  const long = side === 'long';
+  const prices = [...ex.matchAll(/\b(\d{5}\.\d\d)\b/g)].map(k => Number(k[1]));
+  return (long ? S < E && X > E : S > E && X < E) && Math.abs(Math.abs(E - S) - P) < 1e-9 && P / 0.25 === T && T * 0.5 === D
+    && Math.abs(Math.abs(X - E) - Q) < 1e-9 && Math.abs(Q / P - R) < 0.005 && prices.every(p => Number.isInteger(p / 0.25));
+}
+
+test('daily-bias and htf-to-ltf: the examples are tick-correct (NQ 0.25 tick; MNQ $0.50 a tick)', () => {
+  assert.ok(topDownExample(read(file('htf-to-ltf'))));
+  // Every price either example names is on the 0.25 tick.
+  for (const s of Object.keys(PROCEDURES)) {
+    const ex = read(file(s)).split('## Examples')[1];
+    for (const m of ex.matchAll(/\b(\d{5}\.\d\d)\b/g)) assert.ok(Number.isInteger(Number(m[1]) / 0.25), `${s}: ${m[1]}`);
+  }
+  // A wrong tick count, dollar amount, R or off-tick price fails.
+  const good = '## Examples\nlong 14960.00, stop 14938.50 under the low (21.50 pts = 86 ticks, $43.00 per MNQ);\ntarget 15040.25 (80.25 pts, 3.73R)\n';
+  assert.ok(topDownExample(good));
+  for (const [a, b] of [['86 ticks', '85 ticks'], ['$43.00', '$43.50'], ['3.73R', '3.50R'], ['15040.25', '15040.30'], ['stop 14938.50', 'stop 14981.50']]) {
+    assert.ok(!topDownExample(good.replace(a, b)), b);
+  }
+});
