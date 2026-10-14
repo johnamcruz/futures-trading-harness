@@ -2,7 +2,7 @@
 name: trend-momentum-analyst
 description: Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_scan, mcp__harness__strategies_recent, mcp__harness__strategies_show, mcp__harness__bar_briefing, mcp__harness__skill_lookup
-role-skills: [trend-momentum-indicators, market-snapshot, strategy-library, strategy-scan, trader-process, bos-vs-choch, harness-tools]
+role-skills: [trend-momentum-indicators, market-snapshot, strategy-library, strategy-scan, trader-process, bos-vs-choch, harness-tools, bar-briefing]
 role-index: [trend-vs-range, momentum-and-volume, pullback-vs-reversal, strategy-gate-checks]
 model: inherit
 ---
@@ -56,11 +56,11 @@ writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file of your own with the harness tool `bars_fetch`
 (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "count": <n>, "name": "trend"}`:
 it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-trend.json` (use the path it returns), which no other fetch
-replaces, and says when the last bar closed; the `harness-tools` skill);
+replaces, and says when the last bar closed; the `bar-briefing` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `trend-momentum-indicators`, `market-snapshot`,
-   `strategy-library`, `strategy-scan`, `harness-tools`, `trend-vs-range`,
+   `strategy-library`, `strategy-scan`, `harness-tools`, `bar-briefing`, `trend-vs-range`,
    `bos-vs-choch`, `momentum-and-volume`, `pullback-vs-reversal`, and
    `strategy-gate-checks`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run

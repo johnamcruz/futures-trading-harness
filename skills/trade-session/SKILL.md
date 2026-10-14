@@ -97,13 +97,13 @@ its checklist is the order you decide in. Load the others as a step names them.
   writes the runner's default count of closed bars (5000 3-minute, 15000
   1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness
   home's own; use the path it returns) and records the
-  multi-timeframe read for the gate (the `harness-tools` skill). Never paste
+  multi-timeframe read for the gate (the `bar-briefing` skill). Never paste
   a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 
 **Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
-the `harness-tools` skill): this bar's analysis by timeframe, computed once by
+the `bar-briefing` skill): this bar's analysis by timeframe, computed once by
 the runner (the multi-timeframe read with the alignment per side, the trend
 rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
 participation and liquidity, the session window), each part with its version
@@ -337,7 +337,7 @@ It orders the thinking and adds no filter: the priority order decides.
   own. A reason marked FALSE: name it, drop it, and decide again from the
   facts. Check UNCHECKED and UNPARSED reasons yourself; they aren't false
   for that alone. The order gate's checks still come first and don't
-  change.
+  change. Its results: the `reason-check` skill.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.
@@ -387,7 +387,7 @@ target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
 numbers in the rationale and the brackets. The scan's distances are price
 points, not ticks: its summary shows both (`stop 5.25 pts = 21 ticks`).
 
-**The exact numbers come from `order_plan`**, not from your own arithmetic:
+**The exact numbers come from `order_plan`** (the `order-plan` skill), not from your own arithmetic:
 once you have chosen the strategy and the side (the steps above: the trigger,
 the trend rule, the skip rules, the account), call it with them, e.g.
 `order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "orb", "side": "long"}`.

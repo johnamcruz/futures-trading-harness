@@ -14,7 +14,7 @@ description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings f
 ## How It Works
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the
-`harness-tools` skill) holds this bar's indicators (`m3` `trend`,
+`bar-briefing` skill) holds this bar's indicators (`m3` `trend`,
 `context`, `regime`; `m15` `indicators`): use it, and compute only what it
 doesn't hold.
 

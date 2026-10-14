@@ -16,7 +16,7 @@ description: Use session and RTH VWAP, the volume profile (POC, value area, high
 ## How It Works
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the
-`harness-tools` skill) holds this bar's VWAP, participation and profiles
+`bar-briefing` skill) holds this bar's VWAP, participation and profiles
 (`m3`, `day`): use it, and compute only what it doesn't hold.
 
 1. **VWAP** from market-snapshot: `vwapSession` (anchored 18:00 ET, Globex) and

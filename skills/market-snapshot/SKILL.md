@@ -15,7 +15,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 ## How It Works
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing`
 skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
 ATR, VWAP, participation, the skip-rule counters in `context`, swings and
 liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
@@ -26,7 +26,7 @@ doesn't hold.
    file (the prompt names it). Otherwise the harness tool `bars_fetch`
    (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)
    writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns) and says when its last bar closed (see the
-   `harness-tools` skill).
+   `bar-briefing` skill).
    Don't paste a `get_bars` reply into a file: thousands of bars are far more
    than a tool reply can carry. The default is enough for EMA(200), prior-day
    levels, and the multi-timeframe read up to the 4-hour trend (its EMA50

@@ -66,11 +66,11 @@ writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file of your own with the harness tool `bars_fetch`
 (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "count": <n>, "name": "volume"}`:
 it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-volume.json` (use the path it returns), which no other fetch
-replaces, and says when the last bar closed; the `harness-tools` skill);
+replaces, and says when the last bar closed; the `bar-briefing` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `vwap-volume-profile`, `liquidity-concepts`,
-   `session-timing`, `market-snapshot`, `harness-tools`,
+   `session-timing`, `market-snapshot`, `harness-tools`, `bar-briefing`,
    `levels-and-reactions`, `momentum-and-volume`, and `absorption`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.

@@ -115,6 +115,10 @@ it:
   Never split the budget between markets; each verdict is sized from the
   whole cushion.
 
+| Tool | Arguments | What it returns | Script (people) |
+|---|---|---|---|
+| `combine_status` | `account`?, `json`? | each started prop attempt and the policy verdicts; an `account` that isn't a profile (a run id, the broker's account) reads every started attempt and says so | `combine.js status [--account <name>] [--json]` |
+
 ### Scoring a policy strategy on history (the evaluator)
 
 How often a policy strategy passes, blows or times out on history is the

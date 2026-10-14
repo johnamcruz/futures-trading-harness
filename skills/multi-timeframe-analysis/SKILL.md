@@ -40,7 +40,7 @@ them rather than retrying.
 
 ### 2. Run the read
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing`
 skill) already holds this read for the bar: the 15m frame and the alignment
 per side (`m15`), the 1h and 4h frames (`h1` `h1` and `h4`), and the trend
 rule (`m3` `trendRule`). Each frame there has the trend, bias, swing pattern,
