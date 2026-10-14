@@ -162,6 +162,39 @@ test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unread
   }
 });
 
+test('writeCycleLog: the orders the gateway judged in the cycle\'s window are among its orders (an opencode trade-executor\'s are in no main transcript), each once', () => {
+  const home = tmpDir();
+  const gateLog = path.join(home, 'gate.jsonl');
+  const env = { FTH_HOME: home, FTH_GATE_LOG: gateLog };
+  const at = new Date('2026-10-07T14:03:05Z');
+  const ts = s => new Date(at.getTime() + s * 1000).toISOString();
+  const g = (s, x) => JSON.stringify({ ts: ts(s), source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [], contractId: 'MNQ', side: 0, size: 1, type: 2, ...x });
+  fs.writeFileSync(gateLog, [
+    '{"partial": tr', // a torn line: skipped
+    g(-5, { rationale: 'setup:orb long, an earlier cycle\'s' }),
+    g(10, { rationale: 'setup:orb long, stop 21480' }), // the transcript's own call (claudeStream): counted once
+    g(20, { rationale: 'setup:vwap long' }),
+    JSON.stringify({ ts: ts(21), source: 'hook', decision: 'blocked', violations: [], contractId: 'MNQ', rationale: 'setup:vwap long' }), // the hook's: not the gateway's
+    g(30, { tool: 'modify_order', rationale: '[protect] stop' }), // not an entry call
+    g(40, { side: 1, size: 3, type: 1, rationale: 'setup:orb short' }), // allowed, then refused by the order tracker: one order, refused
+    g(40.5, { decision: 'blocked', side: 1, size: 3, type: 1, rationale: 'setup:orb short', violations: [{ check: 'x', message: 'The gateway could not record the order before sending it' }] }),
+    g(70, { rationale: 'setup:orb long, after the cycle' }),
+  ].join('\n') + '\n');
+  const { summary } = writeCycleLog(home, { at, env, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream(['trade-session']), ok: true, durationMs: 45000 });
+  assert.deepStrictEqual(summary.orders.map(o => [o.rationale, o.gate || null, o.via || null]), [
+    ['setup:orb long, stop 21480', null, null],
+    ['[protect] stop', null, null],
+    ['setup:vwap long', 'allowed', 'gate-log'],
+    ['setup:orb short', 'blocked', 'gate-log'],
+  ]);
+  assert.deepStrictEqual(summary.orders[2], { contractId: 'MNQ', side: 0, size: 1, type: 2, rationale: 'setup:vwap long', gate: 'allowed', via: 'gate-log' });
+  // No cycle env (a caller that gives none), or no gate log: the transcript's orders alone.
+  assert.strictEqual(writeCycleLog(home, { at, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
+  assert.strictEqual(writeCycleLog(home, { at, env: { FTH_GATE_LOG: path.join(home, 'none.jsonl') }, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
+  // An entry the gate log alone shows still raises the missing-skills alarm.
+  assert.ok(writeCycleLog(home, { at, env, action: 'trade', harness: 'opencode', prompt: 'P', output: use('mcp__harness__bar_briefing', {}), durationMs: 45000 }).summary.missingSkills.length > 0);
+});
+
 test('skills-loaded: names, transcript files (a subagent reads its session too), and the check', () => {
   assert.strictEqual(skillName('futures-trading-harness:trade-session'), 'trade-session');
   assert.strictEqual(skillName('/strategy-library'), 'strategy-library');

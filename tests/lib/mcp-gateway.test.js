@@ -36,6 +36,12 @@ test('allowed orders are forwarded, blocked orders answered with isError', async
   assert.strictEqual(logs[0].decision, 'blocked');
 });
 
+test('the gate log record carries the order\'s contract, side, size, type and rationale (the cycle log reads them: cycle-log.js gateOrders)', async () => {
+  const logs = [];
+  await handleClientLine(JSON.stringify(call(8, 'place_order', { contractId: 'MNQ', side: 0, size: 2, type: 2, rationale: 'setup:orb long', stopLossBracket: { ticks: 40 } })), allow, e => logs.push(e));
+  assert.deepStrictEqual(logs, [{ source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [], contractId: 'MNQ', side: 0, size: 2, type: 2, rationale: 'setup:orb long' }]);
+});
+
 test('a crashing check blocks the order (fail closed)', async () => {
   const r = await handleClientLine(JSON.stringify(call(3, 'place_order')), () => { throw new Error('journal unreadable'); });
   assert.strictEqual(r.forward, null);

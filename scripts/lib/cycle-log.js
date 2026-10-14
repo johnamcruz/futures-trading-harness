@@ -26,8 +26,8 @@
  * --output-format json (one array, tool calls included, often through its
  * tool_call bridge: counted as the tool reached); opencode with run --format
  * json (one event per line, the main session's tool calls only: a subagent's
- * own calls, the trade-executor's orders among them, are not in it); others as text. The parser
- * (transcript.js) reads what it recognizes and never throws.
+ * own calls, the trade-executor's orders among them, are not in it: the orders add the gateway's records of the
+ * cycle's window, gateOrders); others as text. The parser (transcript.js) reads what it recognizes and never throws.
  */
 
 const fs = require('fs');
@@ -109,8 +109,12 @@ function toolCalls(output) {
   return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {}, ...(c.failed ? { failed: true, error: c.error || '' } : {}), ...(c.stopped ? { stopped: true } : {}) }));
 }
 
-/** The parsed summary of one cycle's transcript. */
-function summarize(output, embedded = []) {
+/**
+ * The parsed summary of one cycle's transcript. `gate`: the gateway's place_order records of the cycle's window
+ * (gateOrders): one the transcript has no call for (an opencode trade-executor's, in a session of its own) is among
+ * the orders, as the gateway logged it (`via: 'gate-log'`, with its `gate` decision).
+ */
+function summarize(output, embedded = [], gate = []) {
   const calls = toolCalls(output);
   const tools = {};
   for (const c of calls) tools[c.name] = (tools[c.name] || 0) + 1;
@@ -121,6 +125,14 @@ function summarize(output, embedded = []) {
   const orders = calls.filter(c => ENTRY_TOOL.test(c.name)).map(c => ({
     contractId: c.input.contractId, side: c.input.side, size: c.input.size, type: c.input.type, rationale: String(c.input.rationale || '').slice(0, 200),
   }));
+  // Each gateway record matched to one transcript order of its contract and rationale; the rest are the cycle's too.
+  const seen = orders.map(o => `${String(o.contractId ?? '')}\n${o.rationale}`);
+  for (const g of gate) {
+    const rationale = String(g.rationale ?? '').slice(0, 200);
+    const i = seen.indexOf(`${String(g.contractId ?? '')}\n${rationale}`);
+    if (i !== -1) { seen[i] = null; continue; }
+    orders.push({ contractId: g.contractId, side: g.side, size: g.size, type: g.type, rationale, gate: g.decision, via: 'gate-log' });
+  }
   const entries = orders.filter(o => !RISK_REDUCING.test(o.rationale));
   return {
     skills,
@@ -133,6 +145,45 @@ function summarize(output, embedded = []) {
     missingSkills: entries.length && calls.length ? [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s) && !embedded.includes(s)) : [],
     ...(embedded.length ? { embeddedSkills: embedded } : {}),
   };
+}
+
+// The gate log's tail read for a cycle's orders (it grows for the life of the home; a cycle's records are its last).
+const GATE_TAIL_BYTES = 4 * 1024 * 1024;
+// After the cycle's end, the slack for the log write (replay/labels.js GATE_SLACK_MS).
+const GATE_SLACK_MS = 2000;
+
+/**
+ * The gateway's place_order records (the gate log, gateLogPath(env): harness-owned, stamped by the wall clock, the
+ * standard contract names the agents send) from `fromMs` to `toMs`, a tracker refusal folded into the allowed record
+ * it follows (replay/labels.js collapsePairs). The gateway's only: every order call passes it, and a hook's record of
+ * the same call would count it twice. [] when the log can't be read.
+ */
+function gateOrders(env, fromMs, toMs) {
+  try {
+    const file = require('./trading/check-order').gateLogPath(env);
+    const size = fs.statSync(file).size;
+    const fd = fs.openSync(file, 'r');
+    let text;
+    try {
+      const len = Math.min(size, GATE_TAIL_BYTES);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      text = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+    const recs = [];
+    for (const line of text.split('\n')) {
+      let e;
+      try { e = JSON.parse(line); } catch (_err) { continue; }
+      if (!e || typeof e !== 'object' || e.source !== 'gateway' || e.tool !== 'place_order') continue;
+      const ms = Date.parse(e.ts);
+      if (Number.isFinite(ms) && ms >= fromMs && ms <= toMs) recs.push({ ...e, ms });
+    }
+    return require('./replay/labels').collapsePairs(recs);
+  } catch (_err) {
+    return [];
+  }
 }
 
 /**
@@ -166,7 +217,10 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   const day = tradingDayKey(cycleAt);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
   const att = headPrompt ? require('./head-prompt').parseAttestation(headPrompt) : null;
-  const summary = summarize(output, att ? att.skills : []);
+  // `env`: the cycle's environment (cycle-run.js), whose gate log holds the orders the cycle's calls sent through the
+  // gateway, from its start to its end (`durationMs`, else now) and the log write's slack.
+  const end = at.getTime() + (Number.isFinite(durationMs) ? durationMs : Math.max(0, Date.now() - at.getTime())) + GATE_SLACK_MS;
+  const summary = summarize(output, att ? att.skills : [], env ? gateOrders(env, at.getTime(), end) : []);
   let lookups = [];
   try { if (transcript) lookups = require('./trading/skill-lookups').readLookups(transcript); } catch (_err) { /* none */ }
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
@@ -227,4 +281,4 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock };
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders };

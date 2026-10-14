@@ -71,7 +71,7 @@ async function handleClientLine(line, check, log = () => {}) {
     } catch (err) {
       result = { allowed: false, message: `Blocked by trading harness gateway: the order gate could not run (${err.message}). The order was not sent.`, violations: [{ check: 'gateway-error', message: err.message }] };
     }
-    log({ source: 'gateway', tool, decision: result.allowed ? 'allowed' : 'blocked', violations: result.violations || [], contractId: args.contractId, rationale: args.rationale });
+    log({ source: 'gateway', tool, decision: result.allowed ? 'allowed' : 'blocked', violations: result.violations || [], contractId: args.contractId, side: args.side, size: args.size, type: args.type, rationale: args.rationale });
     if (result.allowed) return { item };
     // A notification (no id) can't receive a response; drop it.
     return { blocked: item.id === undefined ? null : blockedResponse(item.id, result.message) };

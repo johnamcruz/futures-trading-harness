@@ -247,7 +247,7 @@ function main(argv) {
       if (tagged.refuse) {
         const args = parsed.params.arguments || {};
         if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([tagged.refuse]))));
-        log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [tagged.refuse], contractId: args.contractId, rationale: args.rationale });
+        log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [tagged.refuse], contractId: args.contractId, side: args.side, size: args.size, type: args.type, rationale: args.rationale });
         sentNet.delete(parsed.id);
         inFlight.delete(parsed.id);
         return;
