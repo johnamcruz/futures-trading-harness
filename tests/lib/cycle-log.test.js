@@ -190,3 +190,27 @@ test('toolCalls: Codex items with no event type count; an opencode call that err
   const oc = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_close_position', state: { status: 'error', input: {}, error: 'PositionNotFound: no open position' } } });
   assert.deepStrictEqual(toolCalls(oc).map(c => [c.name, c.failed, c.error]), [['mcp__broker__close_position', true, 'PositionNotFound: no open position']]);
 });
+
+test('writeCycleLog: every phase-2 report\'s FACTS checked against the cycle bar\'s briefing, in the record and the line (fact-claims.js)', () => {
+  const home = tmpDir();
+  const BAR = '2026-10-07T13:57:00.000Z';
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T14:00:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed' } },
+  } });
+  const ev = (id, text) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type: 'risk-manager', prompt: 'p' } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text }] } }),
+  ];
+  const output = [...ev('p1', 'Risk state: ok'), ...ev('p2', 'VERDICT: VETO - opening print, no entries\nFACTS: window opening print; entries none; momentum weak')].join('\n');
+  const at = new Date('2026-10-07T14:03:05Z');
+  const { file } = writeCycleLog(home, { at, action: 'trade', harness: 'claude', prompt: 'P', context: { symbols: [{ symbol: 'MNQ', bar: { t: BAR } }] }, output, result: 'CYCLE RESULT: no-trade - vetoed', ok: true });
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual(rec.factCheck.counts, { reports: 1, claims: 3, true: 0, false: 2, unchecked: 1 });
+  assert.deepStrictEqual(rec.factCheck.reports[0].claims.map(c => [c.text, c.check]), [['window opening print', false], ['entries none', false], ['momentum weak', 'unchecked']]);
+  const line = JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim());
+  assert.deepStrictEqual(line.factCheck, rec.factCheck.counts);
+  // No phase-2 report: the record says so, the line carries nothing.
+  const quiet = writeCycleLog(home, { at: new Date('2026-10-07T14:06:05Z'), action: 'trade', harness: 'claude', prompt: 'P', output: 'x', result: 'r', ok: true });
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(quiet.file, 'utf8')).factCheck.counts.reports, 0);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim().split('\n')[1]).factCheck, undefined);
+});

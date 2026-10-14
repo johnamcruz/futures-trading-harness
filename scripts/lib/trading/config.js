@@ -10,7 +10,7 @@ const { MAX_AGE_CEILING_MIN } = require('./signal-state');
 const path = require('path');
 const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
-const { selectionOf } = require('./contracts');
+const { selectionOf, familyRoot } = require('./contracts');
 const { loadRoundSteps } = require('./round-numbers');
 
 // The roles whose report the runner may serve from its cache (report-cache.js): the analysts and risk-manager phase 1.
@@ -44,6 +44,16 @@ const GATE_CHECKS = [
   'replay-clock', // hard: listed for completeness, never skippable
   'account-lock', // hard: listed for completeness, never skippable
 ];
+
+/** FTH_CYCLE_BARS as { <family root>: <bar open time> } ({} when unset or unreadable). */
+function cycleBarsOf(raw) {
+  try {
+    const o = JSON.parse(raw || '{}');
+    return o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).filter(([, t]) => typeof t === 'string').map(([k, t]) => [familyRoot(k), t])) : {};
+  } catch (_err) {
+    return {};
+  }
+}
 
 function intEnv(env, name, fallback, { min = 0 } = {}) {
   const raw = env[name];
@@ -111,6 +121,9 @@ function loadConfig(env = process.env) {
     // The roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js): roles-ran
     // counts them as returned. Only role names the cache can hold; anything else is ignored.
     cycleCached: String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x)),
+    // The bar each symbol's cycle decides (FTH_CYCLE_BARS, set by the runner: {"MNQ": "<bar open time>"}), keyed by
+    // family root: phase 2's facts are checked against that bar's briefing (fact-claims.js). Unreadable: none.
+    cycleBars: cycleBarsOf(env.FTH_CYCLE_BARS),
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
     // Unset in an autonomous run, the selection is lost: an error, every entry refused.

@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { roleCalls, rolesInTranscript, missingRoles, checkRolesRan, ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
+const { roleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
 const { tmpDir } = require('../helpers');
 
 // opencode `run --format json`: one tool_use event per finished call, with its start and end times.
@@ -219,15 +219,99 @@ test('phase 2 must approve: a VETO, or a report with no verdict, refuses the ent
   assert.deepStrictEqual(miss([rm([1, 2], 'state'), rm([3, 4], 'VERDICT: APPROVE - size 1')], 'lean'), []);
 });
 
-test('verdictOf: read as a model writes it; any veto in the report is no approval', () => {
+test('verdictOf: read as a model writes it; any decision other than approve, or a veto, is no approval', () => {
   const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
-  for (const t of ['VERDICT: APPROVE - size 1', '**VERDICT**: APPROVE - size 1', 'VERDICT: **APPROVE**', 'VERDICT - APPROVE', 'VERDICT: APPROVED', 'VERDICT : APPROVE', 'verdict: approve', 'VERDICT — APPROVE']) assert.strictEqual(verdictOf(t), 'APPROVE', t);
   for (const t of [
-    'If aligned: VERDICT: APPROVE. ... **VERDICT**: VETO - trend rule',
-    'VERDICT: VETO - mixed: re-plan at size 2 for a VERDICT: APPROVE',
-    'VERDICT: VETO - room\n(phase 1 earlier: VERDICT: APPROVE)',
-    'Previous: VERDICT: APPROVE\nFinal VERDICT: VETOED',
-    '**VERDICT**: VETO - room',
-  ]) assert.strictEqual(verdictOf(t), 'VETO', t);
-  for (const t of ['looks fine', 'APPROVE', 'risk state: 2 trades left', '', null]) assert.strictEqual(verdictOf(t), null, String(t));
+    'VERDICT: APPROVE - size 1', '**VERDICT**: APPROVE - size 1', 'VERDICT: **APPROVE**', 'VERDICT - APPROVE', 'VERDICT: APPROVED', 'VERDICT : APPROVE',
+    'verdict: approve', 'VERDICT \u2014 APPROVE', 'Final VERDICT: APPROVE', 'Phase 2 VERDICT: APPROVE', '**Final Verdict:** APPROVE', '"VERDICT: APPROVE - size 1"',
+    '\u00a0VERDICT: APPROVE', '\u200bVERDICT: APPROVE', '> Final VERDICT: APPROVE', 'VERDICT (phase 2): APPROVE', '| VERDICT: APPROVE |', '## VERDICT: APPROVE',
+    '## Verdict\nVERDICT: APPROVE', '**Verdict:**\n\nAPPROVE - size 1', 'per the VERDICT: APPROVE line', '\u2705 VERDICT: APPROVE', '## Verdict\n\u2705 APPROVE - size 1', '## Verdict\n\u00a0APPROVE',
+    // The taught order: step lines (8 Decision: take), the verdict, the facts; lowercase "veto" in prose is no veto.
+    '8 Decision: take - aligned continuation with room\nVERDICT: APPROVE - size 1, risk $10.50, orb long\nFACTS: window rth; entries allowed',
+    'VERDICT: APPROVE - size 1\nthe trend is a read, never a veto',
+    'VERDICT (phase 2): APPROVE - size 1', '**Final Verdict:** APPROVE', 'VERDICT: APPROVE\nthe decision is to wait for the fill', 'VERDICT: APPROVE\nthe verdict was clear', 'Verdict\u2014approve', 'Verdict \u2192 APPROVE', 'Verdict / approve', 'Verdict\u2026: approve', 'Verdict [phase 2]: approve', 'Verdict: (approve)', 'Verdict risk overall final: approve', 'VERDICT: full', 'VERDICT: FULL - size 2, as the prop verdict says', 'VERDICT: APPROVE\nsized as its verdict says: full', 'VERDICT: APPROVE\nas the verdict said, room past the level', 'VERDICT | APPROVE', '| VERDICT | APPROVE | size 1 |', 'Verdict phase 2: approve', 'Verdict (phase 2) - final: APPROVED',
+    // Several APPROVE lines are one approval, whatever else they say (the order decides setup, side and size).
+    '### VERDICT: **APPROVE** but with reservations\n\nVERDICT: APPROVE - size 1, risk $40, orb long, room past the first level',
+    'VERDICT: APPROVE - size 1, MNQ long\nVERDICT: APPROVE - size 2, opening long, risk $40',
+  ]) assert.strictEqual(verdictOf(t), 'APPROVE', JSON.stringify(t));
+  for (const t of [
+    'Overall verdict: REJECT', 'Risk Verdict: STAND ASIDE', '\u274c VERDICT: REJECT', '8 Decision: skip', '## Verdict\nREJECT', '## Verdict\n\n**STAND ASIDE**',
+    'VERDICT: VETO - room', 'VERDICT: VETOED', 'VERDICT:\nSTAND ASIDE', 'VERDICT: Approvement pending', 'VERDICT: BLOCKED', 'Decision = wait',
+    'VERDICT: APPROVE - size 1\nVERDICT: SKIP', 'VERDICT: APPROVE - size 1\n8 Decision: skip - no room', 'VERDICT: APPROVE - size 1\n### Decision: **VETO** on room',
+    'VERDICT: APPROVE - size 1\nVERDICT (phase 2): VETO', 'VERDICT: APPROVE\nVERDICT [phase 2]: VETO', 'VERDICT: APPROVE\n| VERDICT | VETO |',
+    'VERDICT: APPROVE\nVERDICT = VETO', 'VERDICT: APPROVE\nVERDICT\u200b: VETO', 'VERDICT (VETO): APPROVE', 'VERDICT: APPROVE\nVER\u200bDICT: REJECT',
+    'VERDICT: APPROVE\nVERDICT:\u00a0REJECT', 'VERDICT: APPROVE\nthe plan was VETOED', 'VERDICT: APPROVE\nVETOES stand', 'VERDICT: APPROVE\nDecision: vetoed',
+    'VERDICT: APPROVE\nVE\u200bTO from phase 1',
+    'Decision: (skip)', 'VERDICT: [REJECT]', 'VERDICT: \u00abreject\u00bb', 'Decision: 0 contracts', 'Decision: 0', 'Verdict [phase 2]: reject', 'VERDICT: APPROVE | Decision: skip', 'Verdict\u2014reject', 'Verdict\u2026: reject', 'Verdict \u2192 reject', 'Verdict / reject', 'Verdict = reject', 'Verdict | reject', 'VERDICT: APPROVE\ndecision-making: wait', 'VERDICT: APPROVE - size 1 | final decision: skip', 'Decision: to wait', 'Verdict: is pending', 'VERDICT: NOT APPROVE', 'VERDICT: not approved', 'VERDICT: skip', 'VERDICT: APPROVE\nthe verdict is veto', 'VERDICT: APPROVE\nthe decision was a veto', 'VERDICT (vetoed): approve', 'VERDICT (vetoes): approve',
+  ]) assert.strictEqual(verdictOf(t), 'VETO', JSON.stringify(t));
+  for (const t of ['looks fine', 'APPROVE', 'risk state: 2 trades left', '', null, 'the decision is mine', 'the decision is to wait', 'the verdict was in', 'VERDICT: take', 'Decision: take', 'Decision: full', '8 Decision: take']) assert.strictEqual(verdictOf(t), null, String(t));
+});
+
+test('verdictProblem: names the decision that isn\'t approve, or the veto; several APPROVE lines are one approval', () => {
+  const { verdictProblem, decisionLines } = require('../../scripts/lib/trading/roles-ran');
+  const V = 'VERDICT: APPROVE - size 1, risk $40.00, orb long with the 15m up trend, room to 2R';
+  assert.strictEqual(verdictProblem(V), null);
+  assert.strictEqual(verdictProblem(`${V}\nnotes\n${V.replace('orb', 'vx').replace('size 1', 'size 2')}`), null, 'APPROVE lines never compared');
+  assert.match(verdictProblem(`${V}\nVERDICT: STAND ASIDE`), /a verdict line decides stand, not APPROVE/);
+  assert.match(verdictProblem(`${V}\n8 Decision: skip`), /a decision line decides skip, not APPROVE/);
+  assert.match(verdictProblem(`${V}\nVERDICT (VETO): APPROVE`), /a decision line says veto/);
+  assert.strictEqual(verdictProblem(`${V}\nthe plan was VETOED earlier`), 'the report says VETO');
+  assert.strictEqual(verdictProblem(`${V}\na read, never a veto`), null);
+  assert.deepStrictEqual(decisionLines('## Verdict\nVERDICT: APPROVE\n8 Decision: take\nthe decision is mine').map(l => [l.keyword, l.word]), [['verdict', 'approve'], ['decision', 'take']]);
+});
+
+test('assessRound: the approving report is the latest COUNTED phase-2 call; an uncounted call never approves, and a later uncounted veto refuses', () => {
+  const { assessRound } = require('../../scripts/lib/trading/roles-ran');
+  const call = (role, start, end, text = 'report') => ({ role, start, end, text });
+  const APPROVE = 'VERDICT: APPROVE - size 1';
+  const VETO = 'VERDICT: VETO - room';
+  const analysts = ANALYSTS.map(r => call(r, 1, 5));
+  // Index mode: a call whose text says NOLOOKUP skipped its required lookups (it doesn't count).
+  const lookups = c => (c.text.includes('NOLOOKUP') ? ['invalidation'] : []);
+  lookups.needs = () => [];
+  const judge = (calls, cycle, cached = [], lk = null) => assessRound({ calls, launches: [] }, cycle, cached, lk);
+  const refused = r => r.missing.some(m => /risk-manager phase 2 approving the plan/.test(m)) && r.report === null;
+  // Repro A (index mode): phase 1, a counted veto, then a later approval that skipped its lookups.
+  assert.ok(refused(judge([call('risk-manager', 1, 2, 'Risk state'), call('risk-manager', 3, 4, VETO), call('risk-manager', 5, 9, `${APPROVE} NOLOOKUP`)], 'lean', [], lookups)));
+  // Repro B (lean): phase 1 at 1-2, a veto at 3-4, an approval that started at 1.5 (before phase 1 ended) and ended at 9.
+  assert.ok(refused(judge([call('risk-manager', 1, 2, 'Risk state'), call('risk-manager', 3, 4, VETO), call('risk-manager', 1.5, 9, APPROVE)], 'lean')));
+  // Repro C (full, phase 1 cached): an approval that started before the analysts returned, ending after a phase-2 veto.
+  assert.ok(refused(judge([...analysts, call('risk-manager', 2, 9, APPROVE), call('risk-manager', 6, 8, VETO)], 'full', ['risk-manager'])));
+  // Among counted calls the latest decides (main's rule): a veto, then a revised plan approved later, passes; the
+  // reverse doesn't.
+  const revised = call('risk-manager', 8, 9, APPROVE);
+  assert.deepStrictEqual(judge([...analysts, call('risk-manager', 1, 4, 'Risk state'), call('risk-manager', 6, 7, VETO), revised], 'full').report, revised);
+  assert.ok(refused(judge([...analysts, call('risk-manager', 1, 4, 'Risk state'), call('risk-manager', 6, 7, APPROVE), call('risk-manager', 8, 9, VETO)], 'full')));
+  // An uncounted veto ending at or after the counted approval refuses; one ending before it doesn't.
+  const a = call('risk-manager', 6, 8, APPROVE);
+  assert.ok(refused(judge([...analysts, call('risk-manager', 1, 4, 'Risk state'), a, call('risk-manager', 3, 9, VETO)], 'full')));
+  const ok = judge([...analysts, call('risk-manager', 1, 4, 'Risk state'), a, call('risk-manager', 3, 7, VETO)], 'full');
+  assert.deepStrictEqual([ok.missing, ok.report], [[], a]);
+  // Two counted phase-2 reports ending together: no single report, refused.
+  assert.ok(refused(judge([...analysts, call('risk-manager', 1, 4, 'Risk state'), call('risk-manager', 6, 8, APPROVE), call('risk-manager', 7, 8, APPROVE)], 'full')));
+  // The normal flow passes, in full and index mode, cached or not; the report is the counted approval.
+  for (const [cycle, cached, lk] of [['full', [], null], ['full', [], lookups], ['full', ['risk-manager'], null], ['lean', [], null], ['lean', [], lookups]]) {
+    const p2 = call('risk-manager', 6, 8, APPROVE);
+    const calls = [...(cycle === 'full' ? analysts : []), ...(cached.length ? [] : [call('risk-manager', 1, 4, 'Risk state')]), p2];
+    const r = judge(calls, cycle, cached, lk);
+    assert.deepStrictEqual([r.missing, r.report], [[], p2], `${cycle} ${cached} ${lk ? 'index' : 'full'}`);
+  }
+});
+
+test('approvedPhase2: the latest phase-2 report of a complete round that approves; none otherwise; an unreadable transcript is an error', () => {
+  const file = path.join(tmpDir(), 'logs', 'cycle-transcript-p2.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const p2 = text => oc('risk-manager', [30, 40], { output: `<task id="s" state="completed"><task_result>${text}</task_result></task>` });
+  fs.writeFileSync(file, [...FULL.slice(0, 4), p2('VERDICT: APPROVE - size 1\nFACTS: vwap above')].join('\n'));
+  assert.deepStrictEqual(approvedPhase2(file, 'full'), { text: 'VERDICT: APPROVE - size 1\nFACTS: vwap above' });
+  // A later phase 2 replaces an earlier one; a veto, an incomplete round: none (checkRolesRan refuses those).
+  fs.writeFileSync(file, [...FULL, oc('risk-manager', [50, 60], { output: '<task id="s" state="completed"><task_result>VERDICT: APPROVE - size 2\nFACTS: vwap below</task_result></task>' })].join('\n'));
+  assert.deepStrictEqual(approvedPhase2(file, 'full'), { text: 'VERDICT: APPROVE - size 2\nFACTS: vwap below' });
+  fs.writeFileSync(file, [...FULL.slice(0, 4), p2('VERDICT: VETO - room')].join('\n'));
+  assert.strictEqual(approvedPhase2(file, 'full'), null);
+  fs.writeFileSync(file, FULL.slice(1).join('\n'));
+  assert.strictEqual(approvedPhase2(file, 'full'), null);
+  assert.deepStrictEqual(approvedPhase2(path.join(path.dirname(file), 'missing.jsonl'), 'full'), { error: 'ENOENT' });
+  assert.strictEqual(approvedPhase2(null, 'full'), null);
+  assert.strictEqual(approvedPhase2(file, null), null);
 });

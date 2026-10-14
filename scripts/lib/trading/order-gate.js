@@ -26,8 +26,9 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal } = require('./signal-state');
 const { checkSkillsLoaded, REQUIRED_FOR_ENTRY, situationalSkills } = require('./skills-loaded');
-const { checkRolesRan } = require('./roles-ran');
+const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { lookupRule, briefingFacts } = require('./skill-lookups');
+const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
@@ -54,6 +55,20 @@ const STOP_BRACKET_TYPES = new Set(['stop', 'trailing_stop']);
 function isStopBracket(b) {
   return Boolean(b) && typeof b === 'object' && typeof b.ticks === 'number' && Number.isInteger(b.ticks) && b.ticks > 0
     && STOP_BRACKET_TYPES.has(b.type);
+}
+
+/**
+ * The order's own setup for the facts check (fact-claims.js): { strategy, side } from its setup tag and side; a policy
+ * strategy's is the component its latest verdict trades. strategy null when the order names none.
+ */
+function factsOrder(input, setup, named, home) {
+  const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
+  if (!setup) return { strategy: null, side };
+  if (named && named.signal === 'policy') {
+    const v = latestVerdict(home, named.name, contractRoot(input.contractId));
+    return { strategy: v && v.component ? v.component : null, side };
+  }
+  return { strategy: setup[1].toLowerCase(), side };
 }
 
 function isRiskReducing(rationale) {
@@ -323,6 +338,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // In index mode (FTH_ROLE_SKILLS=index), a role's report counts only with the lookups this bar requires of it.
   const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now }) : null;
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
+  // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
+  // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:
+  // the same selection (roles-ran assessRound), the same cached list and the same lookups.
+  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: config.cycleBars, now, order: factsOrder(input, setup, named, config.home) }) : null;
+  if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);
@@ -397,4 +417,5 @@ module.exports = {
   evaluateOrder,
   evaluateModify,
   formatBlock,
+  factsOrder,
 };

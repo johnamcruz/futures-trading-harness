@@ -7,7 +7,8 @@
  * verdicts recorded for that bar, and the started prop attempts (as combine_status lists them).
  *
  *   reason_check { symbol, reasons, json }   symbol: a contract root; reasons: the stated decision (a CYCLE RESULT
- *                                            line, a VERDICT line, or the reasons alone)
+ *                                            line, a VERDICT line, or the reasons alone), with phase 2's FACTS line
+ *                                            when it has one (each claim checked as the order gate checks it)
  */
 
 const { readBriefing, current } = require('../trading/briefing');
@@ -18,6 +19,7 @@ const { contractRoot } = require('../trading/journal');
 const { loadAccounts } = require('../trading/accounts');
 const { loadStrategies } = require('../trading/strategies');
 const { factsFromBriefing, reasonCheck, renderCheck } = require('../trading/reasons');
+const { factsLines, withoutFacts, checkFacts, renderFacts } = require('../trading/fact-claims');
 const { harnessHome } = require('../paths');
 const { cycleBarOf } = require('./briefing');
 const { statusOf } = require('./combine');
@@ -65,14 +67,18 @@ function check({ symbol = null, reasons = null, json = false } = {}, ctx) {
   if (!text) throw new Error(`--reasons: the decision and reasons you stated (${USAGE})`);
   if (text.length > MAX_REASONS) throw new Error(say(c, `--reasons: at most ${MAX_REASONS} characters`, `reasons: at most ${MAX_REASONS} characters`));
   const b = briefingNow(c, root[1]);
-  if (!b) return { text: `No current bar briefing for ${root[1]}: no facts here to check the reasons against. Check each reason yourself against the facts you were given (the prompt, the plan, the analysts' reports); a reason none supports is false.\n` };
+  // A FACTS line (risk-manager phase 2, trading/fact-claims.js): each claim checked as the order gate checks it.
+  const stated = factsLines(text) !== null;
+  if (!b) return { text: `No current bar briefing for ${root[1]}: no facts here to check the reasons against. Check each reason yourself against the facts you were given (the prompt, the plan, the analysts' reports); a reason none supports is false.\n${stated ? renderFacts(checkFacts(text, null, `no current bar briefing for ${root[1]}`)) : ''}` };
   const home = harnessHome(c.env);
   const now = c.now();
   const { strategies } = loadStrategies(c.root, c.env);
   const accounts = loadAccounts(c.root, c.env).accounts.filter(a => a.valid);
   const attempts = accounts.map(a => statusOf(home, a, now, strategies));
-  const r = reasonCheck(text, factsFromBriefing(b, { attempts, verdicts: verdictsFor(home, b, now) }));
-  return { text: json ? `${JSON.stringify(r)}\n` : renderCheck(r) };
+  const r = reasonCheck(stated ? withoutFacts(text) : text, factsFromBriefing(b, { attempts, verdicts: verdictsFor(home, b, now) }));
+  const f = stated ? checkFacts(text, b) : null;
+  if (json) return { text: `${JSON.stringify(f ? { ...r, factsLine: f } : r)}\n` };
+  return { text: `${renderCheck(r)}${f ? renderFacts(f) : ''}` };
 }
 
 /** argv to { symbol, reasons, json }. */

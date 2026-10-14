@@ -127,3 +127,21 @@ test('reason_check: the runner\'s bar-less skip (no attempt) is the verdict the 
   assert.match(check({ symbol: 'MNQ', reasons: 'no-trade - no topstep_50k attempt' }, ctx(h3)).text, /- FALSE no-attempt: "no topstep_50k attempt" - the topstep_50k attempt is active\n/);
   assert.match(check({ symbol: 'MNQ', reasons: 'no-trade - no topstep_100k attempt' }, ctx(h3)).text, /- TRUE no-attempt: "no topstep_100k attempt" - no topstep_100k attempt is running\n/);
 });
+
+test('reason_check: a FACTS line (risk-manager phase 2) is checked as the order gate checks it; the free-text reasons apart', () => {
+  const h = home();
+  const t = check({ symbol: 'MNQ', reasons: 'VERDICT: APPROVE - size 1, keltner short\nFACTS: window opening drive; entries allowed; trend long allowed; read short mixed; room short enough; moon full' }, ctx(h)).text;
+  assert.match(t, /^Reasons checked against this bar's facts:\n/);
+  assert.doesNotMatch(t.split('FACTS checked')[0], /trend long allowed/, 'the FACTS line is not read as free text');
+  assert.match(t, /FACTS checked against the bar briefing:\n- TRUE window: "window opening drive" - the window is opening drive\n- TRUE entries: "entries allowed"/);
+  assert.match(t, /- FALSE trend: "trend long allowed" - Trend rule: prevailing trend 1h down; trend strategies may not go long/);
+  assert.match(t, /- TRUE read: "read short mixed"/);
+  assert.match(t, /- FALSE room: "room short enough" - keltner: VWAP \(rth\) at 0\.4R, it needs 1\.5R\n/);
+  assert.match(t, /- UNCHECKED unknown: "moon full"/);
+  assert.match(t, /2 FACTS FALSE: name each, drop them and decide again from the briefing; the order gate refuses an entry approved on a false fact\.\n$/);
+  const json = JSON.parse(check({ symbol: 'MNQ', reasons: 'VERDICT: APPROVE - size 1\nFACTS: entries allowed', json: true }, ctx(h)).text);
+  assert.deepStrictEqual([json.factsLine.status, json.factsLine.claims.length], ['confirmed', 1]);
+  // No FACTS line: the output is as before; no briefing: the facts can't be checked, and it says what the gate does.
+  assert.doesNotMatch(check({ symbol: 'MNQ', reasons: 'VERDICT: APPROVE - size 1' }, ctx(h)).text, /FACTS/);
+  assert.match(check({ symbol: 'MES', reasons: 'VERDICT: APPROVE\nFACTS: entries allowed' }, ctx(h)).text, /^No current bar briefing for MES[^]*- UNCHECKED entries: "entries allowed" - no current bar briefing for MES\nThese facts can't be checked: the order gate refuses/);
+});

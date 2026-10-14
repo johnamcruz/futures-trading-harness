@@ -1443,6 +1443,133 @@ test('roles-ran: an autonomous full cycle enters only after the analysts and bot
   assert.match(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` }).violations.find(v => v.check === 'roles-ran').message, /can't be read/);
 });
 
+// --- Fact-checked reasons: the facts phase 2 approved on, against the cycle's bar briefing (fact-claims.js, R29). ---
+test('phase2-facts: the order\'s own setup - its setup tag and side; a policy strategy\'s is the component its latest verdict trades', () => {
+  const { factsOrder } = require('../../scripts/lib/trading/order-gate');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const home = trendHome();
+  const tag = r => /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i.exec(r);
+  assert.deepStrictEqual(factsOrder(entryOrder(), tag(entryOrder().rationale), { name: 'orb', signal: 'rules' }, home), { strategy: 'orb', side: 'long' });
+  assert.deepStrictEqual(factsOrder(entryOrder({ side: 'sell' }), tag('setup:ORB short'), null, home), { strategy: 'orb', side: 'short' });
+  assert.deepStrictEqual(factsOrder(entryOrder({ rationale: 'no tag' }), null, null, home), { strategy: null, side: 'long' });
+  const policy = { name: 'prop_portfolio', signal: 'policy' };
+  assert.deepStrictEqual(factsOrder(entryOrder({ rationale: 'setup:prop_portfolio long' }), tag('setup:prop_portfolio long'), policy, home), { strategy: null, side: 'long' }, 'no verdict: no setup');
+  prop.appendVerdict(home, { bar: '2026-10-07T13:54:00.000Z', strategy: 'prop_portfolio', component: 'keltner', contractId: CONTRACT, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 2, at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+  assert.deepStrictEqual(factsOrder(entryOrder({ rationale: 'setup:prop_portfolio long' }), tag('setup:prop_portfolio long'), policy, home), { strategy: 'keltner', side: 'long' });
+});
+
+test('phase2-facts: a room fact is about the order\'s own setup (its setup tag and side), never the verdict\'s text', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  // orb long: IB high at 0.5R before the 2R it needs (short of room); vx long: nothing in its way (room enough).
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', candidates: [
+      { name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: { name: 'IB high', R: 0.5 } },
+      { name: 'vx', direction: 'long', stopPoints: 8, needR: 2, inTheWay: null },
+    ] } },
+  } });
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const facts = (text, input = entryOrder()) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(text)].join('\n'));
+    return evaluateOrder({ input, entries: [plan()], now: NOW, config: auto }).violations.filter(v => v.check === 'phase2-facts').map(v => v.message);
+  };
+  // The repro: the verdict names vx, the order is setup:orb: "room long enough" is about orb, which is short of room.
+  assert.match(facts('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room long enough')[0], /contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it needs 2R\)/);
+  // Naming another strategy, or the other side: can't be matched (never "contradicts").
+  const other = facts('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room vx long enough')[0];
+  assert.match(other, /room facts that can't be matched to this order \(setup:orb long\): "room vx long enough" \(it is about vx long, the order is orb long\)/);
+  assert.doesNotMatch(other, /contradicts/);
+  assert.match(facts('VERDICT: APPROVE\nFACTS: window opening drive; entries allowed; room short enough')[0], /can't be matched to this order \(setup:orb long\): "room short enough"/);
+  // The vx order: its own room is enough, so the same report passes for it.
+  assert.deepStrictEqual(facts('VERDICT: APPROVE - size 1, orb long with vx\nFACTS: window opening drive; entries allowed; room long enough', entryOrder({ rationale: 'setup:vx long, stop 21480, target 21540, risk $40' })), []);
+  // An order with no setup tag: any room fact can't be matched (the setup-tag check refuses it too).
+  assert.match(facts('VERDICT: APPROVE\nFACTS: window opening drive; entries allowed; room long enough', entryOrder({ rationale: 'break above the OR high, stop 21480' }))[0], /the order names no setup/);
+});
+
+test('phase2-facts: an autonomous entry approved on a fact the briefing contradicts is refused; true facts pass; unchecked stated facts fail closed; exits never checked', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  const briefing = { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.', vwap: { side: 'above' }, candidates: [{ name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: { name: 'IB high', R: 0.5 } }] } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
+  } };
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const run = (input, cfg = auto) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+  // The analysts and phase 1, then phase 2's report (its text as given).
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const approve = text => [...ocSkills, ...ocRoles.slice(0, 4), p2(text)].join('\n');
+  const facts = r => r.violations.filter(v => v.check === 'phase2-facts');
+  const unpinned = { ...auto, cycleBars: {} };
+  // No bar pinned and no briefing, no FACTS line or FACTS: none: nothing stated, nothing refused.
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1, risk $8'));
+  assert.deepStrictEqual(run(entryOrder(), unpinned).violations, []);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1, risk $8\nFACTS: none'));
+  assert.deepStrictEqual(run(entryOrder(), unpinned).violations, [], 'FACTS: none with no briefing');
+  // The runner pinned the cycle's bar and its briefing is missing: an anomaly, refused whatever was stated.
+  assert.match(facts(run(entryOrder()))[0].message, /The bar briefing for this cycle's MNQ bar \(2026-10-07T13:54:00.000Z\) can't be read \(no bar briefing for MNQ\)/);
+  // FACTS stated, no briefing to check them against: refused (fails closed).
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: entries allowed; read long aligned'));
+  assert.match(facts(run(entryOrder(), unpinned))[0].message, /can't be checked \(no bar briefing for MNQ\): no entry this cycle/);
+  B.writeBriefing(home, briefing);
+  // A current briefing: an approval states at least 2 checkable claims (owner's decision); none, or one, is refused.
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1, risk $8'));
+  assert.match(facts(run(entryOrder()))[0].message, /approved with 0 checkable facts \(at least 2 needed, in a FACTS line under the verdict/);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: window opening drive'));
+  assert.match(facts(run(entryOrder()))[0].message, /approved with 1 checkable fact \(at least 2 needed/);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: window opening drive; trend long allowed; momentum strong'));
+  assert.match(facts(run(entryOrder()))[0].message, /approved on facts in no known form: "momentum strong"/);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: window opening drive; trend long allowed'));
+  assert.deepStrictEqual(run(entryOrder()).violations, [], 'two checked claims');
+  // True facts: the entry goes.
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: window opening drive; entries allowed; trend long allowed; read long aligned; vwap above'));
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // A false one (the room: IB high at 0.5R before the 2R it needs) and another: refused, naming each.
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: entries allowed; room long enough; read long mixed'));
+  const r = run(entryOrder());
+  assert.deepStrictEqual(checks(r), ['phase2-facts']);
+  assert.match(r.violations[0].message, /approved on facts the bar briefing contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it needs 2R\); "read long mixed" \(the briefing: the long read is aligned\)\. The approval doesn't stand/);
+  // The cycle decides another bar: this briefing isn't its facts (refused). No cycle bar given: the briefing on file
+  // while it is current, else unavailable (stated facts refused, none passes).
+  assert.match(facts(run(entryOrder(), { ...auto, cycleBars: { MNQ: '2026-10-07T13:57:00.000Z' } }))[0].message, /can't be read \(the MNQ briefing is for the bar at/);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: read long aligned; vwap above'));
+  assert.deepStrictEqual(run(entryOrder(), { ...auto, cycleBars: {} }).violations, []);
+  const later = (cfg, at) => evaluateOrder({ input: entryOrder(), entries: [plan()], now: at, config: cfg });
+  const stale = new Date('2026-10-07T14:20:00Z');
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: read long counter; vwap below'));
+  assert.match(facts(later({ ...auto, cycleBars: {} }, stale))[0].message, /can't be checked \(the MNQ briefing \(bar at 2026-10-07T13:54:00.000Z\) is no longer current\)/);
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: none'));
+  assert.deepStrictEqual(facts(later({ ...auto, cycleBars: {} }, stale)), []);
+  // Not autonomous: no check. Exits and protective stops never reach it, whatever the facts, the briefing or the transcript.
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: read long counter'));
+  assert.deepStrictEqual(checks(run(entryOrder())), ['phase2-facts']);
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, autonomous: false })), []);
+  fs.writeFileSync(B.briefingFile(home, 'MNQ'), '{broken');
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1'));
+  B.writeBriefing(home, briefing);
+  for (const rationale of ['[exit] flatten', '[protect] stop for the long at 21480']) {
+    assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], `${rationale}: no FACTS line, a current briefing`);
+  }
+  fs.writeFileSync(B.briefingFile(home, 'MNQ'), '{broken');
+  fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: none'));
+  assert.match(facts(run(entryOrder()))[0].message, /The bar briefing for this cycle's MNQ bar .* can't be read/, 'a corrupt briefing for a pinned bar');
+  for (const rationale of ['[exit] flatten', '[protect] stop for the long at 21480']) {
+    assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], rationale);
+    assert.deepStrictEqual(run(entryOrder({ rationale }), { ...auto, cycleTranscript: `${file}.gone` }).violations, [], rationale);
+  }
+  // The transcript can't be read: refused by both checks (fails closed).
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['phase2-facts', 'roles-ran']);
+  // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
+  for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));
+});
+
 test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript from the runner\'s environment', () => {
   const { checkOrder } = require('../../scripts/lib/trading/check-order');
   const live = replaySetup({ replay: false });
@@ -1681,6 +1808,63 @@ test('account lock outside a runner: a live broker (apiUrlEnv) whose API URL is 
 });
 
 // --- Index mode (FTH_ROLE_SKILLS=index): a role's report counts only with the lookups its bar requires (skill-lookups.js). ---
+test('phase2-facts and roles-ran judge ONE phase-2 report: the latest-ending one, in full and index mode, cached or not', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup, lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
+  const dir = require('../helpers').tmpDir();
+  const home = trendHome();
+  const file = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const T = 1.8e12;
+  const timed = (subagent_type, start, end, output = 'report') => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output, time: { start: T + start, end: T + end } } } });
+  // A reversal candidate (index mode requires lookups of every role), the opening drive, entries allowed.
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', news: { inBlackout: false }, candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }] } } } });
+  const GOOD = 'VERDICT: APPROVE - size 1\nFACTS: window opening drive; entries allowed';
+  const BAD = 'VERDICT: APPROVE - size 1\nFACTS: window opening print; entries allowed';
+  const VETO = 'VERDICT: VETO - room';
+  const analysts = [timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20)];
+  const lookAll = () => {
+    try { fs.unlinkSync(lookupsFile(file)); } catch (_err) { /* none */ }
+    const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
+    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'pullback-vs-reversal', 12);
+    look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+    // The risk manager looks up during A (phase 1) and B, never during C.
+    for (const at of [31, 46]) { look('risk-manager', 'confluence-counting', at); look('risk-manager', 'invalidation', at + 1); }
+  };
+  const write = (c, b) => {
+    fs.writeFileSync(file, [...ocSkills, ...analysts, timed('risk-manager', 30, 40, 'Risk state: tradable'), timed('risk-manager', ...c), timed('risk-manager', ...b)].join('\n'));
+    lookAll();
+  };
+  const modes = {
+    full: { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'full' },
+    index: { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'index' },
+  };
+  for (const [mode, base] of Object.entries(modes)) {
+    for (const cached of [[], ['risk-manager']]) {
+      const cfg = { ...base, cycleCached: cached };
+      const run = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: cfg });
+      const tag = `${mode} mode, ${cached.length ? 'phase 1 cached' : 'nothing cached'}`;
+      // The reviewer's repro: A (30-40), C (an uncounted veto: it started before the analysts and phase 1 returned,
+      // ending last at 60), B (45-55, an approval on a false fact). Refused: a later veto overrides, and the facts check
+      // never passes B in its place.
+      write([15, 60, VETO], [45, 55, BAD]);
+      const r = run();
+      assert.ok(r.violations.some(v => v.check === 'roles-ran' && /risk-manager phase 2 approving the plan/.test(v.message)), `${tag}: ${JSON.stringify(r.violations)}`);
+      // The reverse: B ends last. A false fact refuses on the facts; true facts go.
+      write([15, 50, VETO], [45, 55, BAD]);
+      const bad = run();
+      assert.deepStrictEqual(bad.violations.map(v => v.check), ['phase2-facts'], `${tag}: ${JSON.stringify(bad.violations)}`);
+      assert.match(bad.violations[0].message, /contradicts: "window opening print"/);
+      write([15, 50, VETO], [45, 55, GOOD]);
+      assert.deepStrictEqual(run().violations, [], tag);
+      // An uncounted veto ending with the approval: refused.
+      write([15, 55, VETO], [45, 55, GOOD]);
+      assert.ok(run().violations.some(v => v.check === 'roles-ran'), tag);
+    }
+  }
+});
+
 test('skill lookups: in index mode an entry counts a role\'s report only with the lookups its bar requires; no trigger, no requirement; exits never held', () => {
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const { recordLookup, lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
@@ -1697,7 +1881,11 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
   const reset = () => { try { fs.unlinkSync(lookupsFile(file)); } catch (_err) { /* none */ } };
   const index = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'index' };
-  const run = (input, cfg = index) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+  // The phase-2 facts check (phase2-facts, fact-claims.js) has its own tests: this one is about the lookups.
+  const run = (input, cfg = index) => {
+    const r = evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+    return { ...r, violations: r.violations.filter(v => v.check !== 'phase2-facts') };
+  };
   // A reversal candidate: the roles whose index lists its situational skills (skills-loaded.js SITUATIONAL) looked none up.
   brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
   const refused = run(entryOrder());

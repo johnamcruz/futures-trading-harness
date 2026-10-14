@@ -75,6 +75,17 @@ test('an analyst\'s report is served while the briefing parts it was built on ho
   assert.deepStrictEqual(RC.serveReports({ cache, briefings: {}, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) }).roles, ['risk-manager']);
 });
 
+test('a first risk-manager report with a qualified verdict ("Final VERDICT: APPROVE") is phase 2, never cached as phase 1', () => {
+  const { a } = pair();
+  for (const verdict of ['Final VERDICT: APPROVE - size 1', 'Phase 2 VERDICT: APPROVE', '**Final Verdict:** APPROVE', '\u200bVERDICT: APPROVE']) {
+    const output = task('risk-manager', `Plan review\n${verdict}`, [10, 15]);
+    const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });
+    assert.strictEqual(cache.phase1, null, verdict);
+  }
+  const plain = RC.recordReports({ output: task('risk-manager', 'Phase 1: budget 2 trades', [10, 15]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });
+  assert.strictEqual(plain.phase1.text, 'Phase 1: budget 2 trades', 'control: a report with no verdict is phase 1');
+});
+
 test('phase 1 is served only while the account is unchanged, on the same trading day', () => {
   const { a, b } = pair();
   const cache = RC.recordReports({ output: task('risk-manager', 'Phase 1', [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });

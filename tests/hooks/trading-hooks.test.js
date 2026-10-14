@@ -1937,6 +1937,85 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook: a room fact is about the order\'s own setup tag (phase2-facts), never the verdict\'s text', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const BAR = '2026-10-07T14:24:00.000Z';
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
+  // The order's setup:anytime long is short of room; vx long has room.
+  B.writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T14:27:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:30:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', candidates: [
+      { name: 'anytime', direction: 'long', stopPoints: 8, needR: 2, inTheWay: { name: 'IB high', R: 0.5 } },
+      { name: 'vx', direction: 'long', stopPoints: 8, needR: 2, inTheWay: null },
+    ] } },
+  } });
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })];
+  const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room long enough'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: "room long enough" \(the briefing: anytime: IB high at 0\.5R, it needs 2R\)/);
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room vx long enough'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] Risk-manager phase 2 approved on room facts that can't be matched to this order \(setup:anytime long\): "room vx long enough"/);
+  // An exit goes whatever the facts say.
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate: in an autonomous cycle, an entry approved on a fact the bar briefing contradicts is refused (phase2-facts, Claude transcript and FTH_CYCLE_BARS); exits go', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const BAR = '2026-10-07T14:24:00.000Z';
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) });
+  B.writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T14:27:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:30:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', vwap: { side: 'below' } } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:30:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
+  } });
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
+  const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, risk $40\nFACTS: entries allowed; vwap above; read long aligned'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: "vwap above" \(the briefing: price below the VWAP\)/);
+  assert.doesNotMatch(r.stderr, /roles-ran/);
+  // The same facts, true: no phase2-facts refusal (an autonomous run reads the wall clock, so only this check is asserted).
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, risk $40\nFACTS: entries allowed; vwap below; read long aligned'));
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /phase2-facts/);
+  // Another bar's briefing for the cycle: the stated facts can't be checked, refused.
+  const later = { ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:27:00.000Z' }) };
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, later).stderr, /\[phase2-facts\] The bar briefing for this cycle's MNQ bar \(2026-10-07T14:27:00.000Z\) can't be read/);
+  // A current briefing: at least 2 checkable claims (owner's decision): no line, or one claim, refused; two go.
+  for (const [p2, n] of [['VERDICT: APPROVE - size 1, risk $40', 0], ['VERDICT: APPROVE - size 1\nFACTS: entries allowed', 1]]) {
+    fs.writeFileSync(transcript, cycle(p2));
+    assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, new RegExp(`\\[phase2-facts\\] Risk-manager phase 2 approved with ${n} checkable facts? \\(at least 2 needed`), p2);
+  }
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: entries allowed; window opening drive'));
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /phase2-facts/);
+  // An exit with no FACTS line goes under a current briefing.
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1'));
+  const bare = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(bare.code, 0, bare.stderr);
+  // An exit goes, with the false facts and the briefing gone.
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: vwap above'));
+  fs.unlinkSync(B.briefingFile(env.FTH_HOME, 'MNQ'));
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  // The cycle's bar pinned and its briefing gone: refused, even with FACTS: none; an exit still goes (above).
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: none'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] The bar briefing for this cycle's MNQ bar \(2026-10-07T14:24:00.000Z\) can't be read/);
+  // No bar pinned and no briefing: FACTS: none (or no line) is no phase2-facts refusal.
+  const { FTH_CYCLE_BARS: _pinned, ...unpinned } = env;
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, unpinned).stderr, /phase2-facts/);
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1'));
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, unpinned).stderr, /phase2-facts/);
+});
+
 test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['any', /never empty or "any"/], ['7', /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/]]) {
