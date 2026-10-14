@@ -15,7 +15,7 @@
  *   serverChecks({ cfg, broker, config, env, now })   the server trades the account; its clock agrees
  *   accountChecks({ cfg, accounts, profiles, home })  the account exists, can trade, balance read, profile size
  *   laneChecks(cfg, strategies, home)        each lane: bar, trigger, strategies, policies; listed names on their lane's timeframe
- *   agentChecks(cfg, agents)                 each agent role's effective timeframe; one off the lane's fails (until per-agent timeframes)
+ *   agentChecks(cfg, agents)                 each agent role's effective timeframe; a non-analyst off the first lane's, or an analyst on one it can't be given, fails
  *   propProfiles(strategies, accounts, cfg)  the prop profiles this run trades (active policy strategies, its lanes and symbols)
  *   propChecks({ profiles, home })            every prop account a policy strategy trades has its attempt started
  *   barFieldChecks({ strategies, cfg, barsBySymbol })   bars carry the field("...") paths active strategies read
@@ -164,7 +164,7 @@ function laneChecks(cfg, strategies, home = null) {
   return why.length ? [...out, r('lane strategies', 'fail', why.join('; '))] : out;
 }
 
-/** Each agent role's effective timeframe (its config override, its agent file's, else the lane's); a role off the lane fails. */
+/** Each agent role's effective timeframe (its config override, its agent file's, else the lane's); lanes.js agentErrors decides which fail. */
 function agentChecks(cfg, agents) {
   const list = agentTimeframes(cfg, agents).map(t => `${t.role} ${t.timeframe}${t.from === 'lane' ? '' : ` (${t.from})`}`);
   const why = agentErrors(cfg, agents);

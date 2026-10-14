@@ -63,7 +63,7 @@ const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKE
 const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(now, w));
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
-const { lanesOf } = require('./lanes');
+const { lanesOf, tfLabel } = require('./lanes');
 const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory } = require('./lane-cycle');
 
 const IDLE_MS = 5000;
@@ -132,6 +132,9 @@ function createRunner(deps) {
     // The session record's decision point (session/live.js).
     barClosed = () => {},
     accountReadMs = ACCOUNT_READ_MS,
+    // The analysts on a timeframe of their own (lanes.js analystFrames: [{ role, minutes, lane }]): a lane of theirs
+    // gets its bar briefing too, and the prompt names each one's timeframe. None: every role reads the first lane's.
+    analystFrames = [],
     // Several lanes: how long a lane due at the same close may hold the cycle. A one-pass process (a replay step)
     // passes 0: it can't wait (its bars are all there at the point; one missing is a gap live would wait out too).
     coalesceHoldMs = COALESCE_HOLD_MS,
@@ -162,6 +165,7 @@ function createRunner(deps) {
   };
   const syms = lanes.flatMap((lane, li) => cfg.symbols.map(symbol => ({ symbol, lane: li, minutes: lane.timeframe, contractId: null, contractDay: null, ...restored(symbol, lane.timeframe), lastPollAt: 0, misses: 0, resyncs: 0 })));
   let held = []; // several lanes: closed bars waiting (briefly) for a lane due at the same close
+  const frameLanes = new Set(analystFrames.filter(f => f.lane > 0).map(f => f.lane));
   const delayMs = cfg.barDelaySeconds * 1000;
   const sessionWindows = parseWindows(cfg.sessions.join(',')).windows;
   const timeoutMs = cfg.barTimeoutSeconds * 1000;
@@ -547,8 +551,9 @@ function createRunner(deps) {
   function briefItem(item, results, scanError) {
     if (item.briefed) return;
     item.briefed = true;
-    // The briefing is the symbol's, built on the first lane's bars (another lane's bar keeps the last one).
-    if (item.lane > 0) return;
+    // The briefing is the symbol's, built on the first lane's bars (another lane's bar keeps the last one); another
+    // lane's bars brief only an analyst on that lane's timeframe.
+    if (item.lane > 0 && !frameLanes.has(item.lane)) return;
     try {
       recordBriefing(item, results, scanError);
     } catch (err) {
@@ -1247,6 +1252,7 @@ function createRunner(deps) {
             cyclesLeft,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
+            ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
@@ -1267,6 +1273,11 @@ function createRunner(deps) {
             action: again.action, cachedRoles: served ? served.roles : [],
             // Several lanes: the lanes that closed, and the setups skipped for a higher-priority policy (labels see them).
             ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`), skipped } : {}),
+            // Several lanes: the bar each symbol's bar briefing is on (the first lane's), which the cycle's roles read
+            // as this cycle's (bar_briefing), whichever lane's bar closed.
+            ...(multi ? { cycleBars: Object.fromEntries(cacheSymbols.map(s => [s.symbol, s.bar])) } : {}),
+            // The analysts on their own timeframe, and the cycle's start: each one's briefing is the bar holding then.
+            ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));

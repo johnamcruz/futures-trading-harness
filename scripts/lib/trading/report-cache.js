@@ -8,6 +8,10 @@
  *     briefing's m15, h1 and day parts it names in its Data line are the current ones, for the same symbols and
  *     contracts: until the next 15m close (an h1 or day change comes at a 15m close too). Its 15m-and-up view is
  *     what is reused; the 3m facts (the trigger, the VWAP side, the candidates) come from each bar's briefing.
+ *   - An analyst on its own timeframe (lanes.js analystFrames; `frames`: role -> minutes), in a one-symbol cycle,
+ *     holds while its timeframe's briefing (trading/briefing.js buildFrameBriefing: its `bar` part) and the runner's
+ *     parts it shares are the ones it names, until its own next bar close (a 15m analyst's at most 15 min, a 1h one's
+ *     an hour), never past it: an expired one is never served. An analyst without one keeps the rule above.
  *   - risk-manager phase 1 (the account's state, limits, budget) holds while the account is unchanged (balance,
  *     positions, working orders, prop attempts) on the same trading day, for at most PHASE1_MAX_AGE_MS; never from
  *     a cycle that launched a trade-executor, nor on an account that wasn't read whole, nor a report that doesn't
@@ -19,18 +23,20 @@
  * the valid ones in the next cycle's prompt, and names them to the order gate (FTH_CYCLE_CACHED), whose
  * roles-ran check counts them as returned.
  *
- *   reportVersions(text, current)               { m15, h1, day } from a report's Data line, or null
+ *   reportVersions(text, current, parts)        { m15, h1, day } (or `parts`: [[key, version prefix]]) from a report's Data line, or null
+ *   frameVersions(first, frame, minutes, now)   an own-timeframe analyst's current versions { bar, ...shared } and until, or null
  *   accountKey(account)                         the account facts phase 1 rests on, as text
- *   serveReports({ cache, briefings, symbols, account, day, now })  { roles, reports: [{ role, text, at, until }] }
+ *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings })  { roles, reports: [{ role, text, at, until, tf? }] }
  *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
  *   phase1Holds(text, account)                  phase 1 confirms every active attempt and denies none
- *   recordReports({ prev, output, served, briefings, symbols, account, day, now })  the new cache
+ *   recordReports({ prev, output, served, briefings, symbols, account, day, now, frames, frameBriefings })  the new cache
  *   cacheFile(home), readCache(home), writeCache(home, cache)
  */
 
 const fs = require('fs');
 const path = require('path');
 const { ANALYSTS, roleCalls, verdictOf } = require('./roles-ran');
+const { sharedParts, frameHolds } = require('./briefing');
 
 const PHASE1 = 'risk-manager';
 const CACHED_ROLES = [...ANALYSTS, PHASE1];
@@ -84,18 +90,48 @@ function phase1Holds(text, account) {
  * role may shorten a version to its clock time (`m15@14:00`, the version's own UTC time): with `current` (this bar's
  * versions, when the report is recorded right after its cycle) that names the current version and is stored in full.
  */
-function reportVersions(text, current = null) {
+function reportVersions(text, current = null, parts = PARTS.map(p => [p, p])) {
   const line = String(text || '').split('\n').find(l => /^\s*\**Data:?\**/i.test(l) && /bar_briefing/.test(l));
   if (!line) return null;
   const out = {};
-  for (const p of PARTS) {
-    const m = new RegExp(`\\b${p}@(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z|\\d{2}:\\d{2}\\b)`).exec(line);
+  for (const [p, prefix] of parts) {
+    const m = new RegExp(`\\b${prefix}@(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z|\\d{2}:\\d{2}\\b)`).exec(line);
     if (!m) return null;
-    if (m[1].length > 5) out[p] = `${p}@${m[1]}`;
-    else if (current && current[p] && current[p].slice(p.length + 12, p.length + 17) === m[1]) out[p] = current[p];
+    if (m[1].length > 5) out[p] = `${prefix}@${m[1]}`;
+    else if (current && current[p] && current[p].slice(prefix.length + 12, prefix.length + 17) === m[1]) out[p] = current[p];
     else return null;
   }
   return out;
+}
+
+/** An own-timeframe analyst's parts: its briefing's `bar` (versions `bar15m@...`) and the runner's parts it shares. */
+const frameParts = minutes => [['bar', `bar${minutes}m`], ...sharedParts(minutes).map(p => [p, p])];
+
+/**
+ * An analyst on `minutes`-minute bars: the versions its report must name (its briefing's `bar` part and the runner's
+ * parts it shares) and until when they hold (the earliest of their ends), or null when there is no current one: its
+ * briefing missing, of another symbol or contract, or not the bar holding at `now` (no clock: none).
+ */
+function frameVersions(first, frame, minutes, now) {
+  if (!now || !first || !first.sections || !frame || frame.minutes !== minutes || frame.symbol !== first.symbol) return null;
+  if ((frame.contractId || null) !== (first.contractId || null) || !frameHolds(frame, now)) return null;
+  const parts = frameParts(minutes);
+  const secs = parts.map(([p]) => (p === 'bar' ? frame.sections.bar : first.sections[p]));
+  if (secs.some(x => !x || !x.version || !Number.isFinite(Date.parse(x.validUntil)))) return null;
+  const until = Math.min(...secs.map(x => Date.parse(x.validUntil)));
+  if (until <= now.getTime()) return null;
+  return { versions: Object.fromEntries(parts.map(([p], i) => [p, secs[i].version])), until: new Date(until).toISOString() };
+}
+
+const sameVersions = (a, b) => Boolean(a && b) && Object.keys(a).length === Object.keys(b).length && Object.keys(b).every(k => a[k] === b[k]);
+
+/** An own-timeframe analyst's current versions in a one-symbol cycle on this bar's runner briefing, or null. */
+function frameNow({ briefings, frameBriefings, symbols, minutes, now }) {
+  if (symbols.length !== 1) return null;
+  const s = symbols[0];
+  const b = briefings[s.symbol];
+  if (!b || !b.sections || b.asOf !== s.bar) return null;
+  return frameVersions(b, ((frameBriefings || {})[s.symbol] || {})[minutes] || null, minutes, now);
 }
 
 /** The current m15, h1 and day versions, the same for every symbol (else null: nothing is reusable across them). */
@@ -136,7 +172,7 @@ function accountKey(a) {
 const sameSymbols = (cache, symbols) => JSON.stringify(cache.symbols || []) === JSON.stringify(symbols.map(s => [s.symbol, s.contractId || null]));
 
 /** The cached reports still valid for this cycle, and the roles they stand for. */
-function serveReports({ cache, briefings, symbols, account, day, now = null }) {
+function serveReports({ cache, briefings, symbols, account, day, now = null, frames = {}, frameBriefings = {} }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
   const reports = [];
@@ -144,7 +180,14 @@ function serveReports({ cache, briefings, symbols, account, day, now = null }) {
   const until = untilOf(briefings, symbols);
   for (const role of ANALYSTS) {
     const r = (cache.analysts || {})[role];
-    if (v && r && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until });
+    const m = (frames || {})[role];
+    if (m) {
+      // On its own timeframe: its versions now, and never past their time.
+      const f = r && r.tf === m ? frameNow({ briefings, frameBriefings, symbols, minutes: m, now }) : null;
+      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m` });
+      continue;
+    }
+    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until });
   }
   const p1 = cache.phase1;
   const key = accountKey(account);
@@ -161,7 +204,7 @@ function serveReports({ cache, briefings, symbols, account, day, now = null }) {
  * phase 1's report (the cycle's first risk-manager call, when phase 1 wasn't served from the cache) with the
  * account the cycle was given. Roles served from the cache keep their entry.
  */
-function recordReports({ prev, output, served = [], briefings, symbols, account, day, now }) {
+function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {} }) {
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
@@ -170,10 +213,19 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
   for (const role of ANALYSTS) {
     const mine = calls.filter(c => c.role === role);
     const last = mine.sort((a, b) => a.end - b.end)[mine.length - 1];
+    const m = (frames || {})[role];
+    if (m) {
+      // On its own timeframe: built on its briefing's bar and the shared parts current now, reusable while they hold.
+      const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, now });
+      const named = f && last ? reportVersions(last.text, f.versions, frameParts(m)) : null;
+      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString() };
+      else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && keep.analysts[role].tf === m) cache.analysts[role] = keep.analysts[role];
+      continue;
+    }
     const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
     if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString() };
-    else if (served.includes(role) && keep && keep.analysts && keep.analysts[role]) cache.analysts[role] = keep.analysts[role];
+    else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && !keep.analysts[role].tf) cache.analysts[role] = keep.analysts[role];
   }
   const key = accountKey(account);
   // A cycle that launched a trade-executor changed (or may have changed) the account: no phase 1 from it.
@@ -211,4 +263,4 @@ function removeCache(home) {
   try { fs.unlinkSync(cacheFile(home)); } catch (_err) { /* none */ }
 }
 
-module.exports = { CACHED_ROLES, PHASE1, PHASE1_MAX_AGE_MS, deniesActiveAttempt, phase1Holds, reportVersions, accountKey, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };
+module.exports = { CACHED_ROLES, PHASE1, PHASE1_MAX_AGE_MS, deniesActiveAttempt, phase1Holds, reportVersions, frameVersions, accountKey, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };

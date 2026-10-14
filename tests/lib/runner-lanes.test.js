@@ -668,3 +668,29 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
   assert.ok(flat1);
   assert.doesNotMatch(flat1.prompt, /planned: slow/);
 });
+
+test('lanes: another lane\'s bar is briefed only for an analyst on that lane\'s timeframe; the context names the briefing\'s bar and, with own timeframes, the cycle\'s start', async () => {
+  const run = async analystFrames => {
+    const briefed = [];
+    const { cycles } = await simulate({ cfg: { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }] }, from: START, to: et(10, 4, 30), mkt: market(), deps: { analystFrames, recordBriefing: item => briefed.push(`${item.minutes}m ${item.bar.t}`) } });
+    return { briefed, cycles };
+  };
+  const plain = await run([]);
+  assert.ok(plain.briefed.length >= 2 && plain.briefed.every(x => x.startsWith('3m')), plain.briefed.join(','));
+  for (const c of plain.cycles) assert.ok(!('cycleAt' in c.context) && !('frames' in c.context));
+  const own = await run([{ role: 'market-structure-analyst', minutes: 1, lane: 1 }]);
+  assert.ok(own.briefed.some(x => x.startsWith('1m')) && own.briefed.filter(x => x.startsWith('3m')).length === plain.briefed.length, own.briefed.join(','));
+  for (const c of own.cycles) {
+    assert.strictEqual(c.context.cycleAt, iso(c.start));
+    assert.deepStrictEqual(c.context.frames, [{ role: 'market-structure-analyst', timeframe: '1m' }]);
+  }
+  // A 1m-only cycle's briefing bar is the 3m lane's last (the cycle's roles read that briefing as this cycle's).
+  const oneMin = plain.cycles.filter(c => c.context.lanes.join() === '1m');
+  assert.ok(oneMin.length >= 1);
+  for (const c of oneMin) {
+    const m1 = c.context.symbols.find(x => x.lane === '1m');
+    assert.notStrictEqual(c.context.cycleBars.MNQ, m1.bar.t);
+    const b3 = Date.parse(c.context.cycleBars.MNQ);
+    assert.ok(b3 % 180000 === 0 && b3 < Date.parse(m1.bar.t) && b3 + 2 * 180000 > Date.parse(m1.bar.t) + 60000, `the last 3m bar's open: ${c.context.cycleBars.MNQ} for ${m1.bar.t}`);
+  }
+});

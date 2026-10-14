@@ -4,7 +4,7 @@
  * (scripts/lib/trading/briefing.js): the analysis by timeframe, each part
  * with its version and how long it holds.
  *
- *   node scripts/briefing.js --symbol MNQ [--json]
+ *   node scripts/briefing.js --symbol MNQ [--timeframe 15m] [--json]
  *
  * The operation lives in scripts/lib/harness-tools/briefing.js.
  */

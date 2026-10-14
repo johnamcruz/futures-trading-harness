@@ -31,6 +31,20 @@ it from the briefing. Your report's first line names what it rests on:
 `Data: bar_briefing <the versions you used>`, or, without a current
 briefing, `Data: no current briefing; <the tools you called>`.
 
+**Your timeframe.** By default you read the runner's bars (the cycle's
+timeframe, e.g. 3m) and its briefing. When the caller gives you a timeframe
+of your own (the runner config's `agents`, e.g. "timeframe 15m" or "1h"),
+read `bar_briefing {"symbol": "<SYMBOL>", "timeframe": "15m"}` (with yours) instead: its
+`bar` part is your timeframe's last closed bar (the `m3` facts computed on
+your bars, the gate's trend rule; the setups are the runner's briefing's
+unless a lane trades your bars), with the runner's `m15`, `h1` and `day`
+parts that change no faster than your bars, and it names your bars file.
+Report on your timeframe (put it first where a step below says 3m), and name
+those versions: `Data: bar_briefing <tf> bar<minutes>m@<...>, <the shared
+parts' versions>`. Your report may be reused until your timeframe's next bar
+close, so it may be up to one of your bars old: describe that bar's state,
+not this minute's trigger.
+
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file of your own with the harness tool `bars_fetch`
