@@ -382,8 +382,9 @@ test('mtf: trend (the default) or reversal; a policy strategy takes it from its 
   assert.match(errs(['mtf: sideways']).join(), /mtf: trend \| reversal/);
   const { strategies } = loadStrategies(ROOT, {});
   const byName = Object.fromEntries(strategies.map(s => [s.name, s]));
-  for (const n of ['crt_1h', 'crt_4h', 'cisd_ote', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
-  for (const n of ['orb', 'vwap_reclaim', 'ofi', 'value_area_breakout']) assert.strictEqual(byName[n].mtf, 'trend', n);
+  for (const n of ['crt_1h', 'crt_4h', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
+  // cisd_ote since version 4: a trend strategy (a CISD with the HTF trend on a pullback, or in a range).
+  for (const n of ['orb', 'vwap_reclaim', 'ofi', 'value_area_breakout', 'cisd_ote']) assert.strictEqual(byName[n].mtf, 'trend', n);
   assert.strictEqual(byName.prop_portfolio.mtf, undefined);
 });
 

@@ -6,7 +6,7 @@ status: paper                 # textbook rewrite of the old port: paper until th
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m                 # the trigger: the bounce is read on completed 3-minute bars
 signal: rules
-mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
+mtf: trend                    # with the prevailing HTF trend (a pullback ending), or either way with none (a range); a fade is refused by the trend rule
 rules:
   long:
     - cisd_entry(15) > 0      # the bounce from a bullish 15m (or, with cisdHigherMinutes, 60m) CISD's OTE zone
@@ -35,9 +35,15 @@ strategy is the two put together, mechanically.
 
 ## When to Use
 
-- After a run of 15-minute candles, when a completed 15-minute candle
-  closes back through the open of the run's first candle (a displacement),
-  and price then pulls back into the leg's OTE zone.
+- **Trend pullback (the preferred use).** In a higher-timeframe trend, price
+  pulls back to a level; a CISD back in the trend's direction ends the
+  pullback, and the OTE bounce is the entry.
+- **Range.** At a range extreme (the range high or low, a value-area edge,
+  the prior day's high or low), a CISD back toward the middle, aiming at the
+  other side of the range.
+- Mechanically: after a run of 15-minute (or 60-minute) candles, a strong
+  completed candle closes back through the open of the run's first candle
+  (a displacement), and price then pulls back into the leg's OTE zone.
 - Stronger after a sweep of a key level (the prior RTH day's high or low,
   the overnight high or low in RTH, the prior session's high or low):
   confluence the scan reports (`cisd_sweep(15)`), never required.
@@ -96,11 +102,18 @@ shift; it is preferred when both fire. The CISD timeframes are the `(15)`
 in the rules and the stop and `cisdHigherMinutes`; `cisd_entry(3)` /
 `cisd_risk(3)` is the 3m variant the census also measures.
 
+Why `mtf: trend` (it was `reversal` through the first drafts of version 4):
+the owner's intent is a CISD with the trend on a pullback, or in a range.
+As a trend strategy, the trend rule passes a CISD in the prevailing
+higher-timeframe trend's direction, and both directions when no timeframe
+has a trend (a range); one against a prevailing trend is refused like any
+trend strategy's fade (the scan drops it, the backtester skips it, the
+order gate refuses it). A counter-trend CISD is still read in the `cisd`
+skill (`bos-vs-choch`), but this strategy doesn't trade it.
+
 ### Skip when (judgment: the mechanics take every signal)
 
-- The higher timeframe is cleanly against the CISD, no key level was
-  swept, and the CISD is the only reversal sign (the `cisd` skill:
-  confluence, not a standalone).
+- Mid-range with no level near the CISD (the `cisd` skill: where it works).
 - The first level ahead of the bounce is closer than 1R (levels-and-reactions).
 - Risk to the origin is above the position-sizing budget at size 1.
 
@@ -128,6 +141,8 @@ the owner's decision, by the textbook definition:
   below (the source's asymmetry, kept for parity). The rewrite mirrors
   every step.
 - **Target** 2R as a bracket (was a 2R / 0.5R trail).
+- **A trend strategy** (`mtf: trend`; was `mtf: reversal`): with the trend
+  on a pullback, or either way in a range.
 
 The old port's parity tests against the bot's output went with the port
 (tests/lib/parity.test.js keeps `orb`); the census compares the two
