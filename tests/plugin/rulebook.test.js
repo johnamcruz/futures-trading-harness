@@ -120,6 +120,13 @@ test('R1: no rulebook value is restated anywhere else: not in code, skills, agen
   for (const f of scanned()) {
     let text = read(f);
     if (f === DEFAULTS.file) text = text.replace(DEFAULTS.block, '');
+    // opencode's config holds each prompt (embedded skills included) as one JSON string, one line: scanned as the
+    // prompt's own lines, as its sources are (a policy named anywhere in a whole prompt isn't one on the line).
+    if (f === 'workspace/opencode.json') {
+      const oc = JSON.parse(text);
+      const prompts = Object.values(oc.agent || {}).map(a => a.prompt).filter(p => typeof p === 'string');
+      text = [JSON.stringify(oc, (k, v) => (k === 'prompt' ? undefined : v), 2), ...prompts].join('\n');
+    }
     for (const [where, key, v] of vals) {
       for (const { re, policyOnly } of restatements(key, v)) {
         const lines = text.split('\n');

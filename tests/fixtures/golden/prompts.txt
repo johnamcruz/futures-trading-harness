@@ -26,7 +26,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
+  Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -175,7 +175,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in paper mode (plan only, no orders).
+  Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in paper mode (plan only, no orders).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -198,7 +198,7 @@ Autonomous cycle.
   Don't flip-flop without a new reason.
   Unreviewed: none.
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ.
+  Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -234,7 +234,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -271,7 +271,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): MNQ strategy scan (need at least 3 bars, got 2): what fired is unknown.
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
