@@ -45,16 +45,15 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    The ceilings are code's (the strategy's dollar cap, the broker's max
    size, in an attempt the verdict): at or below, never above. No priority
    order halves a composed trade: its size is yours under the caps.
-4. **Against the trend** only with a true 15m or 1h CHoCH read your way in
-   the record; else the trend rule refuses it.
-5. **`[composed-reads]` refusals**: no record for this bar, or only the
-   other side's (compose again); expired (a new bar: compose again); an
-   entry already placed on this bar and side; another contract than the
-   record's; a read false, unverifiable or against your side on the
-   re-check (drop it or pass); the plan, ticks, limit or size not the
-   record's (send it as given). The stop is never widened to the minimum
-   stop: name a farther level or pass. Exits and protective orders are
-   never held.
+4. **Against the trend**: a true CHoCH read your way at or above its frame
+   (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level>` your
+   way); else the trend rule refuses it.
+5. **`[composed-reads]` refusals**: no record for this bar and side, or
+   expired (compose again); an entry already placed on this bar and side;
+   another contract; a read false, unverifiable or against your side now
+   (drop it or pass); the plan, ticks, limit or size not the record's. The
+   stop is never widened: name a farther level or pass. Exits and
+   protective orders are never held.
 
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |

@@ -519,6 +519,8 @@ test('decision path, trade_lifecycle: the model composes the whole trade with co
   const rec = TL.readRecords(w.home, 'MNQ').at(-1);
   assert.deepStrictEqual([rec.ok, rec.bar, rec.plan.stop.price, rec.plan.target.price, rec.plan.rr], [true, FIRED_BAR, 27404.5, 27512, 3.67], JSON.stringify(rec.problems));
   assert.match(r.ctx.results.compose_check, /^compose_check MNQ long/);
+  // The cycle log judges the entry by the composed list (no strategy skill is missing from a composed entry).
+  assert.deepStrictEqual(D.cycleLines(w).at(-1).missingSkills, []);
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
 });
 

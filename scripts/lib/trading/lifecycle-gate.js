@@ -30,6 +30,11 @@
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot })
  *                                   { message: why it is refused | null, check, record, plan, room }
+ *   reversalAllowed({ home, root, side, check })   D2 (the owner's "CHoCH at or above the trend"): whether a composed
+ *                                   entry against the prevailing trend (mtf-state's record) stands on the re-checked
+ *                                   reads: against 15m, a true agreeing 15m or 1h CHoCH; against 1h, a 1h CHoCH;
+ *                                   against 4h, a 1h CHoCH and a 4h candle that rejected a level the trade's way.
+ *                                   { ok, against: <frame> | null, why }; nothing against it: ok false (no reversal)
  *   recordUsed(entries, { since, side }, root)   a successful non-exit entry on the root's family, that side (an entry
  *                                   whose side can't be read counts), placed at or after `since`
  */
@@ -40,6 +45,8 @@ const { familyOf, familyRoot } = require('./contracts');
 const { contractRoot, entryTime, mayBeRoot } = require('./journal');
 const { latestVerdict } = require('./prop-state');
 const { briefingFor } = require('./fact-claims');
+const { readRecord: readMtf } = require('./mtf-state');
+const { RULE_FRAMES, trendRule } = require('./mtf');
 const { checkReads } = require('./composed-reads');
 const { STRATEGY, readRecords, planOf } = require('./trade-lifecycle');
 
@@ -100,6 +107,31 @@ function limitRefusal({ side, type, limitPrice, reference, tick } = {}) {
 }
 
 const quote = r => `"${r.read}"`;
+
+// What each prevailing frame needs to be faded (D2): the CHoCH frames that suffice, and whether a 4h rejection must join.
+const D2_TIERS = { 15: { choch: ['15m', '1h'], rejection4h: false }, 60: { choch: ['1h'], rejection4h: false }, 240: { choch: ['1h'], rejection4h: true } };
+
+function reversalAllowed({ home, root, side, check }) {
+  const no = (why, against = null) => ({ ok: false, against, why });
+  try {
+    if (!check || !check.ok || !Array.isArray(check.reads)) return no('no standing record');
+    const rec = readMtf(home, root);
+    if (!rec || rec.error || !rec.biases) return no('no multi-timeframe read');
+    const biases = Object.fromEntries(RULE_FRAMES.map(m => [m, rec.biases[m] === null || rec.biases[m] === undefined ? NaN : Number(rec.biases[m])]));
+    const r = trendRule(biases, side, 'trend');
+    if (r.allowed || !r.prevailing) return no('not against the trend');
+    const tier = D2_TIERS[r.prevailing.minutes];
+    if (!tier) return no(`no D2 tier for ${r.prevailing.label}`, r.prevailing.label);
+    const good = x => x.check === true && x.agrees === true && x.dir === side;
+    const chochs = check.reads.filter(x => good(x) && x.kind === 'break' && /^(15m|1h) choch (up|down)$/.test(String(x.form || ''))).map(x => String(x.form).split(' ')[0]);
+    const hasChoch = tier.choch.some(tf => chochs.includes(tf));
+    const has4h = !tier.rejection4h || check.reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || '')));
+    if (hasChoch && has4h) return { ok: true, against: r.prevailing.label, why: null };
+    return no(`against the ${r.prevailing.label} trend a verified ${tier.choch.join(' or ')} CHoCH${tier.rejection4h ? ' and a 4h candle that rejected a level' : ''} the trade's way is needed`, r.prevailing.label);
+  } catch (err) {
+    return no(`the check failed (${err.message})`);
+  }
+}
 
 function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
@@ -162,10 +194,10 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,
     // against the R its target needs.
     const room = { stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null };
-    return { message: null, check, record: rec, plan: p, room };
+    return { message: null, check, record: rec, plan: p, room, expiresAt: new Date(expiry).toISOString() };
   } catch (err) {
     return say(`the check failed (${err.message}): no entry (fails closed)`);
   }
 }
 
-module.exports = { isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, composedRefusal, recordUsed };
+module.exports = { D2_TIERS, reversalAllowed, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, composedRefusal, recordUsed };

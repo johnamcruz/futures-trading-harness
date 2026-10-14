@@ -240,7 +240,8 @@ reversal of owner decision D2: a trend or break read against the side is
 allowed when the combination also has a true 15m or 1h CHoCH the order's way,
 on a timeframe at or below that CHoCH's (a 15m CHoCH never excuses the 1h or
 4h trend; a 3m CHoCH excuses nothing). It is the reads' agreement only: the
-gate's trend rule is checked on its own.
+gate's trend rule has its own tiers (D2): the prevailing frame (the
+multi-timeframe record) is faded only on a CHoCH at or above it.
 
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend
@@ -1068,9 +1069,13 @@ Each has a proposed default; the owner may change any of them.
 
 - **D1.** Approve the design: one `signal: composed` strategy document plus
   `compose_check` and the learning loop. *Proposed default: yes.*
-- **D2.** Trend rule. *Proposed default: follow today's trend rule;
-  against the trend only with a code-verified reversal (a higher-timeframe
-  CHoCH the order's way).*
+- **D2.** Trend rule. *Decided (owner, "CHoCH at or above the trend"):
+  follow today's trend rule; a trade_lifecycle entry against the prevailing
+  trend stands only on true, agreeing reads in its record: against a 15m
+  trend a 15m or 1h CHoCH the trade's way; against a 1h trend a 1h CHoCH;
+  against a 4h trend a 1h CHoCH plus a 4h candle that rejected a level the
+  trade's way (e.g. `4h rejected previous 4h low up`). Otherwise
+  `[mtf-trend]` refuses it (lifecycle-gate.js `reversalAllowed`).*
 - **D3.** Stop buffer beyond the invalidation level. *Proposed default:
   1 tick.*
 - **D4.** The momentum read. *Proposed default: a bar read only: the bar's

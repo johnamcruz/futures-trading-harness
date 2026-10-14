@@ -35,7 +35,7 @@ const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
-const { composedName, composedRefusal } = require('./lifecycle-gate');
+const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -333,12 +333,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message });
   }
-  // D2 (owner-approved): a trade_lifecycle entry against the higher-timeframe trend stands only on a verified 15m or 1h
-  // CHoCH its way (a read of the record, true and agreeing on the re-check); then the trend rule is judged as a
-  // reversal's. Anything else (no record standing, no such read): the trend rule as for any trend entry (fails closed).
+  // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
+  // the tier its frame needs among the record's re-checked reads (lifecycle-gate.js reversalAllowed); then the trend
+  // rule is judged as a reversal's. Anything else (no record standing, a tier short): the trend rule as before.
   const composedSide = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
-  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedCheck.check && composedSide
-    && composedCheck.check.reads.some(r => r.kind === 'break' && r.check === true && r.agrees === true && r.dir === composedSide && /^(15m|1h) choch (up|down)$/.test(String(r.form || ''))));
+  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedSide
+    && reversalAllowed({ home: config.home, root: contractRoot(input.contractId), side: composedSide, check: composedCheck.check }).ok);
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.
@@ -459,7 +459,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     ? `${enteredAll} entries this trading day (limit ${config.maxEntriesPerDay}).`
     : null);
 
-  return { intent: 'entry', violations };
+  // A composed entry the gate let through: the record it judged, its expiry and entry price, for the gateway's stamp.
+  const composedOut = composedCheck && !composedCheck.message ? { composed: { record: composedCheck.record.id, expiresAt: composedCheck.expiresAt, entry: composedCheck.plan.entry.price, side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null } } : {};
+  return { intent: 'entry', violations, ...composedOut };
 }
 
 /**

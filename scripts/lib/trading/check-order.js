@@ -95,7 +95,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     if (held) result.violations.push({ check: 'account-lock', message: held });
   }
   const allowed = result.violations.length === 0;
-  return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now };
+  return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now, ...(result.composed ? { composed: result.composed } : {}) };
 }
 
 function gateLogPath(env = process.env) {

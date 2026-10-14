@@ -2682,7 +2682,12 @@ const lcEval = (home, input = LC.order(), o = {}) => evaluateOrder({
 
 test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it is refused ([strategy]), as any paper strategy', () => {
   const home = lcHome();
-  assert.deepStrictEqual(lcEval(home).violations, []);
+  const ok = lcEval(home);
+  assert.deepStrictEqual(ok.violations, []);
+  // What the gate judged, for the gateway's stamp: the record, its expiry (the earlier of the record's and the
+  // briefing's), the entry price and the side.
+  const judged = require('../../scripts/lib/trading/trade-lifecycle').readRecords(home, 'MNQ').at(-1);
+  assert.deepStrictEqual(ok.composed, { record: judged.id, expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' });
   // Several lanes: the briefing's bar (FTH_CYCLE_BRIEFING_BARS, the first lane's) over the lane bar that closed.
   assert.deepStrictEqual(lcEval(home, LC.order(), { config: { cycleBars: { MNQ: '2026-10-07T13:59:00.000Z' }, cycleBriefingBars: { MNQ: LC.BAR } } }).violations, []);
   const paper = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, status: 'paper' } : s));
@@ -2807,29 +2812,80 @@ test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the 
   assert.strictEqual(checkClaim(parseClaim('room long enough'), LC.briefing(), { strategy: 'trade_lifecycle', side: 'long' }).check, 'unchecked');
 });
 
-test('trade_lifecycle, D2: against the higher-timeframe trend only on a verified 15m or 1h CHoCH the trade\'s way among the record\'s reads; else [mtf-trend]', () => {
-  const down = () => trendHome(require('../helpers').tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
-  const choch = LC.briefing();
-  choch.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
-  const withChoch = LC.READS.map(x => (x.step === 'bias' ? { ...x, read: '1h choch up', skill: 'bos-vs-choch' } : x));
-  // The trend against the long and no CHoCH read: the trend rule refuses it.
-  let home = down();
-  LC.writeScenario(home);
-  assert.deepStrictEqual(checks(lcEval(home)), ['mtf-trend']);
-  // A verified 1h CHoCH up in the record: the trend rule is judged as a reversal's, and the entry goes.
-  home = down();
-  LC.writeScenario(home, { reads: withChoch, b: choch });
-  assert.deepStrictEqual(lcEval(home).violations, []);
-  // The CHoCH read false now (the briefing's last 1h break is a BOS): composed-reads refuses, and the trend rule too.
-  const bos = LC.briefing();
-  bos.sections.h1.data.lastBreak = { last: { kind: 'BOS', direction: 'up', level: 21500 }, previous: null };
-  home = down();
-  LC.writeScenario(home, { reads: withChoch, b: choch });
-  require('../../scripts/lib/trading/briefing').writeBriefing(home, bos);
-  assert.deepStrictEqual(checks(lcEval(home)), ['composed-reads', 'mtf-trend']);
-  // A rules strategy's entry never gets it (trade_lifecycle only), and an exit is never held.
-  const exit = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' });
-  assert.deepStrictEqual(exit.violations, []);
+test('trade_lifecycle, D2 ("CHoCH at or above the trend"): each tier on the gate, a long against 15m, 1h and 4h trends; non-CHoCH breaks never fade it', () => {
+  const B = { kind: k => ({ last: { kind: k, direction: 'up', level: 21500 }, previous: null }) };
+  // The briefing: every break the reads may name, and a 4h candle that rejected the previous 4h low up.
+  const brief = ({ m3 = 'CHoCH', m15 = 'CHoCH', h1 = 'CHoCH' } = {}) => {
+    const b = LC.briefing({ m3: { lastBreak: B.kind(m3) } });
+    b.sections.m15.data.lastBreak = B.kind(m15);
+    b.sections.h1.data.lastBreak = B.kind(h1);
+    b.sections.m3.data.candles['4h'] = { o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top', relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }] };
+    return b;
+  };
+  const reads = (bias, extraSetup = []) => [
+    ...bias.map(read => ({ step: 'bias', skill: 'bos-vs-choch', read })),
+    ...LC.READS.filter(x => x.step !== 'bias'),
+    ...extraSetup.map(read => ({ step: 'setup', skill: 'rejection', read })),
+  ];
+  const run = (biases, bias, { extra = [], b = brief() } = {}) => {
+    const home = trendHome(require('../helpers').tmpDir(), { biases });
+    LC.writeScenario(home, { reads: reads(bias, extra), b });
+    return checks(lcEval(home));
+  };
+  const M15 = { 240: 0, 60: 0, 15: -1 };
+  const H1 = { 240: 0, 60: -1, 15: -1 };
+  const H4 = { 240: -1, 60: -1, 15: -1 };
+  // Against a 15m trend: a 15m or a 1h CHoCH up.
+  assert.deepStrictEqual(run(M15, ['15m choch up']), []);
+  assert.deepStrictEqual(run(M15, ['1h choch up']), []);
+  assert.deepStrictEqual(run(M15, ['1h up']), ['mtf-trend'], 'no CHoCH');
+  // Non-CHoCH breaks and a 3m CHoCH never fade it.
+  assert.deepStrictEqual(run(M15, ['15m bos up'], { b: brief({ m15: 'BOS' }) }), ['mtf-trend']);
+  assert.deepStrictEqual(run(M15, ['1h bos up'], { b: brief({ h1: 'BOS' }) }), ['mtf-trend']);
+  assert.deepStrictEqual(run(M15, ['3m choch up']), ['mtf-trend']);
+  // Against a 1h trend: a 1h CHoCH; a 15m one is under it.
+  assert.deepStrictEqual(run(H1, ['1h choch up']), []);
+  assert.deepStrictEqual(run(H1, ['15m choch up']), ['mtf-trend']);
+  assert.deepStrictEqual(run(H1, ['1h bos up'], { b: brief({ h1: 'BOS' }) }), ['mtf-trend']);
+  // Against a 4h trend: a 1h CHoCH plus a 4h candle that rejected a level the trade's way; either alone is short.
+  assert.deepStrictEqual(run(H4, ['1h choch up'], { extra: ['4h rejected previous 4h low up'] }), []);
+  assert.deepStrictEqual(run(H4, ['1h choch up']), ['mtf-trend']);
+  assert.deepStrictEqual(run(H4, ['15m choch up'], { extra: ['4h rejected previous 4h low up'] }), ['mtf-trend']);
+  // A CHoCH read false now (the briefing's 1h break is a BOS): composed-reads refuses, and the trend rule too.
+  assert.deepStrictEqual(run(H1, ['1h choch up'], { b: brief({ h1: 'BOS' }) }), ['composed-reads', 'mtf-trend']);
+  // With the trend: nothing to fade; an exit is never held.
+  assert.deepStrictEqual(run({ 240: 1, 60: 1, 15: 1 }, ['1h up']), []);
+  const home = trendHome(require('../helpers').tmpDir(), { biases: H4 });
+  assert.deepStrictEqual(lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' }).violations, []);
+});
+
+test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-checked reads)', () => {
+  const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
+  const read = (kind, form, dir = 'short', extra = {}) => ({ kind, form, dir, check: true, agrees: true, ...extra });
+  const at = (biases, reads) => {
+    const home = trendHome(require('../helpers').tmpDir(), { biases });
+    return reversalAllowed({ home, root: 'MNQ', side: 'short', check: { ok: true, reads } }).ok;
+  };
+  const UP15 = { 240: 0, 60: 0, 15: 1 };
+  const UP1H = { 240: 0, 60: 1, 15: 1 };
+  const UP4H = { 240: 1, 60: 1, 15: 1 };
+  assert.strictEqual(at(UP15, [read('break', '15m choch down')]), true);
+  assert.strictEqual(at(UP15, [read('break', '1h choch down')]), true);
+  assert.strictEqual(at(UP15, [read('break', '15m bos down')]), false, 'a BOS');
+  assert.strictEqual(at(UP15, [read('break', '3m choch down')]), false, 'a 3m CHoCH');
+  assert.strictEqual(at(UP15, [read('break', '15m choch up', 'long')]), false, 'the other way');
+  assert.strictEqual(at(UP15, [read('break', '15m choch down', 'short', { check: false })]), false, 'not true');
+  assert.strictEqual(at(UP15, [read('break', '15m choch down', 'short', { agrees: false })]), false, 'not agreeing');
+  assert.strictEqual(at(UP1H, [read('break', '15m choch down')]), false);
+  assert.strictEqual(at(UP1H, [read('break', '1h choch down')]), true);
+  assert.strictEqual(at(UP4H, [read('break', '1h choch down')]), false);
+  assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h rejected previous 4h high down')]), true);
+  assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '15m rejected previous 4h high down')]), false, 'a 15m rejection');
+  assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h broke previous 4h high down')]), false, 'a break, not a rejection');
+  // Not against the trend, no record, or no standing check: no reversal (the trend rule as before).
+  assert.strictEqual(at({ 240: -1, 60: -1, 15: -1 }, [read('break', '1h choch down')]), false);
+  assert.strictEqual(reversalAllowed({ home: require('../helpers').tmpDir(), root: 'MNQ', side: 'short', check: { ok: true, reads: [] } }).ok, false);
+  assert.strictEqual(reversalAllowed({ home: trendHome(require('../helpers').tmpDir(), { biases: UP15 }), root: 'MNQ', side: 'short', check: { ok: false, reads: [read('break', '15m choch down')] } }).ok, false);
 });
 
 test('trade_lifecycle: the order is on the record\'s own contract; the briefing\'s validUntil earlier than the record\'s expiresAt decides', () => {
