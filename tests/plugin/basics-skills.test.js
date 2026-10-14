@@ -72,11 +72,11 @@ const PINS = {
   'fair-value-gaps': [
     'Price inside a gap is never "at an open FVG".',
     'only the unfilled part is still a gap;',
-    'the gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
-    'A filled gap is in neither list. Never mark one by eye.',
+    'gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
+    'a filled gap is in neither list. Never mark one by eye.',
     'The briefing does not rank gaps among the levels in a setup\'s way',
     'The room step stays the priority order\'s, on `inTheWay`.',
-    'Evidence**: not measured.',
+    'Evidence**: not measured;',
   ],
   'momentum-and-volume': [
     'over the mean of the bars before them (the code takes 21)',

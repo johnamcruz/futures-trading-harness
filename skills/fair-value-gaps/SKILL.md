@@ -1,21 +1,20 @@
 ---
 name: fair-value-gaps
-description: Read fair value gaps as the code computes them (open, partly filled, filled) and a gap ahead of a setup, in its own R. A read, never a veto.
+description: Use when an open or partly filled fair value gap is near price, ahead of a setup, or retested after a sweep. A location, never a trigger.
 ---
 
 # Fair Value Gaps
 
 ## When to Use
 
-- A setup fired and an open or partly filled gap lies ahead of it, in its
-  direction.
-- Trader-process step 3, when a gap is near price.
+- Trader-process step 3: a gap near price, retested, or ahead of a setup.
 
 ## How It Works
 
 A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are
-hypotheses; a missing field is `unknown`.
+hypotheses; a missing field is `unknown`. Source: Flux Charts, "Fair Value
+Gaps (FVG) Explained" (fluxcharts.com/articles/fair-value-gaps-fvg-explained).
 
 **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's
 low (bullish) or bar 1's low is above bar 3's high (bearish). Price often
@@ -27,33 +26,35 @@ as `low`-`high`, the whole gap as `gapLow`-`gapHigh`), or **filled**
 (traded through: no longer a gap). Price inside a gap is never "at an
 open FVG".
 
-**What the code gives** (`m3.liquidity.openFvgs`,
-`m3.liquidity.partlyFilledFvgs`): the gaps of the last 60 bars of the
-briefing's own timeframe, the last 3 of each kind, oldest first, each with
-its `side`, `low`, `high` and `at` (the middle bar's open). A filled gap is
-in neither list. Never mark one by eye.
+**Source vs ours.** The source: fair price just moved, a large middle
+candle, bounds as above, invalid once price passes the far edge. Ours: no
+size rule; wicks count; partly filled is ours; filled is its invalid. The
+gaps of the last 60 bars of the briefing's own timeframe, the last 3 of
+each kind; a filled gap is in neither list. Never mark one by eye.
 
-**A gap ahead of a setup**: its unfilled part beyond `m3.price` in the
-setup's direction (above for a long, below for a short). The briefing does
-not rank gaps among the levels in a setup's way (`candidate.inTheWay`,
-`candidate.ahead`): measure the near edge yourself, in points and in the
-setup's own R (the distance over `candidate.stopPoints`), and report it as
-a fact. The room step stays the priority order's, on `inTheWay`.
+**The read.** A location, never a trigger. The source: price back in the
+zone tends to reverse its way; gaps form fast and are less accurate;
+intraday (3m to 15m) suits them. Ours: a completed candle reacting there
+(`candle-reading`), momentum (`momentum-and-volume`) and a fired strategy;
+a 15m gap outweighs a 3m one. After a sweep (`levels-and-reactions`) and
+displacement (cisd_ote's CISD), the retest of its gap is the liquidity-grab
+entry read: it lives here (order-blocks, liquidity-sweep: being built).
 
-**The read**: a gap that held on its retest (partly filled, then closes
-away from it) is a reaction at a level (`levels-and-reactions`); a gap
-ahead is where a move may stall; a gap filled since is no level.
+**Ahead of a setup**: the unfilled part beyond `m3.price` its way. The
+briefing does not rank gaps among the levels in a setup's way
+(`candidate.inTheWay`): give the near edge in its R (over
+`candidate.stopPoints`). The room step stays the priority order's, on
+`inTheWay`.
 
-**Evidence**: not measured. The census has no FVG series
-(docs/research/mtf-setup-catalog.md): the hypotheses above are untested.
+**Evidence**: not measured; no FVG series in the census.
 
 ## Examples
 
 ```text
-Take: bullish gap partly filled, unfilled 21512.00-21515.25 below, closes back above it: held.
-  vwap_reclaim long at 21520.50; no gap ahead; candidate.inTheWay at 2.4R. Priority order: room -> take.
-Skip: cisd_ote short at 21481.25, stopPoints 8.00; bullish open gap 21474.00-21477.50 below,
-  near edge 3.75 pts = 0.47R; candidate.inTheWay prior VAL at 0.6R. Priority order (step 3, room): skip.
-Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); bearish open gap
-  21509.50-21513.00 ahead, near edge 6.25 pts = 1.47R, reported; price stalled in it and fell: -17 ticks, -$8.50.
+Take: bullish gap partly filled, unfilled 21512.00-21515.25; a 3m close back above: held.
+  vwap_reclaim long at 21520.50. Priority order: room -> take.
+Skip: cisd_ote short at 21481.25, stopPoints 8.00; open gap edge 21477.50 = 0.47R,
+  inTheWay at 0.6R. Priority order (step 3, room): skip.
+Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); gap edge
+  21509.50 = 1.47R ahead; it stalled: -17 ticks, -$8.50.
 ```
