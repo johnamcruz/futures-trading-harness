@@ -639,15 +639,19 @@ function createRunner(deps) {
   }
 
   /**
-   * A lane's bar whose briefing couldn't be built: its setups have no room read, so no entry on it (fail closed). The
-   * gate's signal record for the bar says nothing fired (it refuses an entry on it), no verdict is screened, and the
-   * cycle runs only to manage what is open (the cycle is manage-only: entryBlocked).
+   * A lane's bar whose briefing couldn't be built: its setups have no room read, so no entry on it (fail closed). Only
+   * that symbol's lane: the gate's signal record for its timeframe says nothing fired on the bar (the gate refuses an
+   * entry on it), no verdict is screened, its setups leave the prompt, and it runs a cycle only to manage what is open.
+   * Other lanes and symbols in the cycle trade as usual (their records are their own). Logged, and an event
+   * (lane_briefing_unavailable) so a failure that persists is seen.
    */
   async function laneBlocked(item) {
     const why = `the ${item.minutes}m lane's bar briefing can't be built (${item.briefError}): no entry on this bar, only managing what is open`;
     item.verdicts = [];
+    item.scan = [];
     item.entryBlocked = why;
     log(`${item.symbol} ${item.minutes}m: ${why}`, 'error');
+    emit('lane_briefing_unavailable', { symbol: item.symbol, lane: `${item.minutes}m`, bar: item.bar.t, reason: item.briefError });
     let decision;
     if (!cfg.account) decision = { run: false, reason: why };
     else {
@@ -1218,8 +1222,9 @@ function createRunner(deps) {
         const skipped = multi && run.length ? settlePolicies(run) : [];
         // A skip the gate can't read: no entry this cycle (fail closed), only managing what is open.
         if (skipped.some(k => k.unrecorded)) manageOnly = true;
-        // A lane's bar without its briefing: no entry this cycle (fail closed), only managing what is open.
-        if (run.some(x => x.entryBlocked)) manageOnly = true;
+        // A lane's bar without its briefing allows no entry on it (its own record says nothing fired); a cycle of only
+        // such bars is manage-only. Other lanes and symbols in a cycle with one trade as usual.
+        if (run.length && run.every(x => x.entryBlocked)) manageOnly = true;
         // The cycle's budget: the fastest closed lane's (one lane: the runner's cycleTimeoutMinutes).
         const closedLanes = multi ? lanes.filter((l, li) => run.some(x => x.lane === li)) : [];
         const budgetMin = multi ? cycleTimeoutMin(cfg, closedLanes) : cfg.cycleTimeoutMinutes;
@@ -1290,7 +1295,7 @@ function createRunner(deps) {
             bars: x.bars,
           }));
           const symbolsOf = list => (multi ? [...new Set(list.map(x => x.symbol))] : list.map(x => x.symbol));
-          for (const x of run.filter(y => y.entryBlocked)) unavailable.push(`${x.symbol} ${x.minutes}m: ${x.entryBlocked}: this cycle is manage-only, no entry`);
+          for (const x of run.filter(y => y.entryBlocked)) unavailable.push(`${x.symbol} ${x.minutes}m: ${x.entryBlocked} (no ${x.symbol} entry on ${x.minutes}m bars this cycle; its other lanes and the other symbols as usual)`);
           for (const k of skipped.filter(x => x.unrecorded)) unavailable.push(`${k.symbol} ${k.policy}'s skip for ${k.by} could not be recorded for the gate (${k.unrecorded}): this cycle is manage-only, no entry`);
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
           const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(symbolsOf(items), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
