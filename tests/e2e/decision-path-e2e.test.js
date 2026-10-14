@@ -154,6 +154,14 @@ test('decision path, entry: every skill, lookup, role and fact in place: the ord
   assert.deepStrictEqual(line.factCheck, { reports: 1, claims: 3, true: 3, false: 0, unchecked: 0 });
   const byRole = Object.fromEntries(Object.entries(D.REQUIRED_LOOKUPS).filter(([, s]) => s.length).map(([role, s]) => [role, s.length * (role === 'risk-manager' ? 2 : 1)]));
   assert.deepStrictEqual([line.skillLookups.mode, line.skillLookups.byRole], ['index', byRole]);
+  // Judged as the gate judged them: at the replayed time, on its bar briefing (the gate saw every lookup met).
+  const required = Object.entries(D.REQUIRED_LOOKUPS).filter(([, s]) => s.length).reduce((n, [role]) => n + (role === 'risk-manager' ? 2 : 1), 0); // role calls (phase 1 and 2: two)
+  assert.deepStrictEqual([line.skillLookups.requiredCalls, line.skillLookups.met], [required, required], JSON.stringify(line.skillLookups));
+  // Filed under the replayed time's trading day, stamped with it; `at` stays the wall clock (the gate log's).
+  const at = decisionAt(FIRED_BAR);
+  assert.strictEqual(line.cycleAt, at);
+  assert.strictEqual(path.basename(path.dirname(line.file)), require('../../scripts/lib/trading/clock').tradingDayKey(new Date(at)));
+  assert.ok(Math.abs(Date.parse(line.at) - Date.now()) < 10 * 60000, 'at: the wall clock');
   // What the record can't show today: opencode's transcript holds the main session only, so the executor's order is
   // not among the cycle log's orders (the gate's log and the journal have it).
   assert.deepStrictEqual(line.orders, []);
@@ -367,7 +375,6 @@ const COMPOSED = [
   'composed: the learning log: each decision\'s signature, context (regime, bias, session) and outcome in R is recorded append-only; experience_lookup reads it by signature with sample sizes, and its calls are recorded like skill_lookup\'s (required before an entry once D15 says so)',
   'composed, scenario 2 facts: the 4h candle that swept the prior 4h low and closed back, the 5m structure shift, the open 5m FVG and its retest, and the 4h high as a target are briefing fields',
   // Record gaps these tests exposed (follow-ups).
-  'cycle log: a replay pass\'s lookup compliance (skillLookups.met) is judged at the replayed time, as the gate judges it (today cycle-run uses the wall clock: requiredCalls 4, met 2 where the gate saw every lookup met)',
   'cycle log: the trade-executor\'s orders are visible in an opencode cycle\'s record (today only the main session\'s calls are: orders [])',
   'decision history: a risk-manager veto is told apart from the model\'s own pass (today both are skipped)',
 ];
