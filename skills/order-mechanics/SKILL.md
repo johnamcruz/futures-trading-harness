@@ -1,29 +1,17 @@
 ---
 name: order-mechanics
-description: How an order works - order types, the stop bracket every entry carries, a refused vs an unknown outcome, partial fills, and checking a new order once.
+description: Use when an order replied - refused, unknown outcome, partial fill; check it once, never wait for a fill.
 ---
 
 # Order mechanics
 
 ## When to Use
 
-- Before any `place_order`, `modify_order`, `cancel_order` or close.
 - After an order's reply: refused, outcome unknown, working, or filled (in
   whole or in part)?
 
 ## How It Works
 
-- Types: `market`; `limit` (limitPrice); `stop` (stopPrice); `trailing_stop`
-  (trailPrice = absolute price level); `join_bid` / `join_ask`.
-- `buy` opens/adds long or closes short; `sell` the reverse.
-- Every entry carries its stop as `stopLossBracket {ticks, type: "stop"}`
-  (and its target as `takeProfitBracket {ticks, type: "limit"}` when it has
-  one), ticks a whole number above 0 from the fill. Always send it: the gate
-  refuses an entry without one (`[stop-defined]`), a check autonomous runs
-  can't skip. The broker server attaches the stop leg; or refuses the entry
-  (`success: false`); or, if it opened a position whose stop it can't
-  confirm, flattens it and says so. If it can't confirm that flatten either,
-  it returns an error saying a position may be open: that is not a refusal.
 - **Refused**: a reply with `success: false` and an `errorCode` other than
   6 (`OrderPending`) or 7 (`UnknownError`) (a refusal of the brackets
   included), or a `Blocked by ...` refusal. Nothing was

@@ -45,8 +45,8 @@ guide resource once per session if it has one.
 
 ### Where the rest is
 
-- How an order works (types, the stop bracket, refused or unknown outcome,
-  partial fills, checking it once): the `order-mechanics` skill.
+- An order's type, side and stop bracket: the `order-types` skill; its
+  reply (refused or unknown outcome, partial fills, checking it once): the `order-mechanics` skill.
 - An order or read call that errored or timed out: the `order-failures` skill.
 - An order's rationale: the `order-rationale` skill.
 - The journal: the `trade-journal` skill.
