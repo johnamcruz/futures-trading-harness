@@ -78,7 +78,7 @@ async function lookAhead() {
     const planted = path.join(home, 'bars-scratch', 'MNQ-3m-planted.json');
     fs.writeFileSync(planted, JSON.stringify({ bars: [...bars, { ...last, t: new Date(Date.parse(last.t) + 180000).toISOString() }] }));
     out.planted = {};
-    for (const [name, args] of [['strategies_scan', { bars: planted, symbol: 'MNQ', detail: true }], ['strategies_recent', { bars: planted, symbol: 'MNQ' }], ['market_snapshot', { bars: planted }], ['mtf_read', { bars: planted, json: true }], ['order_plan', { bars: planted, symbol: 'MNQ', strategy: 'orb', side: 'long' }]]) out.planted[name] = await call(name, args);
+    for (const [name, args] of [['strategies_scan', { bars: planted, symbol: 'MNQ', detail: true }], ['strategies_recent', { bars: planted, symbol: 'MNQ' }], ['market_snapshot', { bars: planted }], ['mtf_read', { bars: planted, json: true }], ['order_plan', { bars: planted, symbol: 'MNQ', strategy: 'fx_orb', side: 'long' }]]) out.planted[name] = await call(name, args);
   } finally {
     tools.close();
   }

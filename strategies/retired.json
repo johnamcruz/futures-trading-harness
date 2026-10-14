@@ -1,0 +1,17 @@
+{
+  "bos": "2026-10-13",
+  "keltner": "2026-10-13",
+  "ema_cross": "2026-10-13",
+  "supertrend": "2026-10-13",
+  "cisd_ote": "2026-10-14",
+  "crt_1h": "2026-10-14",
+  "crt_4h": "2026-10-14",
+  "ofi": "2026-10-14",
+  "ofi_absorption": "2026-10-14",
+  "orb": "2026-10-14",
+  "prop_flow_1m": "2026-10-14",
+  "value_area": "2026-10-14",
+  "value_area_breakout": "2026-10-14",
+  "value_area_reentry": "2026-10-14",
+  "vwap_reclaim": "2026-10-14"
+}

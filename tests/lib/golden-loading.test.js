@@ -131,13 +131,16 @@ function pinned(doc) {
   return out;
 }
 
-test('every strategy and account loads and validates as pinned (shipped, fixture accounts, and the fixture strategy)', () => {
+test('every strategy and account loads and validates as pinned (shipped, fixture accounts, and the fixture strategies)', () => {
   const shipped = loadStrategies(G.ROOT, {});
-  const withFixture = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: G.EXT_STRATEGIES });
+  // The fixture ext_reader, and the retired rules strategies' rules as fixtures (tests/fixtures/strategies-golden):
+  // no rules strategy ships since 2026-10-14, so their compiled rules are pinned through the fixtures.
+  const withFixture = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: [G.EXT_STRATEGIES, require('../helpers').FX_GOLDEN].join(',') });
   assert.deepStrictEqual(shipped.problems, []);
   assert.ok(shipped.strategies.every(s => s.valid), shipped.strategies.filter(s => !s.valid).map(s => `${s.name}: ${s.errors.join('; ')}`).join('\n'));
-  // The fixture strategy adds itself and changes no other.
-  assert.deepStrictEqual(withFixture.strategies.filter(s => s.name !== 'ext_reader').map(pinned), shipped.strategies.map(pinned));
+  // The fixture strategies add themselves and change no other.
+  assert.deepStrictEqual(withFixture.strategies.filter(s => s.name !== 'ext_reader' && !s.name.startsWith('fx_')).map(pinned), shipped.strategies.map(pinned));
+  assert.ok(withFixture.strategies.filter(s => s.name.startsWith('fx_')).every(s => s.valid));
   assert.ok(withFixture.strategies.find(s => s.name === 'ext_reader').valid);
   const accounts = loadAccounts(G.ROOT, {});
   const fixture = loadAccounts(G.ROOT, { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS });

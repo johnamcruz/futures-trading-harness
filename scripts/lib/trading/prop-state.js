@@ -19,7 +19,7 @@ const { specFor, familyOf, selectedLeg } = require('./contracts');
 const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
-const { componentRefusal } = require('./strategies');
+const { componentRefusal, componentsNote } = require('./strategies');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
 const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
@@ -472,7 +472,7 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     let why = null;
     let barWhy; // the verdict must be for the bar the setup is on now
     let compWhy; // a paper strategy stays paper inside a policy: the setup is from an active one
-    if (!v) why = `no verdict for ${root} (the runner records one at each setup of ${(strategy.strategies || []).join(', ')})`;
+    if (!v) why = `no verdict for ${root} (${componentsNote(strategy)})`;
     else if ((compWhy = componentRefusal(strategy, strategies, v.component, { paper }))) why = `the latest verdict's setup is from ${v.component || 'no named strategy'}: ${compWhy}; no live entry from it`;
     else if (!(Date.parse(v.expiresAt) > now.getTime())) why = `the latest verdict (${v.bar}) expired at ${v.expiresAt}`;
     else if ((barWhy = verdictBarProblem(home, strategy, root, v))) why = barWhy;

@@ -1,6 +1,6 @@
 'use strict';
 
-// Strategy parity with the original bot: the shipped STRATEGY.md rules must
+// Strategy parity with the original bot: the ported STRATEGY.md rules must
 // reproduce the original bot's signals. The expected signals in
 // tests/fixtures/parity/*.expected.json were produced by the original bot's own
 // Python detectors (strategies/*.py detect() on 500-bar windows) on its 3m
@@ -14,21 +14,21 @@ const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 
 const DIR = path.join(__dirname, '..', 'fixtures', 'parity');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { FX_STRATEGIES } = require('../helpers');
+const { FX_STRATEGIES, FX_PARITY, FX_GOLDEN } = require('../helpers');
 
-// The ports and their names in the original bot's output: the shipped one (orb), and the rules of the ports
-// retired on 2026-10-13 (strategies/README.md, "Retired strategies") as test fixtures, so the rule series they read
-// (swing crosses, EMA crosses with ADX, Keltner bands, SuperTrend flips) keep their parity: fx_break and fx_cross
-// (tests/fixtures/strategies-fx, the old bos and ema_cross rules), fx_keltner and fx_supertrend
-// (tests/fixtures/strategies-fx-parity).
-// cisd_ote was a port until version 4 (2026-10-13): it is now the textbook CISD + OTE (strategies/cisd_ote), not the
-// bot's detector, so the bot's cisd_ote signals in the fixtures are left out.
-const NAMES = { orb: 'orb', fx_break: 'bos', fx_cross: 'ema', fx_keltner: 'keltner', fx_supertrend: 'supertrend' };
+// The ports and their names in the original bot's output. Every port is retired (strategies/README.md, "Retired
+// strategies"; orb on 2026-10-14, the others on 2026-10-13); their rules are kept as test fixtures, so the rule
+// series they read (opening ranges, swing crosses, EMA crosses with ADX, Keltner bands, SuperTrend flips) keep their
+// parity: fx_break and fx_cross (tests/fixtures/strategies-fx, the old bos and ema_cross rules), fx_keltner and
+// fx_supertrend (tests/fixtures/strategies-fx-parity), and fx_orb (tests/fixtures/strategies-golden, the old orb rules).
+// cisd_ote was a port until version 4 (2026-10-13), then the textbook CISD + OTE, not the bot's detector, so the
+// bot's cisd_ote signals in the fixtures are left out.
+const NAMES = { fx_orb: 'orb', fx_break: 'bos', fx_cross: 'ema', fx_keltner: 'keltner', fx_supertrend: 'supertrend' };
 // The STRATEGY.md files, as written: Markdown rules, no strategy code.
-const FX_DIRS = [FX_STRATEGIES, path.join(__dirname, '..', 'fixtures', 'strategies-fx-parity')].join(',');
-const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_DIRS }).strategies;
+const FX_DIRS = [FX_STRATEGIES, FX_PARITY, FX_GOLDEN].join(',');
+const LOADED = loadStrategies(path.join(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_DIRS }).strategies;
 const strategy = name => {
-  const s = SHIPPED.find(x => x.name === name);
+  const s = LOADED.find(x => x.name === name);
   assert.ok(s && s.valid && s.signal === 'rules', `${name} is a valid rules strategy`);
   return s;
 };

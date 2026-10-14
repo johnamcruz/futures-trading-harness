@@ -13,7 +13,7 @@ const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
 const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
-const { tmpDir, recordBrokerSpecs, FX_STRATEGIES, fxPolicyRoot } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_STRATEGIES, FX_GOLDEN, fxPolicyRoot } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // The parity bar where the fixtures fx_break (and fx_cross) fired long (tests/e2e/mock-trading-e2e.test.js), and just after it closed.
@@ -143,10 +143,15 @@ test('order_plan: the caller chooses; it refuses, with the reason, rather than p
   refuse({ strategy: 'fx_break' }, /side: long or short, the side you chose \(got none\)/);
   refuse({ strategy: 'fx_break', side: 'up' }, /side: long or short/);
   refuse({ strategy: 'fx_break', side: 'short' }, /fx_break fired long on the last closed bar, not short: the other side is not its setup; no order/);
-  refuse({ strategy: 'orb', side: 'long' }, /orb is not a candidate on the last closed bar \(no rule set fired .*\); no order/);
+  // fx_orb (the fixture holding the retired orb rules) did not fire on the last bar.
+  const golden = { ...ctx, env: { ...ctx.env, FTH_STRATEGIES_DIRS: [FX_STRATEGIES, FX_GOLDEN].join(',') } };
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'fx_orb', side: 'long' }, golden), /fx_orb is not a candidate on the last closed bar \(no rule set fired .*\); no order/);
   refuse({ strategy: 'nope', side: 'long' }, /unknown strategy "nope" \(known:/);
   // A retired strategy (strategies/README.md, "Retired strategies"): refused, saying so.
   refuse({ strategy: 'bos', side: 'long' }, /unknown strategy "bos" \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\) \(known:/);
+  for (const name of ['orb', 'cisd_ote', 'vwap_reclaim', 'ofi', 'prop_flow_1m']) {
+    refuse({ strategy: name, side: 'long' }, new RegExp(`unknown strategy "${name}" \\(retired on 2026-10-14: strategies/README\\.md, "Retired strategies"\\) \\(known:`));
+  }
   refuse({ strategy: 'fx_break', side: 'long', accountId: 1.5 }, /accountId: the broker account's id/);
   // A contract outside every family fx_break lists (MNQ, MES, MYM, M2K): refused, its family named too.
   assert.throws(() => plan({ file, symbol: 'GC', strategy: 'fx_break', side: 'long' }, ctx), /fx_break does not trade GC \(instruments: MNQ, MES, MYM, M2K\)/);
@@ -250,8 +255,12 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio skipped the setup \(the size budget is below one contract\)/);
   verdict({ expiresAt: new Date(NOW.getTime() - 1).toISOString() });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /expired at/);
+  // A component that scanned but did not fire on the bar (fx_orb, the fixture holding the retired orb rules): refused.
+  verdict({ component: 'fx_orb' });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, { ...ctx, env: { ...ctx.env, FTH_STRATEGIES_DIRS: FX_GOLDEN } }), /fx_orb is not a candidate on the last closed bar/);
+  // A verdict from before the retirement, its component retired: nothing scans it, so it is refused.
   verdict({ component: 'orb' });
-  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb is not a candidate on the last closed bar/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb was not scanned on MNQ \(disabled, or it doesn't trade MNQ\); no order/);
   // Only full allows an entry (a verdict is full or skip; the retired half too): any other action refuses, as the gate does.
   for (const action of ['close', 'hold', 'half', undefined]) {
     verdict({ action });

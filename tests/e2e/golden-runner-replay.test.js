@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { assertGolden } = require('../golden');
 const G = require('../fixtures/golden-bars');
-const { FAKE_BROKERS, tmpDir } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, FX_GOLDEN } = require('../helpers');
 const { validateConfig, childEnv } = require('../../scripts/lib/autotrader');
 const { barBriefing } = require('../../scripts/lib/harness-tools/briefing');
 const { decisionPoints } = require('../../scripts/lib/replay/schedule');
@@ -47,6 +47,8 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
   const env = {
     HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl'),
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ACCOUNTS_DIRS: path.join(home, 'no-accounts'), ...extraEnv,
+    // The retired rules strategies' rules as fixtures (tests/fixtures/strategies-golden): no rules strategy ships.
+    FTH_STRATEGIES_DIRS: [FX_GOLDEN, extraEnv.FTH_STRATEGIES_DIRS].filter(Boolean).join(','),
   };
   // `lanes`: the same runner configured as one lane instead of the legacy timeframe (lanes.js).
   const { timeframe: _tf, ...noTimeframe } = { harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 700 };

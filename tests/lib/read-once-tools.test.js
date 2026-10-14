@@ -11,7 +11,7 @@ const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { scan } = require('../../scripts/lib/harness-tools/strategies');
 const { mtf } = require('../../scripts/lib/harness-tools/mtf');
 const { briefedThisCycle } = require('../../scripts/lib/harness-tools/briefing');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_GOLDEN } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).slice(0, 1300);
@@ -22,7 +22,8 @@ function setup() {
   B.writeBriefing(home, b);
   const file = path.join(home, 'MNQ-3m.json');
   fs.writeFileSync(file, JSON.stringify({ bars: BARS }));
-  const ctx = cycleBar => ({ root: ROOT, env: { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt, ...(cycleBar ? { FTH_CYCLE_BARS: JSON.stringify({ MNQ: cycleBar }) } : {}) } });
+  // The fixture strategies holding the retired rules (FX_GOLDEN, fx_orb among them): no rules strategy ships since 2026-10-14.
+  const ctx = cycleBar => ({ root: ROOT, env: { FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_GOLDEN, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt, ...(cycleBar ? { FTH_CYCLE_BARS: JSON.stringify({ MNQ: cycleBar }) } : {}) } });
   return { b, file, ctx };
 }
 
@@ -41,7 +42,7 @@ test('strategies_scan: the summary points to the current briefing; name, detail,
   assert.match(scan({ file, symbol: 'MNQ', view: 'summary' }, ctx(b.asOf)).text, /^This bar's briefing is current \(bar_briefing \{"symbol": "MNQ"\}\): its m3 candidates are this scan/);
   assert.doesNotMatch(scan({ file, symbol: 'MNQ', view: 'summary' }, ctx(null)).text, /briefing is current/, 'outside a cycle');
   assert.doesNotMatch(scan({ file, symbol: 'MNQ', view: 'summary' }, ctx('2026-01-01T00:00:00.000Z')).text, /briefing is current/, 'another bar\'s briefing');
-  assert.doesNotMatch(scan({ file, symbol: 'MNQ', view: 'one', name: 'orb' }, ctx(b.asOf)).text, /briefing is current/, 'one strategy\'s full result');
+  assert.doesNotMatch(scan({ file, symbol: 'MNQ', view: 'one', name: 'fx_orb' }, ctx(b.asOf)).text, /briefing is current/, 'one strategy\'s full result');
   assert.doesNotMatch(scan({ file, symbol: 'MNQ', view: 'json' }, ctx(b.asOf)).text, /briefing is current/, 'detail');
 });
 

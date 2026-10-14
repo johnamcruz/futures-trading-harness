@@ -21,6 +21,15 @@ const TEST_ACCOUNTS = path.join(__dirname, 'fixtures', 'accounts');
  * strategy that fires on a known parity bar (both fire long on NQ-3m's 2026-04-28T04:09 bar).
  */
 const FX_STRATEGIES = path.join(__dirname, 'fixtures', 'strategies-fx');
+/** Fixture rules strategies holding the rules of ports retired on 2026-10-13 (fx_keltner, fx_supertrend), for the parity test. */
+const FX_PARITY = path.join(__dirname, 'fixtures', 'strategies-fx-parity');
+/**
+ * Fixture rules strategies holding the rules of every rules strategy retired on 2026-10-14, unchanged under fx_ names
+ * (fx_orb, fx_cisd_ote, fx_vwap_reclaim, fx_crt_1h, fx_crt_4h, fx_value_area, fx_value_area_reentry,
+ * fx_value_area_breakout: 3m; fx_ofi, fx_ofi_absorption: 1m, reading the broker's flow fields), for FTH_STRATEGIES_DIRS:
+ * the decision goldens and the tests of the code they exercise (rules language, bar fields, detectors, targets).
+ */
+const FX_GOLDEN = path.join(__dirname, 'fixtures', 'strategies-golden');
 /**
  * The broker the repo ships as the default (mcp-configs/brokers.json), read, never named: tests that
  * check the shipped config (a live broker's variables, the default) use it so no test names a platform.
@@ -45,9 +54,27 @@ function homeBrokers(home, brokers, { broker = Object.keys(brokers)[0], env = nu
 }
 
 /**
+ * The shipped prop_portfolio's document with the fixture components (fx_break, fx_cross by default) and `active`:
+ * it lists none and is on paper since its components retired (2026-10-14), so a test of the policy code gives it some.
+ */
+function withComponents(doc, components = ['fx_break', 'fx_cross']) {
+  if (!/^strategies: \[[^\]\n]*\]/m.test(doc) || !/^status: \w+/m.test(doc)) throw new Error('prop_portfolio has no strategies list or status');
+  return doc.replace(/^strategies: \[[^\]\n]*\]/m, `strategies: [${components.join(', ')}]`).replace(/^status: \w+/m, 'status: active');
+}
+
+/**
+ * The rulebook entry the retired prop_flow_1m (1-minute) traded with, as its account's RULEBOOK.md wrote it before
+ * 2026-10-14 (a limit turned off says `off`): listPolicies' `from: 'prop_flow_1m'`, for a policy with no cap.
+ */
+const FLOW_POLICY = Object.freeze({
+  sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3 }),
+  exit: Object.freeze({ trail_activate_r: 2, trail_giveback_r: 0.5 }),
+});
+
+/**
  * A plugin root in `home` with the repo's strategies and accounts, the fixture fx_break (on paper with
- * `paper`) and fx_cross, and prop_portfolio trading fx_break first: a policy whose component fires long on
- * the parity bar (NQ-3m's 2026-04-28T04:09). No shipped 3-minute component fires there.
+ * `paper`) and fx_cross, and prop_portfolio active and trading them (fx_break first): a policy whose component
+ * fires long on the parity bar (NQ-3m's 2026-04-28T04:09).
  */
 function fxPolicyRoot(home, { paper = false } = {}) {
   const root = path.join(home, 'plugin');
@@ -66,7 +93,7 @@ function fxPolicyRoot(home, { paper = false } = {}) {
   const policy = fs.readFileSync(path.join(repo, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8');
   if (!/^strategies: \[/m.test(policy)) throw new Error('prop_portfolio has no strategies list');
   fs.mkdirSync(path.join(root, 'strategies', 'prop_portfolio'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'strategies', 'prop_portfolio', 'STRATEGY.md'), policy.replace(/^strategies: \[/m, 'strategies: [fx_break, '));
+  fs.writeFileSync(path.join(root, 'strategies', 'prop_portfolio', 'STRATEGY.md'), withComponents(policy));
   return root;
 }
 
@@ -197,8 +224,8 @@ function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = 
   }
   if (!names.length) return file;
   // The shipped entry as written (a limit turned off says `off`, never 0).
-  const shipped = shippedPolicy(from);
-  const s = RB.loadRulebookFile(path.join(__dirname, '..', 'accounts', shipped.account, RB.FILE)).policies[from];
+  const s = from === 'prop_flow_1m' ? FLOW_POLICY
+    : RB.loadRulebookFile(path.join(__dirname, '..', 'accounts', shippedPolicy(from).account, RB.FILE)).policies[from];
   const map = (indent, o) => Object.entries(o).map(([k, v]) => `${indent}${k}: ${v}`);
   const block = names.flatMap(n => [`  ${n}:`, '    sizing:', ...map('      ', s.sizing), '    exit:', ...map('      ', s.exit),
     ...(multipliers ? ['    multipliers:', ...multipliers] : ['    multipliers: []'])]).join('\n');
@@ -220,4 +247,4 @@ function rootWithPolicies(policies = {}, opts = {}) {
   return root;
 }
 
-module.exports = { shippedPolicy, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+module.exports = { shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

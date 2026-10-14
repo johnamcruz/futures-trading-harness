@@ -4,7 +4,7 @@
  * End to end, on real data: the runner polls a fake broker serving the
  * parity NQ bars as they close, writes the bars file and the gate's records
  * (multi-timeframe and signals) with the production functions, scans with the
- * real strategies (and the fixtures fx_break and fx_cross), and builds the real prompt. A stand-in for the LLM follows
+ * real loader (the shipped strategies and the fixtures fx_break and fx_cross), and builds the real prompt. A stand-in for the LLM follows
  * the trade-session skill's steps: it reads what fired from the prompt, plans
  * in the journal, sizes the stop from the scan, and sends the order through
  * the real order gate (checkOrder: the hook's and the gateway's check). Then
@@ -38,12 +38,17 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const dataDir = path.join(home, 'bars');
   const journal = writeJournal(home, []);
-  // An active reversal strategy with no session window to relabel the trade as: an active copy of cisd_ote (paper
-  // since its textbook rewrite; the shipped reversal ones keep New York hours, and this bar is at 00:09 ET).
+  // An active strategy with no session window and no regime gate, which doesn't fire on this bar (00:09 ET), to
+  // relabel the trade as: fx_break's document with the retired cisd_ote's rules (a 15m CISD's OTE bounce).
   const rev = path.join(home, 'strategies-rev', 'fx_reversal');
   fs.mkdirSync(rev, { recursive: true });
-  fs.writeFileSync(path.join(rev, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'cisd_ote', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: cisd_ote$/m, 'name: fx_reversal').replace(/^status: paper\b.*$/m, 'status: active'));
+  const revDoc = fs.readFileSync(path.join(FX_STRATEGIES, 'fx_break', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: fx_break$/m, 'name: fx_reversal').replace(/^regimes: .*\n/m, '').replace(/^regime_gate: .*\n/m, '')
+    .replace(/^rules:\n[^]*?^exit:\n/m, 'rules:\n  long:\n    - cisd_entry(15) > 0\n  short:\n    - cisd_entry(15) < 0\nexit:\n')
+    .replace(/^ {2}stop: atr:0\.5$/m, '  stop: cisd_risk(15)');
+  assert.match(revDoc, /^name: fx_reversal\n[^]*^status: active$[^]*cisd_entry\(15\) > 0[^]*stop: cisd_risk\(15\)/m, 'the fixture edit took');
+  assert.doesNotMatch(revDoc, /^regime/m);
+  fs.writeFileSync(path.join(rev, 'STRATEGY.md'), revDoc);
   const env = {
     FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'),

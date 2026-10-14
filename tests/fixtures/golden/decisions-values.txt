@@ -1,6 +1,6 @@
 MNQ 3m: the field values of the strategies that read fields, from bar 100
 ext_reader: every bar's values sha256:5b2c8b8a520eab61
-value_area: every bar's values sha256:d69b14ef8be2b839
+fx_value_area: every bar's values sha256:d69b14ef8be2b839
 2026-04-23T03:18:00.000Z ext_reader short field("ext.a")=-0.6, field("ext.a")[1]=-0.1, field("ext.b.flag")=0
 2026-04-23T03:30:00.000Z ext_reader short field("ext.a")=-0.5, field("ext.a")[1]=0, field("ext.b.flag")=0
 2026-04-23T05:24:00.000Z ext_reader short field("ext.a")=-0.6, field("ext.a")[1]=-0.1, field("ext.b.flag")=0
@@ -137,14 +137,14 @@ value_area: every bar's values sha256:d69b14ef8be2b839
 2026-04-27T15:30:00.000Z ext_reader short field("ext.a")=-0.9, field("ext.a")[1]=-0.4, field("ext.b.flag")=0
 2026-04-27T15:45:00.000Z ext_reader long field("ext.a")=0.8, field("ext.a")[1]=-0.8, field("ext.b.flag")=1
 2026-04-27T16:18:00.000Z ext_reader short field("ext.a")=-0.5, field("ext.a")[1]=0, field("ext.b.flag")=0
-2026-04-27T17:15:00.000Z value_area short field("flow.windows.3.ofiTrade")=-0.239
+2026-04-27T17:15:00.000Z fx_value_area short field("flow.windows.3.ofiTrade")=-0.239
 2026-04-27T17:36:00.000Z ext_reader short field("ext.a")=-0.9, field("ext.a")[1]=-0.4, field("ext.b.flag")=0
 2026-04-27T17:48:00.000Z ext_reader short field("ext.a")=-0.8, field("ext.a")[1]=-0.3, field("ext.b.flag")=0
 2026-04-27T18:12:00.000Z ext_reader short field("ext.a")=-0.6, field("ext.a")[1]=-0.1, field("ext.b.flag")=0
 2026-04-27T18:24:00.000Z ext_reader short field("ext.a")=-0.5, field("ext.a")[1]=0, field("ext.b.flag")=0
 2026-04-27T18:39:00.000Z ext_reader short field("ext.a")=-0.9, field("ext.a")[1]=-0.4, field("ext.b.flag")=0
 2026-04-27T18:51:00.000Z ext_reader short field("ext.a")=-0.8, field("ext.a")[1]=-0.3, field("ext.b.flag")=0
-2026-04-27T18:51:00.000Z value_area short field("flow.windows.3.ofiTrade")=-0.313
+2026-04-27T18:51:00.000Z fx_value_area short field("flow.windows.3.ofiTrade")=-0.313
 2026-04-27T18:54:00.000Z ext_reader long field("ext.a")=0.8, field("ext.a")[1]=-0.8, field("ext.b.flag")=1
 2026-04-27T19:54:00.000Z ext_reader short field("ext.a")=-0.8, field("ext.a")[1]=-0.3, field("ext.b.flag")=0
 2026-04-27T19:57:00.000Z ext_reader long field("ext.a")=0.8, field("ext.a")[1]=-0.8, field("ext.b.flag")=1
@@ -172,7 +172,7 @@ value_area: every bar's values sha256:d69b14ef8be2b839
 2026-04-28T04:03:00.000Z ext_reader short field("ext.a")=-0.9, field("ext.a")[1]=-0.4, field("ext.b.flag")=0
 M2K 3m: the field values of the strategies that read fields, from bar 100
 ext_reader: every bar's values sha256:5b2c8b8a520eab61
-value_area: every bar's values sha256:ef19e03e18a0a65c
+fx_value_area: every bar's values sha256:ef19e03e18a0a65c
 2025-02-19T06:39:00.000Z ext_reader long field("ext.a")=0.8, field("ext.a")[1]=-0.8, field("ext.b.flag")=1
 2025-02-19T07:00:00.000Z ext_reader short field("ext.a")=-0.6, field("ext.a")[1]=-0.1, field("ext.b.flag")=0
 2025-02-19T07:12:00.000Z ext_reader short field("ext.a")=-0.5, field("ext.a")[1]=0, field("ext.b.flag")=0
@@ -329,17 +329,17 @@ value_area: every bar's values sha256:ef19e03e18a0a65c
 2025-02-24T05:45:00.000Z ext_reader short field("ext.a")=-0.9, field("ext.a")[1]=-0.4, field("ext.b.flag")=0
 2025-02-24T06:33:00.000Z ext_reader short field("ext.a")=-0.5, field("ext.a")[1]=0, field("ext.b.flag")=0
 MNQ 1m: the field values of the strategies that read fields, from bar 100
-ofi: every bar's values sha256:34d0d78e69f3a4a8
-ofi_absorption: every bar's values sha256:14b6190f802066f9
-2026-04-23T00:10:00.000Z ofi short field("flow.ofiTrade")=-1, field("flow.windows.3.ofiTrade")=-0.737, field("flow.windows.5.ofiTrade")=-0.423
-2026-04-23T11:51:00.000Z ofi short field("flow.ofiTrade")=-0.479, field("flow.windows.3.ofiTrade")=-0.369, field("flow.windows.5.ofiTrade")=-0.321
-2026-04-23T12:46:00.000Z ofi_absorption short field("flow.windows.5.ofiTrade")=0.286, field("flow.ofiTrade")=-0.819
-2026-04-23T17:10:00.000Z ofi_absorption short field("flow.windows.5.ofiTrade")=0.261, field("flow.ofiTrade")=-0.851
-2026-04-23T17:48:00.000Z ofi long field("flow.ofiTrade")=0.787, field("flow.windows.3.ofiTrade")=0.472, field("flow.windows.5.ofiTrade")=0.41
-2026-04-24T05:18:00.000Z ofi_absorption long field("flow.windows.5.ofiTrade")=-0.28, field("flow.ofiTrade")=0.256
-2026-04-24T10:28:00.000Z ofi_absorption long field("flow.windows.5.ofiTrade")=-0.287, field("flow.ofiTrade")=0.25
-2026-04-24T19:55:00.000Z ofi_absorption long field("flow.windows.5.ofiTrade")=-0.264, field("flow.ofiTrade")=0.272
-2026-04-26T23:18:00.000Z ofi long field("flow.ofiTrade")=0.589, field("flow.windows.3.ofiTrade")=0.507, field("flow.windows.5.ofiTrade")=0.433
-2026-04-27T01:07:00.000Z ofi short field("flow.ofiTrade")=-0.34, field("flow.windows.3.ofiTrade")=-0.609, field("flow.windows.5.ofiTrade")=-0.409
-2026-04-27T12:24:00.000Z ofi_absorption short field("flow.windows.5.ofiTrade")=0.284, field("flow.ofiTrade")=-0.297
-2026-04-27T13:00:00.000Z ofi long field("flow.ofiTrade")=0.944, field("flow.windows.3.ofiTrade")=0.315, field("flow.windows.5.ofiTrade")=0.379
+fx_ofi: every bar's values sha256:34d0d78e69f3a4a8
+fx_ofi_absorption: every bar's values sha256:14b6190f802066f9
+2026-04-23T00:10:00.000Z fx_ofi short field("flow.ofiTrade")=-1, field("flow.windows.3.ofiTrade")=-0.737, field("flow.windows.5.ofiTrade")=-0.423
+2026-04-23T11:51:00.000Z fx_ofi short field("flow.ofiTrade")=-0.479, field("flow.windows.3.ofiTrade")=-0.369, field("flow.windows.5.ofiTrade")=-0.321
+2026-04-23T12:46:00.000Z fx_ofi_absorption short field("flow.windows.5.ofiTrade")=0.286, field("flow.ofiTrade")=-0.819
+2026-04-23T17:10:00.000Z fx_ofi_absorption short field("flow.windows.5.ofiTrade")=0.261, field("flow.ofiTrade")=-0.851
+2026-04-23T17:48:00.000Z fx_ofi long field("flow.ofiTrade")=0.787, field("flow.windows.3.ofiTrade")=0.472, field("flow.windows.5.ofiTrade")=0.41
+2026-04-24T05:18:00.000Z fx_ofi_absorption long field("flow.windows.5.ofiTrade")=-0.28, field("flow.ofiTrade")=0.256
+2026-04-24T10:28:00.000Z fx_ofi_absorption long field("flow.windows.5.ofiTrade")=-0.287, field("flow.ofiTrade")=0.25
+2026-04-24T19:55:00.000Z fx_ofi_absorption long field("flow.windows.5.ofiTrade")=-0.264, field("flow.ofiTrade")=0.272
+2026-04-26T23:18:00.000Z fx_ofi long field("flow.ofiTrade")=0.589, field("flow.windows.3.ofiTrade")=0.507, field("flow.windows.5.ofiTrade")=0.433
+2026-04-27T01:07:00.000Z fx_ofi short field("flow.ofiTrade")=-0.34, field("flow.windows.3.ofiTrade")=-0.609, field("flow.windows.5.ofiTrade")=-0.409
+2026-04-27T12:24:00.000Z fx_ofi_absorption short field("flow.windows.5.ofiTrade")=0.284, field("flow.ofiTrade")=-0.297
+2026-04-27T13:00:00.000Z fx_ofi long field("flow.ofiTrade")=0.944, field("flow.windows.3.ofiTrade")=0.315, field("flow.windows.5.ofiTrade")=0.379

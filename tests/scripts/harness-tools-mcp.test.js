@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
 const { createMcpClient } = require('../../scripts/lib/broker/mcp-client');
 const { TOOLS } = require('../../scripts/lib/harness-tools/registry');
 
@@ -36,8 +36,9 @@ function fixtureHome({ replay = true } = {}) {
   return home;
 }
 
+// The fixture strategies holding the retired rules (FX_GOLDEN, fx_orb among them): no rules strategy ships since 2026-10-14.
 const envFor = (home, extra = {}) => ({
-  PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: REPLAY, FTH_AUTONOMOUS: '',
+  PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: REPLAY, FTH_AUTONOMOUS: '', FTH_STRATEGIES_DIRS: FX_GOLDEN,
   FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'), ...extra,
 });
 
@@ -86,7 +87,7 @@ const oneLine = s => `${JSON.stringify(JSON.parse(s))}\n`;
 const TOOL_WORDING = {
   'strategies list json': oneLine,
   'strategies scan summary': s => scanSummary(JSON.parse(s), { symbol: 'MNQ', bar: lastBar(path.join(PARITY, 'NQ-3m.csv')) }),
-  'strategies scan one': s => `${JSON.stringify(JSON.parse(s).find(r => r.name === 'orb'), null, 2)}\n`,
+  'strategies scan one': s => `${JSON.stringify(JSON.parse(s).find(r => r.name === 'fx_orb'), null, 2)}\n`,
   'strategies recent lines': s => recentLines(JSON.parse(s), { symbol: 'MNQ' }),
   'market snapshot': oneLine,
   'market snapshot params': oneLine,
@@ -99,12 +100,13 @@ const TOOL_WORDING = {
 const CASES = [
   ['strategies list', 'strategies.js', () => ['list'], 'strategies_list', () => ({})],
   ['strategies list json', 'strategies.js', () => ['list', '--json'], 'strategies_list', () => ({ json: true })],
-  ['strategies show', 'strategies.js', () => ['show', 'orb'], 'strategies_show', () => ({ name: 'orb' })],
+  ['strategies show', 'strategies.js', () => ['show', 'fx_orb'], 'strategies_show', () => ({ name: 'fx_orb' })],
+  ['strategies show retired', 'strategies.js', () => ['show', 'orb'], 'strategies_show', () => ({ name: 'orb' })],
   ['strategies show unknown', 'strategies.js', () => ['show', 'nope'], 'strategies_show', () => ({ name: 'nope' })],
   ['strategies validate', 'strategies.js', () => ['validate'], 'strategies_validate', () => ({})],
   ['strategies scan', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', detail: true })],
   ['strategies scan summary', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ' })],
-  ['strategies scan one', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', name: 'orb' })],
+  ['strategies scan one', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', name: 'fx_orb' })],
   ['strategies scan record', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--record'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', record: true, detail: true })],
   ['strategies recent', 'strategies.js', b => ['recent', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--bars', '3'], 'strategies_recent', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', count: 3, json: true })],
   ['strategies recent lines', 'strategies.js', b => ['recent', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--bars', '3'], 'strategies_recent', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', count: 3 })],

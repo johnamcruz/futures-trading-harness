@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN, withComponents } = require('../helpers');
 const E = require('../../scripts/lib/train/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
@@ -52,12 +52,12 @@ test('compare: no bound on either side shows nothing better; the exemption is on
 test('evaluate: both trees on every window with one seed; held-out scores the candidate alone with the look; unavailable without a config', async () => {
   assert.deepStrictEqual(await E.evaluate({ cfg: null, windows: [], candidate: 'c' }), { available: false, why: E.UNAVAILABLE });
   const calls = [];
-  const coversOf = () => ['strategies/p/STRATEGY.md', 'strategies/orb/STRATEGY.md'];
+  const coversOf = () => ['strategies/p/STRATEGY.md', 'strategies/fx_orb/STRATEGY.md'];
   const run = (raw, opts) => { calls.push({ raw, root: opts.root }); return opts.root === 'cand' ? result({ lb: 0.3, seed: raw.seed }) : result({ seed: raw.seed }); };
   const cfg = E.resolveEvaluator({ prop: 'p', data: { MNQ: '/b.csv' }, paths: 10 });
   const windows = [{ from: '2022-03-07', to: '2022-03-12' }, { from: '2022-10-03', to: '2022-10-08' }];
   const v = await E.evaluate({ cfg, windows, champion: 'champ', candidate: 'cand', seed: 5, run, coversOf, look: { candidate: 'l/iter-1/x', purpose: 'tuning' }, ledger: '/ledger' });
-  assert.deepStrictEqual(v.covers, ['strategies/orb/STRATEGY.md', 'strategies/p/STRATEGY.md']);
+  assert.deepStrictEqual(v.covers, ['strategies/fx_orb/STRATEGY.md', 'strategies/p/STRATEGY.md']);
   assert.deepStrictEqual(calls.map(c => [c.root, c.raw.from, c.raw.seed, c.raw.paths, c.raw.look.purpose]), [['champ', '2022-03-07', 5, 10, 'tuning'], ['cand', '2022-03-07', 5, 10, 'tuning'], ['champ', '2022-10-03', 5, 10, 'tuning'], ['cand', '2022-10-03', 5, 10, 'tuning']]);
   assert.strictEqual(v.failures.length, 2);
   assert.match(v.failures[0], /^2022-03-07\.\.2022-03-12: the pass-rate lower bound fell/);
@@ -92,9 +92,9 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   fs.writeFileSync(data, `${['datetime,open,high,low,close,volume', ...bars.map(b => `${new Date(Date.parse(b.t) - SHIFT).toISOString()},${b.o},${b.h},${b.l},${b.c},${b.v}`)].join('\n')}\n`);
   const strat = path.join(home, 'strategies', 'eval_fixture');
   fs.mkdirSync(strat, { recursive: true });
-  fs.writeFileSync(path.join(strat, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+  fs.writeFileSync(path.join(strat, 'STRATEGY.md'), withComponents(fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8'), ['fx_cross', 'fx_break', 'fx_orb'])
     .replace(/^name: prop_portfolio$/m, 'name: eval_fixture').replace(/^instruments: .*$/m, 'instruments: [MNQ, NQ]')
-    .replace(/^strategies: .*$/m, 'strategies: [fx_cross, fx_break, orb]').replace(/^account: .*$/m, 'account: eval_acct').replace(/^contracts: .*$/m, 'contracts: micro'));
+    .replace(/^account: .*$/m, 'account: eval_acct').replace(/^contracts: .*$/m, 'contracts: micro'));
   const acct = path.join(home, 'accounts', 'eval_acct');
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
@@ -102,7 +102,14 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   // Its rulebook (the fixture's, renamed), listing the policy (section 10 step 7: one place for its numbers).
   fs.writeFileSync(path.join(acct, 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace(/^name: test_50k$/m, 'name: eval_acct'));
   listPolicies(acct, ['eval_fixture']);
-  // Its components: orb and the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV.
+  // Its components: the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV, from a folder
+  // outside the tree, and fx_orb (the retired orb's rules, tests/fixtures/strategies-golden) inside it: the tree is the
+  // repo's (linked) with fx_orb among its strategies, as a shipped component would be.
+  const tree = path.join(home, 'tree');
+  fs.mkdirSync(path.join(tree, 'strategies'), { recursive: true });
+  for (const d of fs.readdirSync(ROOT)) if (d !== 'strategies' && d !== '.git') fs.symlinkSync(path.join(ROOT, d), path.join(tree, d));
+  for (const d of fs.readdirSync(path.join(ROOT, 'strategies'))) fs.symlinkSync(path.join(ROOT, 'strategies', d), path.join(tree, 'strategies', d));
+  fs.cpSync(path.join(FX_GOLDEN, 'fx_orb'), path.join(tree, 'strategies', 'fx_orb'), { recursive: true });
   const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_STRATEGIES}`, FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   const to = new Date(Date.parse(`${sessions[sessions.length - 1]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
@@ -110,16 +117,16 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   const windows = [{ from: sessions[0], to }];
   // A skill-only change (nothing the evaluator reads): identical results, exempt from showing itself better.
   const skill = { edits: [{ file: 'skills/session-timing/SKILL.md' }] };
-  const v = await E.evaluate({ cfg, windows, champion: ROOT, candidate: ROOT, seed: 3, env, proposal: skill });
+  const v = await E.evaluate({ cfg, windows, champion: tree, candidate: tree, seed: 3, env, proposal: skill });
   assert.strictEqual(v.available, true);
   const [w] = v.windows;
   assert.deepStrictEqual(w.candidate, w.champion, 'the same tree, bars and seed: the same scores');
   assert.strictEqual(w.candidate.seed, 3);
   // Covered: only strategies loaded from the tree (the fixture policy comes from a folder outside it).
-  assert.ok(v.covers.includes('strategies/orb/STRATEGY.md') && !v.covers.some(f => f.includes('eval_fixture')), v.covers.join());
+  assert.ok(v.covers.includes('strategies/fx_orb/STRATEGY.md') && !v.covers.some(f => /eval_fixture|fx_break|fx_cross/.test(f)), v.covers.join());
   assert.ok(w.candidate.attempts > 0);
   assert.deepStrictEqual(v.failures.filter(f => !/blow/.test(f)), [], 'no failure the champion lacks');
   // A change to a strategy the streams read: the same scores are a tie, and a tie counts against it.
-  const screened = await E.evaluate({ cfg, windows, champion: ROOT, candidate: ROOT, seed: 3, env, proposal: { edits: [{ file: 'strategies/orb/STRATEGY.md' }] } });
+  const screened = await E.evaluate({ cfg, windows, champion: tree, candidate: tree, seed: 3, env, proposal: { edits: [{ file: 'strategies/fx_orb/STRATEGY.md' }] } });
   assert.match(screened.failures.join(), /ties the champion's|no pass-rate bound to compare/);
 });

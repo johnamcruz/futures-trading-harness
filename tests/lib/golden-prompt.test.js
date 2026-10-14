@@ -19,10 +19,11 @@ const blind = history => withPositions(history, { known: false, now: NOW });
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
 
-const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
+// The shipped strategies and the retired rules strategies as fixtures (tests/fixtures/strategies-golden).
+const SHIPPED = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: require('../helpers').FX_GOLDEN }).strategies;
 const MNQ = G.load(G.SERIES[0]);
 const M2K = G.load(G.SERIES[1]);
-const I = 1244; // MNQ bar 1244 (2026-04-27 10:30 ET): orb fires
+const I = 1244; // MNQ bar 1244 (2026-04-27 10:30 ET): fx_orb (the retired orb's rules) fires
 const NOW = new Date(Date.parse(MNQ[I].t) + 3 * 60000 + 5000);
 
 /** The fixed state a trade cycle's prompt is built from (as runner.js passes it). */

@@ -18,35 +18,53 @@ const AG = require('../../scripts/lib/trading/account-gate');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
+const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder: anyEntry, trendHome: anyHome, tmpDir, writeJournal, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { createServerAttestation } = require('../../scripts/lib/broker/allow-list');
 
-const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
-// As tests/lib/order-gate.test.js: a home with an up-trend record and orb fired long; record ages unlimited.
+// The shipped strategies (prop_portfolio, with no components) and the retired rules strategies as fixtures
+// (tests/fixtures/strategies-golden): entries are tagged with the fixture fx_orb, the retired orb's rules.
+const SHIPPED = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
+const FIRED = [{ name: 'fx_orb', direction: 'long' }];
+/** tests/helpers.js trendHome with fx_orb fired long (unless `fired` says otherwise). */
+const trendHome = (home, opts = {}) => anyHome(home, { fired: FIRED, ...opts });
+/** tests/helpers.js entryOrder tagged setup:fx_orb. */
+const entryOrder = (extra = {}) => anyEntry({ rationale: 'setup:fx_orb break above OR high 21500, stop 21480, target 21540, risk $40', ...extra });
+// As tests/lib/order-gate.test.js: a home with an up-trend record and fx_orb fired long; record ages unlimited.
 const BASE = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
 const gate = (input, entries, { now = NOW, config = BASE, blackouts, strategies = SHIPPED, accounts, journalTruncated } = {}) =>
   evaluateOrder({ input, entries, now, config, blackouts, strategies, accounts, journalTruncated });
 
-// The prop challenge (as order-gate.test.js): a mini account, a policy strategy tagged setup:orb over ema_cross.
+// The prop challenge (as order-gate.test.js): a mini account, a policy strategy tagged setup:fx_orb over fx_cross.
 const BAR = '2026-10-07T13:57:00Z';
 const MINI = {
   name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod',
   daily_loss_limit: 1000, daily_loss_soft: 500, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50 }, fees_per_side: { MNQ: 0.37 },
 };
-const POLICY = { name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null, strategies: ['ema_cross'], account: 'mini', contracts: 'micro', timeframe: '3m' };
-const EMA_CROSS = { name: 'ema_cross', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m', mtf: 'trend' };
+const POLICY = { name: 'fx_orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null, strategies: ['fx_cross'], account: 'mini', contracts: 'micro', timeframe: '3m' };
+const EMA_CROSS = { name: 'fx_cross', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m', mtf: 'trend' };
 function propGate({ balance = 50000, policy = false, verdict = policy ? null : {} } = {}) {
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   if (balance !== null) prop.snapshot(home, MINI, balance, new Date(NOW.getTime() - 60000));
   if (verdict) {
     prop.appendVerdict(home, {
-      strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+      strategy: 'fx_orb', component: 'fx_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
       maxSize: policy ? 3 : 50, bar: BAR, at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(), ...verdict,
     });
   }
   return (input, { now = NOW } = {}) => gate(input, [plan()], { now, config: { ...BASE, home }, strategies: [POLICY, EMA_CROSS], accounts: [MINI] });
+}
+
+/** The gate with the shipped strategies and accounts and an attempt running on the shipped prop_portfolio's account. */
+function shippedPolicyGate() {
+  const accounts = loadAccounts(G.ROOT, {}).accounts;
+  const acct = accounts.find(a => a.name === SHIPPED.find(s => s.name === 'prop_portfolio').account);
+  const home = trendHome();
+  prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, acct, acct.starting_balance, new Date(NOW.getTime() - 60000));
+  return input => gate(input, [plan()], { config: { ...BASE, home }, accounts });
 }
 
 const killed = (() => { const f = path.join(tmpDir(), 'STOP'); fs.writeFileSync(f, ''); return { ...BASE, killSwitchFile: f }; })();
@@ -58,10 +76,10 @@ const sell = (rationale, extra = {}) => entryOrder({ side: 'sell', rationale, ..
 const ORDER_GATE = [
   ['entry: planned, tagged, bracketed (allowed)', () => gate(entryOrder(), [plan()])],
   ['entry: no tag, no bracket, no plan', () => gate(entryOrder({ rationale: 'looks strong, going long here', stopLossBracket: undefined }), [])],
-  ['entry: stop only in the rationale', () => gate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb long, stop at 21480.25, target 21540' }), [plan()])],
+  ['entry: stop only in the rationale', () => gate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:fx_orb long, stop at 21480.25, target 21540' }), [plan()])],
   ['entry: a limit leg as the bracket', () => gate(entryOrder({ stopLossBracket: { ticks: 40, type: 'limit' } }), [plan()])],
   ['entry: a stale plan', () => gate(entryOrder(), [plan(121)])],
-  ['entry: the tag not first', () => gate(entryOrder({ rationale: 'long setup:orb, stop 21480' }), [plan()])],
+  ['entry: the tag not first', () => gate(entryOrder({ rationale: 'long setup:fx_orb, stop 21480' }), [plan()])],
   ['entry: paper mode', () => gate(entryOrder(), [plan()], { config: { ...BASE, paper: true } })],
   ['entry: the journal window truncated', () => gate(entryOrder(), [plan(5)], { journalTruncated: true })],
   ['entry: the opening print', () => gate(entryOrder(), [plan(1, { ts: '2026-10-07T13:31:00Z' })], { ...at('2026-10-07T13:32:00Z'), config: { ...BASE, home: trendHome(undefined, { closedAt: '2026-10-07T13:27:00.000Z' }) } })],
@@ -74,8 +92,11 @@ const ORDER_GATE = [
   ['entry: the last entry not reviewed', () => gate(entryOrder(), [placed(30), plan(5)])],
   ['entry: the kill switch on', () => gate(entryOrder(), [plan()], { config: killed })],
   ['entry: an unknown strategy', () => gate(entryOrder({ rationale: 'setup:nope long, stop 21480' }), [plan()])],
-  ['entry: the side named is not the order side', () => gate(entryOrder({ rationale: 'setup:orb short break, stop 21520' }), [plan()])],
-  ['entry: stop on the wrong side of a limit entry', () => gate(entryOrder({ type: 'limit', limitPrice: 21500, rationale: 'setup:orb long, stop 21510, target 21540' }), [plan()])],
+  ['entry: a retired strategy (orb, 2026-10-14)', () => gate(entryOrder({ rationale: 'setup:orb long, stop 21480' }), [plan()], { config: { ...BASE, home: trendHome(undefined, { fired: [{ name: 'orb', direction: 'long' }] }) } })],
+  ['entry: the shipped prop_portfolio, which lists no strategies (an attempt running)', () => shippedPolicyGate()(entryOrder({ rationale: 'setup:prop_portfolio long, stop 21480' }))],
+  ['exit: under the shipped prop_portfolio, an attempt running (allowed)', () => shippedPolicyGate()(sell('[exit] flatten'))],
+  ['entry: the side named is not the order side', () => gate(entryOrder({ rationale: 'setup:fx_orb short break, stop 21520' }), [plan()])],
+  ['entry: stop on the wrong side of a limit entry', () => gate(entryOrder({ type: 'limit', limitPrice: 21500, rationale: 'setup:fx_orb long, stop 21510, target 21540' }), [plan()])],
   ['entry: against the prevailing trend', () => gate(entryOrder(), [plan()], { config: { ...BASE, home: trendHome(undefined, { biases: { 240: -1, 60: -1, 15: -1 } }) } })],
   ['entry: its trigger did not fire', () => gate(entryOrder(), [plan()], { config: { ...BASE, home: trendHome(undefined, { fired: [] }) } })],
   ['entry: no tick specs from the broker', () => gate(entryOrder(), [plan()], { config: { ...BASE, home: trendHome(undefined, { specs: false }) } })],
@@ -108,7 +129,7 @@ const ORDER_GATE = [
 // The gateway's account checks (account-gate.js), over the live account it reads.
 const long1 = [{ contractId: CONTRACT, type: 1, size: 1 }];
 const restingStop = { id: 11, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 };
-const order = (extra = {}) => ({ accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, rationale: 'setup:orb long, stop 1', ...extra });
+const order = (extra = {}) => ({ accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, rationale: 'setup:fx_orb long, stop 1', ...extra });
 const account = o => ({ violations: AG.evaluateAccount({ positions: [], orders: [], trades: [], config: BASE, now: NOW, ...o }) });
 const ACCOUNT_GATE = [
   ['account: an entry while flat (allowed)', () => account({ input: order() })],

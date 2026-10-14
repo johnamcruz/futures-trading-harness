@@ -10,7 +10,7 @@ const path = require('path');
 const RB = require('../../scripts/lib/trading/rulebook');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BODY = '## When to Use\n## How It Works\n## Examples\n';
@@ -203,8 +203,16 @@ test('the strategy loader sizes a policy only from its account\'s rulebook: neve
   assert.strictEqual(policy('prop_portfolio').sizing.cushion_frac, 0.25);
   assert.strictEqual(policy('prop_portfolio').exit.trail_activate_r, 3);
   assert.deepStrictEqual(policy('prop_portfolio').multipliers, []);
-  // `off` reaches the code as 0 ("no limit"); prop_flow_1m's are off, as its sizing always was.
-  assert.deepStrictEqual([policy('prop_flow_1m').sizing.cap_usd, policy('prop_flow_1m').sizing.clock_k], [0, 0]);
+  // `off` reaches the code as 0 ("no limit"): a policy listed with the retired prop_flow_1m's entry (its limits off).
+  const flowDir = path.join(tmpDir(), 'strategies');
+  fs.mkdirSync(path.join(flowDir, 'prop_fx_flow'), { recursive: true });
+  fs.writeFileSync(path.join(flowDir, 'prop_fx_flow', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_fx_flow'));
+  listPolicies(path.dirname(file), ['prop_fx_flow'], { from: 'prop_flow_1m' });
+  assert.match(fs.readFileSync(file, 'utf8'), /^ {2}prop_fx_flow:\n {4}sizing:\n(?: {6}.*\n)*? {6}cap_usd: off\n/m, 'its entry says off');
+  const flow = loadStrategies(root, { FTH_STRATEGIES_DIRS: flowDir }).strategies.find(s => s.name === 'prop_fx_flow');
+  assert.strictEqual(flow.valid, true, flow.errors && flow.errors.join());
+  assert.deepStrictEqual([flow.sizing.cap_usd, flow.sizing.clock_k, flow.sizing.drawdown_halve_usd], [0, 0, 0]);
+  fs.writeFileSync(file, text.replace(/^( {6}cushion_frac: )0\.3\b/m, '$10.25').replace(/^( {6}trail_activate_r: )2\b/m, '$13'));
   // A bad value or a missing key: the policy is refused, naming the file and the key.
   for (const [t, re] of [
     [text.replace(/^( {6}cushion_frac: )0\.3\b/m, '$12'), /policies\.prop_portfolio\.sizing\.cushion_frac: 2 is not a share of the cushion/],

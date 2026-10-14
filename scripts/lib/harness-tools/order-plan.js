@@ -32,7 +32,7 @@
  */
 
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan, rootRefusal, retiredNote } = require('../trading/strategies');
+const { loadStrategies, scan, rootRefusal, retiredNote, componentsNote } = require('../trading/strategies');
 const { selectedSymbols } = require('../trading/contracts');
 const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, timeframeMs } = require('../trading/evaluator');
@@ -86,7 +86,7 @@ function rulesPlan(c, s, { results, root, want, home, specOf }) {
 
 function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, selected }) {
   const v = prop.latestVerdict(home, s.name, root);
-  if (!v) throw new Error(`${s.name} has no verdict for ${root}: the runner records one at each setup of ${(s.strategies || []).join(', ')}; no order`);
+  if (!v) throw new Error(`${s.name} has no verdict for ${root}: ${componentsNote(s)}; no order`);
   if (!(Date.parse(v.expiresAt) > now.getTime())) throw new Error(`${s.name}'s latest verdict (${v.bar}) expired at ${v.expiresAt}; no order`);
   if (v.action === 'skip' || !(v.maxSize >= 1)) throw new Error(`${s.name} skipped the setup${v.reason ? ` (${v.reason})` : ''}; no order`);
   if (!prop.ENTRY_ACTIONS.includes(v.action)) throw new Error(`${s.name}'s verdict action ${JSON.stringify(v.action)} allows no entry (a verdict is full or skip); no order`);
