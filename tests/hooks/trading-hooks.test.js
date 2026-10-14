@@ -2427,7 +2427,7 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
       .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, breakout/);
   assert.match(r.stderr, /risk-manager reported without looking up confluence-counting, invalidation/);
   // Without the lane in the environment, the 3m briefing alone: nothing required.
   const { FTH_CYCLE_LANE_BARS: _lanes, ...oneLane } = env;
@@ -2436,7 +2436,7 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   assert.strictEqual(exit.code, 0, exit.stderr);
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
   look('market-structure-analyst', 'breakout-vs-fakeout', 15);
-  look('market-structure-analyst', 'mtf-breakout', 15);
+  look('market-structure-analyst', 'breakout', 15);
   look('risk-manager', 'confluence-counting', 31);
   look('risk-manager', 'invalidation', 31);
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);

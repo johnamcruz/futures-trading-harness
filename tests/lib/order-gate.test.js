@@ -1986,7 +1986,7 @@ test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry
   // The entry: refused, the roles' reports don't count without their lookups.
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
-  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
   assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
   // Never held by a missing lookup: an exit and a protective stop (place_order), a stop move and a risk-reducing size
   // cut (modify_order), a cancel and a partial close (the gateway's account checks only), and close_position (never
@@ -2002,7 +2002,7 @@ test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry
   assert.strictEqual(orderTool({ method: 'tools/call', params: { name: 'mcp__broker__close_position', arguments: {} } }), null);
   // The lookups made during the roles' calls: the entry goes.
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
-  look('market-structure-analyst', 'mtf-rejection', 11);
+  look('market-structure-analyst', 'rejection', 11);
   look('market-structure-analyst', 'pullback-vs-reversal', 12);
   look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
   look('risk-manager', 'confluence-counting', 31);
@@ -2043,7 +2043,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   frame(lane, [{ name: 'tick_up', direction: 'long', trendRule: 'reversal' }]);
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
-  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
   assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
   // Without the lane (one lane, or the lane's bar didn't close this cycle): the 3m briefing alone, nothing required.
   assert.deepStrictEqual(run(entryOrder(), { ...cfg, cycleLaneBars: {} }).violations, []);
@@ -2051,7 +2051,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   // The lookups made during the roles' calls: the entry goes.
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
   const all = () => {
-    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'rejection', 11);
     look('market-structure-analyst', 'pullback-vs-reversal', 12);
     look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
     look('risk-manager', 'confluence-counting', 31);
@@ -2068,20 +2068,20 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   // A reversal setup: the reversal lookups only (never the breakout ones).
   record({ setups: [{ name: 'tick_up', direction: 'long', trendRule: 'reversal' }] });
   const rev = unmet(run(entryOrder()));
-  assert.match(rev, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection \(/);
+  assert.match(rev, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection \(/);
   assert.match(rev, /trend-momentum-analyst reported without looking up pullback-vs-reversal \(/);
   assert.match(rev, /risk-manager reported without looking up confluence-counting, invalidation/);
-  assert.doesNotMatch(rev, /breakout-vs-fakeout|mtf-breakout/);
+  assert.doesNotMatch(rev, /breakout-vs-fakeout|(?<![\w-])breakout(?![\w-])/);
   all();
   assert.deepStrictEqual(run(entryOrder()).violations, [], 'the reversal lookups made: it goes');
   fs.unlinkSync(lookupsFile(file));
   // A with-trend setup: the breakout lookups only.
   record({ setups: [{ name: 'tick_up', direction: 'long', trendRule: 'allows' }] });
   const allows = unmet(run(entryOrder()));
-  assert.match(allows, /market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout \(/);
-  assert.doesNotMatch(allows, /pullback-vs-reversal|mtf-rejection|trend-momentum-analyst reported/);
+  assert.match(allows, /market-structure-analyst reported without looking up breakout-vs-fakeout, breakout \(/);
+  assert.doesNotMatch(allows, /pullback-vs-reversal|(?<![\w-])rejection(?![\w-])|trend-momentum-analyst reported/);
   look('market-structure-analyst', 'breakout-vs-fakeout', 11);
-  look('market-structure-analyst', 'mtf-breakout', 12);
+  look('market-structure-analyst', 'breakout', 12);
   look('risk-manager', 'confluence-counting', 31);
   look('risk-manager', 'invalidation', 32);
   assert.deepStrictEqual(run(entryOrder()).violations, [], 'the breakout lookups made: it goes');
@@ -2089,7 +2089,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   exits();
   // A record from before the setups were kept (no setups field): its candidates under every trend rule (fails closed).
   record({});
-  assert.match(unmet(run(entryOrder())), /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, mtf-rejection, mtf-breakout/);
+  assert.match(unmet(run(entryOrder())), /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, rejection, breakout/);
   exits();
   // Nothing fired on the lane's bar (its record says so): nothing more is required.
   writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [], setups: [] });
