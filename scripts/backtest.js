@@ -7,7 +7,7 @@
  *
  *   node scripts/backtest.js --config backtest.json
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
- *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
+ *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,cisd_ote]
  *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--fill next-open|close] [--out dir]
  *       [--min-confluence 2] [--conflict reversal|skip|priority]   require agreeing strategies / skip disagreement
  *       [--prop <policy strategy> [--every 5]]   prop challenge attempts

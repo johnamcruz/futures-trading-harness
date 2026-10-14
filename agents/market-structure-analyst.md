@@ -58,7 +58,7 @@ never paste a long `get_bars` reply into a file.
    value gaps (`liquidity.openFvgs`), untested 1h swings (`m3`
    `untested1hSwings`).
 5. Which structure strategies are live for this symbol (`strategies_list`;
-   e.g. `setup:bos`, `setup:cisd_ote`), with the trigger condition and price
+   e.g. `setup:cisd_ote`, `setup:crt_1h`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
    evaluate from their STRATEGY.md body (`strategies_show`) against the
    briefing's numbers; what no tool computes, say is not computed.

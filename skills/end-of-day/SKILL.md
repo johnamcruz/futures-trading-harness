@@ -58,7 +58,7 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
 ## Examples
 
 ```text
-EOD 2026-10-08: flat, 0 working orders. 3 trades (orb +2.0R, ema_cross -1.0R,
+EOD 2026-10-08: flat, 0 working orders. 3 trades (orb +2.0R, vwap_reclaim -1.0R,
 orb +0.1R scratch), net +$11.30 after fees, 0 rule breaks, 1 blocked order
 (time-window). Lesson: none (sample too small). Focus: orb only before 10:30.
 ```

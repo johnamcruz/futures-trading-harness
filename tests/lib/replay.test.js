@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { tmpDir, shippedBroker } = require('../helpers');
+const { tmpDir, shippedBroker, FX_STRATEGIES } = require('../helpers');
 // The live broker the repo ships (mcp-configs/brokers.json), read, never named.
 const SHIPPED = shippedBroker();
 const { validateConfig } = require('../../scripts/lib/autotrader');
@@ -661,11 +661,12 @@ test('runner wiring: the runner scans with its symbols as the selected contracts
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
   const bars = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).filter(x => Date.parse(x.t) <= Date.parse('2026-04-28T04:09:00.000Z'));
-  const { strategies } = loadStrategies(ROOT, {});
+  // With the fixture fx_break (tests/fixtures/strategies-fx): it fires long on that bar.
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES });
   const at = new Date(Date.parse(bars.at(-1).t) + 180000);
   const names = rs => rs.map(r => r.name).sort();
   const nq = runnerScan(strategies, cfgOf({ symbols: ['NQ'] }), 'NQ', bars, at);
-  assert.ok(nq.find(r => r.name === 'bos').candidate, 'bos (listing MNQ) scans the selected NQ and fired');
+  assert.ok(nq.find(r => r.name === 'fx_break').candidate, 'fx_break (listing MNQ) scans the selected NQ and fired');
   assert.deepStrictEqual(names(nq), names(runnerScan(strategies, cfgOf({ symbols: ['MNQ'] }), 'MNQ', bars, at)));
   // Only the runner timeframe's strategies (3m here), and none of the micro-listed rules ones on the leg not selected.
   assert.ok(nq.every(r => r.timeframe === undefined || r.timeframe === '3m'));

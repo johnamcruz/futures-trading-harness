@@ -19,7 +19,7 @@ const { runnerScan } = require('../../scripts/lib/runner-wiring');
 const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
 const MNQ = G.load(G.SERIES[0]);
 const M2K = G.load(G.SERIES[1]);
-const I = 1244; // MNQ bar 1244 (2026-04-27 10:30 ET): bos, keltner and orb fire
+const I = 1244; // MNQ bar 1244 (2026-04-27 10:30 ET): orb fires
 const NOW = new Date(Date.parse(MNQ[I].t) + 3 * 60000 + 5000);
 
 /** The fixed state a trade cycle's prompt is built from (as runner.js passes it). */

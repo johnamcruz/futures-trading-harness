@@ -7,7 +7,7 @@ instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
 mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
-rules:                        # field(...): order flow the broker puts on its bars (see ofi); none on a bar, no signal
+rules:                        # field(...): order flow the broker puts on its bars (see Data); none on a bar, no signal
   long:
     - field("flow.windows.5.ofiTrade") <= -0.25
     - vol_sma(5) >= 1.5 * vol_sma(60)
@@ -31,18 +31,33 @@ source: harness original (order flow from the broker's 1-minute bars); threshold
 
 # Strategy: Absorption Reversal (`setup:ofi_absorption`)
 
-The counterpart of `ofi`. There, aggressive flow moves price (real flow).
-Here it doesn't: sellers hit the market hard for 5 minutes on heavy volume,
-yet price barely gives ground, because a passive buyer is taking
-everything. When the next 1-minute bar turns up, the sellers are trapped.
+Real flow is aggressive flow that moves price. Here it doesn't: sellers
+hit the market hard for 5 minutes on heavy volume, yet price barely gives
+ground, because a passive buyer is taking everything. When the next
+1-minute bar turns up, the sellers are trapped.
 
 Order flow is aggressive buy and sell volume per minute, which the broker
-MCP server puts on its bars; the harness computes none. OFI 1 is
-`field("flow.ofiTrade")` and OFI 5 `field("flow.windows.5.ofiTrade")`, from
--1 (all selling) to +1 (all buying). See `ofi` for the fields and how they
-differ from the harness's former `ofi(n)`. A bar without complete flow has
-null fields, its conditions are false, and the strategy never fires: no
-estimate stands in for it.
+MCP server puts on its bars; the harness computes none. The order-flow
+imbalance over n bars ("OFI n") is buy minus sell volume over the last n
+bars divided by their buy plus sell volume, from -1 (all selling) to +1
+(all buying).
+
+**Data.** The rules read the broker's fields with `field(...)`:
+
+| Rule | Broker field | Meaning |
+|---|---|---|
+| OFI 1 | `field("flow.ofiTrade")` | (buy - sell) / (buy + sell) on this bar |
+| OFI 3 | `field("flow.windows.3.ofiTrade")` | the same over the 3 bars ending with this one (the skip rules) |
+| OFI 5 | `field("flow.windows.5.ofiTrade")` | the same over the 5 bars ending with this one |
+
+The broker sets a field to null when its minutes are not complete, and a
+window is null unless every bar in it is complete. A missing or null field
+makes its condition false, so a bar without complete flow never fires: no
+estimate stands in for it. The harness's former `ofi(n)` was the same ratio
+over the last n bars present, but estimated a bar without recorded flow from
+where it closed in its range; live trades only real flow now. Micro bars
+carry the full-size contract's flow (MNQ the NQ's), a ratio, so the
+thresholds still apply.
 
 ## When to Use
 
@@ -79,8 +94,9 @@ Long, on a 1-minute close (short is the mirror):
 - Not at a level (see When to Use).
 - The 5-bar range is wider than 1.5 × ATR(20): that is a fight, not
   absorption.
-- `ofi` (real flow) fired in the same direction as the absorbed side in
-  the last 3 bars: the flow is winning.
+- Real flow in the absorbed side's direction in the last 3 bars (OFI 1, 3
+  and 5 all at 0.3 or more that way, with the close at least 0.5 × ATR(20)
+  past the close 5 bars back): the flow is winning.
 - Within 5 minutes of high-impact news.
 
 ### Status

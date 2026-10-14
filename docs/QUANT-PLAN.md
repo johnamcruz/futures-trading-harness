@@ -198,15 +198,17 @@ thousands of labels (one per decision time and symbol).
 
 ## What the label runs trade with
 
-- **Strategies**: the active rules strategies (`orb`, `ema_cross`,
-  `keltner`, `supertrend`, `bos`, `cisd_ote`, `vwap_reclaim`, `crt_1h`,
-  `crt_4h`, `value_area_reentry`, `value_area_breakout`), activated for the
-  labels on the owner's call; the order-flow ones (and `value_area`, which
-  needs order flow) stayed `paper` then, and were activated later, once order
-  flow came from the broker servers' bars. The trend-following ones (`ema_cross`,
-  `supertrend`, `keltner`, `bos`, `orb`, `value_area_breakout`, and
-  `vwap_reclaim` in a trend only) are regime-gated: never in a range (the
-  regime-gate pull request, merged before this plan).
+- **Strategies**: the active rules strategies (`orb`, `cisd_ote`,
+  `vwap_reclaim`, `crt_1h`, `crt_4h`, `value_area_reentry`,
+  `value_area_breakout`), activated for the labels on the owner's call; the
+  order-flow one (`ofi_absorption`, and `value_area`, which needs order flow)
+  stayed `paper` then, and was activated later, once order flow came from the
+  broker servers' bars. The trend-following ones (`orb`,
+  `value_area_breakout`, and `vwap_reclaim` in a trend only) are
+  regime-gated: never in a range (the regime-gate pull request, merged
+  before this plan). `bos`, `ema_cross`, `keltner`, `supertrend` and `ofi`
+  were retired on 2026-10-13 for an edge reliably negative after costs
+  (`strategies/README.md`, "Retired strategies").
 - **Context**: the bar briefing (facts by timeframe, computed once per bar)
   and the report cache; the setup's facts in its own R, no code grades.
 - **Next, after the first train windows**: setup quality per strategy

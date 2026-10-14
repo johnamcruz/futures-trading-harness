@@ -179,8 +179,8 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
 Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 
--> Longs are a pullback: wait for a 3m shift up (ema_cross or bos long), target the 1h swing high.
-   Shorts are counter: a 3m keltner short is refused (scan and gate); only a
+-> Longs are a pullback: wait for a 3m shift up (a long setup with a 3m BOS up), target the 1h swing high.
+   Shorts are counter: a 3m orb short is refused (scan and gate); only a
    crt_1h raid of the 1h high could short (the priority order, step 2, decides it:
    level, size, target).
 

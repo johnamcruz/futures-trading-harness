@@ -43,14 +43,14 @@ const { createPropHooks } = require('../../scripts/lib/prop/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { plan: orderPlan } = require('../../scripts/lib/harness-tools/order-plan');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
 const MNQ_ID = 'fake:MNQ:Z26';
 const STEP = 180000;
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
-// The parity bar where bos fired long (tests/e2e/trading-e2e.test.js), and the moment just after it closed.
+// The parity bar where the fixture fx_break fired long (tests/e2e/trading-e2e.test.js), and the moment just after it closed.
 const FIRED_BAR = '2026-04-28T04:09:00.000Z';
 
 /**
@@ -68,7 +68,7 @@ function world(at, over = {}, { specs = true } = {}) {
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_ALLOWED_ACCOUNTS: '7', NODE_ENV: 'test', FTH_TEST_NOW: at,
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
-    FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
+    FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_STRATEGIES_DIRS: FX_STRATEGIES,
   };
   return { home, state, journal, env };
 }
@@ -98,16 +98,16 @@ const working = (w, id = MNQ_ID) => exchange.read(w.state).orders.filter(o => o.
 
 /** The gate's records for the bar where a real strategy fired, and the agent's plan: what an entry needs. */
 function signalOnFiredBar(w) {
-  const strategies = loadStrategies(ROOT, {}).strategies.filter(s => s.timeframe === '3m');
+  const strategies = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES }).strategies.filter(s => s.timeframe === '3m');
   const bars = BARS.filter(b => Date.parse(b.t) <= Date.parse(FIRED_BAR));
   const last = bars[bars.length - 1];
   const now = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
   writeMtfRecord(w.home, 'MNQ', bars);
   const results = scan(strategies, { bars }, { symbol: 'MNQ', now });
   writeSignals(w.home, buildSignals(results, { symbol: 'MNQ', bar: last, stepMs: STEP, now }));
-  const fired = results.find(r => r.name === 'bos' && r.candidate);
-  assert.ok(fired, 'bos fired on the bar');
-  fs.appendFileSync(w.journal, `${JSON.stringify({ ts: now.toISOString(), kind: 'plan', contractId: 'MNQ', tags: ['setup:bos', 'MNQ'], text: 'bos long on the break' })}\n`);
+  const fired = results.find(r => r.name === 'fx_break' && r.candidate);
+  assert.ok(fired, 'fx_break fired on the bar');
+  fs.appendFileSync(w.journal, `${JSON.stringify({ ts: now.toISOString(), kind: 'plan', contractId: 'MNQ', tags: ['setup:fx_break', 'MNQ'], text: 'fx_break long on the break' })}\n`);
   // The broker's bars are the ones the scan read (the gateway's regime check fetches them).
   exchange.update(w.state, s => { s.prices[MNQ_ID] = last.c; s.bars = { ...(s.bars || {}), [MNQ_ID]: bars.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v })) }; });
   // The window the gateway's regime check reads is the evaluator's: the last 500 closed bars, across breaks.
@@ -127,7 +127,7 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
   const entry = {
     accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1,
     stopLossBracket: { ticks: sig.ticks, type: 'stop' }, takeProfitBracket: { ticks: sig.ticks * 2, type: 'limit' },
-    rationale: `setup:bos long trigger on the closed bar, stop ${stop.toFixed(2)}, target ${(sig.price + sig.ticks * 0.5).toFixed(2)}`,
+    rationale: `setup:fx_break long trigger on the closed bar, stop ${stop.toFixed(2)}, target ${(sig.price + sig.ticks * 0.5).toFixed(2)}`,
   };
   const gw = gatewayClient(w);
   try {
@@ -200,12 +200,12 @@ test('mock trading: order_plan\'s place_order arguments, sent as they are, pass 
   const sig = signalOnFiredBar(w);
   const file = path.join(w.home, 'MNQ-3m.json');
   fs.writeFileSync(file, JSON.stringify(BARS.filter(b => Date.parse(b.t) <= Date.parse(FIRED_BAR))));
-  const plan = orderPlan({ file, symbol: 'MNQ', strategy: 'bos', side: sig.side, accountId: 7 }, { root: ROOT, env: w.env, now: () => sig.now, tool: true });
+  const plan = orderPlan({ file, symbol: 'MNQ', strategy: 'fx_break', side: sig.side, accountId: 7 }, { root: ROOT, env: w.env, now: () => sig.now, tool: true });
   assert.strictEqual(plan.args.stopLossBracket.ticks, sig.ticks, 'the same ticks as the stop distance, rounded away from the entry');
   const gw = gatewayClient(w);
   try {
     // The other side is refused by order_plan itself; the side that fired goes through the real gate.
-    assert.throws(() => orderPlan({ file, symbol: 'MNQ', strategy: 'bos', side: 'short' }, { root: ROOT, env: w.env, now: () => sig.now }), /fired long/);
+    assert.throws(() => orderPlan({ file, symbol: 'MNQ', strategy: 'fx_break', side: 'short' }, { root: ROOT, env: w.env, now: () => sig.now }), /fired long/);
     const placed = await attempt(gw, 'place_order', plan.args);
     assert.ok(placed.ok, placed.error);
     assert.deepStrictEqual([position(w).type, position(w).size], [1, 1]);
@@ -328,7 +328,7 @@ async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = 
     writeBars: () => path.join(w.home, 'bars.json'), scanFor: () => [], scanLog: () => {},
     // As scripts/autotrader.js wires them: the entries the gateway let through, and the strategies' exit plans.
     entryOrders: () => entryOrders(w.home),
-    strategyNamed: name => loadStrategies(ROOT, {}).strategies.find(x => x.name === name && x.valid) || null,
+    strategyNamed: name => loadStrategies(ROOT, w.env).strategies.find(x => x.name === name && x.valid) || null,
     event: ev => events.push(ev), log,
   });
   try {
@@ -343,7 +343,7 @@ async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = 
   return { events, logs, runs };
 }
 
-/** The bos long of the fired bar, placed through the gateway as an agent would. */
+/** The fx_break long of the fired bar, placed through the gateway as an agent would. */
 async function enterBos(w, { target = false } = {}) {
   const sig = signalOnFiredBar(w);
   const stop = sig.price - sig.ticks * 0.25;
@@ -352,7 +352,7 @@ async function enterBos(w, { target = false } = {}) {
     const r = await attempt(gw, 'place_order', {
       accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: sig.ticks, type: 'stop' },
       ...(target ? { takeProfitBracket: { ticks: sig.ticks * 2, type: 'limit' } } : {}),
-      rationale: `setup:bos long trigger on the closed bar, stop ${stop.toFixed(2)}${target ? `, target ${(sig.price + sig.ticks * 0.5).toFixed(2)}` : ''}`,
+      rationale: `setup:fx_break long trigger on the closed bar, stop ${stop.toFixed(2)}${target ? `, target ${(sig.price + sig.ticks * 0.5).toFixed(2)}` : ''}`,
     });
     assert.ok(r.ok, r.error);
   } finally {
@@ -466,7 +466,7 @@ test('mock trading: the runner trails a winner\'s stop through the gateway (2R o
   const exit = exchange.read(w.state).fills.at(-1);
   assert.ok(exit.price >= t.price + 2 * t.risk, `the trail held at least 2R (exit ${exit.price}, entry ${t.price}, 1R ${t.risk})`);
   assert.ok(exit.profitAndLoss > 0);
-  assert.ok(r.events.some(e => e.kind === 'position_managed' && e.setup === 'bos'));
+  assert.ok(r.events.some(e => e.kind === 'position_managed' && e.setup === 'fx_break'));
 });
 
 test('mock trading: a close the broker refuses frees its stop; one whose reply errors (it may have filled) still holds it', async () => {
@@ -521,7 +521,7 @@ test('mock trading: an entry whose reply is lost is an order of unknown outcome:
   const sig = signalOnFiredBar(w);
   const entry = {
     accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: sig.ticks, type: 'stop' },
-    rationale: `setup:bos long trigger on the closed bar, stop ${(sig.price - sig.ticks * 0.25).toFixed(2)}`,
+    rationale: `setup:fx_break long trigger on the closed bar, stop ${(sig.price - sig.ticks * 0.25).toFixed(2)}`,
   };
   const gw = createMcpClient({ command: process.execPath, args: [path.join(ROOT, 'scripts', 'mcp-gateway.js')], env: w.env, cwd: ROOT, timeoutMs: 4000 });
   try {
@@ -582,12 +582,12 @@ function roundTrip(w, points) {
 
 const placed = w => exchange.read(w.state).calls.filter(c => c.tool === 'place_order').length;
 
-/** A valid bos long on the fired bar (records and plan written), as an agent would send it. */
-function bosEntry(sig, extra = {}) {
+/** A valid fx_break long on the fired bar (records and plan written), as an agent would send it. */
+function fxEntry(sig, extra = {}) {
   const stop = sig.price - sig.ticks * 0.25;
   return {
     accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: sig.ticks, type: 'stop' },
-    rationale: `setup:bos long trigger on the closed bar, stop ${stop.toFixed(2)}`, ...extra,
+    rationale: `setup:fx_break long trigger on the closed bar, stop ${stop.toFixed(2)}`, ...extra,
   };
 }
 
@@ -601,7 +601,7 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
   const gw = gatewayClient(w);
   try {
     const before = placed(w);
-    const r = await attempt(gw, 'place_order', bosEntry(sig));
+    const r = await attempt(gw, 'place_order', fxEntry(sig));
     assert.ok(!r.ok);
     const checks = lastBlock(w).map(v => v.check);
     assert.ok(checks.includes('loss-streak') && checks.includes('daily-loss-count'), JSON.stringify(lastBlock(w)));
@@ -624,7 +624,7 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
     exchange.update(w3.state, s => { s.nowMs = Date.parse(at); });
     const gw3 = gatewayClient(w3);
     try {
-      return { r: await attempt(gw3, 'place_order', bosEntry(sig3)), w: w3 };
+      return { r: await attempt(gw3, 'place_order', fxEntry(sig3)), w: w3 };
     } finally {
       gw3.close();
     }
@@ -643,7 +643,7 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
   roundTrip(w2, 8);
   const gw2 = gatewayClient(w2);
   try {
-    const ok = await attempt(gw2, 'place_order', bosEntry(sig2));
+    const ok = await attempt(gw2, 'place_order', fxEntry(sig2));
     assert.ok(ok.ok, ok.error);
     assert.strictEqual(position(w2).size, 1);
   } finally {
@@ -659,18 +659,18 @@ test('mock trading: a missing or malformed bracket and inconsistent prices are r
   const gw = gatewayClient(w);
   try {
     const bad = [
-      ['zero ticks', bosEntry(sig, { stopLossBracket: { ticks: 0, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number of ticks above 0 \(got 0\)/],
-      ['negative ticks', bosEntry(sig, { stopLossBracket: { ticks: -40, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number/],
-      ['a fraction of a tick', bosEntry(sig, { stopLossBracket: { ticks: 2.5, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number/],
-      ['a target bracket of 0', bosEntry(sig, { takeProfitBracket: { ticks: 0, type: 'limit' } }), /takeProfitBracket\.ticks must be a whole number/],
-      ['target below the stop on a long', bosEntry(sig, { rationale: `setup:bos long trigger on the closed bar, stop ${(sig.price + 10).toFixed(2)}, target ${(sig.price - 10).toFixed(2)}` }),
+      ['zero ticks', fxEntry(sig, { stopLossBracket: { ticks: 0, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number of ticks above 0 \(got 0\)/],
+      ['negative ticks', fxEntry(sig, { stopLossBracket: { ticks: -40, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number/],
+      ['a fraction of a tick', fxEntry(sig, { stopLossBracket: { ticks: 2.5, type: 'stop' } }), /stopLossBracket\.ticks must be a whole number/],
+      ['a target bracket of 0', fxEntry(sig, { takeProfitBracket: { ticks: 0, type: 'limit' } }), /takeProfitBracket\.ticks must be a whole number/],
+      ['target below the stop on a long', fxEntry(sig, { rationale: `setup:fx_break long trigger on the closed bar, stop ${(sig.price + 10).toFixed(2)}, target ${(sig.price - 10).toFixed(2)}` }),
         /a long needs the target above the stop/],
-      ['a stop off the tick', bosEntry(sig, { rationale: `setup:bos long trigger on the closed bar, stop ${(stop + 0.1).toFixed(2)}` }), /stop .* is not on the 0\.25 tick/],
-      ['a limit entry with its stop above it', bosEntry(sig, { type: 'limit', limitPrice: sig.price, rationale: `setup:bos long trigger on the closed bar, stop ${(sig.price + 5).toFixed(2)}` }),
+      ['a stop off the tick', fxEntry(sig, { rationale: `setup:fx_break long trigger on the closed bar, stop ${(stop + 0.1).toFixed(2)}` }), /stop .* is not on the 0\.25 tick/],
+      ['a limit entry with its stop above it', fxEntry(sig, { type: 'limit', limitPrice: sig.price, rationale: `setup:fx_break long trigger on the closed bar, stop ${(sig.price + 5).toFixed(2)}` }),
         /the stop .* is on the wrong side of the buy entry/],
-      ['brackets that don\'t span the stated stop and target', bosEntry(sig, {
+      ['brackets that don\'t span the stated stop and target', fxEntry(sig, {
         takeProfitBracket: { ticks: sig.ticks * 3, type: 'limit' },
-        rationale: `setup:bos long trigger on the closed bar, stop ${stop.toFixed(2)}, target ${(sig.price + sig.ticks * 0.25).toFixed(2)}`,
+        rationale: `setup:fx_break long trigger on the closed bar, stop ${stop.toFixed(2)}, target ${(sig.price + sig.ticks * 0.25).toFixed(2)}`,
       }), /the brackets span/],
     ];
     for (const [label, order, why] of bad) {
@@ -681,12 +681,12 @@ test('mock trading: a missing or malformed bracket and inconsistent prices are r
       assert.match(v.message, why, label);
     }
     // No bracket, the stop only in the rationale: no entry (every entry carries its stop as stopLossBracket).
-    const unbracketed = await attempt(gw, 'place_order', bosEntry(sig, { stopLossBracket: undefined }));
+    const unbracketed = await attempt(gw, 'place_order', fxEntry(sig, { stopLossBracket: undefined }));
     assert.ok(!unbracketed.ok);
     assert.ok(lastBlock(w).some(v => v.check === 'stop-defined' && /every entry carries its stop as stopLossBracket/.test(v.message)), JSON.stringify(lastBlock(w)));
     assert.strictEqual(placed(w), 0, 'none reached the broker');
     // The well-formed entry goes.
-    const good = await attempt(gw, 'place_order', bosEntry(sig));
+    const good = await attempt(gw, 'place_order', fxEntry(sig));
     assert.ok(good.ok, good.error);
     // An exit with a bracket would leave a working leg behind: refused. Without one it goes.
     const exitWithBracket = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: '[exit] flatten' });

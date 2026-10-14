@@ -222,8 +222,7 @@
     "1021d34dddb684c8"
   ],
   "tests/lib/backtest.test.js|account": [
-    "75cdb5d64d7947ab",
-    "f97171ce1ad04865"
+    "75cdb5d64d7947ab"
   ],
   "tests/lib/clock.test.js|firm-time": [
     "188313c390374da4",
@@ -243,7 +242,6 @@
   ],
   "tests/lib/harness-tools-order-plan.test.js|account": [
     "85309e2f324cc4cc",
-    "aeeec2e2404f672b",
     "afa5fa394df9b038",
     "c72c14120bb0b231",
     "dbfea8d1396ff950",

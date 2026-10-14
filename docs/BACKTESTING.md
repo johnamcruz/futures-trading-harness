@@ -65,18 +65,18 @@ The table needs a header with a time column (`time`, `timestamp`,
 letter case works.
 
 Fields a broker puts on its bars (read by the rules' `field("path")`, such
-as the order flow the `ofi` strategies and `value_area` use) survive in a
+as the order flow `ofi_absorption` and `value_area` use) survive in a
 backtest only on bars the broker built at the strategy's own timeframe. So to
 backtest a strategy that reads broker fields, fetch its bars from the broker
 at its timeframe:
 
 ```bash
-# value_area (3 minutes, also inside prop_portfolio) and ofi (1 minute)
+# value_area (3 minutes, also inside prop_portfolio) and ofi_absorption (1 minute)
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 3 --out data/MNQ-3m.jsonl
 node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --timeframe 3 --strategy value_area
 node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --prop prop_portfolio
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 1 --out data/MNQ-1m.jsonl
-node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
+node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --timeframe 1 --strategy ofi_absorption
 ```
 
 `fetch` asks the broker's `get_bars` for bars of that size (`--timeframe`:
@@ -370,16 +370,23 @@ proves this.
 ### Strategy correctness
 
 `tests/lib/parity.test.js` runs the shipped strategies' rules over the original bot's
-own NQ and RTY 3-minute data. It checks each of the six strategies against
-the signals the original bot's Python detectors produced on the same bars: same
-bar, same direction, same stop.
+own NQ and RTY 3-minute data. It checks each ported strategy (`orb`,
+`cisd_ote`) against the signals the original bot's Python detectors produced
+on the same bars: same bar, same direction, same stop. The expected files
+still hold the signals of the four ports retired on 2026-10-13 (`bos`,
+`ema_cross`, `keltner`, `supertrend`), as the original bot produced them;
+the test leaves those out.
 
-We also ran the same check over 17,500 bars on NQ, ES, RTY, YM, and GC. All
-3,623 signals matched. When the ports moved from code detectors to rules,
+Before the retirement we also ran the same check, on all six ports, over
+17,500 bars on NQ, ES, RTY, YM, and GC. All 3,623 signals matched. When the ports moved from code detectors to rules,
 the rules reproduced the detectors on another 20,000 bars: 4,158 signals,
 same bar, direction, and stop.
 
 ## Examples
+
+A run from before `bos`, `ema_cross`, `keltner` and `supertrend` were
+retired (2026-10-13); today the same command runs the strategies shipped
+now:
 
 ```text
 $ node scripts/backtest.js --data data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01

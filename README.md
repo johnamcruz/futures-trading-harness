@@ -173,13 +173,8 @@ strategy loses, add one where it works.
 ```text
 strategies/
   orb/STRATEGY.md            opening range breakout
-  ema_cross/STRATEGY.md      EMA 9/20 cross
-  keltner/STRATEGY.md        Keltner breakout
-  supertrend/STRATEGY.md     SuperTrend flip
-  bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
   vwap_reclaim/STRATEGY.md   VWAP reclaim, active
-  ofi/STRATEGY.md            1m order-flow imbalance, active
   ofi_absorption/STRATEGY.md 1m absorption reversal, active
   crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, active
   crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, active
@@ -190,8 +185,10 @@ strategies/
 ```
 
 Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The six ported strategies reproduce its signals bar
-for bar (`tests/lib/parity.test.js`).
+rules`); none is code. The two ported strategies (`orb`, `cisd_ote`)
+reproduce its signals bar for bar (`tests/lib/parity.test.js`). Five
+strategies were retired on 2026-10-13 for a reliably negative edge after
+costs (`strategies/README.md`, "Retired strategies").
 
 Each file has code-checked frontmatter and a body the agents follow:
 
@@ -248,8 +245,8 @@ rules:
 To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
-`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. The six bundled
-strategies are ported from an earlier Python trading bot.
+`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. Two bundled
+strategies (`orb`, `cisd_ote`) are ported from an earlier Python trading bot.
 
 ## What's inside
 
@@ -605,7 +602,7 @@ skipped), and its trail exits every trade
 signal: policy
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account, one position at a time
 timeframe: 3m                # the one bar-size setting: every listed strategy trades it
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
+strategies: [cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5, stop_slippage_ticks: 1 }   # risk from the headroom; a contract's risk counts a tick of stop slippage
 contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode
@@ -648,11 +645,11 @@ trader over history and measuring its decisions is
 The harness computes no order flow. A broker MCP server that has it puts it
 on its bars as extra fields (turned on by the server's own settings, which
 its `mcp-configs/brokers.json` entry passes through), and the harness passes
-them through untouched. The `ofi`, `ofi_absorption`, and `value_area`
+them through untouched. The `ofi_absorption` and `value_area`
 strategies read them with the rules' `field("path")`; on a bar without them
-those conditions are false, so `ofi` and `ofi_absorption` give no signal and
+those conditions are false, so `ofi_absorption` gives no signal and
 `value_area` can confirm only through its range-expansion branch. They are active for replay and live (the owner's call), as is
-`prop_flow_1m`, the policy strategy over the 1-minute pair. See
+`prop_flow_1m`, the policy strategy over the 1-minute `ofi_absorption`. See
 [docs/ORDER-FLOW.md](docs/ORDER-FLOW.md).
 
 ### Order gate settings

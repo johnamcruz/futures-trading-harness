@@ -4,7 +4,7 @@
  * End to end, on real data: the runner polls a fake broker serving the
  * parity NQ bars as they close, writes the bars file and the gate's records
  * (multi-timeframe and signals) with the production functions, scans with the
- * real strategies, and builds the real prompt. A stand-in for the LLM follows
+ * real strategies (and the fixtures fx_break and fx_cross), and builds the real prompt. A stand-in for the LLM follows
  * the trade-session skill's steps: it reads what fired from the prompt, plans
  * in the journal, sizes the stop from the scan, and sends the order through
  * the real order gate (checkOrder: the hook's and the gateway's check). Then
@@ -24,7 +24,7 @@ const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/t
 const { scanRecord, appendJsonl } = require('../../scripts/lib/trading/scan-log');
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { FAKE_BROKERS, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, FX_STRATEGIES, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 const { digest, recentTrades, formSummary } = require('../../scripts/lib/trading/instincts');
 const { readJournal } = require('../../scripts/lib/trading/journal');
 
@@ -41,8 +41,9 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   const env = {
     FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'),
+    FTH_STRATEGIES_DIRS: FX_STRATEGIES, // the fixtures fx_break and fx_cross: they fire long on the 04:09 bar
   };
-  const strategies3m = loadStrategies(ROOT, {}).strategies.filter(s => s.timeframe === '3m');
+  const strategies3m = loadStrategies(ROOT, env).strategies.filter(s => s.timeframe === '3m');
   const clockRef = { t: Date.parse('2026-04-28T03:58:30Z') };
   const cycles = [];
   const client = {
@@ -116,10 +117,10 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     assert.match(c.prompt, /With your skill tool, load trade-session, multi-timeframe-analysis, and strategy-library/);
   }
   assert.ok(cycles.some(c => /Your last \d cycle\(s\)/.test(c.prompt)), 'later cycles see the earlier results');
-  // The 04:09 bar fired bos and ema_cross long (with each other): the trade, and the refusals.
+  // The 04:09 bar fired fx_break and fx_cross long (with each other): the trade, and the refusals.
   const traded = cycles.find(c => c.decisions.length);
   assert.ok(traded, 'a strategy fired on one of the bars');
-  assert.match(traded.prompt, /MNQ fired on this bar .*bos long with ema_cross/);
+  assert.match(traded.prompt, /MNQ fired on this bar .*fx_break long with fx_cross/);
   const d = Object.fromEntries(traded.decisions.map(x => [x.what, x]));
   assert.strictEqual(d['the trigger'].allowed, true, d['the trigger'].message);
   assert.deepStrictEqual(d['relabelled as a reversal'].violations.map(v => v.check), ['trigger-fired']);
@@ -129,7 +130,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   const after = cycles.filter(c => Date.parse(c.at) > Date.parse(traded.at));
   assert.ok(after.length >= 1, 'a cycle after the trade');
   for (const c of after) {
-    assert.match(c.prompt, /Your last 1 reviewed trade\(s\) \(0W\/1L, E -1\.05R\), oldest first: bos long loss -1\.05R in trend-up \[mistake:chased\]/);
+    assert.match(c.prompt, /Your last 1 reviewed trade\(s\) \(0W\/1L, E -1\.05R\), oldest first: fx_break long loss -1\.05R in trend-up \[mistake:chased\]/);
     assert.match(c.prompt, /Your recurring mistakes and lessons \(confidence; notes from your own past, not rules\): \(0\.\d\) mistake:chased in 1 of the last 1 reviewed trades/);
     assert.doesNotMatch(c.prompt, /\(form\)/, 'the record is on the reviewed-trades line, not repeated');
   }
@@ -137,5 +138,5 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   assert.ok(fs.existsSync(path.join(home, 'mtf', 'MNQ.json')));
   assert.ok(Array.isArray(readSignals(home, 'MNQ', '3m').candidates), 'the signal record of the last closed bar');
   const scans = fs.readFileSync(path.join(home, 'logs', 'scans.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(scans.some(s => s.candidates.includes('bos') && s.results.find(r => r.name === 'bos').confluence.with.includes('ema_cross')));
+  assert.ok(scans.some(s => s.candidates.includes('fx_break') && s.results.find(r => r.name === 'fx_break').confluence.with.includes('fx_cross')));
 });

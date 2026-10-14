@@ -46,9 +46,11 @@ Regime map:
 ## Examples
 
 ```text
-3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. EMA-cross
-and Keltner strategies are gated off (their ADX gate fails anyway).
+3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. The
+trend-following strategies are gated off (regime range), and an EMA cross
+here is noise, not momentum.
 
-3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → keltner
-signal "long" is valid; check the keltner strategy skip rules.
+3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → expansion
+with trend strength: confluence for a long setup (orb long, a 3m BOS up);
+more than 3 band closes in a row already says the move is late.
 ```

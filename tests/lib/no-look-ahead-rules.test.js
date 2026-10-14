@@ -95,7 +95,7 @@ test('field() at every look-back reads bar t - n, never a later bar, and a missi
 test('every shipped strategy\'s evaluation at bar t is unchanged by the bars after t', () => {
   const { strategies } = loadStrategies(ROOT, {});
   const judged = strategies.filter(s => s.valid && s.signal !== 'policy');
-  assert.ok(judged.length >= 14 && judged.some(s => s.name === 'ofi'), `the shipped rules strategies: ${judged.map(s => s.name)}`);
+  assert.ok(judged.length >= 9 && judged.some(s => s.name === 'ofi_absorption'), `the shipped rules strategies: ${judged.map(s => s.name)}`);
   let fired = 0;
   for (const t of CUTS) {
     // Fresh evaluators judging in the same order: a detector one strategy ran is in the next one's detail on both.

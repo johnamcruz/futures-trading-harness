@@ -85,7 +85,7 @@ doesn't hold.
      `adrDays`, default 10). `line` is the same as the prompt's "day:" line.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
      0.1 x ATR), and open fair value gaps.
-   - `context`: the numbers the strategies' skip rules name: EMA 9/20
+   - `context`: the chop and exhaustion counters for the trend and momentum read: EMA 9/20
      crosses in the last 30 bars, bars of falling ADX, Keltner width vs its
      20-bar average (a squeeze is under 1), the band-close streak, SuperTrend
      flips in the last 20 bars, the last 5 bars' range in ATR, the session's

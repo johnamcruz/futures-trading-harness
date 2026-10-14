@@ -15,7 +15,10 @@ const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const DIR = path.join(__dirname, '..', 'fixtures', 'parity');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 
-const NAMES = { supertrend: 'supertrend', ema_cross: 'ema', keltner: 'keltner', bos: 'bos', orb: 'orb', cisd_ote: 'cisd_ote' };
+// The shipped ports and their names in the original bot's output. The expected files also hold the signals of the
+// ports retired on 2026-10-13 (bos, ema, keltner, supertrend; strategies/README.md, "Retired strategies"): the
+// original bot's own output, kept as it was and left out here.
+const NAMES = { orb: 'orb', cisd_ote: 'cisd_ote' };
 // The shipped STRATEGY.md files, as written: Markdown rules, no strategy code.
 const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), {}).strategies;
 const strategy = name => {
@@ -41,11 +44,11 @@ for (const sym of ['NQ', 'RTY']) {
       }
     }
     const key = x => `${new Date(x.t).toISOString()} ${x.s} ${x.d}`;
-    const want = new Map(expected.signals.map(x => [key(x), Math.round(x.stop * 100) / 100]));
+    const want = new Map(expected.signals.filter(x => Object.values(NAMES).includes(x.s)).map(x => [key(x), Math.round(x.stop * 100) / 100]));
     const have = new Map(got.map(x => [key(x), x.stop]));
     assert.deepStrictEqual([...have.keys()].filter(k => !want.has(k)), [], 'signals the original bot does not fire');
     assert.deepStrictEqual([...want.keys()].filter(k => !have.has(k)), [], 'signals the harness misses');
     for (const [k, stop] of want) assert.ok(Math.abs(have.get(k) - stop) <= 0.01, `${k}: stop ${have.get(k)} vs ${stop}`);
-    assert.ok(want.size > 150);
+    assert.ok(want.size >= 5, `${want.size} signals`);
   });
 }

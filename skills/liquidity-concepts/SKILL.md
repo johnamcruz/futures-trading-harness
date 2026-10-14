@@ -40,7 +40,7 @@ never call one by eye.
    - Skip: don't buy just under prior-day high or sell just above
      prior-day low unless the strategy is a breakout of that level.
    - Reversal setups (cisd_ote strategy) need a sweep first; continuation
-     setups (bos strategy) need a break.
+     setups (a break of structure, market-structure skill) need a break.
 
 ## Examples
 

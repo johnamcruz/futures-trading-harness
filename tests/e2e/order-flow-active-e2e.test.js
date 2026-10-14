@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The order-flow strategies the owner activated (ofi, ofi_absorption, value_area; status active, for
+ * The order-flow strategies the owner activated (ofi_absorption, value_area; status active, for
  * replay and live), end to end through the entry points an LLM uses (separate processes, as in a
  * session): on bars that carry the broker's flow fields, `mtf.js --record` and `strategies.js scan
  * --record` write the gate's records, the plan goes in the journal, and the order goes through the
@@ -10,7 +10,7 @@
  * prices give no signal, so the same order is refused for having no trigger, never for a paper status.
  * value_area confirms by flow OR a range expansion on volume (ported as written), so without flow its
  * expansion branch still fires on a wide, heavy bar. Inside the policy strategies the same holds: value_area is a setup prop_portfolio trades, and
- * prop_flow_1m (active too) takes ofi's and ofi_absorption's setups, each passing the gate's prop checks.
+ * prop_flow_1m (active too) takes ofi_absorption's setups, passing the gate's prop checks.
  * Reverting any of them to paper fails these tests.
  */
 
@@ -35,7 +35,7 @@ const STRATS = Object.fromEntries(loadStrategies(ROOT, {}).strategies.map(s => [
 
 const node = (args, env, input) => spawnSync(process.execPath, args, { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env }, input });
 
-/** The broker's flow on a bar, as the ofi documents name it: the bar's imbalance and its 3- and 5-bar windows. */
+/** The broker's flow on a bar, as the flow strategy documents name it: the bar's imbalance and its 3- and 5-bar windows. */
 const flow = (one, three = one, five = one) => ({ flow: { ofiTrade: one, complete: true, windows: { 3: { ofiTrade: three }, 5: { ofiTrade: five } } } });
 const T1 = Date.UTC(2026, 9, 6, 22, 0); // 18:00 ET, 2026-10-06: the session's open
 const QUIET = 1030; // to 11:10 ET 2026-10-07: four completed 4-hour candles, so the trend rule has its 4-hour read
@@ -55,9 +55,6 @@ function oneMinute(dir, flowOf) {
   }
   return out;
 }
-
-/** ofi: buying flow at 1, 3 and 5 minutes under a rising price. */
-const ofiBars = withFlow => oneMinute(1, (k, burst) => (withFlow ? flow(burst ? 0.6 : 0) : null));
 
 /** ofi_absorption: 5 bars of heavy selling that hold the price, the last one turning up on buying. */
 function absorptionBars(withFlow) {
@@ -91,7 +88,6 @@ function valueAreaBars(withFlow, { expansion = false } = {}) {
 }
 
 const CASES = [
-  { name: 'ofi', tf: 1, side: 'long', bars: ofiBars },
   { name: 'ofi_absorption', tf: 1, side: 'long', bars: absorptionBars },
   { name: 'value_area', tf: 3, side: 'short', bars: valueAreaBars, plain: ' and no range expansion' },
 ];
@@ -157,14 +153,14 @@ test('value_area without the broker\'s flow but on a range expansion: its expans
   assert.strictEqual(res.status, 0, `refused:\n${res.stderr}`);
 });
 
-test('prop_flow_1m covers MNQ and NQ only: while an attempt runs, an ofi or ofi_absorption setup on MES, MYM or M2K is refused (fails closed)', () => {
+test('prop_flow_1m covers MNQ and NQ only: while an attempt runs, an ofi_absorption setup on MES, MYM or M2K is refused (fails closed)', () => {
   assert.deepStrictEqual(STRATS.prop_flow_1m.instruments, ['MNQ', 'NQ']);
   const account = accountNamed(ROOT, STRATS.prop_flow_1m.account, {});
   const attempt = (home, now) => prop.startAttempt(home, account, new Date(now.getTime() - 3600000));
   for (const symbol of ['MES', 'MYM', 'M2K']) {
-    for (const name of ['ofi', 'ofi_absorption']) {
+    for (const name of ['ofi_absorption']) {
       assert.ok(STRATS[name].instruments.includes(symbol), `${name} lists ${symbol}`);
-      const { r, res } = throughTheGate({ name, tf: 1, side: 'long', bars: name === 'ofi' ? ofiBars : absorptionBars }, true, { symbol, before: attempt });
+      const { r, res } = throughTheGate({ name, tf: 1, side: 'long', bars: absorptionBars }, true, { symbol, before: attempt });
       assert.ok(r.candidate, `${name} fires on ${symbol}`);
       assert.strictEqual(res.status, 2, `${name} on ${symbol}`);
       assert.match(res.stderr, /attempt is running: only a policy strategy that trades it/);
@@ -218,7 +214,7 @@ test('value_area trades as active inside prop_portfolio: its setup is the policy
   assert.deepStrictEqual([screened.find(r => r.name === 'prop_flow_1m').candidate, verdict('prop_flow_1m')], [false, null]);
 });
 
-for (const [name, bars] of [['ofi', ofiBars], ['ofi_absorption', absorptionBars]]) {
+for (const [name, bars] of [['ofi_absorption', absorptionBars]]) {
   test(`prop_flow_1m is active: it takes ${name}'s setup on bars carrying the broker's flow, and the gate lets the entry through; without flow, nothing`, async () => {
     assert.strictEqual(STRATS.prop_flow_1m.status, 'active');
     const { screened, gate, verdict } = await throughThePolicy(bars(true), 1);

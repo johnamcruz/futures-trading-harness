@@ -17,6 +17,11 @@ const FAKE_BROKER = 'fake';
 /** Fixture prop accounts (test_50k, test_100k) for FTH_ACCOUNTS_DIRS, where a test needs no real account file. */
 const TEST_ACCOUNTS = path.join(__dirname, 'fixtures', 'accounts');
 /**
+ * Fixture rules strategies (fx_break, fx_cross) for FTH_STRATEGIES_DIRS, where a test needs a generic rules
+ * strategy that fires on a known parity bar (both fire long on NQ-3m's 2026-04-28T04:09 bar).
+ */
+const FX_STRATEGIES = path.join(__dirname, 'fixtures', 'strategies-fx');
+/**
  * The broker the repo ships as the default (mcp-configs/brokers.json), read, never named: tests that
  * check the shipped config (a live broker's variables, the default) use it so no test names a platform.
  */
@@ -37,6 +42,32 @@ function homeBrokers(home, brokers, { broker = Object.keys(brokers)[0], env = nu
   fs.writeFileSync(file, JSON.stringify({ broker, brokers: { ...fake.brokers, ...brokers } }));
   if (env) env.FTH_BROKERS_FILE = file;
   return file;
+}
+
+/**
+ * A plugin root in `home` with the repo's strategies and accounts, the fixture fx_break (on paper with
+ * `paper`) and fx_cross, and prop_portfolio trading fx_break first: a policy whose component fires long on
+ * the parity bar (NQ-3m's 2026-04-28T04:09). No shipped 3-minute component fires there.
+ */
+function fxPolicyRoot(home, { paper = false } = {}) {
+  const root = path.join(home, 'plugin');
+  const repo = path.resolve(__dirname, '..');
+  fs.mkdirSync(path.join(root, 'strategies'), { recursive: true });
+  for (const d of fs.readdirSync(path.join(repo, 'strategies'))) {
+    if (d !== 'prop_portfolio') fs.symlinkSync(path.join(repo, 'strategies', d), path.join(root, 'strategies', d));
+  }
+  fs.symlinkSync(path.join(repo, 'accounts'), path.join(root, 'accounts'));
+  const copy = (name, edit = x => x) => {
+    fs.mkdirSync(path.join(root, 'strategies', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'strategies', name, 'STRATEGY.md'), edit(fs.readFileSync(path.join(FX_STRATEGIES, name, 'STRATEGY.md'), 'utf8')));
+  };
+  copy('fx_break', doc => (paper ? doc.replace(/^status: active$/m, 'status: paper') : doc));
+  copy('fx_cross');
+  const policy = fs.readFileSync(path.join(repo, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8');
+  if (!/^strategies: \[/m.test(policy)) throw new Error('prop_portfolio has no strategies list');
+  fs.mkdirSync(path.join(root, 'strategies', 'prop_portfolio'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'strategies', 'prop_portfolio', 'STRATEGY.md'), policy.replace(/^strategies: \[/m, 'strategies: [fx_break, '));
+  return root;
 }
 
 /** A broker's own contract id for `root`: opaque to the harness (only the translator maps it). */
@@ -135,4 +166,4 @@ function entryOrder(extra = {}) {
   return o;
 }
 
-module.exports = { NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+module.exports = { NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

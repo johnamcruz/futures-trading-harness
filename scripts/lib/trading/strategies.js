@@ -103,8 +103,11 @@ function validateStrategy(data, body, folderName) {
     && data.instruments.every(s => typeof s === 'string' && /^[A-Z0-9]+$/.test(s)), 'instruments: list of contract roots, e.g. [MNQ, MES]');
   req(typeof data.timeframe === 'string' && TIMEFRAME.test(data.timeframe), 'timeframe: e.g. 3m, 15m, 1h');
   const legacy = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote'].includes(data.signal);
+  const retired = ['ema_cross', 'keltner', 'supertrend', 'bos'].includes(data.signal); // strategies/README.md, "Retired strategies"
   req(SIGNALS.includes(data.signal), legacy
-    ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (copy the rules block from strategies/${data.signal}/STRATEGY.md)`
+    ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (${retired
+      ? `the ${data.signal} strategy was retired: its rules block is in the repository's history, strategies/README.md says why`
+      : `copy the rules block from strategies/${data.signal}/STRATEGY.md`})`
     : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a prop-challenge strategy trades other strategies' setups on a prop account, sized from its budget)`);
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
@@ -117,7 +120,7 @@ function validateStrategy(data, body, folderName) {
   if (data.signal === 'policy') {
     const list = data.strategies;
     req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
-      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [ema_cross, keltner])');
+      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [orb, cisd_ote])');
     req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md)');
     if (data.sizing !== undefined) {
       const z = data.sizing;

@@ -6,7 +6,7 @@
 // fires (side, candidate or not, stop, regime, session, the rules that held, the filters that failed) in full, and
 // a digest of its whole result on every bar. At fixed bars the text the model reads is pinned too: the runner's
 // compact scan, the market snapshot, and the bar briefing. Without the broker's fields, every strategy that reads
-// none decides the same, and no condition on a field holds for the ones that read them (ofi, ofi_absorption,
+// none decides the same, and no condition on a field holds for the ones that read them (ofi_absorption,
 // value_area's flow branch, the fixture ext_reader).
 // Goldens: tests/fixtures/golden/ (tests/golden.js says how to update them on purpose).
 
@@ -146,9 +146,8 @@ test('without describe (a backtest) no field values are computed; with it, the s
   assert.ok(shown > 0, 'describe computes them');
 });
 
-test('the broker\'s fields fire every strategy that reads them: ofi and ofi_absorption (1m, deep paths), value_area\'s flow branch, ext_reader (a look-back and a flag)', () => {
+test('the broker\'s fields fire every strategy that reads them: ofi_absorption (1m, deep paths), value_area\'s flow branch, ext_reader (a look-back and a flag)', () => {
   const fired = (label, name, which = 'broker') => decided(SERIES.find(x => x.label === label), which)[name].filter(r => r.direction).length;
-  assert.ok(fired('MNQ 1m', 'ofi') > 0, 'ofi');
   assert.ok(fired('MNQ 1m', 'ofi_absorption') > 0, 'ofi_absorption');
   // value_area's setup holds without flow (its price branch) or with it: the broker's flow adds bars.
   const va = ['MNQ 3m', 'M2K 3m'].reduce((n, l) => n + fired(l, 'value_area') - fired(l, 'value_area', 'plain'), 0);
@@ -191,11 +190,11 @@ function viewAt(s, bars, i) {
   ].join('\n');
 }
 
-/** On 1m: the first bars where ofi and ofi_absorption fire, and where neither does. */
+/** On 1m: the first bar where ofi_absorption fires, and one where it doesn't. */
 function minuteViews(s) {
   const d = decided(s, 'broker');
   const at = name => FIRST + d[name].findIndex(r => r.candidate || r.direction);
-  return [at('ofi'), at('ofi_absorption'), 3000];
+  return [at('ofi_absorption'), 3000];
 }
 
 for (const s of SERIES) {

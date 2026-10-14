@@ -14,14 +14,14 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { loadBars, aggregate } = require('../../scripts/lib/backtest/data');
 const { runBacktest } = require('../../scripts/lib/backtest/run');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const STRATS = Object.fromEntries(loadStrategies(ROOT, {}).strategies.map(s => [s.name, s]));
 const T0 = Date.UTC(2026, 9, 7, 14, 0); // 10:00 ET
 const M = 60000;
 
-/** The broker's flow on a bar: the bar's imbalance and its 3- and 5-bar windows (as the ofi documents name them). */
+/** The broker's flow on a bar: the bar's imbalance and its 3- and 5-bar windows (as the flow strategy documents name them). */
 const flow = (one, three = one, five = one) => ({ flow: { ofiTrade: one, complete: one !== null, windows: { 3: { ofiTrade: three }, 5: { ofiTrade: five } } } });
 
 /**
@@ -45,23 +45,6 @@ const fires = (s, bars) => {
   return bars.map((b, i) => ({ i, r: ev.at(s, i, { describe: false }) })).filter(x => x.r.direction);
 };
 
-test('ofi fires on the broker\'s flow fields, both ways, and never without them', () => {
-  const buying = series(1, (k, burst) => flow(burst ? 0.6 : 0));
-  const f = fires(STRATS.ofi, buying);
-  assert.ok(f.length >= 1, 'fires on the burst');
-  assert.ok(f.every(x => x.i >= 70 && x.r.direction === 'long'), JSON.stringify(f.map(x => [x.i, x.r.direction])));
-  const selling = series(-1, (k, burst) => flow(burst ? -0.6 : 0));
-  assert.ok(fires(STRATS.ofi, selling).some(x => x.r.direction === 'short'));
-
-  // The same prices: no flow on the bars (the broker's flow off), flow not complete (nulls), flow against the move.
-  assert.deepStrictEqual(fires(STRATS.ofi, series(1, () => null)), [], 'no fields: no signal, no estimate');
-  assert.deepStrictEqual(fires(STRATS.ofi, series(1, (k, burst) => flow(burst ? null : 0))), [], 'null fields: no signal');
-  assert.deepStrictEqual(fires(STRATS.ofi, series(1, (k, burst) => flow(burst ? 0.6 : 0, 0.6, null))), [], 'one window null: no signal');
-  assert.deepStrictEqual(fires(STRATS.ofi, series(1, (k, burst) => flow(burst ? -0.6 : 0))), [], 'selling flow under a rising price');
-  // The windows are read where the document says: a weak 5-bar window stops it.
-  assert.deepStrictEqual(fires(STRATS.ofi, series(1, (k, burst) => flow(burst ? 0.6 : 0, 0.6, 0.1))), []);
-});
-
 test('ofi_absorption fires when heavy selling in the broker\'s flow fails to move price and the last bar turns', () => {
   // 70 quiet bars, then 5 bars of selling on heavy volume that hold the price, the last one turning up.
   const bars = series(0, (k, burst) => flow(burst ? (k === 74 ? 0.4 : -0.5) : 0, 0, burst ? -0.4 : 0));
@@ -70,21 +53,13 @@ test('ofi_absorption fires when heavy selling in the broker\'s flow fails to mov
   assert.deepStrictEqual(f.map(x => [x.i, x.r.direction]), [[74, 'long']]);
   const { flow: _f, ...plain } = bars[74];
   assert.deepStrictEqual(fires(STRATS.ofi_absorption, bars.slice(0, 74).concat([plain])), [], 'no fields on the turn bar: no signal');
-});
-
-test('ofi reads each window where its document says: distinct values, and one weak or flipped window stops it, both ways', () => {
-  const fired = (dir, one, three, five) => fires(STRATS.ofi, series(dir, (k, burst) => flow(burst ? one : 0, burst ? three : 0, burst ? five : 0))).map(x => x.r.direction);
-  // Long: one 0.6, three 0.5, five 0.4 all >= 0.3.
-  assert.ok(fired(1, 0.6, 0.5, 0.4).includes('long'));
-  assert.deepStrictEqual(fired(1, 0.6, 0.5, 0.2), [], 'a weak 5-bar window (the 3-bar one is strong)');
-  assert.deepStrictEqual(fired(1, 0.6, 0.2, 0.4), [], 'a weak 3-bar window');
-  assert.deepStrictEqual(fired(1, 0.2, 0.5, 0.4), [], 'a weak 1-bar imbalance');
-  // Short: the mirror.
-  assert.ok(fired(-1, -0.6, -0.5, -0.4).includes('short'));
-  assert.deepStrictEqual(fired(-1, -0.6, -0.5, -0.2), [], 'a weak 5-bar window');
-  assert.deepStrictEqual(fired(-1, -0.6, -0.2, -0.4), [], 'a weak 3-bar window');
-  assert.deepStrictEqual(fired(-1, -0.2, -0.5, -0.4), [], 'a weak 1-bar imbalance');
-  assert.deepStrictEqual(fired(-1, -0.6, -0.5, 0.4), [], 'a flipped 5-bar window');
+  // The same prices with the 5-bar window null (a bar in it incomplete), or with no flow at all: no signal, no estimate.
+  const nullWindow = series(0, (k, burst) => flow(burst ? (k === 74 ? 0.4 : -0.5) : 0, 0, burst ? null : 0));
+  nullWindow[74] = { ...nullWindow[74], c: nullWindow[73].c + 0.5, h: nullWindow[73].c + 1 };
+  assert.deepStrictEqual(fires(STRATS.ofi_absorption, nullWindow), [], 'one window null: no signal');
+  const none = series(0, () => null);
+  none[74] = { ...none[74], c: none[73].c + 0.5, h: none[73].c + 1 };
+  assert.deepStrictEqual(fires(STRATS.ofi_absorption, none), [], 'no fields: no signal');
 });
 
 test('ofi_absorption short: heavy buying that fails to lift price, then a bar that turns down; each flow condition counts', () => {
@@ -148,10 +123,10 @@ test('a backtest on finer bars that carry broker fields: refused when a strategy
   const bars = [];
   for (let k = 0; k < 600; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
-  const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, log: m => logs.push(m) });
-  assert.throws(() => run(['value_area', 'bos']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
+  const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: { FTH_STRATEGIES_DIRS: FX_STRATEGIES }, log: m => logs.push(m) });
+  assert.throws(() => run(['value_area', 'fx_break']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
   const logs = [];
-  run(['bos'], logs);
+  run(['fx_break'], logs);
   assert.ok(logs.some(l => /^warning: .*one\.json: building 3-minute bars from 1-minute ones drops the broker's own fields \(flow\): no strategy here reads them/.test(l)), logs.join('\n'));
 });
 
@@ -177,16 +152,16 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
 
 test('a prop run on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
   const dir = tmpDir();
-  // va_paper: a paper copy of value_area (it reads the broker's flow), listed by an active policy with bos.
+  // va_paper: a paper copy of value_area (it reads the broker's flow), listed by an active policy with the fixture fx_break.
   const strategies = path.join(dir, 'strategies');
   const write = (name, text) => { fs.mkdirSync(path.join(strategies, name), { recursive: true }); fs.writeFileSync(path.join(strategies, name, 'STRATEGY.md'), text); };
   write('va_paper', fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8').replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
-  write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, bos]'));
+  write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, fx_break]'));
   const file = path.join(dir, 'one.json');
   const bars = [];
   for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
-  const env = { ...process.env, FTH_STRATEGIES_DIRS: strategies };
+  const env = { ...process.env, FTH_STRATEGIES_DIRS: `${strategies},${FX_STRATEGIES}` };
   const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) });
   const logs = [];
   try {

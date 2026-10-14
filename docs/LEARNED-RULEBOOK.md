@@ -56,9 +56,9 @@ the champion is replaced only with the owner's approval.
 | Group | Examples (today's source) | Learned how |
 | --- | --- | --- |
 | Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (`prop_portfolio` `sizing`, `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in `ACCOUNT.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
-| Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. keltner in a `mixed` read: half) | Calibration (section 6), then the search |
+| Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. orb in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
-| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate, keltner's ADX ≥ 20), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
+| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
 | Exits | `prop_portfolio` `exit` (hold to +2R, trail 0.5R) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
@@ -134,7 +134,7 @@ The owner's classification is in section 11: the mechanical items enforced, judg
   carry fields it reads, and reports each field's coverage.
 - **Flow coverage (owner's decision, 2026-10-13).** The replay server's
   flow fields cover **2021-05 to 2025-11**, for NQ (MNQ's bars carry NQ's
-  flow, as `strategies/ofi` says); another market's coverage is checked
+  flow, as `strategies/ofi_absorption` says); another market's coverage is checked
   before it is calibrated (NQ first, section 11). Phase B's splits are restricted to that
   span. No window in `scripts/lib/prop/splits.js` moves: coverage limits
   which months carry flow, never which role a month has, so "set in advance"
@@ -150,7 +150,7 @@ The owner's classification is in section 11: the mechanical items enforced, judg
   - **LLM** months (2026-06 on): not covered.
 
   **Outside coverage**, a bar has no flow fields, so every flow condition is
-  false: `ofi` and `ofi_absorption` give no signal, `prop_flow_1m` has no
+  false: `ofi_absorption` gives no signal, `prop_flow_1m` has no
   setup, and `value_area` confirms only through its range expansion (fails
   closed; nothing estimates the flow). The flow strategies are **excluded
   from every claim on those months**: no calibration result, Monte Carlo
@@ -501,8 +501,7 @@ will judge them, before any measurement. Examples:
 - "lunch-window setups are weaker";
 - each strategy's skip rules and filters;
 - the flow strategies' claims (R34), measured only on covered months
-  (section 4): `ofi`'s "flow that agrees over 1, 3 and 5 bars and moves
-  price continues"; `ofi_absorption`'s "heavy one-sided flow over 5 bars that
+  (section 4): `ofi_absorption`'s "heavy one-sided flow over 5 bars that
   fails to move price, then a turn, reverses"; `value_area`'s "the 3-bar flow
   confirmation at the prior day's POC adds edge beyond its range-expansion
   confirmation"; and for each, whether an RTH or a
@@ -535,18 +534,17 @@ rule). Each base rate is computed only from data before the bar it
 describes. Phase B's bars are not back-adjusted (section 4), so a price
 level is the price traded then.
 
-**R34. Flow strategies in scope** (owner's decision, 2026-10-13). `ofi`,
+**R34. Flow strategies in scope** (owner's decision, 2026-10-13).
 `ofi_absorption`, `value_area` (its flow confirmation) and, through them,
 `prop_flow_1m` are calibrated, searched and gated like every other
-strategy, on covered months only (section 4).
+strategy, on covered months only (section 4). (`ofi` was in scope too until
+the owner retired it the same day, for an edge reliably negative after
+costs in the Train census: `strategies/README.md`, "Retired strategies".)
 
 - **Their thresholds are calibrated parameters**, set on the tuning half
   only and judged on the held-out half (section 4), never on Recent's or
   the new months' uncovered bars. They are, by the paths the strategies
   read:
-  - `ofi`: the one-bar imbalance `field("flow.ofiTrade")` and the 3- and
-    5-bar windows `field("flow.windows.3.ofiTrade")` and
-    `field("flow.windows.5.ofiTrade")`, each ±0.3 today;
   - `ofi_absorption`: `field("flow.windows.5.ofiTrade")`, ±0.25 today, and
     the sign of `field("flow.ofiTrade")` on the turning bar;
   - `value_area`: its confirmation `field("flow.windows.3.ofiTrade")`, ±0.2
@@ -566,7 +564,7 @@ strategy, on covered months only (section 4).
   value: no threshold is set from those days. Restricting a flow
   strategy to RTH, or adding a volume condition, is a **candidate** claim
   (R11), kept only if calibration confirms it, never assumed. Those two
-  candidates came from the parity look itself (`ofi` fired overnight, on
+  candidates came from the parity look itself (the since-retired `ofi` fired overnight, on
   thin volume), so they are hypotheses only: proposed and measured on
   Train, and judged on held-out months other than the parity look's.
 - **Their claims go through R11-R13** like any other: listed before
@@ -740,7 +738,7 @@ apply directly:
 
 | # | Mechanism (the course's sources) | What it means here | Requirements |
 |---|---|---|---|
-| 1 | **Improve the agent's design**: skills, prompts, roles (ADAS, AlphaEvolve, the AI Scientist) | The agent's "program" is its skills, strategies and rulebook. An LLM proposes small diffs ("add a room check before the trend reason", "say the opening drive allows entries", "skip keltner in mixed reads"); replays and the backtest score them; an edit is kept only under the promotion rule (R25): no significant loss on any verifier, a significant gain on what it targets, zero blows; a diverse archive of versions is kept, not just the latest. **This is the training process.** The fixes made by hand so far (the phase-1 confirmation, the trend rule's side, the opening window) are this loop run manually. | R24-R28, R30 |
+| 1 | **Improve the agent's design**: skills, prompts, roles (ADAS, AlphaEvolve, the AI Scientist) | The agent's "program" is its skills, strategies and rulebook. An LLM proposes small diffs ("add a room check before the trend reason", "say the opening drive allows entries", "skip orb in mixed reads"); replays and the backtest score them; an edit is kept only under the promotion rule (R25): no significant loss on any verifier, a significant gain on what it targets, zero blows; a diverse archive of versions is kept, not just the latest. **This is the training process.** The fixes made by hand so far (the phase-1 confirmation, the trend rule's side, the opening window) are this loop run manually. | R24-R28, R30 |
 | 2 | **Learn from verified successes** (STaR, RLEF, scaling RL) | Decisions that matched the rulebook and the facts (selected by adherence, never by outcome) become training examples for a small adapter on the local model: the model learns to trade from its own verified decisions. A model-specific training artifact, never code in the harness; gated on months it never trained on. | R31 |
 | 3 | **More thought on the hard decisions** (test-time compute: Large Language Monkeys, Archon) | Ask the take-or-skip decision on a verdict several times and act only when the answers agree, or let a checker pick among them. The most direct lever on a small model's misreads; it costs model time, so verdict decisions only. | R29 |
 | 4 | **Verify before acting** (robust verification, Constitutional AI, step-level verifiers) | Deterministic checks first (the order gate). Then every reason the model states is checked against the briefing's facts ("opening window until 10:00" fails: the briefing says entries are allowed after 09:35). Each step of the priority order is checked on its own, not only the final call. | R29 |
