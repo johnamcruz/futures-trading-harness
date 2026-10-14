@@ -40,9 +40,10 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    attempt line (e.g. it says no attempt is running and the prompt lists an
    active one), the prompt's facts win, and you say the earlier result was
    wrong. Each history line is one decision: time, symbol and lane, what
-   you did (entered, skipped, planned, managed, no-trade, flattened, blocked, error), the
+   you did (entered, skipped, vetoed, planned, managed, no-trade, flattened, blocked, error;
+   skipped is your own pass, vetoed the risk manager's veto), the
    setup and side, the price, your reason, and what happened since, from
-   closed bars only: ticks moved, whether a skipped setup would have hit
+   closed bars only: ticks moved, whether a skipped or vetoed setup would have hit
    +1R or -1R first, an entry's real position (open from its fill with R now, closed with its R, or "unknown" or "unavailable": then you don't know, so don't guess). Use it to
    notice a pattern: the same setup skipped again and again while it keeps
    reaching +1R, or entries that keep getting stopped. Never chase the last

@@ -44,6 +44,36 @@ test('the entry: a no-trade with a setup on the table is a skip, with its strate
   assert.deepStrictEqual(D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [] }), { at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x' });
 });
 
+test('a setup not taken: vetoed when the cycle\'s phase-2 report is a veto, else skipped (the model\'s own pass); a vetoed one keeps its counterfactual', () => {
+  // Claude stream-json: a Task call to a role, answered by its report.
+  let n = 0;
+  const role = (r, text) => {
+    n += 1;
+    return [
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `t${n}`, name: 'Task', input: { subagent_type: r, prompt: 'p' } }] } }),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `t${n}`, content: text }] } }),
+    ].join('\n');
+  };
+  const entry = output => D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100, { scan: [fired('orb', 'long', 2)] })], output });
+  const phase1 = role('risk-manager', 'Phase 1: flat, budget 1 trade');
+  const veto = role('risk-manager', 'Phase 2 on orb long.\nVERDICT: VETO - no room');
+  const approve = role('risk-manager', 'Phase 2 on orb long.\nVERDICT: APPROVE - size 1');
+  assert.strictEqual(entry([phase1, veto].join('\n')).action, 'vetoed');
+  assert.strictEqual(entry([phase1, approve].join('\n')).action, 'skipped', 'approved, then the model passed: its own pass');
+  assert.strictEqual(entry([phase1, approve, veto].join('\n')).action, 'vetoed', 'the latest phase-2 report decides');
+  assert.strictEqual(entry([phase1, veto, approve].join('\n')).action, 'skipped');
+  assert.strictEqual(entry(phase1).action, 'skipped', 'no phase 2: the model passed');
+  assert.strictEqual(entry('').action, 'skipped', 'no transcript (a harness that shows no reports): a pass, as before');
+  assert.strictEqual(entry('{"not": "a transcript"').action, 'skipped');
+  // A veto with nothing on the table stays a plain no-trade; an analyst's "VETO" is no phase-2 report.
+  assert.strictEqual(D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100)], output: veto }).action, 'no-trade');
+  assert.strictEqual(entry(role('market-structure-analyst', 'VERDICT: VETO')).action, 'skipped');
+  // Shown as vetoed, with whether it would have hit +1R or -1R first.
+  const v = entry(veto);
+  const up = [bar(3, 99, 100, 99, 100), bar(4, 100, 102.5, 99.5, 102)];
+  assert.deepStrictEqual(D.historyLines([v], market(up, 4)), ['10:12 MNQ 3m vetoed orb long @100: x; since +8t, would hit +1R first']);
+});
+
 test('the entry of an executed cycle reads the order it placed: setup, side and the stop bracket; an earlier order, an exit or a refused one is not it', () => {
   const placed = (ts, text, extra = {}) => ({ ts, kind: 'order_placed', contractId: 'MNQ', text, data: { request: { side: 1, stopLossBracket: { ticks: 16, type: 'stop' } }, result: { success: true } }, ...extra });
   const entries = [

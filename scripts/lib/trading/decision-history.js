@@ -5,11 +5,15 @@
  * per decision, with what happened since, so the next cycle can see a run of misses or stops, not only what it
  * said. The runner records an entry after each trade cycle (runner.js state.history, kept across restarts):
  *
- *   decisionEntry({ at, symbols, result, items, entries, lanes })   the state.history entry for a cycle: its
+ *   decisionEntry({ at, symbols, result, items, entries, lanes, output })   the state.history entry for a cycle: its
  *       result line plus the facts at the decision: the symbol and lane, the bar and its close (the price), the
- *       tick, the action (entered, skipped, managed, no-trade, flattened, blocked, planned, error), and the setup's
- *       strategy, side and stop distance (1R) when there is one. `items`: the cycle's { symbol, minutes, tickSize,
- *       bar: { t, c }, scan, verdicts }; `entries`: the journal read after the cycle (the entry it placed, if any).
+ *       tick, the action (entered, skipped, vetoed, managed, no-trade, flattened, blocked, planned, error), and the
+ *       setup's strategy, side and stop distance (1R) when there is one. `items`: the cycle's { symbol, minutes,
+ *       tickSize, bar: { t, c }, scan, verdicts }; `entries`: the journal read after the cycle (the entry it placed,
+ *       if any); `output`: the cycle's transcript. A no-trade with a setup on the table is `vetoed` when the cycle's
+ *       phase-2 report (roles-ran.js latestPhase2: the latest risk-manager report with a verdict) is a veto
+ *       (verdictOf), else `skipped`: the model's own pass, a good decision when its counterfactual lost. A transcript
+ *       with no such report (a harness whose transcript doesn't show the roles' reports) is a pass, as before.
  *   historyLines(history, market)   the lines, oldest first; consecutive identical no-trades collapse into one
  *       ("10:03-10:18 MNQ 3m no-trade ×6 @21500.25: nothing fired; since -4t").
  *   marketOf(items, timeframe)      the bars the outcomes read: per symbol and lane, its closed bars and the close
@@ -34,7 +38,7 @@
  *     unknown. When the account's positions could not be read, "position state unavailable", never a stale value.
  * Only bars of the decision's trading day and contract count (the runner flattens at end of day; a roll changes
  * the prices); a decision from an earlier trading day carries its date. A setup is named only on a decision about
- * one (entered, skipped, planned); a manage, flatten or block names the symbol its reason names. An executed cycle
+ * one (entered, skipped, vetoed, planned); a manage, flatten or block names the symbol its reason names. An executed cycle
  * whose journal could not be read names no setup ("details unavailable"): it is not guessed from the scan.
  * An entry from before these fields (only { at, symbols, result }) renders with what it has.
  *
@@ -54,7 +58,7 @@ const { familyRoot } = require('./contracts');
 // The result line's outcome word (autotrader.js CYCLE_OUTCOMES) -> the action the history names.
 const ACTIONS = { 'no-trade': 'no-trade', planned: 'planned', executed: 'entered', managed: 'managed', flattened: 'flattened', blocked: 'blocked', error: 'error' };
 // The actions whose setup was not taken: what it would have done is the counterfactual.
-const NOT_TAKEN = new Set(['skipped', 'no-trade', 'planned']);
+const NOT_TAKEN = new Set(['skipped', 'vetoed', 'no-trade', 'planned']);
 const REASON_CHARS = 100;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 const SETUP_TAG = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
@@ -104,8 +108,20 @@ function placedSince(entries, sinceMs, startMs = sinceMs) {
   return { root: e.contractId ? contractRoot(e.contractId) : null, setup: SETUP_TAG.exec(text)[1], side: sideOf(word) || sideOf(req.side), ticks: ticks(req.stopLossBracket), targetTicks: ticks(req.takeProfitBracket), orderId: e.data.result.orderId ?? e.orderId ?? null, size: Number(req.size) > 0 ? Number(req.size) : null };
 }
 
+/** Whether the cycle's phase-2 report (the latest risk-manager report with a verdict) vetoed: roles-ran.js. Never throws. */
+function vetoedIn(output) {
+  if (!output) return false;
+  try {
+    const { roleCalls, latestPhase2, verdictOf } = require('./roles-ran');
+    const last = latestPhase2(roleCalls(output).calls.filter(c => c.role === 'risk-manager' && verdictOf(c.text) !== null));
+    return Boolean(last) && verdictOf(last.text) === 'VETO';
+  } catch (_err) {
+    return false;
+  }
+}
+
 /** The state.history entry for a cycle (see the module comment). */
-function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false, positions = null }) {
+function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false, positions = null, output = '' }) {
   const base = { at, symbols, result, ...(Array.isArray(lanes) && lanes.length ? { lanes } : {}) };
   const list = (items || []).filter(x => x && x.bar && x.bar.t);
   if (!list.length) return base;
@@ -126,7 +142,8 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   const unknown = action0 === 'entered' && journalFailed;
   const setup = aboutSetup && !unknown ? setupOf(item) : null;
   const tick = Number(item.tickSize) > 0 ? Number(item.tickSize) : null;
-  const action = action0 === 'no-trade' && setup ? 'skipped' : action0;
+  // A setup not taken: the risk manager's veto, or the model's own pass.
+  const action = action0 === 'no-trade' && setup ? (vetoedIn(output) ? 'vetoed' : 'skipped') : action0;
   const same = setup && placed && setup.setup === placed.setup;
   const facts = placed
     ? { setup: placed.setup, side: placed.side || (same ? setup.side : null), stop: placed.ticks && tick ? num(placed.ticks * tick) : same ? setup.stop : null, target: placed.targetTicks && tick ? num(placed.targetTicks * tick) : same ? setup.target : null }
