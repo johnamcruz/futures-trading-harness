@@ -7,7 +7,8 @@
 // doubled: every unit (a sentence, a table cell, a code line) of each skill as main had it (frozen below, with its
 // sha256) is in the skills now exactly as many times as before, byte-for-byte after whitespace is normalised, or is
 // listed below with the text that now carries it (each a fragment of one file) and the reason. And no role loses
-// knowledge in full mode: every role that loaded an old skill loads each skill its content went to.
+// knowledge in full mode: every role that loaded an old skill loads each skill its content went to, where the content
+// is about fields its own body reads.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -70,6 +71,18 @@ const STRUCTURE = ['When to Use', 'How It Works', 'Examples'];
 // file), and why. `home: null`: nothing carries it, with the reason.
 const S = s => `skills/${s}/SKILL.md`;
 const A = a => `agents/${a}.md`;
+// The briefing fields market-snapshot's glossary explained, by the skill it went to. A role must load that skill only
+// when its own body reads one of those fields (a backticked name in its agent file); homes of one `group` are
+// alternatives (one of them is enough). A home without fields binds every role that loaded the old skill.
+const TMI = { fields: ['regime', 'context', 'trend'] };
+const MV = { fields: ['participation', 'relVolLastVsOpeningRange', 'relVolLast3VsOpeningRange', 'relVolLast3VsPrior20', 'relVolVsSameTimePriorDay'] };
+const VVP = { fields: ['volumeProfile', 'priorProfile', 'sessionProfile', 'priorProfileNodes', 'hvnAbove', 'lvnBelow'] };
+const DAY = { fields: ['today', 'dayType', 'openType'] };
+const VWAP = { fields: ['vwap', 'applies', 'rthCrossesLast30', 'sessionCrossesLast30'], group: 'vwap' };
+const LR = { fields: ['liquidity', 'liquidity.swingHighs', 'swingLows', 'liquidity.equalHighs', 'equalHighs', 'equalLows', 'liquidity.openFvgs', 'openFvgs',
+  'liquidity.partlyFilledFvgs', 'partlyFilledFvgs', 'priorRth', 'overnight', 'openingRange'] };
+// Units moved byte-for-byte whose home binds only the roles that read these fields.
+const VERBATIM_FIELDS = { 'Read a skip rule\'s number here; never estimate it.': TMI };
 const ALLOWED = {
   'liquidity-concepts': [
     { old: 'Liquidity Concepts', home: null, reason: 'the retired skill\'s title' },
@@ -97,8 +110,8 @@ const ALLOWED = {
   'market-structure': [
     { old: 'Market Structure', home: null, reason: 'the retired skill\'s title' },
     { old: 'Forming a directional bias on any timeframe.', home: [[S('trend-vs-range'), 'Trader-process step 1 (HTF), and the regime in step 2.']], reason: 'a trigger of the retired skill: the bias is trend-vs-range\'s read' },
-    { old: 'Choosing where a stop belongs (behind structure, not at an arbitrary distance).', home: [[A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
-      reason: 'the stop is the strategy\'s (the invalidation skill, the risk manager\'s); the analyst reports where its bias is wrong' },
+    { old: 'Choosing where a stop belongs (behind structure, not at an arbitrary distance).', home: [[S('trend-vs-range'), 'A stop belongs behind structure (a swing), not at an arbitrary distance; the stop itself stays the strategy\'s (`invalidation`).'], [A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
+      reason: 'trend-vs-range keeps "behind structure" (the stop stays the strategy\'s); the analyst reports where its bias is wrong' },
     { old: 'Deciding whether a breakout is continuation or a reversal attempt.', home: [[S('bos-vs-choch'), 'No one timeframe is the signal; read them top-down.']], reason: 'a trigger of the retired skill: bos-vs-choch reads it' },
     { old: 'In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools` skill) holds this bar\'s structure (`m3`, `m15`, `h1`): use it, and compute only what it doesn\'t hold.',
       home: [[A('market-structure-analyst'), 'Start from the bar briefing: `bar_briefing {"symbol": "<SYMBOL>"}`.']], reason: 'the role\'s own Method says it' },
@@ -112,7 +125,7 @@ const ALLOWED = {
       home: [[S('pullback-vs-reversal'), '**Premium and discount.** Split the current dealing range (last major swing low to high) at 50%: above is premium, below is discount.']], reason: 'moved to pullback-vs-reversal, under its own label' },
     { old: '**Invalidation**: the `invalidation` skill (the stop stays the strategy\'s).', home: [[A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
       reason: 'a pointer; the stop is the strategy\'s, the analyst reports where its bias is wrong' },
-    { old: '**Higher timeframe wins** (`bos-vs-choch`, by timeframe).', home: [[S('bos-vs-choch'), 'No one timeframe is the signal; read them top-down.']], reason: 'superseded wording: #121 reads the timeframes top-down' },
+    { old: '**Higher timeframe wins** (`bos-vs-choch`, by timeframe).', home: [[S('bos-vs-choch'), 'A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.']], reason: 'superseded wording: #121 reads the timeframes top-down' },
     ...[
       '15m: HH 21620 → HL 21540 → HH 21655 → HL 21590 (uptrend)',
       '3m: close 21588 below the 21590 HL → CHoCH on 3m, 15m still up.',
@@ -130,49 +143,49 @@ const ALLOWED = {
     { old: 'Use it, and compute only what it doesn\'t hold.', home: [[S('market-snapshot'), 'A number the briefing doesn\'t carry:']], reason: 'the fallback\'s triggers' },
     { old: 'Read the JSON:', home: [[S('market-snapshot'), 'Read the JSON: the briefing\'s values under the snapshot\'s own keys.']], reason: 'now names where each value is explained' },
     { old: '`trend`: emaFast(9), emaSlow(20), ema50, ema200, adx(14) and its 5-bar slope, supertrend(10,3) direction and line, keltner(20, 1.5×ATR20).',
-      home: [[S('market-snapshot'), '`trend` (`emaFast`, `emaSlow`, `ema50`, `ema200`, `adx`, `adxSlope`, `supertrend`, `keltner`)'], [S('trend-momentum-indicators'), '| SuperTrend(10, 3) | ATR bands |'],
-        [S('trend-momentum-indicators'), '| Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 |'], [S('momentum-and-volume'), '`m3.trend.adxSlope` (now minus 5 bars ago)']], reason: 'the keys stay; the settings are trend-momentum-indicators\' table' },
-    { old: '`volatility`: atr14, atr20.', home: [[S('market-snapshot'), '`volatility` (`atr14`, `atr20`)'], [S('trend-momentum-indicators'), '| ATR(14/20) | Wilder |']], reason: 'the keys stay; ATR is trend-momentum-indicators\'' },
-    { old: '`structure`: last confirmed fractal swing high/low (k=2) and when.', home: [[S('market-snapshot'), '`structure` (the last swing high and low)'], [S('levels-and-reactions'), '(3m swings, 2 bars each side:']], reason: 'the key stays; the swings are levels-and-reactions\'' },
+      home: [[S('market-snapshot'), '`trend` (`emaFast`, `emaSlow`, `ema50`, `ema200`, `adx`, `adxSlope`, `supertrend`, `keltner`)'], [S('trend-momentum-indicators'), '| SuperTrend(10, 3) | ATR bands |', TMI],
+        [S('trend-momentum-indicators'), '| Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 |', TMI], [S('momentum-and-volume'), '`m3.trend.adxSlope` (now minus 5 bars ago)', MV]], reason: 'the keys stay; the settings are trend-momentum-indicators\' table' },
+    { old: '`volatility`: atr14, atr20.', home: [[S('market-snapshot'), '`volatility` (`atr14`, `atr20`)'], [S('trend-momentum-indicators'), '| ATR(14/20) | Wilder |', TMI]], reason: 'the keys stay; ATR is trend-momentum-indicators\'' },
+    { old: '`structure`: last confirmed fractal swing high/low (k=2) and when.', home: [[S('market-snapshot'), '`structure` (the last swing high and low)'], [S('levels-and-reactions'), '(3m swings, 2 bars each side:', LR]], reason: 'the key stays; the swings are levels-and-reactions\'' },
     { old: '`levels`: priorRth high/low/close, overnight high/low, openingRange (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET anchor), vwapRth (09:30 ET anchor; null before today\'s 09:30 ET open and after 16:00 ET: use vwapSession then, as the strategy filters do).',
-      home: [[S('market-snapshot'), '`levels` (`priorRth`, `overnight`, `openingRange`, `vwapSession`, `vwapRth`)'], [S('levels-and-reactions'), 'opening range `m3.today.openingRange` (the first 15 minutes from 09:30 ET; null until formed)'],
-        [S('vwap-volume-profile'), '`vwapRth` is null before today\'s 09:30 ET open and after 16:00 ET: use `vwapSession` then, as the strategy filters do.']], reason: 'the keys stay; the levels are levels-and-reactions\', the VWAPs vwap-volume-profile\'s' },
+      home: [[S('market-snapshot'), '`levels` (`priorRth`, `overnight`, `openingRange`, `vwapSession`, `vwapRth`)'], [S('levels-and-reactions'), 'opening range `m3.today.openingRange` (the first 15 minutes from 09:30 ET; null until formed)', LR],
+        [S('vwap-volume-profile'), '`vwapRth` is null before today\'s 09:30 ET open and after 16:00 ET: use `vwapSession` then, as the strategy filters do.', VWAP], [S('trend-momentum-indicators'), '`rth` from 09:30 to 16:00 ET, else `session`', VWAP]], reason: 'the keys stay; the levels are levels-and-reactions\', the VWAPs vwap-volume-profile\'s' },
     { old: '`vwap`: which VWAP applies now (`rth` or `session`), the distance in ATR(14), and the closes crossing each VWAP in the last 30 bars (`rthCrossesLast30`, `sessionCrossesLast30`; read the one that applies).',
-      home: [[S('vwap-volume-profile'), 'The briefing\'s `m3.vwap`: which VWAP applies now (`applies`: `rth` or `session`), the distance in ATR(14) (`distanceAtr`), and the closes crossing each VWAP in the last 30 bars (`rthCrossesLast30`, `sessionCrossesLast30`; read the one that applies).']], reason: 'moved to vwap-volume-profile, with the briefing\'s field names' },
+      home: [[S('vwap-volume-profile'), 'The briefing\'s `m3.vwap`: which VWAP applies now (`applies`: `rth` or `session`), the distance in ATR(14) (`distanceAtr`), and the closes crossing each VWAP in the last 30 bars (`rthCrossesLast30`, `sessionCrossesLast30`; read the one that applies).', VWAP], [S('trend-momentum-indicators'), '**VWAP** (`m3.vwap`): which applies (`applies`:', VWAP]], reason: 'moved to vwap-volume-profile, with the briefing\'s field names' },
     { old: '`participation`: `lastBarVolume`; the last bar and the last 3 bars\' average vs the opening-range average bar (`relVolLastVsOpeningRange`, `relVolLast3VsOpeningRange`); the last 3 vs the 20 bars before them (`relVolLast3VsPrior20`); and the last bar vs the one bar at the same ET time on the previous trading day (`relVolVsSameTimePriorDay`: one bar, not an average over sessions). orb\'s skip rule reads `relVolLastVsOpeningRange`.',
-      home: [[S('momentum-and-volume'), '`m3.participation.relVolLast3VsPrior20`: the last 3 bars\' mean volume over the mean of the bars before them (the code takes 21);'], [S('momentum-and-volume'), 'over the same ET minute\'s bar the previous trading day; `m3.participation.lastBarVolume`.'],
-        [S('momentum-and-volume'), 'orb\'s skip rule reads the first']],
+      home: [[S('momentum-and-volume'), '`m3.participation.relVolLast3VsPrior20`: the last 3 bars\' mean volume over the mean of the bars before them (the code takes 21);', MV], [S('momentum-and-volume'), 'over the same ET minute\'s bar the previous trading day; `m3.participation.lastBarVolume`.', MV],
+        [S('momentum-and-volume'), 'orb\'s skip rule reads the first', MV]],
       reason: 'momentum-and-volume says it exactly as the code computes it (#122: the code takes 21 bars, not 20); the orb note moved there' },
     { old: 'Both count by trading day (from the 18:00 ET open): from 18:00 ET until the new range closes (09:30 ET + orbMinutes; 09:45 by default), `levels.openingRange` and the opening-range ratios are null, never the closed day\'s.',
-      home: [[S('momentum-and-volume'), 'bar average (null before it closes, and overnight;'], [S('levels-and-reactions'), 'null until formed)']], reason: 'momentum-and-volume and levels-and-reactions say it' },
-    { old: '`volumeProfile`: computed from the bars, never estimate it.', home: [[S('vwap-volume-profile'), 'Don\'t estimate it by hand:']], reason: 'vwap-volume-profile says it' },
+      home: [[S('momentum-and-volume'), 'bar average (null before it closes, and overnight;', MV], [S('levels-and-reactions'), 'null until formed)', LR]], reason: 'momentum-and-volume and levels-and-reactions say it' },
+    { old: '`volumeProfile`: computed from the bars, never estimate it.', home: [[S('vwap-volume-profile'), 'Don\'t estimate it by hand:', VVP]], reason: 'vwap-volume-profile says it' },
     { old: '`priorRth` (the last complete RTH day, the day\'s reference), `session` (this Globex session, developing), `rolling` (the last `vpLookback` bars).',
-      home: [[S('vwap-volume-profile'), '`priorRth`: the last complete RTH day. The reference for the day; fixed.'], [S('vwap-volume-profile'), '`rolling`: the last 360 bars (`vpLookback`).']], reason: 'vwap-volume-profile lists the three' },
+      home: [[S('vwap-volume-profile'), '`priorRth`: the last complete RTH day. The reference for the day; fixed.', VVP], [S('vwap-volume-profile'), '`rolling`: the last 360 bars (`vpLookback`).', VVP]], reason: 'vwap-volume-profile lists the three' },
     { old: 'Each: `poc`, `vah`, `val`, `price` (above, inside, or below value, from the exact levels: a shown VAH a tick under price can still read inside), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of them (`hvn`, `lvn`).',
-      home: [[S('vwap-volume-profile'), '`price` (above, inside, or below value, from the exact levels: a shown VAH a tick under price can still read inside), `fromPocAtr` ((price - POC) / ATR(14))'], [S('vwap-volume-profile'), 'with the nearest above and below (`hvnAbove`, `lvnBelow`, ...)']], reason: 'merged into vwap-volume-profile\'s own list' },
+      home: [[S('vwap-volume-profile'), '`price` (above, inside, or below value, from the exact levels: a shown VAH a tick under price can still read inside), `fromPocAtr` ((price - POC) / ATR(14))', VVP], [S('vwap-volume-profile'), 'with the nearest above and below (`hvnAbove`, `lvnBelow`, ...)', VVP]], reason: 'merged into vwap-volume-profile\'s own list' },
     { old: 'On the contract\'s tick (as in the briefing) for a harness bars file or with `symbol`; otherwise to two decimals, between ticks: round to `tickSize` before using one as an order price.',
-      home: [[S('vwap-volume-profile'), 'shown on the contract\'s tick (as in the briefing) for a harness bars file or with `symbol`; otherwise to two decimals, between ticks: round to `tickSize` before using one as an order price.']], reason: 'replaces vwap-volume-profile\'s older "not on ticks" line' },
-    { old: 'Bar-based: say so.', home: [[S('vwap-volume-profile'), 'Say so when you cite it.']], reason: 'vwap-volume-profile says it' },
+      home: [[S('vwap-volume-profile'), 'shown on the contract\'s tick (as in the briefing) for a harness bars file or with `symbol`; otherwise to two decimals, between ticks: round to `tickSize` before using one as an order price.', VVP]], reason: 'replaces vwap-volume-profile\'s older "not on ticks" line' },
+    { old: 'Bar-based: say so.', home: [[S('vwap-volume-profile'), 'Say so when you cite it.', VVP]], reason: 'vwap-volume-profile says it' },
     { old: '`day` (RTH only, else null): the open against the prior RTH day (`openVs`: inside the prior value area, outside value inside the range, or outside the range), the `gap` from the prior close, the `openType` (open-drive, open-test-drive, open-rejection-reverse, open-auction, from the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first hour) and how far the day has gone past it (`extUp`, `extDown`), the `dayType` so far (inside the initial balance; normal variation: one side extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under 0.35 ADR; neutral: both sides), and the `range` against the average daily range (`adr`, over `adrDays`, default 10).',
-      home: [[S('vwap-volume-profile'), 'the open against the prior RTH day (`openVs`: inside the prior value area, outside value inside the range, or outside the range), the `gap` from the prior close, the `openType` (open-drive, open-test-drive, open-rejection-reverse, open-auction, from the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first hour) and how far the day has gone past it (`extUp`, `extDown`), the `dayType` so far (inside the initial balance; normal variation: one side extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under 0.35 ADR; neutral: both sides), and the range against the average daily range (`rangeVsAdr`, over 10 days).'],
+      home: [[S('vwap-volume-profile'), 'the open against the prior RTH day (`openVs`: inside the prior value area, outside value inside the range, or outside the range), the `gap` from the prior close, the `openType` (open-drive, open-test-drive, open-rejection-reverse, open-auction, from the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first hour) and how far the day has gone past it (`extUp`, `extDown`), the `dayType` so far (inside the initial balance; normal variation: one side extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under 0.35 ADR; neutral: both sides), and the range against the average daily range (`rangeVsAdr`, over 10 days).', DAY],
         [S('market-snapshot'), '`day` (RTH only, else null)']], reason: 'moved to vwap-volume-profile with the briefing\'s field (`m3.today`)' },
-    { old: '`line` is the same as the prompt\'s "day:" line.', home: [[S('vwap-volume-profile'), 'the prompt\'s "day:" line says the same']], reason: 'moved to vwap-volume-profile' },
+    { old: '`line` is the same as the prompt\'s "day:" line.', home: [[S('vwap-volume-profile'), 'the prompt\'s "day:" line says the same', DAY]], reason: 'moved to vwap-volume-profile' },
     { old: '`liquidity`: the last 4 swing highs and lows, equal highs/lows (within 0.1 x ATR), open fair value gaps (`openFvgs`: not traded back into) and partly filled ones (`partlyFilledFvgs`: traded into, not through; `low` to `high` is the part still unfilled, `gapLow` to `gapHigh` the whole gap).',
-      home: [[S('levels-and-reactions'), '(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`)'], [S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)'],
-        [S('levels-and-reactions'), 'open FVGs `m3.liquidity.openFvgs` and partly filled ones `m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`)']], reason: 'levels-and-reactions lists them; fair-value-gaps reads the gaps' },
+      home: [[S('levels-and-reactions'), '(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`)', LR], [S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)', LR],
+        [S('levels-and-reactions'), 'open FVGs `m3.liquidity.openFvgs` and partly filled ones `m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`)', LR]], reason: 'levels-and-reactions lists them; fair-value-gaps reads the gaps' },
     { old: '`context`: the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars, bars of falling ADX, Keltner width vs its 20-bar average (a squeeze is under 1), the band-close streak, SuperTrend flips in the last 20 bars, the last 5 bars\' range in ATR, the session\'s high and low so far, and the last bar\'s volume vs its 60-bar average (`volVsAvg60`).',
-      home: [[S('trend-momentum-indicators'), '**Skip-rule counters** (`m3.context`): the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`), bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar average (`keltnerWidthVsAvg20`: a squeeze is under 1), the band-close streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars (`supertrendFlipsLast20`), the last 5 bars\' range in ATR (`range5Atr`).'],
+      home: [[S('trend-momentum-indicators'), '**Skip-rule counters** (`m3.context`): the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`), bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar average (`keltnerWidthVsAvg20`: a squeeze is under 1), the band-close streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars (`supertrendFlipsLast20`), the last 5 bars\' range in ATR (`range5Atr`).', TMI],
         [S('market-snapshot'), 'Only in this tool\'s output: `context.volVsAvg60` (the last bar\'s volume vs its 60-bar average) and `context.session` (the session\'s high and low so far;']], reason: 'the briefing\'s counters to trend-momentum-indicators; the two the briefing lacks stay here' },
     { old: 'The bar briefing\'s `m3` `context` has the same counters except `volVsAvg60` and `session` (the session high and low reach the briefing only as named levels, `session high` and `session low`, ranked with the others in `nearestLiquidity` and the candidates\' `ahead`): `volVsAvg60` is in this tool\'s output only.',
       home: [[S('market-snapshot'), 'the briefing has them only as named levels, `session high` and `session low`, ranked with the others in `nearestLiquidity` and the candidates\' `ahead`)']], reason: 'reworded for the fallback' },
     { old: 'No strategy\'s skip rule reads it; the strategies whose rules compare volume with an average compute it in their own rules (`vol_sma`), and the scan reports the result.',
       home: [[S('market-snapshot'), 'No strategy\'s skip rule reads `volVsAvg60`; the strategies whose rules compare volume with an average compute it in their own rules (`vol_sma`), and the scan reports the result.']], reason: '"it" named' },
     { old: '`regime`: primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average).',
-      home: [[S('trend-momentum-indicators'), '**The regime\'s fields** (`m3.regime`): primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).']], reason: 'moved to trend-momentum-indicators' },
+      home: [[S('trend-momentum-indicators'), '**The regime\'s fields** (`m3.regime`): primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).', TMI]], reason: 'moved to trend-momentum-indicators' },
     { old: 'Fractal swings need strictly higher/lower neighbours (2 bars each side), so a flat top or bottom (bars side by side at the same high or low) is no swing.',
-      home: [[S('levels-and-reactions'), 'A flat top or bottom (bars side by side at the same high or low) is no swing, so it is in neither.'], [S('levels-and-reactions'), '(3m swings, 2 bars each side:']], reason: 'moved to levels-and-reactions, next to the equal highs and lows' },
+      home: [[S('levels-and-reactions'), 'A flat top or bottom (bars side by side at the same high or low) is no swing, so it is in neither.', LR], [S('levels-and-reactions'), '(3m swings, 2 bars each side:', LR]], reason: 'moved to levels-and-reactions, next to the equal highs and lows' },
     { old: '`liquidity.equalHighs`/`equalLows` are pairs of separate confirmed swings within 0.1 x ATR(14) of each other (see levels-and-reactions); a flat top shows up in neither.',
-      home: [[S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)'], [S('levels-and-reactions'), 'is no swing, so it is in neither.']], reason: 'levels-and-reactions says it' },
+      home: [[S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)', LR], [S('levels-and-reactions'), 'is no swing, so it is in neither.', LR]], reason: 'levels-and-reactions says it' },
   ],
 };
 
@@ -185,27 +198,28 @@ function differences(name, skillTexts, files = f => read(f)) {
   for (const [s, text] of Object.entries(skillTexts)) for (const u of units(text)) { if (!now.has(u)) now.set(u, []); now.get(u).push(s); }
   const allowed = new Map(ALLOWED[name].map(a => [a.old, a]));
   const bad = [];
-  const homes = new Set();
+  const homes = [];
   for (const [u, n] of before) {
     if (STRUCTURE.includes(u)) continue;
     const a = allowed.get(u);
     if (a) {
-      for (const [file, text] of a.home || []) {
+      for (const [file, text, only] of a.home || []) {
         if (!flat(files(file)).includes(flat(text))) bad.push(`${name}: "${text}" not in ${file}`);
         // One home: a fragment in a skill is in exactly one skill.
         const inSkills = Object.entries(skillTexts).filter(([, t]) => flat(t).includes(flat(text))).map(([s]) => s);
         if (file.startsWith('skills/') && inSkills.length !== 1) bad.push(`${name}: "${text}" in ${inSkills.length} skills, not 1`);
-        homes.add(file);
+        homes.push({ file, fields: only ? only.fields : null, group: only && only.group ? `${u}:${only.group}` : null });
       }
       if (!a.reason) bad.push(`${name}: no reason for ${u}`);
       continue;
     }
     const at = now.get(u) || [];
     if (at.length !== n) bad.push(`${name}: ${JSON.stringify(u)}: ${n} before, ${at.length} now`);
-    for (const s of at) homes.add(S(s));
+    const only = VERBATIM_FIELDS[u];
+    for (const s of at) homes.push({ file: S(s), fields: only ? only.fields : null, group: null });
   }
   for (const a of ALLOWED[name]) if (!before.has(a.old)) bad.push(`${name}: allow-list entry not in the old skill: ${a.old}`);
-  return { bad, homes: [...homes] };
+  return { bad, homes };
 }
 
 const current = () => Object.fromEntries(skillNames().map(s => [s, read(S(s))]));
@@ -223,21 +237,32 @@ test('skill retire: every unit of the old skills has exactly one home, or an all
   for (const name of Object.keys(BEFORE)) assert.deepStrictEqual(differences(name, texts).bad, [], name);
 });
 
-/** Each old role's missing homes: a skill it doesn't load (core or index: full mode embeds both), or another role's file. */
+/** The backticked names in a role's agent file: the fields its body reads. */
+const bodyFields = role => new Set([...read(A(role)).matchAll(/`([A-Za-z0-9_.]+)`/g)].map(m => m[1]));
+
+/**
+ * Each old role's missing homes: a skill it doesn't load (core or index: full mode embeds both) that its content went
+ * to, where the home binds it (no fields, or a field its body reads; of a group, one home it loads is enough), or
+ * another role's file.
+ */
 function roleGaps(texts, loadsOf = loads) {
-  const gaps = [];
+  const gaps = new Set();
   for (const [name, roles] of Object.entries(OLD_ROLES)) {
     const { homes } = differences(name, texts);
-    if (homes.length < 2) gaps.push(`${name}: homes ${homes}`);
+    if (new Set(homes.map(h => h.file)).size < 2) gaps.add(`${name}: homes ${homes.map(h => h.file)}`);
     for (const role of roles) {
+      const reads = bodyFields(role);
+      const has = h => loadsOf(role).includes(h.file.split('/')[1]);
       for (const h of homes) {
-        if (h.startsWith('agents/')) { if (h !== A(role)) gaps.push(`${role}: ${name} went to ${h}, another role's file`); continue; }
-        const skill = h.split('/')[1];
-        if (!loadsOf(role).includes(skill)) gaps.push(`${role}: loaded ${name}, but not ${skill}`);
+        if (h.file.startsWith('agents/')) { if (h.file !== A(role)) gaps.add(`${role}: ${name} went to ${h.file}, another role's file`); continue; }
+        if (h.fields && !h.fields.some(x => reads.has(x))) continue;
+        // A group: one home it loads is enough; missing all, it is reported once, by its first home.
+        if (h.group && (homes.some(o => o.group === h.group && has(o)) || homes.find(o => o.group === h.group) !== h)) continue;
+        if (!has(h)) gaps.add(`${role}: loaded ${name}, but not ${h.file.split('/')[1]}`);
       }
     }
   }
-  return gaps;
+  return [...gaps];
 }
 
 test('skill retire: no role loses knowledge in full mode: each role that loaded an old skill loads every skill its content went to', () => {
@@ -245,7 +270,22 @@ test('skill retire: no role loses knowledge in full mode: each role that loaded 
   assert.deepStrictEqual(roleGaps(texts), []);
   // A role without one of the homes fails.
   const without = (role, skill) => r => loads(r).filter(s => !(r === role && s === skill));
-  assert.deepStrictEqual(roleGaps(texts, without('volume-liquidity-analyst', 'trend-momentum-indicators')), ['volume-liquidity-analyst: loaded market-snapshot, but not trend-momentum-indicators']);
+  // The trend analyst reads `regime` and `context` (trend-momentum-indicators), `participation` (momentum-and-volume) and
+  // `vwap` (trend-momentum-indicators' VWAP line, or vwap-volume-profile); the volume analyst `vwap` and the profiles.
+  // Without trend-momentum-indicators, its VWAP line's group is missing too (reported by its first home).
+  assert.deepStrictEqual(roleGaps(texts, without('trend-momentum-analyst', 'trend-momentum-indicators')).sort(),
+    ['trend-momentum-analyst: loaded market-snapshot, but not trend-momentum-indicators', 'trend-momentum-analyst: loaded market-snapshot, but not vwap-volume-profile']);
+  // With either VWAP home the group is met: the volume analyst with trend-momentum-indicators instead of
+  // vwap-volume-profile misses only the profile and day homes' skill, never the VWAP group.
+  const swapped = r => (r === 'volume-liquidity-analyst' ? [...loads(r), 'trend-momentum-indicators'].filter(s => s !== 'vwap-volume-profile') : loads(r));
+  assert.deepStrictEqual(roleGaps(texts, swapped), ['volume-liquidity-analyst: loaded market-snapshot, but not vwap-volume-profile']);
+  assert.deepStrictEqual(roleGaps(texts, without('trend-momentum-analyst', 'momentum-and-volume')), ['trend-momentum-analyst: loaded market-snapshot, but not momentum-and-volume']);
+  assert.deepStrictEqual(roleGaps(texts, without('volume-liquidity-analyst', 'vwap-volume-profile')), ['volume-liquidity-analyst: loaded market-snapshot, but not vwap-volume-profile']);
+  assert.deepStrictEqual(roleGaps(texts, without('volume-liquidity-analyst', 'levels-and-reactions')).sort(),
+    ['volume-liquidity-analyst: loaded liquidity-concepts, but not levels-and-reactions', 'volume-liquidity-analyst: loaded market-snapshot, but not levels-and-reactions']);
+  // A field the body reads binds it: the structure analyst reading `regime` would need trend-momentum-indicators.
+  const reads = bodyFields('market-structure-analyst');
+  assert.ok(!reads.has('regime') && !reads.has('participation') && !reads.has('vwap'), 'the structure analyst reads none of them');
   assert.deepStrictEqual(roleGaps(texts, without('market-structure-analyst', 'pullback-vs-reversal')), ['market-structure-analyst: loaded market-structure, but not pullback-vs-reversal']);
   assert.deepStrictEqual(roleGaps(texts, without('volume-liquidity-analyst', 'fair-value-gaps')), ['volume-liquidity-analyst: loaded liquidity-concepts, but not fair-value-gaps']);
 });

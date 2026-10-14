@@ -71,8 +71,8 @@ never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `vwap-volume-profile`,
    `session-timing`, `harness-tools`, `levels-and-reactions`,
-   `fair-value-gaps`, `momentum-and-volume`, `absorption`,
-   `market-snapshot`, and `trend-momentum-indicators`.
+   `fair-value-gaps`, `momentum-and-volume`, `absorption`, and
+   `market-snapshot`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
    Always, once: `get_quote` for the live bid/ask/last.

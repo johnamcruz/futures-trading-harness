@@ -8,8 +8,7 @@ description: Read fair value gaps as the code computes them (open, partly filled
 ## When to Use
 
 - A setup fired and an open or partly filled gap lies ahead of it, in its
-  direction (in index mode the gate counts your report only after you look
-  this skill up).
+  direction.
 - Trader-process step 3, when a gap is near price.
 
 ## How It Works

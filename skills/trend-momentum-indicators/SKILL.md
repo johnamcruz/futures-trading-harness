@@ -43,6 +43,10 @@ Regime: trend, range or transition, by the rule the code applies, is the
   behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes
   crossing the session VWAP in the last 30 bars, the same count as
   `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).
+- **VWAP** (`m3.vwap`): which applies (`applies`: `rth` from 09:30 to
+  16:00 ET, else `session`), price's `side`, `distanceAtr` (in ATR(14)),
+  and the closes crossing each in the last 30 bars (`rthCrossesLast30`,
+  `sessionCrossesLast30`: many = rotation, few = trend).
 - **Skip-rule counters** (`m3.context`): the numbers the strategies' skip
   rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`),
   bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar

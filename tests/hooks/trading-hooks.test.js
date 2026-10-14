@@ -2218,15 +2218,6 @@ test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report co
   look('market-structure-analyst', 'breakout-vs-fakeout', 15);
   look('market-structure-analyst', 'mtf-breakout', 15);
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, index).stderr, /roles-ran/);
-  // A fair value gap ahead of the long on the same bar: fair-value-gaps too, for both roles that index it.
-  writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(),
-    data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'allows' }], price: 21500, liquidity: { openFvgs: [{ side: 'bearish', low: 21510, high: 21513 }], partlyFilledFvgs: [] } } } } });
-  const gap = gate({ ...orderPayload(), transcript_path: transcript }, index);
-  assert.strictEqual(gap.code, 2);
-  assert.match(gap.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up fair-value-gaps[^\n]*volume-liquidity-analyst reported without looking up fair-value-gaps/);
-  look('market-structure-analyst', 'fair-value-gaps', 15);
-  look('volume-liquidity-analyst', 'fair-value-gaps', 15);
-  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, index).stderr, /roles-ran/);
   // An exit is never held.
   fs.unlinkSync(`${transcript}.lookups.jsonl`);
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, index);

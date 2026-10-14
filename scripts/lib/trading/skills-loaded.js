@@ -52,10 +52,6 @@ const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strate
  *   candidate.trendRule=<v>        a candidate whose trendRule is v (reversal | against | allows)
  *   candidate.name=<strategy>      a candidate of that strategy
  *   candidate.blocked              a candidate blocked now (a no-entry window, a news blackout)
- *   candidate.fvgAhead             a candidate with an open or partly filled fair value gap ahead of it: the gap's
- *                                  unfilled part beyond m3.price in its direction (m3.liquidity.openFvgs,
- *                                  partlyFilledFvgs); with a gap listed and the price, a side or a gap's edges
- *                                  unreadable, it fires (fails closed)
  *   news.inBlackout                a news blackout in force (m3.news.inBlackout)
  */
 const SITUATIONAL = [
@@ -68,37 +64,15 @@ const SITUATIONAL = [
   // A with-trend setup: the breakout setup, and accepted or a fakeout (step 3).
   { when: 'candidate.trendRule=allows', skill: 'mtf-breakout' },
   { when: 'candidate.trendRule=allows', skill: 'breakout-vs-fakeout' },
-  // A fair value gap in a setup's way (step 3): open, partly filled, and its distance in the setup's R.
-  { when: 'candidate.fvgAhead', skill: 'fair-value-gaps' },
 ];
 
 const TREND_RULES = ['reversal', 'against', 'allows'];
 const cands = m3 => (m3 && Array.isArray(m3.candidates) ? m3.candidates.filter(c => c && typeof c === 'object') : []);
-/** The open and partly filled fair value gaps the briefing lists; a list present but not a list is one unreadable gap. */
-const gapsOf = m3 => {
-  const liq = m3 && m3.liquidity && typeof m3.liquidity === 'object' ? m3.liquidity : {};
-  return ['openFvgs', 'partlyFilledFvgs'].flatMap(k => (Array.isArray(liq[k]) ? liq[k] : liq[k] == null ? [] : [null]));
-};
-const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
-/** A gap's unfilled part lies beyond price in the candidate's direction; unreadable price, side or edges: true (fails closed). */
-const gapAhead = (c, gap, price) => {
-  const low = num(gap && gap.low);
-  const high = num(gap && gap.high);
-  if (!Number.isFinite(price) || !Number.isFinite(low) || !Number.isFinite(high)) return true;
-  if (c.direction === 'long') return high > price;
-  if (c.direction === 'short') return low < price;
-  return true;
-};
 const TRIGGERS = {
   candidate: { value: false, test: m3 => cands(m3).length > 0, text: () => 'a setup fired (the briefing lists a candidate)' },
   'candidate.trendRule': { value: v => TREND_RULES.includes(v), test: (m3, v) => cands(m3).some(c => c.trendRule === v), text: v => `a candidate's trendRule is ${v}` },
   'candidate.name': { value: v => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(v), test: (m3, v) => cands(m3).some(c => c.name === v), text: v => `a ${v} candidate fired` },
   'candidate.blocked': { value: false, test: m3 => cands(m3).some(c => Boolean(c.blocked)), text: () => 'a candidate is blocked now (a no-entry window or a news blackout)' },
-  'candidate.fvgAhead': {
-    value: false,
-    test: m3 => cands(m3).some(c => gapsOf(m3).some(g => gapAhead(c, g, num(m3.price)))),
-    text: () => 'an open or partly filled fair value gap lies ahead of a candidate',
-  },
   'news.inBlackout': { value: false, test: m3 => Boolean(m3 && m3.news && m3.news.inBlackout === true), text: () => 'a news blackout is in force' },
 };
 

@@ -153,7 +153,8 @@ const etClock = at => new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-
 const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 // A higher-timeframe read (mtf.js): its EMAs are EMA20 and EMA50 (named so: the 3m and 15m indicators are EMA9/EMA20),
-// its swing pattern, and its dealing range with the 50%. Swing levels against price are in m3 (they move with price).
+// its swing pattern, and the last 20 candles' range (high, low) with its 50% (not a swing-to-swing dealing range).
+// Swing levels against price are in m3 (they move with price).
 const brief = (f, level = round2) => (f ? {
   trend: f.trend, bias: f.bias, swingPattern: f.votes && f.votes.structure, close: f.close, ema20: f.emaFast, ema50: f.emaSlow, adx: f.adx, atr: f.atr,
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
