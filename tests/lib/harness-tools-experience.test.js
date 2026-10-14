@@ -49,7 +49,7 @@ test('experience_lookup: the candidate\'s signatures and context, its cells exac
   assert.match(cells.find(l => l.includes('skill signature, any context')), /n 24 \(12 days; 12 entered, 12 passed\), win 0\.50 \[0\.\d+, 0\.\d+\], mean R 0\.50 \[/);
   assert.match(text, /Similar past decisions \(same skills, closest context\):\n- 2022-03-12 long entered, 2\.00R win: bias 1h bos up \(broke the last swing\)/);
   assert.strictEqual(lines.filter(l => /^- 2022-/.test(l)).length, 3);
-  assert.match(text, /Index [0-9a-f]{16}, practice-train 2022-03-01 to 2022-03-12/);
+  assert.match(text, /Index [0-9a-f]{16}: practice-train days before 2023-03-15 only; 90% intervals, each cell one of many/);
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
   assert.doesNotMatch(text, /\b(should|enter|take it|avoid)\b/i, 'it never says what to do');
   // Recorded: who asked, the record and the index.
@@ -80,6 +80,40 @@ test('experience_lookup: two calls a bar, the third refused; a new bar starts ag
   const loose = home({ transcript: false });
   for (let i = 0; i < 3; i += 1) H.experienceLookup({ symbol: 'MNQ' }, loose.ctx);
   assert.strictEqual(L.recordExperienceLookup({}, { root: 'MNQ' }), false);
+  assert.strictEqual(L.reserveLookup({}, { root: 'MNQ', bar: 'b' }), true, 'outside a cycle: nothing counted');
+});
+
+test('the budget is counted and recorded under a lock: a held lock is waited on, then refused, never broken', () => {
+  const { env } = home({ pin: false });
+  const lock = `${L.lookupsFile(env.FTH_CYCLE_TRANSCRIPT)}.lock`;
+  fs.writeFileSync(lock, '');
+  const t0 = Date.now();
+  assert.throws(() => L.reserveLookup(env, { root: 'MNQ', bar: 'b' }), /its record is locked/);
+  assert.ok(Date.now() - t0 >= 1500, 'waited for it');
+  assert.ok(fs.existsSync(lock), 'never broken');
+  fs.rmSync(lock);
+  assert.deepStrictEqual([L.reserveLookup(env, { root: 'MNQ', bar: 'b' }), L.reserveLookup(env, { root: 'MNQ', bar: 'b' }), L.reserveLookup(env, { root: 'MNQ', bar: 'b' })], [true, true, false]);
+  assert.ok(!fs.existsSync(lock), 'released');
+  assert.strictEqual(L.readExperienceLookups(env.FTH_CYCLE_TRANSCRIPT).length, 2);
+});
+
+test('walk-forward: the record shown is only from days before the candidate bar\'s session, never its own day or later', () => {
+  const h = tmpHome();
+  const bar = '2022-03-10T15:00:00.000Z';
+  const rec = record({ at: '2022-03-10T15:03:00.000Z' });
+  rec.bar = bar;
+  fs.mkdirSync(path.join(h, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(h, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(rec)}\n`);
+  const r = fromLifecycleRecord(rec);
+  const days = ['2022-02-01', '2022-02-02', '2022-02-03', '2022-02-04', '2022-02-07', '2022-02-08', '2022-02-09', '2022-02-10', '2022-02-11', '2022-02-14', '2022-02-15'];
+  const past = Array.from({ length: 22 }, (_, i) => ({ id: `p${i}`, bar: `${days[i % 11]}T15:00:00.000Z`, decision: 'passed', side: 'long', signatures: r.signatures, reads: r.reads, context: r.context, outcome: { R: -1 }, grade: 'good-pass' }));
+  const sameDay = Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, bar: bar, decision: 'entered', side: 'long', signatures: r.signatures, reads: r.reads, context: r.context, outcome: { R: 3 }, grade: 'win' }));
+  const future = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, bar: `2023-0${1 + (i % 9)}-1${i % 7}T15:00:00.000Z`, decision: 'entered', side: 'long', signatures: r.signatures, reads: r.reads, context: r.context, outcome: { R: 5 }, grade: 'win' }));
+  X.pinIndex(h, X.writeIndex(path.join(h, 'built'), X.buildIndex([...past, ...sameDay, ...future], { reps: 100 })));
+  const { text } = H.experienceLookup({ symbol: 'MNQ' }, { env: { FTH_HOME: h }, now: () => new Date('2022-03-10T15:04:00.000Z') });
+  assert.match(text, /skill signature, any context: n 22 \(11 days; 0 entered, 22 passed\), win 0\.00 .*mean R -1\.00/);
+  assert.doesNotMatch(text, /2022-03-10 long|2023-|5\.00R|3\.00R/, 'nothing of its own day or later');
+  assert.match(text, /days before 2022-03-10 only/);
 });
 
 test('experience_lookup: no verified unexpired record is refused (nothing recorded); no pinned index says no record', () => {
