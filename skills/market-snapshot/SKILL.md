@@ -111,4 +111,4 @@ referenceStop.long = 21481.37 → round down to tick 0.25 → 21481.25
 
 Timestamps are UTC; sessions and ranges are computed in America/New_York.
 Fractal swings need strictly higher/lower neighbours, so equal highs are not
-swings (treat them as liquidity; see liquidity-concepts).
+swings (treat them as liquidity; see levels-and-reactions).

@@ -19,11 +19,11 @@ overrule it. A missing field is `unknown` and counts neutral.
 
 | # | Item | For | Against | Neutral |
 |---|---|---|---|---|
-| 1 | HTF read, `candidate.alignment` | `aligned` | `counter` | `pullback`, `mixed`, null |
+| 1 | HTF read, `candidate.alignment` (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
 | 2 | Other strategies, `candidate.confluence.with` / `candidate.confluence.against` | any with it | any against it | none |
 | 3 | VWAP, `candidate.vwapSide` | its side | the other side | `at` |
 | 4 | Reaction at the nearest level (`levels-and-reactions`) | rejection or sweep its way | acceptance against it | none yet |
-| 5 | Bar momentum and participation (`momentum-and-volume`, `absorption`) | with it | against it | thin or mixed |
+| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
 | 6 | Its own `candidate.values` | - | - | always |
 
 **Rules.**
@@ -35,8 +35,10 @@ overrule it. A missing field is `unknown` and counts neutral.
 - **A strategy's own trigger is never confluence for itself**: its
   `candidate.values` are its own rules' readings (item 6, neutral).
 - **Indicators together are one item**: EMA, ADX and SuperTrend readings
-  count together in item 5, never separately; a structure break counts in
-  item 4.
+  count together in item 5, never separately.
+- **An HTF structure break is read in item 1**: a 15m or 1h break its way
+  (`m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
+  the HTF read, never an item of its own.
 - **Not counted**: the trend rule, the regime fit, the room, the window,
   the news: the priority order's own steps or the gate's.
 

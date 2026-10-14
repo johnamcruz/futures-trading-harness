@@ -61,7 +61,8 @@ const PINS = {
   'momentum-and-volume': [
     'over the mean of the bars before them (the code takes 21)',
     '`m3.trend.adxSlope` (now minus 5 bars ago)',
-    'They never trigger an entry and never override the price-action read: when they disagree with it, that is one AGAINST in the count',
+    'They never trigger an entry and never override the price-action read.',
+    'all with its side FOR, all against AGAINST, mixed neutral',
     'ADX has no side',
     'The code\'s note (under 1.0 thin, 1.5 or more strong) is a hypothesis.',
   ],
@@ -82,7 +83,9 @@ const PINS = {
     'Same-side fires from correlated strategies within a few bars are ONE confluence.',
     '**A strategy\'s own trigger is never confluence for itself**',
     '| 6 | Its own `candidate.values` | - | - | always |',
-    '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately',
+    '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately.',
+    '**An HTF structure break is read in item 1**',
+    '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
     'The counts never overrule it.',
     '**Not counted**: the trend rule, the regime fit, the room, the window, the news',
   ],
@@ -98,7 +101,7 @@ const PINS = {
     'It is never a reason to enter without a fired strategy.',
     'a dedicated detector strategy for it is coming.',
     'a completed 15m or 60m candle rejects the level',
-    'no structure break its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) counts as one AGAINST; the priority order decides.',
+    'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
     'Never anticipate it.',
     '**Paired with `mtf-breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
   ],
@@ -217,7 +220,16 @@ test('basics skills: the regime rule is regime.js\'s, and the participation wind
 });
 
 test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {
-  for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred/, s);
+  for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred|counts as one AGAINST/, s);
+  // The HTF structure break is item 1's, the level reaction (item 4) never claims it, and no seventh item appears.
+  const cc = flat(read(file('confluence-counting')));
+  assert.match(cc, /\| 1 \| HTF read, `candidate\.alignment` \(HTF breaks included\) \|/);
+  assert.doesNotMatch(cc, /break[^|.]*item 4|item 4[^|.]*break/);
+  assert.doesNotMatch(cc, /\| 7 \|/);
+  assert.ok(flat(read(file('mtf-rejection'))).includes('is read in item 1 of `confluence-counting`'));
+  // momentum-and-volume and confluence-counting define item 5 the same way.
+  assert.match(cc, /\| 5 \|[^\n]*\| all with it \| all against it \| mixed or thin \|/);
+  assert.doesNotMatch(read('skills/market-snapshot/SKILL.md'), /liquidity-concepts/);
   // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js).
   const ms = read('scripts/lib/trading/market-snapshot.js');
   assert.match(ms, /const tol = atrNow \? 0\.1 \* atrNow : 0;/);

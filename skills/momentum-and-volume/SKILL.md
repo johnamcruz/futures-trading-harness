@@ -48,8 +48,9 @@ by timeframe:
 They confirm that a price-action read has momentum behind it (a 15m
 rejection with the trend while price holds the right side of a rising
 EMA20, ADX rising). ADX has no side. They never trigger an entry and never
-override the price-action read: when they disagree with it, that is one
-AGAINST in the count (`confluence-counting`, item 5), never a veto.
+override the price-action read. In the count they are one item with the
+bar's momentum (`confluence-counting`, item 5): all with its side FOR, all
+against AGAINST, mixed neutral; never a veto.
 
 **The read.** Momentum: closes at the side's extreme, ranges at or above
 ATR, participation 1 or more, ADX rising. Fading: ADX falling, ranges

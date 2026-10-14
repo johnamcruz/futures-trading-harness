@@ -34,9 +34,9 @@ By PLAN step:
    through and closes back inside, with a long wick and the close in the
    opposite third, or an engulfing at the level (`candle-reading`). At
    the end of a pullback with the HTF (`pullback-vs-reversal`) it is a
-   continuation. Against the HTF, no structure break its way
-   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) counts as one
-   AGAINST; the priority order decides.
+   continuation. Against the HTF, whether a structure break went its way
+   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1
+   of `confluence-counting`; the priority order decides.
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
 - **6 Entry**: after the HTF rejection, a completed 3m or 5m candle confirms
