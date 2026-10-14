@@ -140,6 +140,10 @@ function createRunner(deps) {
     // Several lanes: how long a lane due at the same close may hold the cycle. A one-pass process (a replay step)
     // passes 0: it can't wait (its bars are all there at the point; one missing is a gap live would wait out too).
     coalesceHoldMs = COALESCE_HOLD_MS,
+    // The trade lifecycle's composed limits (trading/lifecycle-runner.js, wired by runner-wiring.js): ids() the entry
+    // order ids the gateway recorded, stamp(known, before, items) after a cycle, due(known, orders, now) the expired
+    // ones, forItem(item) the compose records on an item's bar. null: none (no composed strategy).
+    composed = null,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -340,6 +344,31 @@ function createRunner(deps) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
       return null;
+    }
+  }
+
+  /**
+   * Cancel a composed limit entry still working at its record's expiry (the next base-bar close): the broker interface
+   * has no time in force, so an unfilled composed entry never outlives its record. Cancels are risk-reducing.
+   */
+  async function expireComposed(item, { orders }) {
+    if (!composed) return;
+    const known = (state && state.composedOrders) || {};
+    const root = famOf(item.contractId);
+    for (const o of composed.due(known, (orders || []).filter(x => famOf(x.contractId) === root), clock.now())) {
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+      } catch (err) {
+        log(`${item.symbol}: could not cancel the expired composed entry ${o.id} (${err.message}); the next bar retries`, 'error');
+        continue;
+      }
+      const rest = { ...((state && state.composedOrders) || {}) };
+      const was = rest[String(o.id)];
+      delete rest[String(o.id)];
+      state = { ...state, composedOrders: rest };
+      saveState(state);
+      log(`${item.symbol}: cancelled the composed entry ${o.id}: its record expired at ${(was && was.expiresAt) || 'an unknown time'}`);
+      emit('composed_expired', { symbol: item.symbol, orderId: o.id, expiresAt: (was && was.expiresAt) || null, record: (was && was.record) || null });
     }
   }
 
@@ -545,6 +574,7 @@ function createRunner(deps) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
       const account = await client.accountState(cfg.account);
+      await expireComposed(item, account);
       await cleanupFlat(item, account, { noCycles });
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
@@ -1385,11 +1415,14 @@ function createRunner(deps) {
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
+          const composedBefore = composed ? composed.ids() : null;
           const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
           if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [], lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
           state = recordRun(state, 'trade', cycleNow);
+          // The composed entries this cycle placed, each stamped with its record's expiry (expireComposed cancels it then).
+          if (composed) state = { ...state, composedOrders: attempt('stamping the composed entries', () => composed.stamp((state && state.composedOrders) || {}, composedBefore, run.map(x => ({ symbol: x.symbol, bar: x.bar.t }))), (state && state.composedOrders) || {}) };
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).
           // Each with the facts at the decision (decision-history.js): the action, the setup, the price; an entry reads
@@ -1407,7 +1440,7 @@ function createRunner(deps) {
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
+            entry = decisionEntry({ ...base, items: composed ? run.map(x => ({ ...x, composed: composed.forItem(x) })) : run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

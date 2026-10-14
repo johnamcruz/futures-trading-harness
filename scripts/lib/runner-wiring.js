@@ -58,6 +58,8 @@ const { buildSignals, writeSignals, syncRetiredMarks } = require('./trading/sign
 const RC = require('./trading/report-cache');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
+const LR = require('./trading/lifecycle-runner');
+const { recordsAt } = require('./trading/lifecycle-gate');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
 const { barsArchiver } = require('./session/bars-archive');
 const { fieldValues } = require('./session/record');
@@ -460,7 +462,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     dayContext: dayLine,
     // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
     // the last reviewed trades' record on their own line.
-    lessons: ({ entries } = {}) => digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false }),
+    // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
+    // its experience record, not the journal's instincts (the composed-entry design, PR 14).
+    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false })),
     recentTrades: ({ entries } = {}) => recentTrades(entries || journal(), 10),
     tradesSummary: ({ entries } = {}) => formSummary(entries || journal(), 10),
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
@@ -490,6 +494,13 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
     event,
     entryOrders: () => entryOrders(home),
+    // The trade lifecycle's composed limits: stamped with their record's expiry after a cycle, cancelled at it.
+    composed: {
+      ids: () => new Set(entryOrders(home).map(e => String(e.orderId))),
+      stamp: (known, before, items) => LR.stampComposed({ known, before: before || new Set(), entries: entryOrders(home), items, recordsAt: (root, bar) => recordsAt(home, root, bar), composed: LR.composedSetups(strategies()) }),
+      due: (known, orders, at) => LR.dueComposed({ known, orders, now: at }),
+      forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
+    },
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
     exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.

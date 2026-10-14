@@ -244,6 +244,13 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded
   // for review; the scorecard reads its own reasonChecks, not this record (wiring it in is a separate change). Never throws.
   const factCheck = cycleFactChecks({ home, output, context, now: cycleAt });
+  // Every compose_check call the cycle made (trade-lifecycle.js records stamped with its id): its reads, each check,
+  // the signatures, the plan, OK or not (the composed-entry design section 5). Never throws.
+  let composed;
+  try {
+    const symbols = ((context && context.symbols) || []).map(x => x && x.symbol).filter(Boolean);
+    composed = env ? require('./trading/lifecycle-runner').cycleComposed(home, require('./trading/check-order').cycleId(env), symbols) : [];
+  } catch (_err) { composed = []; }
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);
   let file = path.join(dir, `${stamp}-${action}.json`);
@@ -252,6 +259,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck, ...(timing ? { timing } : {}),
+      ...(composed.length ? { composed } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2);
@@ -270,6 +278,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
       ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
+      ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
       ...(timing ? { timing } : {}),
     })}\n`);
   } catch (_err) {

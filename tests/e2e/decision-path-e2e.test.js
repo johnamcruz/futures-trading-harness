@@ -586,3 +586,30 @@ test('decision path, trade_lifecycle: with the position open, the stop moves and
   assert.match(r.ctx.calls[1].text, /\[composed-reads\]/);
   assert.strictEqual(D.position(w), null, 'flat');
 });
+
+test('decision path, trade_lifecycle, the runner: the history and the cycle log keep the record; a resting limit is cancelled at its expiry, the next bar', async () => {
+  const w = D.world();
+  // A limit below the bar's close (better for a long): it rests unfilled. Its rationale states no prices (the brackets
+  // are ticks from the fill; prices from the reference would disagree with the lower limit: [order-consistency]).
+  const r = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, 4h up, value above, a limit under the close' } }));
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  const resting = D.working(w).filter(o => o.type === 1);
+  assert.strictEqual(resting.length, 1, JSON.stringify(D.working(w)));
+  assert.strictEqual(D.position(w), null);
+  // The decision history: the setup is the composed trade, with its record (reads, checks, signature, stated size).
+  const h = r.state.history.at(-1);
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.deepStrictEqual([h.action, h.setup, h.side, h.composed.id, h.composed.signature, h.composed.size, h.composeCalls], [D.RESULT_ACTION.executed, 'trade_lifecycle', 'long', rec.id, rec.signature, 1, 1]);
+  assert.ok(h.composed.reads.every(x => x.check === true && x.agrees === true), JSON.stringify(h.composed.reads));
+  // Stamped with its record's expiry (the next bar's close).
+  assert.deepStrictEqual(Object.values(r.state.composedOrders), [{ expiresAt: rec.expiresAt, record: rec.id, root: 'MNQ' }]);
+  // The cycle log: the cycle's compose_check call.
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual(line.composed, { calls: 1, ok: 1, signatures: [rec.signature] });
+  assert.strictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).composed[0].id, rec.id);
+  // The next bar: the runner cancels it before the cycle (its record expired at that bar's open).
+  const next = await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'nothing new'));
+  assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
+  assert.ok(next.events.some(e => e.kind === 'composed_expired' && String(e.orderId) === String(resting[0].id)), JSON.stringify(next.events.map(e => e.kind)));
+  assert.deepStrictEqual(next.state.composedOrders, {});
+});
