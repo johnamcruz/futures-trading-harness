@@ -652,14 +652,14 @@ test('news: a blackout entry without a valid start and end is unknown (the gate 
 test('completed-candle facts: per timeframe in m3 and a summary line each, the levels at the briefing\'s own values, 5m unavailable on 3m bars; frames share the runner\'s', () => {
   const b = build(1300);
   const d = b.sections.m3.data;
-  assert.deepStrictEqual(Object.keys(d.candles), ['3m', '5m', '15m', '1h']);
+  assert.deepStrictEqual(Object.keys(d.candles), ['3m', '5m', '15m', '1h', '4h']);
   assert.match(d.candles['5m'].unavailable, /not whole 3m bars/);
   const c15 = d.candles['15m'];
   // The last completed 15m candle: closed by this bar's close, never the one forming.
   assert.ok(Date.parse(c15.closedAt) <= Date.parse(b.closedAt) && Date.parse(c15.closedAt) > Date.parse(b.closedAt) - 15 * 60000);
   assert.strictEqual(d.candles['3m'].closedAt, b.closedAt, 'the 3m candle is the bar itself');
   // Every level it met is one the briefing names (at that value), its previous candle, or a CRT range.
-  for (const tf of ['3m', '15m', '1h']) {
+  for (const tf of ['3m', '15m', '1h', '4h']) {
     for (const [name, rel] of Object.entries(d.candles[tf].levels)) {
       assert.match(rel, /^(touched|broke (above|below)|rejected: closed back (above|below))$/, `${tf} ${name}`);
       assert.match(name, /^(prior|session|VWAP|overnight|IB|opening range|15m swing|1h swing|round number|previous|CRT)/);

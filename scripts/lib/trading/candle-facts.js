@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Completed-candle facts: per timeframe (3m, 5m, 15m, 60m), the LAST COMPLETED candle as of a bar's close (never
+ * Completed-candle facts: per timeframe (3m, 5m, 15m, 60m, 4h), the LAST COMPLETED candle as of a bar's close (never
  * the one forming), its shape, a pattern label, how it met the key levels, and the next swing high above and swing
  * low below price. One code path for the bar briefing (the last bar) and the rules language (every bar, htfd_*):
  * both read the per-bar series below, so a fact on a bar depends only on the bars closed by then.
@@ -13,6 +13,15 @@
  * from 3m bars) is unavailable: never approximated. The base bars' size is GIVEN (`base`, minutes: the runner's or
  * lane's timeframe, a strategy's), never guessed from the gaps: one bar off the grid must not change what is whole
  * or when a candle closes. Without it there are no candle facts.
+ *
+ * 4h candles open on the same grid: 18:00, 22:00, 02:00, 06:00, 10:00 and 14:00 ET. The session's last one (14:00 ET)
+ * holds the bars up to the daily break and is completed on the next session's first bar (18:00 ET, or Sunday's open),
+ * as any candle whose last sub-bar is missing: never from a clock or a calendar; its `closedAt` is the 18:00 ET
+ * boundary.
+ *
+ * Every timeframe's candle states whether it traded beyond its previous candle's high or low (prevSweep, `sweep`): a
+ * sweep when it closed back inside that range (the sweep of the prior 4h low and close back), else the side it closed
+ * beyond. The one place the briefing says it (the CRT read uses it too).
  *
  *   completedSeries(bars, minutes, base)   { available, reason, candles, lastAt }: lastAt[i] the index of the last
  *                                          candle completed by bar i's close (-1 none)
@@ -27,6 +36,12 @@
  *                                          bars for a timeframe the base bars can't build)
  *   holdingSwingsAt(bars, minutes, base, idx)   the swings still holding as of bar idx
  *   briefingTargets({ bars, minutes, price, oneR, tick })    the briefing's `swingTargets` block (last bar)
+ *   briefingRangeTargets({ bars, base, price, oneR, tick, index })   the briefing's `rangeTargets`: per frame (1h, 4h)
+ *                                          the last completed candle's high, mid and low as targets, and the side the
+ *                                          candle forming since has taken (prevSweep), only when it has
+ *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack, closedBeyond } when c traded
+ *                                          beyond prev's high or low (closedBack: closed inside prev's range; closedBeyond:
+ *                                          'high' | 'low', the side it closed beyond, else null), else null
  *
  * The definitions below are HYPOTHESES to test against outcomes, not established edges. R = high - low, B = |close -
  * open|, U = high - max(open, close), D = min(open, close) - low; prev is the previous completed candle on the same
@@ -71,7 +86,7 @@ const { htfCandles, atr: atrOf, sessionKey } = require('./indicators');
 const { zonedParts, tradingDayStart } = require('./clock');
 const { pivots } = require('./structure-events');
 
-const TIMEFRAMES = [3, 5, 15, 60];
+const TIMEFRAMES = [3, 5, 15, 60, 240];
 const SESSION_OPEN = 18 * 60; // the session (trading day) opens at 18:00 ET
 const ATR_LEN = 14;
 const VOL_LEN = 20;
@@ -116,6 +131,9 @@ const memo = (bars, key, make) => {
   return m.get(key);
 };
 
+/** The higher-timeframe candles of `bars` (indicators htfCandles), once per bars and timeframe. */
+const htfOf = (bars, minutes) => memo(bars, `htf:${minutes}`, () => htfCandles(bars, minutes));
+
 /**
  * The completed m-minute candles of `bars` (each `base` minutes), and per bar the last one completed by its close
  * (-1: none, or the timeframe isn't whole base bars).
@@ -127,7 +145,7 @@ function completedSeries(bars, minutes, base) {
     const candles = [];
     const reason = n ? unavailableReason(base, minutes) : 'no bars';
     if (reason) return { available: false, reason, candles, lastAt };
-    const h = htfCandles(bars, minutes);
+    const h = htfOf(bars, minutes);
     const ms = bars.map(b => Date.parse(b.t));
     // Each bar's close in minutes since the 18:00 ET open (once per bars and bar size, for every timeframe).
     const closes = memo(bars, `closes:${base}`, () => ms.map(x => sinceOpen(x + base * 60000)));
@@ -207,6 +225,20 @@ function relation(c, level, prevClose = NaN) {
     if (c.l < level && c.c > level) return { relation: 'rejected', dir: 'up' };
   }
   return { relation: 'touched', dir: null };
+}
+
+/**
+ * Whether candle c traded beyond its previous candle's high (low), and where it closed: back inside prev's range
+ * (strictly between its low and high: a sweep), or beyond its high or low (closedBeyond; on the extreme counts as
+ * beyond). Both sides: 'both'. null without prev or when it stayed inside.
+ */
+function prevSweep(c, prev) {
+  if (!prev) return null;
+  const high = c.h > prev.h;
+  const low = c.l < prev.l;
+  if (!high && !low) return null;
+  const closedBack = c.c > prev.l && c.c < prev.h;
+  return { side: high && low ? 'both' : high ? 'high' : 'low', closedBack, closedBeyond: closedBack ? null : c.c >= prev.h ? 'high' : 'low' };
 }
 
 /** Per completed candle: its facts (shape, ATR, volume against its average, patterns). */
@@ -385,7 +417,6 @@ const roundsIn = (c, step) => {
 function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
-  const htfs = new Map();
   const closeOf = k => Date.parse(bars[k].t) + base * 60000;
   const closedAt = i >= 0 ? closeOf(i) : NaN;
   const fineBars = Array.isArray(fine) ? fine.filter(b => Date.parse(b.t) + 60000 <= closedAt) : null;
@@ -420,11 +451,8 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
     while (openIdx >= 0 && closeOf(openIdx) > Date.parse(c.t)) openIdx -= 1;
     // And the first base bar from its open on (the candle's own first bar on base bars).
     const firstIdx = src === bars ? c.first : bars.findIndex(b => Date.parse(b.t) >= Date.parse(c.t));
-    if (!htfs.has(src)) htfs.set(src, new Map());
-    const htf = htfs.get(src);
     const crt = crtFrames.filter(F => F > m && 1440 % F === 0).flatMap(F => {
-      if (!htf.has(F)) htf.set(F, htfCandles(src, F));
-      const h = htf.get(F);
+      const h = htfOf(src, F);
       return [[`CRT ${label(F)} range high`, h.prevH[c.last]], [`CRT ${label(F)} range low`, h.prevL[c.last]]];
     });
     const all = [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(c, roundStep), ...(prev ? [[`previous ${label(m)} high`, prev.h], [`previous ${label(m)} low`, prev.l]] : []), ...crt];
@@ -441,6 +469,7 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
       rangeAtr: r2(f.rangeAtr), volRatio: r2(f.volRatio), pattern: f.pattern,
       ...(f.patterns.length > 1 ? { patterns: f.patterns } : {}),
       ...(f.pattern === 'displacement' ? { dir: c.c > c.o ? 'up' : 'down' } : {}),
+      ...sweepField(m, c, prev),
       levels: Object.fromEntries(found.slice(0, MAX_LEVELS).map(x => [x.name, x.text])),
       ...(found.length > MAX_LEVELS ? { moreLevels: found.length - MAX_LEVELS } : {}),
     };
@@ -449,10 +478,19 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
 }
 
 /**
- * The briefing's `swingTargets`: per side, the next swing on each of `frames` (the base bars' own, 15m, 60m) with its
+ * A candle's `sweep` of its previous candle: { of, closedBack, closedBeyond } when it traded beyond its high or low;
+ * null when it stayed inside, or without a previous candle.
+ */
+function sweepField(m, c, prev) {
+  const s = prevSweep(c, prev);
+  return { sweep: s ? { of: `previous ${label(m)} ${s.side === 'both' ? 'high and low' : s.side}`, closedBack: s.closedBack, closedBeyond: s.closedBeyond } : null };
+}
+
+/**
+ * The briefing's `swingTargets`: per side, the next swing on each of `frames` (the base bars' own, 15m, 60m, 4h) with its
  * distance in points, ticks and R (oneR: 1R in points).
  */
-function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [minutes, 15, 60] }) {
+function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [minutes, 15, 60, 240] }) {
   // `minutes`: the bars' own size (given, never guessed).
   const i = bars.length - 1;
   const above = [];
@@ -469,7 +507,46 @@ function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [mi
   return { above, below };
 }
 
+// The frames whose last completed candle's range (high, mid, low) is a target (briefingRangeTargets): 1h and 4h.
+const RANGE_FRAMES = [60, 240];
+
+/** A target level against price: its side, distance in points and whole ticks, and R (oneR: 1R in points). */
+const targetAt = (p, price, oneR, tick) => {
+  const points = Math.abs(p - price);
+  return { price: p, side: p > price ? 'above' : p < price ? 'below' : 'at', points: r2(points), ticks: Math.round(points / tick), R: oneR > 0 ? r2(points / oneR) : null };
+};
+
+/**
+ * The briefing's `rangeTargets`: per frame (RANGE_FRAMES), the last COMPLETED candle as of bar `index` (the last; never
+ * the one forming: completedSeries) with its high, low and midpoint ((high + low) / 2, exact) as target levels, each
+ * with its side of price, distance and R; and, only when it happened, `taken`: the candle forming since it (its bars
+ * up to `index`) has traded beyond exactly one side of it (prevSweep): { side: 'high' | 'low', closedBack } (closedBack:
+ * this bar closed back inside the range; the far side is then the other one). A frame the base bars can't build, or
+ * with no completed candle yet: { unavailable }. Reads bars 0..index only.
+ */
+function briefingRangeTargets({ bars, base, price, oneR, tick = 0.25, frames = RANGE_FRAMES, index = bars.length - 1 }) {
+  const i = index;
+  const out = {};
+  for (const m of frames) {
+    const s = completedSeries(bars, m, base);
+    if (!s.available) { out[label(m)] = { unavailable: s.reason }; continue; }
+    const j = i >= 0 ? s.lastAt[i] : -1;
+    if (j < 0) { out[label(m)] = { unavailable: 'no completed candle in the bars yet' }; continue; }
+    const c = s.candles[j];
+    const x = { t: c.t, closedAt: c.closedAt, high: targetAt(c.h, price, oneR, tick), mid: targetAt((c.h + c.l) / 2, price, oneR, tick), low: targetAt(c.l, price, oneR, tick) };
+    // The candle forming since: the bars after the completed one's last, up to this one.
+    let hi = -Infinity;
+    let lo = Infinity;
+    for (let k = c.last + 1; k <= i; k += 1) { hi = Math.max(hi, bars[k].h); lo = Math.min(lo, bars[k].l); }
+    const sw = c.last < i ? prevSweep({ h: hi, l: lo, c: bars[i].c }, c) : null;
+    if (sw && sw.side !== 'both') x.taken = { side: sw.side, closedBack: sw.closedBack };
+    out[label(m)] = x;
+  }
+  return out;
+}
+
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets,
 };

@@ -163,7 +163,7 @@ test('swing targets: the nearest untaken confirmed swing above and below; taken 
 test('briefing candles: per timeframe, unavailable ones named, levels met, previous candle and CRT range', () => {
   const b = bars('2026-06-15T13:30:00Z', 60);
   const out = CF.briefingCandles({ bars: b, base: 3, levelsAt: () => [['prior RTH high', 101], ['far', 500]] });
-  assert.deepStrictEqual(Object.keys(out), ['3m', '5m', '15m', '1h']);
+  assert.deepStrictEqual(Object.keys(out), ['3m', '5m', '15m', '1h', '4h']);
   assert.match(out['5m'].unavailable, /not whole 3m bars/);
   const m15 = out['15m'];
   assert.strictEqual(m15.closedAt, '2026-06-15T16:30:00.000Z');
