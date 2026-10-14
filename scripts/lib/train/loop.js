@@ -40,7 +40,8 @@ const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { resolveReplay } = require('../replay/config');
 const driver = require('../replay/driver');
-const { scoreRun } = require('../replay/scorecard');
+const { scoreRun, lookAt } = require('../replay/scorecard');
+const { readRun } = require('../replay/store');
 const { loadStrategies } = require('../trading/strategies');
 const { loadAccounts } = require('../trading/accounts');
 const S = require('./state');
@@ -68,6 +69,21 @@ function monthsOf(from, to) {
 const { checkLook } = require('../prop/looks');
 
 class Stop extends Error {}
+
+/**
+ * Every scorecard, the default or one plugged in with --steps, reads a run only after the loop has checked the look
+ * itself (replay/scorecard.js lookAt: the same rules, against the same ledger the default path uses). A refused
+ * look, or none, throws before the scorecard is called, so a plugged scorecard can't skip it.
+ */
+function checkedScorecard(scorecard) {
+  return async opts => {
+    if (!opts || !opts.look || typeof opts.look.purpose !== 'string' || !Array.isArray(opts.look.ledger)) {
+      throw new Error('a scorecard reads a run only under a look (purpose and ledger): refused');
+    }
+    lookAt(readRun(opts.runDir), opts.look);
+    return scorecard(opts);
+  };
+}
 
 /** The evaluator's result with the proposal's strategy and rulebook files it did not score (judge keeps those blocked). */
 function withUncovered(evaluator, proposal) {
@@ -126,7 +142,8 @@ function open({ loop, env, root, steps, log, lock = true }) {
   const release = lock ? S.acquireLock(paths, { loopId: loop.loopId }) : () => {};
   try {
     const state = S.openState(paths, { loopId: loop.loopId, hash: loop.hash });
-    const ctx = { loop, env, root, steps: { ...defaultSteps({ root, env }), ...(steps || {}) }, log: log || (() => {}), paths, state, release, startedMs: Date.now() };
+    const merged = { ...defaultSteps({ root, env }), ...(steps || {}) };
+    const ctx = { loop, env, root, steps: { ...merged, scorecard: checkedScorecard(merged.scorecard) }, log: log || (() => {}), paths, state, release, startedMs: Date.now() };
     ctx.save = () => S.saveState(paths, state);
     ctx.check = () => {
       const why = S.budgetLeft(state, loop.limits, { startedMs: ctx.startedMs });
@@ -438,11 +455,17 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     // judging spends one look, however many windows and scorings it holds.
     const before = path.join(ctx.paths.dir, `held-out-${proposalId}`, 'ledger-before.jsonl');
     // The scorecard checks the same judging look against that snapshot: it reads, it never logs.
-    ctx.lookFor = () => ({ purpose: 'judging', candidate: `${loop.loopId}/${proposalId}`, ledger: S.readLedger(before) });
+    // Without it a check would run against the recorded looks alone: fail closed, never an empty ledger.
+    const missing = () => new Error(`the held-out ledger snapshot ${before} is missing: this judging's look was already logged, and its checks can't run without the ledger as it was before that look. Restore the file from a backup, or judge the change again under a new loopId (the look stays spent).`);
+    const snapshot = () => {
+      if (!fs.existsSync(before)) throw missing();
+      return S.readLedger(before);
+    };
+    ctx.lookFor = () => ({ purpose: 'judging', candidate: `${loop.loopId}/${proposalId}`, ledger: snapshot() });
     if (!ctx.state.done[`look:${tag}`]) {
       fs.mkdirSync(path.dirname(before), { recursive: true });
       fs.writeFileSync(before, fs.existsSync(ctx.paths.ledger) ? fs.readFileSync(ctx.paths.ledger) : '');
-    }
+    } else if (!fs.existsSync(before)) throw missing();
     const champ = await championRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
     const dir = path.join(ctx.paths.dir, `held-out-${proposalId}`);
     const work = path.join(W(ctx), `held-out-${proposalId}`);
@@ -482,4 +505,4 @@ function importProposal({ loop, env = process.env, root, proposal, approvedBy })
   return { id, file };
 }
 
-module.exports = { Stop, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive };
+module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive };

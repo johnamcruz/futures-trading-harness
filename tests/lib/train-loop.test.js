@@ -241,6 +241,50 @@ test('the scorecard is read under the look\'s rules: tuning on the tuning window
   assert.ok(looks.every(l => !l.ledger.some(x => x.purpose === 'judging')), 'checked against the ledger as it was before this judging\'s own look');
 });
 
+test('a held-out judging resumed without its ledger snapshot is refused, saying what is missing; nothing more runs', async () => {
+  const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
+  await run(w, { dryRun: true });
+  const [kept] = readArchive(w.paths.archive);
+  const judge = () => L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true });
+  const evaluator = w.steps.evaluator;
+  w.steps.evaluator = async () => { throw new Error('planted crash'); };
+  await assert.rejects(judge(), /planted crash/);
+  const snapshot = path.join(w.paths.dir, `held-out-${kept.proposalId}`, 'ledger-before.jsonl');
+  assert.ok(fs.existsSync(snapshot));
+  fs.rmSync(snapshot);
+  w.steps.evaluator = evaluator;
+  const steps = w.calls.steps.length;
+  const looks = S.readLedger(w.paths.ledger).length;
+  await assert.rejects(judge(), /the held-out ledger snapshot .*ledger-before\.jsonl is missing: this judging's look was already logged[^]*Restore the file from a backup, or judge the change again under a new loopId/);
+  assert.strictEqual(w.calls.steps.length, steps, 'nothing ran');
+  assert.strictEqual(S.readLedger(w.paths.ledger).length, looks, 'no look logged');
+  assert.strictEqual(readArchive(w.paths.archive).filter(e => e.phase === 'held-out').length, 0);
+});
+
+test('checkedScorecard: any scorecard (a --steps one too) reads a run only after the loop checks its look against the ledger', async () => {
+  const home = tmpDir();
+  const runDir = path.join(home, 'replay', 'r');
+  const paths = { runDir, manifest: path.join(runDir, 'manifest.json') };
+  const manifest = store.openRun(paths, { runId: 'r', hash: 'h' });
+  store.appendRecord(paths, manifest, { t: '2023-09-13T14:33:02.000Z', day: '2023-09-13', kind: 'trade', ran: [] });
+  let called = 0;
+  const plugged = L.checkedScorecard(async () => { called += 1; return []; });
+  // Select is for judging only: a tuning look is refused before the plugged scorecard runs; no look at all is refused.
+  await assert.rejects(plugged({ runDir, look: { purpose: 'tuning', ledger: [] } }), /scorecard's look at 2023-09-13\.\.2023-09-13 is refused: select [^]*allows judging looks only/);
+  await assert.rejects(plugged({ runDir }), /only under a look/);
+  await assert.rejects(plugged({ runDir, look: { purpose: 'judging' } }), /only under a look/);
+  assert.strictEqual(called, 0);
+  await plugged({ runDir, look: { purpose: 'judging', ledger: [] } });
+  assert.strictEqual(called, 1);
+  // runLoop wraps the scorecard it is given: a plugged one is called only through the check.
+  const w = world({ proposals: [fix] });
+  const seen = [];
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => { seen.push(opts.look.purpose); return score(opts); };
+  await run(w, { dryRun: true });
+  assert.ok(seen.length && seen.every(p => p === 'tuning'));
+});
+
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {
   const w = world({ proposals: [fix], loop: { maxFlagged: 2, limits: { maxIterations: 2, maxModelCalls: 1000, maxWallMinutes: 30 } } });
   await run(w, { dryRun: true });

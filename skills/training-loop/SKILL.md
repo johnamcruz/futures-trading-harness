@@ -103,7 +103,10 @@ same: the one ledger is where the budget lives.
 through an adapter in `scripts/lib/train/loop.js`), under the look's rules:
 tuning on the tuning windows, judging on held-out ones. Either step can be
 replaced with `--steps steps.js` (a module exporting `scorecard` and/or
-`evaluator`).
+`evaluator`); a plugged scorecard is called only after the loop has checked
+its look against the same ledger, so it can't skip the check. A held-out
+judging resumed without its ledger snapshot (`ledger-before.jsonl`) is
+refused: restore the file, or judge again under a new `loopId`.
 
 ## Examples
 
