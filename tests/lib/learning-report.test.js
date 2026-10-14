@@ -7,7 +7,7 @@ const path = require('path');
 const M = require('../../scripts/lib/learning/learning-report');
 const X = require('../../scripts/lib/learning/experience-index');
 const { fromLifecycleRecord } = require('../../scripts/lib/learning/lifecycle-record');
-const { appendDecisions, logFile } = require('../../scripts/lib/learning/experience-log');
+const { appendDecisions, logFile, gradeOf } = require('../../scripts/lib/learning/experience-log');
 const { cycleExperienceLookups, writeCycleLog } = require('../../scripts/lib/cycle-log');
 const { recordExperienceLookup } = require('../../scripts/lib/learning/experience-lookups');
 const { record, tmpHome } = require('../fixtures/learning');
@@ -19,7 +19,7 @@ const ALT = 'bias:daily-bias+location:vwap-volume-profile+setup:rejection+entry:
 /** A composed decision (or a plain pass with decision 'none'). */
 function d(day, decision, R, o = {}) {
   if (decision === 'none') return { id: `${day}-${o.i || 0}-n`, day, role: 'practice-train', decision, signatures: { skill: null, read: null }, reads: [], outcome: null, grade: null };
-  const grade = decision === 'entered' ? (R > 0 ? 'win' : R < 0 ? 'loss' : 'scratch') : R === null ? 'neutral-pass' : R < 0 ? 'good-pass' : 'missed-win';
+  const grade = gradeOf(decision, { R });
   return {
     id: `${day}-${o.i || 0}-${decision}`, day, role: 'practice-train', root: 'MNQ', bar: o.bar || `${day}T14:00:00.000Z`, decision, side: 'long',
     signatures: { skill: o.sig || SIG, read: base.signatures.read }, context: base.context, reads: o.reads || base.reads,
@@ -41,7 +41,8 @@ test('measures: decisions, steps, skills per trade, verified reads, diversity, p
   assert.deepStrictEqual(m.reads, { reads: 12, verified: 11, rate: 0.9167, records: 2, recordsOk: 1 });
   assert.deepStrictEqual([m.diversity.signatures, m.diversity.top, m.diversity.topShare, m.diversity.collapsed], [2, SIG, 0.8, false]);
   assert.ok(m.diversity.entropy > 0.7 && m.diversity.entropy < 0.73);
-  assert.deepStrictEqual(m.passes, { good: 1, missed: 1, neutral: 1, goodRate: 0.5 });
+  assert.deepStrictEqual(m.passes, { good: 1, missed: 1, neutral: 0, goodRate: 0.5 }, 'the refusal is not a pass');
+  assert.deepStrictEqual(m.refusals, { wouldLose: 0, wouldWin: 0, neutral: 1 });
   // Collapse: ten or more composed decisions, 80% or more on one combination.
   const many = Array.from({ length: 10 }, (_, i) => d('2022-03-03', 'passed', -1, { i }));
   assert.deepStrictEqual([M.learningMeasures({ decisions: many }).diversity.collapsed, M.learningMeasures({ decisions: many }).diversity.entropy], [true, 0]);
@@ -60,23 +61,37 @@ test('measures: the per-day curve with its rolling window, pass quality and look
   assert.deepStrictEqual(m.lookups, { calls: 1, decisions: 2, rate: 0.1667 });
 });
 
-test('following the record: entered above zero or passed below zero follows; the opposite is against; a spanning interval neutral', () => {
-  const index = { hash: 'f'.repeat(64), cells: {
-    [X.cellKey('skill', SIG)]: { enough: true, meanR: { lo: 0.1, hi: 0.9 } },
-    [X.cellKey('skill', ALT, X.contextKey(base.context))]: { enough: true, meanR: { lo: -0.8, hi: -0.2 } },
-    [X.cellKey('skill', 'thin')]: { enough: false },
-  } };
+/** n past decisions over 12 February 2022 days, R each, in a context. */
+function past(n, sig, R, ctx = base.context, tag = sig) {
+  const days = ['01', '02', '03', '04', '07', '08', '09', '10', '11', '14', '15', '16'].map(x => `2022-02-${x}`);
+  return Array.from({ length: n }, (_, i) => ({ id: `${tag}${i}`, bar: `${days[i % 12]}T15:00:00.000Z`, decision: 'passed', signatures: { skill: sig, read: 'r' }, context: ctx, outcome: { R } }));
+}
+
+test('following the record: both the context cell and the any-context cell, before the decision\'s day, must agree', () => {
+  const other = { ...base.context, regime: 'range' };
+  const MIXED = 'bias:mixed';
+  const index = X.buildIndex([...past(25, SIG, 1), ...past(25, ALT, -1), ...past(25, MIXED, -1, base.context, 'm1'), ...past(25, MIXED, 3, other, 'm2'), ...past(5, 'thin', 1)], { reps: 300 });
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1), index), 'followed');
   assert.strictEqual(M.followOf(d('2022-03-01', 'passed', 1), index), 'against');
-  assert.strictEqual(M.followOf(d('2022-03-01', 'passed', 1, { sig: ALT }), index), 'followed', 'the context cell first');
+  assert.strictEqual(M.followOf(d('2022-03-01', 'passed', 1, { sig: ALT }), index), 'followed');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: ALT }), index), 'against');
+  assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: MIXED }), index), 'neutral', 'this context below zero, any context above');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: 'thin' }), index), 'no-evidence');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1), null), 'no-evidence');
-  index.cells[X.cellKey('skill', SIG)].meanR = { lo: -0.1, hi: 0.4 };
-  assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1), index), 'neutral');
+  assert.strictEqual(M.followOf(d('2022-02-01', 'entered', 1), index), 'no-evidence', 'walk-forward: nothing before its day');
   const m = M.learningMeasures({ decisions: [d('2022-03-01', 'passed', 1, { sig: ALT }), d('2022-03-01', 'entered', 1, { sig: ALT, i: 1, bar: 'x' })], lookups: [{ root: 'MNQ', bar: '2022-03-01T14:00:00.000Z' }], index });
   assert.deepStrictEqual([m.record.all.followed, m.record.all.against, m.record.withLookup.followed, m.record.withLookup.against], [1, 1, 1, 0]);
 });
+
+test('the gate\'s refusals are counted apart from the model\'s passes', () => {
+  const m = M.learningMeasures({ decisions: [d('2022-03-01', 'passed', -1), d('2022-03-01', 'refused', -1, { i: 1 }), d('2022-03-01', 'refused', 2, { i: 2 }), d('2022-03-01', 'refused', null, { i: 3 })] });
+  assert.deepStrictEqual(m.passes, { good: 1, missed: 0, neutral: 0, goodRate: 1 });
+  assert.deepStrictEqual(m.refusals, { wouldLose: 1, wouldWin: 1, neutral: 1 });
+  assert.strictEqual(m.curve[0].passQuality, 1, 'pass quality is the model\'s own');
+  assert.match(M.learningMarkdown(m), /the gate's refusals apart: 1 would have lost, 1 would have won, 1 neutral/);
+  assert.match(M.learningMarkdown(M.learningMeasures({ decisions: [], indexError: 'the pinned index is not an index file' })), /index unreadable: the pinned index is not an index file/);
+});
+
 
 test('readLearning and the report text: from a run home; none without an experience log; the cycle log keeps the lookups', () => {
   const home = tmpHome();

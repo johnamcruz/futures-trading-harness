@@ -16,13 +16,17 @@
  *   reads            every read of every record: how many, verified (check true), the rate; records ok of all
  *   diversity        distinct skill signatures of composed decisions, normalized entropy (0 one, 1 even), the top
  *                    one's share; `collapsed` when the top share is at least COLLAPSE_SHARE over at least MIN_COLLAPSE
- *   passes           good passes (the counterfactual lost), missed wins, neutral; good of graded
+ *   passes           the model's passes: good passes (the counterfactual lost), missed wins, neutral; good of graded
+ *   refusals         the gate's refusals, apart: would have lost, would have won, neutral (never a pass)
  *   lookups          calls, composed decisions with a lookup on their bar, the rate
- *   record           each composed decision against its cell in the pinned index (this context, else any context,
- *                    the first with enough samples): followed (entered above zero, passed below), against, neutral
- *                    (the interval spans zero), no evidence; overall and for the decisions that looked it up
+ *   record           each composed decision against the pinned index as it stood before the decision's day
+ *                    (walk-forward, as the lookup showed it): followed or against only when both its cell in this
+ *                    context and its cell in any context have enough samples and their intervals lie on the same side
+ *                    of zero (entered above zero, passed below: followed; the opposite: against), neutral when either
+ *                    spans zero or they disagree, no evidence otherwise; overall and for the decisions that looked it up
  *   curve            per practice day: decisions, taken, their mean R and win rate, the same over the last
- *                    ROLLING_DAYS days, pass quality (good of graded passes), lookups, followed and against
+ *                    ROLLING_DAYS days, pass quality (good of the model's graded passes), lookups, followed and against
+ *   index            the pinned index's hash, or why it couldn't be read (indexError)
  *
  *   learningMeasures({ decisions, records, lookups, index })   the measures
  *   readLearning(home)                { decisions, records, lookups, index } from a run home (null without a log)
@@ -33,7 +37,7 @@ const fs = require('fs');
 const path = require('path');
 const { readDecisions, logFile } = require('./experience-log');
 const { readRecords, STEPS } = require('./lifecycle-record');
-const { loadPinned, cellKey, contextKey } = require('./experience-index');
+const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
 
 const ROLLING_DAYS = 5;
 const COLLAPSE_SHARE = 0.8;
@@ -44,16 +48,21 @@ const mean = xs => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null
 const rate = (k, n) => (n ? r4(k / n) : null);
 const hasR = d => d.outcome && Number.isFinite(d.outcome.R);
 
-/** followed | against | neutral | no-evidence for one composed decision against the index. */
+/** Which side of zero a cell's mean-R interval lies: 1 above, -1 below, 0 spanning it; null without enough samples. */
+const sideOf = c => (!c || !c.enough ? null : c.meanR.lo > 0 ? 1 : c.meanR.hi < 0 ? -1 : 0);
+
+/**
+ * followed | against | neutral | no-evidence for one composed decision against the index before its day: both the
+ * context cell and the any-context cell must have enough samples and lie on the same side of zero.
+ */
 function followOf(d, index) {
   if (!index || !d.signatures || !d.signatures.skill) return 'no-evidence';
-  const cells = [cellKey('skill', d.signatures.skill, contextKey(d.context)), cellKey('skill', d.signatures.skill)].map(k => index.cells[k]);
-  const c = cells.find(x => x && x.enough);
-  if (!c) return 'no-evidence';
-  const took = d.decision === 'entered';
-  if (c.meanR.lo > 0) return took ? 'followed' : 'against';
-  if (c.meanR.hi < 0) return took ? 'against' : 'followed';
-  return 'neutral';
+  const before = decisionDay(d);
+  const here = sideOf(cellAt(index, cellKey('skill', d.signatures.skill, contextKey(d.context)), before));
+  const any = sideOf(cellAt(index, cellKey('skill', d.signatures.skill), before));
+  if (here === null || any === null) return 'no-evidence';
+  if (here === 0 || any === 0 || here !== any) return 'neutral';
+  return (here > 0) === (d.decision === 'entered') ? 'followed' : 'against';
 }
 
 function follows(list, index) {
@@ -62,7 +71,7 @@ function follows(list, index) {
   return out;
 }
 
-function learningMeasures({ decisions = [], records = [], lookups = [], index = null } = {}) {
+function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null } = {}) {
   const composed = decisions.filter(d => d.decision !== 'none');
   const entered = composed.filter(d => d.decision === 'entered');
   const stepsOf = d => new Set((d.reads || []).map(r => r.step).filter(s => STEPS.includes(s))).size;
@@ -71,7 +80,7 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
   for (const d of composed) sigs.set(d.signatures.skill, (sigs.get(d.signatures.skill) || 0) + 1);
   const top = [...sigs].sort((a, b) => b[1] - a[1])[0] || null;
   const entropy = sigs.size > 1 ? -[...sigs.values()].reduce((a, k) => a + (k / composed.length) * Math.log(k / composed.length), 0) / Math.log(sigs.size) : sigs.size ? 0 : null;
-  const graded = composed.filter(d => d.decision !== 'entered' && hasR(d));
+  const graded = composed.filter(d => d.decision === 'passed' && hasR(d));
   const good = graded.filter(d => d.grade === 'good-pass').length;
   const missed = graded.filter(d => d.grade === 'missed-win').length;
   const looked = new Set(lookups.map(l => `${l.root}|${l.bar}`));
@@ -84,8 +93,9 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
     reads: { reads: reads.length, verified: reads.filter(r => r.check === 'true').length, rate: rate(reads.filter(r => r.check === 'true').length, reads.length), records: records.length, recordsOk: records.filter(r => r.ok).length },
     diversity: { signatures: sigs.size, entropy: r4(entropy), top: top ? top[0] : null, topShare, collapsed: composed.length >= MIN_COLLAPSE && topShare >= COLLAPSE_SHARE },
     passes: { good, missed, neutral: composed.filter(d => d.grade === 'neutral-pass').length, goodRate: rate(good, good + missed) },
+    refusals: { wouldLose: composed.filter(d => d.grade === 'refused-would-lose').length, wouldWin: composed.filter(d => d.grade === 'refused-would-win').length, neutral: composed.filter(d => d.grade === 'refused-neutral').length },
     lookups: { calls: lookups.length, decisions: withLookup.length, rate: rate(withLookup.length, composed.length) },
-    record: { index: index ? index.hash.slice(0, 16) : null, all: follows(composed, index), withLookup: follows(withLookup, index) },
+    record: { index: index ? index.hash.slice(0, 16) : null, indexError, all: follows(composed, index), withLookup: follows(withLookup, index) },
     curve: curve(decisions, lookups, index),
   };
 }
@@ -97,7 +107,7 @@ function curve(decisions, lookups, index) {
     const today = decisions.filter(d => d.day === day);
     const taken = takenOn(day);
     const window = days.slice(Math.max(0, i - ROLLING_DAYS + 1), i + 1).flatMap(takenOn);
-    const passes = today.filter(d => d.decision !== 'entered' && d.decision !== 'none' && hasR(d));
+    const passes = today.filter(d => d.decision === 'passed' && hasR(d));
     const f = follows(today.filter(d => d.decision !== 'none'), index);
     return {
       day, role: today[0].role || null, decisions: today.length, taken: taken.length,
@@ -154,9 +164,9 @@ function learningMarkdown(m) {
     `- Steps covered per composed decision: ${f2(m.steps.mean)} (${m.steps.allSix} cover all six); distinct skills per trade: ${f2(m.skillsPerTrade)}`,
     `- Reads verified: ${m.reads.verified} of ${m.reads.reads} (${f2(m.reads.rate)}); records ok: ${m.reads.recordsOk} of ${m.reads.records}`,
     `- Combinations: ${m.diversity.signatures}, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed onto one)' : ''}`,
-    `- Passes: ${m.passes.good} good, ${m.passes.missed} missed wins, ${m.passes.neutral} neutral (good rate ${f2(m.passes.goodRate)})`,
+    `- Passes (the model's): ${m.passes.good} good, ${m.passes.missed} missed wins, ${m.passes.neutral} neutral (good rate ${f2(m.passes.goodRate)}); the gate's refusals apart: ${m.refusals.wouldLose} would have lost, ${m.refusals.wouldWin} would have won, ${m.refusals.neutral} neutral`,
     `- experience_lookup: ${m.lookups.calls} calls, ${m.lookups.decisions} composed decisions looked up (${f2(m.lookups.rate)})`,
-    `- Against the record (index ${m.record.index || 'none pinned'}): followed ${m.record.all.followed}, against ${m.record.all.against}, neutral ${m.record.all.neutral}, no evidence ${m.record.all['no-evidence']}; after a lookup: followed ${m.record.withLookup.followed}, against ${m.record.withLookup.against}`,
+    `- Against the record (index ${m.record.index || (m.record.indexError ? `unreadable: ${m.record.indexError}` : 'none pinned')}, before each decision's day): followed ${m.record.all.followed}, against ${m.record.all.against}, neutral ${m.record.all.neutral}, no evidence ${m.record.all['no-evidence']}; after a lookup: followed ${m.record.withLookup.followed}, against ${m.record.withLookup.against}`,
     '', `Per day (rolling over ${ROLLING_DAYS} days):`, '',
     '| Day | Role | Decisions | Taken | Mean R | Win rate | Rolling mean R | Rolling win rate | Pass quality | Lookups | Followed / against |',
     '|---|---|---|---|---|---|---|---|---|---|---|',
