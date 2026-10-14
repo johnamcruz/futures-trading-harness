@@ -220,6 +220,13 @@ test('decision path, missed: a setup on the table, the model decides after the n
 });
 
 // One refusal per missing piece: the entry cycle with that piece removed, the gate's one check that refuses it.
+// The briefing's bar closed 10 minutes before the gate's clock (3m bars: over the 9-minute stale-data cap).
+const oldClose = ctx => {
+  const f = path.join(ctx.env.FTH_HOME, 'briefing', 'MNQ.json');
+  const b = JSON.parse(fs.readFileSync(f, 'utf8'));
+  b.closedAt = new Date(Date.parse(ctx.env.FTH_REPLAY_NOW) - 10 * 60000).toISOString();
+  fs.writeFileSync(f, JSON.stringify(b));
+};
 const staleBriefing = ctx => {
   const f = path.join(ctx.env.FTH_HOME, 'briefing', 'MNQ.json');
   const b = JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -243,6 +250,7 @@ const REFUSALS = [
   ['a fact in no known form', { facts: w => `${D.trueFacts(w).join('; ')}; the tape looks strong` }, 'phase2-facts', /in no known form: "the tape looks strong"/],
   // The briefing another bar's: full mode, the facts can't be checked; index mode, it is no facts for the lookups
   // either, so every situational lookup is required (fails closed) and the roles' reports don't count.
+  ['stale data: the briefing\'s bar closed over 3 of its bars ago', { act: oldClose }, 'briefing-age', /Stale data: the MNQ bar briefing's bar \(at [^)]*\) closed 10\.\d min ago, over the 9 min limit/],
   ['full mode: the briefing is another bar\'s', { act: staleBriefing, mode: 'full' }, 'phase2-facts', /briefing for this cycle's MNQ bar .* can't be read \(the MNQ briefing is for the bar at/],
   ['index mode: the briefing is another bar\'s', { act: staleBriefing }, 'roles-ran', /market-structure-analyst reported without looking up /],
   ['no journal plan', { plan: false }, 'plan-required', /No journal plan for MNQ/],
@@ -334,7 +342,7 @@ test('decision path, position open: a stop move, a partial close, the stop cut t
   // The new entry: refused by the entry checks the exits never meet (the transcript can't be read, a position is open).
   const decisions = D.gateLog(w).filter(g => g.tool === 'place_order').slice(1);
   assert.deepStrictEqual(decisions.map(g => g.decision), ['blocked', 'allowed']);
-  assert.deepStrictEqual(decisions[0].violations.map(v => v.check), ['trigger-fired', 'skills-at-entry', 'roles-ran', 'phase2-facts', 'review-before-next-entry', 'position-open']);
+  assert.deepStrictEqual(decisions[0].violations.map(v => v.check), ['trigger-fired', 'skills-at-entry', 'roles-ran', 'phase2-facts', 'briefing-age', 'review-before-next-entry', 'position-open']);
   // The gate's log: the only risk-reducing call held is the loosened stop, by its own rule.
   const entry = g => g.tool === 'place_order' && !/^\s*\[(exit|protect)\]/i.test(String(g.rationale || ''));
   const held = D.gateLog(w).filter(g => g.decision === 'blocked' && !entry(g));

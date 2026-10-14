@@ -1700,7 +1700,8 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
     assert.deepStrictEqual(run(entryOrder({ rationale }), { ...auto, cycleTranscript: `${file}.gone` }).violations, [], rationale);
   }
   // The transcript can't be read: refused by the three checks that read it (fails closed).
-  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['phase2-facts', 'roles-ran', 'skills-at-entry']);
+  // The pinned bar's briefing unreadable: its data's age can't be checked either (briefing-age).
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['briefing-age', 'phase2-facts', 'roles-ran', 'skills-at-entry']);
   // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
   assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
   for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));
@@ -1955,7 +1956,7 @@ test('phase2-facts and roles-ran judge ONE phase-2 report: the latest-ending one
   const T = 1.8e12;
   const timed = (subagent_type, start, end, output = 'report') => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output, time: { start: T + start, end: T + end } } } });
   // A reversal candidate (index mode requires lookups of every role), the opening drive, entries allowed.
-  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', news: { inBlackout: false }, candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }] } } } });
+  writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', news: { inBlackout: false }, candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }] } } } });
   const GOOD = 'VERDICT: APPROVE - size 1\nFACTS: window opening drive; entries allowed';
   const BAD = 'VERDICT: APPROVE - size 1\nFACTS: window opening print; entries allowed';
   const VETO = 'VERDICT: VETO - room';
@@ -2014,7 +2015,7 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
   fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
     timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
-  const brief = candidates => writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
+  const brief = candidates => writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
   const reset = () => { try { fs.unlinkSync(lookupsFile(file)); } catch (_err) { /* none */ } };
   const index = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'index' };
@@ -2073,7 +2074,7 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   fs.writeFileSync(p2, [...ocSkills, timed('risk-manager', 30, 40)].join('\n'));
   const cachedCfg = lookups => ({ ...index, cycleTranscript: p2, cycleCached: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], cycleCachedLookups: lookups });
   // The facts key the requirement comes from: this bar's briefing m3 version (no other lane).
-  const versioned = (version, candidates) => writeBriefing(home, { symbol: 'MNQ', sections: { m3: { version, validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
+  const versioned = (version, candidates) => writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { version, validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
   const KEY = 'm3@bar-n';
   versioned(KEY, [{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
   const keyed = (o, key = KEY) => Object.fromEntries(Object.entries(o).map(([r, skills]) => [r, { skills, key }]));
@@ -2117,7 +2118,7 @@ test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry
   fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
     timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
   // A reversal candidate on this bar: every role that indexes its situational skills must look them up.
-  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
   // The gate's config as the runner's environment gives it, with no FTH_ROLE_SKILLS: index.
   const env = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
   const fromEnv = loadConfig(env);
@@ -2167,7 +2168,7 @@ test('index mode, several lanes: a closed lane\'s candidates require the lookups
   fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
     timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
   // The 3m (runner's) briefing: no candidate. The 1m lane's bar, which closed this cycle, at 13:59.
-  writeBriefing(home, { symbol: 'MNQ', minutes: 3, sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
+  writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), minutes: 3, sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
   const lane = '2026-10-07T13:59:00.000Z';
   const frame = (asOf, candidates) => writeFrameBriefing(home, { symbol: 'MNQ', minutes: 1, asOf, closedAt: NOW.toISOString(), sections: { bar: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates } } } });
   // The gate's config as the runner's environment gives it (FTH_CYCLE_LANE_BARS from the cycle's lanes), default mode.
@@ -2261,7 +2262,7 @@ test('a session that isn\'t autonomous: no situational skill is required of the 
   const home = trendHome();
   const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
   fs.writeFileSync(file, ocSkills.join('\n'));
-  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
   // A situational skill marked for the head trader (none ships yet): what the guard keeps out of interactive sessions.
   const entry = { when: 'candidate', skill: 'session-timing', head: true };
   SITUATIONAL.push(entry);
@@ -2338,7 +2339,7 @@ test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill ma
   const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
   fs.writeFileSync(file, ocSkills.join('\n'));
   // No candidate on the bar: a readable lanes list requires nothing more of the head trader.
-  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
+  writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
   const entry = { when: 'candidate.trendRule=reversal', skill: 'session-timing', head: true };
   SITUATIONAL.push(entry);
   try {
@@ -2474,11 +2475,12 @@ test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS
   const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
   fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
     timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
-  // The cycle's bar opened 13:57 and its briefing held until just before NOW; the delegated cycle's executor calls ~10
+  // The cycle's bar opened 13:57 and its briefing held until just before NOW; the delegated cycle's executor calls
   // minutes later (the wall clock, live), so the briefing is no longer current at the gate's now.
   const CYCLE_BAR = '2026-10-07T13:57:00.000Z';
-  const late = new Date(NOW.getTime() + 571000);
-  const brief = asOf => writeBriefing(home, { symbol: 'MNQ', asOf, sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(NOW.getTime() - 1000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  // (8 minutes: within the stale-data cap of 3 bars, 9 minutes on 3m; briefing-age has its own test.)
+  const late = new Date(NOW.getTime() + 8 * 60000);
+  const brief = asOf => writeBriefing(home, { symbol: 'MNQ', closedAt: NOW.toISOString(), asOf, sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(NOW.getTime() - 1000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
   brief(CYCLE_BAR);
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
   // The lookups the reversal candidate requires, made during the roles' calls.
@@ -2522,4 +2524,78 @@ test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS
   assert.match(run({ ...cachedEnv(`m3@${CYCLE_BAR}`), FTH_CYCLE_BARS: '' }).violations[0].message, /served from the report cache/);
   // Exits are never held, whatever the bar.
   assert.deepStrictEqual(run({}, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations, []);
+});
+
+test('phase2-facts, several lanes: the facts are checked against the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS), not the lane bar that closed (FTH_CYCLE_BARS); a briefing of neither still fails closed', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  const LANE = '2026-10-07T13:58:00.000Z';
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', candidates: [] } } } });
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2('VERDICT: APPROVE - size 1\nFACTS: window opening drive; entries allowed')].join('\n'));
+  const facts = env => {
+    const cfg = { ...config, ...loadConfig({ FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_TRANSCRIPT: file, ...env }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 3, signalMaxAgeCeilingMin: 45, home };
+    return evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: cfg }).violations.filter(v => v.check === 'phase2-facts').map(v => v.message);
+  };
+  // A 1m-lane-only close: FTH_CYCLE_BARS names the 1m bar, the briefing is the 3m bar's (FTH_CYCLE_BRIEFING_BARS): checked, true.
+  assert.deepStrictEqual(facts({ FTH_CYCLE_BARS: JSON.stringify({ MNQ: LANE }), FTH_CYCLE_BRIEFING_BARS: JSON.stringify({ MNQ: BAR }) }), []);
+  // One lane: FTH_CYCLE_BARS is the briefing's bar.
+  assert.deepStrictEqual(facts({ FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }) }), []);
+  // The lane bar alone (no briefing bar named): the briefing isn't that bar's, refused as before; a briefing bar of
+  // another bar than the briefing on file: refused (fails closed).
+  assert.match(facts({ FTH_CYCLE_BARS: JSON.stringify({ MNQ: LANE }) })[0], /the MNQ briefing is for the bar at/);
+  assert.match(facts({ FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }), FTH_CYCLE_BRIEFING_BARS: JSON.stringify({ MNQ: LANE }) })[0], /the MNQ briefing is for the bar at/);
+});
+
+test('briefing-age: an autonomous entry on a bar briefing older than 3 of its bars is refused, naming the age; within it, or not autonomous, not; a named bar without a briefing fails closed; exits never held', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const BAR = '2026-10-07T13:48:00.000Z';
+  const brief = (minutes, closedMinAgo, extra = {}) => B.writeBriefing(home, { symbol: 'MNQ', minutes, asOf: BAR, closedAt: new Date(NOW.getTime() - closedMinAgo * 60000).toISOString(), sections: { m3: { validUntil: NOW.toISOString(), data: { candidates: [] } } }, ...extra });
+  const run = (env = {}, input = entryOrder()) => {
+    const cfg = { ...config, ...loadConfig({ FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }), ...env }), killSwitchFile: config.killSwitchFile, home };
+    return evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg }).violations.filter(v => v.check === 'briefing-age').map(v => v.message);
+  };
+  // 3m bars: 9 minutes. 9.5 minutes after the bar closed (a delegated cycle's executor): refused, the age named.
+  brief(3, 9.5);
+  const stale = run();
+  assert.strictEqual(stale.length, 1);
+  assert.match(stale[0], /Stale data: the MNQ bar briefing's bar \(at 2026-10-07T13:48:00.000Z\) closed 9\.5 min ago, over the 9 min limit/);
+  // Exits, protective stops: never held.
+  assert.deepStrictEqual(run({}, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })), []);
+  assert.deepStrictEqual(run({}, entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long', stopLossBracket: undefined })), []);
+  // Within the limit: not refused; at the limit: not refused.
+  brief(3, 8);
+  assert.deepStrictEqual(run(), []);
+  brief(3, 9);
+  assert.deepStrictEqual(run(), []);
+  // 1m bars: 3 minutes. 15m: 45 (the ceiling). FTH_SIGNAL_MAX_AGE_MIN only shortens it.
+  brief(1, 4);
+  assert.match(run()[0], /closed 4\.0 min ago, over the 3 min limit/);
+  brief(15, 44);
+  assert.deepStrictEqual(run(), []);
+  brief(15, 46);
+  assert.match(run()[0], /over the 45 min limit/);
+  brief(3, 6);
+  assert.match(run({ FTH_SIGNAL_MAX_AGE_MIN: '5' })[0], /over the 5 min limit/);
+  // No readable close or timeframe: the close unreadable refuses; an unreadable timeframe counts as 1 minute (the strictest).
+  brief(3, 1, { closedAt: 'never' });
+  assert.match(run()[0], /no readable close time/);
+  brief(undefined, 4);
+  assert.match(run()[0], /over the 3 min limit/);
+  // Not autonomous (an interactive session): not this check's.
+  brief(3, 30);
+  assert.deepStrictEqual(run({ FTH_AUTONOMOUS: '' }), []);
+  // The cycle names its bar and no briefing is there: refused (fails closed); no bar named and none: nothing to judge.
+  fs.unlinkSync(B.briefingFile(home, 'MNQ'));
+  assert.match(run()[0], /No bar briefing for MNQ, though the cycle decides its bar at/);
+  assert.deepStrictEqual(run({ FTH_CYCLE_BARS: '' }), []);
+  assert.deepStrictEqual(run({}, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })), []);
+  // Not skippable (FTH_ORDER_GATE_SKIP lists only the skippable checks).
+  brief(3, 30);
+  assert.strictEqual(run({ FTH_ORDER_GATE_SKIP: 'briefing-age' }).length, 1);
 });

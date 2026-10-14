@@ -2564,7 +2564,7 @@ test('order gate hook, a long cycle: past its briefing\'s validUntil by the wall
   const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
   // The cycle's bar's briefing, expired by the wall clock the live gate reads (a delegated cycle outlasts its bar).
-  const brief = asOf => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', asOf, sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(Date.now() - 60000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
+  const brief = asOf => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf, closedAt: new Date(Date.now() - 4 * 60000).toISOString(), sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(Date.now() - 60000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
   brief(BAR_T);
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
@@ -2600,4 +2600,23 @@ test('order gate hook, a long cycle: past its briefing\'s validUntil by the wall
   assert.match(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`), FTH_CYCLE_BARS: '' }).stderr, /market-structure-analyst was served from the report cache/);
   const exit = run({}, orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }));
   assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate hook, briefing-age: an autonomous entry on a bar briefing older than 3 of its bars is refused with the bar\'s age, in the gate log too; a fresh one is not; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const BAR_T = '2026-10-07T14:24:00.000Z';
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR_T }) });
+  // An autonomous gate reads the wall clock: the bar closed 12 minutes ago on 3m bars (limit 9).
+  const brief = minAgo => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR_T, closedAt: new Date(Date.now() - minAgo * 60000).toISOString(), sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [] } } } });
+  brief(12);
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[briefing-age\][^\n]*Stale data: the MNQ bar briefing's bar \(at 2026-10-07T14:24:00.000Z\) closed 12\.\d min ago, over the 9 min limit/);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
+  assert.ok(log.violations.some(v => v.check === 'briefing-age' && /closed 12\.\d min ago/.test(v.message)), JSON.stringify(log));
+  const exit = gate(orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  brief(1);
+  assert.doesNotMatch(gate(orderPayload(), env).stderr, /briefing-age/);
 });
