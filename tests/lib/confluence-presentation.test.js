@@ -61,17 +61,18 @@ test('the compact scan renders a per-side target as the fired side\'s level, nev
 test('fairValueGaps: open (not traded back into), partly filled (the unfilled part), filled (dropped)', () => {
   const t = k => new Date(Date.UTC(2026, 9, 7, 14, 3 * k)).toISOString();
   const bar = (k, l, h) => ({ t: t(k), o: l, h, l, c: h, v: 1 });
+  const fvg = bars => fairValueGaps(bars, 60, bars.map(() => 1)); // ATR 1: each middle bar below is a strong displacement
   // A bullish gap 10-12 (bar 0 high 10, bar 2 low 12).
   const base = [bar(0, 9, 10), bar(1, 10, 13), bar(2, 12, 14)];
-  assert.deepStrictEqual(fairValueGaps([...base, bar(3, 12.5, 15)]).open.map(g => [g.low, g.high]), [[10, 12]]);
-  const partly = fairValueGaps([...base, bar(3, 11, 15)]);
+  assert.deepStrictEqual(fvg([...base, bar(3, 12.5, 15)]).open.map(g => [g.low, g.high]), [[10, 12]]);
+  const partly = fvg([...base, bar(3, 11, 15)]);
   assert.deepStrictEqual(partly.open, []);
   assert.deepStrictEqual(partly.partly.map(g => [g.side, g.low, g.high, g.gapLow, g.gapHigh]), [['bullish', 10, 11, 10, 12]]);
-  const filled = fairValueGaps([...base, bar(3, 9.75, 15)]);
+  const filled = fvg([...base, bar(3, 9.75, 15)]);
   assert.deepStrictEqual([filled.open, filled.partly], [[], []]);
-  // A bearish gap 12-14 (bar 0 low 14, bar 2 high 12), traded up into 13: 13-14 still unfilled.
-  const down = [bar(0, 14, 15), bar(1, 11, 14.5), bar(2, 10, 12), bar(3, 10, 13)];
-  assert.deepStrictEqual(fairValueGaps(down).partly.map(g => [g.side, g.low, g.high, g.gapLow, g.gapHigh]), [['bearish', 13, 14, 12, 14]]);
+  // A bearish gap 12-14 (bar 0 low 14, bar 2 high 12, a down-closing middle bar), traded up into 13: 13-14 still unfilled.
+  const down = [bar(0, 14, 15), { t: t(1), o: 14.5, h: 14.5, l: 11, c: 11, v: 1 }, bar(2, 10, 12), bar(3, 10, 13)];
+  assert.deepStrictEqual(fvg(down).partly.map(g => [g.side, g.low, g.high, g.gapLow, g.gapHigh]), [['bearish', 13, 14, 12, 14]]);
 });
 
 test('the snapshot\'s session VWAP crosses are the regime\'s own count, labeled by their VWAP', () => {
@@ -200,16 +201,19 @@ test('levelOnTick: a computed level to the cent, then on the tick (one rule for 
 });
 
 test('the briefing shows partly filled FVGs with the open ones', () => {
-  let partly = 0;
-  for (const n of [600, 900, 1300]) {
+  // Cuts with open gaps (600, 1100, 1250), partly filled ones (1100, 1200, 1250), and none (900).
+  let withOpen = 0;
+  let withPartly = 0;
+  for (const n of [600, 900, 1100, 1200, 1250]) {
     const b = B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, n), minutes: 3 });
     const liq = b.sections.m3.data.liquidity;
     const s = snapshot({ bars: BARS.slice(0, n) });
     assert.deepStrictEqual(liq.openFvgs, s.liquidity.openFvgs);
     assert.deepStrictEqual(liq.partlyFilledFvgs, s.liquidity.partlyFilledFvgs);
-    partly += liq.partlyFilledFvgs.length;
+    if (liq.openFvgs.length) withOpen += 1;
+    if (liq.partlyFilledFvgs.length) withPartly += 1;
   }
-  assert.ok(partly > 0, 'the fixture has partly filled gaps for the briefing to show');
+  assert.ok(withOpen >= 2 && withPartly >= 2, `cuts with open gaps ${withOpen}, with partly filled ones ${withPartly}: at least two each`);
 });
 
 test('tick rounding is display only: room, R and every candidate\'s levels ahead are those of the unrounded levels', () => {

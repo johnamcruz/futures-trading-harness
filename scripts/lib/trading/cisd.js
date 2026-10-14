@@ -74,6 +74,7 @@
  *
  *   PARAMS                                  the defaults above
  *   findCisds(candles, params)              [{ dir, level, runStart, runEnd, confirm }] (candle indexes)
+ *   strongCandle(k, prev, dir, atr, p)      the displacement strength rule, { strong, engulfing, body, rangeAtr } (also the FVG's middle candle)
  *   cisdSeries(bars, minutes, { levels, atr, params, barMinutes })   the series by base bar, and the latest state
  *   cisdFacts(bars, minutes, opts)          the latest CISD on that timeframe as the briefing shows it
  *   paramsFrom(strategyParams)              PARAMS overridden by cisdMinRun, cisdMaxWait, cisdExpiry, cisdVoidTol, cisdBufferAtr
@@ -207,25 +208,31 @@ function sweepOf(ev, candles, keyAt) {
 }
 
 /**
- * The confirming candle as a displacement (hypotheses): its body at least `minBody` (0.6) of its range, its close in
- * the extreme third the CISD's way, and either its range at least `minRangeAtr` (1.0) x ATR(14) of the CISD
- * timeframe's completed candles or its body engulfing the prior candle's (the prior one the opposite colour: the
- * candle-reading skill's engulfing). Strong when all hold; else weak (a doji, a small body, long wicks, a close
- * mid-range, or a small candle that engulfs nothing): no zone.
+ * A strong displacement candle `k` the `dir` way (1 up, -1 down), the one strength rule (hypotheses), shared with the
+ * fair value gap's middle candle (market-snapshot.js fairValueGaps): it closes the `dir` way, its body is at least
+ * `minBody` (0.6) of its range, its close sits in the extreme third the `dir` way, and either its range is at least
+ * `minRangeAtr` (1.0) x `atr` (ATR(14) of its own timeframe as known at `k`) or its body engulfs the body of `prev`
+ * (the candle before it, the opposite colour: the candle-reading skill's engulfing). Strong when all hold; else weak
+ * (a doji, a small body, long wicks, a close mid-range, or a small candle that engulfs nothing).
  */
-function displacementOf(candles, j, dir, atrTf, p = PARAMS) {
-  const k = candles[j];
-  const prev = j > 0 ? candles[j - 1] : null;
+function strongCandle(k, prev, dir, atr, p = PARAMS) {
   const range = k.h - k.l;
   const body = range > 0 ? Math.abs(k.c - k.o) / range : 0;
   const loc = range > 0 ? (dir === 1 ? (k.c - k.l) / range : (k.h - k.c) / range) : 0;
   const withDir = dir === 1 ? k.c > k.o : k.c < k.o;
   const prevOpposite = prev && (dir === 1 ? prev.c < prev.o : prev.c > prev.o);
   const engulfing = Boolean(withDir && prevOpposite && Math.min(k.o, k.c) <= Math.min(prev.o, prev.c) && Math.max(k.o, k.c) >= Math.max(prev.o, prev.c));
-  const a = atrTf ? atrTf[j] : NaN;
-  const rangeAtr = Number.isFinite(a) && a > 0 ? range / a : null;
+  const rangeAtr = Number.isFinite(atr) && atr > 0 ? range / atr : null;
   const strong = withDir && body >= p.minBody && loc >= UPPER_THIRD && (engulfing || (rangeAtr !== null && rangeAtr >= p.minRangeAtr));
   return { strong, engulfing, body, rangeAtr };
+}
+
+/**
+ * The confirming candle as a displacement: strongCandle on the CISD timeframe's candle `j`, the prior candle and
+ * ATR(14) of the timeframe's completed candles at `j`. Strong, a zone; weak, none.
+ */
+function displacementOf(candles, j, dir, atrTf, p = PARAMS) {
+  return strongCandle(candles[j], j > 0 ? candles[j - 1] : null, dir, atrTf ? atrTf[j] : NaN, p);
 }
 
 /** A new CISD's state at the base bar its confirming candle closes on. */
@@ -380,4 +387,4 @@ function combineHigher(own, higher, higherMinutes) {
   return { ...own, entry, risk, entries };
 }
 
-module.exports = { PARAMS, SNAPSHOT_PARAMS, paramsFrom, findCisds, displacementOf, combineHigher, candlesOf, knownAt, stepMinutes, keyLevelsAt, sweepOf, cisdSeries, cisdFacts };
+module.exports = { PARAMS, SNAPSHOT_PARAMS, paramsFrom, findCisds, strongCandle, displacementOf, combineHigher, candlesOf, knownAt, stepMinutes, keyLevelsAt, sweepOf, cisdSeries, cisdFacts };

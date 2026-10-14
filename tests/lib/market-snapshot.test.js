@@ -54,9 +54,9 @@ test('snapshot: participation, VWAP crosses and distance, swings, equal highs, o
     const c = 100 + (k % 10 < 5 ? k % 10 : 10 - (k % 10)); // a zigzag: swing highs at 105, equal
     rows.push({ t: new Date(t0 + k * 180000).toISOString(), o: c, h: c + 0.5, l: c - 0.5, c, v: k < 5 ? 100 : 50 });
   }
-  // A bullish gap 3 bars from the end that nothing has filled.
+  // A bullish gap 3 bars from the end that nothing has filled, its middle bar a strong displacement candle.
   rows.push({ t: new Date(t0 + 60 * 180000).toISOString(), o: 101, h: 101.5, l: 100.5, c: 101, v: 200 });
-  rows.push({ t: new Date(t0 + 61 * 180000).toISOString(), o: 103, h: 104, l: 102.5, c: 104, v: 200 });
+  rows.push({ t: new Date(t0 + 61 * 180000).toISOString(), o: 101.5, h: 104, l: 101.25, c: 103.75, v: 200 });
   rows.push({ t: new Date(t0 + 62 * 180000).toISOString(), o: 104, h: 105, l: 103.5, c: 105, v: 200 });
   const s = snapshot(rows);
   assert.strictEqual(s.participation.relVolLastVsOpeningRange, 2, 'opening range bars averaged 100');

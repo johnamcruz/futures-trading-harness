@@ -26,7 +26,11 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
 2. **Sweep vs break**: the `breakout-vs-fakeout` skill. No call until the
    close; wicks are information, not signals.
 3. **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's
-   low (bullish) or bar 1's low is above bar 3's high (bearish). Price often
+   low (bullish) or bar 1's low is above bar 3's high (bearish), with a
+   strong displacement middle bar the gap's way (the `cisd` skill's strong
+   candle: body at least 0.6 of its range, close in the extreme third, range
+   at least 1.0 x ATR(14) or engulfing). A gap behind a weak middle bar (a
+   doji, a small body, a close mid-range, the wrong way) is no FVG. Price often
    revisits the gap; a gap that holds on retest supports continuation
    (`m3` `liquidity.openFvgs`). By what price has done since: **open** (not
    traded back into), **partly filled** (traded into, not through: only the
