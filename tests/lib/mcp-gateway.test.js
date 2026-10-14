@@ -94,14 +94,19 @@ test('client requests may not use the gateway-reserved id prefix; lane calls are
 test('canonicalArgs: the gate sees one name per contract, from the configured broker\'s translator cache', () => {
   const home = tmpDir();
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: ['node', 'x.js'] } } }));
-  const env = { FTH_HOME: home };
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T14:30:00Z' };
   const args = { accountId: 7, contractId: 'MNQ:2026-12', size: 1 };
-  assert.deepStrictEqual(canonicalArgs(args, env), args, 'no cache yet: as given');
+  const plain = a => JSON.parse(JSON.stringify(a)); // without the rename mark (a symbol: never on the wire or in a log)
+  assert.deepStrictEqual(plain(canonicalArgs(args, env)), args, 'no cache yet: as given');
   fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'fake:MNQ:Z26': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'fake:MNQ:Z26', month: '2026-12', day: '2026-10-07' } } }));
-  assert.deepStrictEqual(canonicalArgs(args, env), { ...args, contractId: 'MNQ' });
+  assert.deepStrictEqual(plain(canonicalArgs(args, env)), { ...args, contractId: 'MNQ' });
   assert.strictEqual(canonicalArgs({ contractId: 'fake:MNQ:Z26' }, env).contractId, 'MNQ');
   assert.strictEqual(args.contractId, 'MNQ:2026-12', 'the call itself is left as sent');
-  assert.deepStrictEqual(canonicalArgs({ orderId: 9 }, env), { orderId: 9 });
+  // The next trading day (after 18:00 ET), before today's lookup: yesterday's front month names nothing.
+  const tomorrow = { ...env, FTH_TEST_NOW: '2026-10-07T22:01:00Z' };
+  assert.strictEqual(canonicalArgs(args, tomorrow).contractId, 'MNQ:2026-12');
+  assert.strictEqual(canonicalArgs({ contractId: 'fake:MNQ:Z26' }, tomorrow).contractId, 'MNQ:2026-12');
+  assert.deepStrictEqual(plain(canonicalArgs({ orderId: 9 }, env)), { orderId: 9 });
   assert.deepStrictEqual(canonicalArgs(args, { FTH_HOME: home, FTH_BROKER: 'nope' }), args, 'no broker config: as given');
 });
 
@@ -135,10 +140,86 @@ test('canonicalArgs on a replayed day: the call, the positions, the orders and t
   assert.match(AG.evaluateAccountChange('partial_close_position', { input: { ...exit, size: 1 }, positions: facts.positions, orders: facts.orders, config, now, ledger })[0].message, /once recent orders fill/);
   // The close lane's ledger entry: named with the positions too.
   assert.strictEqual(closeLedgerEntry('close_position', close, [{ contractId: 'MNQ', type: 1, size: 1 }], now).contractId, 'MNQ');
-  // Live: nothing is named again (main's naming).
-  const live = canonicalArgs({ accountId: 1, contractId: 'MNQ:2026-12' }, { FTH_HOME: home });
-  assert.strictEqual(live[AG.RENAME], undefined);
-  assert.deepStrictEqual(AG.renamed(live, [{ contractId: 'MNQ' }]).positions, [{ contractId: 'MNQ' }]);
+});
+
+test('canonicalArgs live, the first call after a roll: yesterday\'s cached front month never names a month; the call, the positions and the ledger are named again after the account reads looked today\'s up', async () => {
+  const AG = require('../../scripts/lib/trading/account-gate');
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'] } } }));
+  const file = path.join(home, 'contracts-sim.json');
+  const ids = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
+  const yesterday = { ids, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-06' } } };
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T14:30:00Z' };
+  const config = loadConfig({});
+  const now = new Date('2026-10-07T14:30:00Z');
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  // The account reads: the translator looks today's front month up (March) and lists the March long as MNQ.
+  const caller = { call: async name => {
+    fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-07' } } }));
+    return reply(name === 'list_open_positions' ? [{ contractId: 'MNQ', type: 1, size: 1 }] : []);
+  } };
+  const exitOn = contractId => ({ accountId: 1, contractId, side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' });
+  // A: an exit named for December, checked before today's lookup, is December, never "MNQ": refused.
+  fs.writeFileSync(file, JSON.stringify(yesterday));
+  const a = canonicalArgs(exitOn('MNQ:2026-12'), env);
+  assert.strictEqual(a.contractId, 'MNQ:2026-12', 'yesterday\'s front month names nothing today');
+  const factsA = await AG.accountFacts(a, caller);
+  assert.strictEqual(a.contractId, 'MNQ:2026-12');
+  assert.match(AG.evaluateAccount({ input: a, ...factsA, config, now })[0].message, /open MNQ position is in MNQ;/);
+  // B: a partial close named for March goes: March is today's front month, as the positions were named.
+  fs.writeFileSync(file, JSON.stringify(yesterday));
+  const b = canonicalArgs({ accountId: 1, contractId: 'MNQ:2027-03', size: 1 }, env);
+  assert.strictEqual(b.contractId, 'MNQ:2027-03');
+  const factsB = await AG.accountFacts(b, caller, false);
+  assert.strictEqual(b.contractId, 'MNQ', 'named again after the reads, as the positions were');
+  assert.deepStrictEqual(AG.evaluateAccountChange('partial_close_position', { input: b, ...factsB, config, now }), []);
+  // The ledger is named alike: a March close sent moments ago under its month counts for the next exit.
+  const ledger = [{ contractId: 'MNQ:2027-03', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() }];
+  assert.match(AG.evaluateAccountChange('partial_close_position', { input: b, ...factsB, config, now, ledger })[0].message, /once recent orders fill/);
+  // The close lane's entry, too.
+  fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-07' } } }));
+  assert.strictEqual(closeLedgerEntry('close_position', canonicalArgs({ accountId: 1, contractId: 'MNQ:2027-03' }, env), [{ contractId: 'MNQ', type: 1, size: 1 }], now).contractId, 'MNQ');
+});
+
+test('canonicalArgs for a call without a contract (cancel_order, modify_order): the positions and orders are named from one read, so the last stop of a position is never cancelled because two lists named it two ways', async () => {
+  const AG = require('../../scripts/lib/trading/account-gate');
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'] } } }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: { 'sim-Z6': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-07' } } }));
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T14:30:00Z' };
+  // The positions were named while today's lookup failed (by month), the orders after it succeeded (by the root).
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  const caller = { call: async name => reply(name === 'list_open_positions' ? [{ contractId: 'MNQ:2026-12', type: 1, size: 1 }]
+    : name === 'list_open_orders' ? [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 }] : []) };
+  const config = loadConfig({});
+  const now = new Date(env.FTH_TEST_NOW);
+  const cancel = canonicalArgs({ accountId: 1, orderId: 9 }, env);
+  assert.strictEqual('contractId' in cancel, false);
+  const facts = await AG.accountFacts(cancel, caller, false);
+  assert.deepStrictEqual([facts.positions[0].contractId, facts.orders[0].contractId], ['MNQ', 'MNQ']);
+  assert.strictEqual('contractId' in cancel, false, 'no contract added to the call');
+  assert.deepStrictEqual(AG.evaluateAccountChange('cancel_order', { input: cancel, ...facts, config, now }).map(v => v.check), ['cancel-protection']);
+  const modify = canonicalArgs({ accountId: 1, orderId: 9, stopPrice: 21470 }, env);
+  const mf = await AG.accountFacts(modify, caller, false);
+  assert.deepStrictEqual(AG.evaluateAccountChange('modify_order', { input: modify, ...mf, config, now }).map(v => v.check), ['modify-protection'], 'a stop moved away is refused');
+});
+
+test('canonicalArgs: a check whose trading day changes (18:00 ET) before the account is named fails closed; a close still gets no wrong ledger entry', async () => {
+  const AG = require('../../scripts/lib/trading/account-gate');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'] } } }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: { 'sim-Z6': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-07' } } }));
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T21:59:59Z' };
+  const args = canonicalArgs({ accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' }, env);
+  // The account reads take the clock past 18:00 ET: MNQ may mean another month from the new trading day.
+  const caller = { call: async () => { env.FTH_TEST_NOW = '2026-10-07T22:00:01Z'; return { content: [{ type: 'text', text: '[]' }] }; } };
+  await assert.rejects(AG.accountFacts(args, caller), /the trading day changed while the call was checked \(2026-10-07 to 2026-10-08\)/);
+  env.FTH_TEST_NOW = '2026-10-07T21:59:59Z';
+  const close = canonicalArgs({ accountId: 1, contractId: 'MNQ' }, env);
+  env.FTH_TEST_NOW = '2026-10-07T22:00:01Z';
+  assert.throws(() => closeLedgerEntry('close_position', close, [{ contractId: 'MNQ', type: 1, size: 1 }], new Date()), /trading day changed/, 'the gateway sends the close anyway (scripts/mcp-gateway.js catches it)');
 });
 
 test('closeLedgerEntry: a close counts from the account before it, capped at the position; nothing to close is no entry', () => {

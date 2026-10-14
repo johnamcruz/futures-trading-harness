@@ -97,8 +97,13 @@ in front of the selected server, maps them to the server's own ids and back,
 by asking that same server:
 
 - a name to an id: `search_contracts` with the root; the front month is the
-  contract the server marks `activeContract`, fixed for the trading day;
-- an id to a name: from those answers, else `get_contract`.
+  contract the server marks `activeContract`, fixed for the trading day (the
+  first one recorded that day stays, in every process; a contract marked
+  active in any contract answer replaces a front month recorded on an earlier
+  day); a name with a month always means that month;
+- an id to a name: from those answers, else `get_contract`. Only the trading
+  day's own front month is named by its root: when that day's lookup fails, a
+  contract is named by its month, never by an earlier day's front month.
 
 A contract's root and month come from its `name`, the exchange ticker: root +
 month code + year (`NQZ5`, `MNQH26`). Its ids can be anything. Lookups are
@@ -107,10 +112,13 @@ replay clock each replayed trading day has its own file
 (`contracts-<broker>.<YYYY-MM-DD>.json`), so a replayed day has its own front
 month, tick specs and server limits, as a fresh home would; a broker id's root
 and month, which never change, are read from the live file and the day files
-within 30 days (except a contract whose month is already over that day). The
-gateway names a call and the account it checks it against from one read of the
-day's file taken after the account reads, so the gate and the translator name a
-contract alike. An entry waits until the day's front month is recorded. Day
+within 30 days (except a contract whose month is already over that day). Live
+and under a replay clock, the gateway names a call and the account it checks it
+against from one read of the file taken after the account reads (which may look
+the day's front month up: the first call of a day, the first after a roll), so
+the gate and the translator name a contract alike; a check whose trading day
+changes before that read fails closed. On a replayed day an entry waits until
+the day's front month is recorded. Day
 files more than 30 days before the replayed day are removed when a translator
 starts under a replay clock (never live), one prune at a time; their broker ids
 are kept first in `contracts-<broker>.ids.json`, never removed (a replay's labels

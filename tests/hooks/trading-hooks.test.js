@@ -823,6 +823,131 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
   assert.ok(slow.took < 9000, `${slow.took} ms`);
 });
 
+// A live gateway (no replay clock) over a home whose contract cache was written on an earlier call: `front` is the
+// front month it recorded and the day it did. December is the front month before the roll, March after it.
+const ROLL_IDS = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
+const rollContracts = active => JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-Z6' }, { id: 'sim-H7', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-H7' }]);
+async function liveRollRun({ now, front, active, position, messages, extra = {} }) {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const home = path.join(dir, '.futures-trading-harness');
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(dir, []), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS' } } }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: ROLL_IDS, front: front ? { MNQ: { id: front.id, month: ROLL_IDS[front.id].month, day: front.day } } : {} }));
+  const argsFile = path.join(dir, 'args.jsonl');
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
+    PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: now, NODE_ENV: 'test',
+    SIM_ALLOWED_ACCOUNTS: '1,7', FAKE_ARGS: argsFile, FAKE_CONTRACTS: rollContracts(active),
+    FAKE_POSITIONS: JSON.stringify([].concat(position || []).map(p => ({ contractId: p, type: 1, size: 1 }))), ...extra,
+  } });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  for (const m of messages) {
+    gw.stdin.write(`${JSON.stringify(m)}\n`);
+    for (let t = 0; t < 1600 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
+  }
+  gw.stdin.end();
+  await new Promise(r => gw.on('close', r));
+  const texts = Object.fromEntries(replies().map(r => [r.id, r.result.content[0].text.slice(0, 400)]));
+  const sent = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => /place_order|close/.test(c.name)).map(c => `${c.name} ${c.args.contractId}`) : [];
+  return { texts, sent, cache: JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')) };
+}
+const rollExit = (id, contractId, side = 'sell') => call(id, 'place_order', { ...EXIT_BASE, contractId, side, rationale: '[exit] flatten' });
+const rollPartial = (id, contractId) => call(id, 'partial_close_position', { accountId: 1, contractId, size: 1 });
+const rollClose = (id, contractId) => call(id, 'close_position', { accountId: 1, contractId });
+// The first call after a roll, live: yesterday's cache says December, the broker marks March active.
+const ROLL = { now: TEST_NOW, front: { id: 'sim-Z6', day: '2026-10-06' }, active: 'sim-H7' };
+
+test('MCP gateway wiring, live: the first call after a roll, with yesterday\'s December front month cached, never sends an exit to a month with no position (A) and never refuses one on the month that has it (B)', async () => {
+  // A: long 1 March; an [exit] sell named for December as the very first call would open a December short.
+  const a = await liveRollRun({ ...ROLL, position: 'sim-H7', messages: [rollExit(1, 'MNQ:2026-12')] });
+  assert.match(a.texts[1], /\[exposure\][\s\S]*MNQ:2026-12[\s\S]*open MNQ position is in MNQ\b/, a.texts[1]);
+  assert.deepStrictEqual(a.sent, [], 'nothing reached the server');
+  assert.deepStrictEqual([a.cache.front.MNQ.id, a.cache.front.MNQ.day], ['sim-H7', '2026-10-07'], 'the front month was refreshed from the broker\'s active contract');
+  // B: a partial close of the March long named by its month, as the very first call: allowed, sent to March.
+  const b = await liveRollRun({ ...ROLL, position: 'sim-H7', messages: [rollPartial(1, 'MNQ:2027-03')] });
+  assert.doesNotMatch(b.texts[1], /\[partial-close\]/, b.texts[1]);
+  assert.deepStrictEqual(b.sent, ['partial_close_position sim-H7']);
+  // The same exit by its month, or by the root (March from today), first thing: sent to March, never December.
+  for (const name of ['MNQ:2027-03', 'MNQ']) {
+    const r = await liveRollRun({ ...ROLL, position: 'sim-H7', messages: [rollExit(1, name)] });
+    assert.deepStrictEqual(r.sent, ['place_order sim-H7'], `${name}: ${r.texts[1]}`);
+  }
+  // A partial close named for December (no position there) is refused; the buy side of a long is refused too.
+  const wrong = await liveRollRun({ ...ROLL, position: 'sim-H7', messages: [rollPartial(1, 'MNQ:2026-12'), rollExit(2, 'MNQ:2027-03', 'buy')] });
+  assert.match(wrong.texts[1], /\[partial-close\]/);
+  assert.match(wrong.texts[2], /\[exposure\][\s\S]*same side/);
+  assert.deepStrictEqual(wrong.sent, []);
+});
+
+test('MCP gateway wiring, live: on the roll day a position still open in the old month is exited by its month; the root means the new month', async () => {
+  const r = await liveRollRun({ ...ROLL, position: 'sim-Z6', messages: [rollExit(1, 'MNQ'), rollPartial(2, 'MNQ'), rollExit(3, 'MNQ:2026-12')] });
+  assert.match(r.texts[1], /\[exposure\][\s\S]*open MNQ position is in MNQ:2026-12/, 'MNQ is March now: a sell there would open a short');
+  assert.match(r.texts[2], /\[partial-close\]/);
+  assert.deepStrictEqual(r.sent, ['place_order sim-Z6'], JSON.stringify(r.texts));
+  const partial = await liveRollRun({ ...ROLL, position: 'sim-Z6', messages: [rollPartial(1, 'MNQ:2026-12')] });
+  assert.deepStrictEqual(partial.sent, ['partial_close_position sim-Z6'], partial.texts[1]);
+  // Flattening always works: close_position by the position's month.
+  const flat = await liveRollRun({ ...ROLL, position: 'sim-Z6', messages: [rollClose(1, 'MNQ:2026-12')] });
+  assert.deepStrictEqual(flat.sent, ['close_position sim-Z6']);
+  // Both months open on the roll day: each exit goes to its own month only.
+  const both = await liveRollRun({ ...ROLL, position: ['sim-Z6', 'sim-H7'], messages: [rollExit(1, 'MNQ:2026-12'), rollExit(2, 'MNQ')] });
+  assert.deepStrictEqual(both.sent, ['place_order sim-Z6', 'place_order sim-H7'], JSON.stringify(both.texts));
+  // The day's front month was looked up before the broker flagged the roll (December, today): it stays fixed for
+  // the trading day, and every name still means one month to the gate and the translator alike.
+  const fixed = await liveRollRun({ now: TEST_NOW, front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-H7', position: 'sim-H7', messages: [rollExit(1, 'MNQ'), rollExit(2, 'MNQ:2027-03')] });
+  assert.match(fixed.texts[1], /\[exposure\]/, 'MNQ is still December today: refused');
+  assert.deepStrictEqual(fixed.sent, ['place_order sim-H7']);
+  assert.strictEqual(fixed.cache.front.MNQ.id, 'sim-Z6', 'fixed for the trading day');
+});
+
+test('MCP gateway wiring, live: crossing 18:00 ET starts a new trading day, so the front month is looked up again before any exit is judged', async () => {
+  // Looked up at 17:59 ET (December); the broker marks March from the 18:00 ET session.
+  const before = { now: '2026-10-07T21:59:00.000Z', front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-H7', position: 'sim-H7' };
+  const pre = await liveRollRun({ ...before, messages: [rollExit(1, 'MNQ'), rollExit(2, 'MNQ:2027-03')] });
+  assert.match(pre.texts[1], /\[exposure\]/, 'still the 2026-10-07 trading day: MNQ is December');
+  assert.deepStrictEqual(pre.sent, ['place_order sim-H7']);
+  const post = await liveRollRun({ ...before, now: '2026-10-07T22:01:00.000Z', messages: [rollExit(1, 'MNQ:2026-12'), rollExit(2, 'MNQ')] });
+  assert.match(post.texts[1], /\[exposure\]/, '18:01 ET: December has no position');
+  assert.deepStrictEqual(post.sent, ['place_order sim-H7'], JSON.stringify(post.texts));
+  assert.deepStrictEqual([post.cache.front.MNQ.id, post.cache.front.MNQ.day], ['sim-H7', '2026-10-08']);
+  const partial = await liveRollRun({ ...before, now: '2026-10-07T22:01:00.000Z', messages: [rollPartial(1, 'MNQ:2027-03')] });
+  assert.deepStrictEqual(partial.sent, ['partial_close_position sim-H7'], partial.texts[1]);
+});
+
+test('MCP gateway wiring, live: a late, errored or lost broker reply on the first call after a roll never sends an exit to the wrong month, and close_position always goes', { timeout: 120000 }, async () => {
+  // The front-month search errors: the gate can't tell what MNQ means today, so the root and the empty month are
+  // refused; the position's own month still exits (A and B under a broker error).
+  const errored = await liveRollRun({ ...ROLL, position: 'sim-H7', extra: { FAKE_ERROR: 'search_contracts' },
+    messages: [rollExit(1, 'MNQ:2026-12'), rollExit(2, 'MNQ'), rollExit(3, 'MNQ:2027-03')] });
+  assert.match(errored.texts[1], /\[exposure\]/);
+  assert.match(errored.texts[2], /\[exposure\]/);
+  assert.deepStrictEqual(errored.sent, ['place_order sim-H7'], JSON.stringify(errored.texts));
+  const erroredPartial = await liveRollRun({ ...ROLL, position: 'sim-H7', extra: { FAKE_ERROR: 'search_contracts' }, messages: [rollPartial(1, 'MNQ:2027-03')] });
+  assert.deepStrictEqual(erroredPartial.sent, ['partial_close_position sim-H7'], erroredPartial.texts[1]);
+  // An old-month position under the same error: named by its month (never by yesterday's front month), so its exit
+  // by that month goes and the root, unknown today, is refused.
+  const erroredOld = await liveRollRun({ ...ROLL, position: 'sim-Z6', extra: { FAKE_ERROR: 'search_contracts' }, messages: [call(1, 'list_open_positions', { accountId: 1 }), rollExit(2, 'MNQ'), rollExit(3, 'MNQ:2026-12')] });
+  assert.match(erroredOld.texts[1], /"contractId": "MNQ:2026-12"/, 'the agent sees the month');
+  assert.match(erroredOld.texts[2], /\[exposure\]/);
+  assert.deepStrictEqual(erroredOld.sent, ['place_order sim-Z6'], JSON.stringify(erroredOld.texts));
+  // Late replies (the search and the account reads 1.5 s late): judged on the refreshed front month.
+  const late = await liveRollRun({ ...ROLL, position: 'sim-H7', extra: { FAKE_DELAY_MS: '1500', FAKE_ACCOUNT_DELAY_MS: '1500' }, messages: [rollExit(1, 'MNQ:2026-12'), rollPartial(2, 'MNQ:2027-03')] });
+  assert.match(late.texts[1], /\[exposure\]/);
+  assert.deepStrictEqual(late.sent, ['partial_close_position sim-H7']);
+  // The positions can't be read (an error reply): every gated exit fails closed; close_position still goes.
+  const noPositions = await liveRollRun({ ...ROLL, position: 'sim-H7', extra: { FAKE_ERROR: 'list_open_positions' },
+    messages: [rollExit(1, 'MNQ:2026-12'), rollPartial(2, 'MNQ:2027-03'), rollClose(3, 'MNQ:2027-03')] });
+  assert.match(noPositions.texts[1], /could not run/);
+  assert.match(noPositions.texts[2], /could not run/);
+  assert.deepStrictEqual(noPositions.sent, ['close_position sim-H7']);
+  // The positions reply is lost: the exit fails closed at the call timeout; close_position still goes.
+  const lost = await liveRollRun({ ...ROLL, position: 'sim-H7', extra: { FAKE_DROP: 'list_open_positions' }, messages: [rollExit(1, 'MNQ:2026-12'), rollClose(2, 'MNQ:2027-03')] });
+  assert.match(lost.texts[1], /could not run \(list_open_positions timed out\)/);
+  assert.deepStrictEqual(lost.sent, ['close_position sim-H7']);
+});
+
 test('MCP gateway: an entry for a regime-gated strategy (vwap_reclaim) fetches its bars: no regime refusal in a trend, a regime refusal in a range, and a refusal when the bars can\'t be read', async () => {
   const gated = { ...ORDER, rationale: 'setup:vwap_reclaim long, stop 21480, target 21540, risk $40' };
   const bars = fn => JSON.stringify({ bars: Array.from({ length: 160 }, (_, k) => {

@@ -27,8 +27,9 @@ const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 
 const POSITION_SIGN = { 1: 1, 2: -1 };
-// On a call the gateway names on a replayed day (mcp-gateway.js namedArgs): () => a naming function from one read
-// of the day's contract cache. NAMES: that function once applied (accountFacts), for the ledger.
+// On a call the gateway names (mcp-gateway.js canonicalArgs): () => a naming function from one read of the contract
+// cache, taken after the account reads (which may look the front month up). NAMES: that function once applied
+// (accountFacts), for the ledger.
 const RENAME = Symbol.for('fth.gate.rename');
 const NAMES = Symbol.for('fth.gate.names');
 // Equity index families (by their micro root): one direction-correlated bet.
@@ -445,16 +446,17 @@ async function accountFacts(args, caller, withTrades = true) {
     caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
     withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
   ]);
-  // A replayed day's call: the call itself (in place: the gateway judges and records this object) and the account,
-  // named from one read of the day's cache taken now, after the reads that may have looked the front month up.
+  // The call itself (in place: the gateway judges and records this object) and the account, named from one read
+  // of the contract cache taken now, after the reads that may have looked the front month up (a new day, a roll).
   const r = renamed(args, positions, orders);
-  if (r.names) Object.assign(args, { contractId: r.args.contractId, [NAMES]: r.names });
+  if (r.names) Object.assign(args, { ...(typeof args.contractId === 'string' ? { contractId: r.args.contractId } : {}), [NAMES]: r.names });
   return { positions: r.positions, orders: r.orders, trades };
 }
 
 /**
- * { args, positions, orders, names } named again from one read of the replayed day's contract cache when the call
- * carries RENAME (mcp-gateway.js namedArgs), else as given (names null).
+ * { args, positions, orders, names } named again from one read of the contract cache when the call carries RENAME
+ * (mcp-gateway.js canonicalArgs), else as given (names null). Throws when the names can't be trusted (the trading
+ * day changed during the check): the check fails closed.
  */
 function renamed(args, positions, orders = []) {
   const make = args && args[RENAME];

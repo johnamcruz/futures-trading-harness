@@ -109,7 +109,7 @@ test('a broker id the translator could not name still goes through, so it can be
   assert.deepStrictEqual(parseTicker('6EZ6', NOW), { root: '6E', month: '2026-12' });
 });
 
-test('a failed search keeps results translatable: yesterday\'s front month, else the month\'s own name', async () => {
+test('a failed search keeps results translatable by the month\'s own name, never by yesterday\'s front month (the root may mean another month today)', async () => {
   const { call } = fakeBroker();
   let down = false;
   const flaky = async (name, args) => {
@@ -127,7 +127,8 @@ test('a failed search keeps results translatable: yesterday\'s front month, else
   await later.toBroker('MNQ');
   down = true;
   const nextDay = createTranslator({ call: flaky, cacheFile: shared, now: () => new Date(NOW.getTime() + 2 * 86400000) });
-  assert.strictEqual(await nextDay.toStandard('b-101'), 'MNQ', 'yesterday\'s front month');
+  assert.strictEqual(await nextDay.toStandard('b-101'), 'MNQ:2026-12', 'yesterday\'s front month, by its month');
+  assert.strictEqual(await nextDay.toBroker('MNQ:2026-12'), 'b-101', 'which translates back without a search');
 });
 
 test('two translators on one cache file keep each other\'s ids and agree on the front month', async () => {
@@ -154,7 +155,7 @@ test('contract lists are learned from their own tickers, one pass, no lookup per
   const listed = await t.translateResult('list_available_contracts', CONTRACTS);
   assert.deepStrictEqual(listed.map(c => c.id), ['MNQ', 'MNQ:2027-03', 'NQ', 'b-301']);
   assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0);
-  assert.strictEqual(calls.filter(c => c[0] === 'search_contracts').length, 2, 'one search per root, for its front month');
+  assert.strictEqual(calls.filter(c => c[0] === 'search_contracts').length, 0, 'the contracts the list marks active are their roots\' front months: no search');
   await t.translateResult('list_open_positions', [{ contractId: 'b-301' }, { contractId: 'b-301' }]);
   assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0, 'a contract known not to be a ticker isn\'t looked up again');
 });
@@ -213,14 +214,22 @@ test('canonicalName: every name for a contract becomes its one standard name (th
     ids: { 'fake:MNQ:Z26': { root: 'MNQ', month: '2026-12' }, 'fake:MNQ:H27': { root: 'MNQ', month: '2027-03' } },
     front: { MNQ: { id: 'fake:MNQ:Z26', month: '2026-12', day: '2026-10-07' } },
   };
-  assert.strictEqual(canonicalName('MNQ', cache), 'MNQ');
-  assert.strictEqual(canonicalName('MNQ:2026-12', cache), 'MNQ', 'the front month by its month');
-  assert.strictEqual(canonicalName('fake:MNQ:Z26', cache), 'MNQ', 'the front month by the broker id');
-  assert.strictEqual(canonicalName('fake:MNQ:H27', cache), 'MNQ:2027-03');
-  assert.strictEqual(canonicalName('MNQ:2027-03', cache), 'MNQ:2027-03');
-  assert.strictEqual(canonicalName('ES:2026-12', cache), 'ES:2026-12', 'no front month known: as given');
-  assert.strictEqual(canonicalName('fake:XYZ', cache), 'fake:XYZ');
-  assert.strictEqual(canonicalName(undefined, cache), undefined);
+  const day = '2026-10-07';
+  assert.strictEqual(canonicalName('MNQ', cache, day), 'MNQ');
+  assert.strictEqual(canonicalName('MNQ:2026-12', cache, day), 'MNQ', 'the front month by its month');
+  assert.strictEqual(canonicalName('fake:MNQ:Z26', cache, day), 'MNQ', 'the front month by the broker id');
+  assert.strictEqual(canonicalName('fake:MNQ:H27', cache, day), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('MNQ:2027-03', cache, day), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('ES:2026-12', cache, day), 'ES:2026-12', 'no front month known: as given');
+  assert.strictEqual(canonicalName('fake:XYZ', cache, day), 'fake:XYZ');
+  assert.strictEqual(canonicalName(undefined, cache, day), undefined);
+  // The next trading day (or no day given), before its own lookup: the cached front month names nothing, so a month
+  // is never taken for whatever the root means after a roll.
+  for (const other of ['2026-10-08', undefined]) {
+    assert.strictEqual(canonicalName('MNQ:2026-12', cache, other), 'MNQ:2026-12');
+    assert.strictEqual(canonicalName('fake:MNQ:Z26', cache, other), 'MNQ:2026-12');
+    assert.strictEqual(canonicalName('MNQ', cache, other), 'MNQ', 'a root stays a root: it never matches a month');
+  }
 });
 
 test('tick specs: each contract the broker describes records its root\'s tickSize and tickValue in the local file', async () => {
@@ -380,7 +389,7 @@ test('replay day files: a day\'s file reads the broker ids its siblings recorded
   // The day's own entries win over a sibling's; the live file and other brokers' files are not day files' business.
   fs.writeFileSync(file('2026-10-08'), JSON.stringify({ ids: { 'b-101': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'b-102', month: '2027-03', day: '2026-10-08' } } }));
   assert.strictEqual(readCache(file('2026-10-08')).front.MNQ.id, 'b-102');
-  assert.strictEqual(canonicalName('b-102', readCache(file('2026-10-08'))), 'MNQ');
+  assert.strictEqual(canonicalName('b-102', readCache(file('2026-10-08')), '2026-10-08'), 'MNQ');
   assert.deepStrictEqual(Object.keys(readCache(path.join(home, 'contracts-fake.json')).ids), ['b-102'], 'the live file reads only its own');
   // A sibling's id of a month already over on the day (an expired contract) is not reused; this month's still is.
   fs.writeFileSync(file('2026-09-20'), JSON.stringify({ ids: { 'b-099': { root: 'MNQ', month: '2026-09' }, 'b-100': { root: 'MNQ', month: '2026-10' } } }));
@@ -418,4 +427,43 @@ test('replay day files: a day file reads only its own, the live file and the day
   const i = (Date.parse('2025-06-01T00:00:00Z') - base) / 86400000;
   assert.ok(ids[`b-${i - 30}`] && ids[`b-${i + 30}`] && ids.live, 'the days within 30 and the live file');
   assert.ok(!ids[`b-${i - 31}`] && !ids[`b-${i + 31}`], 'not the others');
+});
+
+test('the front month across a roll: refreshed from the broker\'s active contract when the one on file is another day\'s; fixed for the trading day, across processes; a month name always keeps its month', async () => {
+  const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8'));
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  // Yesterday the front month was December; today the broker marks March active.
+  fs.writeFileSync(cacheFile, JSON.stringify({ ids: { 'b-101': { root: 'MNQ', month: '2026-12' }, 'b-102': { root: 'MNQ', month: '2027-03' } }, front: { MNQ: { id: 'b-101', month: '2026-12', day: '2026-10-06' } } }));
+  const rolled = [{ ...CONTRACTS[0], activeContract: false }, { ...CONTRACTS[1], activeContract: true }];
+  let list = rolled;
+  const calls = [];
+  const call = async (name, args) => {
+    calls.push(name);
+    if (name === 'search_contracts') return { content: [{ type: 'text', text: JSON.stringify(list.filter(c => c.name.includes(args.searchText))) }] };
+    throw new Error(`unexpected ${name}`);
+  };
+  const t = createTranslator({ call, cacheFile, now: () => NOW });
+  assert.strictEqual(await t.toBroker('MNQ:2026-12'), 'b-101', 'a month name never goes to the front month');
+  assert.deepStrictEqual(calls, [], 'by its cached id: no lookup');
+  // An agent's own search answer marks March active: today's front month, no lookup of its own.
+  const listed = await t.translateResult('search_contracts', rolled);
+  assert.deepStrictEqual(listed.map(c => c.id), ['MNQ:2026-12', 'MNQ']);
+  assert.deepStrictEqual(calls, []);
+  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-102', month: '2027-03', day: '2026-10-07' });
+  assert.strictEqual(await t.toBroker('MNQ'), 'b-102');
+  // The broker's flag moves back later the same day: the day's front month stays (a name never changes meaning in a
+  // session), in this process and in another one that looks it up afresh.
+  list = CONTRACTS;
+  await t.translateResult('search_contracts', CONTRACTS);
+  assert.strictEqual(await t.toBroker('MNQ'), 'b-102');
+  const other = createTranslator({ call, cacheFile, now: () => NOW });
+  assert.strictEqual(await other.toBroker('MNQ'), 'b-102', 'adopted from the file: no lookup');
+  assert.deepStrictEqual(calls, []);
+  // A process that looked it up the same day before reading the file: the first one recorded wins for both.
+  const raced = path.join(tmpDir(), 'contracts-fake.json');
+  const late = createTranslator({ call, cacheFile: raced, now: () => NOW });
+  fs.writeFileSync(raced, JSON.stringify({ ids: { 'b-102': { root: 'MNQ', month: '2027-03' } }, front: { MNQ: { id: 'b-102', month: '2027-03', day: '2026-10-07' } } }));
+  await late.toBroker('MNQ:2026-12'); // a lookup by month (December active in this answer) never moves the day's front month
+  assert.strictEqual(await late.toBroker('MNQ'), 'b-102');
+  assert.strictEqual(readJson(raced).front.MNQ.id, 'b-102');
 });

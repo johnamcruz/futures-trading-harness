@@ -172,24 +172,37 @@ function lineSplitter(onLine) {
  * translator's cache: MNQ:2026-12 or the broker's own id for today's front
  * month become MNQ), so the gate and its ledger of recent orders compare
  * like with like. Only for checking: the call goes out as the client sent it.
- * Under a replay clock each replayed day has its own cache file
- * (broker/config.js contractsCacheFile), whose front month the translator may
- * look up only while the gateway reads the account: the call then carries
- * RENAME (account-gate.js), so after the account reads the call, the
- * positions, the orders and the gate's ledger are named again from one read
- * of that file, the front month the positions were named with.
+ * The translator may look the front month up while the gateway reads the
+ * account (the first call of a trading day, the first after a roll, under a
+ * replay clock each replayed day's own cache file: broker/config.js
+ * contractsCacheFile), so the call carries RENAME (account-gate.js): after
+ * the account reads, the call, the positions, the orders and the gate's
+ * ledger are named again from one read of the file, the front month the
+ * positions were named with. Only the front month recorded for the trading
+ * day of the check names a month by its root, and a check whose trading day
+ * changes before that read fails closed (the root may mean another month).
  */
 function canonicalArgs(args, env = process.env) {
-  if (!args || typeof args.contractId !== 'string') return args;
+  if (!args || typeof args !== 'object') return args;
   try {
     const { activeBroker, contractsCacheFile } = require('../broker/config');
     const { readCache, canonicalName } = require('../broker/translator');
-    const file = contractsCacheFile(activeBroker(env).name, env);
-    const out = { ...args, contractId: canonicalName(args.contractId, readCache(file)) };
-    if (!require('./harness-now').resolveClock(env).replay) return out;
+    const { tradingDayKey } = require('./clock');
     const { RENAME } = require('./account-gate');
-    // One read of the day's cache, when called: how every contract is named from it.
-    return { ...out, [RENAME]: () => { const cache = readCache(file); return id => (typeof id === 'string' ? canonicalName(id, cache) : id); } };
+    const clock = require('./harness-now').resolveClock(env);
+    const file = contractsCacheFile(activeBroker(env).name, env);
+    const day = tradingDayKey(clock.now());
+    // One read of the cache, when called: how every contract is named from it.
+    const rename = () => {
+      const at = tradingDayKey(clock.now());
+      if (at !== day) throw new Error(`the trading day changed while the call was checked (${day} to ${at}); send it again`);
+      const cache = readCache(file);
+      return id => (typeof id === 'string' ? canonicalName(id, cache, day) : id);
+    };
+    // A call without a contract (cancel_order, modify_order) still names the positions and orders it is checked
+    // against from that one read: a lookup that failed for one list and not the other never splits a contract in two.
+    const named = typeof args.contractId === 'string' ? { contractId: canonicalName(args.contractId, readCache(file), day) } : {};
+    return { ...args, ...named, [RENAME]: rename };
   } catch (_err) {
     return args; // no broker config: the names are compared as given
   }
@@ -208,7 +221,7 @@ function canonicalArgs(args, env = process.env) {
 function closeLedgerEntry(tool, args, positions, now) {
   if (!Array.isArray(positions)) return null;
   const { contractNet, netPosition, renamed } = require('./account-gate');
-  ({ args, positions } = renamed(args, positions)); // a replayed day's call: named again with the positions
+  ({ args, positions } = renamed(args, positions)); // named again with the positions (canonicalArgs)
   const { contractRoot } = require('./journal');
   const net = contractNet(positions, args.contractId);
   const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);

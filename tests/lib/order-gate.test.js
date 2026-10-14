@@ -1954,3 +1954,32 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
   assert.deepStrictEqual(run(entryOrder({ rationale: '[protect] stop for the long' })).violations, []);
 });
+
+test('account gate across a contract roll: an [exit], [protect] or partial close matches the position\'s contract exactly, named from one read of today\'s front month; never by a stale root alias', () => {
+  const { evaluateAccount, evaluateAccountChange } = require('../../scripts/lib/trading/account-gate');
+  const { canonicalName } = require('../../scripts/lib/broker/translator');
+  const ids = { 'b-Z6': { root: 'MNQ', month: '2026-12' }, 'b-H7': { root: 'MNQ', month: '2027-03' } };
+  const yesterday = { ids, front: { MNQ: { id: 'b-Z6', month: '2026-12', day: '2026-10-06' } } };
+  const today = { ids, front: { MNQ: { id: 'b-H7', month: '2027-03', day: '2026-10-07' } } };
+  const day = '2026-10-07';
+  const name = (cache, id) => canonicalName(id, cache, day);
+  const exit = (contractId, extra = {}) => ({ accountId: 1, contractId, side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten', ...extra });
+  const facts = (cache, ...held) => ({ positions: held.map(id => ({ contractId: name(cache, id), type: 1, size: 1 })), orders: [], trades: [] });
+  const account = (cache, sent, ...held) => evaluateAccount({ input: exit(name(cache, sent)), ...facts(cache, ...held), config, now: NOW }).map(v => v.check);
+  const partial = (cache, sent, ...held) => evaluateAccountChange('partial_close_position', { input: { accountId: 1, contractId: name(cache, sent), size: 1 }, ...facts(cache, ...held), config, now: NOW }).map(v => v.check);
+  // A: long March; December named, with yesterday's or today's front month: refused (a December sell would open a short).
+  for (const cache of [yesterday, today]) assert.deepStrictEqual(account(cache, 'MNQ:2026-12', 'b-H7'), ['exposure']);
+  // B: the March long's partial close by its month: allowed, whichever front month is on file.
+  for (const cache of [yesterday, today]) assert.deepStrictEqual(partial(cache, 'MNQ:2027-03', 'b-H7'), []);
+  // The root is today's front month only: after the roll MNQ is March.
+  assert.deepStrictEqual(account(today, 'MNQ', 'b-H7'), []);
+  assert.deepStrictEqual(account(today, 'MNQ', 'b-Z6'), ['exposure'], 'an old-month long is not exited by the root');
+  assert.deepStrictEqual(account(yesterday, 'MNQ', 'b-Z6'), ['exposure'], 'yesterday\'s front month is not the root today');
+  // An old-month position still open after the roll: exited by its month; a protective stop there goes too.
+  assert.deepStrictEqual(account(today, 'MNQ:2026-12', 'b-Z6'), []);
+  assert.deepStrictEqual(partial(today, 'MNQ:2026-12', 'b-Z6'), []);
+  const stop = evaluateAccount({ input: exit(name(today, 'MNQ:2026-12'), { type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the December long' }), ...facts(today, 'b-Z6'), config, now: NOW });
+  assert.deepStrictEqual(stop, []);
+  // A buy [exit] on a month with no short would open a long: refused.
+  assert.deepStrictEqual(evaluateAccount({ input: exit(name(today, 'MNQ:2026-12'), { side: 'buy' }), ...facts(today, 'b-H7'), config, now: NOW }).map(v => v.check), ['exposure']);
+});
