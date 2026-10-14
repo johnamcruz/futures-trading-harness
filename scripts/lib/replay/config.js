@@ -238,7 +238,7 @@ function configHash(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
   // The role-skills mode as the runner reads it (unset or blank is index, the default): one mode, one hash.
-  if (gate.FTH_ROLE_SKILLS !== undefined && String(gate.FTH_ROLE_SKILLS).trim() === 'index') delete gate.FTH_ROLE_SKILLS;
+  if (gate.FTH_ROLE_SKILLS !== undefined && ['', 'index'].includes(String(gate.FTH_ROLE_SKILLS).trim())) delete gate.FTH_ROLE_SKILLS;
   else if (gate.FTH_ROLE_SKILLS !== undefined) gate.FTH_ROLE_SKILLS = String(gate.FTH_ROLE_SKILLS).trim();
   const b = activeBroker(env);
   // The variables the driver sets are the run's own; maxDailyLoss is only when it sets it (a combine replay):
