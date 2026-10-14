@@ -73,7 +73,8 @@ doesn't hold.
      `priorRth` (the last complete RTH day, the day's reference), `session`
      (this Globex session, developing), `rolling` (the last `vpLookback`
      bars). Each: `poc`, `vah`, `val`, `price` (above, inside, or below
-     value), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low
+     value, from the exact levels: a shown VAH a tick under price can still
+     read inside), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low
      volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of
      them (`hvn`, `lvn`). On the contract's tick (as in the briefing) for a
      harness bars file or with `symbol`; otherwise to two decimals, between

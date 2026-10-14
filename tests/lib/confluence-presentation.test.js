@@ -156,6 +156,28 @@ test('market_snapshot puts the profile on the tick of the file\'s root or the sy
   assert.ok(day.line.includes(`value area ${pp.val}-${pp.vah} (POC ${pp.poc})`), day.line);
 });
 
+test('the runner\'s prompt day line shows the prior value area and POC on the tick, as the briefing does', () => {
+  const { dayLine } = require('../../scripts/lib/runner-wiring');
+  // In RTH (the day so far) and overnight (against the prior day): the fixture's bar 1300 (13:15 ET) and 1401 (19:18 ET).
+  for (const n of [1300, 1401]) {
+    const bars = BARS.slice(0, n);
+    const line = dayLine({ symbol: 'MNQ', tickSize: 0.25 }, bars);
+    const pp = B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3 }).sections.day.data.priorProfile;
+    assert.ok(line.includes(`value area ${pp.val}-${pp.vah} (POC ${pp.poc})`), `bar ${n}: ${line}`);
+    const m = /value area ([\d.]+)-([\d.]+) \(POC ([\d.]+)\)/.exec(line);
+    for (const x of m.slice(1).map(Number)) assert.ok(onGrid(x, 0.25), `bar ${n}: ${x}`);
+  }
+  // A level within a hair of half a tick (the M2K fixture's prior VAL, 2257.95 to the cent): the line shows the
+  // briefing's tick (levelOnTick), not the raw value's nearest tick (2258), overnight (bar 862) and in RTH (bar 1196).
+  const rty = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'RTY-3m.csv'));
+  for (const n of [862, 1196]) {
+    const bars = rty.slice(0, n);
+    const pp = B.buildBriefing({ symbol: 'M2K', bars, minutes: 3 }).sections.day.data.priorProfile;
+    assert.strictEqual(pp.val, 2257.9);
+    assert.match(dayLine({ symbol: 'M2K', tickSize: 0.1 }, bars), /value area 2257\.9-2269\.3 \(POC 2266\.8\)/, `bar ${n}`);
+  }
+});
+
 test('levelOnTick: a computed level to the cent, then on the tick (one rule for every place a level is shown)', () => {
   const { levelOnTick } = require('../../scripts/lib/trading/contracts');
   assert.strictEqual(levelOnTick(27246.5375, 0.25), 27246.5);
@@ -164,6 +186,12 @@ test('levelOnTick: a computed level to the cent, then on the tick (one rule for 
     assert.strictEqual(levelOnTick(x, 0.25), onTick(Math.round(x * 100) / 100, 0.25));
   }
   assert.strictEqual(levelOnTick(null, 0.25), null);
+  // A tick finer than a cent: rounded first at a tenth of the tick's last decimal, so a half-cent tick shows.
+  assert.strictEqual(levelOnTick(31.2551, 0.005), 31.255);
+  assert.strictEqual(levelOnTick(31.2574, 0.005), 31.255);
+  assert.strictEqual(levelOnTick(31.2576, 0.005), 31.26);
+  assert.strictEqual(levelOnTick(2257.94, 0.1), 2257.9);
+  assert.strictEqual(levelOnTick(12.34, null), 12.34);
   // The prompt's day line (describeDay with a level) and the briefing show one price for a level.
   const { describeDay } = require('../../scripts/lib/trading/day-context');
   const d = { open: 27410.75, gap: -23.25, prior: { low: 27130.25, high: 27462.5, close: 27434, val: 27246.5375, poc: 27414.32375, vah: 27455.855 } };

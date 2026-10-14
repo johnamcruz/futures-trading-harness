@@ -82,7 +82,8 @@ never paste a long `get_bars` reply into a file.
    `Implication` line weighs.
 6. Volume profile (computed; never estimate it by hand): the prior RTH
    day's POC, VAH and VAL (the briefing's `day` `priorProfile`), where price
-   is (`m3` `location`: above, inside, or below value), the developing
+   is (`m3` `location`: above, inside, or below value, from the exact
+   levels, so a shown VAH a tick under price can still read inside), the developing
    session's (`m3` `sessionProfile`), and the nearest high and low volume
    nodes above and below (`m3` `sessionProfile` and `priorProfileNodes`:
    `hvnAbove`, `lvnBelow`, ...). Round levels to the tick. Say it is

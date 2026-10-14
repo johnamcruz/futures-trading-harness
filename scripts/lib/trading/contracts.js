@@ -47,12 +47,16 @@ function onTick(x, tick) {
 }
 
 /**
- * A computed level (a volume profile's POC, value area or node) as the model is shown it: to the cent first, as the
- * snapshot computes it and every distance and R is taken from it, then onto the tick. One rule wherever a level is
- * shown (the briefing, market_snapshot, the prompt's day line), so a level never shows two prices.
+ * A computed level (a volume profile's POC, value area or node) as the model is shown it: rounded first at a
+ * precision finer than the tick (the cent, as the snapshot computes levels, for a tick of a cent or more; a tenth of
+ * the tick's last decimal for a finer tick, so 31.2551 on a 0.005 tick is 31.255), then onto the tick. One rule
+ * wherever a level is shown (the briefing, market_snapshot, the prompt's day line), so a level never shows two prices.
  */
 function levelOnTick(x, tick) {
-  return Number.isFinite(x) ? onTick(Math.round(x * 100) / 100, tick) : null;
+  if (!Number.isFinite(x)) return null;
+  if (!(tick > 0)) return x;
+  const places = tick >= 0.01 ? 2 : (String(tick).split('.')[1] || '').length + 1;
+  return onTick(Math.round(x * 10 ** places) / 10 ** places, tick);
 }
 
 /**

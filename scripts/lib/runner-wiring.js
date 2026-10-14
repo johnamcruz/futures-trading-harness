@@ -306,6 +306,18 @@ function reportCacheFor(home, cfg, frames = []) {
   };
 }
 
+/**
+ * The day so far (trading/day-context.js), one line for the prompt, prices on the contract's tick (sym.tickSize, the
+ * broker's; 0.25 without one); in RTH the day so far, outside it the overnight session against the prior day.
+ */
+function dayLine(sym, bars) {
+  const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
+  const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
+  // The prior value area and POC as the briefing and market_snapshot show them (contracts.js levelOnTick).
+  const level = x => levelOnTick(x, tick);
+  return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round, level }) || describeOvernight(bars, { symbol: sym.symbol, round, level });
+}
+
 /** A replay pass (FTH_REPLAY_NOW: one step per process) holds no cycle for a late lane; the live loop keeps the default. */
 const passHold = env => (env.FTH_REPLAY_NOW ? { coalesceHoldMs: 0 } : {});
 
@@ -347,15 +359,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
       backtest: readRecord(home, name), live: liveRecord(entries || journal(), name, regime), regime, at,
       file: (strategies().find(s => s.name === name) || {}).file || null,
     }),
-    // The day so far (trading/day-context.js), one line for the prompt; levels on the contract's tick.
-    dayContext: (sym, bars) => {
-      const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
-      const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
-      // The prior value area and POC as the briefing and market_snapshot show them (contracts.js levelOnTick).
-      const level = x => levelOnTick(x, tick);
-      // In RTH the day so far; outside it, the overnight session against the prior day.
-      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round, level }) || describeOvernight(bars, { symbol: sym.symbol, round, level });
-    },
+    dayContext: dayLine,
     // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
     // the last reviewed trades' record on their own line.
     lessons: ({ entries } = {}) => digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false }),
@@ -395,4 +399,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

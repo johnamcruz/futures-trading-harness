@@ -269,13 +269,15 @@ function volumeProfile(bars, p, atrNow, level) {
 }
 
 /**
- * The snapshot of `input` (bars, or { bars, tickSize }): with the contract's tickSize, the volume profile's levels
- * (row centers, off the grid) are given on its tick; without it, to two decimals.
+ * The snapshot of `input` (bars, or { bars, tickSize, exactLevels }): with the contract's tickSize, the volume
+ * profile's levels (row centers, off the grid) are given on its tick (contracts.js levelOnTick); without it, to two
+ * decimals; with exactLevels, unrounded (for a caller that rounds them itself, as the briefing does).
  */
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   const tickSize = input && !Array.isArray(input) && input.tickSize > 0 ? input.tickSize : null;
-  const level = x => (x === null || x === undefined ? null : tickSize ? levelOnTick(x, tickSize) : round(x, 2));
+  const exact = Boolean(input && !Array.isArray(input) && input.exactLevels);
+  const level = x => (x === null || x === undefined ? null : exact ? x : tickSize ? levelOnTick(x, tickSize) : round(x, 2));
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
   const series = signalSeries(bars, overrides);
   const { p, closes, emaFast, emaSlow, adx, atrStop, st, kc, sw, or } = series;

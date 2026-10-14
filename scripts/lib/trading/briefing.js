@@ -155,6 +155,8 @@ const atClose = (lb, mins) => {
   const shift = x => (x ? { ...x, knownAt: new Date(Date.parse(x.at) + mins * 60000).toISOString() } : null);
   return { last: shift(lb.last), previous: shift(lb.previous) };
 };
+/** A profile summary's levels to the cent (as the snapshot gives them without a tick): room, R and labels use these. */
+const cents = p => (p ? { ...p, ...Object.fromEntries(['poc', 'vah', 'val', 'low', 'high', 'hvnAbove', 'hvnBelow', 'lvnAbove', 'lvnBelow'].map(k => [k, round2(p[k])])), hvn: (p.hvn || []).map(round2), lvn: (p.lvn || []).map(round2) } : {});
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
@@ -171,8 +173,12 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   const win = sessionWindow(closedAt, clock);
   const f15 = frameOf(read15, 15);
   const f60 = frameOf(readH1, 60);
-  const prior = vp.priorRth || {};
-  const sess = vp.session || {};
+  // The profiles' exact levels (shown on the tick by `level`), and the same to the cent: what room, R and the value
+  // labels are computed from, as they always were.
+  const priorX = vp.priorRth || {};
+  const sessX = vp.session || {};
+  const prior = cents(priorX);
+  const sess = cents(sessX);
   const liq = snap.liquidity || {};
   const st = snap.structure || {};
   // The VWAP that applies: the RTH VWAP from 09:30 to 16:00 ET, else the session's (18:00 ET), as the strategy filters use.
@@ -222,8 +228,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low], ['prior RTH close', (lv.priorRth || {}).close],
     ['overnight high', (lv.overnight || {}).high], ['overnight low', (lv.overnight || {}).low],
     // The profile's levels (row centers, off the tick) carry their shown price, on the tick.
-    ['prior VAH', prior.vah, level(prior.vah)], ['prior VAL', prior.val, level(prior.val)], ['prior POC', prior.poc, level(prior.poc)],
-    ['session VAH', sess.vah, level(sess.vah)], ['session VAL', sess.val, level(sess.val)], ['session POC', sess.poc, level(sess.poc)],
+    ['prior VAH', prior.vah, level(priorX.vah)], ['prior VAL', prior.val, level(priorX.val)], ['prior POC', prior.poc, level(priorX.poc)],
+    ['session VAH', sess.vah, level(sessX.vah)], ['session VAL', sess.val, level(sessX.val)], ['session POC', sess.poc, level(sessX.poc)],
     ['last 3m swing high', st.lastSwingHigh], ['last 3m swing low', st.lastSwingLow],
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
@@ -280,10 +286,11 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // Today so far and the developing levels: they move bar by bar.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
-        sessionProfile: sess.poc ? { poc: level(sess.poc), vah: level(sess.vah), val: level(sess.val), hvnAbove: level(sess.hvnAbove), hvnBelow: level(sess.hvnBelow), lvnAbove: level(sess.lvnAbove), lvnBelow: level(sess.lvnBelow) } : null,
-        priorProfileNodes: prior.poc ? { hvnAbove: level(prior.hvnAbove), hvnBelow: level(prior.hvnBelow), lvnAbove: level(prior.lvnAbove), lvnBelow: level(prior.lvnBelow) } : null,
+        sessionProfile: sess.poc ? { poc: level(sessX.poc), vah: level(sessX.vah), val: level(sessX.val), hvnAbove: level(sessX.hvnAbove), hvnBelow: level(sessX.hvnBelow), lvnAbove: level(sessX.lvnAbove), lvnBelow: level(sessX.lvnBelow) } : null,
+        priorProfileNodes: prior.poc ? { hvnAbove: level(priorX.hvnAbove), hvnBelow: level(priorX.hvnBelow), lvnAbove: level(priorX.lvnAbove), lvnBelow: level(priorX.lvnBelow) } : null,
         // Where price is against the levels.
         location: {
+          // From the levels to the cent, not the shown ticks: a shown VAH a tick under price can read inside.
           priorValue: where(price, prior.val, prior.vah), sessionValue: sess.poc ? where(price, sess.val, sess.vah) : null,
           initialBalance: where(price, day.ibLow, day.ibHigh), priorRthRange: lv.priorRth ? where(price, lv.priorRth.low, lv.priorRth.high) : null,
         },
@@ -319,7 +326,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
       validUntil: nextRthRoll(new Date(closedAt.getTime() - step), minutes),
       data: {
         priorRth: lv.priorRth || null,
-        priorProfile: prior.poc ? { poc: level(prior.poc), vah: level(prior.vah), val: level(prior.val), hvn: (prior.hvn || []).map(level), lvn: (prior.lvn || []).map(level) } : null,
+        priorProfile: prior.poc ? { poc: level(priorX.poc), vah: level(priorX.vah), val: level(priorX.val), hvn: (priorX.hvn || []).map(x => level(x)), lvn: (priorX.lvn || []).map(x => level(x)) } : null,
       },
     },
   };
@@ -408,7 +415,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   // The contract's tick (contracts.js): the volume profile's levels are shown on it. The snapshot stays unrounded
   // (the room, R and every decision input read it); computeSections rounds only what it shows.
   const grid = tickOf(symbol);
-  const snap = snapshot({ bars });
+  const snap = snapshot({ bars, exactLevels: true });
   const read = mtfRead(bars);
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
