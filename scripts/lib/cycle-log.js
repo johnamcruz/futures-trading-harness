@@ -176,17 +176,26 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   const factCheck = cycleFactChecks({ home, output, context, now: cycleAt });
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);
-  // A time run again (a replayed decision time retried) keeps the earlier record: the next free name.
   let file = path.join(dir, `${stamp}-${action}.json`);
-  for (let n = 2; fs.existsSync(file); n += 1) file = path.join(dir, `${stamp}-${action}-${n}.json`);
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({
+    fs.mkdirSync(dir, { recursive: true });
+    const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck,
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
-    }, null, 2));
+    }, null, 2);
+    // A time run again (a replayed decision time retried) keeps the earlier record: the next free name, taken
+    // atomically (exclusive create), so two writers never share one.
+    for (let n = 2; ; n += 1) {
+      try {
+        fs.writeFileSync(file, body, { flag: 'wx' });
+        break;
+      } catch (err) {
+        if (err.code !== 'EEXIST' || n > 1000) throw err;
+        file = path.join(dir, `${stamp}-${action}-${n}.json`);
+      }
+    }
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,

@@ -128,8 +128,13 @@ test('writeCycleLog: a replayed cycle is filed and judged at the replay clock\'s
   const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepStrictEqual([rec.at, rec.cycleAt], [wall.toISOString(), '2026-04-28T04:12:02.000Z']);
   assert.strictEqual(path.basename(write(env).file), '041202-trade-2.json', 'the earlier record is kept');
+  // A name another writer took (created exclusively, never overwritten): the next free one.
+  fs.writeFileSync(path.join(path.dirname(file), '041202-trade-3.json'), 'theirs');
+  assert.strictEqual(path.basename(write(env).file), '041202-trade-4.json');
+  assert.strictEqual(fs.readFileSync(path.join(path.dirname(file), '041202-trade-3.json'), 'utf8'), 'theirs');
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).cycleAt, '2026-04-28T04:12:02.000Z', 'the first record intact');
   const lines = fs.readFileSync(path.join(home, 'logs', 'cycles-2026-04-28.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepStrictEqual(lines.map(l => [l.at, l.cycleAt]), [[wall.toISOString(), '2026-04-28T04:12:02.000Z'], [wall.toISOString(), '2026-04-28T04:12:02.000Z']]);
+  assert.deepStrictEqual(lines.map(l => [l.at, l.cycleAt]), Array(3).fill([wall.toISOString(), '2026-04-28T04:12:02.000Z']));
   // A live broker: the replay clock is refused (the gate refuses entries), the record keeps the wall clock.
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'lv', brokers: { lv: { command: ['node', path.join(home, 'live-server.js')] } } }));
   assert.strictEqual(cycleClock(env, wall).cycleAt, wall);
