@@ -5,8 +5,11 @@
  * only when the model calls its skill tool, and its hooks get the session's
  * transcript (transcript_path), so the order gate can check that the model
  * read how to trade before it trades: trade-session (the cycle),
- * multi-timeframe-analysis (the trend rule), and strategy-library (the
- * strategy it names). Two transcript shapes are read:
+ * multi-timeframe-analysis (the trend rule), strategy-library (applying the
+ * strategy it names, and the priority order), strategy-scan (reading the scan)
+ * and strategy-gate-checks (what the gate checks of a strategy entry): the last
+ * three were one skill, strategy-library, before it was split, so an entry
+ * needs what it needed before. Two transcript shapes are read:
  *
  *   - message.content[] items {type:'tool_use', name:'Skill', input:{skill}}
  *     (Claude Code), and slash commands of skills: the call counts.
@@ -38,7 +41,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'];
+const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
 
 /*
  * Situational skills (index mode only, FTH_ROLE_SKILLS=index: role-skills.js): when the cycle's bar briefing shows

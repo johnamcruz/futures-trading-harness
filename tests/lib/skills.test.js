@@ -100,7 +100,8 @@ test('skills: every flag the docs give a script is one it (or its library) reads
 const AUTONOMOUS = [
   'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'skills/premarket/SKILL.md',
   'skills/end-of-day/SKILL.md', 'skills/market-snapshot/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md',
-  'skills/strategy-library/SKILL.md', 'skills/trade-review/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md',
+  'skills/strategy-library/SKILL.md', 'skills/strategy-scan/SKILL.md', 'skills/strategy-gate-checks/SKILL.md', 'skills/harness-root/SKILL.md',
+  'skills/trade-review/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md',
   'skills/session-timing/SKILL.md', 'skills/position-sizing/SKILL.md',
   'agents/market-structure-analyst.md', 'agents/trend-momentum-analyst.md', 'agents/volume-liquidity-analyst.md',
   'agents/news-calendar-analyst.md', 'agents/risk-manager.md', 'agents/trade-executor.md', 'agents/trade-reviewer.md',

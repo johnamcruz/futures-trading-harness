@@ -159,12 +159,12 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
   const full = prompts(validateConfig({}), now).trade(items);
-  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, and strategy-library before deciding/);
+  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks \(the order gate refuses an entry without them\) before deciding/);
   // Codex has no skill tool (it carries the skills in AGENTS.md): it reads them, and its gate can't see them loaded.
   const cx = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
-  assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
-  assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
-  assert.match(full, /strategy-library before deciding \(the order gate refuses an entry without them\)/);
+  assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding, then run/);
+  assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding, then run/);
+  assert.match(full, /strategy-gate-checks \(the order gate refuses an entry without them\) before deciding, then run/);
   assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   // No entries possible: no roster.
@@ -645,8 +645,9 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   });
   // 4700: 4500 plus the required last-line instruction (RESULT_LINE, ~220 characters, with its plain-text rule).
   // 4900: the full cycle's roster (the roles the gate requires) is decision context too.
+  // 4950: the load sentence names the two skills strategy-library was split into (an entry needs them loaded).
   if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
-  assert.ok(p.length < 4900, `the prompt grew to ${p.length} characters`);
+  assert.ok(p.length < 4950, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /no-trade ×\d @|no-trade ×\d:/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
@@ -1013,4 +1014,18 @@ test('the result line\'s outcomes: the prompt and the autonomous-trading skill l
   assert.ok(listed, 'the skill lists the outcomes');
   assert.deepStrictEqual(listed[1].split('|').map(w => w.trim()), CYCLE_OUTCOMES);
   assert.ok(prompts(validateConfig({ harness: 'custom', command: ['a', '{prompt}'], symbols: ['MNQ'] }), new Date('2026-10-07T14:00:00Z'), '/r').premarket('MNQ').includes(RESULT_TEMPLATE));
+});
+
+test('loadList: the gate\'s skills, its parenthetical when the harness is gated, then the skills it does not require', () => {
+  const { loadList } = require('../../scripts/lib/autotrader');
+  const req = ['a', 'b', 'c'];
+  assert.strictEqual(loadList(true, req, []), 'a, b, and c (the order gate refuses an entry without them)');
+  assert.strictEqual(loadList(false, req, []), 'a, b, and c');
+  assert.strictEqual(loadList(true, req, ['x']), 'a, b, and c (the order gate refuses an entry without them); also load x');
+  assert.strictEqual(loadList(false, req, ['x']), 'a, b, and c; also load x');
+  assert.strictEqual(loadList(true, req, ['x', 'y']), 'a, b, and c (the order gate refuses an entry without them); also load x and y');
+  assert.strictEqual(loadList(false, req, ['x', 'y']), 'a, b, and c; also load x and y');
+  // The default is the gate's own list (skills-loaded.js REQUIRED_FOR_ENTRY) and nothing more yet.
+  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  assert.strictEqual(loadList(false), `${REQUIRED_FOR_ENTRY.slice(0, -1).join(', ')}, and ${REQUIRED_FOR_ENTRY[REQUIRED_FOR_ENTRY.length - 1]}`);
 });

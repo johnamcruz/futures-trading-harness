@@ -96,7 +96,7 @@ test('checkSkillsLoaded reads a parts-format chat file: loaded passes, a failed 
   fs.mkdirSync(path.dirname(chat), { recursive: true });
   fs.writeFileSync(chat, `${loadAll().join('\n')}\n`);
   assert.strictEqual(checkSkillsLoaded(chat), null);
-  fs.writeFileSync(chat, [call('a', 'trade-session'), loaded('a'), call('b', 'multi-timeframe-analysis'), loaded('b'), call('c', 'strategy-library'), failed('c')].join('\n'));
+  fs.writeFileSync(chat, [call('a', 'trade-session'), loaded('a'), call('b', 'multi-timeframe-analysis'), loaded('b'), call('d', 'strategy-scan'), loaded('d'), call('e', 'strategy-gate-checks'), loaded('e'), call('c', 'strategy-library'), failed('c')].join('\n'));
   assert.match(checkSkillsLoaded(chat), /not loaded in this session: strategy-library\. Load each with the skill tool/);
 });
 
