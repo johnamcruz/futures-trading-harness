@@ -85,9 +85,11 @@ test('backticked skill and agent references point at files that exist', () => {
     }
   }
   // Skill references in prose too: a name, backticked or not, followed by "skill", "skill's" or "step N" must be a skill,
-  // and "(<skill> skill, <Section>)" must name a heading of that skill (a split skill leaves no pointer to a gone section).
+  // and a section it names ("<skill> skill, <Section>", "<skill> skill's <Section> table", "(<skill>, <Section>)") must
+  // be one of that skill's headings exactly (a split skill leaves no pointer to a gone section). Docs and the README too.
   const misses = text => skillRefMisses(text, new Set(skills), s => read(`skills/${s}/SKILL.md`));
-  for (const file of [...files, ...list('rules/trading').map(r => `rules/trading/${r}`)]) {
+  const docs = fs.readdirSync(path.join(ROOT, 'docs'), { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => `docs/${f}`);
+  for (const file of [...files, ...list('rules/trading').map(r => `rules/trading/${r}`), ...docs, 'README.md']) {
     assert.deepStrictEqual(misses(read(file)), [], file);
   }
   // The check catches what it is for (it would fail without it).
@@ -95,23 +97,42 @@ test('backticked skill and agent references point at files that exist', () => {
   assert.deepStrictEqual(misses('(the `no-such-thing` skill)'), ['no-such-thing']);
   assert.deepStrictEqual(misses('as in no-such-flow step 3'), ['no-such-flow']);
   assert.deepStrictEqual(misses('the fill (broker-mcp skill, Order mechanics).'), ['broker-mcp, Order mechanics']);
+  assert.deepStrictEqual(misses('see the broker-mcp skill, Errors. Then'), ['broker-mcp, Errors']);
+  assert.deepStrictEqual(misses('the broker-mcp skill\'s Errors table'), ['broker-mcp, Errors']);
+  assert.deepStrictEqual(misses('the `broker-mcp` skill\'s Failures and limits section'), ['broker-mcp, Failures and limits']);
+  assert.deepStrictEqual(misses('(broker-mcp, Errors)'), ['broker-mcp, Errors']);
+  assert.deepStrictEqual(misses('(broker-mcp skill, Session)'), ['broker-mcp, Session'], 'a prefix of a heading is not a heading');
+  assert.deepStrictEqual(misses('(strategy-library skill, "The priority")'), ['strategy-library, The priority']);
   assert.deepStrictEqual(misses('(broker-mcp skill, Session loop) and the trade-session skill\'s step 6, trade-session step 6'), []);
+  assert.deepStrictEqual(misses('(the strategy-library skill, "The priority order"), (strategy-library, "The priority order"), the `broker-mcp` skill\'s Tools table'), []);
 });
 
 /**
  * Skill references in prose that point nowhere: "<name> skill", "<name> skill's", "<name> step N" (the name backticked
- * or not) where <name> isn't a skill, and "<name> skill, <Section>)" where <Section> isn't one of its headings.
+ * or not) where <name> isn't a skill, and a section of a skill ("<name> skill, <Section>", "<name> skill's <Section>
+ * table|section|list|row", "(<name>, <Section>)"; the section capitalised or quoted) that isn't one of its headings.
+ * A heading matches exactly, or by its title before ": " ("The priority order: the rule for every setup").
  */
 function skillRefMisses(text, skillSet, readSkill) {
   const flat = text.replace(/\s+/g, ' ');
   const out = [];
-  for (const m of flat.matchAll(/(?<![\w/-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`?(?= skill\b| skill's\b| step \d)/g)) {
+  const NAME = '(?<![\\w/-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`?';
+  for (const m of flat.matchAll(new RegExp(`${NAME}(?= skill\\b| skill's\\b| step \\d)`, 'g'))) {
     if (!skillSet.has(m[1])) out.push(m[1]);
   }
-  for (const m of flat.matchAll(/(?<![\w/-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`? skill, ([A-Z][^).,"]*)\)/g)) {
-    if (!skillSet.has(m[1])) continue;
-    const headings = readSkill(m[1]).split('\n').filter(l => /^#{2,4} /.test(l)).map(l => l.replace(/^#+ /, '').trim());
-    if (!headings.some(h => h.startsWith(m[2].trim()))) out.push(`${m[1]}, ${m[2].trim()}`);
+  const SECTION = '(?:"([^"]+)"|([A-Z][^).,;:"]*?))';
+  const forms = [
+    new RegExp(`${NAME} skill, ${SECTION}(?=[).,;:]|$)`, 'g'),
+    new RegExp(`${NAME} skill's ${SECTION}(?= (?:table|section|list|row)\\b|[).,;:]|$)`, 'g'),
+    new RegExp(`\\(${NAME}, ${SECTION}(?=[),;])`, 'g'),
+  ];
+  for (const re of forms) {
+    for (const m of flat.matchAll(re)) {
+      if (!skillSet.has(m[1])) continue;
+      const section = (m[2] || m[3]).trim();
+      const headings = readSkill(m[1]).split('\n').filter(l => /^#{1,4} /.test(l)).map(l => l.replace(/^#+ /, '').trim());
+      if (!headings.some(h => h === section || h.split(': ')[0] === section)) out.push(`${m[1]}, ${section}`);
+    }
   }
   return out;
 }

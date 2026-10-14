@@ -1,13 +1,13 @@
 ---
 name: trade-journal
-description: The journal the gate reads - its kinds (plan, note, review, lesson, order_placed), what the gate takes from it, and filtering journal_read by kind or tag.
+description: The journal the gate reads - its kinds (plan, entry, exit, note, review, lesson; the server adds order_placed), what the gate reads, filtering by kind or tag.
 ---
 
 # Trade journal
 
 ## When to Use
 
-- Writing a plan, note, review or lesson.
+- Writing a plan, entry, exit, note, review or lesson.
 - Reading the journal (`journal_read`): plans, reviews, lessons, or an
   entry's `order_placed` record.
 
@@ -15,9 +15,10 @@ description: The journal the gate reads - its kinds (plan, note, review, lesson,
 
 `journal_add` / `journal_read` keep the journal the gate reads, a JSON-lines
 file at the broker's journal path in the broker config (`get_server_config`: `journalPath`):
-one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds: `plan`, `note`,
-`review`, `lesson`; every `place_order` writes an `order_placed` entry by
-itself. Write through the tools only; never edit the file. The gate reads
+one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds you write: `plan`, `entry`, `exit`, `review`, `lesson`, `note`. The
+server writes its own: every `place_order` an `order_placed` entry, a
+guardrail refusal an `order_blocked`, `close_position` and
+`partial_close_position` an `exit`, and `modify_order` with a reason a `note`. Write through the tools only; never edit the file. The gate reads
 plans (a plan for this contract within `FTH_PLAN_MAX_AGE_MIN`, 120) and
 reviews (every entry reviewed before the next) from it. Which strategy fired
 it reads from the signal record (`strategies_scan` with `record`), not the

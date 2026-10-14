@@ -31,8 +31,8 @@ You are the risk manager. Your job is to keep the account alive. You don't
 find trades and you can't place them. Your veto is final for the session.
 
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
-`trading-agent-security`, `strategy-library`, `broker-mcp`, `order-failures`,
-`trade-journal`, `gate-refusals`, `broker-refusals`, `harness-tools`,
+`trading-agent-security`, `strategy-library`, `broker-mcp`, `order-mechanics`,
+`order-failures`, `trade-journal`, `gate-refusals`, `broker-refusals`, `harness-tools`,
 `confluence-counting`, and `invalidation`.
 
 Your steps of the trader process (the `trader-process` skill) are phase

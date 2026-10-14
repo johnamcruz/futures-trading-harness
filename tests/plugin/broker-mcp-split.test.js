@@ -16,6 +16,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const BEFORE = 'tests/fixtures/skill-split/broker-mcp.before.txt';
+// The fixture is the skill exactly as main had it before the split (skills/broker-mcp/SKILL.md at 3465bb5d): pinned,
+// so a sentence can't be dropped from the fixture and from its new home together.
+const BEFORE_SHA256 = 'dc8cf0a817ec8b6a5eb27fb1a8642d5dc534e946ad754d7825db0276b7c05e35';
 const HOMES = ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'];
 
 /**
@@ -66,6 +69,12 @@ const ALLOWED = [
   { old: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see Errors.)',
     now: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals` skill.)',
     reason: 'the Errors table\'s row for it is in the gate-refusals skill' },
+  // A truth fix in moved text: the kinds are the broker interface's (scripts/lib/broker/interface.js, JOURNAL), which
+  // the old list left short (the trade-executor writes `exit`; the interface takes `entry` and `exit` too).
+  { old: 'Kinds: `plan`, `note`, `review`, `lesson`; every `place_order` writes an `order_placed` entry by itself.',
+    now: ['Kinds you write: `plan`, `entry`, `exit`, `review`, `lesson`, `note`.',
+      'The server writes its own: every `place_order` an `order_placed` entry, a guardrail refusal an `order_blocked`, `close_position` and `partial_close_position` an `exit`, and `modify_order` with a reason a `note`.'],
+    reason: 'the kinds as the broker interface states them (JOURNAL.agentWritten and serverWritten)' },
   // Deliberately in two homes: both refusal skills carry the error table's header.
   { old: 'Message', copies: 2, reason: 'the table header, in gate-refusals and broker-refusals' },
   { old: 'Meaning', copies: 2, reason: 'the table header, in gate-refusals and broker-refusals' },
@@ -86,7 +95,7 @@ function differences(beforeText, homeTexts) {
   }
   for (const a of ALLOWED) {
     if (!before.has(a.old)) bad.push(`allow-list entry not in the old skill: ${a.old}`);
-    if (a.now && after.get(a.now) !== 1) bad.push(`changed sentence in ${after.get(a.now) || 0} homes, not 1: ${a.now}`);
+    for (const now of [a.now || []].flat()) if (after.get(now) !== 1) bad.push(`changed sentence in ${after.get(now) || 0} homes, not 1: ${now}`);
   }
   for (const h of STRUCTURE) if (after.get(h) !== homeTexts.length) bad.push(`"${h}" heading: ${after.get(h) || 0}, not one per skill`);
   return bad;
@@ -95,8 +104,22 @@ function differences(beforeText, homeTexts) {
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 
 test('broker-mcp split: every unit of the old skill is in exactly one new home, byte-for-byte (whitespace normalised)', () => {
+  const sha = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(ROOT, BEFORE))).digest('hex');
+  assert.strictEqual(sha, BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.deepStrictEqual(differences(read(BEFORE), homeTexts()), []);
   for (const a of ALLOWED) assert.ok(a.reason, a.old);
+});
+
+test('trade-journal: the kinds it lists are the broker interface\'s, the agent\'s and the server\'s', () => {
+  const { JOURNAL } = require('../../scripts/lib/broker/interface');
+  const t = read('skills/trade-journal/SKILL.md').replace(/\s+/g, ' ');
+  const kinds = s => [...s.matchAll(/`([a-z_]+)`/g)].map(m => m[1]);
+  const mine = /Kinds you write: ([^.]*)\./.exec(t);
+  assert.ok(mine, 'the skill lists the kinds the agent writes');
+  assert.deepStrictEqual(kinds(mine[1]).sort(), [...JOURNAL.agentWritten].sort());
+  const server = /The server writes its own: ([^.]*)\./.exec(t);
+  assert.ok(server, 'the skill lists the kinds the server writes');
+  for (const k of Object.keys(JOURNAL.serverWritten)) assert.ok(kinds(server[1]).includes(k), `server kind ${k}`);
 });
 
 test('broker-mcp split: the comparison catches a lost, a doubled or an edited sentence, and a stale exception', () => {
