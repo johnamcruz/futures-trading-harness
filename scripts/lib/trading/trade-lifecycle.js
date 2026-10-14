@@ -40,7 +40,9 @@ const STOP_BUFFER_TICKS = 1; // D3
 const FLOOR_TICKS = 8; // D13
 const FLOOR_ATR = 0.25; // D13: 0.25 x ATR(20)
 const MAX_SIZE = 100;
-const RECORD_KEYS = ['schema', 'id', 'at', 'strategy', 'root', 'symbol', 'side', 'bar', 'expiresAt', 'cycleId', 'ok', 'problems', 'reads', 'signature', 'skillSignature', 'context', 'plan'];
+// lane: the bars the reads were checked on (the briefing's base timeframe); contract: the briefing's contract;
+// exploratory: false until practice exploration (the learning loop's) is built.
+const RECORD_KEYS = ['schema', 'id', 'at', 'strategy', 'root', 'symbol', 'contract', 'lane', 'side', 'bar', 'expiresAt', 'cycleId', 'exploratory', 'ok', 'problems', 'reads', 'signature', 'skillSignature', 'context', 'plan'];
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -81,8 +83,10 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   const floor = stopFloorTicks(briefing, tick);
   if (floor === null) problems.push('ATR(20) is unknown, so the minimum stop (D13) can\'t be checked');
   else if (stopTicks < floor) problems.push(`the stop is ${stopTicks} ticks, under the minimum ${floor} (max of ${FLOOR_TICKS} ticks and ${FLOOR_ATR} x ATR(20)): refused, never widened; name a level further away, or pass`);
-  const rr = stopTicks > 0 ? round2(targetTicks / stopTicks) : null;
-  if (num(minRR) !== null && !(rr >= minRR)) problems.push(`R:R ${rr} is under the strategy's min ${minRR}`);
+  // Compared unrounded (2.996 is under a min of 3); rounded only for display.
+  const rawRR = stopTicks > 0 ? targetTicks / stopTicks : null;
+  const rr = rawRR === null ? null : round2(rawRR);
+  if (num(minRR) !== null && !(rawRR >= minRR)) problems.push(`R:R ${rawRR === null ? 'unknown' : rawRR.toFixed(3)} is under the strategy's min ${minRR}`);
   if (!(Number.isInteger(size) && size >= 1 && size <= MAX_SIZE)) problems.push(`size: a whole number of contracts, 1 to ${MAX_SIZE}`);
   const perContract = round2(stopTicks * tickValue);
   const riskUsd = Number.isInteger(size) ? round2(perContract * size) : null;
@@ -114,7 +118,9 @@ function buildRecord({ at, root, symbol, side, briefing = null, checked = null, 
   })) : [];
   const ok = Boolean(checked && checked.ok && planned && planned.plan && !all.length);
   const body = {
-    schema: SCHEMA, at, strategy: STRATEGY, root: familyRoot(root), symbol, side, bar: briefing ? briefing.asOf : null, expiresAt: m3 ? m3.validUntil : null, cycleId,
+    schema: SCHEMA, at, strategy: STRATEGY, root: familyRoot(root), symbol, contract: briefing ? briefing.contractId || null : null,
+    lane: briefing && Number.isInteger(briefing.minutes) ? `${briefing.minutes}m` : null, side, bar: briefing ? briefing.asOf : null,
+    expiresAt: m3 ? m3.validUntil : null, cycleId, exploratory: false,
     ok, problems: all, reads, signature: checked ? checked.signature : null, skillSignature: checked ? checked.skillSignature : null,
     context: checked ? checked.context : null, plan: planned ? planned.plan : null,
   };

@@ -6,6 +6,7 @@ status: active                # the owner's call; the order gate refuses its ent
 instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rules strategy
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it
+mtf: trend                    # the gate's trend rule applies as to any trend strategy (D2's verified reversal is a reads rule, never this one)
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
   min_rr: 2                   # compose_check refuses a plan under it

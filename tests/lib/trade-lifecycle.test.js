@@ -61,7 +61,7 @@ test('D13: a stop under max(8 ticks, 0.25 x ATR(20)) is refused, never widened; 
 });
 
 test('R:R under the minimum, a size over the dollar cap, no cap, a bad size, an unknown tick: each refused', () => {
-  assert.ok(plan({ minRR: 2.5 }).problems.some(x => /R:R 2.08 is under the strategy's min 2.5/.test(x)));
+  assert.ok(plan({ minRR: 2.5 }).problems.some(x => /R:R 2.081 is under the strategy's min 2.5/.test(x)));
   assert.ok(plan({ size: 3 }).problems.some(x => /size 3 risks \$166.5, over the strategy's risk.max_risk_usd \$150 \(at most 2/.test(x)));
   assert.ok(plan({ maxRiskUsd: null }).problems.some(x => /states no risk.max_risk_usd/.test(x)));
   for (const size of [0, 1.5, null, 101]) assert.ok(plan({ size }).problems.some(x => /size: a whole number/.test(x)), String(size));
@@ -106,4 +106,28 @@ test('the record file: under FTH_HOME, one family per file, append-only, unreada
   TL.appendRecord(home, b);
   assert.deepStrictEqual(TL.readRecords(home, 'MNQ').map(r => r.at), ['1', '2']);
   assert.strictEqual(fs.readFileSync(TL.recordFile(home, 'MNQ'), 'utf8').split('\n').filter(Boolean).length, 3);
+});
+
+test('R:R is compared unrounded: 231/111 ticks (2.0811) meets a min of 2.0805 though it shows 2.08, and fails 2.0812', () => {
+  assert.deepStrictEqual(plan({ minRR: 231 / 111 }).problems, []);
+  assert.deepStrictEqual(plan({ minRR: 2.0805 }).problems, []);
+  assert.strictEqual(plan({ minRR: 2.0805 }).plan.rr, 2.08);
+  assert.ok(plan({ minRR: 2.0812 }).problems.some(x => /R:R 2.081 is under the strategy's min 2.0812/.test(x)));
+});
+
+test('inTheWay: the first level strictly between the entry and the target, never one at the target or behind the entry', () => {
+  const b = scenario1();
+  b.sections.m3.data.nearestLiquidity = { above: [{ name: 'at the target', price: 21598 }, { name: 'next', price: 21570 }], below: [{ name: 'behind', price: 21530 }] };
+  assert.deepStrictEqual(plan({ briefing: b }).plan.inTheWay, { name: 'next', price: 21570, R: 1.07 });
+  b.sections.m3.data.nearestLiquidity = { above: [{ name: 'at the target', price: 21597.75 }, { name: 'beyond', price: 21610 }], below: [] };
+  assert.strictEqual(plan({ briefing: b }).plan.inTheWay, null, 'within a tick of the target, or past it');
+});
+
+test('the record carries its contract, lane and exploratory flag (the learning loop reads them)', () => {
+  const { checked, briefing, ...planned } = plan();
+  briefing.contractId = 'MNQ:2026-06';
+  const r = TL.buildRecord({ at: 'x', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing, checked, planned });
+  assert.deepStrictEqual([r.contract, r.lane, r.exploratory], ['MNQ:2026-06', '3m', false]);
+  const none = TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', problems: ['no cycle bar'] });
+  assert.deepStrictEqual([none.contract, none.lane, none.exploratory], [null, null, false]);
 });

@@ -112,3 +112,12 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   // Fails closed until the gate checks its reads: the strategy check refuses it.
   assert.match(checkStrategyForOrder([s], 'trade_lifecycle', 'MNQ', new Date('2026-04-23T15:00:05Z'), 'buy'), /doesn't check its reads yet, so it places no entries/);
 });
+
+test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {
+  const { home, ctx } = setup({ cycleBar: '2026-04-23T14:58:00.000Z' });
+  ctx.env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify({ MNQ: BAR });
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx).text, /OK: every read verified/);
+  ctx.env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify({ MNQ: '2026-04-23T14:58:00.000Z' });
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx).text, /not the cycle's 2026-04-23T14:58:00.000Z[^]*NOT OK/);
+  assert.deepStrictEqual(readRecords(home, 'MNQ').map(x => x.ok), [true, false]);
+});
