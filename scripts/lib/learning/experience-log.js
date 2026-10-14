@@ -1,0 +1,223 @@
+'use strict';
+
+/**
+ * The experience log (the composed-entry design, section 4.2): one record per decision of a run, the trade_lifecycle
+ * record (lifecycle-record.js) joined with its outcome, appended under the run home, never the repository, and never
+ * read in the session that wrote it. Written after the run's days are done (the replay's finish, or
+ * `replay.js experience`).
+ *
+ * A decision is a cycle with an ok record for the root (the latest ok record of that cycle, the one order_plan plans
+ * from): `entered` when an opening fill of that side on the root came between the record and its expiry, else
+ * `refused` when the gate refused an entry order in that cycle, else `passed`. A cycle with no ok record is
+ * a plain pass (`none`, no signature; `checked` counts the records it tried). The cycles come from the run's store
+ * lines (each trade cycle that ran), so a bar the model found nothing on is counted too.
+ *
+ * Outcome, in R of the bracket (sign x (exit - fill) / the record's stop distance; the brackets are placed from the fill):
+ *   entered  the real round trip from the replay broker's fills (size-weighted entry and exit prices);
+ *   passed, refused   the counterfactual of the same order on the bars after the decision (limitOutcome): a limit at
+ *            the entry reference, filled at it or better (a bar opening through it fills at its open) on the first
+ *            bar that trades it before the record expires, else `unfilled` (R null); then the record's stop and
+ *            target, the stop checked first on every bar (a bar touching both is a loss) and alone on the fill bar,
+ *            the stop filled SLIPPAGE_TICKS worse (the backtester's market-stop slippage), the target at its price,
+ *            out at the close of the bar that reaches end of day or the last bar of the trading day.
+ * Grade: an entry's result (win, loss, scratch); a pass whose counterfactual lost is a `good-pass`, one that would
+ * have won a `missed-win`, unfilled or flat a `neutral-pass`.
+ *
+ * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
+ *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
+ *   exitPrice, exitTime, exitReason, R }, grade, writtenAt }. `role` is the bar's learning role (learning/splits.js);
+ *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
+ *
+ *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick })   the counterfactual
+ *   buildDecisions({ cycles, records, trips, gateRefusals, barsFor, tickOf, eodOf, runId, now })   the lines
+ *   appendDecisions(file, lines)          append the lines whose id isn't in the file yet; { added, kept }
+ *   readDecisions(file)                   every line, [] without a file
+ *   logFile(runHome)                      <run home>/experience/decisions.jsonl
+ */
+
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { SLIPPAGE_TICKS } = require('../replay/counterfactual');
+const { tradingDayKey } = require('../trading/clock');
+const { familyRoot } = require('../trading/contracts');
+const { roleOf } = require('./splits');
+
+const VERSION = 1;
+const round = (x, d = 4) => (x === null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
+const sgn = side => (side === 'long' ? 1 : side === 'short' ? -1 : 0);
+
+/** First index with ms >= t. */
+function lowerBound(bars, t) {
+  let lo = 0;
+  let hi = bars.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (bars[mid].ms < t) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+const resultOf = R => (R === null ? null : R > 0 ? 'win' : R < 0 ? 'loss' : 'scratch');
+
+/** The record's limit order on the bars after the decision (see the head). */
+function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick }) {
+  const none = (reason, extra = {}) => ({ source: 'counterfactual', filled: false, entryPrice: null, exitPrice: null, exitTime: null, exitReason: reason, R: null, ...extra });
+  const s = sgn(side);
+  if (!s || ![entry, stop].every(Number.isFinite) || !(tick > 0)) return none('no plan');
+  if (sgn(side) * (entry - stop) <= 0) return none('stop on the wrong side');
+  const end = Number.isFinite(expiresMs) ? expiresMs : fromMs + tfMs;
+  let i = lowerBound(bars, fromMs);
+  if (i >= bars.length) return none('no bars after the decision');
+  const day = tradingDayKey(new Date(bars[i].ms));
+  let fill = null;
+  for (; i < bars.length && bars[i].ms < end; i += 1) {
+    const b = bars[i];
+    if (tradingDayKey(new Date(b.ms)) !== day || b.ms + tfMs > eodMs) return none('unfilled');
+    if (s > 0 ? b.l <= entry : b.h >= entry) { fill = s > 0 ? Math.min(entry, b.o) : Math.max(entry, b.o); break; }
+  }
+  if (fill === null) return none('unfilled');
+  // The brackets are in ticks from the fill (section 3.4): the record's distances, placed from the fill price.
+  const risk = Math.abs(entry - stop);
+  const stopPx = fill - s * risk;
+  const targetPx = Number.isFinite(target) && s * (target - entry) > 0 ? fill + s * Math.abs(target - entry) : null;
+  const out = (price, bar, reason) => ({
+    source: 'counterfactual', filled: true, entryPrice: fill, exitPrice: price, exitTime: new Date(bar.ms + tfMs).toISOString(), exitReason: reason,
+    R: round((s * (price - fill)) / risk),
+  });
+  const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
+  let last = bars[i];
+  for (let j = i; j < bars.length; j += 1) {
+    const b = bars[j];
+    if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
+    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, 'stop');
+    if (j > i && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
+    if (b.ms + tfMs >= eodMs) return out(b.c, b, 'eod');
+    last = b;
+  }
+  return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
+}
+
+/** A round trip's real outcome in R of the record's stop. */
+function tripOutcome(trip, plan, side) {
+  const s = sgn(side);
+  const avg = fs2 => {
+    const size = fs2.reduce((a, f) => a + (Math.abs(Number(f.size)) || 1), 0);
+    return size ? fs2.reduce((a, f) => a + Number(f.price) * (Math.abs(Number(f.size)) || 1), 0) / size : null;
+  };
+  const entryPrice = avg(trip.opens);
+  const closed = trip.closeMs !== null && trip.closes.length;
+  const exitPrice = closed ? avg(trip.closes) : null;
+  // R in the bracket's risk: the record's stop distance, which the bracket places from the fill.
+  const risk = Number.isFinite(plan.stop) && Number.isFinite(plan.entry) ? Math.abs(plan.entry - plan.stop) : null;
+  return {
+    source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
+    exitTime: closed ? new Date(trip.closeMs).toISOString() : null, exitReason: closed ? 'closed' : 'open',
+    R: closed && risk ? round((s * (exitPrice - entryPrice)) / risk) : null,
+  };
+}
+
+function gradeOf(decision, outcome) {
+  if (decision === 'none') return null;
+  const R = outcome ? outcome.R : null;
+  if (decision === 'entered') return resultOf(R);
+  if (R === null || R === 0) return 'neutral-pass';
+  return R < 0 ? 'good-pass' : 'missed-win';
+}
+
+const idOf = parts => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 20);
+
+/**
+ * The run's decisions.
+ * @param cycles [{ at (ISO, the cycle's decision time), roots: [ROOT] }] each trade cycle that ran, in time order
+ * @param records the trade_lifecycle records (lifecycle-record.js), any order
+ * @param trips round trips from the run's fills (replay/labels.js roundTrips): { family, side: buy|sell, openMs, closeMs, opens, closes }
+ * @param gateRefusals [{ cycleAt (ISO), root or null, check }] the gate's refusals of an entry order in a cycle (the store line's refusals)
+ * @param barsFor (root) -> bars sorted, each { ms, o, h, l, c }; tfMs the bar length
+ * @param tickOf (root) -> tick size; eodOf (ms) -> that trading day's end of day (ms)
+ */
+function buildDecisions({ cycles = [], records = [], trips = [], gateRefusals = [], barsFor = () => [], tfMs = 0, tickOf = () => null, eodOf = () => Infinity, runId = null, now = new Date() }) {
+  const times = cycles.map(c => Date.parse(c.at)).filter(Number.isFinite).sort((a, b) => a - b);
+  const marks = times.map(t => ({ ms: t }));
+  const cycleOf = ms => { const k = lowerBound(marks, ms + 1) - 1; return k >= 0 ? times[k] : null; };
+  // Records by (cycle, root): the cycle is the latest cycle at or before the record.
+  const byCycle = new Map();
+  for (const r of records) {
+    const c = cycleOf(Date.parse(r.at));
+    if (c === null) continue;
+    const k = `${c}|${r.root}`;
+    if (!byCycle.has(k)) byCycle.set(k, []);
+    byCycle.get(k).push(r);
+  }
+  const used = new Set();
+  const out = [];
+  for (const c of cycles) {
+    const at = Date.parse(c.at);
+    if (!Number.isFinite(at)) continue;
+    for (const root of c.roots || []) {
+      const recs = (byCycle.get(`${at}|${root}`) || []).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+      const ok = recs.filter(r => r.ok).pop() || null;
+      const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, writtenAt: now.toISOString() };
+      if (!ok) {
+        const day = tradingDayKey(new Date(at));
+        out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null,
+          exploratory: false, verified: false, reads: [], signatures: { skill: null, read: null }, context: null, plan: null, outcome: null, grade: null });
+        continue;
+      }
+      const fromMs = Date.parse(ok.at);
+      const expiresMs = ok.expiresAt ? Date.parse(ok.expiresAt) : fromMs + tfMs;
+      const want = ok.side === 'long' ? 'buy' : 'sell';
+      const trip = trips.find(t => !used.has(t) && t.openMs !== null && t.openMs >= fromMs && t.openMs <= expiresMs && t.side === want
+        && (!t.family || t.family === familyRoot(root)));
+      let decision = 'passed';
+      let refusal = null;
+      let outcome;
+      if (trip) {
+        used.add(trip);
+        decision = 'entered';
+        outcome = tripOutcome(trip, ok.plan, ok.side);
+      } else {
+        const refused = gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
+        if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
+        outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root) });
+      }
+      out.push({
+        ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
+        role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
+        reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
+      });
+    }
+  }
+  return out;
+}
+
+function safeRole(ms) {
+  try { return roleOf(ms); } catch (_err) { return null; }
+}
+
+const logFile = runHome => path.join(runHome, 'experience', 'decisions.jsonl');
+
+function readDecisions(file) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (_err) { return []; }
+  const out = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try { const d = JSON.parse(line); if (d && d.id) out.push(d); } catch (_err) { /* a torn line */ }
+  }
+  return out;
+}
+
+/** Append-only: lines whose id the file holds already are kept as written, never replaced. */
+function appendDecisions(file, lines) {
+  const have = new Set(readDecisions(file).map(d => d.id));
+  const fresh = lines.filter(l => !have.has(l.id));
+  if (fresh.length) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    fs.appendFileSync(file, `${old && !old.endsWith('\n') ? '\n' : ''}${fresh.map(l => `${JSON.stringify(l)}\n`).join('')}`);
+  }
+  return { added: fresh.length, kept: lines.length - fresh.length };
+}
+
+module.exports = { VERSION, limitOutcome, tripOutcome, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
