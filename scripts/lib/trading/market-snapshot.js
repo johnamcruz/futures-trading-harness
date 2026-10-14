@@ -12,7 +12,7 @@ const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
 const { onTick, levelOnTick } = require('./contracts');
-const { SNAPSHOT_PARAMS: SNAPSHOT_CISD } = require('./cisd');
+const { SNAPSHOT_PARAMS: SNAPSHOT_CISD, strongCandle } = require('./cisd');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -134,30 +134,45 @@ function participation(bars, orbMinutes) {
 const vwapCrosses = (bars, vwap) => crossesOf(bars, vwap, bars.length - REGIME_PARAMS.crossBars);
 
 /**
- * The fair value gaps of the last `n` bars (3-bar gaps: bar 1's high under bar 3's low, bullish, or bar 1's low
- * over bar 3's high, bearish), by what the bars since have done to them: open (not traded back into), partly filled
- * (traded into, not through: low-high is the part still unfilled, gapLow-gapHigh the whole gap), and filled (traded
- * through: dropped). Oldest first.
+ * The fair value gap formed at bar `j` (the third bar), or null: a 3-bar gap (bar 1's high under bar 3's low, bullish,
+ * or bar 1's low over bar 3's high, bearish) whose middle bar is a strong displacement candle the gap's way, the CISD
+ * strength rule (cisd.js strongCandle: an up close for a bullish gap, body >= 0.6 of its range, close in the extreme
+ * third, range >= 1.0 x ATR(14) as known at the middle bar, `atr14[j - 1]`, or its body engulfing bar 1's). Reads
+ * bars j-2..j and the ATR at j-1 only: the gap is known when bar 3 completes. { side, low, high, at (the middle bar) }.
  */
-function fairValueGaps(bars, n = 60) {
+function fvgAt(bars, j, atr14) {
+  if (j < 2) return null;
+  const a = bars[j - 2];
+  const m = bars[j - 1];
+  const c = bars[j];
+  const dir = a.h < c.l ? 1 : a.l > c.h ? -1 : 0;
+  if (!dir || !strongCandle(m, a, dir, atr14[j - 1]).strong) return null;
+  return dir === 1 ? { side: 'bullish', low: a.h, high: c.l, at: m.t } : { side: 'bearish', low: c.h, high: a.l, at: m.t };
+}
+
+/**
+ * The fair value gaps of the last `n` bars (fvgAt: a 3-bar gap with a strong displacement middle bar), by what the
+ * bars since have done to them: open (not traded back into), partly filled (traded into, not through: low-high is the
+ * part still unfilled, gapLow-gapHigh the whole gap), and filled (traded through: dropped). Oldest first. `atr14`:
+ * ATR(14) of `bars` (computed when not given).
+ */
+function fairValueGaps(bars, n = 60, atr14 = ind.atr(bars, 14)) {
   const open = [];
   const partly = [];
   for (let j = Math.max(2, bars.length - n); j < bars.length; j += 1) {
-    const a = bars[j - 2];
-    const c = bars[j];
+    const g = fvgAt(bars, j, atr14);
+    if (!g) continue;
     const later = bars.slice(j + 1);
-    const at = bars[j - 1].t;
-    if (a.h < c.l) {
+    if (g.side === 'bullish') {
       // Bullish: price comes back down into it; the deepest low since is how far it filled.
       const deepest = later.length ? Math.min(...later.map(b => b.l)) : Infinity;
-      if (deepest >= c.l) open.push({ side: 'bullish', low: a.h, high: c.l, at });
-      else if (deepest > a.h) partly.push({ side: 'bullish', low: a.h, high: deepest, gapLow: a.h, gapHigh: c.l, at });
-    }
-    if (a.l > c.h) {
+      if (deepest >= g.high) open.push(g);
+      else if (deepest > g.low) partly.push({ side: 'bullish', low: g.low, high: deepest, gapLow: g.low, gapHigh: g.high, at: g.at });
+    } else {
       // Bearish: price comes back up into it; the highest high since is how far it filled.
       const highest = later.length ? Math.max(...later.map(b => b.h)) : -Infinity;
-      if (highest <= c.h) open.push({ side: 'bearish', low: c.h, high: a.l, at });
-      else if (highest < a.l) partly.push({ side: 'bearish', low: highest, high: a.l, gapLow: c.h, gapHigh: a.l, at });
+      if (highest <= g.low) open.push(g);
+      else if (highest < g.high) partly.push({ side: 'bearish', low: highest, high: g.high, gapLow: g.low, gapHigh: g.high, at: g.at });
     }
   }
   return { open, partly };
@@ -166,9 +181,9 @@ function fairValueGaps(bars, n = 60) {
 /**
  * Liquidity: the last 4 confirmed swing highs and lows, equal highs and lows
  * among them (within 0.1 x ATR(14): resting stops), and the fair value gaps
- * of the last 60 bars still open and partly filled (fairValueGaps).
+ * of the last 60 bars still open and partly filled (fairValueGaps: strong middle bars only).
  */
-function liquidity(bars, k, atrNow) {
+function liquidity(bars, k, atrNow, atr14) {
   const highs = [];
   const lows = [];
   for (let j = k; j < bars.length - k; j += 1) {
@@ -194,7 +209,7 @@ function liquidity(bars, k, atrNow) {
   };
   const recentHighs = highs.slice(-12);
   const recentLows = lows.slice(-12);
-  const { open, partly } = fairValueGaps(bars);
+  const { open, partly } = fairValueGaps(bars, 60, atr14);
   return {
     swingHighs: highs.slice(-4),
     swingLows: lows.slice(-4),
@@ -202,7 +217,7 @@ function liquidity(bars, k, atrNow) {
     equalLows: equal(recentLows),
     openFvgs: open.slice(-3),
     partlyFilledFvgs: partly.slice(-3),
-    note: 'equal = within 0.1 x ATR(14); open FVG = a 3-bar gap price has not traded back into since; partly filled FVG = traded into, not through: low-high is the part still unfilled, gapLow-gapHigh the whole gap (last 60 bars)',
+    note: 'equal = within 0.1 x ATR(14); open FVG = a 3-bar gap whose middle bar is a strong displacement candle the gap\'s way (the CISD strength rule), not traded back into since; partly filled FVG = traded into, not through: low-high is the part still unfilled, gapLow-gapHigh the whole gap (last 60 bars)',
   };
 }
 
@@ -336,7 +351,7 @@ function snapshot(input, overrides = {}) {
     })(),
     participation: participation(bars, p.orbMinutes),
     context: context(bars, series, at(atr14, i)),
-    liquidity: liquidity(bars, p.swingK, at(atr14, i)),
+    liquidity: liquidity(bars, p.swingK, at(atr14, i), atr14),
     regime: classifyRegime(bars),
     referenceStop: stopDistance === null ? null : {
       distance: round(stopDistance),
@@ -388,4 +403,4 @@ function levelsAsOf(bars, i, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps, levelsAsOf };
+module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps, fvgAt, levelsAsOf };

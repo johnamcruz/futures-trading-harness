@@ -95,7 +95,8 @@ doesn't hold.
      0.35 ADR; neutral: both sides), and the `range` against the average daily range (`adr`, over
      `adrDays`, default 10). `line` is the same as the prompt's "day:" line.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
-     0.1 x ATR), open fair value gaps (`openFvgs`: not traded back into) and
+     0.1 x ATR), fair value gaps (3-bar gaps with a strong displacement
+     middle bar, the CISD strength rule), open (`openFvgs`: not traded back into) and
      partly filled ones (`partlyFilledFvgs`: traded into, not through; `low`
      to `high` is the part still unfilled, `gapLow` to `gapHigh` the whole gap).
    - `context`: the numbers the strategies' skip rules name: EMA 9/20
