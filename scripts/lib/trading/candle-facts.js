@@ -36,6 +36,9 @@
  *                                          bars for a timeframe the base bars can't build)
  *   holdingSwingsAt(bars, minutes, base, idx)   the swings still holding as of bar idx
  *   briefingTargets({ bars, minutes, price, oneR, tick })    the briefing's `swingTargets` block (last bar)
+ *   briefingRangeTargets({ bars, base, price, oneR, tick, index })   the briefing's `rangeTargets`: per frame (1h, 4h)
+ *                                          the last completed candle's high, mid and low as targets, and the side the
+ *                                          candle forming since has taken (prevSweep), only when it has
  *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack, closedBeyond } when c traded
  *                                          beyond prev's high or low (closedBack: closed inside prev's range; closedBeyond:
  *                                          'high' | 'low', the side it closed beyond, else null), else null
@@ -128,6 +131,9 @@ const memo = (bars, key, make) => {
   return m.get(key);
 };
 
+/** The higher-timeframe candles of `bars` (indicators htfCandles), once per bars and timeframe. */
+const htfOf = (bars, minutes) => memo(bars, `htf:${minutes}`, () => htfCandles(bars, minutes));
+
 /**
  * The completed m-minute candles of `bars` (each `base` minutes), and per bar the last one completed by its close
  * (-1: none, or the timeframe isn't whole base bars).
@@ -139,7 +145,7 @@ function completedSeries(bars, minutes, base) {
     const candles = [];
     const reason = n ? unavailableReason(base, minutes) : 'no bars';
     if (reason) return { available: false, reason, candles, lastAt };
-    const h = htfCandles(bars, minutes);
+    const h = htfOf(bars, minutes);
     const ms = bars.map(b => Date.parse(b.t));
     // Each bar's close in minutes since the 18:00 ET open (once per bars and bar size, for every timeframe).
     const closes = memo(bars, `closes:${base}`, () => ms.map(x => sinceOpen(x + base * 60000)));
@@ -411,7 +417,6 @@ const roundsIn = (c, step) => {
 function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
-  const htfs = new Map();
   const closeOf = k => Date.parse(bars[k].t) + base * 60000;
   const closedAt = i >= 0 ? closeOf(i) : NaN;
   const fineBars = Array.isArray(fine) ? fine.filter(b => Date.parse(b.t) + 60000 <= closedAt) : null;
@@ -446,11 +451,8 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
     while (openIdx >= 0 && closeOf(openIdx) > Date.parse(c.t)) openIdx -= 1;
     // And the first base bar from its open on (the candle's own first bar on base bars).
     const firstIdx = src === bars ? c.first : bars.findIndex(b => Date.parse(b.t) >= Date.parse(c.t));
-    if (!htfs.has(src)) htfs.set(src, new Map());
-    const htf = htfs.get(src);
     const crt = crtFrames.filter(F => F > m && 1440 % F === 0).flatMap(F => {
-      if (!htf.has(F)) htf.set(F, htfCandles(src, F));
-      const h = htf.get(F);
+      const h = htfOf(src, F);
       return [[`CRT ${label(F)} range high`, h.prevH[c.last]], [`CRT ${label(F)} range low`, h.prevL[c.last]]];
     });
     const all = [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(c, roundStep), ...(prev ? [[`previous ${label(m)} high`, prev.h], [`previous ${label(m)} low`, prev.l]] : []), ...crt];
@@ -505,8 +507,46 @@ function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [mi
   return { above, below };
 }
 
+// The frames whose last completed candle's range (high, mid, low) is a target (briefingRangeTargets): 1h and 4h.
+const RANGE_FRAMES = [60, 240];
+
+/** A target level against price: its side, distance in points and whole ticks, and R (oneR: 1R in points). */
+const targetAt = (p, price, oneR, tick) => {
+  const points = Math.abs(p - price);
+  return { price: p, side: p > price ? 'above' : p < price ? 'below' : 'at', points: r2(points), ticks: Math.round(points / tick), R: oneR > 0 ? r2(points / oneR) : null };
+};
+
+/**
+ * The briefing's `rangeTargets`: per frame (RANGE_FRAMES), the last COMPLETED candle as of bar `index` (the last; never
+ * the one forming: completedSeries) with its high, low and midpoint ((high + low) / 2, exact) as target levels, each
+ * with its side of price, distance and R; and, only when it happened, `taken`: the candle forming since it (its bars
+ * up to `index`) has traded beyond exactly one side of it (prevSweep): { side: 'high' | 'low', closedBack } (closedBack:
+ * this bar closed back inside the range; the far side is then the other one). A frame the base bars can't build, or
+ * with no completed candle yet: { unavailable }. Reads bars 0..index only.
+ */
+function briefingRangeTargets({ bars, base, price, oneR, tick = 0.25, frames = RANGE_FRAMES, index = bars.length - 1 }) {
+  const i = index;
+  const out = {};
+  for (const m of frames) {
+    const s = completedSeries(bars, m, base);
+    if (!s.available) { out[label(m)] = { unavailable: s.reason }; continue; }
+    const j = i >= 0 ? s.lastAt[i] : -1;
+    if (j < 0) { out[label(m)] = { unavailable: 'no completed candle in the bars yet' }; continue; }
+    const c = s.candles[j];
+    const x = { t: c.t, closedAt: c.closedAt, high: targetAt(c.h, price, oneR, tick), mid: targetAt((c.h + c.l) / 2, price, oneR, tick), low: targetAt(c.l, price, oneR, tick) };
+    // The candle forming since: the bars after the completed one's last, up to this one.
+    let hi = -Infinity;
+    let lo = Infinity;
+    for (let k = c.last + 1; k <= i; k += 1) { hi = Math.max(hi, bars[k].h); lo = Math.min(lo, bars[k].l); }
+    const sw = c.last < i ? prevSweep({ h: hi, l: lo, c: bars[i].c }, c) : null;
+    if (sw && sw.side !== 'both') x.taken = { side: sw.side, closedBack: sw.closedBack };
+    out[label(m)] = x;
+  }
+  return out;
+}
+
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets,
 };

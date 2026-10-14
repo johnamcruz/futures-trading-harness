@@ -22,7 +22,9 @@
  *          (candle-facts.js): per timeframe (3m, 5m, 15m, 60m, 4h) the last COMPLETED candle (never the one forming) with its
  *          shape, pattern and how it met the key levels as they stood (fixed ones complete by its open, moving ones at
  *          its close; 5m from a 1m lane's bars when the base bars can't; each one's sweep of its previous candle),
- *          and the next swing target each side on the base bars, 15m, 60m and 4h       until the next base-bar close
+ *          the next swing target each side on the base bars, 15m, 60m and 4h, the last completed 1h and 4h candle's
+ *          high, mid and low as targets (and the side the candle forming since has taken), and the half of the
+ *          session's range price is in                                    until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -91,7 +93,8 @@ const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
-const { briefingCandles, briefingTargets, holdingSwingsAt } = require('./candle-facts');
+const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
+const { halfOf } = require('./fib');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -351,6 +354,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   const noEntry = win.entries === 'none' ? win.text : false;
   const bar = snap.last;
   const atr14 = (snap.volatility || {}).atr14;
+  const sessionRange = (snap.context || {}).session || null;
   return {
     m3: {
       validUntil: new Date(closedAt.getTime() + step),
@@ -405,6 +409,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           priorValue: where(price, prior.val, prior.vah), sessionValue: sess.poc ? where(price, sess.val, sess.vah) : null,
           initialBalance: where(price, day.ibLow, day.ibHigh), priorRthRange: lv.priorRth ? where(price, lv.priorRth.low, lv.priorRth.high) : null,
           priorRthClose: lv.priorRth ? side(price, lv.priorRth.close) : null,
+          // The half of the session's range so far (from 18:00 ET) price is in (fib.js halfOf): premium, discount or equilibrium.
+          sessionRangeHalf: sessionRange ? halfOf({ origin: sessionRange.low, extreme: sessionRange.high }, price) : null,
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
@@ -417,6 +423,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
         swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60, 240] }),
+        // The last completed 1h and 4h candle's high, mid and low as targets, and the side the candle forming since has
+        // taken, only when it has (candle-facts.js; the runner's, as above).
+        rangeTargets: own ? null : briefingRangeTargets({ bars, base: minutes, price, oneR, tick }),
       },
     },
     m15: {
@@ -723,7 +732,7 @@ const targets = list => list.reduce((out, x) => {
 function detailEntries(data) {
   const bar = data.bar || {};
   const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
-  return Object.entries(data).filter(([k]) => k !== 'swingTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
+  return Object.entries(data).filter(([k]) => k !== 'swingTargets' && k !== 'rangeTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
     ? [k, Object.fromEntries(Object.entries(v).filter(([tf, c]) => !c.unavailable && !(tf in EVENT_FRAMES))
       .map(([tf, c]) => [tf, { t: c.t, ...ohlcv(c), body: c.body, upperWick: c.upperWick, lowerWick: c.lowerWick, ...(c.patterns ? { patterns: c.patterns } : {}) }]))]
     : [k, v]));
@@ -735,6 +744,21 @@ function detailEntries(data) {
  */
 const sweepText = s => (!s ? '' : s.closedBack ? `; swept the ${s.of}, closed back inside`
   : `; traded beyond the ${s.of}, closed ${s.closedBeyond === 'high' ? 'above its high' : 'below its low'}`);
+
+/** One level of a prior candle's range: its price, distance with its side, and R. */
+const rangeLevel = (name, x) => `${name} ${x.price} (${x.side === 'at' ? 'at price' : `${x.points} ${x.side}`}, ${x.R === null ? 'R unknown' : `${x.R}R`})`;
+
+/**
+ * The summary's one line of prior-candle range targets: per frame (1h, 4h) the last completed candle's high, mid and
+ * low, and, only when it happened, the side the candle forming since has taken ("low taken, closed back inside" or "low taken, closed below it"). An
+ * unavailable frame is left out (the JSON says why); no line without any.
+ */
+function rangeLine(block, et) {
+  if (!block || typeof block !== 'object') return null;
+  const parts = Object.entries(block).filter(([, x]) => x && !x.unavailable)
+    .map(([tf, x]) => `${tf} (closed ${et(x.closedAt)}) ${rangeLevel('high', x.high)}, ${rangeLevel('mid', x.mid)}, ${rangeLevel('low', x.low)}${x.taken ? `, ${x.taken.side} taken, closed ${x.taken.closedBack ? 'back inside' : x.taken.side === 'low' ? 'below it' : 'above it'}` : ''}`);
+  return parts.length ? `- Prior candle range: ${parts.join('; ')}.` : null;
+}
 
 // Timeframes whose candle line is event-driven (minutes): in full only when the candle completed within that long of
 // this bar's close; after that only its sweep closed back inside, if it made one; else the JSON alone holds it. Never in
@@ -764,6 +788,8 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
+  const range = rangeLine(m3.rangeTargets, et);
+  if (range) out.push(range);
   return out;
 }
 
@@ -848,8 +874,9 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
   // The completed-candle facts and swing targets read the session's levels (one value each, on the runner's bars): they
   // are the runner's briefing's, as the session's facts are; a frame points to them (its own bars' would be another
   // number, and a copy would be held as current for this bar's whole life).
-  data.candles = `in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe): each timeframe's last completed candle and the levels it met, and the next swing targets, one value per level`;
+  data.candles = `in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe): each timeframe's last completed candle and the levels it met, the next swing targets and the prior 1h and 4h candle's range targets, one value per level`;
   delete data.swingTargets;
+  delete data.rangeTargets;
   if (!lane) {
     delete data.candidates;
     delete data.scanError;
