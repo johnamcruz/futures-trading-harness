@@ -13,7 +13,7 @@ const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DATA = path.join(__dirname, '..', 'fixtures', 'data');
@@ -300,13 +300,19 @@ test('backtests follow the exchange calendar: no trading on holidays, early clos
   assert.deepStrictEqual(early, [], 'early close: no entry after 13:00 ET');
 });
 
+/** accounts/tiny: a copy of the test_50k fixture (profile and rulebook) with a 2-session attempt, under `accounts`. */
+function tinyAccount(accounts) {
+  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: test_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
+  fs.writeFileSync(path.join(accounts, 'tiny', 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace('name: test_50k', 'name: tiny'));
+  return path.join(accounts, 'tiny');
+}
+
 test('prop challenge mode: a policy strategy\'s attempts from each start, reported by month', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
-  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
-  const src = fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
-    .replace('name: test_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 ');
-  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), src);
+  listPolicies(tinyAccount(accounts), ['prop_bos']);
   const strategiesDir = path.join(dir, 'strategies');
   fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
   fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
@@ -328,6 +334,32 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   assert.strictEqual(report.withPolicy, undefined);
   assert.strictEqual(report.policy, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
+});
+
+test('prop challenge mode sizes from the account\'s rulebook and folds its multiplier items in, as the live verdict does', () => {
+  // A fixture account with a rulebook listing the policy: its sizing and exit come from there. An enforced
+  // multiplier item whose fact the backtester doesn't have (none today, as the runner) skips every setup.
+  const dir = tmpDir();
+  const accounts = path.join(dir, 'accounts');
+  const tiny = tinyAccount(accounts);
+  const bookFile = path.join(tiny, 'RULEBOOK.md');
+  const fresh = fs.readFileSync(bookFile, 'utf8');
+  const shipped = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const book = multipliers => { fs.writeFileSync(bookFile, fresh); listPolicies(tiny, ['prop_bos'], { multipliers }); };
+  const strategiesDir = path.join(dir, 'strategies');
+  fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace(/^account: .*$/m, 'account: tiny'));
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_bos' };
+  book(null);
+  const plain = runBacktest(base, { root: ROOT, outRoot: dir, env }).report;
+  assert.deepStrictEqual(plain.sizing, { ...require('../../scripts/lib/trading/combine').DEFAULT_SIZING, ...shipped.sizing });
+  assert.ok(plain.baseline.trades > 0);
+  book(['      - item: multipliers', '        fact: probe', '        values:', '          ok: 1']);
+  const gated = runBacktest(base, { root: ROOT, outRoot: dir, env }).report;
+  assert.strictEqual(gated.baseline.attempts, plain.baseline.attempts);
+  assert.strictEqual(gated.baseline.trades, 0, 'a multiplier item without its fact skips every setup (fails closed)');
 });
 
 test('a plain backtest on a CSV says, in its log, report.json and report.md, that value_area reads a bar field the data lacks; a market it doesn\'t list is not named', () => {
@@ -365,11 +397,10 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
 test('prop challenge mode trades what live trades: an active policy leaves out a paper component (still counted as disagreement); a paper policy (a paper run) keeps it', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
-  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
-  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
-    .replace('name: test_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
+  const tiny = tinyAccount(accounts);
   const strategiesDir = path.join(dir, 'strategies');
   const policy = (name, list, status = 'active') => {
+    listPolicies(tiny, [name]);
     fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });
     fs.writeFileSync(path.join(strategiesDir, name, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
       .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')

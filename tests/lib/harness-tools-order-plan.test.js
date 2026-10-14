@@ -220,7 +220,7 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   prop.snapshot(home, account, 100000, NOW);
   recordBar(home, FIRED_BAR);
   const verdict = over => prop.appendVerdict(home, {
-    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
+    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ', multiplier: 1,
     bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12, ...over,
   });
   verdict();
@@ -246,10 +246,15 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /expired at/);
   verdict({ component: 'orb' });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb is not a candidate on the last closed bar/);
-  // Only full (or half) allows an entry: any other action refuses, as the gate does.
-  for (const action of ['close', 'hold', undefined]) {
+  // Only full allows an entry (a verdict is full or skip; the retired half too): any other action refuses, as the gate does.
+  for (const action of ['close', 'hold', 'half', undefined]) {
     verdict({ action });
-    assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /verdict action .* allows no entry \(only full or half\); no order/, String(action));
+    assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /verdict action .* allows no entry \(a verdict is full or skip\); no order/, String(action));
+  }
+  // A full verdict needs a multiplier above 0 and at most 1, as the gate does.
+  for (const multiplier of [undefined, 0, 1.5, 'x']) {
+    verdict({ multiplier });
+    assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /carries no size multiplier above 0 and at most 1 .*; no order/, String(multiplier));
   }
   // The verdict's stop was sized on its own bar: a verdict from the bar before (still unexpired), with bos
   // firing again on the last bar, is never paired with this bar's entry.
@@ -293,7 +298,7 @@ test('order_plan: a policy verdict from a paper component is refused as the gate
   prop.snapshot(home, account, 100000, NOW);
   recordBar(home, FIRED_BAR);
   prop.appendVerdict(home, {
-    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
+    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ', multiplier: 1,
     bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12,
   });
   const go = env => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, { ...ctx, root, env: { ...ctx.env, ...env } });
@@ -310,7 +315,7 @@ test('order_plan: a policy strategy is sized with the broker\'s tick values, and
   prop.snapshot(home, account, 100000, NOW);
   recordBar(home, FIRED_BAR);
   prop.appendVerdict(home, {
-    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
+    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ', multiplier: 1,
     bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12,
   });
   const go = () => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);

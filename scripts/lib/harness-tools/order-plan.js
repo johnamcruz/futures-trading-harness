@@ -89,7 +89,9 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, sel
   if (!v) throw new Error(`${s.name} has no verdict for ${root}: the runner records one at each setup of ${(s.strategies || []).join(', ')}; no order`);
   if (!(Date.parse(v.expiresAt) > now.getTime())) throw new Error(`${s.name}'s latest verdict (${v.bar}) expired at ${v.expiresAt}; no order`);
   if (v.action === 'skip' || !(v.maxSize >= 1)) throw new Error(`${s.name} skipped the setup${v.reason ? ` (${v.reason})` : ''}; no order`);
-  if (!Object.hasOwn(prop.ENTRY_FRACTIONS, v.action)) throw new Error(`${s.name}'s verdict action ${JSON.stringify(v.action)} allows no entry (only ${Object.keys(prop.ENTRY_FRACTIONS).join(' or ')}); no order`);
+  if (!prop.ENTRY_ACTIONS.includes(v.action)) throw new Error(`${s.name}'s verdict action ${JSON.stringify(v.action)} allows no entry (a verdict is full or skip); no order`);
+  const multiplier = prop.verdictMultiplier(v);
+  if (multiplier === null) throw new Error(`${s.name}'s verdict carries no size multiplier above 0 and at most 1 (${JSON.stringify(v.multiplier)}); no order`);
   if (want !== v.direction) throw new Error(`${s.name}'s verdict is for a ${v.direction} entry, not ${want}; no order`);
   // The verdict's stop ticks were sized on its own bar: never paired with another bar's entry.
   if (!sameBar(v.bar, lastBar)) {
@@ -100,7 +102,7 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, sel
   if (!account || !account.valid) throw new Error(`${s.name} trades account "${s.account}", which is ${account ? 'invalid' : 'not found'}`);
   const block = prop.combineBlock(home, account.name, now);
   if (block) throw new Error(`${account.name}: ${block}`);
-  const b = prop.budgetPlan(home, account, s, v.contract, v.stopTicks, prop.ENTRY_FRACTIONS[v.action], specOf, selected);
+  const b = prop.budgetPlan(home, account, s, v.contract, v.stopTicks, multiplier, specOf, selected);
   if (b.error) throw new Error(`${account.name}: ${b.error}`);
   if (b.root !== v.contract || !(b.size >= 1)) throw new Error(`${account.name}: the size budget now allows ${b.root ? `${b.size} ${b.root}` : 'nothing'} at a ${v.stopTicks}-tick stop, not ${v.contract}; no order`);
   const size = Math.min(v.maxSize, b.size);

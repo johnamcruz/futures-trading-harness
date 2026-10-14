@@ -55,11 +55,11 @@ the champion is replaced only with the owner's approval.
 
 | Group | Examples (today's source) | Learned how |
 | --- | --- | --- |
-| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (`prop_portfolio` `sizing`, `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in `ACCOUNT.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
+| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused, never filled from `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. keltner in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
 | Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate, keltner's ADX ≥ 20), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
-| Exits | `prop_portfolio` `exit` (hold to +2R, trail 0.5R) | The search, jointly with sizing (R10) |
+| Exits | `prop_portfolio` `exit` (hold the stop, then trail) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
 **Units.**
@@ -74,7 +74,7 @@ the champion is replaced only with the owner's approval.
   in the contract that account trades.
 
 **R1. One place.** Every learned value lives in one canonical document per
-account size (a proposed `rulebooks/<account>/RULEBOOK.md`: frontmatter
+account size (`accounts/<account>/RULEBOOK.md`, beside the account's profile: frontmatter
 holds the numbers, the body explains them). The runner, the gate, the
 skills, the strategies and the backtester read it; none restates a value.
 The skills keep the reasoning and point to the rulebook for numbers, as they
@@ -108,6 +108,13 @@ closed:
 - The gate refuses any verdict action other than `full` or `skip`.
 
 The owner's classification is in section 11: the mechanical items enforced, judgment taught.
+
+**Pending owner decision: rounding a fractional multiplier.** As built
+(step 7), a multiplier below 1 rounds the size **down**, and a share under
+one contract is no trade: half of 1 contract is 0, a skip (`contractPlan`,
+as the priority order's halving). The alternative keeps at least one
+contract. The owner decides this before any multiplier item is added to a
+rulebook. Today every multiplier is 1 (no items), so nothing changes.
 
 ## 4. Data and splits
 
@@ -472,7 +479,7 @@ capped the large winners a low-win-rate strategy needs, and only a joint
 search over sizing, exit and stand-down reached 0% blows at a 41.7% pass rate
 (60 overlapping 30-day episodes on 2024, about 8 independent; another
 strategy and data). That is a reason to search exits widely, not evidence
-for any setting. Today's `prop_portfolio` exit (2R/0.5R) is one candidate.
+for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`) is one candidate.
 The trail's range is bounded by the target and the consistency rule: one
 winner of several thousand dollars against a $6,000 target makes that day
 more than half the profit, which forces more profit before a pass, so days
@@ -1072,7 +1079,7 @@ What changes in behaviour:
   (R4) arrives. The trained policy's `half` goes, but the gate keeps its
   fraction path for the multiplier, rather than deleting it and adding it
   back. The priority order still halves a trade when the LLM applies it.
-- **No early close past +2R.** The policy's hold-or-close decision in a
+- **No early close once the trail is active.** The policy's hold-or-close decision in a
   trade goes. The trailing exit (`exit` in `prop_portfolio`) manages every
   trade, as it does without a bundle today.
 - **The verdict no longer records which policy produced it.** The check
@@ -1132,7 +1139,10 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    its contract taken from the running attempt.
 7. The rulebook document, its single-place test, the enforced or taught
    classification, and the verdict's multiplier (R1-R4). It starts from
-   today's values, so nothing is learned yet.
+   today's values, so nothing is learned yet. Built: the rulebooks
+   (`accounts/<account>/RULEBOOK.md`, `scripts/lib/trading/rulebook.js`),
+   the single-place and classification tests (`tests/plugin/rulebook.test.js`),
+   and the multiplier on every verdict (the gate takes `full` or `skip` only).
 8. Slippage-safe sizing: `contractPlan`'s risk per contract includes the
    stop's expected slippage, so a stopped trade never ends past the floor or
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
@@ -1199,11 +1209,16 @@ Decided by the owner (2026-10-12):
   baseline with the fingerprints then in the tree, so nothing changes.
 - **Paper components** are enforced inside a policy too, fixed right after
   fact-checked reasons (section 10).
-- **Where it lives:** `rulebooks/<account>/RULEBOOK.md`, numbers in the
-  frontmatter and the evidence in the body (R1).
+- **Where it lives:** numbers in the frontmatter and the evidence in the
+  body (R1); the location was revised on 2026-10-13 (below).
 
 Decided by the owner (2026-10-13):
 
+- **Rulebook location:** `accounts/<account>/RULEBOOK.md`, next to the
+  account's ACCOUNT.md (replacing the proposed `rulebooks/<account>/`),
+  because account names carry the firm's name, which the platform guard
+  (`tests/plugin/no-platform-specifics.test.js`) allows only under
+  `accounts/`.
 - **Data:** Phase B trains and evaluates on the replay broker server's raw
   front-contract bars at each strategy's own timeframe, every broker field
   kept, priced like live with the real roll dates: the data path live uses

@@ -9,6 +9,11 @@
  * Search path: <plugin>/strategies, then each directory in FTH_STRATEGIES_DIRS
  * (comma-separated, e.g. ~/.futures-trading-harness/strategies). A later
  * directory may not redefine an existing name.
+ *
+ * A policy strategy takes its `sizing`, `exit` and `multipliers` from its account's
+ * rulebook (accounts/<account>/RULEBOOK.md, `policies.<name>`; trading/rulebook.js) and
+ * may not state them itself (R1, one place). One its account's rulebook doesn't list, or
+ * whose rulebook is missing or doesn't load, is invalid.
  */
 
 const fs = require('fs');
@@ -22,6 +27,8 @@ const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
 const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
 const { familyOf, selectedLeg } = require('./contracts');
+const rulebook = require('./rulebook');
+const { accountDirs } = require('./accounts');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
@@ -86,6 +93,41 @@ function editDistance(a, b) {
 function suggest(key, known) {
   const close = known.find(k => editDistance(key.toLowerCase(), k.toLowerCase()) <= 2);
   return close ? ` (did you mean ${close}?)` : '';
+}
+
+/** Problems with an exit block (a strategy's, a rulebook's, or a remembered one: trading/exit-memory.js). */
+function exitErrors(x) {
+  const errors = [];
+  const req = (cond, msg) => { if (!cond) errors.push(msg); };
+  if (!x || typeof x !== 'object' || Array.isArray(x)) {
+    errors.push('exit: a map with target_r and/or trail_activate_r + trail_giveback_r');
+  } else {
+    for (const k of Object.keys(x)) if (!EXIT_KEYS.includes(k)) errors.push(`exit.${k}: unknown key${suggest(k, EXIT_KEYS)}`);
+    for (const k of ['target_r', 'trail_activate_r', 'trail_giveback_r']) {
+      if (x[k] !== undefined) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
+    }
+    if (x.max_bars !== undefined) req(Number.isInteger(x.max_bars) && x.max_bars > 0, 'exit.max_bars: a whole number of bars');
+    req((x.trail_activate_r === undefined) === (x.trail_giveback_r === undefined), 'exit: trail_activate_r and trail_giveback_r go together');
+    if (x.target !== undefined) {
+      // A target distance from the entry bar's close, written as an expression (e.g. crt_target(60): the far side of the range).
+      const sides = x.target && typeof x.target === 'object' && !Array.isArray(x.target) ? x.target : null;
+      if (sides && (Object.keys(sides).length !== 2 || typeof sides.long !== 'string' || typeof sides.short !== 'string')) {
+        errors.push('exit.target: a distance expression, or a map with exactly long and short expressions');
+      } else if (!sides && typeof x.target !== 'string') {
+        errors.push('exit.target: a distance expression, e.g. crt_target(60)');
+      } else {
+        for (const [k, e] of Object.entries(sides || { '': x.target })) {
+          try { compileExpression(e); } catch (err) { errors.push(`exit.target${k ? `.${k}` : ''}: ${err.message}`); }
+        }
+      }
+      req(x.target_r === undefined, 'exit: target_r or target, not both');
+    }
+    req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
+    if (x.target_r !== undefined && x.trail_activate_r !== undefined) {
+      req(x.trail_activate_r < x.target_r, 'exit: with both, trail_activate_r must be below target_r (the target would fill first)');
+    }
+  }
+  return errors;
 }
 
 function validateStrategy(data, body, folderName) {
@@ -215,43 +257,31 @@ function validateStrategy(data, body, folderName) {
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
   }
-  if (data.exit !== undefined) {
-    const x = data.exit;
-    if (!x || typeof x !== 'object' || Array.isArray(x)) {
-      errors.push('exit: a map with target_r and/or trail_activate_r + trail_giveback_r');
-    } else {
-      for (const k of Object.keys(x)) if (!EXIT_KEYS.includes(k)) errors.push(`exit.${k}: unknown key${suggest(k, EXIT_KEYS)}`);
-      for (const k of ['target_r', 'trail_activate_r', 'trail_giveback_r']) {
-        if (x[k] !== undefined) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
-      }
-      if (x.max_bars !== undefined) req(Number.isInteger(x.max_bars) && x.max_bars > 0, 'exit.max_bars: a whole number of bars');
-      req((x.trail_activate_r === undefined) === (x.trail_giveback_r === undefined), 'exit: trail_activate_r and trail_giveback_r go together');
-      if (x.target !== undefined) {
-        // A target distance from the entry bar's close, written as an expression (e.g. crt_target(60): the far side of the range).
-        const sides = x.target && typeof x.target === 'object' && !Array.isArray(x.target) ? x.target : null;
-        if (sides && (Object.keys(sides).length !== 2 || typeof sides.long !== 'string' || typeof sides.short !== 'string')) {
-          errors.push('exit.target: a distance expression, or a map with exactly long and short expressions');
-        } else if (!sides && typeof x.target !== 'string') {
-          errors.push('exit.target: a distance expression, e.g. crt_target(60)');
-        } else {
-          for (const [k, e] of Object.entries(sides || { '': x.target })) {
-            try { compileExpression(e); } catch (err) { errors.push(`exit.target${k ? `.${k}` : ''}: ${err.message}`); }
-          }
-        }
-        req(x.target_r === undefined, 'exit: target_r or target, not both');
-      }
-      req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
-      if (x.target_r !== undefined && x.trail_activate_r !== undefined) {
-        req(x.trail_activate_r < x.target_r, 'exit: with both, trail_activate_r must be below target_r (the target would fill first)');
-      }
-    }
-  }
+  if (data.exit !== undefined) errors.push(...exitErrors(data.exit));
   for (const h of REQUIRED_SECTIONS) req(body.includes(h), `body: missing section "${h}"`);
   return errors;
 }
 
 
-function loadStrategyFile(file) {
+/**
+ * A policy strategy's frontmatter with its rulebook entry merged in: { data, errors, multipliers }.
+ * `rulebookOf(account)`: that account's rulebook, or null when it has none.
+ */
+function withRulebook(data, folderName, rulebookOf) {
+  if (data.signal !== 'policy' || typeof data.account !== 'string' || !rulebookOf) return { data, errors: [], multipliers: undefined };
+  const book = rulebookOf(data.account);
+  const where = book ? book.file : `accounts/${data.account}/${rulebook.FILE}`;
+  // Stated here, a value would be a second place: always refused, listed or not.
+  const own = ['sizing', 'exit', 'multipliers'].filter(k => data[k] !== undefined)
+    .map(k => `${k}: it lives in ${where} (policies.${folderName}.${k}), not here (one place)`);
+  if (!book) return { data, errors: [...own, `account: ${data.account} has no rulebook (${where}); no policy on it can be sized`], multipliers: undefined };
+  if (!book.valid) return { data, errors: [...own, `account: ${where} is invalid (${book.errors.join('; ')}); no policy on it can be sized`], multipliers: undefined };
+  const entry = rulebook.policyEntry(book, folderName);
+  if (!entry) return { data, errors: [...own, `account: ${where} doesn't list ${folderName} (policies.${folderName}: its sizing, exit and multipliers); a policy is sized only from its account's rulebook`], multipliers: undefined };
+  return { data: { ...data, sizing: entry.sizing, exit: entry.exit }, errors: own, multipliers: entry.multipliers };
+}
+
+function loadStrategyFile(file, { rulebookOf = null } = {}) {
   const folderName = path.basename(path.dirname(file));
   if (fs.statSync(file).size > MAX_FILE_BYTES) {
     return { name: folderName, file, valid: false, errors: [`file is larger than ${MAX_FILE_BYTES / 1024} KB`] };
@@ -263,7 +293,9 @@ function loadStrategyFile(file) {
   } catch (err) {
     return { name: folderName, file, valid: false, errors: [err.message] };
   }
-  const errors = validateStrategy(parsed.data, parsed.body, folderName);
+  const book = withRulebook(parsed.data, folderName, rulebookOf);
+  parsed = { ...parsed, data: book.data };
+  const errors = [...book.errors, ...validateStrategy(parsed.data, parsed.body, folderName)];
   const ok = errors.length === 0;
   const compiledRules = parsed.data.signal === 'rules' && ok ? compileRules(parsed.data.rules).compiled : null;
   const stop = ok ? parsed.data.risk.stop : null;
@@ -274,13 +306,29 @@ function loadStrategyFile(file) {
   const tgt = ok && parsed.data.exit ? parsed.data.exit.target : undefined;
   const compiledTarget = tgt === undefined ? null
     : typeof tgt === 'string' ? compileExpression(tgt) : { long: compileExpression(tgt.long), short: compileExpression(tgt.short) };
-  return { ...parsed.data, mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'), name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
+  return {
+    ...parsed.data, ...(book.multipliers !== undefined ? { multipliers: book.multipliers } : {}), mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'),
+    name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors,
+  };
+}
+
+/** account name -> its rulebook (beside the first ACCOUNT.md of that name on the account search path), or null; cached per load. */
+function rulebookFinder(pluginRoot, env) {
+  const seen = new Map();
+  return name => {
+    if (!seen.has(name)) {
+      const dir = /^[a-z0-9][a-z0-9_-]*$/.test(name) ? accountDirs(pluginRoot, env).find(d => fs.existsSync(path.join(d, name, 'ACCOUNT.md'))) : null;
+      seen.set(name, dir ? rulebook.loadRulebookFile(path.join(dir, name, rulebook.FILE)) : null);
+    }
+    return seen.get(name);
+  };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */
 function loadStrategies(pluginRoot, env = process.env) {
   const byName = new Map();
   const problems = [];
+  const rulebookOf = rulebookFinder(pluginRoot, env);
   for (const dir of strategyDirs(pluginRoot, env)) {
     let entries;
     try {
@@ -293,7 +341,7 @@ function loadStrategies(pluginRoot, env = process.env) {
     for (const d of entries.filter(e => isDir(e) && !e.name.startsWith('_') && !e.name.startsWith('.'))) {
       const file = path.join(dir, d.name, 'STRATEGY.md');
       if (!fs.existsSync(file)) continue;
-      const s = loadStrategyFile(file);
+      const s = loadStrategyFile(file, { rulebookOf });
       if (byName.has(s.name)) {
         problems.push({ dir, error: `duplicate strategy "${s.name}" ignored (first defined in ${byName.get(s.name).file})` });
         continue;
@@ -502,6 +550,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
 
 module.exports = {
   exitPlan,
+  exitErrors,
   STATUSES,
   SIGNALS,
   FILTERS,

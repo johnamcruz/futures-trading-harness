@@ -193,7 +193,7 @@ learned-rulebook design calibrates it from real flow on history
 ### Traded through a policy strategy
 
 Listed in `prop_portfolio`, a value_area setup exits by the policy
-strategy's own trail (2R / 0.5R), not by the value-area target and time stop
+strategy's own trail (its rulebook `exit`), not by the value-area target and time stop
 above, as in training.
 
 ### Debugging a setup

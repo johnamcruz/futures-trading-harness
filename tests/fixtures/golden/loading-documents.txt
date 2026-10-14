@@ -83,7 +83,7 @@ strategy cisd_ote: {
   "version": 3
 }
 strategy crt_1h: {
-  "body": "6979 chars sha256:ba785f158ebb4026",
+  "body": "6989 chars sha256:7978f994ff460e05",
   "compiledRules": "sha256:1768503060ac2528",
   "compiledStop": "sha256:646ca51de6c81afc",
   "compiledTarget": "sha256:4f720fbc74512798",
@@ -132,7 +132,7 @@ strategy crt_1h: {
   "version": 2
 }
 strategy crt_4h: {
-  "body": "6043 chars sha256:2dd59ea6863fc32c",
+  "body": "6053 chars sha256:5eba451dc537e295",
   "compiledRules": "sha256:06983aecf794e6f8",
   "compiledStop": "sha256:dabc8502fe2a2e8e",
   "compiledTarget": "sha256:c1f256b9635ec579",
@@ -472,7 +472,7 @@ strategy orb: {
 }
 strategy prop_flow_1m: {
   "account": "<name-43f416>",
-  "body": "2294 chars sha256:1d9bee1b9cfa86ae",
+  "body": "2384 chars sha256:0438c07e7e9a3ef9",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -487,6 +487,7 @@ strategy prop_flow_1m: {
     "MNQ",
     "NQ"
   ],
+  "multipliers": [],
   "name": "prop_flow_1m",
   "risk": {
     "stop": "strategy",
@@ -495,7 +496,12 @@ strategy prop_flow_1m: {
   "signal": "policy",
   "sizing": {
     "cushion_frac": 0.2,
-    "min_size_guard": 1.5
+    "min_size_guard": 1.5,
+    "cap_usd": 0,
+    "drawdown_halve_usd": 0,
+    "stop_slippage_ticks": 1,
+    "clock_k": 0,
+    "r_per_session": 0.3
   },
   "source": "harness design (prop_portfolio's counterpart); its strategies read order flow from the broker's 1-minute bars, so backtests need the broker's bars as JSON (backtest.js fetch --out <file.json>)",
   "status": "active",
@@ -509,7 +515,7 @@ strategy prop_flow_1m: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4434 chars sha256:3adeac6169d4ba3b",
+  "body": "4863 chars sha256:349045cd63a42255",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -530,6 +536,7 @@ strategy prop_portfolio: {
     "M2K",
     "RTY"
   ],
+  "multipliers": [],
   "name": "prop_portfolio",
   "risk": {
     "stop": "strategy",
@@ -541,7 +548,9 @@ strategy prop_portfolio: {
     "cap_usd": 1000,
     "drawdown_halve_usd": 1500,
     "min_size_guard": 1.5,
-    "stop_slippage_ticks": 1
+    "stop_slippage_ticks": 1,
+    "clock_k": 0,
+    "r_per_session": 0.3
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",
@@ -609,7 +618,7 @@ strategy supertrend: {
   "version": 3
 }
 strategy value_area: {
-  "body": "8259 chars sha256:7e8078530713fed7",
+  "body": "8269 chars sha256:1e8d5fac1445587d",
   "compiledRules": "sha256:253dee0ab600c3cd",
   "compiledStop": "sha256:29b1123a8f006e5e",
   "compiledTarget": "sha256:3cca3d3b796915e5",
@@ -807,7 +816,7 @@ strategy value_area_breakout: {
   "version": 1
 }
 strategy value_area_reentry: {
-  "body": "4908 chars sha256:ee89306d9dab2580",
+  "body": "4918 chars sha256:2ab0923118515bbb",
   "compiledRules": "sha256:30ca0f93c8cc7aa4",
   "compiledStop": "sha256:7a8202b7f2760396",
   "compiledTarget": "sha256:3cca3d3b796915e5",
@@ -1007,7 +1016,7 @@ account test_50k: {
   "valid": true
 }
 account <name-43f416>: {
-  "body": "1313 chars sha256:252cf9aafc0e79c8",
+  "body": "1406 chars sha256:4f453db34ae4bcb2",
   "consistency_pct": 50,
   "daily_loss_limit": 2000,
   "daily_loss_soft": 1000,
@@ -1044,7 +1053,7 @@ account <name-43f416>: {
   "valid": true
 }
 account <name-aa1519>: {
-  "body": "1315 chars sha256:659d4c784c2bc99d",
+  "body": "1408 chars sha256:e1021939c34195bd",
   "consistency_pct": 50,
   "daily_loss_limit": 3000,
   "daily_loss_soft": 1500,
@@ -1081,7 +1090,7 @@ account <name-aa1519>: {
   "valid": true
 }
 account <name-45bd4d>: {
-  "body": "1301 chars sha256:9db69a3a7dcda899",
+  "body": "1395 chars sha256:f8d2e04b82801684",
   "consistency_pct": 50,
   "daily_loss_limit": 1000,
   "daily_loss_soft": 500,

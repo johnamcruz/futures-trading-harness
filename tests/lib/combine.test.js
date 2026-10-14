@@ -156,6 +156,19 @@ test('contractPlan: a contract\'s risk counts the stop\'s expected slippage (a t
   assert.strictEqual(require('../../scripts/lib/replay/counterfactual').SLIPPAGE_TICKS, c.DEFAULT_SIZING.stop_slippage_ticks);
 });
 
+test('contractPlan: a fraction (the verdict\'s multiplier) rounds the size down, 0 fits nothing, and junk sizes nothing', () => {
+  const plan = fraction => c.contractPlan({ dollars: 400, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro', fraction });
+  // 18 micros at full (above).
+  assert.strictEqual(plan(1).size, 18);
+  assert.strictEqual(plan(0.5).size, 9);
+  assert.strictEqual(plan(0.1).size, 1, 'floor(1.8)');
+  // Under one contract: no plan, never rounded up to 1 (as the priority order's halving: 0 means no trade).
+  for (const fraction of [0.05, 0]) assert.strictEqual(plan(fraction), null, String(fraction));
+  // Never above the whole budget; not a number fails closed.
+  assert.strictEqual(plan(2).size, 18);
+  for (const fraction of [NaN, 'x', null, -1, undefined]) assert.ok(fraction === undefined ? plan(fraction).size === 18 : plan(fraction) === null, String(fraction));
+});
+
 test('contractPlan: when the room to the floor sets the size, a stop a tick past its price never reaches the floor', () => {
   // $50,000 start, $2,000 max loss, no daily limit: down $1,917, so $83 of cushion ($48,083 over a $48,000 floor).
   const s = c.applyClose(c.start(acct({ starting_balance: 50000, max_loss: 2000, daily_loss_limit: 0, daily_loss_soft: 0, consistency_pct: 0 })), -1917);

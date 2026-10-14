@@ -20,7 +20,14 @@ lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
-`sizing` allows, or is skipped. A contract's risk is its stop plus the
+`sizing` allows, or is skipped. Its numbers (the `sizing`, the trail
+`exit`, the soft daily stop, and the verdict's multiplier items) are in the
+account's rulebook, `accounts/<name>/RULEBOOK.md`, the one place for them:
+read them there, never from a strategy or this skill. A missing, incomplete or
+malformed rulebook refuses the account and its policies (every entry; exits,
+flattens and protective stops still go, and the runner keeps trailing an open
+position by the exit plan it had): the refusal names the file and the
+key, so tell the user exactly that and stand aside; fixing it is theirs. A contract's risk is its stop plus the
 stop's expected slippage (`sizing.stop_slippage_ticks`, a tick by default,
 as the backtester fills stops) plus fees both ways, so a stop filled
 within its expected slippage never reaches the floor or the daily limit; a
@@ -36,8 +43,10 @@ it:
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
 - At each setup the runner records a verdict: the strategy that fired, the
-  side, `full` or `skip`, the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
-  size, and the stop in ticks. **A verdict is a ceiling, never an order**:
+  side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
+  size, the stop in ticks, and its multiplier: the share of the budget the
+  rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is
+  an item whose fact is missing or stale). The size is already sized at it. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so (it may
   skip it or halve it), and then exactly as given: rationale
   `setup:<policy strategy> ...`, that contract and side, at most that size,
@@ -89,7 +98,8 @@ it:
   snapshot older than 10 minutes or dated in the future (a clock that
   stepped back: tell the user); a missed close (the user records it with
   `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
-  daily limit; a size over the budget; any entry that doesn't match the
+  daily limit; a size over the budget (at the verdict's multiplier); a verdict
+  that isn't `full`, or carries no multiplier above 0 and at most 1; any entry that doesn't match the
   verdict, or whose verdict is not for the last recorded bar, or is for a
   setup of a strategy that isn't active; any position already open on the account, or any order working
   on it (a resting entry on another market could fill next to it); any entry once another
@@ -171,7 +181,8 @@ day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries all
 prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
-prop_portfolio's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
+prop_portfolio's sizing (its numbers are in the account's RULEBOOK.md, the
+one place for them): cushion_frac x $3250 = $975 (under cap_usd; no
 drawdown from the peak). A 40-tick stop plus a tick of expected slippage
 risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
 $21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =

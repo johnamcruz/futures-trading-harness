@@ -51,6 +51,7 @@ const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, s
 const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
+const { ceiling } = require('../trading/rulebook');
 const { familyOf, specFor } = require('../trading/contracts');
 
 const { normalizeBars } = ind;
@@ -373,7 +374,9 @@ function runEngine(markets, strategies, opts = {}) {
         dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
         guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks,
       });
-      const cp = sizeFor(1);
+      // Times the verdict's multiplier (the rulebook's enforced items, as prop/verdict.js): 0 skips the setup.
+      const { multiplier } = ceiling(o.prop && o.prop.strategy ? o.prop.strategy.multipliers : [], {}, closeAt);
+      const cp = multiplier > 0 ? sizeFor(multiplier) : null;
       if (!cp) return;
       size = cp.size;
       leg = legs.micro.root === cp.root ? legs.micro : legs.mini;

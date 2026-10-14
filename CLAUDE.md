@@ -48,15 +48,22 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
 - `accounts/<name>/ACCOUNT.md`: prop account profiles (`scripts/lib/trading/accounts.js`);
   combine rules and micro/mini sizing in `scripts/lib/trading/combine.js`, live attempt
   state and the gate's prop checks in `prop-state.js`.
+- `accounts/<name>/RULEBOOK.md`: the account's rulebook (`scripts/lib/trading/rulebook.js`,
+  docs/LEARNED-RULEBOOK.md R1-R4), the one place for the numbers its policies trade with
+  (the soft daily stop; each policy's `sizing`, `exit` and verdict `multipliers`) and the
+  enforced-or-taught classification of every rule. The loaders read it; nothing else states
+  a value (`tests/plugin/rulebook.test.js`).
 - Policy strategies (`signal: policy`, e.g. `strategies/prop_portfolio`) are the prop
-  challenge as a strategy: they list rules strategies and carry `account`, `sizing`,
-  `contracts`, and `exit`. Only they have those keys.
+  challenge as a strategy: they list rules strategies and carry `account` and `contracts`;
+  their `sizing` and `exit` come only from the account's rulebook (every key stated; a
+  policy it doesn't list, or an account without a valid rulebook, is refused). Only they
+  have those keys.
 - `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
-  (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`), combine attempts on
+  (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`, with the rulebook's multiplier), combine attempts on
   history (`challenge.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
   OOS month, >= 40% pass over >= 20 attempts and 2 months) in `promotion.js`, frozen code with a
-  test that its numbers only rise; never lower it. No trained policy runs: the learned rulebook
-  that replaces the retired PPO policy is still to come.
+  test that its numbers only rise; never lower it. No trained policy runs: the rulebook holds
+  today's values, and nothing in it is learned yet.
 - Brokers: no broker code in the harness. Every broker or prop firm runs its own MCP server (own repo)
   implementing one interface, `docs/BROKER-MCP-INTERFACE.md` (as data: `scripts/lib/broker/interface.js`).
   Which server is config (`mcp-configs/brokers.json`, `~/.futures-trading-harness/brokers.json`,

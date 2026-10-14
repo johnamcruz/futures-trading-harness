@@ -42,6 +42,7 @@ const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
+const { createExitMemory } = require('./trading/exit-memory');
 const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-state');
 const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBriefing, wholeBars, readFrameBriefing, writeFrameBriefing, removeFrameBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
@@ -233,6 +234,12 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   const strategies = () => loadStrategies(root, env).strategies;
   // The analysts on a timeframe of their own (lanes.js; refused at start when it can't be given): none, as before.
   const frames = analystFrames(cfg, agents || loadAgents(root));
+  // An open position keeps its strategy's exit plan if the strategy stops loading (trading/exit-memory.js).
+  const exitMemory = createExitMemory(path.join(home, 'exit-plans.json'), {
+    onError: m => log(m, 'error'),
+    // An alert like the runner's own: into the event log (the cycle log and the scorecard read it).
+    onDrop: d => event({ at: now().toISOString(), kind: 'exit_plan_dropped', ...d }),
+  });
   const journal = () => readJournal(resolveJournalPath(env));
   const record = barRecorder({ cfg, home, env, now, log, onBarClosed });
   return createRunner({
@@ -299,6 +306,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     event,
     entryOrders: () => entryOrders(home),
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
+    exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
     barClosed: record.closed,
     // A replay pass is one step in its own process: it can't hold a cycle for a lane that is late (runner.js).

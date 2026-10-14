@@ -79,10 +79,10 @@ test('settleCollisions: one policy\'s entry verdicts stand; every other policy\'
   assert.strictEqual(LC.settleCollisions(null).winner, null);
 });
 
-test('skippedVerdict: the same setup and bar, skipped at size 0, saying why and by which policy', () => {
-  const v = { at: 'x', strategy: 'pol1', component: 'a1', bar: '2026-10-07T14:00:00Z', action: 'full', maxSize: 3, contract: 'MNQ', stopTicks: 40, direction: 'long' };
+test('skippedVerdict: the same setup and bar, skipped at size 0 and multiplier 0, saying why and by which policy', () => {
+  const v = { at: 'x', strategy: 'pol1', component: 'a1', bar: '2026-10-07T14:00:00Z', action: 'full', multiplier: 1, maxSize: 3, contract: 'MNQ', stopTicks: 40, direction: 'long' };
   const s = LC.skippedVerdict(v, 'pol3', new Date('2026-10-07T14:03:02Z'));
-  assert.deepStrictEqual(s, { ...v, at: '2026-10-07T14:03:02.000Z', action: 'skip', maxSize: 0, reason: 'skipped: lower priority (pol3 goes first when both have a setup in one cycle)', skippedBy: 'pol3' });
+  assert.deepStrictEqual(s, { ...v, at: '2026-10-07T14:03:02.000Z', action: 'skip', multiplier: 0, maxSize: 0, reason: 'skipped: lower priority (pol3 goes first when both have a setup in one cycle)', skippedBy: 'pol3' });
   assert.strictEqual(v.action, 'full', 'the original is untouched');
 });
 

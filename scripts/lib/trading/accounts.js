@@ -5,12 +5,16 @@
  * `accounts/<name>/ACCOUNT.md` (frontmatter read by code, body by the
  * agents). A policy strategy names one (`account: <name>`) to size by its
  * cushion and to train a policy for it. Extra folders: FTH_ACCOUNTS_DIRS.
+ * An account's rulebook (`RULEBOOK.md` beside it, trading/rulebook.js) holds the
+ * harness's own numbers for it: `daily_loss_soft` comes from there and only there
+ * (R1, one place); a missing or invalid rulebook makes the account invalid.
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
+const rulebook = require('./rulebook');
 
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const KEYS = ['name', 'description', 'firm', 'type', 'starting_balance', 'profit_target', 'max_loss', 'max_loss_mode',
@@ -59,10 +63,20 @@ function loadAccountFile(file) {
   } catch (err) {
     return { name: folderName, file, valid: false, errors: [err.message] };
   }
-  const errors = validateAccount(parsed.data, parsed.body, folderName);
+  const book = rulebook.loadRulebookFile(path.join(path.dirname(file), rulebook.FILE));
+  const data = { ...parsed.data };
+  const bookErrors = [];
+  // One place: the soft stop is never the profile's, and an account without a rulebook (whose enforced values
+  // would quietly default to off) is refused.
+  if (parsed.data.daily_loss_soft !== undefined) bookErrors.push(`daily_loss_soft: it lives in ${rulebook.FILE} beside this file, not here (one place)`);
+  const bookFile = path.join(path.dirname(file), rulebook.FILE);
+  if (!book) bookErrors.push(`${bookFile}: missing; every account has its rulebook beside its ACCOUNT.md (the soft daily stop and its policies' numbers)`);
+  else if (!book.valid) bookErrors.push(...book.errors.map(e => `${bookFile}: ${e}`));
+  else data.daily_loss_soft = rulebook.limit(book.daily_loss_soft);
+  const errors = [...bookErrors, ...validateAccount(data, parsed.body, folderName)];
   return {
     daily_loss_limit: 0, daily_loss_soft: 0, consistency_pct: 0, fees_per_side: {},
-    ...parsed.data, name: folderName, file, body: parsed.body, valid: errors.length === 0, errors,
+    ...data, name: folderName, file, body: parsed.body, valid: errors.length === 0, errors,
   };
 }
 

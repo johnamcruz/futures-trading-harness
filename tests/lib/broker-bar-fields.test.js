@@ -14,7 +14,7 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { loadBars, aggregate } = require('../../scripts/lib/backtest/data');
 const { runBacktest } = require('../../scripts/lib/backtest/run');
-const { tmpDir } = require('../helpers');
+const { tmpDir, rootWithPolicies } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const STRATS = Object.fromEntries(loadStrategies(ROOT, {}).strategies.map(s => [s.name, s]));
@@ -187,7 +187,9 @@ test('a prop run on finer bars with broker fields: a paper strategy the policy l
   for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
   const env = { ...process.env, FTH_STRATEGIES_DIRS: strategies };
-  const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) });
+  // prop_mixed is listed in its account's rulebook (a plugin root with the accounts copied).
+  const root = rootWithPolicies({ prop_mixed: fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').match(/^account: (\S+)/m)[1] });
+  const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root, outRoot: dir, env, log: m => logs.push(m) });
   const logs = [];
   try {
     run('prop_mixed', logs);

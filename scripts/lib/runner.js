@@ -91,7 +91,7 @@ const COALESCE_HOLD_MS = 10000;
 function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
-    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
+    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null, exitStrategy = null,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
@@ -375,7 +375,8 @@ function createRunner(deps) {
         return contractRoot(e.contractId) === contractRoot(cid) && e.setup && (!e.side || e.side === side)
           && at >= dayStart && at <= fillAt + 120000;
       });
-      const strategy = rec && strategyNamed(rec.setup);
+      // Exits only: a strategy that stopped loading while its position is open keeps its last exit plan (exitStrategy).
+      const strategy = rec && (exitStrategy || strategyNamed)(rec.setup, { symbol: item.symbol, contractId: cid, position: key });
       const plan = strategy ? exitPlan(strategy) : null;
       const entry = Number(p.averagePrice);
       let risk = null;
@@ -460,6 +461,12 @@ function createRunner(deps) {
     if (sign * (target - resting) < tick - 1e-9) return;
     if (Number(stopOrder.size) > Number(p.size)) {
       log(`${item.symbol}: trail: stop ${stopOrder.id} (size ${stopOrder.size}) is bigger than the position (${p.size}); not moving it toward the market`, 'error');
+      return;
+    }
+    // Never a stop that isn't a price (a broken exit plan gives NaN): the broker's stop stays where it is.
+    if (!(typeof target === 'number' && Number.isFinite(target) && target > 0)) {
+      log(`${item.symbol}: trail: the new stop for ${t.setup} is not a price (${target}); not sent, stop ${stopOrder.id} stays at ${resting}`, 'error');
+      emit('stop_not_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, resting, target: String(target) });
       return;
     }
     await client.modifyStop(cfg.account, stopOrder.id, target);

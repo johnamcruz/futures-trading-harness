@@ -624,7 +624,7 @@ instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared 
 timeframe: 3m                # the one bar-size setting: every listed strategy trades it
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
-sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5, stop_slippage_ticks: 1 }   # risk from the headroom; a contract's risk counts a tick of stop slippage
+# sizing, exit, multipliers: in the account's rulebook (accounts/<account>/RULEBOOK.md, policies.prop_portfolio), the one place for them
 contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode
 ```
 
@@ -678,7 +678,7 @@ those conditions are false, so `ofi` and `ofi_absorption` give no signal and
 |---|---|---|
 | `FTH_KILL_SWITCH_FILE` | `~/.futures-trading-harness/STOP` | If it exists, no new entries |
 | `FTH_STRATEGIES_DIRS` | (none) | Extra strategy folders |
-| `FTH_ACCOUNTS_DIRS` | (none) | Extra account-profile folders |
+| `FTH_ACCOUNTS_DIRS` | (none) | Extra account-profile folders: each account folder holds its `ACCOUNT.md` and its `RULEBOOK.md` (required: an account without a valid one is refused). A shipped account of the same name comes first, with its own rulebook |
 | `FTH_PLAN_MAX_AGE_MIN` | 120 | Plan freshness |
 | `FTH_MAX_CONSECUTIVE_LOSSES` / `FTH_LOSS_COOLDOWN_MIN` | 2 / 30 | Loss-streak cooldown |
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |

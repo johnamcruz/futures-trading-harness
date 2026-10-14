@@ -52,3 +52,32 @@ test('setupPlan: the stop in ticks (half to even, as the engine) and a plan per 
   assert.strictEqual(p.i, bars.length - 1);
   assert.deepStrictEqual(p.sizing, { ...combine.DEFAULT_SIZING });
 });
+
+test('the verdict\'s multiplier (R4): 1 for a full verdict and 0 for a skip while the rulebook has no multiplier items', () => {
+  assert.strictEqual(decideSetup(args()).multiplier, 1);
+  assert.strictEqual(decideSetup(args({ strategy: { ...strategy, multipliers: [] } })).multiplier, 1);
+  const wide = decideSetup(args({ scan: { direction: 'short', stopDistance: 1000 } }));
+  assert.deepStrictEqual([wide.action, wide.multiplier], ['skip', 0]);
+});
+
+test('the verdict folds the rulebook\'s enforced multiplier items into its ceiling; a missing or stale fact skips the setup', () => {
+  const mtf = [{ item: 'mtf_read', fact: 'mtf', values: { aligned: 1, mixed: 0.5, counter: 0 }, max_age_min: 10 }];
+  const s = { ...strategy, multipliers: mtf };
+  const fresh = value => ({ mtf: { value, at: new Date(now.getTime() - 60000).toISOString() } });
+  const pick = v => [v.action, v.multiplier, v.maxSize];
+  // 18 MNQ at full (above); at 0.5: floor(18 x 0.5) = 9.
+  assert.deepStrictEqual(pick(decideSetup(args({ strategy: s, facts: fresh('aligned') }))), ['full', 1, 18]);
+  assert.deepStrictEqual(pick(decideSetup(args({ strategy: s, facts: fresh('mixed') }))), ['full', 0.5, 9]);
+  const stale = { mtf: { value: 'aligned', at: new Date(now.getTime() - 11 * 60000).toISOString() } };
+  for (const [label, facts] of [['no fact', {}], ['stale', stale], ['no time', { mtf: { value: 'aligned' } }], ['a value it does not map', fresh('pullback')], ['a value of 0', fresh('counter')]]) {
+    const v = decideSetup(args({ strategy: s, facts }));
+    assert.deepStrictEqual([v.action, v.multiplier, v.maxSize, v.contract], ['skip', 0, 0, null], label);
+    assert.match(v.reason, /the rulebook's enforced items allow no size \(mtf_read: /, label);
+  }
+  // No facts passed at all (as the runner today): any item zeroes, never a full size (fails closed).
+  assert.strictEqual(decideSetup(args({ strategy: s })).action, 'skip');
+  // A share too small for one contract: a skip, never rounded up to 1.
+  const v = decideSetup(args({ strategy: { ...strategy, multipliers: [{ item: 'mtf_read', fact: 'mtf', values: { aligned: 0.01 } }] }, facts: fresh('aligned') }));
+  assert.deepStrictEqual([v.action, v.multiplier], ['skip', 0]);
+  assert.match(v.reason, /at the rulebook's multiplier \(0\.01\) no contract fits/);
+});

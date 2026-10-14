@@ -42,7 +42,7 @@ function propGate({ balance = 50000, policy = false, verdict = policy ? null : {
   if (balance !== null) prop.snapshot(home, MINI, balance, new Date(NOW.getTime() - 60000));
   if (verdict) {
     prop.appendVerdict(home, {
-      strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40,
+      strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
       maxSize: policy ? 3 : 50, bar: BAR, at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(), ...verdict,
     });
   }
