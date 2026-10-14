@@ -58,7 +58,7 @@ const READS = [
 ];
 
 /** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps). */
-function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 100 } = {}) {
+function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300 } = {}) {
   const checked = checkReads({ reads, side, briefing: b, tick: 0.25 });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd }) : null;
   return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned });

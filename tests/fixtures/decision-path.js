@@ -66,6 +66,10 @@ const RESULT_ACTION = { executed: 'entered', 'no-trade': 'skipped', blocked: 'bl
 const headLoads = w => (w.mode === 'full' ? [...REQUIRED_FOR_ENTRY, 'trader-process', 'htf-to-ltf'] : []);
 // What it reads before an entry (setup-judgment, trade-plan): loaded in full mode, embedded in index mode.
 const entryLoads = w => (w.mode === 'full' ? [...REQUIRED_AT_ENTRY] : []);
+// A rules setup's entry also reads the strategy skills: in index mode the head trader's prompt embeds the composed
+// entry's list (trade_lifecycle, the one shipped entry strategy), so it looks these up (full mode loads them above).
+const STRATEGY_SKILLS = REQUIRED_FOR_ENTRY.filter(s => /^strategy-/.test(s));
+const strategyReads = w => (w.mode === 'full' ? [] : STRATEGY_SKILLS);
 // The roles the report cache serves on the fired bar after a quiet bar, in index mode (the default): risk-manager phase 1
 // (the account unchanged; no lookup is required of it). The analysts' reports here name no briefing versions, so none is
 // cached; a cached analyst is served only with lookups made under the same facts key (the e2e's cache cases).
@@ -225,6 +229,7 @@ function entryCycle(w, o = {}) {
     ...roundSteps(w, o),
     ...Object.entries(o.outside || {}).flatMap(([as, skills]) => skills.map(s => ({ lookup: s, as }))),
     ...entryLoads(w).filter(s => !(o.skip || []).includes(s)).map(s => ({ load: s })),
+    ...strategyReads(w).filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
     ...(o.manual ? [] : [{ harness: 'order_plan', args: ctx => ({ bars: path.join(ctx.env.FTH_BARS_DIR, 'MNQ-3m.json'), symbol: 'MNQ', strategy: SETUP.strategy, side: SETUP.side, accountId: 7 }) }]),
     ...(o.plan === false ? [] : [{ broker: 'journal_add', args: ctx => ({ kind: 'plan', contractId: 'MNQ', tags: [`setup:${SETUP.strategy}`, 'MNQ'], text: `${SETUP.strategy} ${SETUP.side}, stop ${plan(ctx).stopPrice}` }) }]),
     ...roleStep(o, 'risk-manager', () => `Phase 2 on the ${SETUP.strategy} ${SETUP.side} plan for MNQ.\nVERDICT: ${verdict} - size 1\nFACTS: ${facts()}`, 'phase2'),
@@ -254,6 +259,6 @@ const working = w => exchange.read(w.state).orders.filter(o => o.status === 1 &&
 const placedAtBroker = w => exchange.read(w.state).calls.filter(c => c.tool === 'place_order');
 
 module.exports = {
-  ROOT, SETUP, MNQ_ID, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
+  ROOT, SETUP, MNQ_ID, STRATEGY_SKILLS, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
   entryCycle, passCycle, roundSteps, manualArgs, planOf, gateLog, cycleLines, position, working, placedAtBroker,
 };

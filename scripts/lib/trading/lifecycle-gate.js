@@ -10,7 +10,9 @@
  * The entry must:
  *   - be in a runner's cycle on a bar (FTH_CYCLE_BARS) whose bar briefing is the one on disk (fact-claims briefingFor);
  *   - have a compose record for that bar, its root and its side (the latest such record is the one judged);
- *   - be before the record's expiry (the next base-bar close) and the first entry since it (one entry per record);
+ *   - be on the record's own contract (its symbol: a size stated for MNQ is not one for NQ);
+ *   - be before the record's expiry (the next base-bar close) and the first entry on the family and side since the
+ *     cycle bar opened (one entry per bar and side, whichever record it came from);
  *   - pass the reads checker (composed-reads.js) run again on the record's reads against that briefing (the record's
  *     own `ok` and checks are never read): every read true, agreeing with the side, every step stated;
  *   - match the plan worked out again from the re-checked reads (trade-lifecycle.js planOf: the D3 buffer, the D13
@@ -28,7 +30,8 @@
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot })
  *                                   { message: why it is refused | null, check, record, plan, room }
- *   recordUsed(entries, record, root)   a successful entry on the root's family placed at or after it
+ *   recordUsed(entries, { since, side }, root)   a successful non-exit entry on the root's family, that side (an entry
+ *                                   whose side can't be read counts), placed at or after `since`
  */
 
 const fs = require('fs');
@@ -73,12 +76,17 @@ function composedName({ setupName, named = null, strategies = null, home, root }
   return null;
 }
 
-function recordUsed(entries, record, root) {
-  const at = Date.parse(record && record.at);
+const sideOfEntry = e => {
+  const s = String((e.data && e.data.request && e.data.request.side) || '').toLowerCase();
+  return s === 'buy' ? 'long' : s === 'sell' ? 'short' : null;
+};
+
+function recordUsed(entries, { since, side = null } = {}, root) {
+  const at = Date.parse(since);
   if (!Number.isFinite(at)) return true;
   const fam = r => (familyOf(r) ? familyOf(r).micro : r);
   return (entries || []).some(e => e && e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
-    && !RISK_REDUCING.test(String(e.text || '')) && entryTime(e) >= at
+    && !RISK_REDUCING.test(String(e.text || '')) && entryTime(e) >= at && (!side || !sideOfEntry(e) || sideOfEntry(e) === side)
     && (mayBeRoot(e.contractId, root) || (Boolean(e.contractId) && fam(contractRoot(e.contractId)) === fam(root))));
 }
 
@@ -109,11 +117,14 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     if (!mine.length) return say(`the compose record for this bar is for a ${atBar[atBar.length - 1].side}, not this ${side}`);
     const rec = mine[mine.length - 1];
     if (familyRoot(String(rec.root || '')) !== familyRoot(root)) return say(`the compose record is for ${rec.root}, not ${familyRoot(root)}`);
+    // The stated size is a number of the record's own contract (its symbol): never another leg of the family.
+    const recSymbol = String(rec.symbol || rec.contract || '').toUpperCase();
+    if (recSymbol !== String(contractRoot(input.contractId) || '').toUpperCase()) return say(`the compose record is for ${recSymbol || 'no named contract'}, not ${contractRoot(input.contractId)}: its size is a number of its own contract; compose on the contract you trade`);
     const expiries = [rec.expiresAt, b.sections.m3 && b.sections.m3.validUntil].map(x => Date.parse(x)).filter(Number.isFinite);
     if (!expiries.length) return say('the compose record has no expiry');
     const expiry = Math.min(...expiries);
     if (!(now.getTime() < expiry)) return say(`the compose record expired at ${new Date(expiry).toISOString()} (the next bar's close): compose again on the new bar`);
-    if (recordUsed(entries, rec, root)) return say(`the compose record of ${rec.at} was already used for an entry: one entry per record`);
+    if (recordUsed(entries, { since: cycleBar, side }, root)) return say(`a ${side} entry on ${familyRoot(root)} was already placed since this bar opened (${cycleBar}): one entry per bar and side`);
     const spec = specOf(contractRoot(input.contractId));
     const tick = spec && spec.tickSize > 0 ? spec.tickSize : null;
     if (!tick || !(spec.tickValue > 0)) return say('no tick specs for the contract, so the plan can\'t be checked');

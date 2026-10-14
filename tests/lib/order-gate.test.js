@@ -2439,8 +2439,10 @@ function headRun() {
   const att = H.attestation(configFile, root);
   const transcript = path.join(dir, 'logs', 'cycle-transcript.jsonl');
   fs.mkdirSync(path.dirname(transcript), { recursive: true });
-  // An opencode stream whose session loaded no skill by tool: the head trader read its prompt's.
-  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
+  // An opencode stream whose session loaded no skill by tool: the head trader read its prompt's, and looked up the
+  // strategy skills a rules entry (these tests' setup:orb) needs beyond it (the prompt embeds the composed entry's).
+  const lookedUp = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`));
+  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' }), ...lookedUp].join('\n'));
   const cfg = { ...config, autonomous: true, roleSkills: 'index', cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
   return { H, root, dir, configFile, generated, att, transcript, cfg };
 }
@@ -2450,13 +2452,13 @@ const HEAD_RISK_REDUCING = ['[exit] flatten', '[protect] stop for the long at 21
 
 test('head prompt (gate): the attested, verified embedded skills count as loaded for the runner\'s opencode transcript in index mode', () => {
   const { att, cfg } = headRun();
-  const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
-  for (const s of [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY]) assert.ok(att.skills.includes(s), `attested: ${s}`);
+  const { REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  for (const s of [...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY]) assert.ok(att.skills.includes(s), `attested: ${s}`);
   assert.deepStrictEqual(skillChecks(headGate(cfg)), []);
   // Without the attestation the same session is refused for every one of them: the transcript alone decides.
   const none = headGate({ ...cfg, headPromptAttestation: null });
   assert.deepStrictEqual(skillChecks(none), ['skills-at-entry', 'skills-loaded']);
-  assert.match(none.violations.find(v => v.check === 'skills-loaded').message, /not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks\. Load each with the skill tool \(or skill_lookup, without one/);
+  assert.match(none.violations.find(v => v.check === 'skills-loaded').message, /not loaded in this session: trade-session, multi-timeframe-analysis\. Load each with the skill tool \(or skill_lookup, without one/);
 });
 
 test('head prompt (gate): never fails open: interactive, full mode, a hook\'s transcript, another harness\'s transcript, a bad or forged attestation, a changed file or skill', () => {
@@ -2501,12 +2503,12 @@ test('head prompt (gate): never fails open: interactive, full mode, a hook\'s tr
   fs.writeFileSync(configFile, generated);
   assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'restored: counted again');
   // A skill that isn't attested still needs its load (a situational one the briefing triggers, or one the runner left out).
-  const partial = { ...att, skills: att.skills.filter(s => s !== 'strategy-scan') };
+  const partial = { ...att, skills: att.skills.filter(s => s !== 'trade-session') };
   const p = headGate({ ...cfg, headPromptAttestation: JSON.stringify(partial) });
   assert.deepStrictEqual(skillChecks(p), ['skills-loaded']);
-  assert.match(p.violations[0].message, /not loaded in this session: strategy-scan\./);
+  assert.match(p.violations[0].message, /not loaded in this session: trade-session\./);
   // ... and a skill_lookup in the transcript for it counts, as before.
-  fs.appendFileSync(transcript, `\n${ocEvent('harness_skill_lookup', { skill: 'strategy-scan' }).replace('VERDICT: APPROVE - size 1', '<skill name=\\"strategy-scan\\">...')}`);
+  fs.appendFileSync(transcript, `\n${ocEvent('harness_skill_lookup', { skill: 'trade-session' }).replace('VERDICT: APPROVE - size 1', '<skill name=\\"trade-session\\">...')}`);
   assert.deepStrictEqual(skillChecks(headGate({ ...cfg, headPromptAttestation: JSON.stringify(partial) })), []);
 });
 
@@ -2703,7 +2705,7 @@ test('trade_lifecycle: composed-reads refuses a false, unverifiable or other-sid
   assert.match(only(lcEval(lcHome({ side: 'short' })))[0], /for a short, not this long/);
   assert.match(only(lcEval(lcHome(), LC.order(), { now: new Date(LC.EXPIRES) }))[0], /expired/);
   const used = { ts: '2026-10-07T14:00:01Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } };
-  assert.match(only(lcEval(lcHome(), LC.order(), { entries: [plan(1, { ts: '2026-10-07T13:59:30Z' }), used] }))[0], /already used/);
+  assert.match(only(lcEval(lcHome(), LC.order(), { entries: [plan(1, { ts: '2026-10-07T13:59:30Z' }), used] }))[0], /already placed since this bar opened/);
   home = trendHome();
   require('../../scripts/lib/trading/briefing').writeBriefing(home, LC.briefing());
   assert.match(only(lcEval(home))[0], /no compose record/);
@@ -2724,12 +2726,21 @@ test('trade_lifecycle: composed-reads runs keyed on the tag even with no strateg
   assert.ok(checks(skipping).includes('composed-reads'), 'a hard check');
 });
 
-test('trade_lifecycle: the stated size goes only within the ceilings: over the risk cap is refused ([max-risk]), at it goes', () => {
-  // Size 2 x 111 ticks x $0.50 = $111 over max_risk_usd $100: the record states it, the cap refuses it.
-  // compose_check's plan refuses it too (trade-lifecycle.js planOf), so composed-reads, re-planning it, does.
-  const r = lcEval(lcHome({ size: 2 }), LC.order({ size: 2 }));
-  assert.deepStrictEqual(checks(r), ['composed-reads', 'max-risk']);
-  assert.match(r.violations[1].message, /risk \$111\.00 .* over setup:trade_lifecycle's risk\.max_risk_usd \$100\.00/);
+test('trade_lifecycle: the stated size goes only within the ceilings: $300 the hard cap (the owner\'s $200-300 a trade)', () => {
+  // 111-tick stop, $0.50 a tick on MNQ: 4 = $222.00 and 5 = $277.50 go; 6 = $333.00 is over $300, refused by the plan
+  // (composed-reads, as compose_check) and by the cap (max-risk).
+  for (const size of [4, 5]) assert.deepStrictEqual(lcEval(lcHome({ size }), LC.order({ size })).violations, [], `${size} MNQ`);
+  const six = lcEval(lcHome({ size: 6 }), LC.order({ size: 6 }));
+  assert.deepStrictEqual(checks(six), ['composed-reads', 'max-risk']);
+  assert.match(six.violations[0].message, /size 6 risks \$333, over the strategy's risk.max_risk_usd \$300/);
+  assert.match(six.violations[1].message, /risk \$333\.00 .* over setup:trade_lifecycle's risk\.max_risk_usd \$300\.00/);
+  // 1 NQ ($5.00 a tick) at the same 111 ticks is $555.00: refused.
+  const nqHome = trendHome();
+  LC.writeScenario(nqHome, { b: { ...LC.briefing(), symbol: 'NQ' } });
+  const nqRec = require('../../scripts/lib/trading/trade-lifecycle').readRecords(nqHome, 'NQ').at(-1);
+  require('../../scripts/lib/trading/trade-lifecycle').appendRecord(nqHome, { ...nqRec, symbol: 'NQ', contract: 'NQ' });
+  const nq = lcEval(nqHome, LC.order({ contractId: 'NQ' }));
+  assert.ok(checks(nq).includes('max-risk') && nq.violations.some(v => /\$555\.00/.test(v.message)), JSON.stringify(nq.violations));
   // Over the broker's max order size too.
   assert.ok(checks(lcEval(lcHome({ size: 60 }), LC.order({ size: 60 }))).includes('max-order-size'));
   // An order above the record's stated size is refused by composed-reads even under every cap.
@@ -2794,4 +2805,46 @@ test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the 
   assert.deepStrictEqual([checkClaim(parseClaim('room long short'), b, order).check, checkClaim(parseClaim('room long enough'), b, order).check], [true, false]);
   // Without the record's plan (refused), no room is assumed: the order's own setup has none on the scan.
   assert.strictEqual(checkClaim(parseClaim('room long enough'), LC.briefing(), { strategy: 'trade_lifecycle', side: 'long' }).check, 'unchecked');
+});
+
+test('trade_lifecycle, D2: against the higher-timeframe trend only on a verified 15m or 1h CHoCH the trade\'s way among the record\'s reads; else [mtf-trend]', () => {
+  const down = () => trendHome(require('../helpers').tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
+  const choch = LC.briefing();
+  choch.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
+  const withChoch = LC.READS.map(x => (x.step === 'bias' ? { ...x, read: '1h choch up', skill: 'bos-vs-choch' } : x));
+  // The trend against the long and no CHoCH read: the trend rule refuses it.
+  let home = down();
+  LC.writeScenario(home);
+  assert.deepStrictEqual(checks(lcEval(home)), ['mtf-trend']);
+  // A verified 1h CHoCH up in the record: the trend rule is judged as a reversal's, and the entry goes.
+  home = down();
+  LC.writeScenario(home, { reads: withChoch, b: choch });
+  assert.deepStrictEqual(lcEval(home).violations, []);
+  // The CHoCH read false now (the briefing's last 1h break is a BOS): composed-reads refuses, and the trend rule too.
+  const bos = LC.briefing();
+  bos.sections.h1.data.lastBreak = { last: { kind: 'BOS', direction: 'up', level: 21500 }, previous: null };
+  home = down();
+  LC.writeScenario(home, { reads: withChoch, b: choch });
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, bos);
+  assert.deepStrictEqual(checks(lcEval(home)), ['composed-reads', 'mtf-trend']);
+  // A rules strategy's entry never gets it (trade_lifecycle only), and an exit is never held.
+  const exit = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' });
+  assert.deepStrictEqual(exit.violations, []);
+});
+
+test('trade_lifecycle: the order is on the record\'s own contract; the briefing\'s validUntil earlier than the record\'s expiresAt decides', () => {
+  const home = lcHome();
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const rec = TL.readRecords(home, 'MNQ').at(-1);
+  // A record for NQ: an MNQ order is refused (its size is a number of NQ).
+  TL.appendRecord(home, { ...rec, symbol: 'NQ', contract: 'NQ' });
+  assert.match(lcEval(home).violations.find(v => v.check === 'composed-reads').message, /the compose record is for NQ, not MNQ/);
+  // The briefing expires before the record says: refused at the briefing's.
+  const h2 = trendHome();
+  const b = LC.briefing();
+  b.sections.m3.validUntil = '2026-10-07T14:01:00.000Z';
+  LC.writeScenario(h2, { b });
+  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: LC.EXPIRES });
+  assert.deepStrictEqual(lcEval(h2).violations, [], 'before both');
+  assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:01:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:01:00.000Z/);
 });

@@ -39,7 +39,7 @@ test('compose_check: scenario 1 is OK, the plan in code, one record appended per
   assert.strictEqual(rec.expiresAt, '2026-04-23T15:03:00.000Z');
   assert.strictEqual(rec.at, '2026-04-23T15:00:05.000Z');
   assert.strictEqual(rec.plan.size, 1);
-  assert.strictEqual(rec.plan.maxSize, 1, 'the shipped strategy\'s $100 cap over $55.50 a contract');
+  assert.strictEqual(rec.plan.maxSize, 5, 'the shipped strategy\'s $300 cap over $55.50 a contract');
   assert.strictEqual(rec.signature, 'bias:1h-bos-up+bias:above-prior-rth-range+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:1h-swing-1.5-2.5r');
   assert.strictEqual(rec.context.trendSide, 'with');
   // Under FTH_HOME, never the repository.
@@ -55,7 +55,7 @@ test('compose_check: a false read, an unknown skill or a size over the cap is re
   const one = reads => composeCheck({ symbol: 'MNQ', side: 'long', reads, size: 1 }, ctx);
   assert.match(one(SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior VAH down' } : x))).text, /FALSE setup[^]*NOT OK/);
   assert.match(one(SCENARIO_1.map((x, i) => (i === 0 ? { ...x, skill: 'astrology' } : x))).text, /no skill named astrology[^]*NOT OK/);
-  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 2 }, ctx).text, /PROBLEM: size 2 risks \$111, over the strategy's risk.max_risk_usd \$100/);
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 6 }, ctx).text, /PROBLEM: size 6 risks \$333, over the strategy's risk.max_risk_usd \$300/);
   assert.deepStrictEqual(readRecords(home, 'MNQ').map(x => x.ok), [false, false, false]);
 });
 

@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const exchange = require('../fixtures/mock-exchange');
 const D = require('../fixtures/decision-path');
-const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
 const { requiredFor, needed } = require('../../scripts/lib/trading/skill-lookups');
 const { trendRuleOf } = require('../../scripts/lib/trading/reasons');
 const { stableHead } = require('../../scripts/lib/autotrader');
@@ -80,7 +80,7 @@ test('decision path, pass: no candidate on the bar, the model passes; nothing re
   assert.deepStrictEqual([line.result, line.orders, line.missingSkills], ['CYCLE RESULT: no-trade - nothing fired', [], []]);
   // Index mode: the head trader's per-cycle skills are embedded in its prompt, as the runner attested (none loaded by a tool).
   assert.deepStrictEqual(D.headLoads(w), []);
-  assert.ok([...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].every(s => line.embeddedSkills.includes(s)), JSON.stringify(line));
+  assert.ok([...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY].every(s => line.embeddedSkills.includes(s)), JSON.stringify(line));
 });
 
 test('decision path, skip: a setup on the table, the model passes; recorded as skipped with its setup, side and 1R, shown with what followed', async () => {
@@ -176,7 +176,7 @@ test('decision path, entry: every skill, lookup, role and fact in place: the ord
   // The cycle log: every required skill loaded; the phase-2 facts all true; the lookups made, by role.
   const line = D.cycleLines(w).at(-1);
   assert.deepStrictEqual([line.result, line.missingSkills], [`CYCLE RESULT: executed - ${SETUP.strategy} ${SETUP.side} MNQ 1`, []]);
-  assert.ok([...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].every(s => line.embeddedSkills.includes(s)), 'embedded, attested');
+  assert.ok([...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY].every(s => line.embeddedSkills.includes(s)), 'embedded, attested');
   assert.deepStrictEqual(line.factCheck, { reports: 1, claims: 3, true: 3, false: 0, unchecked: 0 });
   const byRole = Object.fromEntries(Object.entries(D.REQUIRED_LOOKUPS).filter(([, s]) => s.length).map(([role, s]) => [role, s.length * (role === 'risk-manager' ? 2 : 1)]));
   assert.deepStrictEqual([line.skillLookups.mode, line.skillLookups.byRole], ['index', byRole]);
@@ -247,7 +247,7 @@ const REFUSALS = [
   ...REQUIRED_FOR_ENTRY.map(s => [`full mode: ${s} not loaded`, { skip: [s], mode: 'full' }, ['skills-loaded'], new RegExp(`not loaded in this session: ${s}\\b`)]),
   ...REQUIRED_AT_ENTRY.map(s => [`full mode: ${s} not read before the entry`, { skip: [s], mode: 'full' }, ['skills-at-entry'], new RegExp(`not read in this session: ${s}\\b`)]),
   // Index mode: an attestation the gate can't verify counts no embedded skill, so the transcript (no loads) decides.
-  ['index mode: the head prompt\'s attestation doesn\'t verify', { pre: ctx => { ctx.env.FTH_HEAD_PROMPT = JSON.stringify({ config: path.join(ctx.env.FTH_HOME, 'none.json'), sha256: '0'.repeat(64), skills: REQUIRED_FOR_ENTRY }); } }, ['skills-loaded', 'skills-at-entry'], new RegExp(`not loaded in this session: ${REQUIRED_FOR_ENTRY.join(', ')}\\.`)],
+  ['index mode: the head prompt\'s attestation doesn\'t verify', { pre: ctx => { ctx.env.FTH_HEAD_PROMPT = JSON.stringify({ config: path.join(ctx.env.FTH_HOME, 'none.json'), sha256: '0'.repeat(64), skills: REQUIRED_FOR_ENTRY }); } }, ['skills-loaded', 'skills-at-entry'], new RegExp(`not loaded in this session: ${REQUIRED_FOR_ENTRY.filter(x => !D.STRATEGY_SKILLS.includes(x)).join(', ')}\\.`)],
   ...Object.entries(D.REQUIRED_LOOKUPS).flatMap(([role, skills]) => skills.map(s => [`${role} didn't look up ${s}`, { noLookup: { [role]: [s] } }, 'roles-ran', new RegExp(`${role} reported without looking up ${s}\\b`)])),
   ...Object.entries(D.REQUIRED_LOOKUPS).filter(([, s]) => s.length).map(([role, skills]) => [`${role}'s lookup of ${skills[0]} made outside its calls`, { outside: { [role]: [skills[0]] } }, 'roles-ran', new RegExp(`${role} reported without looking up ${skills[0]}\\b`)]),
   ...D.ANALYSTS.map(a => [`${a} never ran`, { dropRole: a }, 'roles-ran', new RegExp(`not returned yet: ${a}\\.`)]),
@@ -499,7 +499,7 @@ function composedCycle(w, o = {}) {
   return [
     ...D.roundSteps(w),
     ...D.entryLoads(w).map(s => ({ load: s })),
-    ...['trade-lifecycle', 'confluence-counting', 'invalidation', 'rejection'].filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
+    ...['confluence-counting', 'invalidation', 'rejection'].filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
     { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: o.reads || LC_READS, size: o.size || 1 } },
     ...(o.tamper ? [{ act: ctx => lcTamper(ctx, o.tamper) }] : []),
     ...(o.before ? [{ act: o.before }] : []),
@@ -528,7 +528,7 @@ const LC_REFUSALS = [
   ['an unverifiable read (no 5m candle in a 3m runner\'s briefing)', { reads: lcSwap('entry', '5m close top') }, /unverifiable: "5m close top"/],
   ['a record that expired', { tamper: () => ({ expiresAt: '2026-04-28T04:12:00.000Z' }) }, /expired at 2026-04-28T04:12:00.000Z/],
   ['a record whose plan is not its reads\'', { tamper: rec => ({ plan: { ...rec.plan, stop: { ...rec.plan.stop, ticks: 60 } } }) }, /record's plan \(60-tick stop/],
-  ['a record already used', { before: ctx => fs.appendFileSync(ctx.env.MOCK_JOURNAL, `${JSON.stringify({ ts: new Date(Date.parse(ctx.env.FTH_REPLAY_NOW) + 1000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } })}\n`) }, /already used for an entry/],
+  ['a record already used', { before: ctx => fs.appendFileSync(ctx.env.MOCK_JOURNAL, `${JSON.stringify({ ts: new Date(Date.parse(ctx.env.FTH_REPLAY_NOW) + 1000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } })}\n`) }, /already placed since this bar opened/],
   ['an order off the record (a market order)', { order: { type: 'market', limitPrice: undefined } }, /a market order/],
   ['an order off the record (another size)', { order: { size: 2 } }, /size 2 is not the size the record states \(1\)/],
 ];
@@ -544,19 +544,19 @@ for (const [name, o, message] of LC_REFUSALS) {
   });
 }
 
-test('decision path, trade_lifecycle refused: a stated size over the dollar cap ([max-risk]), and trade-lifecycle not read ([skills-loaded])', async () => {
-  // 3 x 92 ticks x $0.50 = $138 over max_risk_usd $100: compose_check says NOT OK, and sent anyway, the plan check and
+test('decision path, trade_lifecycle refused: a stated size over the dollar cap ([max-risk]), and a required lookup not made ([skills-loaded])', async () => {
+  // 7 x 92 ticks x $0.50 = $322 over max_risk_usd $300: compose_check says NOT OK, and sent anyway, the plan check and
   // the cap both refuse it.
   let w = D.world();
-  const r3 = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { size: 3, result: BLOCKED }));
+  const r3 = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { size: 7, result: BLOCKED }));
   assert.match(r3.ctx.results.compose_check, /NOT OK/);
   let e = lastEntry(w);
-  assert.deepStrictEqual([e.decision, e.checks], ['blocked', ['composed-reads', 'max-risk']], e.messages);
+  assert.ok(e.decision === 'blocked' && e.checks.includes('composed-reads') && e.checks.includes('max-risk'), JSON.stringify(e));
   w = D.world();
-  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { skip: ['trade-lifecycle', 'invalidation'], result: BLOCKED }));
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { skip: ['invalidation'], result: BLOCKED }));
   e = lastEntry(w);
   assert.deepStrictEqual([e.decision, e.checks], ['blocked', ['skills-loaded']], e.messages);
-  assert.match(e.messages, /not loaded in this session: trade-lifecycle, invalidation\./);
+  assert.match(e.messages, /not loaded in this session: invalidation\./);
   assert.deepStrictEqual(D.placedAtBroker(w), []);
 });
 

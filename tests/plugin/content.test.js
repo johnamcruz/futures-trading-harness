@@ -438,9 +438,10 @@ test('the priority order is written once, in strategy-library, and every role th
     ...dir('strategies', d => `strategies/${d}/STRATEGY.md`), ...dir('commands', f => (f.endsWith('.md') ? `commands/${f}` : null)), ...dir('docs', f => (f.endsWith('.md') ? `docs/${f}` : null))]
     .filter(f => f !== 'skills/strategy-library/SKILL.md' && fs.existsSync(path.join(ROOT, f)));
   for (const f of docs) for (const re of RULE) assert.doesNotMatch(read(f), re, `${f} restates the priority order (${re}): point to strategy-library instead`);
-  // Who decides has it: the head trader loads strategy-library every cycle; the roles that judge a setup carry it.
+  // Who decides has it: trade-session names it (a rules entry loads strategy-library); the roles that judge a setup carry
+  // it. A trade_lifecycle entry is sized by the model under the caps: no priority order halves it (the owner's D1).
   assert.match(read('skills/trade-session/SKILL.md'), /The priority order\*\* \(the `strategy-library` skill, "The priority order"\)/);
-  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /strategy-library, strategy-scan, and strategy-gate-checks \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding/);
+  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding/);
   for (const role of ['risk-manager', 'market-structure-analyst', 'trend-momentum-analyst']) {
     // Its core (role-skills): never only in its index (role-index).
     assert.match(read(`agents/${role}.md`), /^role-skills: \[[^\]]*\bstrategy-library\b/m, role);

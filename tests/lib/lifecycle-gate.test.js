@@ -64,12 +64,16 @@ test('composed-reads: the record must be this bar\'s, this side\'s, unexpired an
   assert.match(judge(home, { cycleBars: { MNQ: '2026-10-07T14:00:00.000Z' } }).message, /briefing can't be read .*not the cycle's/);
   assert.match(judge(home, { now: new Date(F.EXPIRES) }).message, /expired at 2026-10-07T14:03:00.000Z/);
   const used = { ts: '2026-10-07T14:00:01Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } };
-  assert.match(judge(home, { entries: [used] }).message, /already used for an entry/);
-  // An exit after it, a failed entry, or an entry before it doesn't use it.
-  for (const e of [{ ...used, text: '[exit] flat' }, { ...used, data: { result: { success: false } } }, { ...used, ts: '2026-10-07T13:59:00Z' }, { ...used, contractId: 'MES' }]) {
+  assert.match(judge(home, { entries: [used] }).message, /already placed since this bar opened/);
+  // Any long entry since the bar opened counts, whichever record (13:59, before this record's at), and one whose side
+  // can't be read; an exit, a failed entry, one before the bar opened, a short or another family doesn't.
+  for (const e of [{ ...used, ts: '2026-10-07T13:59:00Z' }, { ...used, data: { result: { success: true }, request: { side: 'buy' } } }]) {
+    assert.match(judge(home, { entries: [e] }).message, /already placed/, JSON.stringify(e));
+  }
+  for (const e of [{ ...used, text: '[exit] flat' }, { ...used, data: { result: { success: false } } }, { ...used, ts: '2026-10-07T13:56:00Z' }, { ...used, contractId: 'MES' }, { ...used, data: { result: { success: true }, request: { side: 'sell' } } }]) {
     assert.strictEqual(judge(home, { entries: [e] }).message, null, JSON.stringify(e));
   }
-  assert.strictEqual(recordUsed([], { at: 'not a time' }, 'MNQ'), true, 'no time: treated as used');
+  assert.strictEqual(recordUsed([], { since: 'not a time' }, 'MNQ'), true, 'no time: treated as used');
   // Only a record for the other side.
   ({ home } = world({ side: 'short' }));
   assert.match(judge(home).message, /for a short, not this long/);
@@ -89,10 +93,10 @@ test('composed-reads: the record must be this bar\'s, this side\'s, unexpired an
 });
 
 test('composed-reads: the order as the record says: a limit at the reference or better, its ticks, its stated size', () => {
-  // A $200 cap here, so 2 at $55.50 fits (the shipped $100 allows 1: the plan refuses 2, as compose_check does).
-  const big = { ...DOC, risk: { ...DOC.risk, max_risk_usd: 200 } };
-  const { home } = world({ size: 2, maxRiskUsd: 200 });
-  assert.match(judge(home, { order: { size: 2 } }).message, /size 2 risks \$111, over the strategy's risk.max_risk_usd \$100/);
+  // 2 at $55.50 is $111, under the shipped $300; under a $100 cap the plan refuses it, as compose_check does.
+  const big = DOC;
+  const { home } = world({ size: 2 });
+  assert.match(judge(home, { strategy: { ...DOC, risk: { ...DOC.risk, max_risk_usd: 100 } }, order: { size: 2 } }).message, /size 2 risks \$111, over the strategy's risk.max_risk_usd \$100/);
   const two = { size: 2 };
   assert.strictEqual(judge(home, { strategy: big, order: two }).message, null);
   assert.match(judge(home, { strategy: big, order: { ...two, type: 'market', limitPrice: undefined } }).message, /a market order: a trade-lifecycle entry is a limit/);

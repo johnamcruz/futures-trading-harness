@@ -357,9 +357,11 @@ test('order gate (hook): the runner\'s head-prompt attestation (opencode, index 
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   fs.writeFileSync(configFile, require('../../scripts/lib/harness-sync').expectedFiles(REPO)['workspace/opencode.json']);
   const att = H.attestation(configFile, REPO);
-  // The runner's opencode cycle transcript (no skill loaded by tool: the head trader's prompt embeds them).
+  // The runner's opencode cycle transcript (no skill loaded by tool: the head trader's prompt embeds them; this
+  // non-composed entry's strategy skills it looked up, as the prompt embeds the composed entry's list).
   const cycle = path.join(dir, 'cycle-transcript.jsonl');
-  fs.writeFileSync(cycle, JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }));
+  const lookup = skill => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'harness_skill_lookup', state: { status: 'completed', input: { skill }, output: `<skill name="${skill}">...` } } });
+  fs.writeFileSync(cycle, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ...['strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(lookup)].join('\n'));
   const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'index', FTH_CYCLE_TRANSCRIPT: cycle, FTH_HEAD_PROMPT: JSON.stringify(att) };
   // A hook call with its own transcript (Claude Code's, Qwen Code's) that loaded no skill: refused for them, attestation or not.
   const transcript = path.join(dir, 'session.jsonl');

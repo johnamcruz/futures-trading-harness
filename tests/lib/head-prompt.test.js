@@ -19,7 +19,11 @@ const index = JSON.parse(HS.expectedFiles(ROOT)['workspace/opencode.json']);
 const full = JSON.parse(HS.expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
 
 test('CORE: the gate\'s lists first, then what the head trader reads every cycle (the runner\'s load list, trade-session steps 2 to 4)', () => {
-  assert.deepStrictEqual(H.CORE.slice(0, REQUIRED_FOR_ENTRY.length + REQUIRED_AT_ENTRY.length), [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY]);
+  // trade_lifecycle is the one entry strategy: the composed entry's list, with trade-lifecycle and without the strategy
+  // skills (a rules strategy's entry reads those with skill_lookup).
+  const { REQUIRED_FOR_COMPOSED } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(H.CORE.slice(0, REQUIRED_FOR_COMPOSED.length + REQUIRED_AT_ENTRY.length), [...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY]);
+  for (const s of ['strategy-library', 'strategy-scan', 'strategy-gate-checks']) assert.ok(!H.CORE.includes(s) && REQUIRED_FOR_ENTRY.includes(s), s);
   for (const s of ['autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context']) assert.ok(H.CORE.includes(s), s);
   assert.strictEqual(new Set(H.CORE).size, H.CORE.length);
   for (const s of H.CORE) assert.ok(fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')), s);

@@ -333,9 +333,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message });
   }
-  // D2: a composed entry against the higher-timeframe trend stands only on a verified CHoCH its way (the checker marks
-  // such a read `reversal`); then the trend rule is judged as a reversal's.
-  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedCheck.check && composedCheck.check.reads.some(r => r.reversal === true));
+  // D2 (owner-approved): a trade_lifecycle entry against the higher-timeframe trend stands only on a verified 15m or 1h
+  // CHoCH its way (a read of the record, true and agreeing on the re-check); then the trend rule is judged as a
+  // reversal's. Anything else (no record standing, no such read): the trend rule as for any trend entry (fails closed).
+  const composedSide = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
+  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedCheck.check && composedSide
+    && composedCheck.check.reads.some(r => r.kind === 'break' && r.check === true && r.agrees === true && r.dir === composedSide && /^(15m|1h) choch (up|down)$/.test(String(r.form || ''))));
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.
