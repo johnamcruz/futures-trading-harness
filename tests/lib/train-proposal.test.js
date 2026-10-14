@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('../helpers');
-const { FAILURES, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf } = require('../../scripts/lib/train/proposal');
+const { FAILURES, LOCKED_KEYS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf } = require('../../scripts/lib/train/proposal');
 
 function tree() {
   const root = tmpDir();
@@ -53,6 +53,12 @@ test('validateProposal: never code, accounts, the loop\'s own skills, a path out
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'status: paper', replace: 'status: active' }), /name or status line is the owner's/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0', replace: 'stop_atr: 1.0\nstatus: active' }), /name or status/);
   assert.deepStrictEqual(validateProposal(ok({ edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0', replace: 'stop_atr: 1.25' }] }), { root }), []);
+  // However the edit is worded, the parsed owner-held keys may not move.
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'tatus: paper', replace: 'tatus: active' }), /status is the owner's to change/);
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'paper', replace: 'active' }), /status is the owner's/);
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nregime_gate: false\n' }), /regime_gate is the owner's/);
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: '---\n# ORB', replace: '# ORB' }), /frontmatter no longer parses/);
+  assert.ok(LOCKED_KEYS.includes('sizing') && LOCKED_KEYS.includes('account') && LOCKED_KEYS.includes('strategies'));
   // A symbolic link out of the tree is refused.
   fs.mkdirSync(path.join(root, 'skills', 'linked'));
   fs.symlinkSync(path.join(root, 'accounts', 'a', 'ACCOUNT.md'), path.join(root, 'skills', 'linked', 'SKILL.md'));

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, pairUp, judge } = require('../../scripts/lib/train/paired');
+const { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, collapse, pairUp, judge } = require('../../scripts/lib/train/paired');
 
 const FAILURES = ['wrong-side entry', 'bad size', 'wrong stated reason'];
 const side = (cats, { blowAt = -1 } = {}) => cats.map((category, i) => ({ key: `t${i}`, repeat: 0, category, blow: i === blowAt }));
@@ -28,9 +28,39 @@ test('mcnemar: the exact one-sided binomial tail', () => {
   assert.throws(() => mcnemar(1.5, 0), /whole counts/);
 });
 
-test('pairUp: by key and repeat; a missing candidate decision is a failure, a missing baseline leaves the pair out', () => {
+test('pairUp: one pair per decision, repeats collapsed to the majority (a tie to the failure); a missing candidate repeat is a failure', () => {
   const p = pairUp([{ key: 'a', repeat: 0, category: 'right' }, { key: 'b', repeat: 0, category: NO_DECISION }], []);
-  assert.deepStrictEqual(p.map(x => [x.key, x.cand.category]), [['a#0', NO_DECISION]]);
+  assert.deepStrictEqual(p.map(x => [x.key, x.cand.category]), [['a', NO_DECISION]]);
+  const r = (key, repeat, category, blow = false) => ({ key, repeat, category, blow });
+  const q = pairUp([r('a', 0, 'right'), r('a', 1, 'right'), r('a', 2, 'bad size')], [r('a', 0, 'right'), r('a', 1, 'bad size'), r('a', 2, 'right', true)]);
+  assert.deepStrictEqual(q.map(x => [x.key, x.base.category, x.cand.category, x.cand.blow, x.cand.agree]), [['a', 'right', 'right', true, 2]]);
+  assert.strictEqual(collapse([r('a', 0, 'right'), r('a', 1, 'bad size')]).category, 'bad size', 'a tie is a failure');
+  assert.strictEqual(pairUp([r('a', 0, 'right'), r('a', 1, 'right')], [r('a', 0, 'right')])[0].cand.category, NO_DECISION, '1 of 2 missing: a tie, so the failure');
+});
+
+test('judge: repeats are not independent pairs: 2 fixed decisions x 10 repeats is never kept', () => {
+  const base = [];
+  const cand = [];
+  for (let k = 0; k < 10; k += 1) {
+    for (let i = 0; i < 20; i += 1) {
+      base.push({ key: `t${i}`, repeat: k, category: i < 2 ? 'wrong stated reason' : 'right' });
+      cand.push({ key: `t${i}`, repeat: k, category: 'right' });
+    }
+  }
+  const v = judge({ pairs: pairUp(base, cand), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([v.tests.pairs, v.tests.target.b], [20, 2]);
+  assert.strictEqual(v.verdict, 'inconclusive');
+});
+
+test('judge: a targeted failure turned unchecked or into another failure is never a fix; tolerance 0 means none broken', () => {
+  const v = judge({ pairs: pairs([...many(10, 'wrong stated reason'), ...many(10, 'right')], [...many(10, 'unchecked'), ...many(10, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(v.tests.target.b, 0);
+  assert.notStrictEqual(v.verdict, 'kept');
+  const spread = judge({ pairs: pairs([...many(12, 'wrong stated reason'), ...many(18, 'right')], [...many(6, 'right'), 'bad size', 'wrong-side entry', 'unchecked', 'unchecked', 'bad size', 'wrong-side entry', ...many(18, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(spread.tests.target.b, 6);
+  const strict = judge({ pairs: pairs([...many(10, 'wrong stated reason'), ...many(10, 'right')], [...many(10, 'right'), 'bad size', ...many(9, 'right')]), targets: ['wrong stated reason'], failures: FAILURES, rule: ruleFrom({ harmTolerance: 0 }) });
+  assert.strictEqual(strict.verdict, 'rejected');
+  assert.match(strict.reasons.join(), /bad size: 1 decision\(s\) broken against 0 fixed, worse by more than the tolerance \(0\)/);
 });
 
 test('judge: a significant fix with nothing broken is kept', () => {

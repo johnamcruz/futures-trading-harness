@@ -44,13 +44,18 @@ change is (CLAUDE.md, "Before a pull request").
    person's imported proposal; the champion and each candidate re-run on
    the panel's points from the same checkpoints, with the same seeds and
    repeats; the paired test; the archive. Every look is logged in the look
-   ledger before it is taken (`<FTH_HOME>/training/looks.jsonl`).
+   ledger before it is taken: one ledger, the default harness home's
+   `training/looks.jsonl`, whatever `FTH_HOME` says.
 4. **The verdict is code** (`scripts/lib/train/paired.js`, frozen): kept
-   only with zero blows, no failure category worse than the tolerance or
-   significantly worse, and a significant gain on what it targets, on at
-   least the rule's minimum pairs, discordant pairs and effect. A change
-   to a strategy or the rulebook is `blocked` until the evaluator (section
-   10 step 9) screens it.
+   only with zero blows, no failure category (unchecked included) worse
+   than the tolerance or significantly worse, and a significant gain on
+   what it targets (a targeted failure now decided right), on at least the
+   rule's minimum decisions, discordant decisions and effect. A decision's
+   repeats count once (the category most of them gave). A change to a
+   strategy or the rulebook is `blocked` until the evaluator (section 10
+   step 9) screens it; a strategy's name, status, account, sizing,
+   contracts, instruments, timeframe, list and regime gate are never a
+   proposal's to change.
 5. **Kept:** the archive entry, `pr-body.md` and the proposal in the
    iteration's `promotion/` folder, and a local branch
    `train/<loopId>-i<n>-<id>` on the champion's commit. Review it, run
@@ -58,7 +63,9 @@ change is (CLAUDE.md, "Before a pull request").
    yourself.
 6. **Held-out judging** is its own step and spends the look budget:
    `node scripts/train-loop.js judge --config loop.json --proposal <id>
-   --held-out-look`. Each change is judged there once.
+   --held-out-look`. Each held-out month judges once, across every change
+   and loop: a month an earlier judging look (or a recorded look) used is
+   refused.
 7. **Status:** `node scripts/train-loop.js status --config loop.json`:
    iterations, verdicts, leaders per category.
 

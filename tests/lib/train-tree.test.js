@@ -38,6 +38,12 @@ test('exportTree: HEAD as plain files, links kept; a repository with uncommitted
   assert.ok(!fs.existsSync(path.join(out, '.git')));
   fs.writeFileSync(path.join(r.dir, 'skills', 'a', 'SKILL.md'), 'edited\n');
   assert.throws(() => T.exportTree(r.dir, path.join(tmpDir(), 'tree')), /uncommitted changes/);
+  // A candidate's tree: the champion's commit exactly, whatever the working tree or HEAD hold now.
+  r.git('commit', '-qam', 'later');
+  const cand = path.join(tmpDir(), 'cand');
+  assert.strictEqual(T.exportTree(r.dir, cand, { commit: r.head }), r.head);
+  assert.strictEqual(fs.readFileSync(path.join(cand, 'skills', 'a', 'SKILL.md'), 'utf8'), '# A\n\nold text\n');
+  assert.throws(() => T.exportTree(r.dir, path.join(tmpDir(), 'x'), { commit: 'f'.repeat(40) }), /git rev-parse/);
 });
 
 test('copyTree and changedFiles: the working tree without .git; content, link and added or removed files differ', () => {

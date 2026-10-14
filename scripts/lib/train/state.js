@@ -4,7 +4,8 @@
  * The training loop's state on disk, in the harness home (never the repository):
  *
  *   <FTH_HOME>/training/loop.lock               one loop at a time on this home: { pid, loopId, startedAt }
- *   <FTH_HOME>/training/looks.jsonl              the look ledger the loop appends to (R16; prop/looks.js judges it)
+ *   <default home>/training/looks.jsonl          the one look ledger (R16; prop/looks.js judges it): always the default
+ *                                                harness home's, whatever FTH_HOME says, so another home never starts a fresh budget
  *   <FTH_HOME>/training/<loopId>/state.json      the loop's progress: phases done, counters, the iterations
  *   <FTH_HOME>/training/<loopId>/archive.jsonl   every proposal and its verdict (archive.js)
  *   <FTH_HOME>/training/<loopId>/iter-<n>/       each iteration's files (panel, proposals, results, verdicts)
@@ -22,19 +23,24 @@
  *   readLedger(file) / logLook(file, look)    the look ledger: a look is checked (prop/looks.js) before it is logged
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { checkLook } = require('../prop/looks');
 
 const VERSION = 1;
 
+/** The look ledger: the default harness home's (of the user's home directory), never FTH_HOME's. */
+const ledgerFile = env => path.join(harnessHome({}, env.HOME || os.homedir()), 'training', 'looks.jsonl');
+
 function loopPaths(env, loopId) {
   const training = path.join(harnessHome(env), 'training');
   const dir = path.join(training, loopId);
   return {
-    training, dir, lock: path.join(training, 'loop.lock'), ledger: path.join(training, 'looks.jsonl'),
+    training, dir, lock: path.join(training, 'loop.lock'), ledger: ledgerFile(env),
     state: path.join(dir, 'state.json'), archive: path.join(dir, 'archive.jsonl'), iter: n => path.join(dir, `iter-${n}`),
   };
 }
@@ -56,21 +62,46 @@ function lockHolder(file) {
 
 function acquireLock(paths, { loopId, pid = process.pid, now = new Date() }) {
   fs.mkdirSync(paths.training, { recursive: true, mode: 0o700 });
-  for (let i = 0; i < 2; i += 1) {
-    try {
-      fs.writeFileSync(paths.lock, JSON.stringify({ pid, loopId, startedAt: now.toISOString() }), { flag: 'wx' });
-      return () => {
-        const held = readJson(paths.lock, null);
-        if (held && held.pid === pid) fs.unlinkSync(paths.lock);
-      };
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      const holder = lockHolder(paths.lock);
-      if (holder) throw new Error(`another training loop (pid ${holder.pid}, ${holder.loopId}) is running on this home (${paths.lock}): one loop at a time`, { cause: err });
-      fs.unlinkSync(paths.lock);
+  // Written whole first, then linked into place: the lock never exists half-written.
+  const tag = `${pid}-${crypto.randomBytes(4).toString('hex')}`;
+  const tmp = `${paths.lock}.${tag}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ pid, loopId, startedAt: now.toISOString() }), { mode: 0o600 });
+  const busy = (holder, cause) => new Error(`another training loop (pid ${holder.pid}, ${holder.loopId}) is running on this home (${paths.lock}): one loop at a time`, { cause });
+  try {
+    for (let i = 0; i < 3; i += 1) {
+      try {
+        fs.linkSync(tmp, paths.lock);
+        return () => {
+          const held = readJson(paths.lock, null);
+          if (held && held.pid === pid) fs.unlinkSync(paths.lock);
+        };
+      } catch (err) {
+        if (err.code !== 'EEXIST') throw err;
+        const lock = readJson(paths.lock, null);
+        // Unreadable: held (fails closed); a person removes it once no loop runs.
+        if (!lock) throw new Error(`${paths.lock} is unreadable: another loop may hold it; remove it by hand once no training loop runs`, { cause: err });
+        if (alive(lock.pid)) throw busy(lock, err);
+        // A dead holder's lock: moved aside (only one process can move it), then checked to be the one read.
+        const aside = `${paths.lock}.${tag}.stale`;
+        try {
+          fs.renameSync(paths.lock, aside);
+        } catch (e) {
+          if (e.code === 'ENOENT') continue;
+          throw e;
+        }
+        const moved = readJson(aside, null);
+        if (moved && alive(moved.pid)) {
+          try { fs.linkSync(aside, paths.lock); } catch (_e) { /* someone holds it again */ }
+          fs.unlinkSync(aside);
+          throw busy(moved, err);
+        }
+        fs.unlinkSync(aside);
+      }
     }
+    throw new Error(`could not lock ${paths.lock}`);
+  } finally {
+    fs.unlinkSync(tmp);
   }
-  throw new Error(`could not lock ${paths.lock}`);
 }
 
 function openState(paths, { loopId, hash, now = new Date() }) {

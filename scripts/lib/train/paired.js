@@ -3,15 +3,18 @@
 /**
  * The training loop's paired test (docs/LEARNED-RULEBOOK.md R25, R26, R30 item 4): the champion
  * (baseline) and a challenger (candidate) decide the same decision points, from the same reference
- * states, with the same seeds and repeats; each pair is one point decided once by each. A challenger is
- * kept only with:
+ * states, with the same seeds and repeats; each pair is one decision, its repeats collapsed to the
+ * category most of them gave (repeats measure the model's noise, they are not independent evidence).
+ * A challenger is kept only with:
  *
  * - zero blows on its side (R25: zero blows, no exception);
- * - no failure category significantly worse (R26: a paired test per category, with a minimum count),
- *   and none worse by more than the stated tolerance (R30: McNemar "with a stated tolerance");
- * - a significant gain on what it targets: an exact one-sided McNemar test on the pairs where only one
- *   side failed a targeted category, with at least `minPairs` pairs, `minDiscordant` discordant ones
- *   and an effect of at least `minEffect` (the share of pairs fixed minus the share broken);
+ * - no failure category (unchecked and `no decision` among them, and all failures together) significantly
+ *   worse (R26: a paired test per category, with a minimum count), and none worse by more than the stated
+ *   tolerance (R30: McNemar "with a stated tolerance");
+ * - a significant gain on what it targets: an exact one-sided McNemar test of the decisions fixed (a targeted
+ *   failure now right) against those broken (a right decision now anything else), with at least `minPairs`
+ *   decisions, `minDiscordant` discordant ones and an effect of at least `minEffect` (fixed minus broken,
+ *   as a share of the decisions);
  * - every verifier that applies: a change to a strategy or the rulebook is mechanical and is screened
  *   by the evaluator first (R28), so without one (step 9 not built) it is `blocked`, never kept.
  *
@@ -20,7 +23,8 @@
  *
  *   DECISION_RULE, ruleFrom(overrides)
  *   mcnemar(b, c)                         exact one-sided p: P(X >= b | n = b + c, 1/2)
- *   pairUp(baseline, candidate)          [{ key, base, cand }] by key and repeat (a missing candidate is a failure)
+ *   pairUp(baseline, candidate)          [{ key, base, cand }]: one pair per decision, its repeats collapsed to the
+ *                                        majority category (collapse); a missing candidate repeat is a failure
  *   judge({ pairs, targets, failures, rule, mechanical, evaluator })   { verdict, reasons, tests }
  */
 
@@ -60,17 +64,33 @@ function mcnemar(b, c) {
   return Math.min(1, p);
 }
 
-const keyOf = r => `${r.key}#${r.repeat}`;
+/**
+ * A decision's outcome over its repeats: the category most repeats gave (a tie goes to a failure, never to
+ * right), and a blow if any repeat blew. Repeats measure the model's noise; they are not independent pairs.
+ */
+function collapse(records) {
+  const count = new Map();
+  for (const r of records) count.set(r.category, (count.get(r.category) || 0) + 1);
+  const [category] = [...count].sort((a, b) => b[1] - a[1] || (a[0] === 'right') - (b[0] === 'right') || String(a[0]).localeCompare(String(b[0])))[0];
+  return { key: records[0].key, category, blow: records.some(r => r.blow === true), repeats: records.length, agree: count.get(category) };
+}
+
+const byKey = list => (list || []).reduce((m, r) => m.set(r.key, [...(m.get(r.key) || []), r]), new Map());
 
 /**
- * Pairs by decision key and repeat. A baseline without a decision leaves the pair out (no reference); a candidate
- * without one is a failure (`no decision`): a change that stops the agent deciding never reads as a fix.
+ * One pair per decision (its repeats collapsed). A baseline repeat without a decision is left out (no reference);
+ * a candidate repeat missing for a baseline one is a failure (`no decision`): a change that stops the agent
+ * deciding never reads as a fix.
  */
 function pairUp(baseline, candidate) {
-  const cand = new Map((candidate || []).map(r => [keyOf(r), r]));
-  return (baseline || []).filter(r => r && r.category && r.category !== NO_DECISION).map(r => ({
-    key: keyOf(r), base: r, cand: cand.get(keyOf(r)) || { key: r.key, repeat: r.repeat, category: NO_DECISION, blow: false },
-  }));
+  const cand = byKey(candidate);
+  const out = [];
+  for (const [key, recs] of byKey((baseline || []).filter(r => r && r.category && r.category !== NO_DECISION))) {
+    const mine = cand.get(key) || [];
+    const c = recs.map(r => mine.find(x => x.repeat === r.repeat) || { key, repeat: r.repeat, category: NO_DECISION, blow: false });
+    out.push({ key, base: collapse(recs), cand: collapse(c) });
+  }
+  return out;
 }
 
 const round = x => Math.round(x * 10000) / 10000;
@@ -97,10 +117,19 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   const reasons = [];
   const targetSet = new Set(targets || []);
   if (!targetSet.size) throw new Error('judge: a proposal names the failure categories it targets');
-  const target = tally(pairs, r => targetSet.has(r.category) || r.category === NO_DECISION);
+  // Fixed: a targeted failure the candidate decides right (never one it turns into another failure or unchecked).
+  // Broken: a right decision the candidate decides otherwise.
+  let b = 0;
+  let c = 0;
+  for (const p of pairs) {
+    if (targetSet.has(p.base.category) && p.cand.category === 'right') b += 1;
+    else if (p.base.category === 'right' && p.cand.category !== 'right') c += 1;
+  }
+  const target = { b, c, n: b + c, effect: pairs.length ? round((b - c) / pairs.length) : 0, pBetter: round(mcnemar(b, c)), pWorse: round(mcnemar(c, b)) };
   const harm = {};
-  const tol = Math.max(1, Math.floor(rule.harmTolerance * pairs.length));
-  for (const k of [...new Set([...(failures || []), NO_DECISION])]) harm[k] = tally(pairs, r => r.category === k);
+  const tol = rule.harmTolerance > 0 ? Math.max(1, Math.floor(rule.harmTolerance * pairs.length)) : 0;
+  for (const k of [...new Set([...(failures || []), 'unchecked', NO_DECISION])]) harm[k] = tally(pairs, r => r.category === k);
+  harm['any failure'] = tally(pairs, r => r.category !== 'right');
   const blows = pairs.filter(p => p.cand.blow === true).length;
   const tests = { pairs: pairs.length, target, harm, harmTolerance: tol, blows, rule };
   if (blows) reasons.push(`${blows} blow(s) on the candidate's side: zero blows, no exception`);
@@ -123,4 +152,4 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   return { verdict: 'kept', reasons: [`fixed ${target.b}, broke ${target.c} of ${pairs.length} pairs (effect ${target.effect}, p ${target.pBetter})`], tests };
 }
 
-module.exports = { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, pairUp, tally, judge };
+module.exports = { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, collapse, pairUp, tally, judge };

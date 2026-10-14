@@ -1180,11 +1180,13 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     enough for a small local model, structured edits to skills, strategies
     and rulebooks only, validated, applied and synced in a copy; an external
     model only as a manual import a person approves); the paired test (the
-    same points, seeds and repeats; an exact McNemar test with a minimum
+    same points, seeds and repeats, each decision's repeats counted once;
+    an exact McNemar test with a minimum
     pair count, discordant count and effect, a per-category harm check with
     a tolerance, zero blows; frozen, a config may only tighten it); the
     archive; every look logged through `prop/looks.js`, tuning windows only,
-    held-out judging a separate step that spends the budget; a kept change
+    held-out judging a separate step that spends the budget, each held-out
+    month once, in one ledger whatever the harness home; a kept change
     written as a local branch and a pull request body draft, never pushed.
     Not yet: Optuna over the agent's design (R30's categorical search; the
     loop judges each proposal on its own), the evaluator as a verifier (step

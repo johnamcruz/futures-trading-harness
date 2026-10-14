@@ -32,14 +32,15 @@ function world() {
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({
     brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } },
   }));
-  const trader = { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-09:40@America/New_York'], eodAt: '09:45@America/New_York' };
+  const trader = { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-10:40@America/New_York'], eodAt: '10:45@America/New_York' };
   const loop = {
     loopId: 'e2e-loop',
     replay: { workDir: path.join(user, 'train'), broker: 'replaymock', premarket: false, autotrader: trader, brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null } },
-    // Wednesday 2022-03-09, in Train: four trade decisions (09:30, 09:33, 09:36, 09:39, each polled 2 s after its bar closed) and end of day.
+    // Wednesday 2022-03-09, in Train: a trade decision every 3 minutes from 09:30 to 10:39 (each polled 2 s after its bar
+    // closed), over 20, and end of day: enough decisions for the paired test (repeats are not independent pairs).
     tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }],
     proposer: { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], timeframe: 3 },
-    repeats: 5, seed: 5, maxProposals: 2, controlPoints: 0,
+    repeats: 2, seed: 5, maxFlagged: 40, maxProposals: 2, controlPoints: 0,
     limits: { maxIterations: 1, maxModelCalls: 30, maxWallMinutes: 30 },
   };
   const config = path.join(user, 'loop.json');
@@ -54,7 +55,7 @@ const lines = file => fs.readFileSync(file, 'utf8').trim().split('\n').map(l => 
 
 test('training loop e2e: the planted fix is kept and the planted harm rejected; a stop at the limit resumes; every look logged', { timeout: 900000 }, () => {
   const w = world();
-  // Stopped by the model-call limit part way: 5 champion steps, 1 proposer call, then point runs.
+  // Stopped by the model-call limit part way, in the champion's replay.
   const first = runner(w, ['run', '--dry-run']);
   assert.strictEqual(first.status, 0, `${first.stdout}\n${first.stderr}`);
   assert.match(result(first).stopped, /max model calls reached \(30 of 30\)/);
@@ -69,18 +70,21 @@ test('training loop e2e: the planted fix is kept and the planted harm rejected; 
   assert.strictEqual(second.status, 0, `${second.stdout}\n${second.stderr}`);
   assert.match(result(second).stopped, /max iterations reached/);
   const state = JSON.parse(fs.readFileSync(path.join(w.state, 'state.json'), 'utf8'));
-  // Every call once: 5 champion steps + 1 proposer + 4 points x 5 repeats x (champion + 2 candidates).
-  assert.strictEqual(state.modelCalls, 5 + 1 + 4 * 5 * 3, 'nothing ran twice across the stop');
+  const champion = fs.readFileSync(path.join(w.loop.replay.workDir, 'e2e-loop', 'runs', 'e2e-loop-champion-t0', 'replay', 'e2e-loop-champion-t0', '2022-03-09.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const P = champion.filter(l => l.kind === 'trade').length;
+  assert.ok(P >= 20, `${P} decisions`);
+  // Every call once: the champion's steps + 1 proposer + P points x 2 repeats x (champion + 2 candidates).
+  assert.strictEqual(state.modelCalls, champion.length + 1 + P * 2 * 3, 'nothing ran twice across the stop');
   assert.deepStrictEqual(state.iterations.map(i => [i.n, i.done]), [[1, true]]);
 
   const archive = lines(path.join(w.state, 'archive.jsonl'));
   const byTarget = Object.fromEntries(archive.map(e => [e.proposal.edits[0].replace.includes('FIX') ? 'fix' : 'harm', e]));
   assert.strictEqual(byTarget.fix.verdict, 'kept', JSON.stringify(byTarget.fix.reasons));
-  assert.deepStrictEqual([byTarget.fix.tests.pairs, byTarget.fix.tests.target.b, byTarget.fix.tests.target.c], [20, 20, 0]);
+  assert.deepStrictEqual([byTarget.fix.tests.pairs, byTarget.fix.tests.target.b, byTarget.fix.tests.target.c], [P, P, 0]);
   assert.strictEqual(byTarget.harm.verdict, 'rejected');
-  assert.match(byTarget.harm.reasons.join(' '), /wrong-side entry: 20 decision\(s\) broken/);
+  assert.match(byTarget.harm.reasons.join(' '), new RegExp(`wrong-side entry: ${P} decision\\(s\\) broken`));
   for (const e of archive) {
-    assert.deepStrictEqual([e.seed, e.repeats, e.panel.flagged, e.panel.points.length], [5, 5, 4, 4], 'what reproduces it');
+    assert.deepStrictEqual([e.seed, e.repeats, e.panel.flagged, e.panel.points.length], [5, 2, P, P], 'what reproduces it');
     assert.ok(e.files.includes(SKILL), 'the edited skill');
     assert.ok(e.files.every(f => f === SKILL || /^(workspace|qwen-extension|\.codex|\.agents)\//.test(f)), `only the skill and adapters generated from it: ${e.files}`);
   }
@@ -104,8 +108,8 @@ test('training loop e2e: the planted fix is kept and the planted harm rejected; 
     assert.deepStrictEqual([base.times, cand.times, base.seed], [[p.t], [p.t], cand.seed]);
     assert.notStrictEqual(base.seed, JSON.parse(fs.readFileSync(path.join(work, 'iter-1', 'champion', `${i}-r0.json`), 'utf8')).seed, 'each repeat its own seed');
   });
-  // The look ledger: the champion's replays and the iteration, both tuning looks at Train, each once.
-  const looks = lines(path.join(w.live, 'training', 'looks.jsonl'));
+  // The one look ledger (the default home's, HOME here): the champion's replays and the iteration, both tuning looks at Train, each once.
+  const looks = lines(path.join(w.user, '.futures-trading-harness', 'training', 'looks.jsonl'));
   assert.deepStrictEqual(looks.map(l => [l.candidate, l.purpose]), [['e2e-loop/champion', 'tuning'], ['e2e-loop/iter-1', 'tuning']]);
   // The repository's tree is untouched.
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, SKILL), 'utf8'), /PLANTED/);

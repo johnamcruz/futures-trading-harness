@@ -6,7 +6,8 @@
  * branch (R25: a kept change becomes a pull request the owner reviews; this writes the branch, never
  * pushes it and never opens the pull request).
  *
- *   exportTree(root, dir, { git })        the repository's HEAD as plain files in dir (git archive); refuses a
+ *   exportTree(root, dir, { commit, git }) a commit (the champion's) as plain files in dir (git archive); with none,
+ *                                         HEAD, refusing a
  *                                         repository with uncommitted changes, so the baseline is HEAD exactly
  *   copyTree(root, dir)                   the working tree's files in dir (no .git, node_modules): tests' copier
  *   prepareTree(dir, { proposal, run })   the proposal applied (if any), adapters synced, strategies validated
@@ -33,10 +34,16 @@ function gitRunner(root) {
   };
 }
 
-function exportTree(root, dir, { git = gitRunner(root) } = {}) {
-  const dirty = String(git(['status', '--porcelain', '--untracked-files=no'])).trim();
-  if (dirty) throw new Error(`the repository has uncommitted changes; the champion is HEAD exactly, so commit or set them aside first:\n${dirty.split('\n').slice(0, 10).join('\n')}`);
-  const commit = String(git(['rev-parse', 'HEAD'])).trim();
+function exportTree(root, dir, { commit: given = null, git = gitRunner(root) } = {}) {
+  let commit;
+  if (given) {
+    // A candidate's or the proposer's tree: the champion's own commit, whatever HEAD is now.
+    commit = String(git(['rev-parse', '--verify', '--quiet', `${given}^{commit}`])).trim();
+  } else {
+    const dirty = String(git(['status', '--porcelain', '--untracked-files=no'])).trim();
+    if (dirty) throw new Error(`the repository has uncommitted changes; the champion is HEAD exactly, so commit or set them aside first:\n${dirty.split('\n').slice(0, 10).join('\n')}`);
+    commit = String(git(['rev-parse', 'HEAD'])).trim();
+  }
   fs.mkdirSync(dir, { recursive: true });
   const tar = git(['archive', '--format=tar', commit], { encoding: null });
   const r = spawnSync('tar', ['-x', '-C', dir], { input: tar });

@@ -11,7 +11,8 @@
  * - edits: 1 to MAX_EDITS exact replacements, each `find` found exactly once in its file when applied.
  *
  * Only these files: a skill's SKILL.md (not the loop's own skills), a strategy's STRATEGY.md (never its
- * `name:` or `status:` line: a status flip is the owner's decision, R33), a rulebook's RULEBOOK.md.
+ * `name:` or `status:` line, nor any LOCKED_KEYS value however the edit is worded: a status flip is the owner's
+ * decision, R33), a rulebook's RULEBOOK.md.
  * Never code, accounts (firm rules), agents, rules, commands, generated adapters, or the promotion gate.
  *
  *   parseProposals(output)              [{ proposal } | { error, line }] from PROPOSAL lines
@@ -25,6 +26,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { CATEGORIES } = require('../replay/scorecard');
+const { parseFrontmatter } = require('../frontmatter');
 
 const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'unchecked'));
 const MAX_EDITS = 3;
@@ -37,6 +39,9 @@ const ALLOWED = Object.freeze([
   { re: /^rulebooks\/([a-z0-9_]+)\/RULEBOOK\.md$/, kind: 'rulebook' },
 ]);
 const LOCKED_KEY = /^\s*(name|status)\s*:/m;
+// A strategy's keys a proposal never changes: its identity, status and kind, and a policy's account, sizing,
+// contracts, markets, timeframe and component list, and the regime gate (the owner's, or the rulebook's, R1).
+const LOCKED_KEYS = Object.freeze(['name', 'status', 'signal', 'account', 'sizing', 'contracts', 'instruments', 'timeframe', 'strategies', 'regime_gate']);
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const str = (x, max) => typeof x === 'string' && x.trim().length > 0 && x.length <= max;
@@ -102,6 +107,7 @@ function validateProposal(p, { root }) {
   if (p.why !== undefined && !(typeof p.why === 'string' && p.why.length <= 1000)) errors.push('why: up to 1000 characters');
   if (!Array.isArray(p.edits) || !p.edits.length || p.edits.length > MAX_EDITS) return [...errors, `edits: 1 to ${MAX_EDITS}`];
   const texts = new Map();
+  const originals = new Map();
   let changed = 0;
   p.edits.forEach((e, i) => {
     const at = `edits[${i}]`;
@@ -119,6 +125,7 @@ function validateProposal(p, { root }) {
         const real = fs.realpathSync(abs);
         if (!real.startsWith(`${fs.realpathSync(root)}${path.sep}`)) throw new Error('outside the tree');
         text = fs.readFileSync(abs, 'utf8');
+        originals.set(e.file, text);
       } catch (err) {
         errors.push(`${at}.file: ${e.file}: ${err.code === 'ENOENT' ? 'no such file' : err.message}`);
         return;
@@ -130,6 +137,21 @@ function validateProposal(p, { root }) {
     changed += Math.max(e.find.length, e.replace.length);
   });
   if (changed > MAX_CHANGED) errors.push(`a small diff: ${changed} characters changed, at most ${MAX_CHANGED}`);
+  // A strategy's owner-held keys, compared parsed before and after (however the edit is worded).
+  for (const [file, after] of texts) {
+    if (kindOf(file) !== 'strategy') continue;
+    let a;
+    let b;
+    try {
+      a = parseFrontmatter(originals.get(file)).data;
+      b = parseFrontmatter(after).data;
+    } catch (err) {
+      errors.push(`${file}: the frontmatter no longer parses after the edit (${err.message})`);
+      continue;
+    }
+    const moved = LOCKED_KEYS.filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+    if (moved.length) errors.push(`${file}: ${moved.join(', ')} ${moved.length > 1 ? 'are' : 'is'} the owner's to change, never a proposal's`);
+  }
   return errors;
 }
 
@@ -152,4 +174,4 @@ function proposalId(p) {
 
 const isMechanical = p => (p.edits || []).some(e => ['strategy', 'rulebook'].includes(kindOf(e.file)));
 
-module.exports = { FAILURES, MAX_EDITS, LOOP_SKILLS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf };
+module.exports = { FAILURES, MAX_EDITS, LOOP_SKILLS, LOCKED_KEYS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf };

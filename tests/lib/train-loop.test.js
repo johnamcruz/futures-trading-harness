@@ -18,7 +18,8 @@ const { readArchive } = require('../../scripts/lib/train/archive');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SKILL = 'skills/a/SKILL.md';
-const TIMES = ['2022-03-09T14:33:02.000Z', '2022-03-09T14:36:02.000Z', '2022-03-09T14:39:02.000Z', '2022-03-09T14:42:02.000Z', '2022-03-09T14:45:02.000Z'];
+// Twenty trade decisions, every 3 minutes from 09:33 New York time.
+const TIMES = Array.from({ length: 20 }, (_, i) => new Date(Date.parse('2022-03-09T14:33:02.000Z') + i * 180000).toISOString());
 const fix = { targets: ['wrong stated reason'], expects: 'fixed', edits: [{ file: SKILL, find: '# A', replace: '# A\nFIX' }] };
 const harm = { targets: ['wrong stated reason'], expects: 'harm', edits: [{ file: SKILL, find: '# A', replace: '# A\nHARM' }] };
 const RESULT = text => (text.includes('FIX') ? 'planted fix' : text.includes('HARM') ? 'planted harm' : 'planted failure');
@@ -31,7 +32,7 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
   const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3, account: '7' };
   const loop = resolveLoop({
     loopId: 'l1', replay: { workDir: path.join(user, 'work'), broker: 'sim', premarket: false, autotrader: trader },
-    tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }], proposer: trader, repeats: 4, seed: 3, controlPoints: 0,
+    tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }], proposer: trader, repeats: 2, seed: 3, maxFlagged: 20, controlPoints: 0,
     limits: { maxIterations: 1, maxModelCalls: 1000, maxWallMinutes: 30 }, ...over,
   });
   const calls = { propose: 0, steps: [], branches: [], evaluator: 0, replay: 0 };
@@ -43,15 +44,24 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
       fs.writeFileSync(path.join(run.paths.runHome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['x'], replay: true, journalEnv: 'SIM_JOURNAL', env: [] } } }));
     },
     // The driver's loop, reduced: the clock, the (checkpointing) step, the line.
-    runReplay: async ({ run, deps }) => {
+    runReplay: async ({ run, deps, maxCycles }) => {
       calls.replay += 1;
       const manifest = store.openRun(run.paths, { runId: run.runId, hash: 'h' });
-      for (const t of TIMES) {
+      const done = store.recordedTimes(run.paths.runDir);
+      const todo = TIMES.filter(t => !done.has(t));
+      if (todo.length > maxCycles) {
+        for (const t of todo.slice(0, maxCycles)) {
+          const res = await deps.step({ t: new Date(t), kind: 'trade', day: '2022-03-09' }, {}, 1000);
+          store.appendRecord(run.paths, manifest, { t, day: '2022-03-09', kind: 'trade', ran: store.parseStep(res.output).ran });
+        }
+        return { cycles: maxCycles, stopped: `stopped after ${maxCycles} decision times (--max-cycles)`, done: false };
+      }
+      for (const t of todo) {
         fs.writeFileSync(run.paths.clockFile, JSON.stringify({ now: t }));
         const res = await deps.step({ t: new Date(t), kind: 'trade', day: '2022-03-09' }, {}, 1000);
         store.appendRecord(run.paths, manifest, { t, day: '2022-03-09', kind: 'trade', ran: store.parseStep(res.output).ran });
       }
-      return { cycles: TIMES.length, stopped: null, done: true };
+      return { cycles: todo.length, stopped: null, done: true };
     },
     stepDeps: (run, tree) => ({
       serverCheck: async () => null,
@@ -79,7 +89,7 @@ test('one iteration: the fix is kept (a local branch, a PR body), the harm rejec
   assert.match(res.stopped, /max iterations reached \(1 of 1\)/);
   const archive = readArchive(w.paths.archive);
   assert.deepStrictEqual(archive.map(e => [e.proposal.expects, e.verdict]), [['fixed', 'kept'], ['harm', 'rejected']]);
-  assert.deepStrictEqual([archive[0].tests.pairs, archive[0].tests.target.b, archive[0].seed, archive[0].repeats, archive[0].baseCommit], [20, 20, 3, 4, 'c0ffee']);
+  assert.deepStrictEqual([archive[0].tests.pairs, archive[0].tests.target.b, archive[0].seed, archive[0].repeats, archive[0].baseCommit], [20, 20, 3, 2, 'c0ffee']);
   assert.deepStrictEqual(archive[0].files, [SKILL]);
   assert.strictEqual(w.calls.branches.length, 1);
   const b = w.calls.branches[0];
@@ -88,8 +98,8 @@ test('one iteration: the fix is kept (a local branch, a PR body), the harm rejec
   assert.strictEqual(archive[0].promotion.branch, b.branch);
   assert.ok(fs.existsSync(path.join(w.paths.iter(1), 'promotion', archive[0].proposalId, 'pr-body.md')));
   assert.deepStrictEqual(S.readLedger(w.paths.ledger).map(l => [l.candidate, l.purpose, l.ranges[0].from]), [['l1/champion', 'tuning', '2022-03-09'], ['l1/iter-1', 'tuning', '2022-03-09']]);
-  // 5 champion steps + 1 proposer + 5 points x 4 repeats x 3 sides.
-  assert.strictEqual(JSON.parse(fs.readFileSync(w.paths.state, 'utf8')).modelCalls, 5 + 1 + 60);
+  // 20 champion steps + 1 proposer + 20 points x 2 repeats x 3 sides.
+  assert.strictEqual(JSON.parse(fs.readFileSync(w.paths.state, 'utf8')).modelCalls, 20 + 1 + 120);
   assert.strictEqual(w.calls.evaluator, 2);
   assert.ok(!fs.existsSync(w.paths.lock), 'the lock is released');
   // A second run with the same limits starts nothing new.
@@ -108,10 +118,10 @@ test('dry run: no branch; the PR body still written', async () => {
 });
 
 test('resumable: a crash part way resumes where it stopped; no point runs twice; the same verdicts', async () => {
-  const w = world({ crashAt: 30 });
+  const w = world({ crashAt: 50 });
   await assert.rejects(run(w), /planted crash/);
   assert.ok(!fs.existsSync(w.paths.lock), 'the lock is released on a crash');
-  assert.strictEqual(w.calls.steps.length, 30, '5 champion steps, then 25 point steps, the last one crashed');
+  assert.strictEqual(w.calls.steps.length, 50, '20 champion steps, then 30 point steps, the last one crashed');
   // The same stubs without the crash, recording into the same list.
   const base = world().steps.stepDeps;
   w.steps.stepDeps = (r, tree) => {
@@ -123,9 +133,9 @@ test('resumable: a crash part way resumes where it stopped; no point runs twice;
   // Every (side, point, repeat) home ran exactly once across the crash, except the one that crashed (it runs again).
   const homes = w.calls.steps.map(s => s.split('|')[1]).filter(h => h.includes(`${path.sep}iter-1${path.sep}`));
   const counts = homes.reduce((m, h) => m.set(h, (m.get(h) || 0) + 1), new Map());
-  assert.deepStrictEqual([...counts.entries()].filter(([, n]) => n > 1).map(([h, n]) => [path.basename(h), n]), [['1-r0', 2]], 'only the crashed point (the fix side\'s fifth run) ran twice');
-  assert.strictEqual(counts.size, 60);
-  assert.strictEqual(w.calls.steps.length, 30 + 60 - 24, 'after the crash: the 36 point runs not done, the crashed one among them');
+  assert.deepStrictEqual([...counts.entries()].filter(([, n]) => n > 1).map(([h, n]) => [path.basename(h), n]), [['14-r1', 2]], 'only the crashed point (the champion side\'s 30th run) ran twice');
+  assert.strictEqual(counts.size, 120);
+  assert.strictEqual(w.calls.steps.length, 50 + 120 - 29, 'after the crash: the 91 point runs not done, the crashed one among them');
   assert.deepStrictEqual(readArchive(w.paths.archive).map(e => e.verdict), ['kept', 'rejected']);
   assert.strictEqual(w.calls.replay, 1, 'the champion\'s replay ran once');
   assert.strictEqual(w.calls.propose, 1, 'the proposer ran once');
@@ -137,10 +147,10 @@ test('limits: the model-call limit stops between calls; raised, the loop resumes
   const res = await run(w);
   assert.match(res.stopped, /max model calls reached \(7 of 7\)/);
   assert.strictEqual(JSON.parse(fs.readFileSync(w.paths.state, 'utf8')).modelCalls, 7);
-  w.loop = resolveLoop({ loopId: 'l1', replay: w.loop.replay, tuningWindows: w.loop.tuningWindows, proposer: w.loop.proposer, repeats: 4, seed: 3, controlPoints: 0, limits: { maxIterations: 1, maxModelCalls: 1000, maxWallMinutes: 30 } });
+  w.loop = resolveLoop({ loopId: 'l1', replay: w.loop.replay, tuningWindows: w.loop.tuningWindows, proposer: w.loop.proposer, repeats: 2, seed: 3, maxFlagged: 20, controlPoints: 0, limits: { maxIterations: 1, maxModelCalls: 1000, maxWallMinutes: 30 } });
   const done = await run(w);
   assert.match(done.stopped, /max iterations reached/);
-  assert.strictEqual(JSON.parse(fs.readFileSync(w.paths.state, 'utf8')).modelCalls, 66);
+  assert.strictEqual(JSON.parse(fs.readFileSync(w.paths.state, 'utf8')).modelCalls, 141);
 });
 
 test('one loop at a time, and never while a live runner holds the account', async () => {
@@ -167,13 +177,13 @@ test('one loop at a time, and never while a live runner holds the account', asyn
 });
 
 test('a strategy change is blocked until the evaluator screens it; a duplicate is never re-judged; an invalid proposal is archived', async () => {
-  const w = world({ proposals: [{ targets: ['wrong stated reason'], expects: 'x', edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'a', replace: 'b' }] }, { targets: ['right'], expects: 'bad', edits: [] }, fix] });
+  const w = world({ proposals: [{ targets: ['wrong stated reason'], expects: 'x', edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'stop: a', replace: 'stop: b' }] }, { targets: ['right'], expects: 'bad', edits: [] }, fix] });
   // The stub tree has a strategy for the first proposal.
   const make = w.steps.makeTree;
-  w.steps.makeTree = dir => { const c = make(dir); fs.mkdirSync(path.join(dir, 'strategies', 'orb'), { recursive: true }); fs.writeFileSync(path.join(dir, 'strategies', 'orb', 'STRATEGY.md'), 'a\n'); return c; };
+  w.steps.makeTree = dir => { const c = make(dir); fs.mkdirSync(path.join(dir, 'strategies', 'orb'), { recursive: true }); fs.writeFileSync(path.join(dir, 'strategies', 'orb', 'STRATEGY.md'), '---\nname: orb\nstop: a\n---\n# ORB\n'); return c; };
   w.steps.stepDeps = (r, tree) => {
     const d = world().steps.stepDeps(r, tree);
-    return { ...d, step: async p => (fs.readFileSync(path.join(tree, 'strategies', 'orb', 'STRATEGY.md'), 'utf8') === 'b\n' ? { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true, result: 'planted fix' }] })}` } : d.step(p)) };
+    return { ...d, step: async p => (fs.readFileSync(path.join(tree, 'strategies', 'orb', 'STRATEGY.md'), 'utf8').includes('stop: b') ? { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true, result: 'planted fix' }] })}` } : d.step(p)) };
   };
   w.loop = { ...w.loop, maxProposals: 3, limits: { ...w.loop.limits, maxIterations: 2 } };
   await run(w);
@@ -234,6 +244,36 @@ test('held-out judging: only with --held-out-look, only held-out units, logged b
   assert.deepStrictEqual(looks[looks.length - 1].ranges, [{ from: '2023-09-13', to: '2023-09-14' }]);
   assert.strictEqual(readArchive(w.paths.archive).filter(e => e.phase === 'held-out').length, 1);
   await assert.rejects(judge(), /judged on held-out months already/);
+});
+
+test('held-out months judge once, across changes and loops; months a recorded look used are used', async () => {
+  const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
+  await run(w, { dryRun: true });
+  const [kept] = readArchive(w.paths.archive);
+  // Another loop's judging look at September 2023, in the one ledger.
+  fs.mkdirSync(path.dirname(w.paths.ledger), { recursive: true });
+  fs.appendFileSync(w.paths.ledger, `${JSON.stringify({ candidate: 'other/abc', purpose: 'judging', ranges: [{ from: '2023-09-04', to: '2023-09-09' }] })}\n`);
+  await assert.rejects(L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /held-out months already used for judging: 2023-09/);
+  // April 2024: the flow parity check's recorded look (Select).
+  await assert.rejects(L.judgeHeldOut({ loop: { ...w.loop, heldOutWindows: [{ from: '2024-04-22', to: '2024-04-27' }] }, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /already used for judging: 2024-04/);
+  assert.strictEqual(S.readLedger(w.paths.ledger).filter(l => l.purpose === 'judging').length, 1, 'a refused judging logs nothing');
+});
+
+test('fails closed: an unreadable imported proposal, a proposer that writes what the loop judges with, a champion tree gone', async () => {
+  const w = world();
+  fs.mkdirSync(path.join(w.paths.dir, 'imported'), { recursive: true });
+  fs.writeFileSync(path.join(w.paths.dir, 'imported', '1-x.json'), '{torn');
+  await run(w, { dryRun: true });
+  assert.strictEqual(w.calls.propose, 0);
+  assert.deepStrictEqual(readArchive(w.paths.archive).map(e => [e.verdict, e.reasons[0]]), [['invalid', 'imported file 1-x.json is unreadable or holds no proposal']]);
+
+  const v = world();
+  v.steps.propose = async () => { fs.appendFileSync(v.paths.ledger, '{"candidate":"forged","purpose":"tuning","ranges":[{"from":"2022-03-09","to":"2022-03-10"}]}\n'); return { proposals: [{ proposal: fix }] }; };
+  await assert.rejects(run(v), /the proposer's run changed the loop's state, the look ledger or the champion's tree/);
+  assert.deepStrictEqual(readArchive(v.paths.archive), []);
+  // Resumed with the champion's tree removed: its runs were made with it, so the loop refuses.
+  fs.rmSync(path.join(v.loop.workDir, 'trees', 'champion'), { recursive: true, force: true });
+  await assert.rejects(run(v), /the champion's tree \([^)]*\) is gone/);
 });
 
 test('scorecardDecisions: the scorecard\'s records as the loop reads them', () => {

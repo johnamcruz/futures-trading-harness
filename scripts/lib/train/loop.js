@@ -34,7 +34,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { readJson, writeJsonAtomic } = require('../harness-run');
+const { readJson, writeJsonAtomic, dirDigest, fileDigest } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { resolveReplay } = require('../replay/config');
@@ -50,7 +50,19 @@ const { pairUp, judge } = require('./paired');
 const A = require('./archive');
 const proposer = require('./proposer');
 const { replayFor } = require('./config');
-const { unitContaining } = require('../prop/splits');
+const { unitContaining, RECORDED_LOOKS } = require('../prop/splits');
+
+/** The months ('YYYY-MM') a [from, to) range of session dates touches. */
+function monthsOf(from, to) {
+  const out = [];
+  const last = new Date(Date.parse(`${to}T00:00:00Z`) - 86400000).toISOString().slice(0, 7);
+  for (let m = String(from).slice(0, 7); m <= last;) {
+    out.push(m);
+    const [y, mo] = m.split('-').map(Number);
+    m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+  }
+  return out;
+}
 const { checkLook } = require('../prop/looks');
 
 class Stop extends Error {}
@@ -70,7 +82,8 @@ function scorecardDecisions(records) {
 
 function defaultSteps({ root, env = process.env }) {
   return {
-    makeTree: dir => T.exportTree(root, dir),
+    // The champion: HEAD (a clean repository); a candidate or the proposer: the champion's own commit, whatever HEAD is now.
+    makeTree: (dir, commit) => T.exportTree(root, dir, { commit }),
     prepareTree: (dir, opts) => T.prepareTree(dir, opts),
     stepDeps: (run, tree) => driver.defaultDeps(run, tree),
     seedRunHome: (run, opts) => driver.seedRunHome(run, opts),
@@ -108,6 +121,8 @@ function open({ loop, env, root, steps, log, lock = true }) {
     ctx.check = () => {
       const why = S.budgetLeft(state, loop.limits, { startedMs: ctx.startedMs });
       if (why) throw new Stop(why);
+      // A live runner started since: refused before every model call, not only at the start.
+      refuseIfLive(env);
     };
     ctx.call = () => {
       ctx.check();
@@ -135,7 +150,10 @@ async function phase(ctx, key, file, fn) {
 const W = ctx => ctx.loop.workDir;
 
 async function championTree(ctx) {
-  return phase(ctx, 'tree:champion', path.join(ctx.paths.dir, 'champion-tree.json'), async () => {
+  const file = path.join(ctx.paths.dir, 'champion-tree.json');
+  const done = ctx.state.done['tree:champion'] && readJson(file, null);
+  if (done && !fs.existsSync(done.dir)) throw new Error(`the champion's tree (${done.dir}) is gone: the loop's runs were made with it; start a new loopId`);
+  return phase(ctx, 'tree:champion', file, async () => {
     const dir = path.join(W(ctx), 'trees', 'champion');
     if (fs.existsSync(dir)) T.removeTree(dir, path.join(W(ctx), 'trees'));
     const baseCommit = await ctx.steps.makeTree(dir);
@@ -166,7 +184,8 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     const res = await ctx.steps.runReplay({ run, baseEnv: ctx.env, root: tree, deps, maxCycles: left, log: ctx.log });
     S.spend(ctx.state, res.cycles || 0);
     ctx.save();
-    if (!res.done) throw new Stop(res.stopped || `${label}: not finished`);
+    // Stopped at the model-call limit (its cycles are the calls left) or for the driver's own reason.
+    if (!res.done) throw new Stop(S.budgetLeft(ctx.state, ctx.loop.limits, { startedMs: ctx.startedMs }) || res.stopped || `${label}: not finished`);
     ctx.state.done[`run:${label}`] = true;
     ctx.save();
   }
@@ -214,7 +233,7 @@ async function candidateTree(ctx, { dir, id, proposal, champion }) {
   const treeDir = path.join(dir, 'trees', id);
   const owned = path.join(dir, 'trees');
   if (fs.existsSync(treeDir)) T.removeTree(treeDir, owned);
-  await ctx.steps.makeTree(treeDir);
+  await ctx.steps.makeTree(treeDir, champion.baseCommit);
   await ctx.steps.prepareTree(treeDir, { proposal });
   // The candidate is the champion plus the proposal and the adapters generated from it; anything else fails closed.
   const files = T.changedFiles(champion.dir, treeDir);
@@ -223,22 +242,37 @@ async function candidateTree(ctx, { dir, id, proposal, champion }) {
   return { dir: treeDir, files };
 }
 
-async function proposalsFor(ctx, { n, flagged }) {
+/**
+ * What the proposer must not touch, as digests: the loop's state and archive, the look ledger, the champion's tree.
+ * (The checkpoints and run homes, possibly gigabytes, are not hashed: the proposer's harness home and working
+ * directory are its own, and nothing points it at them.)
+ */
+function guarded(ctx, champion) {
+  const ledger = fs.existsSync(ctx.paths.ledger) ? fileDigest('ledger', fs.readFileSync(ctx.paths.ledger)) : null;
+  return JSON.stringify([dirDigest(ctx.paths.dir), ledger, dirDigest(champion.dir)]);
+}
+
+async function proposalsFor(ctx, { n, flagged, champion }) {
   const queued = path.join(ctx.paths.dir, 'imported');
   const files = fs.existsSync(queued) ? fs.readdirSync(queued).filter(f => f.endsWith('.json')).sort() : [];
   if (files.length) {
     // Tier 3 (manual): proposals a person imported come first; no model is called for this iteration.
     // Marked used once the phase's file is written (below, after the propose phase), so a stop in between loses none.
-    const list = files.slice(0, ctx.loop.maxProposals).map(f => ({ ...readJson(path.join(queued, f), {}), file: f }));
-    return list.map(x => ({ proposal: x.proposal, source: `manual, approved by ${x.approvedBy}`, imported: x.file }));
+    const list = files.slice(0, ctx.loop.maxProposals).map(f => ({ ...(readJson(path.join(queued, f), null) || {}), file: f }));
+    return list.map(x => (x.proposal && typeof x.proposal === 'object'
+      ? { proposal: x.proposal, source: `manual, approved by ${x.approvedBy}`, imported: x.file }
+      : { error: `imported file ${x.file} is unreadable or holds no proposal`, source: 'manual', imported: x.file }));
   }
   ctx.call();
   // The proposer reads its own copy of the champion's documents (its working directory), never the trees the runs use.
   const scratch = path.join(W(ctx), `iter-${n}`, 'proposer');
   const own = path.join(scratch, 'tree');
   if (fs.existsSync(own)) T.removeTree(own, scratch);
-  await ctx.steps.makeTree(own);
+  await ctx.steps.makeTree(own, champion.baseCommit);
+  // Its harness's own tools could write files: anything the loop judges with that changed fails closed.
+  const before = guarded(ctx, champion);
   const res = await ctx.steps.propose({ cfg: ctx.loop.proposer, tree: own, flagged, home: path.join(scratch, 'home'), baseEnv: ctx.env, maxProposals: ctx.loop.maxProposals });
+  if (guarded(ctx, champion) !== before) throw new Error('the proposer\'s run changed the loop\'s state, the look ledger or the champion\'s tree: the loop stops; check them before resuming');
   return res.proposals.map(p => ({ ...p, source: 'proposer' }));
 }
 
@@ -261,7 +295,7 @@ async function iteration(ctx, n, { champion, champ }) {
   ctx.save();
   const archive = A.readArchive(ctx.paths.archive);
   const proposals = await phase(ctx, `${n}:propose`, path.join(dir, 'proposals.json'), async () => {
-    const raw = await proposalsFor(ctx, { n, flagged: panel.flagged });
+    const raw = await proposalsFor(ctx, { n, flagged: panel.flagged, champion });
     const ids = [];
     return raw.map(x => {
       if (x.error) return { id: null, source: x.source, errors: [x.error], line: x.line, imported: x.imported };
@@ -376,8 +410,17 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     const entry = archive.find(e => e.proposalId === proposalId && e.verdict === 'kept' && e.phase !== 'held-out');
     if (!entry) throw new Error(`${proposalId}: no change kept on tuning in this loop's archive`);
     if (archive.some(e => e.proposalId === proposalId && e.phase === 'held-out')) throw new Error(`${proposalId} was judged on held-out months already: each held-out month judges once`);
-    const champion = await championTree(ctx);
     const tag = `h-${proposalId}-`;
+    // Each held-out month judges once (section 4), across every loop and change: a month any earlier judging look
+    // or recorded look touched is used. (This judging's own look, logged before a stop, is its own.)
+    if (!ctx.state.done[`look:${tag}`]) {
+      const months = ws => new Set(ws.flatMap(w => monthsOf(w.from, w.to)));
+      const mine = months(loop.heldOutWindows);
+      const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...S.readLedger(ctx.paths.ledger).filter(l => l.purpose === 'judging')]
+        .flatMap(l => [...months(Array.isArray(l.ranges) ? l.ranges : [l])]).filter(m => mine.has(m));
+      if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
+    }
+    const champion = await championTree(ctx);
     const champ = await championRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
     const dir = path.join(ctx.paths.dir, `held-out-${proposalId}`);
     const work = path.join(W(ctx), `held-out-${proposalId}`);

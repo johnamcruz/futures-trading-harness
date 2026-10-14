@@ -12,9 +12,12 @@ const LIMITS = { maxIterations: 2, maxModelCalls: 10, maxWallMinutes: 60 };
 
 test('loopPaths: everything in the harness home\'s training folder', () => {
   const home = tmpDir();
-  const p = S.loopPaths({ FTH_HOME: home }, 'l1');
+  const user = tmpDir();
+  const p = S.loopPaths({ FTH_HOME: home, HOME: user }, 'l1');
+  // The ledger is the default home's, whatever FTH_HOME says: another home never starts a fresh look budget.
+  assert.strictEqual(S.loopPaths({ FTH_HOME: tmpDir(), HOME: user }, 'l2').ledger, p.ledger);
   assert.deepStrictEqual([p.lock, p.ledger, p.state, p.archive, p.iter(3)], [
-    path.join(home, 'training', 'loop.lock'), path.join(home, 'training', 'looks.jsonl'), path.join(home, 'training', 'l1', 'state.json'),
+    path.join(home, 'training', 'loop.lock'), path.join(user, '.futures-trading-harness', 'training', 'looks.jsonl'), path.join(home, 'training', 'l1', 'state.json'),
     path.join(home, 'training', 'l1', 'archive.jsonl'), path.join(home, 'training', 'l1', 'iter-3'),
   ]);
 });
@@ -36,6 +39,12 @@ test('lock: one loop at a time; a live holder refuses, a dead one\'s lock is tak
   await new Promise(r => sleeper.on('exit', r));
   const again = S.acquireLock(p, { loopId: 'l1' });
   assert.strictEqual(JSON.parse(fs.readFileSync(p.lock, 'utf8')).pid, process.pid);
+  // An unreadable lock is held (fails closed), never taken over.
+  const p2 = S.loopPaths({ FTH_HOME: tmpDir() }, 'l1');
+  fs.mkdirSync(p2.training, { recursive: true });
+  fs.writeFileSync(p2.lock, '');
+  assert.throws(() => S.acquireLock(p2, { loopId: 'l1' }), /unreadable: another loop may hold it/);
+  assert.deepStrictEqual(fs.readdirSync(p2.training), ['loop.lock'], 'no temporary file left');
   // A release by a process that no longer holds it leaves the holder's lock alone.
   fs.writeFileSync(p.lock, JSON.stringify({ pid: 1, loopId: 'x' }));
   again();
