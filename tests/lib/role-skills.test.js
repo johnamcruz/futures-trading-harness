@@ -112,12 +112,18 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   // The core is embedded in full in both modes: every skill the body says to load.
   for (const a of HS.loadAgents(ROOT)) {
     for (const d of HS.agentSkills(ROOT, { ...a, index: [] })) assert.ok(index.agent[a.name].prompt.includes(`<skill name="${d.name}">\n${d.body}\n</skill>`), `${a.name}: ${d.name}`);
-    // A role without an index has the same prompt in both modes.
-    if (!a.index.length) assert.strictEqual(index.agent[a.name].prompt, full.agent[a.name].prompt, a.name);
+    // A role without an index has the same prompt in both modes, but for the skill tool it doesn't hold in index mode.
+    if (!a.index.length) assert.strictEqual(index.agent[a.name].prompt, full.agent[a.name].prompt.replace("don't load them again with the skill tool.", "don't load them again."), a.name);
   }
-  // Only the prompts differ between the modes: permissions, servers and the rest are the same.
+  // Only the prompts and the roles' skill tool (denied in index mode: opencode.js agentPermission) differ between the
+  // modes: the other permissions, servers and the rest are the same.
+  const roleNames = new Set(HS.loadAgents(ROOT).map(a => a.name));
   const strip = c => JSON.stringify(c, (k, v) => (k === 'prompt' ? undefined : v));
-  assert.strictEqual(strip(index), strip(full));
+  const roleSkill = c => Object.fromEntries([...roleNames].map(r => [r, c.agent[r].permission.skill]));
+  assert.deepStrictEqual(roleSkill(index), Object.fromEntries([...roleNames].map(r => [r, 'deny'])));
+  assert.deepStrictEqual(roleSkill(full), Object.fromEntries([...roleNames].map(r => [r, 'allow'])));
+  const withRoleSkill = (c, v) => ({ ...c, agent: Object.fromEntries(Object.entries(c.agent).map(([n, a]) => [n, roleNames.has(n) ? { ...a, permission: { ...a.permission, skill: v } } : a])) });
+  assert.strictEqual(strip(withRoleSkill(index, 'allow')), strip(full));
 });
 
 test('agentPrompt: the one load sentence (core and index) stays one in full mode and becomes two in index mode', () => {

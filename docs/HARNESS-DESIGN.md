@@ -107,7 +107,11 @@ everything, then names every broker and harness tool (its own allowed, the
 rest denied, so no user rule for the role grants one), then allows its other
 tools (Claude names translated: `mcp__broker__x` → `broker_x`, `Read` →
 `read` and `list`); a role's shell, edits, web fetch and delegation are never
-granted, so only `trade-executor` holds order tools. Language servers,
+granted, so only `trade-executor` holds order tools. In index mode the roles
+are denied opencode's `skill` tool too (their skills are in their prompt or
+read with `skill_lookup`; while an agent may use the tool, opencode lists every
+skill's name and description in its system prompt, about 29 KB a role call);
+full mode and the head trader, which loads its skills with it, keep it. Language servers,
 formatters and snapshots are off. The roles live in the one file, not
 in `.opencode/agents/`: opencode installs npm packages into every `.opencode/`
 folder it loads (running its `package.json`), so the harness keeps none, and
