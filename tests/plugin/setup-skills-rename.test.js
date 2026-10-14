@@ -172,7 +172,7 @@ const LATE = {
       to: ["(top third), then on the 3m close a momentum bar. Reads: 1h up, at prior vah, 15m rejected prior vah up,","3m close top, 3m momentum up, stop 15m low 21512.75, target 1h swing 21598.00. Priority order -> take."],
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
     { from: "(H 21590.75, C 21585.50). ofi_absorption short fired. Priority order (step 2, a fade only at an HTF level): skip.",
-      to: ["(H 21590.75, C 21585.50): 3m rejected 3m swing high down, against the 1h trend, no 15m or 1h CHoCH","down. Priority order (step 2, the trend rule): skip."],
+      to: ["(H 21590.75, C 21585.50): 3m rejected last 3m swing high down, against the 1h trend, no 1h CHoCH","down. Priority order (step 2, the trend rule): skip."],
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples); owner decision D2: against the trend only with a 15m or 1h CHoCH its way" },
     { from: "Loser: at the prior RTH low 21402.00: on the 1h close a rejection (L 21396.75, C 21405.50), on the",
       to: "Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50",

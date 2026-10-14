@@ -98,7 +98,7 @@ const LATE = [
     to: "Shorts are counter: a trend strategy's short is refused (scan and gate); a composed",
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
   { from: "crt_1h raid of the 1h high could short (the priority order, step 2, decides it:",
-    to: "short needs a 15m or 1h CHoCH down (the priority order, step 2).",
+    to: "short needs a 1h CHoCH down and a 4h rejection (`trade-lifecycle`).",
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
   { from: "level, size, target).",
     to: null,

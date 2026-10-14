@@ -100,7 +100,7 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal 
 
 -> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.
    Shorts are counter: a trend strategy's short is refused (scan and gate); a composed
-   short needs a 15m or 1h CHoCH down (the priority order, step 2).
+   short needs a 1h CHoCH down and a 4h rejection (`trade-lifecycle`).
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)

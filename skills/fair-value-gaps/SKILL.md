@@ -54,7 +54,7 @@ briefing does not rank gaps among the levels in a setup's way
 
 ```text
 Take: bullish gap partly filled, unfilled 21512.00-21515.25; a 3m close back above: held.
-  Reads: at the gap, 3m close top. Priority order: room -> take.
+  Reads: 3m close top (no read form names a gap). Priority order -> take.
 Skip: short at 21481.25, stop 8.00 points; open gap edge 21477.50 = 0.47R,
   inTheWay at 0.6R. Priority order (step 3, room): skip.
 Loser: long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); gap edge

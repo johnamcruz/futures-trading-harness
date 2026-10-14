@@ -72,7 +72,7 @@ Take: at the prior VAH 21535.00, 1h and 15m up: on the 15m close a wick to 21512
   (top third), then on the 3m close a momentum bar. Reads: 1h up, at prior vah, 15m rejected prior vah up,
   3m close top, 3m momentum up, stop 15m low 21512.75, target 1h swing 21598.00. Priority order -> take.
 Skip: at the swing high 21588.25 (3m, a minor level), 1h and 15m up: on the 3m close a shooting star
-  (H 21590.75, C 21585.50): 3m rejected 3m swing high down, against the 1h trend, no 15m or 1h CHoCH
+  (H 21590.75, C 21585.50): 3m rejected last 3m swing high down, against the 1h trend, no 1h CHoCH
   down. Priority order (step 2, the trend rule): skip.
 Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.

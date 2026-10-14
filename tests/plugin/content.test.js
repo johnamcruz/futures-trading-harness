@@ -323,7 +323,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(rm, /within the verdict for a policy strategy; the priority order's size\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Halvings don't compound: however many\s+steps halve, the size is halved once\./);
   // The example's short against the trend is the priority order's step 2 (crt_1h retired; D2 for a composed one).
-  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /a composed\s+short needs a 15m or 1h CHoCH down \(the priority order, step 2\)\./);
+  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /a composed\s+short needs a 1h CHoCH down and a 4h rejection \(`trade-lifecycle`\)\./);
   assert.match(rm, /`m3` `candidates` is `null` \(the scan failed or the bar wasn't\s+scanned\): VETO a rules strategy/);
   assert.match(read('skills/htf-to-ltf/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
