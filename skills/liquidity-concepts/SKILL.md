@@ -19,8 +19,8 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
 
 1. **Resting liquidity** (stops cluster just beyond obvious levels): the
    levels and their fields are the `levels-and-reactions` skill's. Equal
-   highs/lows: 2+ swing points within ~2 ticks of each other (`taken` once
-   traded through).
+   highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
+   × ATR(14) of each other (`taken` once traded through).
 2. **Sweep vs break**: the `breakout-vs-fakeout` skill. No call until the
    close; wicks are information, not signals.
 3. **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's

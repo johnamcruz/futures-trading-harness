@@ -30,7 +30,8 @@ code's or hypotheses; a missing field is `unknown`.
 `m3.vwap.crossesLast30` counts the VWAP that applies (RTH in RTH), so it
 can differ from the regime's crosses.
 
-**Structure.** Swing pattern (`HH/HL`, `LH/LL`, `mixed`):
+**Structure.** Swing pattern (`HH/HL`, `LH/LL`, `mixed`, or `unclear`:
+fewer than two confirmed swings, no vote):
 `m15.frame.swingPattern`, `h1.h1.swingPattern`, `h1.h4.swingPattern`; on
 3m, from `m3.liquidity.swingHighs` and `m3.liquidity.swingLows`. Latest
 break: `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `barsAgo`),

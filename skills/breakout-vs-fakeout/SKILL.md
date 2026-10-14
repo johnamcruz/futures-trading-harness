@@ -32,7 +32,9 @@ hypotheses; a missing field is `unknown`.
   `unknown`. No call before the close.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): fading every
-hourly sweep lost after costs (F1): a sweep alone is not a reversal. A
+sweep of the previous hour's high or low lost after costs (F1). The levels
+in `m3.sweeps` differ and were not tested; read a sweep alone as no
+reversal signal. A
 first 3m close through the IB high on volume lost (F8A); its retest (F8B)
 was positive on 38 trades, interval straddling zero; level retests (F9)
 fired too rarely to say.

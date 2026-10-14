@@ -29,15 +29,14 @@ overrule it. A missing field is `unknown` and counts neutral.
 **Rules.**
 
 - **Correlated fires count as one.** Strategies whose triggers read the
-  same indicator or structure event fire largely together (a quant audit
-  of the scan: about half of one trend strategy's candidates had a
-  correlated one within 9 minutes; another pair, about 46%). Same-side
+  same indicator or structure event fire largely together. Same-side
   fires from correlated strategies within a few bars are ONE confluence.
   `candidate.confluence` is this bar; earlier bars, `strategies_recent`.
 - **A strategy's own trigger is never confluence for itself**: its
   `candidate.values` are its own rules' readings (item 6, neutral).
-- **One piece of evidence each**: an indicator reading (EMA, ADX, a
-  structure break) counts once, in item 4 or 5.
+- **Indicators together are one item**: EMA, ADX and SuperTrend readings
+  count together in item 5, never separately; a structure break counts in
+  item 4.
 - **Not counted**: the trend rule, the regime fit, the room, the window,
   the news: the priority order's own steps or the gate's.
 

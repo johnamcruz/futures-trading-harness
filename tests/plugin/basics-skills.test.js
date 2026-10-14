@@ -26,8 +26,8 @@ const file = s => `skills/${s}/SKILL.md`;
 const ROLES = {
   'market-structure-analyst': ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout'],
   'trend-momentum-analyst': ['trend-vs-range', 'momentum-and-volume', 'pullback-vs-reversal'],
-  'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption', 'candle-reading'],
-  'risk-manager': ['confluence-counting', 'invalidation', 'mtf-rejection', 'mtf-breakout'],
+  'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
+  'risk-manager': ['confluence-counting', 'invalidation'],
   'trade-executor': [],
   'news-calendar-analyst': [],
 };
@@ -52,7 +52,7 @@ const PINS = {
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
     'Never by eye.',
     'No call before the close.',
-    'fading every hourly sweep lost after costs (F1): a sweep alone is not a reversal.',
+    'sweep of the previous hour\'s high or low lost after costs (F1). The levels in `m3.sweeps` differ and were not tested',
   ],
   'levels-and-reactions': [
     'No reaction is not a rejection.',
@@ -81,6 +81,8 @@ const PINS = {
     'each in exactly one bucket, so for + against + neutral = 6',
     'Same-side fires from correlated strategies within a few bars are ONE confluence.',
     '**A strategy\'s own trigger is never confluence for itself**',
+    '| 6 | Its own `candidate.values` | - | - | always |',
+    '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately',
     'The counts never overrule it.',
     '**Not counted**: the trend rule, the regime fit, the room, the window, the news',
   ],
@@ -96,7 +98,7 @@ const PINS = {
     'It is never a reason to enter without a fired strategy.',
     'a dedicated detector strategy for it is coming.',
     'a completed 15m or 60m candle rejects the level',
-    'a reversal needs an HTF structure break',
+    'no structure break its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) counts as one AGAINST; the priority order decides.',
     'Never anticipate it.',
     '**Paired with `mtf-breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
   ],
@@ -113,7 +115,7 @@ const PINS = {
 };
 
 /** Veto language: a skill that tells the model to skip or never take. Only the read sentence names a veto. */
-const VETO = /\b(?:never|don'?t|do not|must not|cannot) (?:take|enter|trade)\b|\bmust skip\b|\balways skip\b|\bstand aside\b|\bvetoe?s?\b/i;
+const VETO = /\b(?:never|don'?t|do not|must not|should not|cannot|can't)\s+(?:take|enter|entry|trade|buy|sell|short|long|go long|go short)\b|\bno (?:trade|entry)\b|\b(?:must|always) skip\b|\bstand aside\b|\bvetoe?s?\b/i;
 const vetoFree = text => !VETO.test(flat(text).replace(READ, '').replace(/\bnever a veto\b/g, ''));
 
 /** Each pin of a skill present (flattened). */
@@ -181,7 +183,8 @@ test('basics skills: a read, never a veto; the priority order decides', () => {
     const skip = text.slice(text.indexOf('Skip:')).split('\nLoser:')[0];
     assert.match(flat(skip), /[Pp]riority order[^.]*skip|No setup without a fired strategy/, s);
   }
-  for (const bad of ['Never take a long here.', 'You must skip it.', 'Stand aside on a doji.', 'Do not enter after a sweep.', 'This vetoes the trade.']) {
+  for (const bad of ['Never take a long here.', 'You must skip it.', 'Stand aside on a doji.', 'Do not enter after a sweep.', 'This vetoes the trade.',
+    'Without one do not buy.', 'Never short into support.', 'Do not go long here.', 'No entry on a doji.']) {
     assert.ok(!vetoFree(`${READ} ${bad}`), bad);
   }
 });
@@ -213,6 +216,22 @@ test('basics skills: the regime rule is regime.js\'s, and the participation wind
   assert.match(read('scripts/lib/trading/market-snapshot.js'), /const prior20 = mean\(bars\.slice\(Math\.max\(0, i - 23\), i - 2\)\.map\(vol\)\);/);
 });
 
+test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {
+  for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred/, s);
+  // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js).
+  const ms = read('scripts/lib/trading/market-snapshot.js');
+  assert.match(ms, /const tol = atrNow \? 0\.1 \* atrNow : 0;/);
+  assert.match(ms, /const recentHighs = highs\.slice\(-12\);/);
+  assert.ok(flat(read('skills/liquidity-concepts/SKILL.md')).includes('two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other'));
+  assert.doesNotMatch(read('skills/liquidity-concepts/SKILL.md'), /~2 ticks/);
+  // Unsourced numbers stay out of confluence-counting.
+  assert.doesNotMatch(read(file('confluence-counting')), /46%|9 minutes|about half|quant audit/);
+  // Each role only what it uses: the structure analyst reads levels and sweeps from the small skills.
+  const skillsOf = r => parseFrontmatter(read(`agents/${r}.md`)).data['role-skills'];
+  assert.ok(!skillsOf('market-structure-analyst').includes('liquidity-concepts'));
+  assert.ok(skillsOf('volume-liquidity-analyst').includes('liquidity-concepts'));
+});
+
 test('basics skills: key sentences pinned; a changed one fails', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
@@ -237,11 +256,35 @@ test('basics skills: take, skip and losing examples, tick-correct', () => {
   }
 });
 
+/** In each example, every stop price after the first lies at or closer than it (never farther from the entry), and no example widens or loosens a stop. */
+function stopsNeverWiden(text) {
+  const ex = text.slice(text.indexOf('## Examples'));
+  if (/(?<!never )\b(?:widen(?:s|ed)?|wider|loosen(?:s|ed)?)\b/i.test(ex)) return false;
+  for (const part of ex.split(/\n(?=Take:|Skip:|Loser:)/)) {
+    const entry = /\b(long|short) at (\d{5}\.\d\d)/.exec(part);
+    const stops = [...part.matchAll(/\bstop(?:ped)?(?: (?:at|to|now|moved to))? (\d{5}\.\d\d)/g)].map(m => Number(m[1]));
+    if (!entry || !stops.length) continue;
+    const long = entry[1] === 'long';
+    if (stops.some(x => (long ? x < stops[0] : x > stops[0]))) return false;
+  }
+  return true;
+}
+
+test('basics skills: no example moves a stop away from risk', () => {
+  for (const s of SKILLS) assert.ok(stopsNeverWiden(read(file(s))), s);
+  const inv = read(file('invalidation'));
+  assert.ok(!stopsNeverWiden(inv.replace('stopped at 21499.00', 'stopped at 21497.00')));
+  assert.ok(!stopsNeverWiden(inv.replace('traded through the swing low', 'the stop moved to 21497.00 and traded through the swing low')));
+  assert.ok(!stopsNeverWiden(inv.replace('in one move', 'in one move; the stop was widened')));
+});
+
 test('basics skills: confluence-counting\'s examples count six items', () => {
   const ex = read(file('confluence-counting')).split('## Examples')[1];
   const counts = [...ex.matchAll(/for (\d), against (\d), neutral (\d)/g)];
   assert.ok(counts.length >= 3);
   for (const [, a, b, c] of counts) assert.strictEqual(Number(a) + Number(b) + Number(c), 6);
+  // Item 6 (its own values) is neutral in every example, never for or against.
+  for (const line of ex.split('\n').filter(l => /^(?:Take|Skip):/.test(l))) assert.match(line, /\b6(?: values)?:? (?:\(?neutral)/, line);
   // trader-process's own example uses the same six.
   const tp = /5 Confluence: for (\d), against (\d), neutral (\d)/.exec(read('skills/trader-process/SKILL.md').split('## Examples')[1]);
   assert.strictEqual(Number(tp[1]) + Number(tp[2]) + Number(tp[3]), 6);
@@ -303,7 +346,9 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   }
   const tp = read('skills/trader-process/SKILL.md');
   const step = n => tp.slice(tp.indexOf(`${n}. **`), tp.indexOf(`${n + 1}. **`) > 0 ? tp.indexOf(`${n + 1}. **`) : tp.indexOf('### Roles'));
-  const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal'], 5: ['confluence-counting'], 6: ['candle-reading'], 9: ['invalidation'] };
+  const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal'], 6: ['candle-reading'], 9: ['invalidation'] };
+  // Step 5 counts confluence-counting's six items, and the candidate's own values are always neutral.
+  assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`; the candidate\'s own `values` are always neutral.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
   assert.match(flat(step(4)), /setups: `mtf-rejection`, `mtf-breakout`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.

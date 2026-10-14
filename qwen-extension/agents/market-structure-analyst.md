@@ -69,7 +69,7 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `liquidity-concepts`, `market-snapshot`, `strategy-library`,
+   `market-snapshot`, `strategy-library`,
    `harness-tools`, `trend-vs-range`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
    `mtf-rejection`, and `mtf-breakout`.

@@ -2,7 +2,7 @@
 name: market-structure-analyst
 description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show, mcp__harness__bar_briefing
-role-skills: [market-structure, multi-timeframe-analysis, liquidity-concepts, market-snapshot, strategy-library, trader-process, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, candle-reading, mtf-rejection, mtf-breakout, harness-tools]
+role-skills: [market-structure, multi-timeframe-analysis, market-snapshot, strategy-library, trader-process, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, candle-reading, mtf-rejection, mtf-breakout, harness-tools]
 model: inherit
 ---
 
@@ -58,7 +58,7 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `liquidity-concepts`, `market-snapshot`, `strategy-library`,
+   `market-snapshot`, `strategy-library`,
    `harness-tools`, `trend-vs-range`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
    `mtf-rejection`, and `mtf-breakout`.

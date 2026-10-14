@@ -54,7 +54,7 @@ AGAINST in the count (`confluence-counting`, item 5), never a veto.
 **The read.** Momentum: closes at the side's extreme, ranges at or above
 ATR, participation 1 or more, ADX rising. Fading: ADX falling, ranges
 shrinking, closes mid-range. High volume with little range: `absorption`.
-Each indicator is one piece of evidence (`confluence-counting`).
+The indicators together are one item in the count (`confluence-counting`, item 5), never one each.
 
 **Evidence**: above-average volume on a first close through the IB high
 did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).

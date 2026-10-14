@@ -47,6 +47,6 @@ Take: orb long at 21503.25, stopPoints 4.25: stop 21499.00; invalidation 3m swin
   above the stop: consistent. Priority order -> take. 9 Manage: invalidation 21500.50, exit trail.
 Skip: cisd_ote long; invalidation the sweep wick 21474.00; inTheWay 0.8R.
   Priority order (step 3, room): skip.
-Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); a close at
-  21500.00: line 9 "invalidation hit"; the stop stays; stopped next bar: -17 ticks, -$8.50.
+Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); the next bar
+  traded through the swing low and the stop in one move: stopped at 21499.00. -17 ticks, -$8.50.
 ```

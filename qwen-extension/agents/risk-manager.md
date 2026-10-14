@@ -32,7 +32,7 @@ find trades and you can't place them. Your veto is final for the session.
 
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `trading-agent-security`, `strategy-library`, `broker-mcp`, `harness-tools`,
-`confluence-counting`, `invalidation`, `mtf-rejection`, and `mtf-breakout`.
+`confluence-counting`, and `invalidation`.
 
 Your steps of the trader process (the `trader-process` skill) are phase
 2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision). Phase 1

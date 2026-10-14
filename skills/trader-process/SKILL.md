@@ -39,9 +39,8 @@ It adds no filter and no veto:
    reversal is one with it (a fade). Its STRATEGY.md and the
    priority order judge it, not this label. Read: `pullback-vs-reversal`;
    setups: `mtf-rejection`, `mtf-breakout`.
-5. **Confluence.** Count for, against, neutral: the read for its side,
-   other strategies, location, the candidate's `values`.
-   Read: `confluence-counting`.
+5. **Confluence.** Count the six items of `confluence-counting`; the
+   candidate's own `values` are always neutral.
 6. **Entry.** Its trigger fired on a closed bar; never anticipate.
    Read: `candle-reading`.
 7. **Risk.** Stop and size (`order_plan`, the priority order); its exit
