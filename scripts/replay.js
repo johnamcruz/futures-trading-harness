@@ -16,7 +16,10 @@
  *       --out: write elsewhere (required for an unfinished run, outside its run home)
  *   node scripts/replay.js scorecard <run dir> [--bars SYM=file ...] [--out dir]   the adherence scorecard: each decision
  *       against the priority order's mechanical steps, its stated reasons checked against the facts, a failure
- *       category (scorecard.jsonl, scorecard-summary.json, scorecard.md); --bars and --out as for labels
+ *       category and its severity (scorecard.jsonl, scorecard-summary.json, scorecard.md), and the flagged decisions
+ *       for review (flagged.jsonl, flagged.md); --bars and --out as for labels; a look at the schedule's months
+ *       (prop/looks.js): --purpose reasoning-fix (default in Recent: outcomes hidden) | tuning (default elsewhere) |
+ *       judging, --ledger <file> (required for judging; an allowed look is appended to it), --candidate <name>
  *   report, labels and scorecard read a live session's folder (<FTH_HOME>/sessions/<day>, session/live.js) as a run's
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
@@ -46,7 +49,7 @@ const scorecard = require('./lib/replay/scorecard');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -105,10 +108,11 @@ function barsArgs(argv) {
 // The adherence scorecard (scripts/lib/replay/scorecard.js), written in the run's folder or --out, never the repository.
 function score(argv) {
   if (!argv[1] || argv[1].startsWith('--')) throw new Error(USAGE);
-  const opts = { root: ROOT, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts, barsFiles: barsArgs(argv), outDir: arg(argv, '--out') || null };
+  const look = { purpose: arg(argv, '--purpose') || null, candidate: arg(argv, '--candidate') || null, ledgerFile: arg(argv, '--ledger') || null };
+  const opts = { root: ROOT, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts, barsFiles: barsArgs(argv), outDir: arg(argv, '--out') || null, look };
   const { file, summary } = scorecard.writeScorecard(argv[1], opts);
   process.stdout.write(scorecard.summaryText(summary));
-  say(`wrote ${file}, scorecard-summary.json and scorecard.md${summary.unfinished ? ` (the run is not finished: ${summary.unfinished})` : ''}`);
+  say(`wrote ${file}, scorecard-summary.json, scorecard.md, flagged.jsonl and flagged.md${summary.unfinished ? ` (the run is not finished: ${summary.unfinished})` : ''}`);
   return 0;
 }
 

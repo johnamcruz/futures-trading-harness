@@ -24,7 +24,8 @@ broker.
 - Turning a run into labels: each decision, the gate's answer, the outcome
   and the counterfactuals (step 10).
 - Scoring how closely the trader followed its rules: the adherence
-  scorecard (step 11), for a replay run or a live session (step 12).
+  scorecard (step 11), for a replay run or a live session (step 12), and
+  its flagged decisions, the failures the code found, for review.
 - Not inside an autonomous cycle: replays, like backtests, are
   the user's to start. An agent may explain and prepare the config.
 
@@ -243,7 +244,47 @@ broker.
    pacing: cushion, daily-limit headroom, balance check),
    `scorecard-summary.json` and `scorecard.md` (agreement overall, by step
    and by strategy, the categories, the wrong-reason rate, trades, skipped
-   setups, the account by day). Like labels, it is written in the run's own
+   setups, the account by day). Every failure carries a severity (`high`: a
+   wrong-side entry, or an entry where the order says no trade; `medium`: a
+   size over the ceiling, an early close, an excessive abstention, a refused
+   entry, or a false hard-stop reason such as the window or the trend rule;
+   `low`: any other false reason on a right decision), and the report counts
+   the failures per type, per session day and per run, with rates.
+   Everything is decided by code from the record, never by a model.
+   **Session timing:** a false claim about the window ("opening print until
+   10:00" in the opening drive, "session closed" or "opens 18:00" at 10:48)
+   is a session-timing misread, counted apart inside its category.
+   **Field check:** for a strategy whose rules read broker fields
+   (`field("a.b")`), its field conditions are checked on the values the
+   decision line recorded; an entry on a setup the scan did not fire whose
+   own side fails is a `wrong-side entry` (the other side, all on fields,
+   holds) or a `bad size` (the order says no trade), and a fired setup the
+   values contradict is a recording `mismatch`, never the trader's failure.
+   **Claim checks:** when a cycle record carries its own reason checks
+   (`reasonChecks`; no cycle records them yet), a right decision that still
+   states a claim its own check found false is a `wrong stated reason`;
+   without them it reads "not checked". **Missing data:** values absent (a
+   session recorded before they were), a values error, an archive error or a
+   pruned archive are counted, never filled in. It also writes
+   `flagged.jsonl` and `flagged.md`: one entry per failure, with what the
+   trader saw (pointers, relative to the run home, to the decision line, the
+   cycle record, the prompt's hash and the scan line, and the facts), what it
+   did and said, what the code found, and one sentence to review it by.
+   Scoring a run is a look at its days (`scripts/lib/prop/looks.js`):
+   `--purpose reasoning-fix` (the default for a run in Recent and the only
+   look Recent allows, e.g. the June 1-5, 2026 replay), `tuning` (the
+   default elsewhere) or `judging` (it needs `--ledger <file>`, a JSON
+   list; each allowed look is appended to a ledger given, so a budget
+   counts it), `--candidate <name>`; a look the schedule refuses (a reserve
+   half-year, a held-out quarter not judged) stops it before anything is
+   read, and a live session is no look. On a reasoning-fix look every
+   market outcome is hidden (owner, 2026-10-13): no trade results, no
+   skipped setup's counterfactual, no account balance or P&L, and an exit
+   is never scored from its excursion, and a dollar amount in any text (an
+   entry block, a verdict reason, the trader's own words) reads `$…`; only
+   the reasoning and fact
+   failures show. A tuning look, or a live session, shows everything. Like
+   labels, it is written in the run's own
    folder only once the run is finished, else to `--out` outside its run
    home; `--bars` as for labels. Read `unchecked` and `unparsed` as
    unmeasured, never as agreement; a false reason is a misread of a fact the
