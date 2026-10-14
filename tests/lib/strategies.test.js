@@ -8,7 +8,7 @@ const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, tradesRoot, rootRefusal, recentSignals } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { run } = require('../../scripts/strategies');
-const { tmpDir } = require('../helpers');
+const { tmpDir, shippedPolicy, rootWithPolicies } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BODY = '## When to Use\n## How It Works\n## Examples\n';
@@ -350,14 +350,17 @@ test('policy strategies: the prop keys live only on them, and their strategies m
     fs.writeFileSync(path.join(dir, name, 'STRATEGY.md'), `---\n${fm}\n---\n${body}\n`);
   };
   const head = n => [`name: ${n}`, `description: ${'x'.repeat(40)}`, 'status: paper', 'instruments: [MNQ, NQ]', 'signal: policy', 'account: topstep_100k',
-    'exit:', '  trail_activate_r: 2', '  trail_giveback_r: 0.5', 'risk:', '  stop: strategy', '  min_rr: 2'];
+    'risk:', '  stop: strategy', '  min_rr: 2'];
   write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [ema_cross, keltner]'].join('\n'));
   write('p_tf', [...head('p_tf'), 'timeframe: 3m', 'strategies: [ofi]'].join('\n'));
   write('p_none', [...head('p_none'), 'timeframe: 3m', 'strategies: [nope]'].join('\n'));
   write('p_es', [...head('p_es'), 'timeframe: 3m', 'strategies: [vwap_reclaim]'].join('\n').replace('instruments: [MNQ, NQ]', 'instruments: [MYM, YM]'));
   write('off_rules', ['name: off_rules', `description: ${'x'.repeat(40)}`, 'status: disabled', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - close > 1', 'risk:', '  stop: atr:1', '  min_rr: 2'].join('\n'));
   write('p_off', [...head('p_off'), 'timeframe: 3m', 'strategies: [off_rules]'].join('\n'));
-  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir });
+  // Each listed in its account's rulebook, which sizes and exits it (a policy states neither itself).
+  const account = shippedPolicy().account;
+  const root = rootWithPolicies(Object.fromEntries(['p_ok', 'p_tf', 'p_none', 'p_es', 'p_off'].map(n => [n, account])));
+  const { strategies } = loadStrategies(root, { FTH_STRATEGIES_DIRS: dir });
   const by = n => strategies.find(s => s.name === n);
   assert.strictEqual(by('p_ok').valid, true, by('p_ok').errors.join());
   assert.match(by('p_tf').errors.join(), /ofi trades 1m bars, not 3m/);

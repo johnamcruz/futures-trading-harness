@@ -82,7 +82,7 @@ function settleCollisions(verdicts, strategyOf = () => null) {
 
 /** The verdict that supersedes a skipped one: the same setup and bar, skipped, size 0, saying why. */
 function skippedVerdict(v, by, now = new Date()) {
-  return { ...v, at: now.toISOString(), action: 'skip', maxSize: 0, reason: `skipped: ${LOWER_PRIORITY} (${by} goes first when both have a setup in one cycle)`, skippedBy: by };
+  return { ...v, at: now.toISOString(), action: 'skip', multiplier: 0, maxSize: 0, reason: `skipped: ${LOWER_PRIORITY} (${by} goes first when both have a setup in one cycle)`, skippedBy: by };
 }
 
 /** "Lanes closed this cycle: 3m (every bar), 1m (on a signal)." for the lanes that closed (`closed`: lane objects). */

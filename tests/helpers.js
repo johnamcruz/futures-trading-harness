@@ -135,4 +135,55 @@ function entryOrder(extra = {}) {
   return o;
 }
 
-module.exports = { NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+/** The shipped policy `from` as loaded (its rulebook's sizing and exit). */
+function shippedPolicy(from = 'prop_portfolio') {
+  const { loadStrategies } = require('../scripts/lib/trading/strategies');
+  return loadStrategies(path.join(__dirname, '..'), {}).strategies.find(x => x.name === from);
+}
+
+/**
+ * Lists policies in the rulebook of the account folder `accountDir` (accounts/<name>): each with the shipped `from`
+ * policy's sizing and exit, and `multipliers` (YAML list lines; none by default). One place, as the loaders require:
+ * every account has a RULEBOOK.md beside its ACCOUNT.md, and every policy on it is listed there. Without a rulebook
+ * yet one is written: the ACCOUNT.md's daily_loss_soft moves into it (else `soft`, else 0), with the shipped
+ * classification. Returns the rulebook's path.
+ */
+function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = null, multipliers = null } = {}) {
+  const RB = require('../scripts/lib/trading/rulebook');
+  const file = path.join(accountDir, RB.FILE);
+  if (!fs.existsSync(file)) {
+    const profileFile = path.join(accountDir, 'ACCOUNT.md');
+    const profile = fs.readFileSync(profileFile, 'utf8');
+    const m = profile.match(/^daily_loss_soft: (\d+(?:\.\d+)?)[^\n]*\n/m);
+    if (m) fs.writeFileSync(profileFile, profile.replace(m[0], ''));
+    const kinds = k => Object.keys(RB.ITEMS).filter(i => (k === 'enforced') === Boolean(RB.ITEMS[i].enforcedBy)).join(', ');
+    fs.writeFileSync(file, ['---', `name: ${path.basename(accountDir)}`, 'description: a test rulebook for a fixture account', 'learned: none',
+      `daily_loss_soft: ${soft ?? (m ? m[1] : 0)}`, `enforced: [${kinds('enforced')}]`, `taught: [${kinds('taught')}]`, '---',
+      '', '## When to Use', '', '## How It Works', '', '## Examples', ''].join('\n'));
+  }
+  if (!names.length) return file;
+  // The shipped entry as written (a limit turned off says `off`, never 0).
+  const shipped = shippedPolicy(from);
+  const s = RB.loadRulebookFile(path.join(__dirname, '..', 'accounts', shipped.account, RB.FILE)).policies[from];
+  const map = (indent, o) => Object.entries(o).map(([k, v]) => `${indent}${k}: ${v}`);
+  const block = names.flatMap(n => [`  ${n}:`, '    sizing:', ...map('      ', s.sizing), '    exit:', ...map('      ', s.exit),
+    ...(multipliers ? ['    multipliers:', ...multipliers] : ['    multipliers: []'])]).join('\n');
+  const text = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(file, /^policies:/m.test(text) ? text.replace(/^policies:[^\n]*\n/m, h => `${h}${block}\n`)
+    : text.replace(/^enforced:/m, `policies:\n${block}\nenforced:`));
+  return file;
+}
+
+/**
+ * A plugin root for tests: the shipped strategies (linked) and a copy of the shipped accounts with their rulebooks,
+ * in which `policies` ({ name: account }) are listed (listPolicies).
+ */
+function rootWithPolicies(policies = {}, opts = {}) {
+  const root = tmpDir();
+  fs.symlinkSync(path.join(__dirname, '..', 'strategies'), path.join(root, 'strategies'));
+  fs.cpSync(path.join(__dirname, '..', 'accounts'), path.join(root, 'accounts'), { recursive: true });
+  for (const [name, account] of Object.entries(policies)) listPolicies(path.join(root, 'accounts', account), [name], opts);
+  return root;
+}
+
+module.exports = { shippedPolicy, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

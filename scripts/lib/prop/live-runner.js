@@ -216,7 +216,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         let verdict;
         if (!cs || unspecified) {
           const reason = !cs ? `no ${s.account} attempt` : whyNoSpec(specOf, unspecified);
-          verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
+          verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', multiplier: 0, maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
           verdict = decideSetup({ account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, now, specOf, selected: [root] });
         }

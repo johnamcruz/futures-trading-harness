@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, rootWithPolicies } = require('../helpers');
 const L =require('../../scripts/lib/lanes');
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
@@ -365,22 +365,26 @@ test('start checks include the signal-lane check; prop profiles follow a lane\'s
 test('start and preflight read the home\'s attempts: a lane leaving out a second policy with a running attempt is refused', async () => {
   const dir = tmpDir();
   try {
-    // A second 3m policy (a copy of the shipped one, on the same account), from an extra strategies directory.
+    // A second 3m policy (a copy of the shipped one, on the same account), from an extra strategies directory, listed
+    // in its account's rulebook: a plugin root with the repo linked in but its accounts copied (rootWithPolicies),
+    // run with its symlinks kept so the scripts see that root.
     const extra = path.join(dir, 'strategies', 'prop_extra');
     fs.mkdirSync(extra, { recursive: true });
     fs.writeFileSync(path.join(extra, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio/m, 'name: prop_extra'));
     const home = path.join(dir, '.futures-trading-harness');
     const account = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
+    const root = rootWithPolicies({ prop_extra: account });
+    for (const e of fs.readdirSync(ROOT)) if (!['accounts', 'strategies', '.git'].includes(e)) fs.symlinkSync(path.join(ROOT, e), path.join(root, e));
     require('../../scripts/lib/trading/prop-state').startAttempt(home, { name: account }, new Date('2026-10-07T14:00:00Z'));
     const env = { ...process.env, HOME: dir, FTH_HOME: home, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'), FTH_STRATEGIES_DIRS: path.join(dir, 'strategies') };
     delete env.FTH_REPLAY_NOW;
     const raw = { harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], paper: true, lanes: [{ timeframe: 3, policies: ['prop_portfolio'] }] };
     const config = path.join(dir, 'auto.json');
     fs.writeFileSync(config, JSON.stringify(raw));
-    const run = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config, '--dry-run'], { encoding: 'utf8', env });
+    const run = spawnSync(process.execPath, ['--preserve-symlinks', '--preserve-symlinks-main', path.join(root, 'scripts', 'autotrader.js'), '--config', config, '--dry-run'], { encoding: 'utf8', env });
     assert.strictEqual(run.status, 1);
     assert.match(run.stderr, /lanes\[0\]\.policies: leaves out prop_extra, a policy on 3m with a running .* attempt/);
-    const report = await P.runPreflight({ raw, root: ROOT, env, home, deps: { now: () => new Date('2026-10-07T14:00:00Z'), resolve: () => '/bin/agent', open: () => { throw new Error('no broker here'); } } });
+    const report = await P.runPreflight({ raw, root, env, home, deps: { now: () => new Date('2026-10-07T14:00:00Z'), resolve: () => '/bin/agent', open: () => { throw new Error('no broker here'); } } });
     const row = report.results.find(x => x.check === 'lane strategies');
     assert.ok(row && row.status === 'fail', JSON.stringify(report.results));
     assert.match(row.detail, /leaves out prop_extra/);

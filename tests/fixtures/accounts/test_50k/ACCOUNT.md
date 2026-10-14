@@ -8,7 +8,6 @@ profit_target: 3000
 max_loss: 2000
 max_loss_mode: trailing_eod   # floor = highest end-of-day balance - max_loss; locks at the starting balance
 daily_loss_limit: 1000          # the firm's daily limit (0 = none)
-daily_loss_soft: 500           # the harness's: no new entries for the day once reached
 consistency_pct: 50           # best day at most this share of the total profit for a pass
 max_contracts:
   MNQ: 50

@@ -8,7 +8,6 @@ profit_target: 9000
 max_loss: 4500
 max_loss_mode: trailing_eod   # floor = highest end-of-day balance - max_loss; locks at the starting balance
 daily_loss_limit: 3000          # the firm's daily limit (0 = none); verify, Topstep has changed it
-daily_loss_soft: 1500           # the harness's: no new entries for the day once reached
 consistency_pct: 50           # best day at most this share of the total profit for a pass
 max_contracts:
   MNQ: 150
@@ -49,8 +48,9 @@ The challenge a policy strategy with `account: topstep_150k` trades.
 - **Blow**: equity at or below the floor at any moment. The floor starts at
   $145500 and trails the highest end-of-day balance by $4500, locking
   at $150000 once an end-of-day balance reaches $154500.
-- **Daily**: the harness stops new entries at -$1500 for the day; the firm's
-  daily limit is $3000.
+- **Daily**: the firm's daily limit is $3000. The harness's own soft daily
+  stop, like every number the policies trade this account with, is in its
+  rulebook (`RULEBOOK.md` beside this file).
 - **Size**: at most 15 minis or 150 micros. The harness sizes each trade from
   the cushion (balance minus floor), and from the time left when the
   strategy's `sizing.clock_k` is set; a stopped trade never reaches the floor

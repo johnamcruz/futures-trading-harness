@@ -261,8 +261,9 @@ node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy orb,
 
 With `--prop <policy strategy>` (config `prop`), the run is a set of
 prop-challenge attempts of that policy strategy instead of one long backtest:
-its strategies' setups, on its account, sized by its `sizing` in micros or
-minis (`contracts`). As live, an active policy takes setups only from its
+its strategies' setups, on its account, sized by its `sizing` (from the
+account's rulebook, `accounts/<account>/RULEBOOK.md`, with the verdict's
+multiplier items folded in as live) in micros or minis (`contracts`). As live, an active policy takes setups only from its
 `active` strategies: a `paper` one stays paper inside it and is left out
 (logged, and listed in `combine.json`'s `leftOut`). A left-out strategy still
 fires in the scan, as live, so it still counts as agreement or disagreement:

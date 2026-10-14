@@ -17,7 +17,7 @@ const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { gateFailures } = require('../../scripts/lib/prop/promotion');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -42,6 +42,9 @@ function setup() {
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
     .replace(/^name: test_50k$/m, 'name: eval_acct').replace(/^sessions: 30\b/m, 'sessions: 2').replace(/^profit_target: 3000\b/m, 'profit_target: 300'));
+  // Its rulebook (the fixture's, renamed), listing the policy with prop_portfolio's numbers: one place.
+  fs.writeFileSync(path.join(acct, 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace(/^name: test_50k$/m, 'name: eval_acct'));
+  listPolicies(acct, ['eval_fixture']);
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || '', FTH_HOME: home, FTH_STRATEGIES_DIRS: path.join(home, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   return { home, data, env, sessions };

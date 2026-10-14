@@ -409,6 +409,22 @@ test('lanes: the trailing stop counts only the first lane\'s bars: a 1m bar\'s r
   assert.ok(managed.length >= 1, 'the trade is managed (from the 3m bars)');
   assert.deepStrictEqual(modified, [], 'the 1m bars\' +3R never moved the stop');
   assert.deepStrictEqual(closed, [], 'nor closed the trade through a stop the 1m bars would have trailed');
+  // The strategy stops loading while the position is open (its rulebook refused): the exit plan it had still
+  // manages the position (exitStrategy, trading/exit-memory.js); without one, the position goes unmanaged.
+  const trendy = { name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, valid: false, remembered: true };
+  for (const [label, exitStrategy, want] of [['remembered', () => trendy, true], ['none', () => null, false]]) {
+    clockRef.t = START;
+    managed.length = 0;
+    const again = createRunner({
+      cfg, root: '/r', client, clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
+      isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {}, writeBars: () => '/b.json', scanFor: () => [],
+      entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: iso(et(9, 59, 54)) }],
+      strategyNamed: () => null, exitStrategy,
+      event: e => { if (e.kind === 'position_managed') managed.push(e); },
+    });
+    while (clockRef.t < et(10, 8)) clockRef.t += await again.step();
+    assert.strictEqual(managed.length >= 1, want, label);
+  }
 });
 
 test('lanes: the priority holds across cycles: a lower-priority setup in a later 1m-only cycle never jumps a higher one\'s open verdict', async () => {
@@ -547,7 +563,7 @@ test('lanes, end to end on the real verdict file: the runner settles against pro
         const close = Date.parse(bars[bars.length - 1].t) + lane.timeframe * 60000;
         const p = plan(lane.timeframe, symbol, close);
         if (!p) return results;
-        const v = { at: now.toISOString(), expiresAt: iso(close + 10 * 60000), strategy: p.strategy, component: 'c', symbol, contract: symbol, contractId: symbol, direction: 'long', action: p.action, maxSize: p.action === 'skip' ? 0 : 1, stopTicks: 40, bar: bars[bars.length - 1].t };
+        const v = { at: now.toISOString(), expiresAt: iso(close + 10 * 60000), strategy: p.strategy, component: 'c', symbol, contract: symbol, contractId: symbol, direction: 'long', action: p.action, multiplier: p.action === 'skip' ? 0 : 1, maxSize: p.action === 'skip' ? 0 : 1, stopTicks: 40, bar: bars[bars.length - 1].t };
         state.appendVerdict(home, v);
         return [...results, { name: v.strategy, signal: 'policy', status: 'active', candidate: v.action !== 'skip', direction: 'long', verdict: v }];
       },

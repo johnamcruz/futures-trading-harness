@@ -172,7 +172,8 @@ const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 /**
  * The contract and size for a trade in a micro/mini family (contracts.js
  * familyOf). The size is worked out in micros from the budget and the room
- * (contracts above), times `fraction` (a half-size verdict), then traded as:
+ * (contracts above), times `fraction` (the verdict's multiplier, rounded down:
+ * 0 means no contract fits), then traded as:
  *   micro: that many micros;
  *   mini:  whole minis only (10 micros each, rounded down; 0 if under one);
  *   auto:  minis once the size reaches one mini, else micros.
@@ -196,7 +197,9 @@ function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto'
   if (!cap) return null;
   const unit = mi || { tickValue: mn.tickValue / ratio, fee: mn.fee / ratio };
   let n = contracts(dollars, riskOf(unit), cap, guard, room);
-  if (fraction < 1 && n > 0) n = Math.max(1, Math.floor(n * fraction));
+  // Never more than the whole budget; a fraction that isn't a number sizes nothing (fails closed).
+  const f = typeof fraction === 'number' && Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
+  if (f < 1 && n > 0) n = Math.floor(n * f);
   if (!n) return null;
   const minis = Math.floor(n / ratio);
   const useMini = canMini && (mode === 'mini' || (mode === 'auto' && (minis >= 1 || !canMicro)));

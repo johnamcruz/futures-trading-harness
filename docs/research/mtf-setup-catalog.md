@@ -57,7 +57,7 @@ a 15-minute trend with a 5-minute pullback and a 1-minute entry.
   (whether or not they survive): the existing combine simulator
   (`scripts/lib/prop/challenge.js`, through `backtest.js --prop`) with a
   `paper` policy strategy listing only that variant, on the bundled 100K
-  account profile, with `prop_portfolio`'s sizing and its 2R / 0.5R trail
+  account profile, with `prop_portfolio`'s sizing and trail (its account's rulebook)
   (a policy's trades exit by its trail; this is the simulator as it
   exists), attempts starting every 5 trading days inside Train: pass, blow
   and timeout rates.
@@ -319,6 +319,10 @@ left as committed, and no rule or result depends on these):
   missing, since 240 hours hold about 10 daily candles and that vote
   needs 50. So `mtf_bias(1440)` is a two-vote read on few candles: weak,
   not absent.
+- Two lines (the method's prop simulation and the prop simulation
+  results) were reworded after the census, when R1 (the rulebook as the
+  single source) landed, to name the rulebook as the trail's source
+  instead of restating its values. The trail used is unchanged.
 
 **Verdict: nothing survives.** Every variant's BH-adjusted p is 1.000 (the
 smallest raw one-sided p is F8B's 0.082), and no 95% interval's lower bound is above zero. No
@@ -398,7 +402,7 @@ such variants (27 / 8).
 ### Prop simulation (top 3 by the interval's lower bound)
 
 F3A (-0.093), F2B (-0.097) and F6B (-0.099), each as the only strategy of
-a `paper` policy with `prop_portfolio`'s sizing and 2R / 0.5R trail, on
+a `paper` policy with `prop_portfolio`'s sizing and trail (from the rulebook), on
 the 100K account profile, 105 attempts of 30 sessions starting every 5
 trading days in Train (the attempts overlap, so they are not 105
 independent tries):

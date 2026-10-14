@@ -8,13 +8,8 @@ timeframe: 1m
 signal: policy
 strategies: [ofi, ofi_absorption]
 account: topstep_100k
-sizing:
-  cushion_frac: 0.2
-  min_size_guard: 1.5
 contracts: auto
-exit:
-  trail_activate_r: 2
-  trail_giveback_r: 0.5
+# sizing, exit and the verdict's multipliers: in its account's rulebook (RULEBOOK.md beside ACCOUNT.md, policies.prop_flow_1m), the one place for them
 risk:
   stop: strategy
   min_rr: 2
@@ -24,7 +19,8 @@ source: harness design (prop_portfolio's counterpart); its strategies read order
 # Strategy: Prop Flow 1m (`setup:prop_flow_1m`)
 
 The order-flow counterpart of `prop_portfolio`: the same account and
-sizing, over the 1-minute `ofi` and `ofi_absorption` setups. A policy
+sizing rules (its own numbers, in the account's rulebook:
+`policies.prop_flow_1m`), over the 1-minute `ofi` and `ofi_absorption` setups. A policy
 strategy trades one timeframe, so the flow strategies get their own.
 
 ## When to Use
@@ -63,7 +59,7 @@ setups come here and a 3-minute run's go to `prop_portfolio`.
 ## Examples
 
 ```text
-prop_flow_1m short setup from ofi_absorption: sizing says full (max 1 NQ, stop 30 ticks)
+prop_flow_1m short setup from ofi_absorption: sizing says full (multiplier 1, max 1 NQ, stop 30 ticks)
 NQ selected. A $200 budget: 30 ticks plus a tick of expected slippage on MNQ = 31 x $0.50
 = $15.50 + $0.74 fees = $16.24 a micro, so 12 micros, traded as 1 NQ: 31 x $5 = $155
 + $2.80 fees = $157.80.

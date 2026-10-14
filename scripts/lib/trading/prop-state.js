@@ -25,8 +25,18 @@ const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older 
 const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
 const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
 const VERDICT_KEEP = 500;
-/** The verdict actions an entry may follow, with the share of the size budget each allows. Any other action refuses. */
-const ENTRY_FRACTIONS = Object.freeze({ full: 1, half: 0.5 });
+/** A verdict is `full` or `skip` (docs/LEARNED-RULEBOOK.md, R4); only a full one allows an entry. Any other action refuses. */
+const ENTRY_ACTIONS = Object.freeze(['full']);
+
+/**
+ * A verdict's size multiplier (the rulebook's enforced items, prop/verdict.js): the share of the size
+ * budget a full verdict allows. Above 0 and at most 1, or null: missing, not a number, 0 (the rulebook
+ * skipped the setup) or above 1 (nothing raises the size). Null refuses the entry (fails closed).
+ */
+function verdictMultiplier(v) {
+  const m = v ? v.multiplier : undefined;
+  return typeof m === 'number' && Number.isFinite(m) && m > 0 && m <= 1 ? m : null;
+}
 
 const combineFile = (home, account) => path.join(home, 'combine', `${account}.json`);
 const verdictsFile = home => path.join(home, 'policy-verdicts.jsonl');
@@ -351,7 +361,7 @@ function legsFor(account, root, specOf = specFor, selected = null) {
  * The contract and size the account's budget allows for a policy strategy's
  * entry with a `stopTicks` stop, from the latest snapshot (combine.contractPlan,
  * as the backtester sizes it), or { error }. `fraction` scales the budget
- * (a verdict's share: ENTRY_FRACTIONS).
+ * (a verdict's multiplier: verdictMultiplier).
  */
 function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, specOf = specFor, selected = null) {
   const r = readAttempt(home, account.name);
@@ -412,8 +422,10 @@ function verdictBarProblem(home, strategy, root, v) {
  *            entries, and the size is within the budget for the order's stop;
  *   policy:  a fresh verdict for this policy strategy, contract and side,
  *            recorded on the bar the setup is on now (the last bar of the
- *            signal record), whose action allows an entry (ENTRY_FRACTIONS:
- *            full, or half; anything else refuses), and the size is within it;
+ *            signal record), whose action allows an entry (ENTRY_ACTIONS: full;
+ *            skip or anything else refuses) with a valid multiplier
+ *            (verdictMultiplier: above 0, at most 1; the budget is checked at
+ *            it), and the size is within it;
  *            the setup it traded is from one of the policy's active strategies
  *            (strategies.js componentRefusal against `strategies`, the
  *            registry: none refuses). `paper` (order_plan in a paper run
@@ -423,15 +435,23 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
   const out = [];
   const root = contractRoot(input.contractId);
   const size = Number(input.size);
+  // An invalid strategy (e.g. a policy its account's rulebook refuses) is never sized, hard: the skippable
+  // [strategy] check isn't the only refusal, and its sizing would otherwise fall back to the code's defaults.
+  if (strategy.valid === false) {
+    const why = (strategy.errors && strategy.errors[0]) || 'invalid';
+    out.push({ check: strategy.signal === 'policy' ? 'policy' : 'combine', message: `setup:${strategy.name} is invalid (${why}); no entry is sized from it until it is fixed (exits and protective stops still go).` });
+    return out;
+  }
   if (!account || !account.valid) {
     out.push({ check: 'combine', message: `setup:${strategy.name} trades account "${strategy.account}", which is ${account ? `invalid (${account.errors[0]})` : 'not found'} (accounts/<name>/ACCOUNT.md).` });
     return out;
   }
   const ticks = input.stopLossBracket ? Number(input.stopLossBracket.ticks) : NaN;
-  // The budget is checked at the verdict's share (a half can fall from minis to micros); an action
-  // that allows no entry is refused below, never sized as full.
+  // The budget is checked at the verdict's multiplier (a share can fall from minis to micros); a verdict
+  // that allows no entry, or carries no valid multiplier, is refused below, never sized as full.
   const verdictNow = strategy.signal === 'policy' ? latestVerdict(home, strategy.name, root) : null;
-  const fraction = verdictNow && Object.hasOwn(ENTRY_FRACTIONS, verdictNow.action) ? ENTRY_FRACTIONS[verdictNow.action] : 1;
+  const vm = verdictNow && ENTRY_ACTIONS.includes(verdictNow.action) ? verdictMultiplier(verdictNow) : null;
+  const fraction = vm === null ? 1 : vm;
   // `journal`: every entry, unfiltered, so one with an unreadable time still counts as since the snapshot.
   const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
@@ -440,7 +460,7 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     if (b.error) out.push({ check: 'combine', message: `${account.name}: ${b.error}.` });
     else if (b.root !== root || !(size >= 1 && size <= b.size)) {
       const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : 'nothing';
-      out.push({ check: 'combine', message: `${account.name}: ${input.size} ${root} is not within the account's ${fraction < 1 ? 'half-size ' : ''}size budget for a ${ticks}-tick stop (${allowed}; contracts: ${strategy.contracts || 'auto'}).` });
+      out.push({ check: 'combine', message: `${account.name}: ${input.size} ${root} is not within the account's ${fraction < 1 ? `${fraction}x ` : ''}size budget for a ${ticks}-tick stop (${allowed}; contracts: ${strategy.contracts || 'auto'}).` });
     }
   }
   // Every entry of a policy strategy follows a fresh verdict the runner
@@ -457,7 +477,11 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     else if (!(Date.parse(v.expiresAt) > now.getTime())) why = `the latest verdict (${v.bar}) expired at ${v.expiresAt}`;
     else if ((barWhy = verdictBarProblem(home, strategy, root, v))) why = barWhy;
     else if (v.action === 'skip' || !(v.maxSize >= 1)) why = `the setup was skipped${v.reason ? ` (${v.reason})` : ''}`;
-    else if (!Object.hasOwn(ENTRY_FRACTIONS, v.action)) why = `the verdict's action ${JSON.stringify(v.action)} allows no entry (only ${Object.keys(ENTRY_FRACTIONS).join(' or ')})`;
+    else if (!ENTRY_ACTIONS.includes(v.action)) why = `the verdict's action ${JSON.stringify(v.action)} allows no entry (a verdict is full or skip)`;
+    else if (verdictMultiplier(v) === null) {
+      why = v.multiplier === 0 ? 'the rulebook\'s enforced items skipped the setup (multiplier 0)'
+        : `the verdict's size multiplier (${JSON.stringify(v.multiplier)}) is not above 0 and at most 1, so no size can be judged; wait for the next setup's verdict`;
+    }
     else if (dir !== v.direction) why = `the verdict is for a ${v.direction} entry, not ${side || 'this side'}`;
     else if (v.contract !== root) why = `the verdict trades ${v.contract}, not ${root}`;
     else if (!(size >= 1 && size <= v.maxSize)) why = `size ${input.size} is over the verdict's ${v.maxSize} ${v.contract} (${v.action})`;
@@ -484,8 +508,8 @@ function verdictUsed(entries, name, v, root) {
 }
 
 /**
- * The entry verdicts still open now: each policy's latest verdict per index family that allows an entry (full or
- * half, size >= 1), unexpired, and not used for an entry yet (`entries`: the journal). A multi-lane runner settles a
+ * The entry verdicts still open now: each policy's latest verdict per index family that allows an entry (full with
+ * a valid multiplier, size >= 1), unexpired, and not used for an entry yet (`entries`: the journal). A multi-lane runner settles a
  * new setup against them, so a higher-priority policy's open setup keeps its place across cycles (lane-cycle.js).
  */
 function openEntryVerdicts(home, entries, now = new Date()) {
@@ -495,7 +519,7 @@ function openEntryVerdicts(home, entries, now = new Date()) {
     const root = fam(v.contract || contractRoot(v.contractId || v.symbol) || '');
     if (v && v.strategy) latest.set(`${v.strategy}|${root}`, { v, root });
   }
-  return [...latest.values()].filter(({ v, root }) => Object.hasOwn(ENTRY_FRACTIONS, v.action) && v.maxSize >= 1
+  return [...latest.values()].filter(({ v, root }) => ENTRY_ACTIONS.includes(v.action) && verdictMultiplier(v) !== null && v.maxSize >= 1
     && Date.parse(v.expiresAt) > now.getTime() && Number.isFinite(Date.parse(v.at)) && !verdictUsed(entries, v.strategy, v, root)).map(x => x.v);
 }
 
@@ -527,5 +551,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_FRACTIONS, verdictUsed, openEntryVerdicts,
+  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };
