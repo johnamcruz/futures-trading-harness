@@ -20,7 +20,7 @@ Summary (MNQ 1m, 20:11 ET):
 - Room above (R = the 1m reference stop): 15m swing high / round number 27099.75 (88.25 pts, 24.48R).
 - Room below (R = the 1m reference stop): round number 27000 (11.5 pts, 3.19R).
 - 3m (closed 20:09): inside, close top third, range 0.89 ATR, vol 1.77x; touched CRT 1h range low.
-- 5m (closed 20:10): inside, close top third, range 1.1 ATR, vol 5.35x; rejected CRT 1h range low (closed back below), touched previous 5m low.
+- 5m (closed 20:10): inside, close top third, range 1.1 ATR, vol 5.35x, momentum up; rejected CRT 1h range low (closed back below), touched previous 5m low.
 - 15m (closed 20:00): bullish engulfing, close top third, vol 1.08x; traded beyond the previous 15m high, closed above its high; touched previous 15m high.
 - 1h (closed 20:00): none, close top third.
 - Next swing above (R = the 1m reference stop): 3m 27098.25 (86.75 pts, 347 ticks, 24.07R), 15m 27099.75 (88.25 pts, 353 ticks, 24.48R); below: none found.

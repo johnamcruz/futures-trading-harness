@@ -85,6 +85,7 @@
 const { htfCandles, atr: atrOf, sessionKey } = require('./indicators');
 const { zonedParts, tradingDayStart } = require('./clock');
 const { pivots } = require('./structure-events');
+const { momentumRead } = require('./momentum');
 
 const TIMEFRAMES = [3, 5, 15, 60, 240];
 const SESSION_OPEN = 18 * 60; // the session (trading day) opens at 18:00 ET
@@ -467,6 +468,8 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
       t: c.t, closedAt: c.closedAt, o: c.o, h: c.h, l: c.l, c: c.c, v: Number.isFinite(c.v) ? c.v : null,
       body: r2(f.body), upperWick: r2(f.upperWick), lowerWick: r2(f.lowerWick), closeLocation: f.closeLocation,
       rangeAtr: r2(f.rangeAtr), volRatio: r2(f.volRatio), pattern: f.pattern,
+      // The momentum read (momentum.js, D4) from the values shown: up, down, none, or null (unknown).
+      momentum: momentumRead({ rangeAtr: r2(f.rangeAtr), closeLocation: f.closeLocation, volRatio: r2(f.volRatio) }),
       ...(f.patterns.length > 1 ? { patterns: f.patterns } : {}),
       ...(f.pattern === 'displacement' ? { dir: c.c > c.o ? 'up' : 'down' } : {}),
       ...sweepField(m, c, prev),
