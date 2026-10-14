@@ -186,6 +186,8 @@ function cycleSummary(line) {
     action: line.action, at: line.at, ok: line.ok, timedOut: line.timedOut, durationMs: line.durationMs, result: line.result,
     promptHash: line.file ? promptHash(line.file) : null, promptChars: line.promptChars, skills: line.skills || [], tools: line.tools || {},
     orders: line.orders || [], missingSkills: line.missingSkills || [], file: line.file || null,
+    // When it acted against its bar (cycle-timing.js), for the report's setup timing.
+    ...(line.timing && typeof line.timing === 'object' ? { timing: line.timing } : {}),
   };
 }
 

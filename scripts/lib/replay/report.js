@@ -13,11 +13,16 @@
  * ticks, store.js) when there is one. A trade wins when its net is above zero.
  * Stand-aside: trade cycles whose CYCLE RESULT is no-trade. Refusals by
  * replay-clock are the replay's own plumbing, counted apart from the trader's.
+ * Setup timing (cycle-timing.js timingReport, from each cycle's `timing`): bar close to decision and to order (median,
+ * p90), overruns (decided after the next bar closed), setups caught or missed, each role's median time; all bar cycles,
+ * setup bars and quiet bars. Shown when a cycle carries timing.
  *
- *   summarize(days)            { months: [row], total: row }
+ *   summarize(days)            { months: [row], total: row, timing }
  *   toMarkdown(summary, manifest)   report.md
  *   toText(summary)            the terminal table
  */
+
+const { timingReport } = require('../cycle-timing');
 
 const mean = xs => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -69,6 +74,7 @@ function summarize(days) {
   const months = new Map();
   const total = blankRow('total');
   const open = new Map();
+  const ran = [];
   for (const day of Object.keys(days).sort()) {
     const key = day.slice(0, 7);
     if (!months.has(key)) months.set(key, blankRow(key));
@@ -85,6 +91,7 @@ function summarize(days) {
           if (!c.ok) row.failed += 1;
         }
         for (const c of rec.ran || []) {
+          if (row === total) ran.push(c);
           row.cycles += 1;
           if (!c.ok) row.failed += 1;
           if (c.action === 'trade' || c.action === 'manage') {
@@ -102,7 +109,7 @@ function summarize(days) {
       }
     }
   }
-  return { months: [...months.values()].map(finish), total: finish(total) };
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran) };
 }
 
 const pct = x => (x === null ? '-' : `${(x * 100).toFixed(1)}%`);
@@ -113,6 +120,32 @@ const refusalText = r => Object.entries(r.refusals).sort((a, b) => b[1] - a[1]).
 const HEAD = ['month', 'times', 'cycles', 'failed', 'stand-aside', 'trades', 'win rate', 'mean R (n)', 'expectancy', 'net', 'MAE R', 'MFE R', 'refusals by check', 'replay-clock'];
 const cells = r => [r.key, r.points, r.cycles, r.failed, pct(r.standAsideRate), r.trades, pct(r.winRate), `${fix(r.meanR)} (${r.tradesWithR})`, usd(r.expectancy), usd(r.net), fix(r.meanMaeR), fix(r.meanMfeR), refusalText(r), r.replayClockRefusals];
 
+const secs = ms => (ms === null || ms === undefined ? '-' : `${(ms / 1000).toFixed(1)}s`);
+const TIMING_HEAD = ['bars', 'cycles', 'close to decision p50 / p90', 'close to order p50 / p90 (n)', 'overran', 'setups caught', 'missed (why)'];
+const missedText = g => Object.entries(g.missedBy).map(([k, n]) => `${k} ${n}`).join(', ');
+const timingCells = (name, g) => [name, g.cycles, `${secs(g.decision.median)} / ${secs(g.decision.p90)}`, `${secs(g.order.median)} / ${secs(g.order.p90)} (${g.order.n})`, g.overran, g.caught, `${g.missed}${g.missed ? ` (${missedText(g)})` : ''}`];
+const timingRows = t => [['all', t.all], ['setup bars', t.setup], ['quiet bars', t.quiet]].map(([n, g]) => timingCells(n, g).map(String));
+const roleText = t => Object.entries(t.all.roleMedianMs).map(([r, ms]) => `${r} ${secs(ms)}`).join(', ') || 'none timed';
+const hasTiming = summary => Boolean(summary.timing && summary.timing.all.cycles);
+
+/** The setup-timing block, as Markdown lines (none without timed cycles). */
+function timingMarkdown(summary) {
+  if (!hasTiming(summary)) return [];
+  const t = summary.timing;
+  return [
+    '## Setup timing', '',
+    `| ${TIMING_HEAD.join(' | ')} |`, `| ${TIMING_HEAD.map(() => '---').join(' | ')} |`, ...timingRows(t).map(r => `| ${r.join(' | ')} |`), '',
+    `Role median: ${roleText(t)}.`, '',
+    'Latency on the cycle\'s clock (the replay clock plus the run\'s wall time in a replay). Overran: decided after the next bar closed. A setup (a candidate on the bar) is caught when an order or the decision came before its bar was superseded.', '',
+  ];
+}
+
+function table(head, rows) {
+  const all = [head, ...rows];
+  const width = head.map((_, i) => Math.max(...all.map(r => String(r[i]).length)));
+  return `${all.map(r => r.map((c, i) => String(c).padEnd(width[i])).join('  ').trimEnd()).join('\n')}\n`;
+}
+
 function toMarkdown(summary, manifest = {}) {
   const rows = [...summary.months, summary.total].map(r => `| ${cells(r).join(' | ')} |`);
   return [
@@ -122,13 +155,14 @@ function toMarkdown(summary, manifest = {}) {
     `- Days done: ${(manifest.daysDone || []).length}; last decision time ${manifest.lastT || 'none'}`, '',
     `| ${HEAD.join(' | ')} |`, `| ${HEAD.map(() => '---').join(' | ')} |`, ...rows, '',
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
+    ...timingMarkdown(summary),
   ].join('\n');
 }
 
 function toText(summary) {
-  const all = [HEAD, ...[...summary.months, summary.total].map(r => cells(r).map(String))];
-  const width = HEAD.map((_, i) => Math.max(...all.map(r => r[i].length)));
-  return `${all.map(r => r.map((c, i) => c.padEnd(width[i])).join('  ').trimEnd()).join('\n')}\n`;
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String)));
+  if (!hasTiming(summary)) return main;
+  return `${main}\nsetup timing\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
 module.exports = { summarize, tradesOf, toMarkdown, toText };

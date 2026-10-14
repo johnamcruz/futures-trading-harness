@@ -101,7 +101,7 @@ function world({ mode = 'index' } = {}) {
  * One pass of the live runner at `at` (a replay's decision time), the cycle played by `script` (scripted-model.js).
  * { ctx: the model's last cycle, ran: the cycles run, logs, events, state }.
  */
-async function pass(w, at, script) {
+async function pass(w, at, script, o = {}) {
   const ms = Date.parse(at);
   fs.writeFileSync(w.clock, JSON.stringify({ now: at }));
   const last = BARS.filter(b => Date.parse(b.t) + STEP <= ms).at(-1);
@@ -109,6 +109,9 @@ async function pass(w, at, script) {
   const env = { ...w.env, FTH_REPLAY_NOW: at };
   const now = () => new Date(ms);
   const model = scriptedModel(script);
+  // `o.lateBy` (ms): a slow model, its final answer that much later (the result event's times shifted, the wall clock
+  // the cycle's timing reads with it once the run returned): what the cycle log's timing sees of a cycle that overran.
+  const slow = o.lateBy ? lateModel(model, o.lateBy) : null;
   const logs = [];
   const events = [];
   const ran = [];
@@ -117,7 +120,7 @@ async function pass(w, at, script) {
     const runner = wireRunner({
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
       runCycle: async (action, prompt, limits) => {
-        const r = await runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: model, guard: () => true });
+        const r = await runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: slow ? slow.run : model, guard: () => true, ...(slow ? { wallNow: slow.wallNow } : {}) });
         ran.push({ action, prompt, context: limits && limits.context, ...r });
         return r;
       },
@@ -130,6 +133,27 @@ async function pass(w, at, script) {
   } finally {
     client.close();
   }
+}
+
+/** A model whose final answer (its text events) comes `lateBy` ms late, and the wall clock that ran on with it. */
+function lateModel(model, lateBy) {
+  let done = false;
+  const shift = line => {
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { return line; }
+    if (!ev || ev.type !== 'text') return line;
+    const t = ev.part && ev.part.time ? { time: { start: ev.part.time.start + lateBy, end: ev.part.time.end + lateBy } } : {};
+    return JSON.stringify({ ...ev, timestamp: ev.timestamp + lateBy, part: { ...ev.part, ...t } });
+  };
+  return {
+    run: async (argv, opts) => {
+      const r = await model(argv, opts);
+      done = true;
+      const output = String(r.output || '').split('\n').map(shift).join('\n');
+      return { ...r, output, stdout: output };
+    },
+    wallNow: () => Date.now() + (done ? lateBy : 0),
+  };
 }
 
 /** The bar briefing's m3 version: the facts key of a pass without other lanes (skill-lookups.js factsKey). */

@@ -1,0 +1,245 @@
+'use strict';
+
+/**
+ * When a cycle acted relative to its bar, for the cycle log (cycle-log.js `timing`) and the replay report
+ * (replay/report.js): measurement only, nothing here changes what a cycle does.
+ *
+ * The timeline, on the cycle's own clock (the replay clock's in a replay, as the gate reads it: harness-now.js; the
+ * wall clock live): the cycle starts at its time (`cycleAtMs`), and every later moment is that time plus the wall time
+ * the run had taken by then. Times read from the transcript, each event's own when it carries one:
+ *
+ *   - opencode `run --format json`: a task call's state.time {start, end}; the head trader's text event's part.time.end
+ *     or the event's timestamp
+ *   - Claude stream-json / Qwen Code: a Task/Agent tool_use (start) answered by its tool_result (end); Qwen's session
+ *     parts: functionCall answered by functionResponse; the event's `timestamp` (ms or ISO) when it has one
+ *   - otherwise the time the run's line arrived (harness-run.js `lineTimes`, standard output's lines in order);
+ *     a whole-document transcript (Qwen's JSON array) has neither, so its roles carry no times
+ *
+ * The decision: the first of the trade-executor's launch, an order call, and the head trader's CYCLE RESULT line; with
+ * none timed, the cycle's end when the run finished and wrote a result. The order: the first place_order the gate
+ * logged (gate log, wall `ts`) during the run, else one in the transcript.
+ *
+ *   transcriptTimes(text, lineTimes)   { roles: [{ role, start, end, ok }], decision, orders: [ms] } (wall ms, null unknown)
+ *   gateOrders(file, fromMs, toMs)     [{ ms, decision }] place_order decisions the gate logged in [from, to]
+ *   barWindow(context, minutes)        { barClose, nextClose, setup, deadline } (ms; nulls without bars)
+ *   cycleTiming(input)                 the cycle log's `timing` record
+ *   runTiming(run)                     cycleTiming for a run as cycle-run.js ran it (its clock, its gate log), or null
+ *   timingReport(cycles)               { all, setup, quiet }: latencies, overruns, setups caught/missed, per-role median
+ *
+ * Never throws on a malformed transcript or gate log: what it can't read it leaves out.
+ */
+
+const fs = require('fs');
+
+const TASK_TOOLS = new Set(['task', 'Task', 'Agent']);
+const EXECUTOR = 'trade-executor';
+const RESULT_LINE = /CYCLE RESULT:/;
+const ORDER_TOOL = /(^|__|_)place_order$/;
+const GATE_TAIL_BYTES = 1024 * 1024;
+
+const isObj = v => Boolean(v) && typeof v === 'object';
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const msOf = v => num(v) ?? (typeof v === 'string' && Number.isFinite(Date.parse(v)) ? Date.parse(v) : null);
+const roleOf = v => (typeof v === 'string' && v.trim() ? v.trim().split(':').pop() : null);
+const texts = c => (typeof c === 'string' ? [c] : Array.isArray(c) ? c.filter(x => isObj(x) && typeof x.text === 'string').map(x => x.text) : []);
+const minOf = xs => { const v = xs.filter(x => x !== null && x !== undefined); return v.length ? Math.min(...v) : null; };
+
+/** The transcript's events with the line each came from (null for a whole-document transcript). */
+function events(text) {
+  const s = String(text || '');
+  try {
+    const doc = JSON.parse(s.trim());
+    return (Array.isArray(doc) ? doc : [doc]).filter(isObj).map(ev => ({ ev, line: null }));
+  } catch (_err) {
+    const out = [];
+    s.split('\n').forEach((l, line) => {
+      if (!l.trim().startsWith('{')) return;
+      try { const ev = JSON.parse(l); if (isObj(ev)) out.push({ ev, line }); } catch (_e) { /* not an event */ }
+    });
+    return out;
+  }
+}
+
+/** The role calls, the decision and the order calls a transcript shows, in wall ms. */
+function transcriptTimes(text, lineTimes = null) {
+  const roles = [];
+  const orders = [];
+  const decided = [];
+  const pending = new Map(); // a Claude/Qwen call's id -> { role, start }
+  for (const { ev, line } of events(text)) {
+    const at = msOf(ev.timestamp) ?? (line !== null && Array.isArray(lineTimes) ? num(lineTimes[line]) : null);
+    const part = isObj(ev.part) ? ev.part : null;
+    // opencode: a finished call with its own times; the head trader's text.
+    if (part && ev.type === 'tool_use' && isObj(part.state)) {
+      const st = part.state;
+      const t = isObj(st.time) ? st.time : {};
+      const input = isObj(st.input) ? st.input : {};
+      if (TASK_TOOLS.has(part.tool)) roles.push({ role: roleOf(input.subagent_type), start: num(t.start) ?? at, end: num(t.end) ?? at, ok: st.status === 'completed' });
+      else if (ORDER_TOOL.test(String(part.tool || ''))) orders.push(num(t.start) ?? at);
+    }
+    if (part && ev.type === 'text' && RESULT_LINE.test(String(part.text || ''))) decided.push(num(isObj(part.time) ? part.time.end : null) ?? at);
+    // Claude stream-json and Qwen Code: tool_use answered by tool_result; text with the result line.
+    const msg = isObj(ev.message) ? ev.message : {};
+    for (const c of Array.isArray(msg.content) ? msg.content : []) {
+      if (!isObj(c)) continue;
+      if (c.type === 'tool_use' && TASK_TOOLS.has(c.name) && isObj(c.input)) pending.set(c.id, { role: roleOf(c.input.subagent_type), start: at });
+      else if (c.type === 'tool_use' && ORDER_TOOL.test(String(c.name || ''))) orders.push(at);
+      else if (c.type === 'tool_result' && pending.has(c.tool_use_id)) {
+        roles.push({ ...pending.get(c.tool_use_id), end: at, ok: c.is_error !== true });
+        pending.delete(c.tool_use_id);
+      } else if (c.type === 'text' && ev.type === 'assistant' && RESULT_LINE.test(String(c.text || ''))) decided.push(at);
+    }
+    if (ev.type === 'result' && RESULT_LINE.test(String(ev.result || ''))) decided.push(at);
+    // Qwen's session parts.
+    for (const p of Array.isArray(msg.parts) ? msg.parts : []) {
+      if (!isObj(p)) continue;
+      const fc = isObj(p.functionCall) ? p.functionCall : null;
+      const fr = isObj(p.functionResponse) ? p.functionResponse : null;
+      if (fc && TASK_TOOLS.has(fc.name) && isObj(fc.args)) pending.set(fc.id, { role: roleOf(fc.args.subagent_type), start: at });
+      else if (fc && ORDER_TOOL.test(String(fc.name || ''))) orders.push(at);
+      if (fr && pending.has(fr.id)) {
+        roles.push({ ...pending.get(fr.id), end: at, ok: !(isObj(fr.response) && Object.prototype.hasOwnProperty.call(fr.response, 'error')) });
+        pending.delete(fr.id);
+      }
+      if (msg.role === 'model' && texts([p]).some(x => RESULT_LINE.test(x))) decided.push(at);
+    }
+    // Codex: the agent's message item.
+    if (isObj(ev.item) && ev.item.type === 'agent_message' && RESULT_LINE.test(String(ev.item.text || ''))) decided.push(at);
+  }
+  // A call still running when the run ended: started, never answered.
+  for (const c of pending.values()) roles.push({ ...c, end: null, ok: false });
+  const launches = roles.filter(r => r.role === EXECUTOR).map(r => r.start);
+  const resultAt = decided.filter(x => x !== null).at(-1) ?? null;
+  return { roles: roles.filter(r => r.role), decision: minOf([...launches, ...orders, resultAt]), resultAt, orders: orders.filter(x => x !== null) };
+}
+
+/** The place_order decisions the gate logged between fromMs and toMs (the log's tail only: a long log stays cheap). */
+function gateOrders(file, fromMs, toMs) {
+  let text;
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      const len = Math.min(size, GATE_TAIL_BYTES);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      text = buf.toString('utf8');
+    } finally { fs.closeSync(fd); }
+  } catch (_err) { return []; }
+  const out = [];
+  for (const l of text.split('\n')) {
+    let e;
+    try { e = JSON.parse(l); } catch (_err) { continue; }
+    if (!isObj(e) || !(ORDER_TOOL.test(String(e.tool || '')) || (e.source === 'hook' && !e.tool))) continue;
+    const ms = Date.parse(e.ts);
+    if (Number.isFinite(ms) && ms >= fromMs && ms <= toMs) out.push({ ms, decision: e.decision || null });
+  }
+  return out.sort((a, b) => a.ms - b.ms);
+}
+
+/**
+ * The cycle's bars (context.symbols, runner.js): the latest bar close, the next bar close (the earliest symbol's bar
+ * after its own: the bar is superseded then), whether a setup is on the table (a fired candidate) and its deadline
+ * (the next close of a symbol with one). `minutes`: the runner's timeframe; a lane's ("3m") wins.
+ */
+function barWindow(context, minutes) {
+  const syms = ((context && context.symbols) || []).filter(x => isObj(x) && isObj(x.bar) && Number.isFinite(Date.parse(x.bar.t)));
+  const rows = syms.map(x => {
+    const m = /^(\d+)m$/.exec(String(x.lane || ''));
+    const mins = m ? Number(m[1]) : num(minutes);
+    const close = mins ? Date.parse(x.bar.t) + mins * 60000 : null;
+    return { close, next: close === null ? null : close + mins * 60000, setup: Array.isArray(x.fired) && x.fired.length > 0 };
+  }).filter(r => r.close !== null);
+  if (!rows.length) return { barClose: null, nextClose: null, setup: false, deadline: null };
+  const setups = rows.filter(r => r.setup);
+  return { barClose: Math.max(...rows.map(r => r.close)), nextClose: Math.min(...rows.map(r => r.next)), setup: setups.length > 0, deadline: setups.length ? Math.min(...setups.map(r => r.next)) : null };
+}
+
+const iso = ms => (ms === null || ms === undefined ? null : new Date(ms).toISOString());
+
+/**
+ * The cycle's timing record. Input: { text (the transcript), lineTimes, context, minutes, startedMs and endedMs (the
+ * run's wall start and end), cycleAtMs (the cycle's own time at its start), replay, gate ([{ ms }] from gateOrders),
+ * ok, timedOut, result }.
+ */
+function cycleTiming({ text = '', lineTimes = null, context = null, minutes = null, startedMs, endedMs, cycleAtMs = startedMs, replay = false, gate = [], ok = null, timedOut = false, result = null }) {
+  const onClock = w => (w === null || w === undefined ? null : cycleAtMs + (w - startedMs));
+  const t = transcriptTimes(text, lineTimes);
+  const order = minOf([...(gate || []).map(g => g.ms), ...t.orders]);
+  let decision = minOf([t.decision, order]);
+  let decisionFrom = decision === null ? null : 'transcript';
+  if (decision === null && ok && !timedOut && RESULT_LINE.test(String(result || ''))) [decision, decisionFrom] = [endedMs, 'end'];
+  const bars = barWindow(context, minutes);
+  const at = { decision: onClock(decision), order: onClock(order), end: onClock(endedMs) };
+  const since = x => (x === null || bars.barClose === null ? null : x - bars.barClose);
+  const record = {
+    clock: replay ? 'replay' : 'wall',
+    barClose: iso(bars.barClose), nextBarClose: iso(bars.nextClose),
+    start: iso(cycleAtMs), decision: iso(at.decision), decisionFrom, order: iso(at.order), orders: (gate || []).length || t.orders.length, end: iso(at.end),
+    roles: t.roles.map(r => ({ role: r.role, start: iso(onClock(r.start)), end: iso(onClock(r.end)), ms: r.start !== null && r.end !== null ? r.end - r.start : null, ...(r.ok ? {} : { ok: false }) })),
+    cycleMs: endedMs - startedMs,
+    latencyMs: { start: since(cycleAtMs), decision: since(at.decision), order: since(at.order) },
+    // The decision came after the next bar closed (no decision: the cycle's end did).
+    overran: bars.nextClose === null ? null : (at.decision ?? at.end) > bars.nextClose,
+    setup: bars.setup,
+  };
+  if (bars.setup) {
+    const acted = minOf([at.decision, at.order]);
+    record.setupCaught = acted !== null && acted <= bars.deadline;
+    record.setupMissed = record.setupCaught ? null : timedOut ? 'timeout' : acted !== null ? 'overran' : 'error';
+  }
+  return record;
+}
+
+const quantile = (xs, q) => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.ceil(q * s.length) - 1)];
+};
+
+function group(timings) {
+  const lat = k => timings.map(x => x.latencyMs && num(x.latencyMs[k])).filter(x => x !== null);
+  const roles = {};
+  for (const r of timings.flatMap(x => x.roles || [])) if (r && r.role && num(r.ms) !== null) (roles[r.role] = roles[r.role] || []).push(r.ms);
+  const missedBy = {};
+  for (const x of timings) if (x.setupMissed) missedBy[x.setupMissed] = (missedBy[x.setupMissed] || 0) + 1;
+  const stat = xs => ({ n: xs.length, median: quantile(xs, 0.5), p90: quantile(xs, 0.9) });
+  return {
+    cycles: timings.length, decision: stat(lat('decision')), order: stat(lat('order')), overran: timings.filter(x => x.overran).length,
+    caught: timings.filter(x => x.setupCaught === true).length, missed: timings.filter(x => x.setupCaught === false).length, missedBy,
+    roleMedianMs: Object.fromEntries(Object.entries(roles).sort().map(([k, v]) => [k, quantile(v, 0.5)])),
+  };
+}
+
+/** The cycles' timing, over the cycles with a bar: all of them, setup bars and quiet bars. `cycles`: [{ timing }]. */
+function timingReport(cycles) {
+  const timed = (cycles || []).map(c => c && c.timing).filter(x => isObj(x) && x.barClose);
+  return { all: group(timed), setup: group(timed.filter(x => x.setup)), quiet: group(timed.filter(x => !x.setup)) };
+}
+
+/**
+ * The timing of one run as cycle-run.js ran it: `res` (the run's result: stdout/output, lineTimes, env), the cycle's
+ * `context` and `result`, `startedMs`/`endedMs` (wall), `now` (the cycle's time the runner gave it). The cycle's own
+ * clock is the replay clock's when one is in force in the run's env (as the gate reads it), else `now`; the gate log is
+ * the run's (FTH_GATE_LOG, else the home's). Null when it can't be built (logging never stops a cycle).
+ */
+function runTiming({ res, cfg, context, home, env, startedMs, endedMs, now, result }) {
+  try {
+    const runEnv = (res && res.env) || env || {};
+    const { resolveClock } = require('./trading/harness-now');
+    const { gateLogPath } = require('./trading/check-order');
+    let clock = { replay: false };
+    try { clock = resolveClock(runEnv, { testClock: false }); } catch (_err) { /* the wall clock */ }
+    const cycleAtMs = clock.replay ? clock.at.getTime() : now.getTime();
+    const lineTimes = Array.isArray(res.lineTimes) ? res.lineTimes : null;
+    const gate = gateOrders(gateLogPath({ FTH_GATE_LOG: runEnv.FTH_GATE_LOG || '', FTH_HOME: home }), startedMs, endedMs + 1000);
+    return cycleTiming({
+      text: lineTimes ? res.stdout : res.output, lineTimes, context, minutes: cfg && cfg.timeframe, startedMs, endedMs, cycleAtMs,
+      replay: Boolean(clock.replay), gate, ok: res.ok, timedOut: res.timedOut, result,
+    });
+  } catch (_err) {
+    return null;
+  }
+}
+
+module.exports = { transcriptTimes, gateOrders, barWindow, cycleTiming, runTiming, timingReport };
