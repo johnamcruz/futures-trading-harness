@@ -1,6 +1,6 @@
 ---
 name: levels-and-reactions
-description: Which levels matter (prior RTH high, low and close, overnight high and low, opening range, IB, VWAP, value-area edges and POC, swings, equal highs and lows, round numbers, higher-timeframe swings) with the briefing field for each, resting liquidity and targets, and how price reacts at them - rejection, acceptance, sweep. A read for trader-process step 3, never a veto.
+description: Which levels matter (prior RTH high/low/close, overnight high/low, opening range, IB, VWAP, value area and POC, swings, equal highs/lows, round numbers, higher-timeframe swings) with the briefing field for each, and how price reacts at them - rejection, acceptance, sweep. A trader-process step 3 read, never a veto.
 ---
 
 # Levels and Reactions

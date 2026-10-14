@@ -95,6 +95,15 @@ const ALLOWED = [
     now: 'The one exception is authoring: the `strategy-researcher` role, which the user starts interactively for a new strategy, may run a backtest itself (the `strategy-backtest` skill); no trading role does.',
     reason: 'the backtest is the strategy-backtest skill\'s since the strategy-authoring split' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
+  // skill_lookup lists every skill without `skill` (foundation batch B, index-all-skills): its row's three cells.
+  { old: '`skill`, `role`?', now: '`skill`?, `role`?, `query`?', reason: 'skill_lookup without skill lists every skill (query filters)' },
+  { old: 'a skill of the harness in full: one a role\'s prompt lists in its skill index (its `role-index`), looked up only when the cycle needs it. With `role` (your role\'s name) in an autonomous cycle the lookup is recorded: where the bar\'s briefing makes a skill in your index required (your prompt says when), your report counts for an entry only once you looked it up during one of your calls this cycle. An unknown skill is refused. Read-only',
+    now: 'a skill in full: one your skill index lists, read only when the cycle needs it. With `role` (your role\'s name), in an autonomous cycle, the lookup is recorded: when your prompt says the bar requires a skill of your index, your report counts for an entry only once you looked it up in the call that reports. An unknown skill is refused. No `skill`: the list (`query` filters). Read-only',
+    reason: 'the listing form, with the old cell shortened so the row (core for four roles) doesn\'t grow their prompts more than needed' },
+  { old: '`bars` and `daily` are bars files by absolute path (no `~`): the runner\'s bars file (the prompt names it, under the bar directory) or a `bars_fetch` file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns: each harness home, a replay\'s run home included, has its own, and `/tmp/fth` is no longer read).',
+    now: '`bars` and `daily` are bars files by absolute path (no `~`): the runner\'s bars file (the prompt names it, under the bar directory) or a `bars_fetch` file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns: each harness home, a replay\'s run home included, has its own).',
+    reason: 'the old shared folder\'s note dropped (the next sentence refuses every other path), so the listing form costs the four roles that hold this skill nothing' },
+  { old: '`skill-lookup.js --skill <name> [--role <role>]`', now: '`skill-lookup.js --skill <name> [--role <role>] \\| --query <text>`', reason: 'the CLI\'s listing form' },
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
   { old: BRIEFING_CELL, now: m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || '')), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, and the m3 fields in the order briefing.js builds them' },
   // lessons and reconcile: the agent-facing cells are dropped. The tools' MCP descriptions (registry.js) say what each

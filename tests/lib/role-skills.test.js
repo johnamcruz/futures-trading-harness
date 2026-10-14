@@ -98,6 +98,14 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `session-timing`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `fair-value-gaps`, `momentum-and-volume`, `absorption`, `contract-roll`, and `market-snapshot`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
   assert.match(vl, /`skill_lookup \{"skill": "<skill>", "role": "volume-liquidity-analyst"\}`/);
   assert.doesNotMatch(vl, /Required by the situation/);
+  // Every other skill is one call away (skill_lookup's catalog): one short line in index mode, never the catalog.
+  const OTHER = 'Other skills: `skill_lookup {}` lists them all.';
+  assert.ok(OTHER.length <= 80);
+  for (const a of HS.loadAgents(ROOT)) {
+    assert.strictEqual(index.agent[a.name].prompt.split(OTHER).length - 1, a.index.length ? 1 : 0, `${a.name}: index mode`);
+    assert.ok(!full.agent[a.name].prompt.includes(OTHER), `${a.name}: full mode`);
+  }
+  assert.match(vl, /- market-snapshot: [^\n]*\n\nOther skills: `skill_lookup \{\}` lists them all\.\n/, 'after the index');
   const rm = index.agent['risk-manager'].prompt;
   assert.match(rm, /Required by the situation[^]*- a setup fired \(the briefing lists a candidate\): `confluence-counting`\n- a setup fired \(the briefing lists a candidate\): `invalidation`/);
   assert.ok(vl.length < fullVl.length);

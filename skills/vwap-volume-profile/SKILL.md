@@ -1,6 +1,6 @@
 ---
 name: vwap-volume-profile
-description: Use session and RTH VWAP, the volume profile (POC, value area, high and low volume nodes), the day so far (open type, initial balance, day type), and relative volume to judge trend quality, fair value, and participation in futures. Use when evaluating mean-reversion vs trend days, where price sits against value, targets at volume nodes, or whether a breakout has participation.
+description: Use session and RTH VWAP, the volume profile (POC, value area, volume nodes), the day so far (open type, IB, day type), and relative volume to judge trend quality, fair value and participation. Use for mean-reversion vs trend days, where price sits against value, targets at volume nodes, or a breakout's participation.
 ---
 
 # VWAP and Volume

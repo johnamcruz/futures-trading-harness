@@ -140,6 +140,9 @@ function agentPrompt(agent) {
 /** The skill_lookup call a role makes, with its own name (the order gate counts a lookup by it). */
 const lookupCall = role => `\`skill_lookup {"skill": "<skill>", "role": "${role}"}\``;
 
+/** Index mode's one line for the skills outside a role's lists: the catalog is on demand, never in the prompt. */
+const OTHER_SKILLS = 'Other skills: `skill_lookup {}` lists them all.';
+
 /**
  * A role's prompt in index mode (role-skills.js skillPlan): its body, its core skills in full, then its index, one
  * line per skill (name and description), which it reads whole with the harness tool skill_lookup when the cycle
@@ -160,7 +163,7 @@ function indexPrompt(agent, plan) {
   }
   out.push('## Your skill index', '',
     `Your other skills, not loaded. Read one only when this cycle's situation needs it: ${lookupCall(agent.name)} returns the whole skill. Don't look up what the cycle doesn't need.`,
-    '', ...plan.indexed.map(d => `- ${d.name}: ${d.description}`), '');
+    '', ...plan.indexed.map(d => `- ${d.name}: ${d.description}`), '', OTHER_SKILLS, '');
   if (plan.required.length) {
     out.push('Required by the situation: when this bar\'s briefing shows it, or a setup the caller names as fired on another lane\'s bar this cycle shows it (that setup counts as one of the briefing\'s candidates, with the trend rule the caller gives), look the skill up in this call, before your report; otherwise the order gate doesn\'t count your report for an entry.', '',
       ...plan.required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');

@@ -54,6 +54,10 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
   `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
   `commands/` are thin shims that say "Use the `<skill>` skill".
+  A description is at most 160 characters (longer ones pinned, shrinking
+  only), and every skill is indexed: a role's lists, the head trader's load
+  list, a command shim, or a reasoned allow-list
+  (`tests/plugin/skills-indexed.test.js`).
 - `strategies/<name>/STRATEGY.md`: schema in `scripts/lib/trading/strategies.js`.
 - `accounts/<name>/ACCOUNT.md`: prop account profiles (`scripts/lib/trading/accounts.js`);
   combine rules and micro/mini sizing in `scripts/lib/trading/combine.js`, live attempt

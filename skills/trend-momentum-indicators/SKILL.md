@@ -1,6 +1,6 @@
 ---
 name: trend-momentum-indicators
-description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings for futures - trend presence, strength, volatility regime, the regime and skip-rule counter fields, and when each signal is unreliable. Use when a strategy gates on an indicator or when classifying the regime.
+description: Read EMA, ADX, ATR, SuperTrend and Keltner for futures - trend, strength, volatility, the regime and skip-rule fields, and when each signal is unreliable. Use when a strategy gates on an indicator or to classify the regime.
 ---
 
 # Trend and Momentum Indicators
