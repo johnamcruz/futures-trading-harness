@@ -219,6 +219,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `strategy-rules` (skills/strategy-rules/SKILL.md): Use when writing a strategy's `rules` and the series they read.
 - `strategy-scan` (skills/strategy-scan/SKILL.md): Read strategy scans - candidates, why not, trend flags, confluence.
 - `strategy-tools` (skills/strategy-tools/SKILL.md): Use when calling a strategies_* harness tool.
+- `take-profit` (skills/take-profit/SKILL.md): Use when choosing where to take profit - swing (pivot) highs and lows per timeframe, the prior 1h and 4h candle's high, low and mid, room in R.
 - `timeframe-sources` (skills/timeframe-sources/SKILL.md): Use when you need a timeframe's bars or numbers - which file, briefing field or mtf_read call holds it.
 - `tool-arguments` (skills/tool-arguments/SKILL.md): Use when calling a harness tool, for its arguments.
 - `top-down-entry` (skills/top-down-entry/SKILL.md): Use when reading a setup top down - the HTF side and level, the 15m setup there, the 3m/5m trigger, where the idea is wrong and where it aims.

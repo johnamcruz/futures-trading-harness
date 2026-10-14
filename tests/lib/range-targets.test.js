@@ -47,6 +47,25 @@ test('the last completed hour\'s high, mid and low as targets, with side, points
   assert.strictEqual(briefingRangeTargets({ bars, base: 3, price: 1, oneR: NaN })['1h'].high.R, null, 'no 1R: R unknown');
 });
 
+test('an off-tick midpoint: the price exact, its distance to the tick toward price (a target rounds toward the entry)', () => {
+  // The 10:00 hour 21480 to 21540.25 (241 ticks): mid 21510.125. From 21490 (below it): to 21510.00, 80 ticks, 20 pts.
+  const a = flat(et(10, 0), et(11, 0), 21500);
+  a[3][2] = 21540.25;
+  a[7][3] = 21480;
+  const bars = mk([...a, ...flat(et(11, 0), et(11, 6), 21490)]);
+  const x = at(bars, bars.length - 1)['1h'];
+  assert.deepStrictEqual(x.mid, { price: 21510.125, side: 'above', points: 20, ticks: 80, R: 4 });
+  assert.deepStrictEqual(x.high, { price: 21540.25, side: 'above', points: 50.25, ticks: 201, R: 10.05 });
+  // From above (21530): to 21510.25, 79 ticks, 19.75 pts.
+  const above = mk([...a, ...flat(et(11, 0), et(11, 6), 21530)]);
+  assert.deepStrictEqual(at(above, above.length - 1)['1h'].mid, { price: 21510.125, side: 'below', points: 19.75, ticks: 79, R: 3.95 });
+});
+
+test('the summary line names its R, as the swing line does', () => {
+  const b = B.buildBriefing({ symbol: 'NQ', bars: NQ.slice(0, 900), minutes: 3, blackouts: { items: [] } });
+  assert.match(B.renderBriefing(b, { now: new Date(b.closedAt) }), /^- Prior candle range \(R = the 3m reference stop\): 1h \(closed /m);
+});
+
 test('taken, only when it happened: the side the candle forming since took, closed back inside or beyond; both sides is none', () => {
   const bars = hours();
   assert.deepStrictEqual(at(bars, idx(bars, et(11, 6)))['1h'].taken, { side: 'low', closedBack: true });
@@ -87,7 +106,7 @@ test('in the briefing: one summary line (high, mid, low per frame; the taken sid
     const shape = r => Object.fromEntries(Object.entries(r).map(([tf, x]) => [tf, x.unavailable ? x : [x.high.price, x.mid.price, x.low.price, x.taken || null]]));
     assert.deepStrictEqual(shape(d.rangeTargets), shape(ref));
     const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
-    const line = text.split('\n').find(l => l.startsWith('- Prior candle range: '));
+    const line = text.split('\n').find(l => l.startsWith('- Prior candle range (R = the 3m reference stop): '));
     assert.ok(line, `bar ${k - 1}`);
     for (const [tf, x] of Object.entries(d.rangeTargets)) {
       if (x.unavailable) continue;

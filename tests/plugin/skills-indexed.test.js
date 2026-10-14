@@ -46,6 +46,8 @@ const ALLOWED = {
   'timeframe-sources': 'without a current briefing: where each timeframe\'s bars come from (multi-timeframe-analysis, trade-session and premarket point to it)',
   'mtf-bias-filter': 'the trend as a rules filter, for writing a strategy (multi-timeframe-analysis points to it); never read in a cycle',
   'top-down-entry': 'referenced, never embedded: the structure analyst\'s setup step names it and looks it up (basics-skills.test.js)',
+  // On no role's list until the owner approves the prompt growth (an index line grows a pinned role prompt).
+  'take-profit': 'never embedded: the head trader finds it by its index line (workspace/AGENTS.md); the trade lifecycle\'s skill will point to it',
   'broker-bar-fields': 'never embedded: found by its workspace/AGENTS.md index line when the briefing has a Broker bar fields line (broker-bar-fields-skill.test.js); a role list would embed it in full mode',
   // The trade-session split's pieces (trade-session-split.test.js): the head trader reads each when the core's step names
   // it, never on the per-cycle load list (the cycle's load doesn't grow); setup-judgment and trade-plan are indexed by

@@ -516,15 +516,20 @@ function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [mi
 // The frames whose last completed candle's range (high, mid, low) is a target (briefingRangeTargets): 1h and 4h.
 const RANGE_FRAMES = [60, 240];
 
-/** A target level against price: its side, distance in points and whole ticks, and R (oneR: 1R in points). */
+/**
+ * A target level against price: its side, and its distance in whole ticks, points and R (oneR: 1R in points) to the
+ * level rounded onto the tick toward price (a target rounds toward the entry: an off-tick midpoint loses the part
+ * tick; a level on the tick is unchanged).
+ */
 const targetAt = (p, price, oneR, tick) => {
-  const points = Math.abs(p - price);
-  return { price: p, side: p > price ? 'above' : p < price ? 'below' : 'at', points: r2(points), ticks: Math.round(points / tick), R: oneR > 0 ? r2(points / oneR) : null };
+  const ticks = Math.floor(Math.abs(p - price) / tick + 1e-9);
+  const points = ticks * tick;
+  return { price: p, side: p > price ? 'above' : p < price ? 'below' : 'at', points: r2(points), ticks, R: oneR > 0 ? r2(points / oneR) : null };
 };
 
 /**
  * The briefing's `rangeTargets`: per frame (RANGE_FRAMES), the last COMPLETED candle as of bar `index` (the last; never
- * the one forming: completedSeries) with its high, low and midpoint ((high + low) / 2, exact) as target levels, each
+ * the one forming: completedSeries) with its high, low and midpoint ((high + low) / 2, the price exact; its distance to the tick toward price: targetAt) as target levels, each
  * with its side of price, distance and R; and, only when it happened, `taken`: the candle forming since it (its bars
  * up to `index`) has traded beyond exactly one side of it (prevSweep): { side: 'high' | 'low', closedBack } (closedBack:
  * this bar closed back inside the range; the far side is then the other one). A frame the base bars can't build, or

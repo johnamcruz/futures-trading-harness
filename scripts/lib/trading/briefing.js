@@ -795,11 +795,11 @@ const rangeLevel = (name, x) => `${name} ${x.price} (${x.side === 'at' ? 'at pri
  * low, and, only when it happened, the side the candle forming since has taken ("low taken, closed back inside" or "low taken, closed below it"). An
  * unavailable frame is left out (the JSON says why); no line without any.
  */
-function rangeLine(block, et) {
+function rangeLine(block, et, roomOf = 'R = the reference stop') {
   if (!block || typeof block !== 'object') return null;
   const parts = Object.entries(block).filter(([, x]) => x && !x.unavailable)
     .map(([tf, x]) => `${tf} (closed ${et(x.closedAt)}) ${rangeLevel('high', x.high)}, ${rangeLevel('mid', x.mid)}, ${rangeLevel('low', x.low)}${x.taken ? `, ${x.taken.side} taken, closed ${x.taken.closedBack ? 'back inside' : x.taken.side === 'low' ? 'below it' : 'above it'}` : ''}`);
-  return parts.length ? `- Prior candle range: ${parts.join('; ')}.` : null;
+  return parts.length ? `- Prior candle range (${roomOf}): ${parts.join('; ')}.` : null;
 }
 
 // Timeframes whose candle line is event-driven (minutes): in full only when the candle completed within that long of
@@ -831,7 +831,7 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
-  const range = rangeLine(m3.rangeTargets, et);
+  const range = rangeLine(m3.rangeTargets, et, roomOf);
   if (range) out.push(range);
   return out;
 }
