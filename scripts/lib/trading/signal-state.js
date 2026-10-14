@@ -32,10 +32,11 @@ const tfOf = stepMs => `${Math.round(stepMs / 60000)}m`;
 
 /**
  * A fired scan result's trend rule, as the bar briefing names it (briefing.js candidate): 'reversal' (a strategy with
- * mtf: reversal), 'allows' or 'against' (the trend rule for its side), or null (unknown).
+ * mtf: reversal), 'allows' or 'against' (the trend rule for its side), or null (unknown). Its style is the scan's
+ * (strategies.js withStyle stamps the strategy file's on every fired result), else `style` when given.
  */
-function candidateTrendRule(r) {
-  const mtf = (r && r.mtf) || {};
+function candidateTrendRule(r, style = null) {
+  const mtf = { ...(style ? { style } : {}), ...((r && r.mtf) || {}) };
   const allowed = r && r.direction === 'long' ? mtf.longAllowed : mtf.shortAllowed;
   return mtf.style === 'reversal' ? 'reversal' : allowed === false ? 'against' : allowed === true ? 'allows' : null;
 }

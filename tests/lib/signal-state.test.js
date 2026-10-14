@@ -155,3 +155,24 @@ test('signal record setups: every fired candidate the bar briefing lists, with t
   const briefed = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan: synthetic });
   assert.deepStrictEqual(pick(rec.setups), pick(briefed.sections.m3.data.candidates));
 });
+
+test('a fired result without the scan\'s trend read keeps its strategy\'s style: a reversal strategy\'s setup is "reversal" in the signal record and the briefing', () => {
+  const { withStyle } = require('../../scripts/lib/trading/strategies');
+  const { candidateTrendRule } = require('../../scripts/lib/trading/signal-state');
+  const B = require('../../scripts/lib/trading/briefing');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
+  const bare = { name: 'fade', candidate: true, direction: 'short', signal: 'rules', stopDistance: 8 };
+  assert.strictEqual(candidateTrendRule(bare), null, 'no read, no style: unknown');
+  assert.strictEqual(candidateTrendRule(bare, 'reversal'), 'reversal', 'the strategy file\'s style given');
+  const stamped = withStyle(bare, { name: 'fade', mtf: 'reversal' });
+  assert.deepStrictEqual(stamped.mtf, { style: 'reversal' });
+  assert.strictEqual(withStyle(bare, { name: 'fade' }).mtf.style, 'trend', 'no mtf key: trend, the default');
+  // The scan's own read wins; a result that didn't fire is left alone.
+  const read = { ...bare, mtf: { style: 'trend', shortAllowed: true } };
+  assert.strictEqual(withStyle(read, { mtf: 'reversal' }), read);
+  assert.strictEqual(withStyle({ ...bare, candidate: false }, { mtf: 'reversal' }).mtf, undefined);
+  const rec = buildSignals([stamped], { symbol: 'NQ', bar: { t: bars.at(-1).t }, stepMs: 180000 });
+  assert.strictEqual(rec.setups[0].trendRule, 'reversal');
+  assert.strictEqual(B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan: [stamped] }).sections.m3.data.candidates[0].trendRule, 'reversal');
+});

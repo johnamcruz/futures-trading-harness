@@ -453,6 +453,16 @@ function barsTimeframe(stepMs) {
 const onTimeframe = (strategies, tf) => strategies.filter(s => typeof tf === 'string' && tf !== '' && s.timeframe === tf);
 
 /**
+ * A fired result always names its strategy's mtf style (from the strategy file): the evaluator gives it with the
+ * trend read (`mtf`); a result without that read gets { style } alone, so a reversal strategy's setup is never read
+ * as having no trend rule (signal-state.js candidateTrendRule, the bar briefing and the signal record).
+ */
+function withStyle(r, s) {
+  if (!r || !r.candidate || !r.direction || (r.mtf && r.mtf.style)) return r;
+  return { ...r, mtf: { ...(r.mtf || {}), style: s.mtf || 'trend' } };
+}
+
+/**
  * Evaluate every valid, non-disabled strategy for `symbol` on the last closed
  * bar. Mechanical strategies report fired/not fired with filter results;
  * manual strategies are listed for the LLM to evaluate from their Markdown
@@ -472,7 +482,7 @@ function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
       continue;
     }
     try {
-      results.push(ev.at(s, norm.length - 1, { now, describe: true }));
+      results.push(withStyle(ev.at(s, norm.length - 1, { now, describe: true }), s));
     } catch (err) {
       // One broken strategy must not stop the others from being scanned.
       results.push({ name: s.name, status: s.status, error: err.message, candidate: false });
@@ -567,7 +577,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
   return null;
 }
 
-module.exports = {
+module.exports = { withStyle,
   RETIRED,
   retiredNote,
   retiredCopies,

@@ -2187,3 +2187,27 @@ test('account gate: a ledger entry kept by its month (never a root) is not count
   assert.deepStrictEqual(cancel(entry(kept)), ['cancel-protection'], 'kept by its month: December, not March');
   assert.deepStrictEqual(cancel(entry('MNQ')), [], 'the bare root it used to keep counted against March (the bug)');
 });
+
+test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill marked for the head trader is required, whatever the briefing shows', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { SITUATIONAL, headSituationalSkills } = require('../../scripts/lib/trading/skills-loaded');
+  const home = trendHome();
+  const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
+  fs.writeFileSync(file, ocSkills.join('\n'));
+  // No candidate on the bar: a readable lanes list requires nothing more of the head trader.
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
+  const entry = { when: 'candidate.trendRule=reversal', skill: 'session-timing', head: true };
+  SITUATIONAL.push(entry);
+  try {
+    assert.deepStrictEqual(headSituationalSkills(), ['session-timing']);
+    const base = { ...config, ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home, autonomous: true, cycle: null };
+    const skillsLoaded = c => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: c, transcriptPath: file }).violations.filter(v => v.check === 'skills-loaded');
+    assert.deepStrictEqual(skillsLoaded({ ...base, cycleLaneBars: {} }), [], 'lanes readable, no trigger: not required');
+    const unreadable = skillsLoaded({ ...base, cycleLaneBars: loadConfig({ FTH_CYCLE_LANE_BARS: 'not json' }).cycleLaneBars });
+    assert.ok(unreadable.length === 1 && /session-timing/.test(unreadable[0].message), JSON.stringify(unreadable));
+    // An exit is never held.
+    assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }), entries: [plan()], now: NOW, config: { ...base, cycleLaneBars: null }, transcriptPath: file }).violations, []);
+  } finally {
+    SITUATIONAL.splice(SITUATIONAL.indexOf(entry), 1);
+  }
+});
