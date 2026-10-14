@@ -39,6 +39,13 @@ description: Rules for running the trading harness unattended (headless, schedul
    than 45 minutes (3 min on 1m, 9 min on 3m), so a 1m setup can't wait.
    A cycle with only a 1m bar reuses the analysts' cached reports of the
    last 3m bar (served under "Cached reports"): don't launch them again.
+   **Analysts on their own timeframe.** When the prompt says "Each analyst
+   reads its own timeframe" (e.g. trend-momentum-analyst on 15m,
+   volume-liquidity-analyst on 1h), pass each named analyst its timeframe
+   with the symbol (trade-session step 2). Its cached report says
+   "(15m, from 10:45 ET, holds until 11:00 ET)": it rests on its own bar and
+   may be up to one of its bars old, so this bar's facts come from the bar
+   briefing. Merge every analyst's latest report and decide once.
    Your last cycle results are those of the lanes that closed (each tagged
    with its lanes, e.g. "MNQ 1m"), plus the first lane's last 3 and those
    of the lane an open trade was entered on, so 1m cycles never crowd out

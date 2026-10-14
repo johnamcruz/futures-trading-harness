@@ -20,14 +20,22 @@
  *   signalLaneErrors(lanes, strategies)  a trigger "signal" lane with no mechanical strategy (only positions would cycle)
  *   describeLane(lane, strategies)       one line for the preflight report
  *
- * Each agent role may name its own timeframe: `timeframe` in its agents/<role>.md frontmatter (none: the lane's),
- * and the runner config's `agents: { "<role>": { "timeframe": "15m" } }` overrides it. Nothing reads it yet:
- * a role whose timeframe differs from the lane's is refused (AGENT_TIMEFRAME_REFUSAL) until a later step.
+ * Each agent role may name its own timeframe: `timeframe` in its agents/<role>.md frontmatter (none: the first
+ * lane's), and the runner config's `agents: { "<role>": { "timeframe": "15m" } }` overrides it. Only the analysts
+ * (roles-ran ANALYSTS) read their own: each gets a bar briefing and bars of its timeframe (trading/briefing.js), and its
+ * report is reused until its own next bar close (trading/report-cache.js). The risk manager, the executor and the
+ * gate decide once per cycle on the cycle's bars, so any other role off the first lane's timeframe is refused.
+ * An analyst's timeframe is a lane's, or whole bars of the first lane that divide the hour (built from its bars).
  *
  *   tfMinutes(tf)                        "15m" -> 15, "1h" -> 60, "1d" -> 1440; null when not a timeframe
- *   agentOverrideErrors(agents, lane)    the config's `agents` map: shape, timeframes, and none off the lane's
- *   agentErrors(cfg, agents)             each role named exists; each role's timeframe valid and the lane's
+ *   tfLabel(minutes)                     60 -> "1h", 15 -> "15m"
+ *   agentOverrideErrors(agents)          the config's `agents` map: shape and timeframes
+ *   agentErrors(cfg, agents)             each role named exists; each role's timeframe valid, and off the first lane's
+ *                                        only for an analyst on a timeframe it can be given (frameError)
  *   agentTimeframes(cfg, agents)         [{ role, timeframe, from: 'config' | 'agent' | 'lane' }]
+ *   frameError(minutes, lanes)           why an analyst can't read `minutes`-minute bars under these lanes, or null
+ *   analystFrames(cfg, agents)           the analysts on a timeframe other than the first lane's:
+ *                                        [{ role, minutes, lane }] (lane: the lane of that timeframe's index, or -1: built)
  *   omittedPolicyErrors(cfg, strategies, attemptRunning)  a lane's policies list leaving out a policy with a running attempt
  *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, agents)
  *
@@ -38,12 +46,12 @@
 
 const { onTimeframe } = require('./trading/strategies');
 const { familyRoot } = require('./trading/contracts');
+const { ANALYSTS } = require('./trading/roles-ran');
 
 const LANE_KEYS = ['timeframe', 'trigger', 'strategies', 'policies'];
 const TRIGGERS = ['bar', 'signal'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
-const AGENT_TIMEFRAME_REFUSAL = 'per-agent timeframes arrive in a later step: until then every role reads the lane\'s bars, so a role set to another timeframe is refused';
 const TIMEFRAME = /^([1-9]\d*)(m|h|d)$/;
 
 const tfOf = lane => `${lane.timeframe}m`;
@@ -166,14 +174,17 @@ function describeLane(lane, strategies) {
   return `${tfOf(lane)} bars, trigger ${lane.trigger}; strategies: ${show(names('rules'))}${lane.strategies ? ' (listed)' : ''}; policies: ${show(names('policy'))}${lane.policies ? ' (listed)' : ''}`;
 }
 
+/** A timeframe's name from its minutes: 60 -> "1h", 15 -> "15m" (as the config writes it). */
+const tfLabel = m => (m % 60 === 0 ? `${m / 60}h` : `${m}m`);
+
 /** Minutes in a timeframe ("3m", "1h", "1d"); null when it is not one. */
 function tfMinutes(tf) {
   const m = TIMEFRAME.exec(typeof tf === 'string' ? tf : '');
   return m ? Number(m[1]) * { m: 1, h: 60, d: 1440 }[m[2]] : null;
 }
 
-/** The runner config's `agents` overrides: a map of role -> { timeframe }, each a timeframe, none off the lane's. */
-function agentOverrideErrors(agents, lane) {
+/** The runner config's `agents` overrides: a map of role -> { timeframe }, each a timeframe (the roles: agentErrors). */
+function agentOverrideErrors(agents) {
   if (agents === undefined) return [];
   if (!isObject(agents)) return ['agents: a map of role -> { "timeframe": "15m" }'];
   const errors = [];
@@ -187,7 +198,6 @@ function agentOverrideErrors(agents, lane) {
     for (const k of Object.keys(o)) if (k !== 'timeframe') errors.push(`${at}: unknown key "${k}" (timeframe)`);
     if (o.timeframe === undefined) continue;
     if (tfMinutes(o.timeframe) === null) errors.push(`${at}.timeframe: a timeframe such as "3m", "15m", "1h"`);
-    else if (lane && Number.isInteger(lane.timeframe) && tfMinutes(o.timeframe) !== lane.timeframe) errors.push(`${at}.timeframe: ${o.timeframe}, not the lane's ${tfOf(lane)}: ${AGENT_TIMEFRAME_REFUSAL}`);
   }
   return errors;
 }
@@ -203,18 +213,45 @@ function agentTimeframes(cfg, agents) {
   });
 }
 
-/** The roles the config names exist; every role's timeframe is valid and the lane's (until per-agent timeframes). */
+/**
+ * Why an analyst can't be given `minutes`-minute bars and a briefing on them, or null: a lane's timeframe (its bars),
+ * or whole bars of the first lane that divide the hour (15m and 1h from 3m bars), built from the first lane's bars.
+ */
+function frameError(minutes, lanes) {
+  if (lanes.some(l => l.timeframe === minutes)) return null;
+  const first = lanes[0].timeframe;
+  if (Number.isInteger(minutes) && minutes <= 60 && 60 % minutes === 0 && minutes % first === 0) return null;
+  return `an analyst's timeframe is a lane's (${lanes.map(tfOf).join(', ')}) or whole ${first}m bars that divide the hour (built from the first lane's bars), not ${minutes}m`;
+}
+
+/** The roles the config names exist; every role's timeframe is valid, and off the first lane's only for an analyst that can read it. */
 function agentErrors(cfg, agents) {
   const roles = new Set(agents.map(a => a.name));
   const errors = Object.keys(isObject(cfg.agents) ? cfg.agents : {}).filter(r => !roles.has(r))
     .map(r => `agents.${r}: no such role (agents/${r}.md; roles: ${[...roles].join(', ')})`);
-  const lane = lanesOf(cfg)[0];
+  const lanes = lanesOf(cfg);
+  const lane = lanes[0];
   for (const t of agentTimeframes(cfg, agents).filter(x => x.from !== 'lane')) {
     const at = t.from === 'config' ? `agents.${t.role}.timeframe` : `agents/${t.role}.md timeframe`;
-    if (tfMinutes(t.timeframe) === null) errors.push(`${at}: a timeframe such as "3m", "15m", "1h" (got ${JSON.stringify(t.timeframe)})`);
-    else if (tfMinutes(t.timeframe) !== lane.timeframe) errors.push(`${at}: ${t.timeframe}, not the lane's ${tfOf(lane)}: ${AGENT_TIMEFRAME_REFUSAL}`);
+    const m = tfMinutes(t.timeframe);
+    if (m === null) errors.push(`${at}: a timeframe such as "3m", "15m", "1h" (got ${JSON.stringify(t.timeframe)})`);
+    else if (m === lane.timeframe) continue;
+    else if (!ANALYSTS.includes(t.role)) errors.push(`${at}: ${t.timeframe}, not the first lane's ${tfOf(lane)}: only the analysts (${ANALYSTS.join(', ')}) read their own timeframe; ${t.role} decides once per cycle on the cycle's bars (leave it unset)`);
+    else if (frameError(m, lanes)) errors.push(`${at}: ${frameError(m, lanes)}`);
   }
   return errors;
+}
+
+/**
+ * The analysts on a timeframe other than the first lane's (a valid one: the rest are refused at start), in role
+ * order: [{ role, minutes, lane }], `lane` the index of the lane on that timeframe (its bars), or -1 (built from
+ * the first lane's bars). None: every role reads the first lane's bars, as before.
+ */
+function analystFrames(cfg, agents) {
+  const lanes = lanesOf(cfg);
+  return agentTimeframes(cfg, agents).filter(t => ANALYSTS.includes(t.role)).map(t => ({ role: t.role, minutes: tfMinutes(t.timeframe) }))
+    .filter(t => t.minutes !== null && t.minutes !== lanes[0].timeframe && !frameError(t.minutes, lanes))
+    .map(t => ({ ...t, lane: lanes.findIndex(l => l.timeframe === t.minutes) }));
 }
 
 /** Every refusal the runner checks at start against the strategies and agent roles. */
@@ -224,6 +261,6 @@ const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => [
 ];
 
 module.exports = {
-  LANE_KEYS, TRIGGERS, AGENT_TIMEFRAME_REFUSAL, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
-  tfMinutes, agentOverrideErrors, agentErrors, agentTimeframes, omittedPolicyErrors, startErrors,
+  LANE_KEYS, TRIGGERS, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
+  tfMinutes, tfLabel, agentOverrideErrors, agentErrors, agentTimeframes, frameError, analystFrames, omittedPolicyErrors, startErrors,
 };

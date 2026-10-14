@@ -15,7 +15,10 @@ const path = require('path');
 const { assertGolden } = require('../golden');
 const G = require('../fixtures/golden-bars');
 const { FAKE_BROKERS, tmpDir } = require('../helpers');
-const { validateConfig } = require('../../scripts/lib/autotrader');
+const { validateConfig, childEnv } = require('../../scripts/lib/autotrader');
+const { barBriefing } = require('../../scripts/lib/harness-tools/briefing');
+const { decisionPoints } = require('../../scripts/lib/replay/schedule');
+const { tfLabel } = require('../../scripts/lib/lanes');
 const { wireRunner, closedBarsOnly } = require('../../scripts/lib/runner-wiring');
 const { readBriefing } = require('../../scripts/lib/trading/briefing');
 const RC = require('../../scripts/lib/trading/report-cache');
@@ -29,14 +32,17 @@ const ANALYSTS = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-
 // opencode's task events, as a cycle's output carries them (report-cache.test.js).
 const task = (role, report, [s, e]) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: `<task id="s" state="completed">\n<task_result>\n${report}\n</task_result>\n</task>`, time: { start: s, end: e } } } });
 
-async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {}, restart = false } = {}) {
+// `agents`: the runner config's per-role timeframes; `analyst(role, run)`: an analyst's report (default: two build on the
+// briefing file, the third reads the bars); `fresh`: one fresh runner per decision point, the state kept between
+// them, under the replay clock (as replay runs passes), instead of the live loop; `restart`: the live loop, a new runner every pass from its saved state.
+async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {}, agents = null, analyst = null, fresh = false, start = START, restart = false } = {}) {
   const home = tmpDir();
   // The prompt names the harness home from the process's environment (autotrader.js prompts): this run's home.
   const savedHome = process.env.FTH_HOME;
   process.env.FTH_HOME = home;
   const real = fs.realpathSync(home);
   const paths = text => text.split(real).join('<home>').split(home).join('<home>').split(G.ROOT).join('<root>');
-  const clockRef = { t: START };
+  const clockRef = { t: start };
   const now = () => new Date(clockRef.t);
   const env = {
     HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl'),
@@ -44,7 +50,7 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
   };
   // `lanes`: the same runner configured as one lane instead of the legacy timeframe (lanes.js).
   const { timeframe: _tf, ...noTimeframe } = { harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 700 };
-  const cfg = validateConfig(lanes ? { ...noTimeframe, lanes } : { ...noTimeframe, timeframe });
+  const cfg = validateConfig({ ...(lanes ? { ...noTimeframe, lanes } : { ...noTimeframe, timeframe }), ...(agents ? { agents } : {}) });
   const broker = {
     async activeContract(symbol) { return { id: symbol, name: `${symbol}M6`, tickSize: 0.25, tickValue: 0.5 }; },
     // The replay server's bars up to its clock (the pass drops any that close later: closedBarsOnly).
@@ -59,12 +65,14 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
   const written = [];
   const runCycle = async (action, prompt, limits = {}) => {
     const ctx = limits.context || {};
+    // The cycle's environment as the runner hands it to the harness (FTH_CYCLE_BARS, FTH_CYCLE_AT): what a role's tools read.
+    const runEnv = analyst ? childEnv({ ...cfg, harness: 'claude' }, G.ROOT, env, ctx) : null;
     const served = ctx.cachedRoles || [];
     const b = readBriefing(home, 'MNQ');
     const versions = b ? ['m3', 'm15', 'h1', 'day'].map(p => b.sections[p].version).join(', ') : 'none';
     // The roles not served from the cache run: two analysts build on the briefing; the third reads the bars itself (never cacheable).
     const output = [
-      ...ANALYSTS.filter(r => !served.includes(r)).map((r, k) => task(r, k === 2 || r === ANALYSTS[2] ? 'Data: get_bars, market_snapshot\nBias: neutral' : `Data: bar_briefing ${versions}\nBias: long`, [10, 20 + k])),
+      ...ANALYSTS.filter(r => !served.includes(r)).map((r, k) => task(r, analyst ? analyst(r, { ctx, cfg, env: runEnv, now }) : k === 2 || r === ANALYSTS[2] ? 'Data: get_bars, market_snapshot\nBias: neutral' : `Data: bar_briefing ${versions}\nBias: long`, [10, 20 + k])),
       ...(served.includes('risk-manager') ? [] : [task('risk-manager', 'Phase 1: flat, budget 2 trades', [10, 15])]),
       task('risk-manager', 'Phase 2: VETO - no plan', [30, 40]),
     ].join('\n');
@@ -83,15 +91,33 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
   const runner = make();
   const keysAfter = [];
   let guard = 0;
+  const after = before => {
+    if (cycles.length > before) {
+      const c = RC.readCache(home);
+      keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.tf ? { ...x.versions, tf: x.tf } : x.versions])), phase1: c.phase1 && { account: c.phase1.account, day: c.phase1.day }, symbols: c.symbols } : null);
+      written.push(JSON.parse(fs.readFileSync(path.join(cfg.dataDir, `MNQ-${cfg.timeframe}m.json`), 'utf8')).bars);
+    }
+  };
   try {
-    while (clockRef.t < end) {
+    if (fresh) {
+      // Replay: a new runner (a new process) per decision point, at the point, the state saved between passes.
+      let saved = state;
+      for (const p of decisionPoints(cfg, { start: new Date(start), end: new Date(end) }).filter(x => x.kind === 'trade')) {
+        clockRef.t = p.t.getTime();
+        const pass = wireRunner({
+          cfg, root: G.ROOT, home, env: { ...env, FTH_REPLAY_NOW: p.t.toISOString() }, client: closedBarsOnly(broker, now), dataDir: cfg.dataDir, now, runCycle,
+          loadState: () => (saved ? JSON.parse(JSON.stringify(saved)) : null), saveState: x => { saved = JSON.parse(JSON.stringify(x)); },
+          killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {},
+        });
+        const before = cycles.length;
+        await pass.step();
+        after(before);
+      }
+    }
+    while (!fresh && clockRef.t < end) {
       const before = cycles.length;
       clockRef.t += await (restart ? make() : runner).step();
-      if (cycles.length > before) {
-        const c = RC.readCache(home);
-        keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.versions])), phase1: c.phase1 && { account: c.phase1.account, day: c.phase1.day }, symbols: c.symbols } : null);
-        written.push(JSON.parse(fs.readFileSync(path.join(cfg.dataDir, `MNQ-${cfg.timeframe}m.json`), 'utf8')).bars);
-      }
+      after(before);
       if ((guard += 1) > 10000) throw new Error('runaway loop');
     }
     if (inspect) inspect(home, cfg);
@@ -260,4 +286,87 @@ test('the decision history: a runner restarted every pass (as a replay runs, one
   assert.ok(live.cycles.slice(1).every(c => c.history.length && c.history.every(l => /@[\d.]+: .*; since [+-]?\d+t/.test(l))), live.cycles.map(c => c.history.join(' | ')).join('\n'));
   // The recorded lines are exactly the prompt's: all of them, in order, and nothing else.
   for (const c of live.cycles) if (c.history.length) assert.ok(c.prompt.includes(`): ${c.history.join(' | ')}. Don't flip-flop`), `${c.at}: the prompt shows ${c.history.join(' | ')}`);
+});
+
+// Per-agent timeframes (lanes.js analystFrames): an analyst reads bar_briefing as a role would, through the cycle's
+// environment (childEnv), with its own timeframe when the prompt gives it one, and names the versions it read.
+const AGENT_TFS = { 'market-structure-analyst': { timeframe: '3m' }, 'trend-momentum-analyst': { timeframe: '15m' }, 'volume-liquidity-analyst': { timeframe: '1h' } };
+const MULTI_END = Date.parse('2026-04-27T16:06:30Z'); // 10:36 .. 12:06 ET: two 1h closes (11:00, 12:00), six 15m closes
+function toolAnalyst(role, { ctx, env, now }) {
+  const tf = ((ctx.frames || []).find(f => f.role === role) || {}).timeframe;
+  const out = barBriefing({ symbol: 'MNQ', json: true, ...(tf ? { timeframe: tf } : {}) }, { env, now, replayAt: () => null }).text;
+  let b;
+  try { b = JSON.parse(out); } catch (_err) { return `Data: no current briefing; get_bars (${out.trim().slice(0, 80)})\nBias: neutral`; }
+  const parts = tf ? [b.sections.bar, ...Object.values(b.shared)] : ['m3', 'm15', 'h1', 'day'].map(p => b.sections[p]);
+  return `Data: bar_briefing ${tf ? `${tf} ` : ''}${parts.map(x => x.version).join(', ')}\nBias: long`;
+}
+const tickUp = () => {
+  const dir = path.join(tmpDir(), 'strategies', 'tick_up');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), [
+    '---', 'name: tick_up', 'description: Test rules strategy on 1-minute bars, a close above or below the last one, for the lanes cache test.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 1m', 'signal: rules', 'mtf: reversal', 'rules:', '  long:', '    - close > close[1]', '  short:', '    - close < close[1]',
+    'risk:', '  stop: atr:0.5', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  return { FTH_STRATEGIES_DIRS: path.dirname(dir) };
+};
+const BARS1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
+const TWO_LANES = [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }];
+// Hits over cycles, and the runs (misses: the role launched) it took.
+const hitRate = (cycles, role) => { const n = cycles.filter(c => c.served.includes(role)).length; return `${n}/${cycles.length} (${Math.round((100 * n) / cycles.length)}%, ${cycles.length - n} runs)`; };
+function framesText({ cycles, keysAfter }) {
+  return cycles.map((c, k) => {
+    const hit = ['risk-manager', ...ANALYSTS].map(r => `${short(r)} ${c.served.includes(r) ? 'HIT' : 'miss'}`).join(', ');
+    const keys = keysAfter[k];
+    const after = keys ? Object.entries(keys.analysts).map(([r, v]) => `${short(r)}${v.tf ? ` ${tfLabel(v.tf)}` : ''} ${['bar', 'm15', 'h1', 'day'].filter(p => v[p]).map(p => v[p]).join(' ')}`).join('; ') || 'no analyst' : 'no cache';
+    return `${c.at} ${(c.lanes || []).join('+')}: ${hit}\n  cached after: ${after}`;
+  }).join('\n');
+}
+
+test('analysts on 3m, 15m and 1h with a 1m signal lane: each reads its own timeframe\'s briefing; the hit/miss sequence and keys are pinned; slower analysts hit far more often', async () => {
+  const extraEnv = tickUp();
+  const one = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst });
+  const multi = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst, agents: AGENT_TFS });
+  assert.ok(multi.cycles.length >= 40, `cycles: ${multi.cycles.length}`);
+  // The same cycles (the agents' timeframes add no decision time), the same phase-1 hits.
+  assert.deepStrictEqual(multi.cycles.map(c => `${c.at} ${c.lanes}`), one.cycles.map(c => `${c.at} ${c.lanes}`));
+  assert.deepStrictEqual(multi.cycles.map(c => c.served.includes('risk-manager')), one.cycles.map(c => c.served.includes('risk-manager')));
+  const [ms, tm, vl] = ANALYSTS;
+  const hits = (run, r) => run.cycles.filter(c => c.served.includes(r)).length;
+  // One timeframe: every analyst reads the 3m briefing and holds to the next 15m close, so all three alike; on 3m, 15m
+  // and 1h the 3m one keeps that rule, the 15m one holds within its 15m bar, the 1h one within its hour.
+  assert.strictEqual(hits(one, ms), hits(one, vl));
+  assert.strictEqual(hits(multi, ms), hits(one, ms), 'an analyst on the first lane\'s timeframe is cached as before');
+  assert.ok(hits(multi, vl) > hits(multi, tm) && hits(multi, vl) >= multi.cycles.length - 3, `1h ${hits(multi, vl)} vs 15m ${hits(multi, tm)} of ${multi.cycles.length}`);
+  // Each own-timeframe report is a miss exactly at its own bar's close (the first cycle at or after it), and hits otherwise.
+  const missAt = (run, r) => run.cycles.map((c, k) => (k > 0 && !c.served.includes(r) ? c.at : null)).filter(Boolean);
+  const closesAt = m => multi.cycles.filter((c, k) => k > 0 && Math.floor(Date.parse(c.at) / (m * 60000)) !== Math.floor(Date.parse(multi.cycles[k - 1].at) / (m * 60000))).map(c => c.at);
+  assert.deepStrictEqual(missAt(multi, vl), closesAt(60));
+  assert.deepStrictEqual(missAt(multi, tm), closesAt(15));
+  // The 1h analyst's key holds its 1h bar, the shared h1 and day (never the m15, which changes faster).
+  const lastKeys = multi.keysAfter.at(-1).analysts;
+  assert.deepStrictEqual(Object.keys(lastKeys[vl]).sort(), ['bar', 'day', 'h1', 'tf']);
+  assert.match(lastKeys[vl].bar, /^bar60m@/);
+  assert.deepStrictEqual(Object.keys(lastKeys[tm]).sort(), ['bar', 'day', 'h1', 'm15', 'tf']);
+  assert.ok(!('tf' in lastKeys[ms]), 'the 3m analyst keeps the legacy key');
+  // The prompt gives each launched analyst its timeframe; cached ones say how long they hold.
+  assert.match(multi.cycles[0].prompt, /Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m \(bar_briefing with "timeframe": "15m"; its bars file is named there\), volume-liquidity-analyst on 1h/);
+  assert.doesNotMatch(one.cycles.map(c => c.prompt).join('\n'), /own timeframe/);
+  const cachedOwn = multi.cycles.find(c => c.served.includes(vl) && c.served.includes(tm));
+  assert.match(cachedOwn.prompt, /--- volume-liquidity-analyst report \(1h, from \d\d:\d\d ET, holds until \d\d:00 ET\) ---\nData: bar_briefing 1h bar60m@/);
+  const rates = `hit rate per analyst (cycles): one timeframe (3m) ${ANALYSTS.map(r => `${short(r)} ${hitRate(one.cycles, r)}`).join(', ')}; 3m/15m/1h ${ANALYSTS.map(r => `${short(r)} ${hitRate(multi.cycles, r)}`).join(', ')}`;
+  assertGolden('runner-replay-frames-cache.txt', `${rates}\n${framesText(multi)}`);
+  assertGolden('runner-replay-frames-prompts.txt', [0, multi.cycles.indexOf(cachedOwn)].map(k => multi.cycles[k]).map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+});
+
+test('replay equals live with analysts on their own timeframes: a fresh runner per decision point gives the same reports, cache hits, keys and prompts', async () => {
+  const extraEnv = tickUp();
+  const end = Date.parse('2026-04-27T15:21:30Z'); // across the 11:00 1h close
+  // Both from the first decision point (a 3m close plus the poll delay), where the live loop's first poll cycles too.
+  const start = Date.parse('2026-04-27T14:36:02Z');
+  const live = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, analyst: toolAnalyst, agents: AGENT_TFS });
+  const passes = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, analyst: toolAnalyst, agents: AGENT_TFS, fresh: true });
+  assert.ok(live.cycles.length >= 20, `cycles: ${live.cycles.length}`);
+  assert.strictEqual(framesText(passes), framesText(live));
+  assert.deepStrictEqual(passes.cycles.map(c => c.prompt), live.cycles.map(c => c.prompt));
 });

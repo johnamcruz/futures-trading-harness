@@ -43,6 +43,24 @@
  *   renderBriefing(b, { now })                                   one text block per section, with validity
  *   briefingFile(home, root) / writeBriefing / readBriefing      <FTH_HOME>/briefing/<MICRO ROOT>.json
  *   nextClose(at, minutes)                                       when the candle containing `at` closes
+ *
+ * An analyst on its own timeframe (lanes.js analystFrames: 15m or 1h from 3m bars, or another lane's bars) gets a
+ * briefing on that timeframe: its `bar` part is the m3 part's facts computed on its own bars (the trend rule is the
+ * runner's, the gate's; setups only on a lane's bars), valid until its next bar close; the runner's briefing's
+ * parts that change no faster than its bars (m15 up to 15m bars, h1 up to 1h, day) are shared: read from that
+ * briefing, never copied, so every timeframe's briefing names the same versions.
+ *
+ *   buildFrameBriefing({ symbol, contractId, bars, minutes, first, lane, scan, scanError, barsFile, blackouts, clock, now })
+ *                                                                its `bar` part (first: the runner's briefing)
+ *   sharedParts(minutes)                                         the runner's parts it shares: ['m15', 'h1', 'day'] up to 15m
+ *   frameHolds(f, at)                                            its bar is the one holding at `at`
+ *   wholeBars(bars, minutes)                                     the completed `minutes` bars built from `bars`, each opening on
+ *                                                                its boundary (a missing first sub-bar never moves it)
+ *   frameUntil(closedAt, minutes)                                its bar's end: the next bar's close in market hours (the
+ *                                                                last 1h bar before the 16:00 ET break holds to 19:00 ET)
+ *   renderFrameBriefing(f, first, { now })                       as text, its `bar` part and the shared parts
+ *   frameBriefingFile(home, root, minutes) / writeFrameBriefing / readFrameBriefing / removeFrameBriefing
+ *                                                                <FTH_HOME>/briefing/<MICRO ROOT>-<minutes>m.json
  *   sessionWindow(at, clock)                                     { name, until, entries, marketOpen, text, refusal } (the skill's windows, the gate's clock)
  */
 
@@ -51,7 +69,7 @@ const path = require('path');
 const { snapshot } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
-const { tradingDayStart, minutesOfDay, entryClock } = require('./clock');
+const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, specFor } = require('./contracts');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
@@ -476,6 +494,9 @@ function summaryLines(b, et) {
   const m3 = (b.sections.m3 || {}).data || {};
   const m15 = (b.sections.m15 || {}).data || {};
   const al = m15.alignment || {};
+  // A briefing on 1h bars shares no m15 part (it changes faster than its bars).
+  const alignment = b.sections.m15 ? `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`
+    : `- Alignment: not in a ${b.minutes}m briefing (the 15m read changes faster than its bars). Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`;
   const rule = String(m3.trendRule || '').replace(/^Trend rule: /, '');
   const vw = m3.vwap || {};
   const news = m3.news || {};
@@ -485,13 +506,14 @@ function summaryLines(b, et) {
     `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
-    `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`,
+    alignment,
     `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away, ${vw.crossesLast30 ?? '?'} crosses in 30 bars.`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
     `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
     `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,
   ];
-  if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
+  if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
+  else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
   else if (!m3.candidates || !m3.candidates.length) out.push('- Setups: none fired on this bar.');
   else {
     out.push('- Setups:');
@@ -542,4 +564,108 @@ function readBriefing(home, root) {
   }
 }
 
-module.exports = { SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing };
+// The runner's parts a briefing on `minutes`-minute bars shares: those whose clock is no faster than its bars.
+const SHARED_CLOCK = { m15: 15, h1: 60, day: 1440 };
+const sharedParts = minutes => Object.keys(SHARED_CLOCK).filter(p => SHARED_CLOCK[p] >= minutes);
+
+/**
+ * The briefing on an analyst's own timeframe: `bars` are its closed `minutes`-minute bars (a lane's, or built from
+ * the first lane's), `first` the runner's briefing (its parts are shared, see
+ * sharedParts). `lane`: the bars are a lane's, so `scan` is that lane's scan and its candidates are this bar's;
+ * else no strategy trades these bars and the setups are the runner's briefing's.
+ */
+function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, lane = false, scan = null, scanError = null, barsFile = null, blackouts = null, clock = null, now = new Date() }) {
+  if (!first || !first.sections || !first.sections.m3) throw new Error(`no runner bar briefing to share with the ${minutes}m one`);
+  if (first.symbol !== symbol || (first.contractId || null) !== contractId) throw new Error(`the runner's bar briefing is for ${first.symbol} ${first.contractId || ''}, not ${symbol} ${contractId || ''}`);
+  const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, now });
+  const base = b.sections.m3;
+  // No trend rule: one read off these bars isn't the gate's, and the gate's, copied here, would be served as current
+  // for this bar's whole life (and in a report cached on it). The gate's current rule is the runner's briefing's.
+  const data = { ...base.data, trendRule: `Trend rule: not in a ${minutes}m briefing (it would be up to a ${minutes}m bar old): the order gate's current rule is in the runner's ${first.minutes}m bar briefing and the cycle prompt` };
+  if (!lane) {
+    delete data.candidates;
+    delete data.scanError;
+    data.setups = `not scanned on ${minutes}m bars (no lane trades them): this bar's setups are in the ${first.minutes}m bar briefing`;
+  }
+  return {
+    symbol, contractId, minutes, runnerMinutes: first.minutes, asOf: b.asOf, closedAt: b.closedAt, price: b.price, builtAt: b.builtAt, barsFile,
+    sections: { bar: { version: `bar${minutes}m@${b.closedAt}`, computedAt: b.closedAt, validUntil: frameUntil(new Date(b.closedAt), minutes).toISOString(), data } },
+  };
+}
+
+/**
+ * When a bar that closed at `closedAt` stops being the last one: the close of the next `minutes`-minute bar that opens
+ * in market hours (clock.js inMarketHours, ET wall time, so across a DST change too). Inside a session that is
+ * closedAt + minutes; the last bar before the daily break or the weekend holds until the first bar after the open.
+ */
+function frameUntil(closedAt, minutes) {
+  const step = minutes * 60000;
+  let open = closedAt.getTime();
+  // At most a week of bars: a week always has market hours.
+  for (let k = 0; k <= Math.ceil(10080 / minutes) && !inMarketHours(new Date(open)); k += 1) open += step;
+  return new Date(open + step);
+}
+
+/**
+ * The completed `minutes`-minute bars in `bars`, OHLCV only, each stamped with its own boundary's open (nextClose of
+ * its first sub-bar, less its minutes), never its first sub-bar's time: a 1h bar whose 14:00 sub-bar is missing still
+ * opens at 14:00 and closes at 15:00. Two anchors meet here: mtf.js candles group the sub-bars on the 18:00
+ * America/New_York grid, and nextClose counts from the trading day's start (clock.js tradingDayStart, in its
+ * own zone): the same instant all year, and a test pins that they agree.
+ */
+function wholeBars(bars, minutes) {
+  return candles(normalizeBars(bars), minutes).filter(c => c.complete)
+    .map(({ t, o, h, l, c, v }) => ({ t: new Date(nextClose(new Date(t), minutes).getTime() - minutes * 60000).toISOString(), o, h, l, c, v }));
+}
+
+/** Whether the briefing's bar is the one holding at `at` (closed by then, its next bar not yet). */
+function frameHolds(f, at) {
+  const s = f && f.sections && f.sections.bar;
+  return Boolean(s && Date.parse(f.closedAt) <= at.getTime() && Date.parse(s.validUntil) > at.getTime());
+}
+
+/** The briefing on an analyst's timeframe as text: the summary, its `bar` part, then the runner's parts it shares. */
+function renderFrameBriefing(f, first, { now = new Date() } = {}) {
+  const day = etDate(new Date(f.closedAt));
+  const et = v => etTimes(v, day);
+  const shared = sharedParts(f.minutes).filter(p => first.sections[p]);
+  const view = { symbol: f.symbol, minutes: f.minutes, sections: { m3: f.sections.bar, ...Object.fromEntries(shared.map(p => [p, first.sections[p]])) } };
+  const lines = [`Bar briefing ${f.symbol} ${f.minutes}m (your own timeframe; the runner's bars are ${f.runnerMinutes}m), bar ${et(f.asOf)} ET closed ${et(f.closedAt)} ET (${day}), price ${f.price}; times in ET, distances in points and R (computed once per ${f.minutes}m bar; reuse it, don't recompute). Your report on it may be reused until its next ${f.minutes}m close, so it may be up to one ${f.minutes}m bar old.${f.barsFile ? ` Its ${f.minutes}m bars, oldest first: ${f.barsFile}.` : ''}`];
+  lines.push(...summaryLines(view, et), '', 'Detail by timeframe:');
+  const part = (label, s) => {
+    const stale = Date.parse(s.validUntil) <= now.getTime() ? ' EXPIRED (the next briefing replaces it)' : '';
+    lines.push(`[${label}] version ${s.version}, valid until ${et(s.validUntil)} ET${stale}`);
+    for (const [k, v] of Object.entries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
+  };
+  part(`bar ${f.minutes}m`, f.sections.bar);
+  for (const p of shared) part(p, first.sections[p]);
+  return `${lines.join('\n')}\n`;
+}
+
+const frameBriefingFile = (home, root, minutes) => path.join(home, 'briefing', `${familyRoot(root)}-${minutes}m.json`);
+
+function writeFrameBriefing(home, f) {
+  const file = frameBriefingFile(home, f.symbol, f.minutes);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(f)}\n`);
+  fs.renameSync(tmp, file);
+  return file;
+}
+
+function readFrameBriefing(home, root, minutes) {
+  try {
+    return JSON.parse(fs.readFileSync(frameBriefingFile(home, root, minutes), 'utf8'));
+  } catch (_err) {
+    return null;
+  }
+}
+
+function removeFrameBriefing(home, root, minutes) {
+  try { fs.unlinkSync(frameBriefingFile(home, root, minutes)); } catch (_err) { /* none */ }
+}
+
+module.exports = {
+  SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
+  sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
+};

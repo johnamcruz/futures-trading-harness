@@ -160,6 +160,20 @@ the roles read the bars themselves. A report the prompt gives under "Cached
 reports" names an earlier bar's versions by design: the runner checked that
 the parts it rests on (`m15`, `h1`, `day`) are still current, so it counts.
 
+**An analyst on its own timeframe.** When the prompt says "Each analyst
+reads its own timeframe" (the runner config's `agents`, e.g. a 15m trend
+analyst and a 1h structure analyst), give that analyst its timeframe with the
+symbol ("timeframe 15m"): it reads `bar_briefing` with that `timeframe` (its
+own bar and the runner's m15, h1 and day parts it
+shares) and the bars file named there, and its `Data:` line names those
+versions (`bar15m@...`, then the shared parts). The analysts the prompt
+doesn't name read the runner's bars and briefing as above. Such a report,
+served under "Cached reports", holds until its own timeframe's next bar
+close, so it may be up to one of its bars old (a 1h report at 10:50 can be
+from 10:00): take this bar's facts (the trigger, the VWAP side, the
+candidates, the trend rule) from the runner's bar briefing, never from it.
+You merge every analyst's latest report and decide once for the cycle.
+
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
 (risk-manager, trade-executor, …), never to a generic, forked, or other-CLI

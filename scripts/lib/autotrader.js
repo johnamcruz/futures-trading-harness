@@ -222,8 +222,8 @@ function validateConfig(raw) {
   const laneSpec = parseLanes(cfg, raw);
   errors.push(...laneSpec.errors);
   if (raw && raw.lanes !== undefined && laneSpec.lanes.length) Object.assign(cfg, { lanes: laneSpec.lanes, timeframe: laneSpec.lanes[0].timeframe, trigger: laneSpec.lanes[0].trigger });
-  // Per-role timeframes (lanes.js): checked, and refused off the lane's until a later step reads them.
-  errors.push(...agentOverrideErrors(cfg.agents, laneSpec.lanes[0]));
+  // Per-role timeframes (lanes.js): their shape here; the roles and which may leave the first lane's, at start (agentErrors).
+  errors.push(...agentOverrideErrors(cfg.agents));
   if (laneSpec.lanes.slice(1).some(l => l.trigger === 'signal') && !cfg.account) errors.push('account: required with a lane on trigger "signal" (to see open positions)');
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
@@ -379,7 +379,7 @@ const ANALYST_ROLES = ['market-structure-analyst', 'trend-momentum-analyst', 'vo
  * the roles still to run are named (a cached report is that role's report); phase 2 reviews a plan, so it runs only
  * when there is one.
  */
-function roster(cfg, cachedRoles = []) {
+function roster(cfg, cachedRoles = [], frames = []) {
   const gate = ROLES_CHECKED.has(cfg.harness);
   const p1 = cachedRoles.includes('risk-manager') ? [] : ['risk-manager (phase 1)'];
   const p2 = 'then risk-manager phase 2 on your plan, if any';
@@ -388,7 +388,18 @@ function roster(cfg, cachedRoles = []) {
   if (cfg.cycle !== 'full') return '';
   const launch = [...ANALYST_ROLES.filter(r => !cachedRoles.includes(r)), ...p1];
   const list = launch.length > 1 ? `${launch.slice(0, -1).join(', ')} and ${launch[launch.length - 1]}` : launch[0];
-  return ` Full cycle: ${launch.length ? `${list} as parallel subagents, ` : ''}plan from their reports, ${p2}${tail}`;
+  return ` Full cycle: ${launch.length ? `${list} as parallel subagents, ` : ''}plan from their reports, ${p2}${tail}${framesText(cfg, frames.filter(f => launch.includes(f.role)))}`;
+}
+
+/**
+ * The analysts launched this cycle that read a timeframe of their own (runner config agents, lanes.js analystFrames):
+ * the caller gives each its timeframe; it reads that timeframe's bar briefing and bars, and its report may be reused
+ * until that timeframe's next bar close.
+ */
+function framesText(cfg, frames) {
+  if (!frames.length) return '';
+  const list = frames.map(f => `${f.role} on ${f.timeframe} (bar_briefing with "timeframe": "${f.timeframe}"; its bars file is named there)`).join(', ');
+  return ` Each analyst reads its own timeframe: give it that timeframe with the symbol: ${list}; the others read the ${cfg.timeframe}-minute bars below. A report on an analyst's own timeframe holds until that timeframe's next bar close, so it may be up to one of its bars old.`;
 }
 
 /**
@@ -398,9 +409,13 @@ function roster(cfg, cachedRoles = []) {
 function cachedText(cached) {
   if (!cached || !Array.isArray(cached.reports) || !cached.reports.length) return '';
   const roles = cached.reports.map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
-  const until = cached.reports.map(r => r.until).filter(Boolean).sort()[0];
-  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
-    + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (from ${etTime(r.at)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
+  // An analyst on its own timeframe (`tf`) holds until that timeframe's next bar close, said with its report.
+  const until = cached.reports.filter(r => !r.tf).map(r => r.until).filter(Boolean).sort()[0];
+  const own = cached.reports.filter(r => r.tf);
+  const ownText = own.length ? ` A report on an analyst's own timeframe (${own.map(r => `${r.role} ${r.tf}`).join(', ')}) holds until that timeframe's next bar close, so it may be up to one of its bars old; take this bar's facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : '';
+  const from = r => (r.tf ? `${r.tf}, from ${etTime(r.at)}, holds until ${etTime(r.until)}` : `from ${etTime(r.at)}`);
+  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
+    + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (${from(r)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
 // How the skills are loaded: Claude, opencode and Qwen Code have a skill tool (which the gate sees, skills-loaded.js);
@@ -425,7 +440,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '' } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -467,7 +482,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -515,6 +530,14 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const bars = ((context && context.symbols) || []).filter(x => x && x.symbol && x.bar && x.bar.t).map(x => [x.symbol, x.bar.t]);
   if (bars.length) env.FTH_CYCLE_BARS = JSON.stringify(Object.fromEntries(bars));
   else delete env.FTH_CYCLE_BARS;
+  // Several lanes: the bar each symbol's bar briefing is on (cycleBars: the first lane's), whichever lane's bar closed,
+  // so bar_briefing serves it as this cycle's (the other tools' read-once checks keep FTH_CYCLE_BARS).
+  const briefed = context && context.cycleBars ? Object.entries(context.cycleBars).filter(([s, t]) => s && typeof t === 'string') : [];
+  if (briefed.length) env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify(Object.fromEntries(briefed));
+  else delete env.FTH_CYCLE_BRIEFING_BARS;
+  // An analyst on its own timeframe reads the briefing of that timeframe's bar holding at the cycle's start.
+  if (context && typeof context.cycleAt === 'string') env.FTH_CYCLE_AT = context.cycleAt;
+  else delete env.FTH_CYCLE_AT;
   // The roles served from the report cache this cycle (their reports are in the prompt): roles-ran counts them.
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');

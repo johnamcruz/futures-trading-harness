@@ -130,8 +130,9 @@ test('several lanes are accepted (the runner cycles them together); each is pars
   // Preflight passes the config and lists each lane.
   const pre = P.configChecks({ ...BASE, lanes: two });
   assert.ok(pre.cfg, JSON.stringify(pre.results));
-  // Per-agent timeframes stay refused until they are read (a later step).
-  assert.match(invalid({ ...BASE, lanes: two, agents: { 'market-structure-analyst': { timeframe: '15m' } } }), /per-agent timeframes arrive in a later step/);
+  // Per-agent timeframes are read now: an analyst on 15m is a valid config (its role is checked at start).
+  assert.strictEqual(validateConfig({ ...BASE, lanes: two, agents: { 'market-structure-analyst': { timeframe: '15m' } } }).agents['market-structure-analyst'].timeframe, '15m');
+  assert.strictEqual(L.AGENT_TIMEFRAME_REFUSAL, undefined, 'the step-1 refusal is gone');
 });
 
 test('a lane\'s strategies: those on its timeframe, narrowed by its lists; a listed policy keeps the strategies it trades', () => {
@@ -244,12 +245,10 @@ test('agent timeframes: none declared is the lane\'s for every role; the config 
   assert.strictEqual(L.agentTimeframes(same, declared).find(t => t.role === 'risk-manager').from, 'config');
 });
 
-test('agent timeframes off the lane\'s are refused until a later step; the config names real roles with valid timeframes', () => {
-  const msg = invalid({ ...BASE, timeframe: 3, agents: { 'market-structure-analyst': { timeframe: '15m' } } });
-  assert.match(msg, /agents\.market-structure-analyst\.timeframe: 15m, not the lane's 3m: per-agent timeframes arrive in a later step/);
-  // "1h" on a 60-minute lane is the lane's own.
+test('agent timeframes: an analyst may read its own (a lane\'s, or whole first-lane bars dividing the hour); any other role off the first lane\'s is refused', () => {
+  // validateConfig checks only the shape and the timeframe; the roles at start (agentErrors).
+  assert.strictEqual(validateConfig({ ...BASE, timeframe: 3, agents: { 'market-structure-analyst': { timeframe: '15m' } } }).agents['market-structure-analyst'].timeframe, '15m');
   assert.strictEqual(validateConfig({ ...BASE, timeframe: 60, agents: { 'risk-manager': { timeframe: '1h' } } }).agents['risk-manager'].timeframe, '1h');
-  assert.match(invalid({ ...BASE, lanes: [{ timeframe: 1 }], agents: { 'risk-manager': { timeframe: '3m' } } }), /not the lane's 1m/);
   for (const [agents, re] of [
     ['15m', /agents: a map of role/], [['x'], /agents: a map of role/],
     [{ 'risk-manager': '15m' }, /agents\.risk-manager: an object/],
@@ -257,27 +256,54 @@ test('agent timeframes off the lane\'s are refused until a later step; the confi
     [{ 'risk-manager': { tf: '3m' } }, /agents\.risk-manager: unknown key "tf"/],
     [{ 'Risk Manager': { timeframe: '3m' } }, /"Risk Manager" is not a role name/],
   ]) assert.match(invalid({ ...BASE, agents }), re, JSON.stringify(agents));
-  // A role that doesn't exist: refused at start (the roles are files), and an agent file's own timeframe off the lane too.
+  const cfgWith = (agents, more = {}) => validateConfig({ ...BASE, timeframe: 3, ...more, agents });
+  // Analysts: 15m, 30m and 1h are whole 3m bars dividing the hour; 1m only as a lane's.
+  for (const tf of ['15m', '30m', '1h', '3m']) assert.deepStrictEqual(L.agentErrors(cfgWith({ 'trend-momentum-analyst': { timeframe: tf } }), AGENTS), [], tf);
+  for (const tf of ['1m', '5m', '45m', '2h', '4h', '1d']) {
+    assert.match(L.agentErrors(cfgWith({ 'trend-momentum-analyst': { timeframe: tf } }), AGENTS).join('\n'), /agents\.trend-momentum-analyst\.timeframe: an analyst's timeframe is a lane's \(3m\) or whole 3m bars that divide the hour/, tf);
+  }
+  const laned = { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }, { timeframe: 5, trigger: 'bar' }] };
+  for (const tf of ['1m', '5m', '15m', '1h']) assert.deepStrictEqual(L.agentErrors(cfgWith({ 'volume-liquidity-analyst': { timeframe: tf } }, laned), AGENTS), [], tf);
+  // Every other role decides once per cycle on the cycle's bars: off the first lane's, refused (its own lane's 3m is fine).
+  for (const role of ['risk-manager', 'trade-executor', 'news-calendar-analyst', 'trade-reviewer']) {
+    assert.match(L.agentErrors(cfgWith({ [role]: { timeframe: '15m' } }), AGENTS).join('\n'), new RegExp(`agents\\.${role}\\.timeframe: 15m, not the first lane's 3m: only the analysts .* read their own timeframe; ${role} decides once per cycle`), role);
+    assert.deepStrictEqual(L.agentErrors(cfgWith({ [role]: { timeframe: '3m' } }), AGENTS), [], role);
+  }
+  // A role that doesn't exist: refused at start (the roles are files); an agent file's own timeframe is checked too.
   const cfg = validateConfig({ ...BASE, agents: { nobody: { timeframe: '3m' } } });
   assert.match(L.agentErrors(cfg, AGENTS).join('\n'), /agents\.nobody: no such role/);
-  const declared = AGENTS.map(a => (a.name === 'trend-momentum-analyst' ? { ...a, timeframe: '15m' } : a));
-  assert.match(L.agentErrors(validateConfig(BASE), declared).join('\n'), /agents\/trend-momentum-analyst\.md timeframe: 15m, not the lane's 3m: per-agent timeframes arrive/);
+  const declared = AGENTS.map(a => (a.name === 'risk-manager' ? { ...a, timeframe: '15m' } : a));
+  assert.match(L.agentErrors(validateConfig(BASE), declared).join('\n'), /agents\/risk-manager\.md timeframe: 15m, not the first lane's 3m/);
   const badDecl = AGENTS.map(a => (a.name === 'risk-manager' ? { ...a, timeframe: 15 } : a));
   assert.match(L.agentErrors(validateConfig(BASE), badDecl).join('\n'), /agents\/risk-manager\.md timeframe: a timeframe such as/);
-  // The config's override wins over a declared one: off-lane declared, the lane's own in the config, accepted.
-  const fixed = validateConfig({ ...BASE, agents: { 'trend-momentum-analyst': { timeframe: '3m' } } });
+  // The config's override wins over a declared one.
+  const fixed = validateConfig({ ...BASE, agents: { 'risk-manager': { timeframe: '3m' } } });
   assert.deepStrictEqual(L.agentErrors(fixed, declared), []);
   assert.strictEqual(L.startErrors(cfg, REG, AGENTS).length, 1);
 });
 
-test('preflight shows each role\'s effective timeframe and fails a role off the lane', () => {
-  const ok = P.agentChecks(validateConfig({ ...BASE, agents: { 'risk-manager': { timeframe: '3m' } } }), AGENTS);
+test('analystFrames: the analysts off the first lane\'s timeframe, each with its lane (or -1: built from the first lane\'s bars); none by default', () => {
+  assert.deepStrictEqual(L.analystFrames(validateConfig(BASE), AGENTS), [], 'no shipped role declares one: every role reads the first lane\'s bars');
+  const laned = { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }] };
+  const cfg = validateConfig({ ...BASE, ...laned, agents: { 'market-structure-analyst': { timeframe: '3m' }, 'trend-momentum-analyst': { timeframe: '15m' }, 'volume-liquidity-analyst': { timeframe: '1h' }, 'risk-manager': { timeframe: '3m' } } });
+  assert.deepStrictEqual(L.analystFrames(cfg, AGENTS), [{ role: 'trend-momentum-analyst', minutes: 15, lane: -1 }, { role: 'volume-liquidity-analyst', minutes: 60, lane: -1 }]);
+  const oneMin = validateConfig({ ...BASE, ...laned, agents: { 'market-structure-analyst': { timeframe: '1m' } } });
+  assert.deepStrictEqual(L.analystFrames(oneMin, AGENTS), [{ role: 'market-structure-analyst', minutes: 1, lane: 1 }]);
+  // An agent file's own timeframe counts; a refused one (not a buildable timeframe) is never a frame.
+  const declared = AGENTS.map(a => (a.name === 'trend-momentum-analyst' ? { ...a, timeframe: '1h' } : a.name === 'volume-liquidity-analyst' ? { ...a, timeframe: '5m' } : a));
+  assert.deepStrictEqual(L.analystFrames(validateConfig(BASE), declared), [{ role: 'trend-momentum-analyst', minutes: 60, lane: -1 }]);
+  assert.deepStrictEqual(['1m', '15m', '30m', '60m'].map(t => L.frameError(L.tfMinutes(t), L.lanesOf(validateConfig(BASE)))), [L.frameError(1, [{ timeframe: 3 }]), null, null, null]);
+});
+
+test('preflight shows each role\'s effective timeframe and fails a role that can\'t read its own', () => {
+  const ok = P.agentChecks(validateConfig({ ...BASE, agents: { 'risk-manager': { timeframe: '3m' }, 'trend-momentum-analyst': { timeframe: '1h' } } }), AGENTS);
   assert.deepStrictEqual(ok.map(x => [x.check, x.status]), [['agent timeframes', 'ok']]);
   assert.match(ok[0].detail, /market-structure-analyst 3m, .*risk-manager 3m \(config\)/);
-  const declared = AGENTS.map(a => (a.name === 'trend-momentum-analyst' ? { ...a, timeframe: '15m' } : a));
+  assert.match(ok[0].detail, /trend-momentum-analyst 1h \(config\)/);
+  const declared = AGENTS.map(a => (a.name === 'risk-manager' ? { ...a, timeframe: '15m' } : a));
   const bad = P.agentChecks(validateConfig(BASE), declared);
   assert.strictEqual(bad[0].status, 'fail');
-  assert.match(bad[0].detail, /per-agent timeframes arrive in a later step/);
+  assert.match(bad[0].detail, /only the analysts .* read their own timeframe/);
 });
 
 test('an agent\'s timeframe key changes no generated adapter (Codex, Qwen Code, opencode)', () => {

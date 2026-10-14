@@ -486,11 +486,28 @@ More runner settings:
   decision point listing its lanes.
 - `agents` (optional) sets an agent role's timeframe:
   `{ "<role>": { "timeframe": "15m" } }`, over the `timeframe` its
-  `agents/<role>.md` may declare (none: the lane's). The role must exist and
-  the timeframe be one such as `3m`, `15m` or `1h`. Nothing reads it yet: a
-  role set to a timeframe other than the lane's is refused at start
-  ("per-agent timeframes arrive in a later step"). Preflight lists each
-  role's effective timeframe.
+  `agents/<role>.md` may declare (none: the first lane's; no shipped role
+  declares one). The role must exist and the timeframe be one such as `3m`,
+  `15m` or `1h`. Only the analysts (`market-structure-analyst`,
+  `trend-momentum-analyst`, `volume-liquidity-analyst`) read their own
+  timeframe; the risk manager, the executor and the gate decide once per
+  cycle on the cycle's bars, so any other role set off the first lane's
+  timeframe is refused at start. An analyst's timeframe is a lane's (its
+  bars), or whole bars of the first lane that divide the hour (`15m`, `30m`,
+  `1h` from 3m bars: the runner builds them from the first lane's bars and
+  writes them as `<dataDir>/<SYMBOL>-<minutes>m.json`, OHLCV only); anything
+  else is refused at start. Such an analyst gets a bar briefing of its
+  timeframe (`bar_briefing` with `"timeframe": "15m"`: its own bar's facts,
+  the first lane's m15, h1 and day parts that
+  change no faster than its bars), the prompt tells the head trader which
+  analyst reads which timeframe, and its report is cached on that briefing
+  until its own next bar close (a 15m analyst re-runs at most every 15
+  minutes, a 1h one at most hourly; the last bar before the 16:00 ET break or
+  the weekend holds until the first bar after the open), never past it. An
+  analyst on the first lane's timeframe is cached as before (its 15m-and-up
+  view to the next 15m close). Each cycle merges the latest report of every
+  analyst; risk-manager phase 1 is still read fresh whenever the account
+  changes. Preflight lists each role's effective timeframe.
 - `"cycle": "lean"` skips the parallel analysts unless a strategy fires (use
   it for 1-minute bars so a cycle fits in one bar).
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
