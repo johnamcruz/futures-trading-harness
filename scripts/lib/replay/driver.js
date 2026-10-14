@@ -40,6 +40,7 @@ const fs = require('fs');
 const path = require('path');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES } = require('../harness-run');
 const { loadBrokers } = require('../broker/config');
+const { loadRoundSteps, seedFile, FILE_NAME: ROUND_NUMBERS_FILE } = require('../trading/round-numbers');
 const { withAdapter } = require('../broker/adapter');
 const { liveSpecs } = require('../trading/broker-specs');
 const { sessionMinute, tradingDayKey, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
@@ -70,6 +71,9 @@ function seedRunHome(run, { root, userEnv = process.env }) {
   // Resolved (absolute entry and journal paths), so nothing is re-based on the run home.
   const { broker, brokers } = loadBrokers(userEnv);
   writeJsonAtomic(path.join(paths.runHome, 'brokers.json'), { broker, brokers });
+  // The round-number steps as the user's home resolves them, refusals included (round-numbers.js seedFile), so the
+  // replay's briefing shows the levels, and the reasons for none, that live would.
+  writeJsonAtomic(path.join(paths.runHome, ROUND_NUMBERS_FILE), seedFile(loadRoundSteps(userEnv)));
   // The run's own .env (FTH_ENV_FILE points here): empty, so a child reads no other first.
   fs.writeFileSync(path.join(paths.runHome, '.env'), '', { flag: 'a', mode: 0o600 });
   // The workspace's operator files, so the harness CLI runs as live but never writes the live workspace.

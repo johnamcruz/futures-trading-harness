@@ -18,6 +18,7 @@ const G = require('../fixtures/golden-bars');
 const { homeBrokers, tmpDir } = require('../helpers');
 const RC = require('../../scripts/lib/trading/report-cache');
 const { buildBriefing } = require('../../scripts/lib/trading/briefing');
+const STEPS = require('../../scripts/lib/trading/round-numbers').defaultRoundSteps();
 const { ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
 const { createTranslator, readCache } = require('../../scripts/lib/broker/translator');
 const { recordNow } = require('../../scripts/lib/trading/harness-now');
@@ -26,7 +27,7 @@ const { contractsCacheFile } = require('../../scripts/lib/broker/config');
 
 const MNQ = G.load(G.SERIES[0]);
 const N = 1246; // MNQ bar 1246 (10:36 ET) and the next one, 10:39 ET: the same 15m candle
-const briefAt = (bars, n, prev = null) => buildBriefing({ symbol: 'MNQ', contractId: 'MNQ', bars: bars.slice(0, n), minutes: 3, prev, blackouts: { items: [] }, now: new Date(Date.parse(bars[n - 1].t) + 180000) });
+const briefAt = (bars, n, prev = null) => buildBriefing({ symbol: 'MNQ', contractId: 'MNQ', bars: bars.slice(0, n), minutes: 3, prev, blackouts: { items: [] }, roundSteps: STEPS, now: new Date(Date.parse(bars[n - 1].t) + 180000) });
 const task = (role, report, [s, e]) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: `<task id="s" state="completed">\n<task_result>\n${report}\n</task_result>\n</task>`, time: { start: s, end: e } } } });
 const dataLine = b => `Data: bar_briefing ${['m3', 'm15', 'h1', 'day'].map(p => b.sections[p].version).join(', ')}`;
 const ACCT = { id: 7, balance: 50000, positions: [], orders: [], workingOrders: 0, attempts: [{ account: 'mini', status: 'active', balance: 50000, floor: 48000, profit: 0, dayPnl: 0, entryBlock: null }] };

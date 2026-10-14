@@ -235,8 +235,20 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
     try { const c = loadConfig(env); clock = { entryHours: c.entryHours, noEntryWindows: c.noEntryWindows }; } catch (err) { clock = { error: err.message }; }
     return { blackouts, clock };
   };
+  // The round-number steps (round-numbers.js), read once per bar close and passed to every timeframe's briefing of
+  // that bar, so an edit mid-bar never gives two timeframes different steps; refusals are carried in them.
+  let steps = { at: null, value: null };
+  const roundStepsAt = closeAt => {
+    if (steps.at !== closeAt) {
+      let value;
+      try { value = loadConfig(env).roundSteps; } catch (err) { value = { steps: {}, errors: [{ family: '*', message: err.message }] }; }
+      steps = { at: closeAt, value };
+    }
+    return steps.value;
+  };
+  const closeOf = (bars, minutes) => (bars && bars.length ? new Date(Date.parse(bars[bars.length - 1].t) + minutes * 60000).toISOString() : null);
   // One timeframe's briefing; a failure removes it (an older bar's is never read as this one's) and is logged.
-  const frame = (item, minutes, { bars: barsOf, lane = false, scan = null, scanError = null, barsFile = null }) => {
+  const frame = (item, minutes, { bars: barsOf, lane = false, scan = null, scanError = null, barsFile = null, roundSteps }) => {
     try {
       const prev = readFrameBriefing(home, item.symbol, minutes);
       const bars = barsOf();
@@ -248,7 +260,7 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
         file = path.join(dataDir, `${item.symbol}-${minutes}m.json`);
         writeJsonAtomic(file, { contractId: item.contractId || null, barSize: `${minutes} minute`, builtFrom: `${cfg.timeframe} minute`, count: bars.length, bars });
       }
-      writeFrameBriefing(home, buildFrameBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars, minutes, first: readBriefing(home, item.symbol), lane, scan, scanError, barsFile: file, ...facts(), now: now() }));
+      writeFrameBriefing(home, buildFrameBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars, minutes, first: readBriefing(home, item.symbol), lane, scan, scanError, barsFile: file, ...facts(), roundSteps, now: now() }));
     } catch (err) {
       removeFrameBriefing(home, item.symbol, minutes);
       log(`${item.symbol}: no ${minutes}m bar briefing this bar (${err.message}); the ${minutes}m analysts read the bars themselves`, 'error');
@@ -256,18 +268,20 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
   };
   return (item, results, scanError = null) => {
     if (item.lane > 0) {
-      if (laned.has(item.minutes)) frame(item, item.minutes, { bars: () => item.bars, lane: true, scan: results, scanError, barsFile: (item.bar && item.bar.file) || null });
+      const roundSteps = roundStepsAt(closeOf(item.bars, item.minutes));
+      if (laned.has(item.minutes)) frame(item, item.minutes, { bars: () => item.bars, lane: true, scan: results, scanError, barsFile: (item.bar && item.bar.file) || null, roundSteps });
       return null;
     }
-    const file = firstBriefing(item, results, scanError);
-    for (const m of built) frame(item, m, { bars: () => wholeBars(item.bars, m) });
+    const roundSteps = roundStepsAt(closeOf(item.bars, cfg.timeframe));
+    const file = firstBriefing(item, results, scanError, roundSteps);
+    for (const m of built) frame(item, m, { bars: () => wholeBars(item.bars, m), roundSteps });
     return file;
   };
 
-  function firstBriefing(item, results, scanError) {
+  function firstBriefing(item, results, scanError, roundSteps) {
     try {
       const { blackouts, clock } = facts();
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, now: now() }));
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.

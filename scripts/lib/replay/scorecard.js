@@ -74,6 +74,7 @@ const { readLines, readRun } = require('./store');
 const { labelRun, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
 const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
+const { loadRoundSteps } = require('../trading/round-numbers');
 const { exitPlan } = require('../trading/evaluator');
 const { historyBars } = require('../autotrader');
 const { expandHome } = require('../paths');
@@ -290,7 +291,8 @@ function runRecords(home, { strategies, outcomeBars }) {
   };
   // The bars the runner hands a cycle under a config.
   const countFor = cfg => { const tf = Number(cfg.timeframe) || null; return Number(cfg.bars) > 0 ? Number(cfg.bars) : tf ? historyBars(tf) : 0; };
-  return { scans, verdicts, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')) };
+  // The run's own round-number steps (its home, seeded at its start), never today's user config.
+  return { scans, verdicts, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')), roundSteps: loadRoundSteps({ FTH_HOME: home }) };
 }
 
 const before = (list, t) => (list || []).filter(x => Date.parse(x.at) <= t).pop() || null;
@@ -308,7 +310,7 @@ function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
     return { ...r, ...(rules ? { minRR: s.risk ? s.risk.min_rr : undefined, exit: exitPlan(s), status: s.status } : {}), ...(r.mtf ? { mtf: { ...r.mtf, style: style(r) || 'trend' } } : {}) };
   });
   try {
-    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars: all.slice(Math.max(0, i + 1 - count), i + 1).map(({ ms: _ms, ...x }) => x), minutes: tf, scan: results, blackouts: rec.blackouts, now: new Date(t) });
+    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars: all.slice(Math.max(0, i + 1 - count), i + 1).map(({ ms: _ms, ...x }) => x), minutes: tf, scan: results, blackouts: rec.blackouts, roundSteps: rec.roundSteps, now: new Date(t) });
     return { candidates: b.sections.m3.data.candidates || [], alignment: b.sections.m15.data.alignment || {} };
   } catch (_err) {
     return null;

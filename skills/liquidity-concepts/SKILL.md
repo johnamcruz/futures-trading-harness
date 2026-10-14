@@ -20,7 +20,9 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
 1. **Resting liquidity** (stops cluster just beyond obvious levels): the
    levels and their fields are the `levels-and-reactions` skill's. Equal
    highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-   × ATR(14) of each other (`taken` once traded through).
+   × ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
+   MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+   traded through.
 2. **Sweep vs break**: the `breakout-vs-fakeout` skill. No call until the
    close; wicks are information, not signals.
 3. **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's
@@ -40,7 +42,10 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
 ## Examples
 
 ```text
-Overnight high 21614.75 and prior-day high 21615.00 (equal highs, one tick
-apart). The 09:39 ET 3m bar wicks to 21624.00 and closes 21606.00. → sweep of a double liquidity pool
-(m3.sweeps lists it). A short idea is wrong above 21624.00 (the invalidation skill).
+Overnight high 21614.75 and prior-day high 21615.00, one tick apart: two key
+levels stacked into one pool (not the briefing's `equalHighs`, which are pairs
+of 3m swing highs; the briefing merges them as one level
+"overnight high / prior RTH high"). The 09:39 ET 3m bar wicks to 21624.00 and
+closes 21606.00. → sweep of a double liquidity pool (m3.sweeps lists it). A
+short idea is wrong above 21624.00 (the invalidation skill).
 ```

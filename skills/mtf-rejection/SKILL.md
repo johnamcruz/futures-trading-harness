@@ -29,7 +29,7 @@ By PLAN step:
    `trend-vs-range`.
 - **3 Location**: price at a key level (`levels-and-reactions`: POC,
    VAH/VAL, CRT high/low, prior-day and overnight high/low, VWAP, IB/OR,
-   swing, previous candle high/low).
+   swing, previous candle high/low: `mtf_read` `json`, not the briefing).
 - **4 Setup**: a completed 15m or 60m candle rejects the level: it trades
    through and closes back inside, with a long wick and the close in the
    opposite third, or an engulfing at the level (`candle-reading`). After

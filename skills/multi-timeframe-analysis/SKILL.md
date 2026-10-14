@@ -42,8 +42,13 @@ them rather than retrying.
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
 skill) already holds this read for the bar: the 15m frame and the alignment
-per side (`m15`), the 1h and 4h frames (`h1`), and the trend rule (`m3`). Use
-it; run `mtf_read` only without a current briefing. The alignment and the
+per side (`m15`), the 1h and 4h frames (`h1` `h1` and `h4`), and the trend
+rule (`m3` `trendRule`). Each frame there has the trend, bias, swing pattern,
+close, EMA20 and EMA50, ADX, ATR and the last 20 candles' range with its mid
+(`range`); it leaves out the close's position in that range, the frame's
+swing high and low and its previous candle's high and low (the 15m and 1h
+swings against price are `m3` `htfLevels`; `mtf_read` with `json` has
+the rest). Use it; run `mtf_read` only without a current briefing. The alignment and the
 trend rule in a trade plan are the briefing's (intraday frames); a daily
 read, if you have one (premarket's), is context only, never a second
 alignment.
@@ -65,7 +70,8 @@ Each timeframe's trend has three votes:
 2. EMA 20 against EMA 50 (no vote with fewer than 50 candles, and the line
    says so).
 3. Swing structure: higher highs and higher lows (HH/HL), lower highs and
-   lower lows (LH/LL), or mixed.
+   lower lows (LH/LL), mixed, or unclear (fewer than two confirmed swing
+   highs or lows: no structure vote).
 
 Two votes the same way, and none against, set the trend (UP or DOWN);
 anything else is RANGE. Each line also gives ADX, ATR, where the close sits
@@ -135,10 +141,16 @@ size, target).
 
 ### 5. Levels flow down
 
-Take levels from the higher timeframes (the daily and 4-hour swing highs and
-lows, the previous candle's high and low on each, the prior day's high and
-low) and treat them as targets on the trigger timeframe, or as reasons to
-skip a setup that runs straight into one.
+Take levels from the higher timeframes and treat them as targets on the
+trigger timeframe, or as reasons to skip a setup that runs straight into
+one. The briefing shows: the 15m and 1h swing highs and lows against price
+(`m3` `htfLevels`), the 1h swings not yet traded back to (`m3`
+`untested1hSwings`), each frame's last-20-candle range high, low and mid
+(`m15` `frame.range`, `h1` `h1.range` and `h4.range`), and the prior RTH
+day's high and low (`day` `priorRth`). The daily and 4-hour swing highs and
+lows are not in it: take them from `mtf_read` (premarket's daily read).
+Each timeframe's previous-candle high and low is not in the briefing yet; it
+is coming as a separate feature.
 
 ### 6. Write it down
 

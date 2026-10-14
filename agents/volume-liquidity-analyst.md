@@ -65,10 +65,13 @@ never paste a long `get_bars` reply into a file.
    VWAP in the last 30 bars (`rthCrossesLast30`, `sessionCrossesLast30`:
    read the one `applies` names; many = rotation, few = trend). The
    session count is the regime's own (`regime.metrics.sessionVwapCrosses`).
-4. Participation (the briefing's `m3` `participation`): relative volume of the last bar
-   and the last 3 vs the opening-range average, vs the 20 bars before, and vs
-   the same time the previous day. Flag climax bars (relative volume 3+ with a
-   wide range).
+4. Participation (the briefing's `m3` `participation`): the last bar and the
+   last 3 bars' average vs the opening-range average bar
+   (`relVolLastVsOpeningRange`, `relVolLast3VsOpeningRange`), the last 3 vs
+   the 20 bars before (`relVolLast3VsPrior20`), and the last bar vs the one
+   bar at the same ET time the previous trading day
+   (`relVolVsSameTimePriorDay`: one bar, not an average over sessions).
+   Flag climax bars (relative volume 3+ with a wide range).
 5. Liquidity (the briefing's `m3` `liquidity`, `overnight` and `day`
    `priorRth`): untaken pools above and below (prior-day/overnight
    highs/lows, `equalHighs` / `equalLows` not `taken`, round

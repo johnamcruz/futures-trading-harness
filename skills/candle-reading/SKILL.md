@@ -14,7 +14,8 @@ description: Read completed candles as a stack (3m, 5m, 15m, 60m) from OHLC - bo
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (the previous higher-timeframe candle's high and low).
+low and a CRT range (the previous higher-timeframe candle's high and low;
+not in the briefing yet: `mtf_read` `json`, `levels.prevHigh`/`prevLow`).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
