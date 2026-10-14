@@ -195,9 +195,12 @@ Section 6 adds the forms for every concept the deleted strategies knew.
 **The checker reads every relation.** The candle levels the prompt shows are
 capped at four per candle, strongest first (`MAX_LEVELS`,
 `candle-facts.js:330`; `moreLevels` counts the rest, `:445`). The checker
-reads the full, structured list that candle-facts computes before the cap,
-so a true relation the text left out still verifies, and a level name is
-matched exactly, never against the text.
+needs the full, structured list, which today exists only while the facts
+are built (`found`, `candle-facts.js:431-437`); the saved briefing keeps the
+capped text (`:444`). So the briefing stores the full list as a structured
+field the prompt never renders (the prompt keeps the capped text), and the
+checker reads that field: a true relation the text left out still verifies,
+and a level name is matched exactly, never against the text.
 
 **Side agreement.** Every read with a direction must agree with the order's
 side: `up`, `bos up`, `choch up`, `rejected ... up`, `cisd up`, `momentum
@@ -252,13 +255,19 @@ decide whether to trade.
   The stop is placed a buffer beyond it (D3). Stop ticks =
   ceil(|entry reference - stop| / tick), as `trade-plan` rounds today.
 - **Minimum stop.** The stop is at least a floor (D13), so a stop at the
-  nearest candle low isn't inside one bar's noise.
+  nearest candle low isn't inside one bar's noise. A stop closer than the
+  floor is refused, never widened: a wider stop would no longer be the
+  level the model named.
 - **The fill and the level.** The bracket is in ticks from the fill, and a
   market order fills away from the last close, so the stop could land short
   of the level. The gate reads only local state (no quote), so it can't
   measure that at send time. The entry is therefore a limit order at the
   entry reference, valid until the record expires (D13): it fills at the
   reference or better, so the stop lands at the level or beyond it.
+  `composed-reads` requires `type: limit` with `limitPrice` equal to the
+  record's reference, or better for the side. The broker interface has no
+  time in force (`broker/interface.js:74-76`), so the runner cancels a
+  working composed limit at the record's `expiresAt`.
 - **Target.** A real level on the winning side: a swing target
   (`m3.swingTargets`) or a named key level, floored toward the entry.
 - **Checks.** R:R at least the composed document's `risk.min_rr`; the first
@@ -291,7 +300,7 @@ the tag (`order-gate.js:49`), so a signature, if written, comes after it.
 | Check | Composed entry |
 |---|---|
 | `setup-tag`, `strategy` | Unchanged. `composed` resolves to `strategies/composed/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
-| `trigger-fired` | Replaced, for `signal: composed`, by a new hard check `composed-reads`. It loads the latest record for the root and **re-runs the pure reads checker** on the record's reads against `briefingFor(home, root, { cycleBar })`: it never trusts the record's `ok` flag. The reads must be true and side-agreeing, the record for this bar (unexpired) and the order's side; the plan is recomputed and the bracket ticks must equal it; the size at most `maxSize`; the record not yet used for an entry; an exploratory record only in replay practice (D18); and, once required (D15), an `experience_lookup` on the record recorded this cycle |
+| `trigger-fired` | Replaced, for `setup:composed`, by a new hard check `composed-reads`, keyed on the tag and run outside the skippable checks, so it runs even when the composed document is missing or invalid (not behind `named.valid !== false`, `order-gate.js:280-284`). It loads the latest record for the root and **re-runs the pure reads checker** on the record's reads against `briefingFor(home, root, { cycleBar })`: it never trusts the record's `ok` flag. The reads must be true and side-agreeing, the record for this bar (unexpired) and the order's side; the plan is recomputed and the bracket ticks must equal it; the size at most `maxSize`; the order `type: limit` at the record's reference or better (section 3.4); the record not yet used for an entry; an exploratory record only in replay practice (D18); and, once required (D15), an `experience_lookup` on the record recorded this cycle |
 | `mtf-trend` | Unchanged; the style is `trend` unless D2's verified reversal applies |
 | `phase2-facts` | Unchanged forms and minimum; `factsOrder` (`order-gate.js:64-72`) gives the composed record, so a room fact is checked against the record's first level in the way instead of `m3.candidates` |
 | `review-before-next-entry` | Unchanged (`order-gate.js:373`): a composed entry on a root whose earlier entry has no review is refused; the review tags `setup:composed` |
@@ -308,7 +317,7 @@ here can hold one.
 **Paper in replay.** Without the D10 exemption a `paper` composed entry gets
 no fill in replay: replay runs with `FTH_PAPER=0` (`replay/config.js:67`), so
 the status check refuses it, and paper mode would refuse it too
-(`order-gate.js:262`) and only journal the plan (`replay/labels.js:736-737`).
+(`order-gate.js:262`) and only journal the plan (`replay/labels.js:738-740`).
 The learning loop needs real replay fills, so the exemption is what lets
 practice score outcomes while `composed` is still `paper`; only the owner
 promotes it to `active`.
@@ -328,12 +337,18 @@ Code changes this needs:
 - `strategies.js:368-380` and `componentRefusal` (`strategies.js:545`): a
   policy lists only rules components; `signal: composed` becomes its own
   policy, with no component list.
+- `withRulebook` (`strategies.js:285-286`) returns early unless the signal
+  is `policy`, so it must also load the rulebook entry for
+  `signal: composed`.
 - The verdict: `compose_check` asks for it, the same `decideSetup`
   (`prop/verdict.js:50`) with the record's direction and stop distance in
   place of a scan's, so the budget (`combine.js:143`, a share of the cushion
   above the floor), the rulebook's multiplier and the one-entry-per-verdict
-  rule apply unchanged. It is recorded at the record's bar, so
-  `verdictBarProblem` (`prop-state.js:403`) ties it to the cycle bar, and
+  rule apply unchanged. It is recorded at the record's bar.
+  `verdictBarProblem` (`prop-state.js:403-404`) ties it to the cycle bar
+  through `lastRecordedBar`, which reads the runner's per-bar signal record
+  (`signal-state.js:202-209`): that per-bar record must survive the
+  deletion of the strategies (section 9), and
   `openEntryVerdicts` (`prop-state.js:515`, the latest verdict per policy
   and index family, unexpired and unused) sees it as the open setup, as it
   sees a policy's today; with one policy, lane priority has nothing to
@@ -346,7 +361,8 @@ Code changes this needs:
 
 The **read signature** is the reads in step order, sorted within a step by
 skill then form, without prices, e.g.
-`bias:1h-bos-up+bias:above-prior-rth-range+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:60m-swing`.
+`bias:1h-bos-up+bias:above-prior-rth-range+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:60m-swing-1.5-2.5r`
+(scenario 1's target is 2.1R).
 The **skill signature** is the same without the reads: which skill at each
 step. Same combination, same signature, so outcomes pool across days
 (section 4.2).
@@ -361,7 +377,7 @@ context**.
 
 ### 4.1 The loop
 
-1. **Practice.** The runner replays Train months (section 4.7). At each bar
+1. **Practice.** The runner replays teaching months (D23; section 4.7). At each bar
    the model composes a candidate from its skills and either enters it or
    passes. Nothing about the choice is fixed: the steps are the frame, the
    skill and the read at each step are the model's.
@@ -465,18 +481,27 @@ full context):
 
 - `n`, the decisions; entries and passes counted apart;
 - the win rate with a 90% Wilson interval (`prop/stats.js:74`);
-- the mean R with a 90% block-bootstrap interval by trading day
-  (`prop/stats.js:50`), so one day's cluster counts once;
+- the mean R with a 90% interval from resampling whole trading days, so
+  one day's cluster counts once (`prop/stats.js:50`'s `blockBootstrap`
+  blocks by a fixed number of outcomes, not by day, so the index needs a
+  by-day variant);
 - the first and last date seen, and the split by regime and by year;
 - per step, the mean R grouped by the skill chosen at that step with the
   other steps' skills held, so "does the location step add anything" is
   answerable from the record (owner decision D7).
 
-**Minimum sample.** A cell with fewer than `MIN_N` decisions (D16) shows
-`n too small (n=7)` and no rate or mean; its count still shows.
+**Minimum sample.** A cell with fewer than `MIN_N` decisions, or fewer than
+`MIN_DAYS` distinct trading days (D16), shows `n too small (n=7, 3 days)`
+and no rate or mean; its count still shows.
 
-**No leakage.** An index is built only from records whose split role is
-`train` (Train, 2021-05 to 2023-06; `splits.js:51`). Records from Select,
+**Many cells, one test.** The index has many cells, and some will look good
+by chance. Its intervals describe; they don't prove. The guard is the
+paired replay (section 4.8), which tests the agent as a whole once, on
+months it never practised on.
+
+**No leakage.** An index is built only from records whose bar dates are
+teaching months (D23; Train, 2021-01-01 to 2023-07-01, `splits.js:51`, by
+default). Records from Select,
 Out-of-sample and Recent replays are kept in their run's log but never
 indexed: those months judge, they don't teach (`docs/LEARNED-RULEBOOK.md`
 section 4; `prop/looks.js`). A Recent replay is a reasoning-fix look whose
@@ -522,9 +547,14 @@ A read-only harness tool, modelled on `skill_lookup`
 - **Prompt stays stable.** The tool's schema joins the cached head of the
   roles that hold it (about 0.8-1 KB, as `skill_lookup`'s 737 bytes); its
   output is a tool result, not prompt text, so no statistic is embedded and
-  the prompt prefix doesn't change from cycle to cycle. Today's journal
-  instincts, which are embedded (`runner.js:126`, `trading/instincts.js`),
-  are unchanged by this design.
+  the prompt prefix doesn't change from cycle to cycle.
+- **One channel, not two.** Today's journal instincts are embedded in the
+  cycle prompt (`runner.js:126`, `trading/instincts.js`): per-setup and
+  regime expectancy, repeated mistakes and lessons, read from the whole
+  journal with no split filter. That is a second learning channel outside
+  this loop's guards. For composed runs it is off (practice, judging and
+  live alike); its useful parts (mistakes, lessons) reach the model only
+  through `experience_lookup`, filtered like everything else.
 - **Recorded.** Each call appends `{ at, role, record, index }` next to the
   cycle's transcript, as `skill_lookup` records its lookups
   (`trading/skill-lookups.js:48`). The gate can then require a lookup on the
@@ -533,17 +563,28 @@ A read-only harness tool, modelled on `skill_lookup`
 
 ### 4.5 Practice and exploration
 
-**Practice runs.** Replays over Train months only, the composed document
-in `paper` traded under the replay exemption (D10), the runner cycling
-every bar on the composed lane (D11). At each bar the model composes or
-passes; the gate checks every read; fills are the replay broker's.
+**Practice runs.** A run is practice when the broker and the run config are
+both replay (D10) **and** every day of the run falls in teaching months
+(D23), by the split role of each date (`prop/splits.js:190`, `roleOf`), as
+the run's manifest records it. The composed document trades in `paper`
+under the replay exemption, the runner cycling every bar on the composed
+lane (D11). At each bar the model composes or passes; the gate checks every
+read; fills are the replay broker's.
 
-**Exploration.** A candidate whose cell in the pinned index is `n too small`
-is exploratory: `compose_check` marks the record `exploratory: true`, and
-the size is the minimum (one micro) whatever the budget allows. Exploration
-happens only in replay practice: in any other run an exploratory entry
-is refused by the gate (D18). So the record grows where it is thin without
-risking more than a micro on an untested combination.
+**Exploration.** "No record" is judged on a coarse cell: the skill signature
+with only the trend side (with or against) as context. A candidate whose
+coarse cell has fewer than `MIN_N` decisions is exploratory:
+`compose_check` marks the record `exploratory: true`, and the size is the
+minimum (one micro) whatever the budget allows. A cell is not exploratory
+just because its six-key context is thin, which would make nearly every
+candidate exploratory. Exploration happens only in practice runs: in any
+other run an exploratory record is not an entry (the gate refuses it,
+D18). So the record grows where it is thin without risking more than a
+micro on an untested combination.
+
+**No sizing confound.** Judging runs (section 4.8) are not practice runs, so
+no entry in any arm is exploratory: every arm sizes from the same budget,
+and the arms differ only in what `experience_lookup` returns.
 
 **How picking uses the record.** Taught in the new skill, composed-entry (index
 only), not enforced by the gate (D19):
@@ -569,34 +610,49 @@ to the lesson the cell's statistics at that moment (`n`, win rate, mean R
 and intervals, the index hash). The lookup shows a lesson only beside those
 statistics, and marks it `contradicted` when the cell's interval now lies on
 the other side of zero from what the lesson claims. A lesson never changes a
-statistic, and no LLM decides whether a lesson is right.
+statistic, and no LLM decides whether a lesson is right. A lesson is
+shown only when every trade it cites is from teaching months (by split
+role); a lesson written on a judging or live session is kept but never
+shown until an owner-approved rebuild (section 4.7).
 
 ### 4.7 Discipline: splits, looks and the champion
 
-- **Teaching months.** Practice and indexing use Train only. Select and
-  Out-of-sample judge (section 4.8), each look logged in the ledger
-  (`prop/looks.js`; Out-of-sample under its look budget). Recent takes only
-  reasoning-fix looks, whose scorecard hides P&L (`replay/scorecard.js:412`).
+- **Teaching months.** Practice and indexing use teaching months only
+  (D23; Train by default). Judging uses other months (section 4.8), each
+  look logged in the ledger (`prop/looks.js`; Out-of-sample under its look
+  budget). Recent takes only reasoning-fix looks, whose scorecard hides P&L
+  (`replay/scorecard.js:412`).
+- **The model's memory of the market.** Train (2021-2023), Select and
+  Out-of-sample (2023-2025) are all before the model's training cutoff.
+  The LLM's own replays are meant for months after it (`LLM_FROM`,
+  `prop/splits.js:62-63`; `docs/LEARNED-RULEBOOK.md` section 4, the "LLM"
+  row: "it cannot remember them"), and the briefing shows dates and prices,
+  so on older months the model may recall what happened. The statistics
+  stay true (code computes every outcome from the bars), but the model's
+  choices there may reflect recall, and a judgment on those months would
+  overstate it. D23 decides; its proposed default judges only on months
+  after the cutoff.
 - **Live never edits the running agent.** A live or paper-live session reads
   its pinned index; its own decisions are logged but enter an index only at
   a rebuild between sessions, and that rebuild is a change to the champion.
 - **The champion.** The agent that trades (its skills, the composed document
   and its pinned index) changes only with the owner's approval, after the
   paired replay (section 4.8) and the frozen promotion gate. A practice
-  index rebuilt between Train practice sessions is a challenger, never the
+  index rebuilt between practice sessions is a challenger, never the
   champion.
 - **Paper and replay first.** No live entry until the owner promotes
   `composed` from `paper` (D9).
 
 ### 4.8 How we know it learned
 
-A **paired replay** on held-out months (Select first; Out-of-sample for the
-promotion gate, under its budget): the same bars, the same skills and the
-same composed document, run twice.
+A **paired replay** on held-out months after the model's cutoff (D23: the
+2026-H2 walk-forward quarters, then the reserve; Select and Out-of-sample
+only as a pre-check marked as possibly recalled): the same bars, the same
+skills and the same composed document, run once per arm.
 
 | Arm | `experience_lookup` |
 |---|---|
-| With experience | reads the index built from Train practice |
+| With experience | reads the index built from practice in teaching months |
 | Without experience | returns "no record" every time |
 | Shuffled (recommended) | reads the same index with its statistics permuted across cells |
 
@@ -632,7 +688,10 @@ and the promotion gate passed; then the owner decides.
   whose last year has the opposite sign of its whole is flagged `shifted`.
 - *Old records:* no hidden decay weight (D21): the per-year split and
   last-seen show age openly.
-- *Leakage:* Train-only indexing (section 4.3); every held-out look logged.
+- *Leakage:* indexing from teaching months only (section 4.3); every
+  held-out look logged; judging after the model's cutoff (D23).
+- *Many comparisons:* the paired replay tests the whole agent once
+  (section 4.3).
 - *Fishing:* `compose_check` is limited per bar (D6) and every call is
   logged, so the record covers what was tried, not only what passed.
 
@@ -644,9 +703,9 @@ and the promotion gate passed; then the owner decides.
 | The journal plan | The plan text names the record (`composed <bar> <signature>`); `journal_add` has no data field (`broker/interface.js:90-93`), and the broker interface doesn't change |
 | Decision history (`decision-history.js:107`) | `setup: composed`, the signature, and the record's stop and target; a pass with an `ok` record is `skipped`, so its +1R/-1R counterfactual is kept |
 | Cycle log (`cycle-log.js`) | Each `compose_check` and `experience_lookup` call, its record and refusal, and the pinned index's hash, beside `factCheck` |
-| Labels (`replay/labels.js`) | The reads and signatures; the record's target counts as the plan's own exit, not a clone reason |
+| Labels (`replay/labels.js`) | The reads and signatures; the record's target counts as the plan's own exit, and a limit entry as the plan's own order type: neither is a clone reason (limit entries are one today, `replay/labels.js:30`) |
 | Scorecard (`replay/scorecard.js`, `trading/reasons.js:89`) | The expected decision comes from the reads: a bar with an `ok` record is not "no setup"; a composed entry is judged by its record (every read verified and side-agreeing, the gate's answer), each step's `why` (right or wrong reason) and its outcome in R; a pass whose counterfactual lost is a good pass |
-| Counterfactual (`replay/counterfactual.js:70`) | The record's stop and target distances simulate a pass |
+| Counterfactual (`replay/counterfactual.js:70`) | A pass is simulated as the entry would have traded: the same limit at the record's reference until `expiresAt` (today a counterfactual fills at market at the next bar's open, `replay/counterfactual.js:15-18`), the record's stop and target, and the rulebook's trail (section 6), so entries and passes are scored alike |
 | Experience log (section 4.2) | New, built from the rows above at each run's end of day |
 
 ## 6. Concept inventory: what the old strategies knew
@@ -664,7 +723,8 @@ the read form section 3.2's checker gains.
 | `cisd_ote` | CISD: a displacement through the run's open | `cisd` | `m3.cisd.<tf>` dir, level, displacement (`briefing.js:189-200, 415`; 3m, 5m, 15m, 60m) | `<tf> cisd up\|down` | present |
 | `cisd_ote` | Sweep before the CISD | `cisd` | `m3.cisd.<tf>.sweep`, `m3.sweeps` (`briefing.js:384`) | `swept <level>` | present |
 | `cisd_ote` | OTE zone, price in it, a bounce closing back the trade's way | `fib-retracement` | `m3.cisd.<tf>.ote`, `priceInOte` (`briefing.js:199`); no bounce flag | `in ote`, `<tf> ote bounce up\|down` | partial |
-| `cisd_ote` | Momentum (version 5, unmerged branch `feat/cisd-ote-momentum`) | `momentum-and-volume`, `trend-momentum-indicators` | 15m ADX and EMAs (`briefing.js:167, 429`), `m3.bar.rangeAtr` (`:358`); no bar close third or 1-bar volume against the 20-bar average | `<tf> momentum up\|down` (D4) | partial |
+| `cisd_ote` | Momentum: a large bar closing at its extreme on volume (version 5, on the unmerged branch `feat/cisd-ote-momentum` at `a270c9db`; `main` has version 4) | `momentum-and-volume` | `m3.bar.rangeAtr` (`briefing.js:358`); no bar close third or 1-bar volume against the 20-bar average | `<tf> momentum up\|down` (D4) | partial |
+| `cisd_ote` | The 15m trend agrees (ADX, EMA20 beyond EMA50): a separate bias read, not part of momentum | `trend-momentum-indicators` | 15m ADX and EMAs (`briefing.js:167, 429`) | `<tf> adx above <n>`, `<tf> ema20 above\|below ema50` | present (fact); form new |
 | `crt_1h`, `crt_4h` | The prior 1h or 4h candle's range swept and closed back inside | `candle-reading`, `rejection`, `breakout` | `m3.candles.<tf>.levels["CRT 1h\|4h range high\|low"]` (`candle-facts.js:425-430`); the detector `crt.js` feeds only the rules (`rules.js:142`) | `<tf> rejected CRT <tf> range low\|high` | partial |
 | `crt_1h`, `crt_4h` | A 3m structure shift after the sweep | `bos-vs-choch` | `m3.lastBreak` (`briefing.js:383`), not tied to the sweep | `crt <tf> shift up\|down` | partial |
 | `crt_1h`, `crt_4h` | The range's far side as the target | `top-down-entry` | none | `target crt <tf> far side <price>` | missing |
@@ -678,12 +738,18 @@ the read form section 3.2's checker gains.
 | `value_area`, `ofi` | Order-flow imbalance over 1, 3 and 5 bars | none | none: the bars carry the broker's flow fields (`indicators.js:26-29`), the briefing's bar keeps only OHLCV (`briefing.js:358`) | `<tf> flow up\|down` | missing |
 | `ofi_absorption` | Absorption: heavy flow without progress, then a turn | `absorption` (bar volume only) | `m3.participation` (`briefing.js:372`); no flow | `<tf> absorbed up\|down` | partial |
 | `ofi`, `ofi_absorption` | Volume surge against a longer average | `momentum-and-volume` | `m3.participation.relVolLast3VsPrior20` (`market-snapshot.js:163`), other windows | `<tf> volume above average` | partial |
+| `orb`, `vwap_reclaim`, `value_area_breakout` | Trade only in some regimes (`regimes: [trend, transition]` or `[trend]`; `regime_gate: true`: the gate refused other regimes) | `trend-vs-range` | `m3.regime.primary` (`briefing.js:365`) | `regime trend\|transition\|range` | present (fact); form new. The gate no longer enforces a regime: which regime suits which combination is what the record learns |
+| `crt_1h`, `crt_4h` | Context filters (`strategies/crt_1h/STRATEGY.md:66-125`): the draw on liquidity, premium or discount half of the range, an outside candle voids the hour, skip on a trend day | `daily-bias`, `levels-and-reactions`, `candle-reading`, `trend-vs-range` | `m3.liquidity` and swing targets; today's high and low (`briefing.js:398`, no half); `pattern: outside` on 3m-60m (`candle-facts.js:41`), not 4h; `m3.today.dayType` | `in premium\|discount`, `<tf> pattern outside`, `day type <name>` | partial |
+| All (policies' rulebook `exit`) | The trail: hold the setup's stop until a profit in R, then trail behind the best price (the values are the account's RULEBOOK.md `exit`) | `manage-position` | the rulebook's `exit` per policy | none: the exit stays code; the runner's exit plan (`runner.js:405-407`, `exitPlan`) and the counterfactual need it for `composed` | partial |
 | `prop_portfolio`, `prop_flow_1m` | Sizing and the priority order of their components | `position-sizing` | the account's rulebook | none: sizing stays code (section 3.7) | n/a |
 
-**Parameters worth keeping as skill guidance:** the version-5 momentum rule
-(15m ADX(14) at least 20, EMA20 beyond EMA50 and moving the trade's way over
-3 candles, bar range at least 1 ATR(14), close in the far third, volume at
-least the 20-bar average); a strong CISD candle (body at least 0.6 of its
+**Parameters worth keeping as skill guidance:** momentum is a bar read: a
+range at least 1 ATR(14), a close in the far third, volume at least the
+20-bar average (the version-5 rule's bar part; the kept skill text already
+says "closes at the side's extreme, ranges at or above ATR, participation 1
+or more", `skills/momentum-and-volume/SKILL.md:56-57`); the higher-timeframe
+trend (ADX(14) at least 20, EMA20 beyond EMA50) is a separate bias read,
+so pairing them is the model's choice, not a definition; a strong CISD candle (body at least 0.6 of its
 range, close in its extreme third, range at least 1 ATR); a CRT sweep is
 shallow (at most half the range beyond it), and the far side should be at
 least 2R away; acceptance is two closes; don't chase VWAP past 1.5 ATR;
@@ -707,7 +773,12 @@ concept, not a tuned number.
 4. Order flow: the flow fields per bar in the briefing (a fact, read-only),
    a new skill teaching order-flow imbalance, and absorption with flow.
 5. Section 8's scenario-2 facts.
-6. The read forms for all of the above, in the reads checker.
+6. CRT's context: the premium or discount half of the range, the outside
+   candle on 4h, the trend day as a read; the regime as a read.
+7. The exit: the trail stated in `manage-position` as guidance now; the
+   rulebook's trail for `composed`, in the runner's exit plan and the
+   counterfactual, is built with composed (PR 14).
+8. The read forms for all of the above, in the reads checker.
 
 ## 7. Skill text changes
 
@@ -750,7 +821,10 @@ Each change is synced to every harness by `node scripts/sync-harness.js`.
 6. **The shared momentum read** per timeframe (D4).
 
 Each is a briefing fact first (with tests and no look-ahead), then a read
-form.
+form. The same holds for section 6's gaps. Prompt size: a new fact goes in
+the briefing's data; it reaches the rendered prompt text only when a skill
+reads it there, and each PR reports the head trader's prompt bytes before
+and after, so phase A doesn't grow the prompt unnoticed.
 
 ## 9. Composed as the only strategy
 
@@ -786,7 +860,9 @@ snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
 | `trading/rules.js` | The rule compiler and evaluator | `readField`, `causalLevels`, `sideValuesText` (the briefing uses them, `briefing.js:92`) |
 | `trading/crt.js` | Its rule-only parts | The detector, now a fact |
 | `trading/strategies.js` | `scan` (`:471`), `recentSignals` (`:500`), `withConfluence` (`:526`), `RETIRED`, the policy component check (`:368-391`), `componentRefusal` (`:545`) | The loader, the validator, `withRulebook` (`:285`) for `composed` |
-| `trading/signal-state.js` | The trigger and retired-lane records | Bar timing (`sameBar`, `barMs`, used by `prop-state.js:21`) |
+| `trading/signal-state.js` | The trigger and retired-lane logic, the candidates in the record | The per-bar record the runner writes every bar and `lastRecordedBar` (`signal-state.js:202-209`), which `verdictBarProblem` needs (`prop-state.js:403-404`); bar timing (`sameBar`, `barMs`, `prop-state.js:21`) |
+| `trading/skills-loaded.js:66-76` (`SITUATIONAL`), `trading/skill-lookups.js:96-102, 119` | Triggers on `m3.candidates` and the signal record's setups | Rekeyed on the composed record's reads and skills (a `rejected` setup read requires `rejection`, any `ok` record `confluence-counting` and `invalidation`), in phase C. Until then no entry is possible, so no lookup is required |
+| `prop/trade-stream.js:35` (`scan`), `prop/evaluate-run.js:17` (`backtest/run.js`) | Building combine attempts from strategy scans | A trade stream from replay fills into `prop/attempts.js`, built before `scan` and `run.js` go, since the promotion gate (D9) evaluates on it |
 | `trading/scan-log.js`, `trading/track-record.js` | All | |
 | `trading/evaluator.js` | Rule evaluation | `exitPlan`, `timeframeMs` |
 | `backtest/run.js`, `walk-forward.js`, `report.js` | All, once `roundHalfEven` moves out of `engine.js` (used by `prop/verdict.js:17`) | `data.js`, `sim-broker.js` (the counterfactual), `engine.js` math |
@@ -838,7 +914,8 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 
 **Phase A: nothing the old strategies knew is lost.**
 
-- **PR 1.** **CRT as a fact** (section 6, gap 1).
+- **PR 1.** **CRT as a fact** (section 6, gaps 1 and 6: the sweep, the shift,
+  the far side, its context; the regime read).
 - **PR 2.** **"This bar" flags** (gap 2).
 - **PR 3.** **Momentum and volume reads** (gap 3; D4).
 - **PR 4.** **Order-flow facts and a new skill teaching order flow** (gap 4).
@@ -855,40 +932,49 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
   rulebook policies; move gate, runner and replay tests to fixture
   strategies; regenerate and explain goldens; delete the strategy skills,
   agent and commands; `REQUIRED_FOR_ENTRY` names no deleted skill.
-- **PR 9.** **Dead code,** one PR per area of section 9's table (runner and lanes;
-  gate and fact claims; replay; backtest; tools).
+- **PR 9.** **Attempts from replay fills:** the trade stream from replay
+  fills into `prop/attempts.js`, replacing `prop/trade-stream.js`'s scan and
+  `prop/evaluate-run.js`'s `backtest/run.js`, so the promotion gate keeps
+  an input.
+- **PR 10.** **Dead code,** one PR per area of section 9's table (runner and
+  lanes, keeping the per-bar record; gate and fact claims; replay;
+  backtest; tools).
 
 **Phase C: composed.**
 
-- **PR 10.** **`compose_check` and the record.** The tool, the record file, the stop
+- **PR 11.** **`compose_check` and the record.** The tool, the record file, the stop
   and target rules, the minimum stop; `strategies/composed`
   (`signal: composed`, `status: paper`, `risk.max_risk_usd` required).
-- **PR 11.** **Gate.** `composed-reads` (re-runs the checker), side agreement, the
-  replay exemption (D10), `factsOrder` for room facts; gate and wiring
+- **PR 12.** **Gate.** `composed-reads` (re-runs the checker, keyed on the tag,
+  requires the limit entry), side agreement, the replay exemption (D10),
+  `factsOrder` for room facts, `SITUATIONAL` rekeyed on the record; gate and wiring
   tests (`tests/lib/order-gate.test.js`,
   `tests/hooks/trading-hooks.test.js`).
-- **PR 12.** **order_plan, the limit entry and the prop verdict** (section 3.7).
-- **PR 13.** **Runner:** every bar on the composed lane (D11).
-- **PR 14.** **Skills and the risk manager:** section 7's text, the new skill
+- **PR 13.** **order_plan, the limit entry and the prop verdict** (section 3.7).
+- **PR 14.** **Runner:** every bar on the composed lane (D11); cancel a
+  working composed limit at `expiresAt`; the exit plan and trail for
+  `composed`; the journal instincts off for composed runs.
+- **PR 15.** **Skills and the risk manager:** section 7's text, the new skill
   composed-entry, synced.
-- **PR 15.** **Records:** section 5.
-- **PR 16.** **Scenario 1 and 2 end to end:** e2e tests on real bars, the model's
+- **PR 16.** **Records:** section 5.
+- **PR 17.** **Scenario 1 and 2 end to end:** e2e tests on real bars, the model's
   reads, the record, the gate allowing a paper entry in replay and
   refusing a false or disagreeing read.
 
 **Phase D: the learning loop.**
 
-- **PR 17.** **Experience log:** the end-of-day step and its module (section 4.2).
-- **PR 18.** **Index:** the CLI and module, Train-only, `MIN_N`, the intervals, the
+- **PR 18.** **Experience log:** the end-of-day step and its module (section 4.2).
+- **PR 19.** **Index:** the CLI and module, teaching months only, the by-day interval, `MIN_N`, the intervals, the
   pinned hash (section 4.3).
-- **PR 19.** **`experience_lookup`:** the tool, its recording, and the gate's lookup
+- **PR 20.** **`experience_lookup`:** the tool, its recording, and the gate's lookup
   requirement behind D15 (section 4.4).
-- **PR 20.** **Exploration and lessons:** the `exploratory` flag and its gate rule,
+- **PR 21.** **Exploration and lessons:** the `exploratory` flag and its gate rule,
   the lesson statistics (sections 4.5, 4.6).
-- **PR 21.** **Paired replay:** the three arms, the scorecard's adherence-to-record
+- **PR 22.** **Paired replay:** the three arms, the scorecard's adherence-to-record
   measure, the ledger entries (section 4.8).
 
-Then practice on Train, the paired replay on held-out months, the frozen
+Then practice on teaching months, the paired replay on months after the
+model's cutoff (D23), the frozen
 promotion gate, and the owner's decision.
 
 ## 11. Risks
@@ -923,10 +1009,11 @@ Each has a proposed default; the owner may change any of them.
   CHoCH the order's way).*
 - **D3.** Stop buffer beyond the invalidation level. *Proposed default:
   1 tick.*
-- **D4.** The momentum read. *Proposed default: the `cisd_ote` version-5
-  rule: 15m ADX(14) at least 20 and EMA20 beyond EMA50 the trade's way;
-  the bar's range at least 1 ATR, a close in its far third, volume at least
-  the 20-bar average.*
+- **D4.** The momentum read. *Proposed default: a bar read only: the bar's
+  range at least 1 ATR(14), a close in its far third, volume at least the
+  20-bar average (the bar part of `cisd_ote` version 5). The trend
+  (ADX(14) at least 20, EMA20 beyond EMA50) is its own read, so the model
+  chooses whether to pair them.*
 - **D5.** `composed` as the account's policy (the rulebook lists it;
   section 3.7's code changes). *Proposed default: not in a prop attempt
   until replay proves it.*
@@ -953,8 +1040,9 @@ Each has a proposed default; the owner may change any of them.
 - **D13.** Minimum stop and the entry order. *Proposed default: a stop of at
   least the larger of 8 ticks and 0.25 x ATR(20) of the base bars (half the
   briefing's 0.5 x ATR(20) reference stop, `briefing.js:38`; 8 ticks is
-  2.00 points, $4.00 a micro contract on MNQ); the entry a limit at the
-  entry reference, valid until the record expires.*
+  2.00 points, $4.00 a micro contract on MNQ); a closer stop is refused,
+  never widened; the entry a limit at the entry reference or better,
+  cancelled at the record's expiry.*
 - **D14.** When the old strategies are deleted. *Proposed default: right
   after phase A, when every concept in section 6 is present as a skill, a
   fact and a read form; before composed is built. No trading until composed
@@ -963,7 +1051,8 @@ Each has a proposed default; the owner may change any of them.
   composed entry. *Proposed default: recorded from the first PR; required
   once the pinned index holds data for the root.*
 - **D16.** Minimum sample before a statistic is shown. *Proposed default:
-  20 decisions per cell; 90% intervals.*
+  20 decisions over at least 10 distinct trading days per cell; 90%
+  intervals from resampling days.*
 - **D17.** The context keys. *Proposed default: the six of section 4.2,
   bucketed as the briefing names them.*
 - **D18.** Exploration. *Proposed default: replay practice only, at the
@@ -973,9 +1062,29 @@ Each has a proposed default; the owner may change any of them.
   measured.*
 - **D20.** Adopting a new index into the champion. *Proposed default: only
   after the paired replay and the promotion gate, with the owner's
-  approval; practice indexes rebuild freely between Train practice
-  sessions.*
+  approval; practice indexes rebuild freely between practice sessions.*
 - **D21.** Old records. *Proposed default: no decay weight; the per-year
   split, last-seen date and `shifted` flag show age.*
 - **D22.** The lookup's budget. *Proposed default: at most 2 calls per
   cycle bar, output at most 4 KB.*
+- **D23.** Which months teach and which judge, given the model's training
+  cutoff (section 4.7). Today's replay bars end around 2026-07-20, so
+  months after the cutoff (`LLM_FROM` 2026-06-01) are scarce: June 2026 is
+  in Recent (reasoning-fix looks only), and 2026-H2 has begun. Options:
+  - *Wait for data:* practise and judge only after the cutoff. Clean, but
+    the promotion gate needs at least 20 attempts over two months, so
+    months of waiting.
+  - *Practise before, judge after:* practise and index on Train; judge
+    only on months after the cutoff (2026-H2's walk-forward quarters, then
+    the reserve). The record's statistics stay true (code computes them);
+    practice choices may reflect recall, which the clean judgment exposes
+    rather than rewards. Judging waits for those months.
+  - *Mask dates and rebase prices:* hide the date and shift every price in
+    practice briefings. It weakens recall but breaks replay equals live
+    (the briefing would differ from live), round-number levels, holidays,
+    rolls and news, and doesn't hide the shape of famous days.
+
+  *Proposed default: practise before, judge after. Practice and indexing on
+  Train; Select and Out-of-sample only as a pre-check marked as possibly
+  recalled; the paired replay and the promotion gate (D9) only on months
+  after the cutoff, as they accumulate.*
