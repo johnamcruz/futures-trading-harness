@@ -102,7 +102,7 @@ const AUTONOMOUS = [
   'skills/runner-lanes/SKILL.md', 'skills/kill-switch/SKILL.md', 'skills/runner-logs/SKILL.md',
   'skills/end-of-day/SKILL.md', 'skills/market-snapshot/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md',
   'skills/strategy-library/SKILL.md', 'skills/strategy-scan/SKILL.md', 'skills/strategy-gate-checks/SKILL.md', 'skills/harness-root/SKILL.md',
-  'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'skills/timeframe-sources/SKILL.md',
+  'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'skills/top-down-entry/SKILL.md', 'skills/timeframe-sources/SKILL.md',
   'skills/trade-review/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md',
   'skills/session-timing/SKILL.md', 'skills/news-blackouts/SKILL.md', 'skills/exchange-holidays/SKILL.md',
   'skills/contract-roll/SKILL.md', 'skills/position-sizing/SKILL.md', 'skills/micro-mini-specs/SKILL.md',

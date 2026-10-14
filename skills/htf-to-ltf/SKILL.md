@@ -1,6 +1,6 @@
 ---
 name: htf-to-ltf
-description: Use when tying higher timeframes to the entry - alignment labels per side, HTF levels as LTF targets.
+description: Use when timeframes disagree - alignment labels, reversals, HTF levels.
 ---
 
 # HTF to LTF
@@ -46,7 +46,7 @@ Take levels from the higher timeframes and treat them as targets on the
 trigger timeframe, or as reasons to skip a setup that runs straight into
 one. Where each frame's levels are: the `timeframe-sources` skill.
 Each timeframe's last completed candle and the levels it met, and the next
-swing each side: the `candle-reading` skill.
+swing each side: the `candle-reading` skill. Top down: `top-down-entry`.
 
 ## Examples
 

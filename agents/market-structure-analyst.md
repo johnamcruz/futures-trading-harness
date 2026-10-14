@@ -94,7 +94,9 @@ never paste a long `get_bars` reply into a file.
    e.g. `setup:crt_1h`, `setup:crt_4h`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
    evaluate from their STRATEGY.md body (`strategies_show`) against the
-   briefing's numbers; what no tool computes, say is not computed.
+   briefing's numbers; what no tool computes, say is not computed. The
+   steps from level to entry: the `top-down-entry` skill (`skill_lookup`
+   when a setup forms at a level).
 
 ## Output (keep it under 250 words)
 
