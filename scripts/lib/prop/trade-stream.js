@@ -1,0 +1,183 @@
+'use strict';
+
+/**
+ * The evaluator's first layer (docs/LEARNED-RULEBOOK.md R6.1): trade generation, slow and deterministic. The
+ * backtest engine (backtest/engine.js, the code live uses: the strategies' evaluator, fills, fees, slippage
+ * and the trailing exit) runs a policy strategy's strategies over the bars once, without an account, one
+ * position at a time across its markets as an attempt trades, and every setup it takes becomes a trade of
+ * the stream, in R and ticks, so the second layer (prop/attempts.js) can size and replay it under any
+ * account state and rulebook without re-running the bars.
+ *
+ * Each trade records:
+ * - its outcome: the move in ticks from the fill to the exit, the stop in ticks, R, its adverse path (each
+ *   deeper trough in ticks, in order: the second layer replays the floor and the daily limit on it), the
+ *   adverse excursion in R, and its order within the day;
+ * - its stop overshoot: ticks a stop exit filled past the stop beyond the expected slippage (gaps, fast
+ *   markets), resampled by the bootstrap (R9);
+ * - its no-stop path: the worst move and the last close until the end of the day, for a stop that wasn't
+ *   working (an injected fault, R9);
+ * - its facts, by the functions live uses, never a copy: the scan (trading/strategies.js scan: the
+ *   confluence) and the briefing (trading/briefing.js buildBriefing: the trend rule, the multi-timeframe
+ *   read, the room to the first level in its way and the room it needs), on the bars the runner hands a
+ *   cycle (autotrader historyBars), and the regime on its signal bar. A fact that can't be computed is
+ *   recorded as an error, never guessed (R4: the rulebook's multiplier fails closed on it).
+ *
+ * Entries fill after the model's cycle delay (`entryDelayMs`: at the open of the first bar at least that long
+ * after the signal bar's close; 0 is the next bar's open). Dollar limits (the account's and the engine's
+ * maxDailyLoss) are left to the second layer, which sizes; the gate's count rules (losses per day, the loss
+ * streak cooldown, entries per day) apply here, on the stream.
+ */
+
+const { runEngine, prepare, DEFAULTS } = require('../backtest/engine');
+const { tradingDays } = require('./challenge');
+const { tradingDayStart, tradingDayKey, sessionMinute, sessionMinuteOf } = require('../trading/clock');
+const { fieldPaths } = require('../backtest/bar-fields');
+const { scan } = require('../trading/strategies');
+const { buildBriefing } = require('../trading/briefing');
+const { historyBars, parseAt } = require('../autotrader');
+
+const round6 = x => Math.round(x * 1e6) / 1e6;
+
+/** A conservative cycle delay from measured cycle times (ms): the given percentile (0.9 by default), or 0 with none. */
+function delayFromCycles(durationsMs, percentile = 0.9) {
+  const xs = (durationsMs || []).filter(x => Number.isFinite(x) && x >= 0).sort((a, b) => a - b);
+  if (!xs.length) return 0;
+  return xs[Math.min(xs.length - 1, Math.ceil(percentile * xs.length) - 1)];
+}
+
+/**
+ * Each trading day's volatility regime, from the first market's bars: the day's range against the mean range
+ * of the `lookback` days before it (only earlier days: causal): 'high' at 1.25x or more, 'low' at 0.8x or
+ * less, else 'normal' (and 'normal' before any history). Map day key -> regime.
+ */
+function dayRegimes(bars, tfMs, lookback = 20) {
+  const ranges = new Map();
+  for (const b of bars) {
+    const k = tradingDayKey(new Date(b.ms + tfMs));
+    const r = ranges.get(k) || { h: -Infinity, l: Infinity };
+    r.h = Math.max(r.h, b.h);
+    r.l = Math.min(r.l, b.l);
+    ranges.set(k, r);
+  }
+  const out = new Map();
+  const past = [];
+  for (const [k, r] of ranges) {
+    const range = r.h - r.l;
+    const recent = past.slice(-lookback);
+    const mean = recent.length ? recent.reduce((a, x) => a + x, 0) / recent.length : null;
+    out.set(k, !mean ? 'normal' : range >= 1.25 * mean ? 'high' : range <= 0.8 * mean ? 'low' : 'normal');
+    past.push(range);
+  }
+  return out;
+}
+
+/** The worst move and the last close (signed ticks from the entry) from the fill bar to the end of that trading day. */
+function noStopPath(book, t, { tfMs, eod }) {
+  const sign = t.direction === 'long' ? 1 : -1;
+  const fillMs = Date.parse(t.entryTime);
+  let k = book.bars.findIndex(b => b.ms >= fillMs);
+  if (k < 0) return null;
+  const day = tradingDayStart(new Date(book.bars[k].ms + tfMs)).getTime();
+  let worst = 0;
+  let close = null;
+  for (; k < book.bars.length; k += 1) {
+    const b = book.bars[k];
+    const closeAt = new Date(b.ms + tfMs);
+    if (tradingDayStart(closeAt).getTime() !== day) break;
+    worst = Math.min(worst, (sign * ((sign > 0 ? b.l : b.h) - t.entry)) / book.tickSize);
+    close = (sign * (b.c - t.entry)) / book.tickSize;
+    if (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt)) break;
+  }
+  return close === null ? null : { worstTicks: round6(worst), closeTicks: round6(close) };
+}
+
+/** The facts at a trade's setup, by the live scan and briefing on the bars a cycle is handed. */
+function factsAt(book, t, { strategies, tfMin, count }) {
+  const signal = t.setup && t.setup.signalBar;
+  const i = book.index.get(signal);
+  if (i === undefined) return { error: `no bar at the signal time ${signal}` };
+  try {
+    const bars = book.bars.slice(Math.max(0, i + 1 - count), i + 1).map(({ t: bt, o, h, l, c, v, ...rest }) => {
+      const { ms: _ms, i: _i, ...fields } = rest;
+      return { t: bt, o, h, l, c, v, ...fields };
+    });
+    const results = scan(strategies, bars, { symbol: book.symbol, selected: [book.symbol] });
+    const brief = buildBriefing({ symbol: book.symbol, bars, minutes: tfMin, scan: results, now: new Date(Date.parse(signal) + tfMin * 60000) });
+    const c = (brief.sections.m3.data.candidates || []).find(x => x.name === t.strategy && x.direction === t.direction);
+    if (!c) return { error: `the scan on the signal bar has no ${t.direction} ${t.strategy} candidate` };
+    return {
+      trendRule: c.trendRule, alignment: c.alignment, roomR: c.inTheWay ? c.inTheWay.R : null, inTheWay: c.inTheWay ? c.inTheWay.name : null,
+      needR: c.needR, confluence: { with: (c.confluence && c.confluence.with || []).length, against: (c.confluence && c.confluence.against || []).length },
+      vwapSide: c.vwapSide, regime: (t.setup && t.setup.regime) || null,
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * Run layer 1. markets: [{ symbol, bars, tickSize, tickValue, feesPerSide }] (bars at the policy's timeframe);
+ * strategies: every strategy the scan counts (the policy's `counted`), in its order; prop: { strategy (the policy
+ * strategy), components (the names it trades), contracts }; engine: the backtest options (gateConfig, sessions,
+ * eodAt, window, fill, slippageTicks, ...); from, to: ms bounds of the window (to exclusive); facts: false skips
+ * them (faster; a rulebook that reads facts then fails closed on every trade).
+ *
+ * Returns { days: [{ day, regime, trades }] (every trading day with bars in the window, in order),
+ * trades, fieldBranch (the traded strategies that read broker fields), entryDelayMs, slippageTicks, expired,
+ * skipped, runtimeMs }.
+ */
+function tradeStream({ markets, strategies, prop, engine = {}, from = null, to = null, facts = true, entryDelayMs = 0, regimeLookback = 20 }) {
+  const started = Date.now();
+  if (!prop || !prop.strategy || !Array.isArray(prop.components) || !prop.components.length) throw new Error('prop: { strategy, components, contracts }: the policy strategy and the strategies it trades');
+  if (!(Number.isFinite(entryDelayMs) && entryDelayMs >= 0)) throw new Error(`entryDelayMs: 0 or more, not ${String(entryDelayMs)}`);
+  const o = {
+    ...DEFAULTS, ...engine, account: null, sizing: null, prop, maxDailyLoss: 0, onePosition: true, entryDelayMs, tracePath: true,
+    start: from, end: to,
+  };
+  if (o.fill !== 'next-open' && entryDelayMs > 0) throw new Error('entryDelayMs needs fill: next-open');
+  const prepared = prepare(markets, strategies, o);
+  const res = runEngine(markets, strategies, { ...o, prepared });
+  const books = new Map(prepared.books.map(b => [b.symbol, { ...b, index: new Map(b.bars.map((x, k) => [x.t, k])) }]));
+  const tfMin = Number(o.timeframe) || Math.round((prepared.books[0].bars[1].ms - prepared.books[0].bars[0].ms) / 60000);
+  const tfMs = tfMin * 60000;
+  const eod = parseAt(o.eodAt);
+  const count = historyBars(tfMin);
+  const regimes = dayRegimes(prepared.books[0].bars, tfMs, regimeLookback);
+  const slip = o.slippageTicks;
+  const trades = res.trades.map(t => {
+    const book = books.get(t.symbol);
+    const sign = t.direction === 'long' ? 1 : -1;
+    const tick = book.tickSize;
+    const stopTicks = Math.round(t.risk / tick);
+    const moveTicks = round6((sign * (t.exit - t.entry)) / tick);
+    const stopped = t.reason === 'stop';
+    return {
+      day: tradingDayKey(new Date(Date.parse(t.exitTime))), symbol: t.symbol, strategy: t.strategy, direction: t.direction,
+      entryTime: t.entryTime, exitTime: t.exitTime, reason: t.reason, tickSize: tick, tickValue: book.tickValue, feesPerSide: book.feesPerSide ?? 0.37,
+      stopTicks, moveTicks, r: t.r, maeR: t.maeR, mfeR: t.mfeR, troughTicks: t.troughTicks || [],
+      overshootTicks: stopped ? Math.max(0, round6((sign * (t.initialStop - t.exit)) / tick - slip)) : null,
+      noStop: noStopPath(book, t, { tfMs, eod }),
+      facts: facts ? factsAt(book, t, { strategies, tfMin, count }) : { error: 'facts not computed (facts: false)' },
+    };
+  });
+  const byDay = new Map();
+  for (const t of trades) {
+    if (!byDay.has(t.day)) byDay.set(t.day, []);
+    const list = byDay.get(t.day);
+    t.seq = list.length;
+    list.push(t);
+  }
+  // from and to are session starts (prop/evaluator.js sessionStart): a day is in the window when its session starts in it.
+  const days = tradingDays(prepared.books)
+    .filter(d => (from === null || d >= from) && (to === null || d < to))
+    .map(d => tradingDayKey(new Date(d + 12 * 3600000)))
+    .map(k => ({ day: k, regime: regimes.get(k) || 'normal', trades: byDay.get(k) || [] }));
+  const traded = new Set(prop.components);
+  const fieldBranch = strategies.filter(s => traded.has(s.name) && fieldPaths(s).length).map(s => s.name);
+  return {
+    days, trades, fieldBranch, entryDelayMs, slippageTicks: slip, expired: res.expired, skipped: res.skipped,
+    timeframe: tfMin, runtimeMs: Date.now() - started,
+  };
+}
+
+module.exports = { tradeStream, delayFromCycles, dayRegimes, noStopPath, factsAt };

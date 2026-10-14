@@ -123,7 +123,10 @@ function createSimBroker({ tickSize, slippageTicks = 1 }) {
       p.peakR = Math.max(p.peakR, (p.sign * ((long ? bar.h : bar.l) - p.entry)) / p.risk);
       const stopFill = stopHit ? tick((long ? Math.min(bar.o, p.stop) : Math.max(bar.o, p.stop)) - p.sign * slip) : null;
       const worst = stopHit ? stopFill : (long ? bar.l : bar.h);
-      p.troughR = Math.min(p.troughR, (p.sign * (worst - p.entry)) / p.risk);
+      const trough = (p.sign * (worst - p.entry)) / p.risk;
+      // Each deeper trough in ticks, in order (the evaluator's guard replays the floor and daily limit on it).
+      if (p.troughPath && trough < p.troughR) p.troughPath.push(Math.round((p.sign * (worst - p.entry)) / tickSize * 1e6) / 1e6);
+      p.troughR = Math.min(p.troughR, trough);
       const forced = guard ? guard(worst, p) : null;
       if (forced) return b.exit(forced.price, forced.reason);
       if (stopHit) return b.exit(stopFill, p.stop === p.initialStop ? 'stop' : 'trail');

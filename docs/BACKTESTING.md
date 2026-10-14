@@ -284,6 +284,70 @@ pass, and pass and blow rates by the month an attempt starts in. (The
 retired PPO policy's `--bundle` option is gone; a config naming `bundle` is
 refused.)
 
+### The two-layer evaluator
+
+`node scripts/evaluate.js` scores a policy strategy for the learned rulebook
+(`docs/LEARNED-RULEBOOK.md` R6-R9): the learning loop's scoring function.
+Its logic is in `scripts/lib/prop/` (`trade-stream.js`, `attempts.js`,
+`evaluator.js`, `stats.js`, `evaluate-run.js`).
+
+```bash
+node scripts/evaluate.js --prop prop_portfolio --data MNQ=data/MNQ-3m.jsonl \
+  --from 2021-06-01 --to 2021-09-01 [--seed 1] [--paths 2000] [--mean-block 7] \
+  [--entry-delay-ms 0] [--stop-fault-rate 0] [--outage-rate 0] [--no-facts] [--out result.json]
+```
+
+- **Layer 1, trade generation.** The backtest engine runs the policy's
+  strategies over the bars once, with no account, one position at a time
+  across its markets. Every setup it takes becomes a trade in ticks and R,
+  with its adverse path, its stop overshoot, and its path to the end of the
+  day with no stop. Its facts come from the live scan and briefing: the
+  trend rule, the multi-timeframe read, the room to the first level in its
+  way and the room it needs, the confluence, and the regime. A fact that
+  can't be computed is recorded as an error. The gate's count rules
+  (losses a day, the loss-streak cooldown, entries a day) apply here.
+  `--entry-delay-ms` fills each entry at the open of the first bar at least
+  that long after the signal bar's close. It stands for the model's cycle
+  delay; 0 is the next bar's open.
+- **Layer 2, attempt simulation.** Combine attempts are replayed from that
+  stream under the account's rules (`combine.js`). Each trade is sized as
+  the gate sizes it, times the rulebook's multiplier, and its adverse path is
+  replayed against the floor and the daily limit. Only this layer re-runs for
+  pacing and sizing trials. The sizing function and the rulebook values are
+  inputs, so the rulebook and the slippage-safe sizing plug in when they land.
+- **Real paths.** An attempt starts on every distinct start day that leaves
+  room for a whole attempt. The pass, blow and timeout rates have a block
+  bootstrap interval (blocks of `sessions`, 90% two-sided), a Wilson interval
+  at the effective sample size (non-overlapping attempts), and that size.
+- **Resampled paths.** A stationary block bootstrap over the window's
+  trading days (mean block 5 to 10 days, joins matched by the day's
+  volatility regime) draws the paths. Each stop exit's overshoot is redrawn
+  from that market's observed ones, and stop faults and runner outages are
+  injected at the given rates. The rates are unmeasured until replays
+  measure them, and the result says so.
+- **Expectancy cuts.** The real and resampled paths are scored again with
+  the per-trade expectancy cut by 25% and by 50%.
+- **Blows.** The result's top-level `blown` counts every blow on every path
+  scored, so the gate's zero-blow rule and R8's constraint read one number.
+- **The gate.** `gateFailures` (`prop/promotion.js`) reads the result
+  directly. `promotion.failures` is its verdict, plus "no covered attempt"
+  for a policy with a field branch.
+- **Splits and looks.** The window lies in one unit of the schedule
+  (`prop/splits.js`). Train runs freely. Any other unit needs
+  `--look-candidate`, `--look-purpose tuning|judging` and `--ledger <file>`.
+  The ledger must allow the look (`prop/looks.js`), and the look is appended
+  to it before any bar is read. The ledger file must exist; start a new one
+  only on purpose, with `--new-ledger`. A run holds `<ledger>.lock` while it
+  checks and logs, and a leftover lock is refused, never broken. A reasoning-fix look is refused: a mechanical
+  score is a market claim.
+- **A field branch.** For a policy whose traded strategies read broker
+  fields, on a window not wholly covered: the pass rate, the attempt count
+  and the months come from covered attempts only (decided at the start: the
+  start day plus `sessions` sessions inside coverage). Blows count on every
+  attempt. Uncovered attempts are marked `flowOff`.
+- **Determinism.** Everything random is drawn from `--seed`, so the same
+  bars, options and seed give the same result.
+
 ### No look-ahead
 
 A decision at bar t reads only bars up to t. Every rules series (each name

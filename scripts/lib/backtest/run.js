@@ -419,4 +419,4 @@ function combineMarkdown(r) {
   return `${lines.join('\n')}\n`;
 }
 
-module.exports = { CONTRACT_SPECS, validateBacktestConfig, barsAt, pickStrategies, runBacktest };
+module.exports = { CONTRACT_SPECS, WARMUP_BARS, validateBacktestConfig, barsAt, pickStrategies, policyStrategy, runBacktest };
