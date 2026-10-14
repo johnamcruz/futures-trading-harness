@@ -24,8 +24,9 @@
  *          its close; 5m from a 1m lane's bars when the base bars can't; each one's sweep of its previous candle),
  *          the next swing target each side on the base bars, 15m, 60m and 4h, the last completed 1h and 4h candle's
  *          high, mid and low as targets (and the side the candle forming since has taken), the half of the session's
- *          range price is in, and the unfilled FVGs on 5m, 15m and 1h candles with the last candle's retest
- *          (fvg-frames.js)                                                until the next base-bar close
+ *          range price is in, the unfilled FVGs on 5m, 15m and 1h candles with the last candle's retest
+ *          (fvg-frames.js), and the 5m structure (the latest BOS or CHoCH on 5m candles, from 1m bars when the base
+ *          bars can't: m5-structure.js)                                   until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -99,6 +100,7 @@ const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine } = require('./fvg-frames');
+const { structure5m, structureLine } = require('./m5-structure');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -443,6 +445,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         rangeTargets: own ? null : briefingRangeTargets({ bars, base: minutes, price, oneR, tick }),
         // The unfilled fair value gaps on completed 5m, 15m and 1h candles, each with its last candle's retest (fvg-frames.js).
         fvgs: own ? null : fvgFrames({ bars, base: minutes, fine }),
+        // The latest BOS or CHoCH and the last swings on completed 5m candles: base bars that divide 5m, else a 1m
+        // lane's bars; without them unavailable, with why (m5-structure.js).
+        structure5m: own ? null : structure5m({ bars, base: minutes, fine }),
       },
     },
     m15: {
@@ -714,6 +719,9 @@ function summaryLines(b, et) {
   // The FVGs near price (within 2R) or retested by their timeframe's last candle (fvg-frames.js fvgLine).
   const fvg = fvgLine(m3.fvgs, et, { price: m3.price, near: m3.oneR ? 2 * m3.oneR.points : NaN });
   if (fvg) out.push(fvg);
+  // The 5m structure only when its last break is recent (m5-structure.js structureLine).
+  const s5 = structureLine(m3.structure5m, et);
+  if (s5) out.push(s5);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
@@ -770,15 +778,15 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
 /**
  * A section's data as the detail shows it: what the summary already says in full is left out (SUMMARY_FIELDS: the
- * swing and range targets, the timeframes' FVGs; SUMMARY_ONLY; each candle's pattern, close location, range, volume and
- * levels; an unavailable timeframe or an event-driven one), and so is a candle's OHLCV when it is the `bar` above (the
- * base timeframe's own), so the text stays small; the JSON keeps it all.
+ * swing and range targets, the timeframes' FVGs, the 5m structure; SUMMARY_ONLY; each candle's pattern, close
+ * location, range, volume and levels; an unavailable timeframe or an event-driven one), and so is a candle's OHLCV when
+ * it is the `bar` above (the base timeframe's own), so the text stays small; the JSON keeps it all.
  */
 function detailEntries(data) {
   if ('brokerFields' in data) data = omit(data, ['brokerFields']);

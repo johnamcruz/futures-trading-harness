@@ -26,6 +26,7 @@ Summary (MNQ 1m, 20:11 ET):
 - 1h (closed 20:00): none, close top third.
 - Next swing above (R = the 1m reference stop): 3m 27098.25 (86.75 pts, 347 ticks, 24.07R), 15m 27099.75 (88.25 pts, 353 ticks, 24.48R); below: none found.
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
+- 5m structure: CHoCH down through 27087 (known 20:05, 1 candle ago); swing high 27091.5, swing low 27087.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong, engulfing), no key-level sweep, zone void; 15m none; 1h none.
 - Setups: none fired on this bar.
 
