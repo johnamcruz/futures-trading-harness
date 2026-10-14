@@ -33,7 +33,8 @@ const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'un
 const MAX_EDITS = 3;
 const MAX_TEXT = 2000;
 const MAX_CHANGED = 3000;
-const LOOP_SKILLS = Object.freeze(['training-loop', 'design-self-review']);
+// The loop's own skills (training-verdict is the training-loop skill's verdict, split out): never a proposal's to edit.
+const LOOP_SKILLS = Object.freeze(['training-loop', 'training-verdict', 'design-self-review']);
 const ALLOWED = Object.freeze([
   { re: /^skills\/([a-z0-9-]+)\/SKILL\.md$/, kind: 'skill' },
   { re: /^strategies\/([a-z0-9_]+)\/STRATEGY\.md$/, kind: 'strategy' },

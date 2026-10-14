@@ -1169,8 +1169,8 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     design with the decision-point replay mode and paired tests, the
     verifiers, the archive, and promotion as a reviewed pull request.
     **Status: skeleton built** (`scripts/train-loop.js`,
-    `scripts/lib/train/`, the `training-loop` and `design-self-review`
-    skills). Built: the orchestrator (resumable, one loop at a time, refused
+    `scripts/lib/train/`, the `training-loop`, `training-verdict` and
+    `design-self-review` skills). Built: the orchestrator (resumable, one loop at a time, refused
     while a live runner runs, limits on iterations, model calls and wall
     time, a dry run); the decision-point replay mode in its simplest form
     (the champion's continuous replay checkpointed before each trade
