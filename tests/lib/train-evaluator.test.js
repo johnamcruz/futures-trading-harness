@@ -60,12 +60,14 @@ test('evaluate: both trees on every window with one seed; held-out scores the ca
   const before = path.join(dir, 'before.jsonl');
   fs.writeFileSync(before, '{"candidate":"x","purpose":"tuning","ranges":[{"from":"2022-03-07","to":"2022-03-12"}]}\n');
   const scratch = path.join(dir, 'scratch.jsonl');
+  fs.writeFileSync(`${scratch}.lock`, ''); // a crashed scoring's lock on the loop's own scratch file
   const h = await E.evaluate({
     cfg, windows: windows.slice(0, 1), candidate: 'cand', seed: 5, coversOf, look: { candidate: 'l/x', purpose: 'judging' }, ledger: before, scratchLedger: { file: scratch },
     run: (raw, o) => { calls.push({ raw, root: o.root, held: fs.readFileSync(raw.ledger, 'utf8') }); fs.appendFileSync(raw.ledger, 'logged\n'); return result({ attempts: 8 }); },
   });
   assert.deepStrictEqual(calls.map(c => [c.root, c.raw.look.purpose, c.raw.ledger, c.held]), [['cand', 'judging', scratch, fs.readFileSync(before, 'utf8')]]);
   assert.doesNotMatch(fs.readFileSync(before, 'utf8'), /logged/, 'the ledger snapshot is never written');
+  assert.ok(!fs.existsSync(`${scratch}.lock`), 'a stale scratch lock is cleared');
   assert.match(h.failures.join(), /too small an out-of-sample test/);
   assert.strictEqual(h.windows[0].champion, null);
 });
@@ -103,6 +105,8 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   const [w] = v.windows;
   assert.deepStrictEqual(w.candidate, w.champion, 'the same tree, bars and seed: the same scores');
   assert.strictEqual(w.candidate.seed, 3);
+  // Covered: only strategies loaded from the tree (the fixture policy comes from a folder outside it).
+  assert.ok(v.covers.includes('strategies/orb/STRATEGY.md') && !v.covers.some(f => f.includes('eval_fixture')), v.covers.join());
   assert.ok(w.candidate.attempts > 0);
   assert.deepStrictEqual(v.failures.filter(f => !/blow/.test(f)), [], 'no failure the champion lacks');
 });

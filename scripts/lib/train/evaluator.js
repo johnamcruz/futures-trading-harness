@@ -81,7 +81,10 @@ const runDefault = (raw, opts) => require('../prop/evaluate-run').runEvaluation(
 /** The documents the evaluator's streams read: the policy strategy and the strategies it counts (no rulebook yet). */
 function coversDefault(root, prop, env) {
   const p = require('../backtest/run').policyStrategy(root, prop, env);
-  return [p.strategy, ...p.counted].map(s => `strategies/${s.name}/STRATEGY.md`);
+  // Only the files loaded from this tree: a same-named strategy from a user's folder (FTH_STRATEGIES_DIRS) shadows
+  // the tree's copy, so an edit to the tree's copy is not what the streams read.
+  return [p.strategy, ...p.counted].map(s => path.relative(root, s.file || '').split(path.sep).join('/'))
+    .filter(rel => /^strategies\/[^/]+\/STRATEGY\.md$/.test(rel));
 }
 
 /**
@@ -99,7 +102,11 @@ async function evaluate({ cfg, windows, champion = null, candidate, seed, env = 
     // scratchLedger: a copy of the ledger as it was before the caller's own look (held-out judging), made fresh for
     // each scoring, so the evaluator checks the same look and logs nothing more: one judging, one look.
     const fresh = () => {
-      if (scratchLedger) fs.copyFileSync(ledger, scratchLedger.file);
+      if (scratchLedger) {
+        // The loop's own scratch file: a lock a crashed scoring left on it is stale (the loop's lock is held).
+        fs.rmSync(`${scratchLedger.file}.lock`, { force: true });
+        fs.copyFileSync(ledger, scratchLedger.file);
+      }
       return scratchLedger ? scratchLedger.file : ledger;
     };
     const raw = { ...rest, seed: s, from: w.from, to: w.to, ...(look && ledger ? { look } : {}) };
