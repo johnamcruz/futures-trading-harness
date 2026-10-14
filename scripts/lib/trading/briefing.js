@@ -71,7 +71,8 @@ const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
-const { familyRoot, specFor } = require('./contracts');
+const { familyRoot, tickOf, levelOnTick } = require('./contracts');
+const { sideTarget } = require('./order-plan');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText } = require('./rules');
 
@@ -144,9 +145,9 @@ const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 // A higher-timeframe read (mtf.js): its EMAs are EMA20 and EMA50 (named so: the 3m and 15m indicators are EMA9/EMA20),
 // its swing pattern, and its dealing range with the 50%. Swing levels against price are in m3 (they move with price).
-const brief = f => (f ? {
+const brief = (f, level = round2) => (f ? {
   trend: f.trend, bias: f.bias, swingPattern: f.votes && f.votes.structure, close: f.close, ema20: f.emaFast, ema50: f.emaSlow, adx: f.adx, atr: f.atr,
-  range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: round2((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
+  range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
 /** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
@@ -154,11 +155,16 @@ const atClose = (lb, mins) => {
   const shift = x => (x ? { ...x, knownAt: new Date(Date.parse(x.at) + mins * 60000).toISOString() } : null);
   return { last: shift(lb.last), previous: shift(lb.previous) };
 };
+/** A profile summary's levels to the cent (as the snapshot gives them without a tick): room, R and labels use these. */
+const cents = p => (p ? { ...p, ...Object.fromEntries(['poc', 'vah', 'val', 'low', 'high', 'hvnAbove', 'hvnBelow', 'lvnAbove', 'lvnBelow'].map(k => [k, round2(p[k])])), hvn: (p.hvn || []).map(round2), lvn: (p.lvn || []).map(round2) } : {});
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null }) {
+  // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
+  // list). Display only: room, R and every other decision input are computed from the unrounded levels.
+  const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -167,8 +173,12 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   const win = sessionWindow(closedAt, clock);
   const f15 = frameOf(read15, 15);
   const f60 = frameOf(readH1, 60);
-  const prior = vp.priorRth || {};
-  const sess = vp.session || {};
+  // The profiles' exact levels (shown on the tick by `level`), and the same to the cent: what room, R and the value
+  // labels are computed from, as they always were.
+  const priorX = vp.priorRth || {};
+  const sessX = vp.session || {};
+  const prior = cents(priorX);
+  const sess = cents(sessX);
   const liq = snap.liquidity || {};
   const st = snap.structure || {};
   // The VWAP that applies: the RTH VWAP from 09:30 to 16:00 ET, else the session's (18:00 ET), as the strategy filters use.
@@ -217,8 +227,9 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     [`VWAP (${applies || 'session'})`, round2(vwapRef)],
     ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low], ['prior RTH close', (lv.priorRth || {}).close],
     ['overnight high', (lv.overnight || {}).high], ['overnight low', (lv.overnight || {}).low],
-    ['prior VAH', prior.vah], ['prior VAL', prior.val], ['prior POC', prior.poc],
-    ['session VAH', sess.vah], ['session VAL', sess.val], ['session POC', sess.poc],
+    // The profile's levels (row centers, off the tick) carry their shown price, on the tick.
+    ['prior VAH', prior.vah, level(priorX.vah)], ['prior VAL', prior.val, level(priorX.val)], ['prior POC', prior.poc, level(priorX.poc)],
+    ['session VAH', sess.vah, level(sessX.vah)], ['session VAL', sess.val, level(sessX.val)], ['session POC', sess.poc, level(sessX.poc)],
     ['last 3m swing high', st.lastSwingHigh], ['last 3m swing low', st.lastSwingLow],
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
@@ -245,15 +256,17 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         trend: { ema9: round2(t.emaFast), ema20: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend ? { direction: t.supertrend.direction, line: round2(t.supertrend.line) } : null, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },
         priceVsEma9: side(price, t.emaFast),
         atr14: round2(atr14),
-        vwap: { applies, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr, crossesLast30: applies === 'rth' ? (snap.vwap || {}).rthCrossesLast30 : (snap.vwap || {}).sessionCrossesLast30 },
+        vwap: { applies, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr,
+          // Closes crossing each VWAP in the last 30 bars, labeled by the VWAP: the session one is the regime's sessionVwapCrosses.
+          rthCrossesLast30: (snap.vwap || {}).rthCrossesLast30 ?? null, sessionCrossesLast30: (snap.vwap || {}).sessionCrossesLast30 ?? null },
         participation: snap.participation ? omit(snap.participation, ['note']) : null,
         // The counters the strategies' skip rules name (EMA crosses, ADX falling, Keltner squeeze and band-close streak,
         // SuperTrend flips, the last 5 bars' range in ATR).
         context: snap.context ? omit(snap.context, ['volVsAvg60', 'session']) : null,
         referenceStop: snap.referenceStop ? { distance: round2(snap.referenceStop.distance), long: round2(snap.referenceStop.long), short: round2(snap.referenceStop.short) } : null,
         swings: { high: st.lastSwingHigh, highAt: st.lastSwingHighAt, low: st.lastSwingLow, lowAt: st.lastSwingLowAt },
-        // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), open fair value gaps.
-        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs },
+        // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), fair value gaps open and partly filled.
+        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
@@ -273,10 +286,11 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // Today so far and the developing levels: they move bar by bar.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
-        sessionProfile: sess.poc ? { poc: round2(sess.poc), vah: round2(sess.vah), val: round2(sess.val), hvnAbove: sess.hvnAbove, hvnBelow: sess.hvnBelow, lvnAbove: sess.lvnAbove, lvnBelow: sess.lvnBelow } : null,
-        priorProfileNodes: prior.poc ? { hvnAbove: prior.hvnAbove, hvnBelow: prior.hvnBelow, lvnAbove: prior.lvnAbove, lvnBelow: prior.lvnBelow } : null,
+        sessionProfile: sess.poc ? { poc: level(sessX.poc), vah: level(sessX.vah), val: level(sessX.val), hvnAbove: level(sessX.hvnAbove), hvnBelow: level(sessX.hvnBelow), lvnAbove: level(sessX.lvnAbove), lvnBelow: level(sessX.lvnBelow) } : null,
+        priorProfileNodes: prior.poc ? { hvnAbove: level(priorX.hvnAbove), hvnBelow: level(priorX.hvnBelow), lvnAbove: level(priorX.lvnAbove), lvnBelow: level(priorX.lvnBelow) } : null,
         // Where price is against the levels.
         location: {
+          // From the levels to the cent, not the shown ticks: a shown VAH a tick under price can read inside.
           priorValue: where(price, prior.val, prior.vah), sessionValue: sess.poc ? where(price, sess.val, sess.vah) : null,
           initialBalance: where(price, day.ibLow, day.ibHigh), priorRthRange: lv.priorRth ? where(price, lv.priorRth.low, lv.priorRth.high) : null,
         },
@@ -290,7 +304,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     m15: {
       validUntil: nextClose(closedAt, 15),
       data: {
-        frame: brief(f15),
+        frame: brief(f15, level),
         alignment: read15.alignment,
         lastBreak: atClose(lastBreaks(c15), 15),
         // The 15m candles' own indicators (completed candles only): EMA9 and EMA20, as on the trigger bars.
@@ -305,14 +319,14 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     },
     h1: {
       validUntil: nextClose(closedAt, 60),
-      data: { h1: brief(f60), h4: brief(frameOf(readH1, 240)), lastBreak: atClose(lastBreaks(c60), 60) },
+      data: { h1: brief(f60, level), h4: brief(frameOf(readH1, 240), level), lastBreak: atClose(lastBreaks(c60), 60) },
     },
     day: {
       // The prior RTH day changes at the RTH close (16:00 ET).
       validUntil: nextRthRoll(new Date(closedAt.getTime() - step), minutes),
       data: {
         priorRth: lv.priorRth || null,
-        priorProfile: prior.poc ? { poc: round2(prior.poc), vah: round2(prior.vah), val: round2(prior.val), hvn: prior.hvn, lvn: prior.lvn } : null,
+        priorProfile: prior.poc ? { poc: level(priorX.poc), vah: level(priorX.vah), val: level(priorX.val), hvn: (priorX.hvn || []).map(x => level(x)), lvn: (priorX.lvn || []).map(x => level(x)) } : null,
       },
     },
   };
@@ -330,12 +344,12 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const up = r.direction === 'long';
   // Its own three nearest levels in its direction, in its own R (its stop): the first is the one in its way.
   const ahead = merge(levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a)), tick).slice(0, 3)
-    .map(([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
+    .map(([name, p, shown]) => ({ name, price: shown ?? p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
   const exit = r.exit || {};
   const inTheWay = R > 0 ? ahead[0] || null : null;
   // Its target: a level target's distance (the scan's targetDistance), else targetR x its stop.
   const targetPoints = Number.isFinite(r.targetDistance) ? r.targetDistance : Number.isFinite(exit.targetR) && R > 0 ? exit.targetR * R : null;
-  const target = targetPoints !== null ? { level: exit.target || null, points: round2(targetPoints), R: R > 0 ? round2(targetPoints / R) : null } : null;
+  const target = targetPoints !== null ? { level: sideTarget(exit.target, r.direction), points: round2(targetPoints), R: R > 0 ? round2(targetPoints / R) : null } : null;
   // The room it needs: to its trail activation, else its target, else its min R:R, else 2R.
   const needR = exit.trailActivateR ?? (target && target.R) ?? r.minRR ?? 2;
   const mtf = r.mtf || {};
@@ -398,7 +412,10 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
   const closedAt = new Date(Date.parse(last.t) + minutes * 60000);
-  const snap = snapshot({ bars });
+  // The contract's tick (contracts.js): the volume profile's levels are shown on it. The snapshot stays unrounded
+  // (the room, R and every decision input read it); computeSections rounds only what it shows.
+  const grid = tickOf(symbol);
+  const snap = snapshot({ bars, exactLevels: true });
   const read = mtfRead(bars);
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
@@ -416,8 +433,8 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const c60 = done(60);
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
   // Levels within a tick are one level: the contract's tick (contracts.js), 0.25 for a root it doesn't list.
-  const tick = (specFor(String(symbol || '').split(':')[0]) || {}).tickSize || 0.25;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick });
+  const tick = grid || 0.25;
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -430,12 +447,15 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
 }
 
-/** Levels within a tick of each other, as one with the names joined (sorted nearest first; the first price kept). */
+/**
+ * Levels within a tick of each other, as one with the names joined (sorted nearest first; the first price kept).
+ * A level is [name, price, shown?]: `shown` is its price as displayed (on the tick), never used for a distance.
+ */
 function merge(sorted, tick = 0.25) {
   const out = [];
-  for (const [name, p] of sorted) {
+  for (const [name, p, shown] of sorted) {
     const same = out.find(([, q]) => Math.abs(q - p) <= tick + 1e-9);
-    if (same) { if (!same[0].split(' / ').includes(name)) same[0] = `${same[0]} / ${name}`; } else out.push([name, p]);
+    if (same) { if (!same[0].split(' / ').includes(name)) same[0] = `${same[0]} / ${name}`; } else out.push([name, p, shown]);
   }
   return out;
 }
@@ -444,7 +464,7 @@ function merge(sorted, tick = 0.25) {
 function nearest(price, oneR, levels, tick = 0.25) {
   const pick = above => merge(levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
     .sort(([, a], [, b]) => (above ? a - b : b - a)), tick).slice(0, 3);
-  const one = ([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
+  const one = ([name, p, shown]) => ({ name, price: shown ?? p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
   return { above: pick(true).map(one), below: pick(false).map(one) };
 }
 
@@ -507,7 +527,7 @@ function summaryLines(b, et) {
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
     alignment,
-    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away, ${vw.crossesLast30 ?? '?'} crosses in 30 bars.`,
+    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
     `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
     `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,

@@ -28,6 +28,37 @@ function specFor(root) {
   return CONTRACT_SPECS[String(root || '').toUpperCase()] || null;
 }
 
+/** The tick size of a symbol by its standard name (MNQ, MNQ:2026-03), or null for a root the table doesn't list. */
+function tickOf(symbol) {
+  const spec = specFor(String(symbol || '').split(':')[0]);
+  return spec ? spec.tickSize : null;
+}
+
+/**
+ * A price on the tick grid (the nearest tick), so a level the model reads is a
+ * price it can trade (a profile row's center, 27246.54, is 27246.5 on a 0.25
+ * tick). Null for a non-number; the value unchanged without a tick.
+ */
+function onTick(x, tick) {
+  if (!Number.isFinite(x)) return null;
+  if (!(tick > 0)) return x;
+  const places = (String(tick).split('.')[1] || '').length;
+  return Number((Math.round(x / tick) * tick).toFixed(places));
+}
+
+/**
+ * A computed level (a volume profile's POC, value area or node) as the model is shown it: rounded first at a
+ * precision finer than the tick (the cent, as the snapshot computes levels, for a tick of a cent or more; a tenth of
+ * the tick's last decimal for a finer tick, so 31.2551 on a 0.005 tick is 31.255), then onto the tick. One rule
+ * wherever a level is shown (the briefing, market_snapshot, the prompt's day line), so a level never shows two prices.
+ */
+function levelOnTick(x, tick) {
+  if (!Number.isFinite(x)) return null;
+  if (!(tick > 0)) return x;
+  const places = tick >= 0.01 ? 2 : (String(tick).split('.')[1] || '').length + 1;
+  return onTick(Math.round(x * 10 ** places) / 10 ** places, tick);
+}
+
 /**
  * Micro and mini contracts on the same underlying (same price, same tick size;
  * the mini is worth `ratio` micros: 10, or 5 for silver). Bars are the family's; a trade picks one.
@@ -86,4 +117,4 @@ function selectedLeg(root, symbols) {
   return symbols.find(x => x === f.micro || x === f.mini) || null;
 }
 
-module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot, parseSelection, selectionOf, selectedSymbols, selectedLeg };
+module.exports = { CONTRACT_SPECS, FAMILIES, specFor, tickOf, onTick, levelOnTick, familyOf, familyRoot, parseSelection, selectionOf, selectedSymbols, selectedLeg };

@@ -61,9 +61,10 @@ never paste a long `get_bars` reply into a file.
    `market_snapshot` on each.
    Always, once: `get_quote` for the live bid/ask/last.
 3. VWAP (the briefing's `m3` `vwap`): which applies (`rth` 09:30-16:00 ET,
-   else `session`), the distance in ATR(14), and the crosses in the last 30
-   bars (`crossesLast30`, of the VWAP that applies: many = rotation, few =
-   trend).
+   else `session`), the distance in ATR(14), and the closes crossing each
+   VWAP in the last 30 bars (`rthCrossesLast30`, `sessionCrossesLast30`:
+   read the one `applies` names; many = rotation, few = trend). The
+   session count is the regime's own (`regime.metrics.sessionVwapCrosses`).
 4. Participation (the briefing's `m3` `participation`): relative volume of the last bar
    and the last 3 vs the opening-range average, vs the 20 bars before, and vs
    the same time the previous day. Flag climax bars (relative volume 3+ with a
@@ -73,14 +74,17 @@ never paste a long `get_bars` reply into a file.
    highs/lows, `equalHighs` / `equalLows` not `taken`, round
    numbers), recent sweeps (the briefing's `m3` `sweeps`: a high traded above
    and closed back below within 1-3 bars, or a low the same below, in the
-   last 10 bars, key levels first; computed, never by eye), and `openFvgs`.
+   last 10 bars, key levels first; computed, never by eye), `openFvgs` (not
+   traded back into) and `partlyFilledFvgs` (traded into, not through: `low`
+   to `high` is the part still unfilled).
    The room to run: the briefing's `m3` `nearestLiquidity` (the three
    nearest levels above and below price, in points and R of the reference
    stop; each candidate's own `ahead` is in its own R) is what the
    `Implication` line weighs.
 6. Volume profile (computed; never estimate it by hand): the prior RTH
    day's POC, VAH and VAL (the briefing's `day` `priorProfile`), where price
-   is (`m3` `location`: above, inside, or below value), the developing
+   is (`m3` `location`: above, inside, or below value, from the exact
+   levels, so a shown VAH a tick under price can still read inside), the developing
    session's (`m3` `sessionProfile`), and the nearest high and low volume
    nodes above and below (`m3` `sessionProfile` and `priorProfileNodes`:
    `hvnAbove`, `lvnBelow`, ...). Round levels to the tick. Say it is

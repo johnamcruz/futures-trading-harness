@@ -25,7 +25,8 @@ opening range `m3.today.openingRange` (null until formed); IB
 swings `m3.swings.high`, `m3.swings.low`, 15m and 1h `m3.htfLevels`
 (`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
 `m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs`; round numbers: `round number` in
+`m3.liquidity.openFvgs` and partly filled ones
+`m3.liquidity.partlyFilledFvgs` (the unfilled part); round numbers: `round number` in
 `m3.nearestLiquidity`.
 
 **Which matter now**: the nearest, `m3.nearestLiquidity.above` and

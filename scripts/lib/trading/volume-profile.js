@@ -237,19 +237,23 @@ function profileAt(bars, kind, i, { length = 0, options = {} } = {}) {
   return start >= 0 ? buildProfile(bars, start, i, options) : null;
 }
 
-/** A compact summary of a profile for a snapshot or a prompt, with price's place in it. */
-function describe(p, price, atr, round = x => x) {
+/**
+ * A compact summary of a profile for a snapshot or a prompt, with price's place in it. `round` rounds the ratios;
+ * `level` the price levels (POC, value area, range, nodes), e.g. onto the contract's tick (default: `round`).
+ */
+function describe(p, price, atr, round = x => x, level = round) {
   if (!p) return null;
   const where = price > p.vah ? 'above value' : price < p.val ? 'below value' : 'inside value';
   const dist = x => (atr > 0 ? round((price - x) / atr) : null);
+  const near = (list, dir) => (Number.isFinite(nearest(list, price, dir)) ? level(nearest(list, price, dir)) : null);
   return {
-    poc: round(p.poc), vah: round(p.vah), val: round(p.val), low: round(p.low), high: round(p.high),
+    poc: level(p.poc), vah: level(p.vah), val: level(p.val), low: level(p.low), high: level(p.high),
     price: where, fromPocAtr: dist(p.poc),
-    hvnAbove: Number.isFinite(nearest(p.hvn, price, 1)) ? round(nearest(p.hvn, price, 1)) : null,
-    hvnBelow: Number.isFinite(nearest(p.hvn, price, -1)) ? round(nearest(p.hvn, price, -1)) : null,
-    lvnAbove: Number.isFinite(nearest(p.lvn, price, 1)) ? round(nearest(p.lvn, price, 1)) : null,
-    lvnBelow: Number.isFinite(nearest(p.lvn, price, -1)) ? round(nearest(p.lvn, price, -1)) : null,
-    hvn: p.hvn.map(round), lvn: p.lvn.map(round),
+    hvnAbove: near(p.hvn, 1),
+    hvnBelow: near(p.hvn, -1),
+    lvnAbove: near(p.lvn, 1),
+    lvnBelow: near(p.lvn, -1),
+    hvn: p.hvn.map(x => level(x)), lvn: p.lvn.map(x => level(x)),
     bars: p.to - p.from + 1,
   };
 }

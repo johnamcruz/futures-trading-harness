@@ -76,7 +76,8 @@ never paste a long `get_bars` reply into a file.
    bars only for older swings.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
    formed, equal highs/lows (`liquidity.equalHighs` / `equalLows`), open fair
-   value gaps (`liquidity.openFvgs`), untested 1h swings (`m3`
+   value gaps (`liquidity.openFvgs`) and partly filled ones
+   (`liquidity.partlyFilledFvgs`, the unfilled part), untested 1h swings (`m3`
    `untested1hSwings`).
 5. Which structure strategies are live for this symbol (`strategies_list`;
    e.g. `setup:bos`, `setup:cisd_ote`), with the trigger condition and price

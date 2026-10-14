@@ -48,6 +48,16 @@ const scratchDir = (env = process.env) => path.join(harnessHome(env), 'bars-scra
 /** The default file in dir: <SYMBOL>-<tf>m.json or -1d.json; with name, <SYMBOL>-<tf>m-<name>.json. */
 const defaultOut = (symbol, timeframe, daily, dir, name = null) => path.join(dir, `${symbol}-${daily ? '1d' : `${timeframe}m`}${name ? `-${name}` : ''}.json`);
 
+/**
+ * The contract root a harness bars file is named for (<SYMBOL>-<tf>m[-name].json or -1d.json: this file's
+ * defaultOut, and the runner's <SYMBOL>-<tf>m.json), or null for any other name ('-', a CSV, a file of one's own).
+ */
+function symbolOfBarsFile(file) {
+  if (typeof file !== 'string' || file === '-') return null;
+  const m = /^([A-Z0-9]{1,8})-(?:\d+m|1d)(?:-[a-z0-9-]+)?\.json$/.exec(path.basename(file));
+  return m ? m[1] : null;
+}
+
 const lstat = p => {
   try {
     return fs.lstatSync(p);
@@ -145,4 +155,4 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   return { file, contractId: contract.id, tickSize: contract.tickSize, tickValue: contract.tickValue, count: bars.length, first: bars[0].t, last: last.t, closedAt: new Date(Date.parse(last.t) + step).toISOString(), bars };
 }
 
-module.exports = { MAX_COUNT, requestErrors, scratchDir, defaultOut, outError, fetchBarsToFile, lstat, realish, inside };
+module.exports = { MAX_COUNT, requestErrors, scratchDir, defaultOut, outError, fetchBarsToFile, lstat, realish, inside, symbolOfBarsFile };

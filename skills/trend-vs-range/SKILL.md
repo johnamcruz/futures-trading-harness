@@ -19,7 +19,7 @@ code's or hypotheses; a missing field is `unknown`.
 `m15.indicators.regime.primary`), as regime.js decides it:
 
 - `trend-up`: ADX(14) at least 20 (`m3.regime.metrics.adx`), at most 3
-  session-VWAP crosses in the last 30 bars (`m3.regime.metrics.vwapCrosses`),
+  session-VWAP crosses in the last 30 bars (`m3.regime.metrics.sessionVwapCrosses`),
   EMA(20) up at least 0.3 ATR(14) over 5 bars
   (`m3.regime.metrics.ema20SlopeAtr`), the close above EMA(50)
   (`m3.regime.metrics.closeAboveEma50`).
@@ -27,8 +27,8 @@ code's or hypotheses; a missing field is `unknown`.
 - `range`: neither, and ADX under 18 or 5 or more crosses.
 - `transition`: everything else.
 
-`m3.vwap.crossesLast30` counts the VWAP that applies (RTH in RTH), so it
-can differ from the regime's crosses.
+`m3.vwap` counts each VWAP's crosses, labeled: `sessionCrossesLast30` is
+the regime's count; `rthCrossesLast30`, the RTH VWAP's, can differ from it.
 
 **Structure.** Swing pattern (`HH/HL`, `LH/LL`, `mixed`, or `unclear`:
 fewer than two confirmed swings, no vote):

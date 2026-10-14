@@ -26,7 +26,12 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
 3. **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's
    low (bullish) or bar 1's low is above bar 3's high (bearish). Price often
    revisits the gap; a gap that holds on retest supports continuation
-   (`m3` `liquidity.openFvgs`).
+   (`m3` `liquidity.openFvgs`). By what price has done since: **open** (not
+   traded back into), **partly filled** (traded into, not through: only the
+   unfilled part is still a gap; `m3` `liquidity.partlyFilledFvgs` give it
+   as `low`-`high`, the whole gap as `gapLow`-`gapHigh`), or **filled**
+   (traded through: no longer a gap). Price inside a gap is never "at an
+   open FVG".
 4. **Use.** Targets: the next untested liquidity pool in the trade's
    direction. Room: the first level in a setup's way (`inTheWay`) is the
    priority order's step 3 (strategy-library). Reversal setups (cisd_ote)
