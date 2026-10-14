@@ -24,14 +24,16 @@
  *   vwap above|below|at                     m3.vwap.side                                  none
  *   value inside|above|below                m3.location.priorValue                        none
  *   regime <name>, day type <name>          m3.regime.primary, m3.today.dayType           none
- *   at <level>                              the level inside the trigger bar's range (m3.bar), or a completed
- *                                           candle's relation to it (m3.candles.<tf>.relations)   none
+ *   at <level>                              the level inside the trigger bar's range (m3.bar), or met by the base
+ *                                           timeframe's candle or the next one up and within one ATR(14) of price
+ *                                           (m3.candles.<tf>.relations, m3.atr14)         none
  *   <tf> rejected|broke <level> up|down     m3.candles.<tf>.relations (every relation, uncapped)   up long, down short
  *   <tf> touched <level>                    the same                                      none
  *   <tf> pattern <name>                     m3.candles.<tf>.patterns (or pattern)          engulfing by its colour,
  *                                                                                         displacement by its dir
- *   <tf> cisd up|down                       m3.cisd.<tf>.dir                              up long, down short
- *   [<tf>] in ote                           m3.cisd.<tf>.priceInOte (no tf: any timeframe)                      none
+ *   <tf> cisd up|down                       m3.cisd.<tf>.dir, a live one (void, expired or weak: false)   up long, down short
+ *   [<tf>] in ote                           m3.cisd.<tf>.priceInOte of a live CISD (no tf: any; zones both ways:
+ *                                           false)                                        the CISD's way
  *   swept <level>                           m3.sweeps (by name)                           none
  *   <tf> close top|middle|bottom            m3.candles.<tf>.closeLocation                 top long, bottom short
  *   <tf> momentum up|down                   D4's bar read on m3.candles.<tf>: rangeAtr >= 1, volRatio >= 1, close in
@@ -45,9 +47,12 @@
  * Each read is true, false or 'unchecked' (a form this checker doesn't know, a fact the briefing doesn't hold, a
  * level it doesn't name): never true unless the briefing says so. Side agreement (D12): a read with a direction must
  * be the order's side; a stop or target must be on its side of the reference price (m3.price). The one exception is
- * D2's verified reversal: when the combination also has a true 15m or 1h CHoCH the side's way, a trend read against
- * the side stands, and so does a break read against it on a lower timeframe than that CHoCH. The combination is ok when every read is true and agrees, every step is stated, and there
- * is exactly one stop and one target read.
+ * D2's verified reversal: when the combination also has a true 15m or 1h CHoCH the side's way, a trend or break read
+ * against the side stands on a timeframe at or below that CHoCH's (never the gate's trend rule, which the gate checks on
+ * its own). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
+ * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
+ * entry close and momentum), and no read is stated twice. The combination is ok when every read is true and agrees,
+ * every step is stated, and there is exactly one stop and one target read.
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
  *   checkRead(parsed, briefing, { side, tick })  { check, fact, field, value, dir, price? }
@@ -62,6 +67,13 @@ const { trendRuleOf } = require('./reasons');
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 const SIDES = ['long', 'short'];
+// The step each kind of read belongs to (the design's read vocabulary); stop and target are checked on their own.
+const STEP_KINDS = {
+  trend: 'bias', break: 'bias', priorRth: 'bias', trendRule: 'bias', alignment: 'bias', regime: 'bias', dayType: 'bias',
+  at: 'location', vwap: 'location', value: 'location',
+  relation: 'setup', pattern: 'setup', cisd: 'setup', ote: 'setup', swept: 'setup',
+  close: 'entry', momentum: 'entry',
+};
 const MAX_READS = 16;
 const READ_MAX = 120;
 const WHY_MAX = 160;
@@ -154,6 +166,17 @@ function levelIndex(b) {
   for (const x of [...(liq.equalHighs || []), ...(liq.equalLows || [])]) if (isObj(x) && !x.taken) add(x.name, x.price);
   return out;
 }
+
+/** The base timeframe's candle and the next available one up (the candles a location read may count). */
+function recentFrames(m3, base) {
+  const have = Object.entries(isObj(m3.candles) ? m3.candles : {}).filter(([, c]) => isObj(c) && !c.unavailable).map(([tf]) => tf)
+    .sort((x, y) => TF_ORDER.indexOf(x) - TF_ORDER.indexOf(y));
+  const i = have.indexOf(base);
+  return i < 0 ? [] : have.slice(i, i + 2);
+}
+
+// A CISD whose zone is gone (cisd.js DEAD): no longer a live read.
+const DEAD_CISD = new Set(['void', 'expired', 'weak']);
 
 const within = (a, b, tick) => Math.abs(a - b) <= tick + 1e-9;
 
@@ -261,16 +284,24 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
       return res(levelName(d) === p.value, `the day type is ${d}`, { field: 'm3.today.dayType', value: d });
     }
     case 'at': {
+      // At a level now: inside the trigger bar's range, or met by the base timeframe's last completed candle or the next
+      // one up and still within one ATR(14) of price. A higher timeframe's candle that met it an hour ago, or a level
+      // far from price, is not "at" it.
       const prices = levelIndex(b).get(p.level) || [];
       const bar = isObj(m3.bar) ? m3.bar : {};
+      const price = num(m3.price);
+      const atr = num(m3.atr14);
       const inBar = prices.filter(x => num(bar.l) !== null && num(bar.h) !== null && x >= bar.l && x <= bar.h);
-      const met = Object.entries(isObj(m3.candles) ? m3.candles : {}).filter(([, c]) => isObj(c) && Array.isArray(c.relations)
-        && c.relations.some(r => isObj(r) && levelName(r.name) === p.level)).map(([tf]) => tf);
-      if (!prices.length && !met.length) return res('unchecked', `the briefing names no level "${p.level}"`);
-      const ok = inBar.length > 0 || met.length > 0;
-      const fact = ok ? `${p.level} ${inBar.length ? `${inBar[0]} is inside the bar's range ${bar.l}-${bar.h}` : `was met by the ${met.join(', ')} candle`}`
-        : `${p.level} ${prices.join(', ')} is outside the bar's range ${bar.l}-${bar.h} and no completed candle met it`;
-      return res(ok, fact, { field: 'm3.bar, m3.candles.<tf>.relations', value: prices[0] ?? null });
+      const near = prices.filter(x => price !== null && atr > 0 && Math.abs(x - price) <= atr);
+      const frames = recentFrames(m3, base);
+      const met = frames.filter(tf => isObj(m3.candles[tf]) && Array.isArray(m3.candles[tf].relations)
+        && m3.candles[tf].relations.some(r => isObj(r) && levelName(r.name) === p.level));
+      if (!prices.length) return res('unchecked', `the briefing names no level "${p.level}"`);
+      const ok = inBar.length > 0 || (met.length > 0 && near.length > 0);
+      const fact = inBar.length ? `${p.level} ${inBar[0]} is inside the bar's range ${bar.l}-${bar.h}`
+        : ok ? `${p.level} ${near[0]} was met by the ${met.join(', ')} candle and is within one ATR(14) ${atr} of price ${price}`
+          : `${p.level} ${prices.join(', ')} is outside the bar's range ${bar.l}-${bar.h}${met.length ? `, ${atr > 0 ? `more than one ATR(14) ${atr} from price ${price}` : 'ATR(14) unknown'}` : ` and the ${frames.join(', ') || 'base'} candle didn't meet it`}`;
+      return res(ok, fact, { field: 'm3.bar, m3.candles.<base|next>.relations', value: prices[0] });
     }
     case 'relation': {
       const got = candleOf(p.tf);
@@ -294,13 +325,19 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
       if (typeof x === 'string' && /^none/.test(x)) return res(false, `no ${p.tf} CISD in these bars`, { field: `m3.cisd.${p.tf}`, dir: dirSide(p.value) });
       if (!isObj(x)) return res('unchecked', `the ${p.tf} CISD is unknown${typeof x === 'string' ? ` (${x})` : ''}`);
       const d = x.dir === 'bullish' ? 'up' : x.dir === 'bearish' ? 'down' : null;
-      return res(d === p.value, `the latest ${p.tf} CISD is ${x.dir} at ${x.level} (${x.status})`, { field: `m3.cisd.${p.tf}.dir`, value: d, dir: dirSide(p.value) });
+      const dead = DEAD_CISD.has(x.status);
+      return res(d === p.value && !dead, `the latest ${p.tf} CISD is ${x.dir} at ${x.level}, status ${x.status}${dead ? ' (dead: no longer a read)' : ''}`,
+        { field: `m3.cisd.${p.tf}`, value: `${d} ${x.status}`, dir: dirSide(p.value) });
     }
     case 'ote': {
+      // The OTE zone is the CISD's pullback zone: it points the CISD's way (a bearish zone is a short's location).
       const all = Object.entries(isObj(m3.cisd) ? m3.cisd : {}).filter(([tf, x]) => isObj(x) && (!p.tf || tf === p.tf));
       if (!all.length) return res('unchecked', `no ${p.tf ? `${p.tf} ` : ''}CISD zone in the briefing`);
-      const inIt = all.filter(([, x]) => x.priceInOte === true).map(([tf]) => tf);
-      return res(inIt.length > 0, inIt.length ? `price is in the ${inIt.join(', ')} OTE zone` : 'price is in no OTE zone', { field: 'm3.cisd.<tf>.priceInOte', value: inIt.join(', ') || null });
+      const inIt = all.filter(([, x]) => x.priceInOte === true && !DEAD_CISD.has(x.status));
+      const dirs = [...new Set(inIt.map(([, x]) => (x.dir === 'bullish' ? 'long' : x.dir === 'bearish' ? 'short' : null)))];
+      const fact = inIt.length ? `price is in the ${inIt.map(([tf, x]) => `${tf} ${x.dir}`).join(', ')} OTE zone` : 'price is in no live OTE zone';
+      if (dirs.length > 1) return res(false, `${fact}: they point both ways, name the timeframe (<tf> in ote)`, { field: 'm3.cisd.<tf>.priceInOte' });
+      return res(inIt.length > 0 && dirs[0] !== null, fact, { field: 'm3.cisd.<tf>.priceInOte', value: inIt.map(([tf]) => tf).join(', ') || null, dir: dirs[0] || null });
     }
     case 'swept': {
       if (!Array.isArray(m3.sweeps)) return res('unchecked', 'the sweeps are unknown');
@@ -401,13 +438,15 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   const known = skills ? new Set(skills) : null;
   const m3 = data(briefing, 'm3');
   const reference = m3 ? num(m3.price) : null;
+  const seen = new Set();
   const checked = list.slice(0, MAX_READS).map((r, i) => {
     const x = isObj(r) ? r : {};
-    const step = typeof x.step === 'string' ? x.step.toLowerCase() : null;
-    const skill = typeof x.skill === 'string' ? x.skill : null;
+    // Every stored field bounded (the CLI takes any JSON): the step and skill to their forms' length, the read to READ_MAX.
+    const step = typeof x.step === 'string' ? x.step.toLowerCase().slice(0, 16) : null;
+    const skill = typeof x.skill === 'string' ? x.skill.slice(0, 64) : null;
     const why = typeof x.why === 'string' ? x.why.slice(0, WHY_MAX) : null;
     const p = parseRead(x.read);
-    const row = { step, skill, read: typeof x.read === 'string' ? x.read : null, why, kind: p.kind, form: p.form || null, slug: p.slug || null };
+    const row = { step, skill, read: typeof x.read === 'string' ? x.read.slice(0, READ_MAX) : null, why, kind: p.kind, form: p.form || null, slug: p.slug || null };
     const bad = msg => { problems.push(`read ${i + 1} ("${row.read}"): ${msg}`); return { ...row, check: false, fact: msg, field: null, value: null, dir: null, agrees: false }; };
     if (!STEPS.includes(step)) return bad(`step must be one of ${STEPS.join(', ')}`);
     if (!skill || !SKILL.test(skill)) return bad('skill must be a skill folder name');
@@ -415,11 +454,17 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     // A stop or target read only in its own step, and that step holds only its own form.
     const own = ['stop', 'target'].find(k => (step === k) !== (p.kind === k));
     if (own) return bad(`a ${own} read is "${own} <source> <price>", in the ${own} step only`);
+    // Each step takes its own kinds of read (the skill and the form within them are the model's choice).
+    if (STEP_KINDS[p.kind] && STEP_KINDS[p.kind] !== step) return bad(`a ${p.kind} read belongs to the ${STEP_KINDS[p.kind]} step, not ${step}`);
+    if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
+    if (p.form) seen.add(p.form);
     const c = checkRead(p, briefing, { tick });
     return { ...row, ...c, agrees: true };
   });
-  // Side agreement (D12), with D2's verified reversal: a true 15m or 1h CHoCH the side's way lets a trend read against
-  // the side stand, and a break read against it on a lower timeframe than that CHoCH.
+  // Side agreement (D12), with D2's verified reversal: a true 15m or 1h CHoCH the side's way lets a trend or break read
+  // against the side stand on a timeframe at or below the CHoCH's (a 15m CHoCH never excuses a 1h or 4h trend; a 3m
+  // CHoCH excuses nothing). This is the reads' agreement only: an ok combination never satisfies the gate's trend rule,
+  // which the gate checks on its own.
   const rank = tf => TF_ORDER.indexOf(tf);
   const choch = Math.max(-1, ...checked.filter(r => r.kind === 'break' && r.check === true && r.dir === side && r.form
     && r.form.split(' ')[1] === 'choch' && ['15m', '1h'].includes(r.form.split(' ')[0])).map(r => rank(r.form.split(' ')[0])));
@@ -427,7 +472,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     if (r.check !== true) continue;
     if (r.kind === 'stop' || r.kind === 'target') r.agrees = r.dir === side;
     else if (r.dir && r.dir !== side) {
-      r.agrees = choch >= 0 && (r.kind === 'trend' || (r.kind === 'break' && rank(r.form.split(' ')[0]) < choch));
+      r.agrees = choch >= 0 && (r.kind === 'trend' || r.kind === 'break') && rank(r.form.split(' ')[0]) <= choch;
       if (r.agrees) r.reversal = true;
     }
   }

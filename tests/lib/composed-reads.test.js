@@ -157,32 +157,51 @@ test('momentum is D4\'s bar read: range at least 1 ATR, volume at least its aver
   assert.strictEqual(CR.checkRead(CR.parseRead('3m momentum down'), scenario1()).check, false);
 });
 
-test('a true read the other way refuses the combination; a higher-timeframe CHoCH the order\'s way allows a counter-trend read (D2)', () => {
+test('a true read the other way refuses the combination; a 15m or 1h CHoCH the order\'s way excuses trend and break reads at or below its timeframe (D2)', () => {
   const b = scenario1();
+  b.sections.m15.data.frame.trend = 'down';
   b.sections.h1.data.h4.trend = 'down';
-  const counter = SCENARIO_1.concat({ step: 'bias', skill: 'multi-timeframe-analysis', read: '4h down' });
+  const counter = SCENARIO_1.concat({ step: 'bias', skill: 'multi-timeframe-analysis', read: '15m down' });
   const r = CR.checkReads({ reads: counter, side: 'long', briefing: b });
   assert.strictEqual(r.reads.at(-1).check, true);
   assert.strictEqual(r.reads.at(-1).agrees, false);
   assert.strictEqual(r.ok, false);
-  b.sections.m15.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21530 };
-  const withChoch = counter.concat({ step: 'bias', skill: 'bos-vs-choch', read: '15m choch up' });
+  // A 1h CHoCH up excuses the 15m trend down.
+  b.sections.h1.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21500 };
+  const withChoch = counter.map(x => (x.read === '1h bos up' ? { ...x, read: '1h choch up' } : x));
   const r2 = CR.checkReads({ reads: withChoch, side: 'long', briefing: b });
   assert.strictEqual(r2.ok, true, CR.renderCheck(r2));
-  assert.strictEqual(r2.reads.find(x => x.read === '4h down').reversal, true);
-  // A break against the side on the CHoCH's own timeframe or above is not excused.
-  b.sections.h1.data.lastBreak.last = { kind: 'BOS', direction: 'down', level: 21500 };
-  const r4 = CR.checkReads({ reads: withChoch.map(x => (x.read === '1h bos up' ? { ...x, read: '1h bos down' } : x)), side: 'long', briefing: b });
-  assert.strictEqual(r4.reads.find(x => x.read === '1h bos down').check, true);
-  assert.strictEqual(r4.ok, false);
+  assert.strictEqual(r2.reads.find(x => x.read === '15m down').reversal, true);
+  // Never a trend above the CHoCH's timeframe: the 4h down stays against the long.
+  const r4h = CR.checkReads({ reads: withChoch.concat({ step: 'bias', skill: 'multi-timeframe-analysis', read: '4h down' }), side: 'long', briefing: b });
+  assert.strictEqual(r4h.reads.at(-1).agrees, false);
+  assert.strictEqual(r4h.ok, false);
+  // A 15m CHoCH excuses the 15m trend, never the 1h's.
   b.sections.h1.data.lastBreak.last = { kind: 'BOS', direction: 'up', level: 21500 };
+  b.sections.m15.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21530 };
+  b.sections.h1.data.h1.trend = 'down';
+  const m15 = counter.concat({ step: 'bias', skill: 'bos-vs-choch', read: '15m choch up' });
+  assert.strictEqual(CR.checkReads({ reads: m15, side: 'long', briefing: b }).ok, true);
+  const r1h = CR.checkReads({ reads: m15.concat({ step: 'bias', skill: 'multi-timeframe-analysis', read: '1h down' }), side: 'long', briefing: b });
+  assert.strictEqual(r1h.reads.at(-1).agrees, false);
+  assert.strictEqual(r1h.ok, false);
+  // A 3m CHoCH excuses nothing.
+  b.sections.m15.data.lastBreak.last = { kind: 'BOS', direction: 'down', level: 21530 };
+  b.sections.m3.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21535 };
+  const m3 = counter.concat({ step: 'bias', skill: 'bos-vs-choch', read: '3m choch up' });
+  const r3m = CR.checkReads({ reads: m3, side: 'long', briefing: b });
+  assert.strictEqual(r3m.reads.find(x => x.read === '3m choch up').check, true);
+  assert.strictEqual(r3m.reads.find(x => x.read === '15m down').agrees, false);
+  assert.strictEqual(r3m.ok, false);
   // The reversal never excuses a setup, an entry, a stop or a target the other way.
-  const bad = withChoch.map(x => (x.step === 'entry' && x.skill === 'candle-reading' ? { ...x, read: '3m close bottom' } : x));
+  b.sections.h1.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21500 };
+  b.sections.h1.data.h1.trend = 'up';
   b.sections.m3.data.candles['3m'].closeLocation = 'bottom';
   b.sections.m3.data.candles['3m'].volRatio = 0.5;
-  const r3 = CR.checkReads({ reads: bad.filter(x => x.read !== '3m momentum up'), side: 'long', briefing: b });
-  assert.strictEqual(r3.ok, false);
-  assert.strictEqual(r3.reads.find(x => x.read === '3m close bottom').agrees, false);
+  const bad = withChoch.filter(x => x.read !== '3m momentum up').map(x => (x.read === '3m close top' ? { ...x, read: '3m close bottom' } : x));
+  const r5 = CR.checkReads({ reads: bad, side: 'long', briefing: b });
+  assert.strictEqual(r5.ok, false);
+  assert.strictEqual(r5.reads.find(x => x.read === '3m close bottom').agrees, false);
 });
 
 test('every candle relation is checked, past the four the briefing text shows', () => {
@@ -342,4 +361,82 @@ test('on briefings built from the fixture bars: each true read verifies, its mir
     assert.strictEqual(CR.checkRead(CR.parseRead(`stop 3m low ${c3.l}`), b).check, true);
   }
   assert.ok(checked > 10, `checked ${checked} relations`);
+});
+
+test('at <level>: the trigger bar, or the base or next candle within one ATR(14) of price; never a stale or distant level', () => {
+  const b = scenario1();
+  const m3 = b.sections.m3.data;
+  const at = read => CR.checkRead(CR.parseRead(read), b);
+  m3.bar.l = 21535; // the IB high 21533 is now outside the trigger bar; the 15m candle met it, 7.25 from price
+  m3.atr14 = 10;
+  assert.strictEqual(at('at IB high').check, true);
+  m3.atr14 = 5;
+  assert.strictEqual(at('at IB high').check, false, 'more than one ATR(14) from price');
+  delete m3.atr14;
+  assert.strictEqual(at('at IB high').check, false, 'ATR(14) unknown: only the trigger bar counts');
+  // A level only a 1h candle met (not the base candle or the next one up), 90 points away: false.
+  m3.atr14 = 200;
+  b.keyLevels.push(['prior VAL', 21450]);
+  m3.candles['1h'].relations = [{ name: 'prior VAL', price: 21450, rel: 'touched', dir: null }];
+  assert.strictEqual(at('at prior VAL').check, false);
+  assert.match(at('at prior VAL').fact, /the 3m, 15m candle didn't meet it/);
+});
+
+test('CISD and OTE: a dead CISD is no read; an OTE zone points the CISD\'s way', () => {
+  const b = scenario1();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  for (const status of ['void', 'expired', 'weak']) {
+    b.sections.m3.data.cisd['15m'].status = status;
+    assert.strictEqual(one('15m cisd up').check, false, status);
+    assert.match(one('15m cisd up').fact, new RegExp(`status ${status} \\(dead`));
+  }
+  b.sections.m3.data.cisd['15m'] = { dir: 'bearish', level: 21550, status: 'touched', priceInOte: true };
+  assert.deepStrictEqual([one('in ote').check, one('in ote').dir], [true, 'short']);
+  assert.deepStrictEqual([one('15m in ote').check, one('15m in ote').dir], [true, 'short']);
+  // A long located in a bearish OTE disagrees.
+  const reads = SCENARIO_1.concat({ step: 'setup', skill: 'fib-retracement', read: '15m in ote' });
+  const r = CR.checkReads({ reads, side: 'long', briefing: b });
+  assert.strictEqual(r.reads.at(-1).agrees, false);
+  assert.strictEqual(r.ok, false);
+  // Zones both ways: name the timeframe.
+  b.sections.m3.data.cisd['1h'] = { dir: 'bullish', level: 21500, status: 'waiting', priceInOte: true };
+  assert.strictEqual(one('in ote').check, false);
+  assert.strictEqual(one('1h in ote').dir, 'long');
+  b.sections.m3.data.cisd['1h'].status = 'void';
+  assert.strictEqual(one('1h in ote').check, false, 'a dead CISD has no zone');
+});
+
+test('each step takes its own kinds of read, and no read is stated twice', () => {
+  const b = scenario1();
+  const misplaced = SCENARIO_1.map(x => (x.step === 'location' ? { ...x, read: '1h bos up' } : x));
+  const r = CR.checkReads({ reads: misplaced, side: 'long', briefing: b });
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.problems.some(p => /a break read belongs to the bias step, not location/.test(p)), r.problems.join('; '));
+  const twice = SCENARIO_1.concat({ step: 'bias', skill: 'multi-timeframe-analysis', read: '1h BOS up' });
+  const r2 = CR.checkReads({ reads: twice, side: 'long', briefing: b });
+  assert.strictEqual(r2.ok, false);
+  assert.ok(r2.problems.some(p => /the same read twice/.test(p)));
+  // Another skill and another form within a step is the model's choice.
+  const free = SCENARIO_1.map(x => (x.step === 'location' ? { ...x, skill: 'levels-and-reactions', read: 'vwap above' } : x));
+  assert.strictEqual(CR.checkReads({ reads: free, side: 'long', briefing: b }).ok, true);
+});
+
+test('edges: one tick, the momentum thresholds, pattern none, taken pools, an unavailable candle, stored lengths', () => {
+  const b = scenario1();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  assert.strictEqual(one('stop 15m low 21513').check, true, 'exactly one tick');
+  assert.strictEqual(one('stop 15m low 21513.01').check, false, 'past one tick');
+  Object.assign(b.sections.m3.data.candles['3m'], { rangeAtr: 1, volRatio: 1 });
+  assert.strictEqual(one('3m momentum up').check, true, 'at the thresholds');
+  Object.assign(b.sections.m3.data.candles['3m'], { rangeAtr: 0.99 });
+  assert.strictEqual(one('3m momentum up').check, false);
+  b.sections.m3.data.candles['1h'].pattern = 'none';
+  assert.strictEqual(one('1h pattern none').check, false);
+  b.sections.m3.data.liquidity.equalHighs = [{ name: 'equal highs', price: 21541, taken: true }];
+  assert.strictEqual(one('at equal highs').check, 'unchecked', 'a taken pool is no level');
+  b.sections.m3.data.liquidity.equalHighs = [{ name: 'equal highs', price: 21541, taken: false }];
+  assert.strictEqual(one('at equal highs').check, true);
+  assert.strictEqual(one('stop 5m low 21500').check, 'unchecked', 'the 5m candle is unavailable');
+  const long = CR.checkReads({ reads: [{ step: 'bias', skill: `a${'b'.repeat(200)}`, read: `1h bos up ${'x'.repeat(500)}`, why: 'y' }], side: 'long', briefing: b });
+  assert.ok(long.reads[0].read.length <= 120 && long.reads[0].skill.length <= 64);
 });

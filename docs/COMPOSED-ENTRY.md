@@ -206,11 +206,11 @@ and one comparison.
 | bias | `<tf> bos\|choch up\|down` (60m is written 1h) | `<section>.lastBreak.last` (3m, 15m, 1h) | Field exists; form new |
 | bias | `above\|below\|inside prior RTH range` | `m3.location.priorRthRange` | Field exists; form new |
 | bias | `trend <side> allowed`, `read <side> <label>` | `m3.trendRule`, `m15.alignment` | Exists |
-| location | `at <level name>` | the level within the trigger candle's range, or a structured relation of a completed candle (below) | Fields exist; form new |
+| location | `at <level name>` | the level within the trigger candle's range, or met by the base timeframe's last completed candle or the next one up (a structured relation, below) and within one ATR(14) of price; a higher timeframe's candle or a distant level is not "at" it | Fields exist; form new |
 | location | `vwap above\|below\|at`, `value inside\|above\|below` | `m3.vwap.side`, `m3.location.priorValue` | Exists |
 | setup | `<tf> rejected\|broke <level name> up\|down` | a completed candle's relation to the level | The briefing's text keeps only four per candle (`candle-facts.js:330, 444-445`); the checker needs every relation, structured (`rel`, `dir`, level) |
 | setup | `<tf> pattern <name>` | `m3.candles.<tf>.pattern(s)` | Field exists; form new |
-| setup | `<tf> cisd up\|down`, `in ote` | `m3.cisd` (`briefing.js:415`) | Field exists; form new |
+| setup | `<tf> cisd up\|down`, `[<tf>] in ote` | `m3.cisd` (`briefing.js:415`): a live CISD only (a `void`, `expired` or `weak` one is false); the OTE zone points its CISD's way | Field exists; form new |
 | setup | `swept <level name>` | `m3.sweeps` (`structure-events.js:71`) | Field exists; form new |
 | setup | `<tf> fvg retest up\|down` | per-timeframe FVGs | Missing beyond the trigger bars |
 | entry | `<tf> close top\|middle\|bottom` | `m3.candles.<tf>.closeLocation` | Field exists; form new |
@@ -232,12 +232,22 @@ and a level name is matched exactly, never against the text.
 
 **Side agreement.** Every read with a direction must agree with the order's
 side: `up`, `bos up`, `choch up`, `rejected ... up`, `cisd up`, `momentum
-up`, `close top`, `above prior RTH range` for a long; their mirrors for a
-short. A long with `1h bos down` is refused, even though the read is true.
-A read with no direction (`at prior VAH`, `in ote`, `value inside`) agrees
-with either side. The only exception is the verified reversal of owner
-decision D2: an against-trend read is allowed when the combination also has
-a higher-timeframe CHoCH the order's way.
+up`, `close top`, `above prior RTH range`, `in ote` in a bullish CISD's zone
+for a long; their mirrors for a short. A long with `1h bos down` is refused,
+even though the read is true. A read with no direction (`at prior VAH`,
+`value inside`) agrees with either side. The only exception is the verified
+reversal of owner decision D2: a trend or break read against the side is
+allowed when the combination also has a true 15m or 1h CHoCH the order's way,
+on a timeframe at or below that CHoCH's (a 15m CHoCH never excuses the 1h or
+4h trend; a 3m CHoCH excuses nothing). It is the reads' agreement only: the
+gate's trend rule is checked on its own.
+
+**Each step its own reads.** The step a read belongs to is fixed by its
+form, as the table above lists it (bias: trend, break, prior RTH range, trend
+rule, alignment, regime, day type; location: `at`, `vwap`, `value`; setup:
+relations, patterns, CISD, OTE, sweeps; entry: close, momentum), and no read
+is stated twice, so one read can't fill several steps. Which skill and which
+form within a step stay the model's choice.
 
 **When it stands.** A read is true, false or unchecked, as FACTS claims are
 (`fact-claims.js:26`). The combination stands only when every read is true
