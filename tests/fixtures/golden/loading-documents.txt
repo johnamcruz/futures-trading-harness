@@ -1,6 +1,6 @@
 strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
 strategy cisd_ote: {
-  "body": "7655 chars sha256:db990f12ac9a8a0a",
+  "body": "8644 chars sha256:40b6159da220a7f5",
   "compiledRules": "sha256:22c22c3f06d68e2e",
   "compiledStop": "sha256:c5497faa7f3507dd",
   "compiledTarget": null,
@@ -12,7 +12,7 @@ strategy cisd_ote: {
     "MYM",
     "M2K"
   ],
-  "mtf": "reversal",
+  "mtf": "trend",
   "name": "cisd_ote",
   "params": {
     "cisdMinRun": 2,

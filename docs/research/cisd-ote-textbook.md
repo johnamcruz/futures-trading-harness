@@ -198,9 +198,26 @@ S's prop simulation (the same set-up as N1's): 106 attempts, 14.2% pass
 (15), 0% blow, 85.8% timeout, median 14 sessions to pass, average profit
 $142, 48.1 trades an attempt, expectancy -0.023R.
 
-**Read plainly:** the shipped definition (S) has no edge on Train either:
+4. **A trend strategy.** The owner's intent: a CISD with the trend on a
+   pullback, or at a range extreme. `cisd_ote` became `mtf: trend` (it was
+   `mtf: reversal`): the trend rule now drops a CISD against the prevailing
+   higher-timeframe trend, and passes both directions when no timeframe has
+   one. That changes which setups trade, so S was run again as a labelled
+   follow-up, ST (S as a trend strategy, the shipped definition now):
+
+| Variant (follow-up) | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | one-sided p |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **ST (shipped: S with `mtf: trend`)** | 744 | -0.035 [-0.131, 0.062] | 0.96 | 36% | 28.6 | 262 / -0.040 | 482 / -0.032 | 386 / -0.060 | 358 / -0.008 | -0.09 / 0.03 / -0.08 | 0.76 |
+
+ST's exits: 203 at the target, 449 at the stop, 92 at end of day; 170 of
+its trades came from a 60m CISD. Its prop simulation (as before): 106
+attempts, 10.4% pass (11), 0% blow, 89.6% timeout, median 10 sessions to
+pass, average profit $187, 32.3 trades an attempt, expectancy -0.007R.
+
+**Read plainly:** the shipped definition (S, and ST as shipped) has no edge on Train either:
 its mean is below zero with an interval straddling it, as the old port's
 (-0.001R) does, and it is still worse than the port by the mean. Its prop
 pass rate (14.2%) is above the port's (8.5%) and N1's (0%), far below the
-40% the promotion gate asks for. It was defined after the census results
-above, so none of this is a pre-registered test. `cisd_ote` stays `paper`.
+40% the promotion gate asks for. As a trend strategy (ST) it takes 37%
+fewer trades, with about the same mean (-0.035R) and a 10.4% pass rate. It
+was defined after the census results above, so none of this is a pre-registered test. `cisd_ote` stays `paper`.
