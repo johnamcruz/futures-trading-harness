@@ -1,8 +1,9 @@
 ---
 name: volume-liquidity-analyst
 description: Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
-tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_quote, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__bar_briefing
-role-skills: [vwap-volume-profile, liquidity-concepts, session-timing, market-snapshot, trader-process, levels-and-reactions, momentum-and-volume, absorption, harness-tools]
+tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_quote, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__bar_briefing, mcp__harness__skill_lookup
+role-skills: [vwap-volume-profile, liquidity-concepts, session-timing, market-snapshot, trader-process, harness-tools]
+role-index: [levels-and-reactions, momentum-and-volume, absorption]
 model: inherit
 ---
 

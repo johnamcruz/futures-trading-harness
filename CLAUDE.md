@@ -40,7 +40,16 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   only the three analysts may set one, and no adapter carries it). Only `trade-executor` may hold order-writing MCP tools; a test enforces it.
   `role-skills` lists the skills the role's body says to load (a test keeps them equal); no
   harness interprets the key: opencode's generated roles carry those skills in full in their
-  prompt, and the other adapters load them as the body says.
+  prompt, and the other adapters load them as the body says. An optional `role-index` lists the
+  skills it looks up only as needed in index mode (its body's load sentence names `role-skills` and
+  `role-index` together, kept equal, so every adapter that reads the body loads them all as before;
+  the role then holds `mcp__harness__skill_lookup`). `FTH_ROLE_SKILLS` (`scripts/lib/role-skills.js`)
+  picks opencode's prompts: `full` (the default, committed) embeds both lists; `index` embeds
+  `role-skills` and lists `role-index` one line per skill, read with `skill_lookup` (the prompt's
+  load sentence becomes two: the core below, "Look up as needed: ..." for the index), and the
+  gate requires the situational ones a bar's briefing triggers (`SITUATIONAL` in
+  `scripts/lib/trading/skills-loaded.js`; `scripts/lib/trading/skill-lookups.js`). Index mode stays
+  off until a paired replay proves it.
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
   `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
   `commands/` are thin shims that say "Use the `<skill>` skill".

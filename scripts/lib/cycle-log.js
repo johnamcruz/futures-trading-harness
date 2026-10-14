@@ -12,7 +12,9 @@
  *       transcript, and the parsed summary
  *   <FTH_HOME>/logs/cycles-<day>.jsonl   one summary line per cycle: result,
  *       skills loaded, tool calls by name, shell commands, orders sent, and
- *       the skills an entry needed but the model never loaded
+ *       the skills an entry needed but the model never loaded, and the roles'
+ *       skill lookups (skill-lookups.js: how many, by role, and the reports a
+ *       bar's required lookup applied to and met)
  *
  * Transcripts: Claude Code runs with --output-format stream-json (one JSON
  * event per line, tool calls included); Codex with --json; Qwen Code with
@@ -126,9 +128,11 @@ function summarize(output) {
  * Write the cycle record and its summary line. Returns { file, summary }.
  * Never throws (logging must not stop trading).
  */
-function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null }) {
+function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null }) {
   const day = tradingDayKey(at);
   const summary = summarize(output);
+  // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
+  if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at });
   const stamp = at.toISOString().slice(11, 19).replace(/:/g, '');
   const file = path.join(home, 'logs', 'cycles', day, `${stamp}-${action}.json`);
   try {
@@ -148,4 +152,21 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   return { file, summary };
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog };
+/** The cycle's skill lookups and their compliance (index mode: the bar's requirements, first symbol's briefing). */
+function cycleLookups({ home, output, transcript, context, roleSkills, at }) {
+  try {
+    const { readLookups, lookupsFile, briefingFacts, requiredFor, lookupStats } = require('./trading/skill-lookups');
+    const { roleCalls } = require('./trading/roles-ran');
+    const symbol = ((context && context.symbols) || []).map(x => x && x.symbol).find(Boolean);
+    const m3 = symbol ? briefingFacts(home, symbol, at) : null;
+    const required = roleSkills === 'index' ? requiredFor(path.resolve(__dirname, '..', '..')) : new Map();
+    const records = readLookups(transcript);
+    // The run's own file, read once: removed with its transcript (harness-run.js).
+    try { fs.unlinkSync(lookupsFile(transcript)); } catch (_err) { /* none */ }
+    return { mode: roleSkills || 'full', ...lookupStats({ calls: roleCalls(output).calls, records, required, m3 }) };
+  } catch (_err) {
+    return null;
+  }
+}
+
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups };

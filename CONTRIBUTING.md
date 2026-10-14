@@ -15,7 +15,19 @@
 
 - Skills: `skills/<name>/SKILL.md` with `name`, `description`, and the three sections.
 - Agents: `agents/<name>.md` with `name`, `description`, `tools`, `model`; fewest
-  tools that work; order tools belong to `trade-executor` only.
+  tools that work; order tools belong to `trade-executor` only. `role-skills` lists
+  the skills the role uses every call; `role-index`, optional, the ones it reads only
+  when a cycle needs them in opencode's index mode (the role holds
+  `mcp__harness__skill_lookup`). Its body's "Load the skills ..." sentence names both
+  lists together: every adapter that reads the body loads them all, and only
+  `FTH_ROLE_SKILLS=index` splits them (the core embedded, "Look up as needed: ..." for
+  the index).
+  A skill goes in the index when the role needs it only in some situations; when a
+  situation makes it necessary, add the trigger to `SITUATIONAL` in
+  `scripts/lib/trading/skills-loaded.js` (a small vocabulary over the bar briefing's
+  `m3`), and in index mode the gate won't count the role's report for an entry without
+  that lookup. The split into small single-purpose skills is what makes this work:
+  the index entry is the skill's `description`, so write it to say when it is needed.
 - Commands: a shim that says "Use the `<skill>` skill for: $ARGUMENTS".
 - Then run `node scripts/sync-harness.js` to regenerate the Codex, Qwen,
   opencode, and workspace files, and commit them.

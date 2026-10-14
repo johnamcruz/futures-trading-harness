@@ -11,6 +11,7 @@ tools:
   - mcp__harness__strategies_list
   - mcp__harness__strategies_show
   - mcp__harness__bar_briefing
+  - mcp__harness__skill_lookup
 approvalMode: default
 background: false
 ---

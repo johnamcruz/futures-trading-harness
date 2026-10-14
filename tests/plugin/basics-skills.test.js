@@ -239,7 +239,8 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   // Unsourced numbers stay out of confluence-counting.
   assert.doesNotMatch(read(file('confluence-counting')), /46%|9 minutes|about half|quant audit/);
   // Each role only what it uses: the structure analyst reads levels and sweeps from the small skills.
-  const skillsOf = r => parseFrontmatter(read(`agents/${r}.md`)).data['role-skills'];
+  // Its core (role-skills) and its index (role-index: looked up as needed in opencode's index mode).
+  const skillsOf = r => { const d = parseFrontmatter(read(`agents/${r}.md`)).data; return [...(d['role-skills'] || []), ...(d['role-index'] || [])]; };
   assert.ok(!skillsOf('market-structure-analyst').includes('liquidity-concepts'));
   assert.ok(skillsOf('volume-liquidity-analyst').includes('liquidity-concepts'));
 });
@@ -351,7 +352,8 @@ test('basics skills: the two multi-timeframe setups follow the PLAN steps, on co
 test('basics skills: each role carries exactly its own, says to load them, and trader-process points to them', () => {
   for (const [role, mine] of Object.entries(ROLES)) {
     const { data, body } = parseFrontmatter(read(`agents/${role}.md`));
-    const has = SKILLS.filter(s => (data['role-skills'] || []).includes(s));
+    // Its core (role-skills) or its index (role-index); the load sentence names both.
+    const has = SKILLS.filter(s => [...(data['role-skills'] || []), ...(data['role-index'] || [])].includes(s));
     assert.deepStrictEqual(has.sort(), [...mine].sort(), role);
     const said = /Load the\s+skills?\s+([^.]*)\./.exec(flat(body));
     for (const s of mine) assert.ok(said && said[1].includes(`\`${s}\``), `${role}: ${s}`);

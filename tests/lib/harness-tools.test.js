@@ -249,7 +249,7 @@ test('bars: fetch through the broker; only its own arguments reach the file writ
 test('index: one function per agent operation, and none of the user\'s', () => {
   assert.deepStrictEqual(Object.keys(OPERATIONS).sort(), [
     'bar_briefing', 'bars_fetch', 'blackouts_add', 'blackouts_list', 'combine_status', 'lessons', 'market_snapshot', 'mtf', 'order_plan', 'reason_check', 'reconcile',
-    'strategies_list', 'strategies_recent', 'strategies_scan', 'strategies_show', 'strategies_validate',
+    'skill_lookup', 'strategies_list', 'strategies_recent', 'strategies_scan', 'strategies_show', 'strategies_validate',
   ]);
   for (const [name, fn] of Object.entries(OPERATIONS)) assert.strictEqual(typeof fn, 'function', name);
   assert.ok(!Object.keys(OPERATIONS).some(n => /start|stop|record_day/.test(n)));

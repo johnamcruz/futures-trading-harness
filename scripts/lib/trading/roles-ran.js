@@ -48,7 +48,9 @@
  *   roleCalls(text)                              { calls: [{ role, start, end, text }] that count, launches: trade-executor launches }
  *   rolesInTranscript(text)                      Map role -> calls that count
  *   missingRoles(calls, cycle, cached)           what a cycle still lacks, as text, [] when complete
- *   checkRolesRan(transcriptPath, cycle, cached) the gate's message, or null
+ *   checkRolesRan(transcriptPath, cycle, cached, lookups)   the gate's message, or null; `lookups`: (call) -> the
+ *                                                required skills it didn't look up (skill-lookups.js lookupRule):
+ *                                                such a call doesn't count
  */
 
 const fs = require('fs');
@@ -165,6 +167,16 @@ function approved(phase2) {
   return verdictOf(last.text) === 'APPROVE';
 }
 
+/**
+ * When this entry's round started: the last trade-executor launch's end (else its start), the one placing this order
+ * excepted (it may still be running: Claude, Qwen); -Infinity before any.
+ */
+function roundStart(launches = []) {
+  const pending = launches.filter(l => l.pending);
+  const current = pending[0] || null;
+  return Math.max(-Infinity, ...launches.filter(l => l !== current).map(l => (l.end ?? l.start)));
+}
+
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
 function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   if (!CYCLES.includes(cycle)) return [];
@@ -172,8 +184,7 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   // launch, finished, errored, running or in the background, ends the round: its end, else its start.
   const pending = launches.filter(l => l.pending);
   if (pending.length > 1) return [`one trade-executor at a time (${pending.length} running)`];
-  const current = pending[0] || null;
-  const lastExec = Math.max(-Infinity, ...launches.filter(l => l !== current).map(l => (l.end ?? l.start)));
+  const lastExec = roundStart(launches);
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
   const missing = [];
@@ -206,7 +217,7 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
  * transcript or no cycle (an interactive session) -> null. A transcript the
  * runner named but that can't be read -> refused (fails closed).
  */
-function checkRolesRan(transcriptPath, cycle, cached = []) {
+function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
   // A Claude subagent's hook gets its own transcript: the roles ran in its main session's.
   const files = transcriptFiles(transcriptPath).reverse();
@@ -224,9 +235,24 @@ function checkRolesRan(transcriptPath, cycle, cached = []) {
       if (file === transcriptPath) return `The cycle's transcript can't be read (${err.code || err.message}), so the gate can't see which roles ran: no entry this cycle.`;
     }
   }
-  const missing = missingRoles(roleCalls(texts.join('\n')), cycle, cached);
+  const found = roleCalls(texts.join('\n'));
+  // Index mode (skill-lookups.js): a report whose role didn't look up a skill this bar's briefing requires doesn't count.
+  const unmet = [];
+  if (typeof lookups === 'function') {
+    // This round's calls only: a lookup made before the last trade-executor call counts for that entry, not this one.
+    const round = found.calls.filter(c => c.start > roundStart(found.launches));
+    found.calls = found.calls.filter(c => {
+      const skills = lookups(c, round);
+      if (skills.length) unmet.push(`${c.role} reported without looking up ${skills.join(', ')} (its skill index requires it on this bar, or on any bar when no current bar briefing shows the situation: skill_lookup with its role)`);
+      return !skills.length;
+    });
+  }
+  // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
+  const needs = typeof lookups === 'function' && typeof lookups.needs === 'function' ? lookups.needs : () => [];
+  for (const r of cached) if (needs(r).length) unmet.push(`${r} was served from the report cache, which made no lookup of ${needs(r).join(', ')} this cycle`);
+  const missing = missingRoles(found, cycle, cached.filter(r => !needs(r).length));
   return missing.length
-    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
+    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}${unmet.length ? ` (${[...new Set(unmet)].join('; ')})` : ''}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
     : null;
 }
 

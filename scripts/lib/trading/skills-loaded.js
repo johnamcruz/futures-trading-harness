@@ -23,6 +23,11 @@
  * A harness that passes no transcript (Codex) carries the skills in the
  * workspace instructions (AGENTS.md); for it the check doesn't apply.
  *
+ * In index mode (FTH_ROLE_SKILLS=index, opencode only) the situational skills
+ * (SITUATIONAL) marked for the head trader that the bar briefing triggers are
+ * required as well (the gate adds them to the list it checks), and a
+ * skill_lookup in the session's transcript counts as a load.
+ *
  * A Claude subagent's transcript (…/<session>/subagents/agent-*.jsonl) is read
  * together with its session's main transcript (…/<session>.jsonl), where the
  * head trader loaded the skills before handing the order to the
@@ -34,6 +39,58 @@ const fs = require('fs');
 const path = require('path');
 
 const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'];
+
+/*
+ * Situational skills (index mode only, FTH_ROLE_SKILLS=index: role-skills.js): when the cycle's bar briefing shows
+ * the situation, the skill is read before an entry by each role whose `role-index` lists it (skill_lookup naming its
+ * role during one of its calls this cycle: skill-lookups.js; a subagent's own tool calls, skill loads included, are
+ * not in the session's transcript, so the harness tool records them), and, for an entry marked `head`, by the head
+ * trader too (a skill load or a skill_lookup in the session's transcript). With no trigger firing, nothing more is
+ * required. The triggers read the briefing's `m3` part (trading/briefing.js), a small vocabulary:
+ *
+ *   candidate                      a setup fired: m3.candidates is not empty
+ *   candidate.trendRule=<v>        a candidate whose trendRule is v (reversal | against | allows)
+ *   candidate.name=<strategy>      a candidate of that strategy
+ *   candidate.blocked              a candidate blocked now (a no-entry window, a news blackout)
+ *   news.inBlackout                a news blackout in force (m3.news.inBlackout)
+ */
+const SITUATIONAL = [
+  // A setup fired: what counts as confluence (trader-process step 5) and what proves it wrong (steps 7 and 9).
+  { when: 'candidate', skill: 'confluence-counting' },
+  { when: 'candidate', skill: 'invalidation' },
+  // A fade at a level (a strategy with mtf: reversal): the rejection setup, and pullback or reversal (step 4).
+  { when: 'candidate.trendRule=reversal', skill: 'mtf-rejection' },
+  { when: 'candidate.trendRule=reversal', skill: 'pullback-vs-reversal' },
+  // A with-trend setup: the breakout setup, and accepted or a fakeout (step 3).
+  { when: 'candidate.trendRule=allows', skill: 'mtf-breakout' },
+  { when: 'candidate.trendRule=allows', skill: 'breakout-vs-fakeout' },
+];
+
+const TREND_RULES = ['reversal', 'against', 'allows'];
+const cands = m3 => (m3 && Array.isArray(m3.candidates) ? m3.candidates.filter(c => c && typeof c === 'object') : []);
+const TRIGGERS = {
+  candidate: { value: false, test: m3 => cands(m3).length > 0, text: () => 'a setup fired (the briefing lists a candidate)' },
+  'candidate.trendRule': { value: v => TREND_RULES.includes(v), test: (m3, v) => cands(m3).some(c => c.trendRule === v), text: v => `a candidate's trendRule is ${v}` },
+  'candidate.name': { value: v => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(v), test: (m3, v) => cands(m3).some(c => c.name === v), text: v => `a ${v} candidate fired` },
+  'candidate.blocked': { value: false, test: m3 => cands(m3).some(c => Boolean(c.blocked)), text: () => 'a candidate is blocked now (a no-entry window or a news blackout)' },
+  'news.inBlackout': { value: false, test: m3 => Boolean(m3 && m3.news && m3.news.inBlackout === true), text: () => 'a news blackout is in force' },
+};
+
+/** "candidate.trendRule=reversal" -> { key, value }; throws on anything outside the vocabulary. */
+function parseTrigger(text) {
+  const [key, ...rest] = String(text || '').trim().split('=');
+  const value = rest.length ? rest.join('=').trim() : null;
+  const t = Object.prototype.hasOwnProperty.call(TRIGGERS, key.trim()) ? TRIGGERS[key.trim()] : null;
+  if (!t) throw new Error(`unknown trigger "${text}" (${Object.keys(TRIGGERS).join(', ')})`);
+  if (t.value === false && value !== null) throw new Error(`trigger "${key}" takes no value`);
+  if (t.value && (value === null || !t.value(value))) throw new Error(`trigger "${key}" needs a valid value (${key}=<value>)`);
+  return { key: key.trim(), value };
+}
+
+const fires = (trigger, m3) => TRIGGERS[trigger.key].test(m3 || {}, trigger.value);
+const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
+/** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
+const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
 const MAX_BYTES = 50 * 1024 * 1024;
 
 /** "futures-trading-harness:trade-session" or "/trade-session" -> "trade-session". */
@@ -67,7 +124,7 @@ function skillsInTranscript(text) {
   const out = new Set();
   const calls = new Map(); // parts format: unanswered functionCall id -> skill name
   for (const line of String(text || '').split('\n')) {
-    if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function') && !line.includes('"skill"')) continue;
+    if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function') && !line.includes('"skill"') && !line.includes('skill_lookup')) continue;
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
     if (!ev || typeof ev !== 'object') continue;
@@ -75,6 +132,9 @@ function skillsInTranscript(text) {
     const part = ev.part && typeof ev.part === 'object' ? ev.part : null;
     if (ev.type === 'tool_use' && part && part.tool === 'skill' && part.state && part.state.status === 'completed'
       && part.state.input && typeof part.state.input.name === 'string') out.add(skillName(part.state.input.name));
+    // A whole skill read with the harness tool skill_lookup (index mode): read as a load.
+    if (ev.type === 'tool_use' && part && /(^|_)skill_lookup$/.test(String(part.tool || '')) && part.state && part.state.status === 'completed'
+      && part.state.input && typeof part.state.input.skill === 'string') out.add(skillName(part.state.input.skill));
     const msg = ev.message && typeof ev.message === 'object' ? ev.message : {};
     const content = msg.content;
     if (Array.isArray(content)) {
@@ -129,4 +189,4 @@ function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
     : null;
 }
 
-module.exports = { REQUIRED_FOR_ENTRY, skillName, transcriptFiles, skillsInTranscript, checkSkillsLoaded };
+module.exports = { REQUIRED_FOR_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, skillName, transcriptFiles, skillsInTranscript, checkSkillsLoaded };

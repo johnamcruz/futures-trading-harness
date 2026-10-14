@@ -213,8 +213,10 @@ test('each role\'s prompt carries its declared skills in full, so a role never d
     // The declared list is the one its body tells other harnesses to load: they can't drift apart.
     const said = /Load the\s+skills?\s+([^.]*)\./.exec(a.body.replace(/\s+/g, ' '));
     assert.ok(said, `agents/${a.file} says which skills to load`);
-    assert.deepStrictEqual([...said[1].matchAll(/`([a-z-]+)`/g)].map(m => m[1]).sort(), [...a.skills].sort(), `agents/${a.file}`);
+    // Its core (role-skills) and its index (role-index) together: the body loads them all for every other adapter.
+    assert.deepStrictEqual([...said[1].matchAll(/`([a-z-]+)`/g)].map(m => m[1]).sort(), [...a.skills, ...a.index].sort(), `agents/${a.file}`);
     const prompt = generated.agent[a.name].prompt;
+    assert.doesNotMatch(prompt, /Look up as needed/, `${a.name}: full mode embeds its index skills too`);
     // The role's own text first, its "Load the skills" sentence saying they are below: nothing tells it to load them again.
     assert.ok(prompt.startsWith(a.body.slice(0, 40)), `${a.name}: the role's own text first`);
     assert.doesNotMatch(prompt, /Load the\s+skills?\b/, `${a.name}`);

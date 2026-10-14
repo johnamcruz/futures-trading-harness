@@ -280,9 +280,22 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
 /**
  * The report cache over the harness home: the briefings the runner recorded for this bar decide which analyst
  * reports still hold, the account decides phase 1's. Claude and opencode stream their cycle's tool results (each
- * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts.
+ * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts. In index
+ * mode (opencode, FTH_ROLE_SKILLS=index) a role a lookup is required of on the bar is never served (lookupRoles).
  */
-function reportCacheFor(home, cfg, frames = []) {
+/** Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). */
+function lookupRoles(briefingsBySymbol, now, env = process.env) {
+  let mode;
+  try { mode = require('./role-skills').modeOf(env); } catch (_err) { mode = 'index'; }
+  if (mode !== 'index') return [];
+  const { requiredFor, needed } = require('./trading/skill-lookups');
+  const { current } = require('./trading/briefing');
+  const required = requiredFor(path.resolve(__dirname, '..', '..'));
+  const facts = Object.values(briefingsBySymbol).map(b => (b && current(b, now) && b.sections.m3 ? b.sections.m3.data || null : null));
+  return [...required.keys()].filter(role => (facts.length ? facts : [null]).some(m3 => needed(role, required, m3).length));
+}
+
+function reportCacheFor(home, cfg, frames = [], env = process.env) {
   if (!['claude', 'opencode'].includes(cfg.harness)) return null;
   const briefings = symbols => Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
   // The analysts on their own timeframe (role -> minutes) and those timeframes' briefings.
@@ -291,8 +304,13 @@ function reportCacheFor(home, cfg, frames = []) {
   const own = symbols => ({ frames: roles, frameBriefings: Object.fromEntries(symbols.map(s => [s.symbol, Object.fromEntries(tfs.map(m => [m, readFrameBriefing(home, s.symbol, m)]))])) });
   return {
     serve: ({ symbols, account, now }) => {
-      const s = RC.serveReports({ cache: RC.readCache(home), briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
-      const reports = cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports;
+      const b = briefings(symbols);
+      const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
+      // Index mode (FTH_ROLE_SKILLS=index): a role a lookup is required of on this bar runs (the gate counts its report
+      // only with that lookup made this cycle: trading/skill-lookups.js).
+      // Only opencode runs carry the mode (autotrader.js childEnv).
+      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env) : [];
+      const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(r => !lookups.includes(r.role));
       return { roles: reports.map(r => r.role), reports };
     },
     record: ({ symbols, account, now, output, served }) => {
@@ -413,4 +431,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { laneSignals, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { laneSignals, lookupRoles, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

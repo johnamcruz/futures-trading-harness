@@ -2111,3 +2111,36 @@ test('order gate wiring: outside a runner, a live broker whose API URL variable 
   const exit = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[exit] flatten before the close' })), full);
   assert.strictEqual(exit.code, 0, 'exits are always allowed');
 });
+
+test('order gate hook: in index mode (FTH_ROLE_SKILLS=index) a role\'s report counts only with the lookups its bar requires; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  // A with-trend candidate on this bar's briefing (current by the wall clock an autonomous run reads): the situational
+  // skills of the roles that index them are required (skills-loaded.js SITUATIONAL).
+  writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'allows' }] } } } });
+  const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
+  const T = 1.8e12;
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(name => ev('skill', { name })),
+    ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
+      .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
+  const index = { ...env, FTH_ROLE_SKILLS: 'index' };
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 31);
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, index);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  // The default (full): not required.
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
+  // Looked up during its call (the harness tool records it next to the transcript): counted.
+  look('market-structure-analyst', 'breakout-vs-fakeout', 15);
+  look('market-structure-analyst', 'mtf-breakout', 15);
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, index).stderr, /roles-ran/);
+  // An exit is never held.
+  fs.unlinkSync(`${transcript}.lookups.jsonl`);
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, index);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});

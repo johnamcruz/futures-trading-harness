@@ -9,6 +9,7 @@ tools:
   - mcp__harness__bars_fetch
   - mcp__harness__market_snapshot
   - mcp__harness__bar_briefing
+  - mcp__harness__skill_lookup
 approvalMode: default
 background: false
 ---
