@@ -458,8 +458,9 @@ or counterfactual bars in the run home: pass the replayed data with
   a stub replay broker. No model is called by the harness: the harness CLI
   is. The replay broker is its own repo, reached through the broker
   interface.
-- The `replay` skill tells agents how to configure, run, resume and read a
-  replay (the user's to start).
+- The `replay` skill tells agents how to configure, run and read a replay
+  (the user's to start); `replay-resume` how to resume one, `replay-labels`
+  how to label it, and `replay-scorecard` how to score it.
 - Stage 2's labeler: `scripts/lib/replay/labels.js` and `counterfactual.js`
   (tests in `tests/lib/replay-labels.test.js`,
   `tests/lib/replay-counterfactual.test.js`, and the replay end-to-end

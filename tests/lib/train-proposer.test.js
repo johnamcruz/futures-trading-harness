@@ -22,7 +22,7 @@ test('the prompt template: the skill\'s text block, with every placeholder; shor
   assert.match(prompt, /1\. 2022-03-09 09:40 MNQ: wrong stated reason\. Expected: take orb\. You did: none\. Why flagged: skipped citing the opening window\. False reasons: "opening window until 10:00"/);
   assert.match(prompt, /skills\/session-timing\/SKILL\.md/);
   assert.match(prompt, /strategies\/orb\/STRATEGY\.md/);
-  assert.doesNotMatch(prompt, /skills\/training-loop\/SKILL\.md|skills\/design-self-review\/SKILL\.md/, 'never the loop\'s own skills');
+  assert.doesNotMatch(prompt, /skills\/training-loop\/SKILL\.md|skills\/training-verdict\/SKILL\.md|skills\/design-self-review\/SKILL\.md/, 'never the loop\'s own skills');
   assert.doesNotMatch(prompt, /\{\{/);
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, 'skills', 'design-self-review'), { recursive: true });

@@ -153,4 +153,4 @@ node scripts/replay.js scorecard ~/.futures-trading-harness/sessions/<trading da
 ```
 
 The scorecard grades each decision against the priority order; score live and
-replay sessions apart (the `replay` skill).
+replay sessions apart (the `live-session-records` skill).

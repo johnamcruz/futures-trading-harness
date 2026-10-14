@@ -568,7 +568,7 @@ reports them. The scorecard scores each decision against the priority
 order's mechanical steps, checks the reasons the trader stated against the
 facts it had, and sorts the misses into a failure taxonomy (wrong-side entry,
 bad size, early close, excessive abstention, wrong stated reason, risk-rule
-rejection). See the `replay` skill and
+rejection). See the `replay` and `replay-scorecard` skills and
 [docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md).
 
 ### Backtesting

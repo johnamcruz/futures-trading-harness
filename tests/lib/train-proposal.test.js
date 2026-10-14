@@ -12,6 +12,7 @@ function tree() {
   const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), text); };
   put('skills/session-timing/SKILL.md', '# Session Timing\n\nThe opening window runs until 09:35.\n');
   put('skills/training-loop/SKILL.md', '# Loop\n');
+  put('skills/training-verdict/SKILL.md', '# Verdict\n');
   put('strategies/orb/STRATEGY.md', '---\nname: orb\nstatus: paper\nstop_atr: 1.0\n---\n# ORB\n');
   put('scripts/lib/prop/promotion.js', "const PROMOTION_GATE = { minPassRate: 0.4 };\n");
   put('accounts/a/ACCOUNT.md', 'daily_loss_limit: 1000\n');
@@ -48,6 +49,7 @@ test('validateProposal: never code, accounts, the loop\'s own skills, a path out
   assert.match(edit({ file: 'scripts/lib/prop/promotion.js', find: '0.4', replace: '0.1' }), /not a document a proposal may edit/);
   assert.match(edit({ file: 'accounts/a/ACCOUNT.md', find: '1000', replace: '9000' }), /not a document/);
   assert.match(edit({ file: 'skills/training-loop/SKILL.md', find: '# Loop', replace: '# X' }), /not a document/);
+  assert.match(edit({ file: 'skills/training-verdict/SKILL.md', find: '# Verdict', replace: '# X' }), /not a document/, 'the verdict, split from training-loop, is the loop\'s own too');
   assert.match(edit({ file: 'skills/../scripts/x/SKILL.md', find: 'a', replace: 'b' }), /not a document/);
   assert.match(edit({ file: '/etc/skills/x/SKILL.md', find: 'a', replace: 'b' }), /not a document/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'status: paper', replace: 'status: active' }), /name or status line is the owner's/);
