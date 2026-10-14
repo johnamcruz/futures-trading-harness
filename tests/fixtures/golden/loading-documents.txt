@@ -662,12 +662,12 @@ strategy fx_vwap_reclaim: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "3927 chars sha256:5ec04543caf9db43",
+  "body": "3576 chars sha256:0ece308de865bd61",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
   "contracts": "auto",
-  "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade. It lists none today; its one component will be trade_lifecycle.",
+  "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade. Its one component is trade_lifecycle.",
   "errors": [],
   "exit": {
     "trail_activate_r": 2,
@@ -701,10 +701,12 @@ strategy prop_portfolio: {
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",
-  "strategies": [],
+  "strategies": [
+    "trade_lifecycle"
+  ],
   "timeframe": "3m",
   "valid": true,
-  "version": 2
+  "version": 3
 }
 strategy trade_lifecycle: {
   "body": "2832 chars sha256:5e5a94b37a74c49e",

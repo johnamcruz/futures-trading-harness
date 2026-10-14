@@ -26,6 +26,11 @@
  * closed bar of the bars given, compared as the gate compares it with the
  * signal record's last bar: signal-state.js sameBar).
  *
+ * A composed strategy (trade_lifecycle), or a policy that lists one: the order the model's compose record gives on
+ * this cycle's bar (trading/lifecycle-order.js): a limit at its entry reference, its brackets, the size it states
+ * at or under the ceiling (risk.max_risk_usd; in an attempt, the policy's verdict on the record and the budget).
+ * The bars are not read: the record and the cycle bar's briefing are the plan's facts.
+ *
  * Tick specs are the broker's (trading/broker-specs.js), as the gate checks
  * them: none recorded for the contract (or, for a policy strategy, either
  * contract of its family) is a refusal saying to fetch the contract first.
@@ -47,6 +52,7 @@ const { FUTURE_TOLERANCE_MIN, sameBar, signalMaxAgeMin } = require('../trading/s
 const { harnessHome } = require('../paths');
 const { context, atClock, say } = require('./cli');
 const { whyNot } = require('./compact');
+const { composedOrder } = require('../trading/lifecycle-order');
 
 const SIDES = { long: 'long', buy: 'long', short: 'short', sell: 'short' };
 
@@ -156,6 +162,8 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const notTraded = rootRefusal(s, root, selected);
   if (notTraded) throw new Error(`${name} ${notTraded}`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
+  const composed = s.signal === 'composed' ? s : s.signal === 'policy' ? strategies.find(x => (s.strategies || []).includes(x.name) && x.signal === 'composed' && x.valid) : null;
+  if (composed) return composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected });
   const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now, selected });
@@ -172,6 +180,24 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   }
   const account = Number.isInteger(accountId) ? '' : ' (add "accountId": the account\'s id)';
   return { text: `${line}\nplace_order arguments${account}: ${JSON.stringify(args)}\n`, plan: out, args };
+}
+
+/** order_plan for a composed trade (trading/lifecycle-order.js), with the gate's prop checks on its exact arguments in an attempt. */
+function composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected }) {
+  const home = harnessHome(c.env);
+  const specOf = liveSpecs(c.env);
+  const r = composedOrder({
+    home, root, side: want, now, cycleBars: loadConfig(c.env).cycleBars, strategy: composed, strategies, accounts: loadAccounts(c.root, c.env).accounts,
+    specOf, accountId: Number.isInteger(accountId) ? accountId : null, selected, paper: c.env.FTH_PAPER === '1',
+  });
+  if (s.signal === 'policy' && !r.policy) throw new Error(`${s.name} has no running attempt: plan ${composed.name} itself`);
+  if (r.policy) {
+    const journal = readJournal(resolveJournalPath(c.env));
+    const found = prop.propViolations(home, { strategy: r.policy, account: r.account, input: r.args, now, entries: entriesSince(journal, tradingDayStart(now)), journal, specOf, selected, strategies, paper: c.env.FTH_PAPER === '1' });
+    if (found.length) throw new Error(`the order gate would refuse this entry: ${found.map(v => `[${v.check}] ${v.message}`).join(' ')}`);
+  }
+  const account = Number.isInteger(accountId) ? '' : ' (add "accountId": the account\'s id)';
+  return { text: `${r.line}\nplace_order arguments${account}: ${JSON.stringify(r.args)}\n`, plan: r.plan, args: r.args };
 }
 
 const OPS = { plan };

@@ -60,10 +60,15 @@ function parseRetired(data) {
 const RETIRED = parseRetired(require('../../../strategies/retired.json'));
 /** " (retired on <date>: strategies/README.md, \"Retired strategies\")" for a retired name, else "". */
 const retiredNote = name => (Object.hasOwn(RETIRED, name) ? ` (retired on ${RETIRED[name]}: strategies/README.md, "Retired strategies")` : '');
-/** Where a policy strategy's verdicts come from: its components' setups, or none when it lists no strategies. */
+/**
+ * Where a policy strategy's verdicts come from: its components' setups (the trade lifecycle's: order_plan sizes each
+ * compose record, prop/composed-verdict.js), or none when it lists no strategies.
+ */
 const componentsNote = policy => {
   const list = (policy && Array.isArray(policy.strategies) && policy.strategies) || [];
-  return list.length ? `the runner records one at each setup of ${list.join(', ')}` : 'it lists no strategies, so it has no setups and no verdicts: no entry';
+  const rules = list.filter(n => n !== 'trade_lifecycle');
+  const notes = [...(list.includes('trade_lifecycle') ? ['order_plan records one on each trade_lifecycle compose record'] : []), ...(rules.length ? [`the runner records one at each setup of ${rules.join(', ')}`] : [])];
+  return notes.length ? notes.join('; ') : 'it lists no strategies, so it has no setups and no verdicts: no entry';
 };
 /**
  * The loaded strategies under a retired name: a user's own copy (no shipped folder holds one). It loads and trades
@@ -397,7 +402,8 @@ function loadStrategies(pluginRoot, env = process.env) {
       const c = byName.get(n);
       if (!c) errs.push(`strategies: ${n} is not a strategy${retiredNote(n)}`);
       else if (!c.valid) errs.push(`strategies: ${n} is invalid (${c.errors[0]})`);
-      else if (c.signal !== 'rules') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies only`);
+      // A rules strategy's scan setups, or the model's composed trade (trade_lifecycle: its compose record's setup).
+      else if (c.signal !== 'rules' && c.signal !== 'composed') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies and composed ones only`);
       // Not re-run on other bars: its periods and stop are in its own bars (a 3m strategy on 1m bars is another strategy).
       else if (c.timeframe !== s.timeframe) errs.push(`strategies: ${n} trades ${c.timeframe} bars, not ${s.timeframe} (a policy strategy lists strategies on its own timeframe; they are not re-run on other bars)`);
       else if (c.status === 'disabled') errs.push(`strategies: ${n} is disabled; remove it from the list`);
@@ -504,7 +510,7 @@ function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
     if (!s.valid || s.status === 'disabled') continue;
     if (root && !tradesRoot(s, root, selected)) continue;
     if (s.signal === 'policy') {
-      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` : 'a policy strategy with no strategies listed: no setups' });
+      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: ${s.strategies.every(n => n === 'trade_lifecycle') ? 'its setups are the trade_lifecycle compose records (order_plan sizes each)' : `the runner screens the setups of ${s.strategies.join(', ')}`}` : 'a policy strategy with no strategies listed: no setups' });
       continue;
     }
     // The trade lifecycle has no trigger to scan: the model composes it (compose_check).
@@ -568,7 +574,8 @@ function withConfluence(results) {
  * that are valid rules strategies with status active. In a paper run (`paper`: no order goes
  * live) any non-disabled one counts, as a paper run takes any non-disabled policy. `registry`:
  * loadStrategies' list; none (or a name not in it) refuses, so a caller can't fail open.
- * The runner's screen, the order gate (prop-state.js), and the backtester all use it.
+ * The runner's screen, the order gate (prop-state.js), and the backtester all use it. A composed component
+ * (trade_lifecycle) counts too, under the same status rule.
  */
 function componentRefusal(policy, registry, name, { paper = false } = {}) {
   const owner = policy && policy.name;
@@ -577,7 +584,7 @@ function componentRefusal(policy, registry, name, { paper = false } = {}) {
   const c = registry.find(x => x.name === name);
   if (!c) return `${name} is not a known strategy${retiredNote(name)}`;
   if (!c.valid) return `strategies/${name}/STRATEGY.md is invalid (${(c.errors || [])[0]})`;
-  if (c.signal !== 'rules') return `${name} is signal: ${c.signal}; a policy trades rules strategies only`;
+  if (c.signal !== 'rules' && c.signal !== 'composed') return `${name} is signal: ${c.signal}; a policy trades rules strategies and composed ones only`;
   if (c.status === 'active' || (paper && c.status !== 'disabled')) return null;
   return `${name} has status "${c.status}": ${owner} trades only its active strategies${paper ? '' : ' live'} (a ${c.status} strategy stays ${c.status} inside a policy)`;
 }

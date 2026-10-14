@@ -2931,3 +2931,47 @@ test('trade_lifecycle, D2: a reversal never stands on a stale, future-dated or p
   fs.writeFileSync(path.join(noClose, 'mtf', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', biases: { 240: 0, 60: -1, 15: -1 } }));
   assert.strictEqual(at(noClose), false, 'no close time');
 });
+// ---- trade_lifecycle inside a prop attempt: prop_portfolio's verdict on the compose record is the ceiling ----
+const LCP = require('../fixtures/lifecycle-prop');
+const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
+const lcSpec = r => (r === 'MNQ' || r === 'NQ' ? { tickSize: 0.25, tickValue: r === 'NQ' ? 5 : 0.5 } : null);
+const lcPropPlan = home => composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: LCP.registry(), accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
+const lcPropEval = (home, input, o = {}) => evaluateOrder({
+  input, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: o.registry || LCP.registry(), accounts: [LCP.MINI],
+  config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...(o.config || {}) },
+});
+
+test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdict goes; a paper component is refused ([policy])', () => {
+  const { home } = LCP.propHome({ size: 5 });
+  const args = lcPropPlan(home);
+  assert.match(args.rationale, /^setup:prop_portfolio long trade_lifecycle/);
+  assert.deepStrictEqual(lcPropEval(home, args).violations, []);
+  const paper = LCP.registry().map(s => (s.name === 'trade_lifecycle' ? { ...s, status: 'paper' } : s));
+  const live = lcPropEval(home, args, { registry: paper });
+  assert.deepStrictEqual(checks(live), ['policy']);
+  assert.match(live.violations[0].message, /trade_lifecycle has status "paper"/);
+  // The composed-reads check runs for it too: the record's reads, re-checked.
+  const down = LC.briefing();
+  down.sections.h1.data.h1.trend = 'down';
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, down);
+  assert.ok(checks(lcPropEval(home, args)).includes('composed-reads'));
+});
+
+test('trade_lifecycle in an attempt: over the verdict\'s size is refused even when the record states it; a verdict not sized on this record is refused', () => {
+  // The record states 8; the verdict sized it at 7 (the size budget): the gate refuses 8.
+  const { home, rec } = LCP.propHome({ size: 8 });
+  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy: LCP.policy(), component: 'trade_lifecycle', account: LCP.MINI, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec: lcSpec('MNQ'), specOf: lcSpec, now: LCP.NOW });
+  const eight = LC.order({ accountId: 1, size: 8, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' });
+  const r = lcPropEval(home, eight);
+  assert.ok(checks(r).includes('policy') && checks(r).includes('combine'), JSON.stringify(r.violations));
+  assert.ok(r.violations.some(v => /size 8 is over the verdict's 7 MNQ/.test(v.message)));
+  assert.ok(!checks(r).includes('composed-reads'), 'the size is the record\'s');
+  // A verdict sized on another record (the same bar and stop): refused.
+  const p = LCP.propHome({ size: 2 });
+  prop.appendVerdict(p.home, { strategy: 'prop_portfolio', component: 'trade_lifecycle', contract: 'MNQ', contractId: 'MNQ', symbol: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 111, maxSize: 7, bar: LC.BAR, at: '2026-10-07T13:59:55Z', expiresAt: '2026-10-07T14:06:00Z', record: 'another' });
+  const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 2, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
+  assert.deepStrictEqual(checks(two), ['policy']);
+  assert.match(two.violations[0].message, /the latest verdict is not the one sized on the compose record/);
+  // An exit under the policy goes with nothing.
+  assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 2, rationale: '[exit] flatten the prop_portfolio long' }).violations, []);
+});

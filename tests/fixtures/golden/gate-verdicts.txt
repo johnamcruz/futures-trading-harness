@@ -40,7 +40,7 @@ entry: a retired strategy (orb, 2026-10-14): REFUSED (intent entry)
   [strategy] setup:orb is not a known strategy (retired on 2026-10-14: strategies/README.md, "Retired strategies"): no new entries from it. A position it opened is still exited and protected with [exit] or [protect].
 entry: the shipped prop_portfolio, which lists no strategies (an attempt running): REFUSED (intent entry)
   [combine] <name-43f416>: 1 MNQ is not within the account's size budget for a 40-tick stop (4 NQ at $207.80 risk each; contracts: auto).
-  [policy] setup:prop_portfolio: no verdict for MNQ (it lists no strategies, so it has no setups and no verdicts: no entry).
+  [policy] setup:prop_portfolio: no verdict for MNQ (order_plan records one on each trade_lifecycle compose record).
 exit: under the shipped prop_portfolio, an attempt running (allowed): ALLOWED (intent risk-reducing)
 entry: the side named is not the order side: REFUSED (intent entry)
   [order-consistency] The order doesn't agree with itself: the rationale says short but the order side is buy. Fix the order or the rationale so both say the same trade.

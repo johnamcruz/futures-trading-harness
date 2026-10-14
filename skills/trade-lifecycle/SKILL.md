@@ -41,9 +41,11 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 3. **Send it as the record says**: `place_order` type `limit` at the
    record's entry price (or better), `stopLossBracket.ticks` and
    `takeProfitBracket.ticks` the record's, the size the record states, on
-   the record's contract, rationale `setup:trade_lifecycle long|short ...`.
-   The ceilings are code's (the strategy's dollar cap, the broker's max
-   size, in an attempt the verdict): at or below, never above. No priority
+   the record's contract, rationale `setup:trade_lifecycle long|short ...`
+   (in an attempt, `setup:prop_portfolio`); `order_plan` gives these for
+   the strategy trade_lifecycle and refuses a size over the ceiling. The
+   ceilings are code's (the strategy's $300 cap, the broker's max size, in
+   an attempt also the verdict): at or below, never above. No priority
    order halves a composed trade: its size is yours under the caps.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
    (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level>` your
