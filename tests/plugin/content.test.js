@@ -359,7 +359,7 @@ test('the session hours read unambiguously (a small local model read "18:00 ET t
   assert.match(read('workspace/AGENTS.md'), /load the skill you need yourself \(your skill tool, or read\s+`<root>\/skills\/<name>\/SKILL\.md` if your harness has none\), never through a\s+role/);
   assert.match(read('skills/strategy-authoring/SKILL.md'), /the whole market session, from 18:00 ET until 16:00 ET the next day \(closed only 16:00-18:00 ET/);
   assert.match(read('skills/premarket/SKILL.md'), /^description: .*Use at the start of the trading day \(just after the 18:00 ET open\)/m);
-  for (const f of ['rules/trading/execution.md', 'rules/trading/prop-firm.md', 'skills/session-timing/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'skills/strategy-authoring/SKILL.md', 'strategies/_template/STRATEGY.md']) {
+  for (const f of ['rules/trading/execution.md', 'rules/trading/prop-firm.md', 'skills/session-timing/SKILL.md', 'skills/news-blackouts/SKILL.md', 'skills/exchange-holidays/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'skills/strategy-authoring/SKILL.md', 'strategies/_template/STRATEGY.md']) {
     assert.doesNotMatch(read(f), /18:00 ET to 16:00 ET|18:00-16:00 ET session/, f);
   }
 });

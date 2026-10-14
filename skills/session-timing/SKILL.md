@@ -1,6 +1,6 @@
 ---
 name: session-timing
-description: Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, prop-firm cut-offs, and scheduled news. Use when timing an entry, choosing strategies for the time of day, or setting news blackouts.
+description: Use when timing an entry - the trading day (from the 18:00 ET open), its sessions, and which windows allow entries.
 ---
 
 # Session Timing
@@ -8,7 +8,6 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 ## When to Use
 
 - Before any entry: is this a good time for this strategy?
-- Premarket: build today's news blackout list.
 
 ## How It Works
 
@@ -39,14 +38,11 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 18:00 (Sun–Thu) | The firm's trading day starts (its daily reset); Globex open | Session opens; daily counters reset |
 | 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
-| 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout 08:25–08:40 |
 | 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
 | 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Entries allowed; primary window for ORB |
-| 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
 | 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
-| 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
 | 16:00–18:00 | Daily break (the harness's day is over; the firm's own flatten deadline falls in it) | Closed: no entries, no positions (hard rule); the harness is flat by 15:50 ET (runner), 16:00 ET at the latest |
 
@@ -69,51 +65,11 @@ refusals: the briefing states news blackouts on its own `News` line, and
 the gate states holidays and early closes when it refuses an entry (the
 briefing's window doesn't know them).
 
-**Holidays and early closes.** The harness treats every exchange holiday
-as closed (New Year's Day, MLK Day, Presidents Day, Good Friday, Memorial
-Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, Christmas), even
-where CME runs a short session: no trading at all that day. The day after
-Thanksgiving and Christmas Eve are early closes (13:00 ET). The harness
-carries this calendar for 2026-2027
-(`scripts/lib/trading/exchange-calendar.js`).
-The runner config (`closedDates`, `earlyCloseDates`) and the gate's
-`FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES` add days to it, never remove
-one (trading days, YYYY-MM-DD of the day they end on). The gate refuses
-entries on a closed day and after 13:00 ET on an early-close day, and the
-runner flattens at `earlyCloseEodAt` (default 12:50 ET). After the
-calendar's last day the gate refuses every entry (market-hours: "The
-exchange calendar ends ..."); the runner warns once a day for the 30 days
-before it. Configured dates extend it only a whole year at a time (every
-holiday and every early close of the year). Tell the user; never work around it. Premarket checks the calendar; if
-CME announces a change that isn't listed, tell the user and plan as if it
-were (no entries after 12:45 ET, flat by 12:50 ET).
-
-**Contract roll.** Equity index futures expire quarterly (H Mar, M Jun, U
-Sep, Z Dec) on the third Friday; volume moves to the next contract about
-eight days earlier (the roll, the Thursday or Friday before). Trade the
-front month by its plain name (`MNQ`): the harness maps it to the contract the
-broker marks active, once per trading day, so after the roll `MNQ` is the new
-month and the old one shows as `MNQ:2026-12`. Bars from before the
-roll come from the old contract at a different price (the spread between
-months): levels, VWAP, and swings that straddle the roll day are not
-comparable; prefer the new contract's own bars for levels on roll days.
-
-Metals (MGC) and crude (MCL) have their own sessions: crude reacts to EIA
-inventory (Wednesday 10:30 ET); gold to US data and rates.
-
-**Blackouts.** The order gate reads `~/.futures-trading-harness/blackouts/blackouts.json`
-(or `FTH_BLACKOUTS_FILE`): a JSON array of `{ "start": ISO-8601, "end":
-ISO-8601, "reason": "CPI" }`. During premarket, after confirming the
-day's calendar, add the high-impact events from 5 minutes before to 10
-minutes after (FOMC: 13:55 to 15:00 ET) with the harness tool `blackouts_add`
-(`{"start": "<ISO>", "end": "<ISO>", "reason": "<event>"}`).
-It is append-only; never edit the file by hand.
+News windows: the `news-blackouts` skill; holidays and early closes: the
+`exchange-holidays` skill; the quarterly roll: the `contract-roll` skill.
 
 ## Examples
 
-```json
-[
-  { "start": "2026-10-14T12:25:00Z", "end": "2026-10-14T12:40:00Z", "reason": "CPI 08:30 ET" },
-  { "start": "2026-10-28T17:55:00Z", "end": "2026-10-28T19:00:00Z", "reason": "FOMC 14:00 ET" }
-]
-```
+Tuesday 10:00 ET is inside the session (it opened Monday 18:00 ET): the
+opening drive, entries allowed until 11:00 ET. Tuesday 15:47 ET is into the
+close: no entries.

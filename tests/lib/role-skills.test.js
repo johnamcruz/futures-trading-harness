@@ -123,7 +123,7 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // (indexed) for the market-structure analyst.
 const MAIN_SKILLS = {
   'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools'],
-  'news-calendar-analyst': ['session-timing', 'trader-process'],
+  'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools'],
   'strategy-researcher': ['strategy-authoring', 'strategy-library'],
   'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'],

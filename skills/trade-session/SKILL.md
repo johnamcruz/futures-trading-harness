@@ -65,7 +65,7 @@ its checklist is the order you decide in. Load the others as a step names them.
   says nothing about a 3m strategy). Stale or mismatched bars → manage open
   positions only, journal a note, end. On interactive use, check the contract
   is the front month (`search_contracts` / the roll guidance in
-  `session-timing`) before planning.
+  `contract-roll`) before planning.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
   a pending entry from your own plan that carries its stop bracket. An order

@@ -40,9 +40,9 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
    - The calendar: a CME holiday or an early close today (from the news
      analyst) that the built-in calendar or the runner config doesn't list →
      tell the user (it goes in `closedDates` / `earlyCloseDates`) and plan for
-     it (see `session-timing`).
+     it (see `exchange-holidays`).
      A contract roll this week → the active contract from `search_contracts`,
-     and levels from before the roll read with care.
+     and levels from before the roll read with care (`contract-roll`).
 5. `journal_add {kind:"note", contractId, tags:["premarket", "<SYMBOL>"]}` with
    the game plan, then show it.
 
