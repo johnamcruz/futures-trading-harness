@@ -15,12 +15,9 @@ description: Use session and RTH VWAP, the volume profile (POC, value area, high
 
 ## How It Works
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
-skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
-ATR, VWAP, participation, the skip-rule counters in `context`, swings and
-liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
-and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
-doesn't hold.
+In an autonomous cycle the bar briefing (`bar_briefing`, the
+`harness-tools` skill) holds this bar's VWAP, participation and profiles
+(`m3`, `day`): use it, and compute only what it doesn't hold.
 
 1. **VWAP** from market-snapshot: `vwapSession` (anchored 18:00 ET, Globex) and
    `vwapRth` (anchored 09:30 ET).
@@ -30,10 +27,8 @@ doesn't hold.
      targets, or stand aside.
    - Distance from VWAP in ATRs: beyond ~2 × ATR(14) on the trigger timeframe
      is stretched; don't chase.
-2. **Relative volume.** Compare the trigger bar's `v` with the average of the
-   same time-of-day bars over recent sessions (or the opening-range bars). A
-   breakout bar with ≥ 1.5× relative volume has participation; below 1×, treat
-   it as suspect.
+2. **Relative volume**: the participation fields, as computed, are the
+   `momentum-and-volume` skill's.
 3. **Volume profile.** Don't estimate it by hand: market-snapshot's
    `volumeProfile` has three, computed from closed bars
    (`scripts/lib/trading/volume-profile.js`):
@@ -62,8 +57,7 @@ doesn't hold.
 
    It is a bar-based approximation (each bar's volume spread evenly over its
    range), not a tick-level profile. Say so when you cite it.
-4. **Volume climax.** A very large bar after an extended move, with a long wick,
-   often marks exhaustion. Don't enter in its direction.
+4. **Volume climax**: the `absorption` skill.
 
 ## Examples
 

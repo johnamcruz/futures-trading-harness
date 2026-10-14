@@ -1,24 +1,24 @@
 ---
 name: trader-process
-description: The top-down order a trader thinks in - HTF, context, location, setup, confluence, entry, risk, decision, management - and its PLAN block. It adds no filter; the priority order decides. Use every trade cycle.
+description: Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the priority order decides. Every cycle.
 ---
 
 # Trader Process
 
 ## When to Use
 
-- Every trade cycle, and each role for its own steps.
+- Every trade cycle; each role for its steps.
 
 ## How It Works
 
-The ORDER of thinking, nothing more. It adds no filter and no veto:
+It adds no filter and no veto:
 
 - **The priority order decides** (strategy-library, "The priority
   order"): take, skip and size. Only its hard stops and the gate's end a
   plan early.
-- **No setup without a fired strategy.** VWAP, value, levels, the
-  higher timeframes and the bar's broker fields are confluence only: they
-  never make a trade on their own.
+- **No setup without a fired strategy.** VWAP, value, levels, higher
+  timeframes and broker fields are confluence only: they never make a
+  trade on their own.
 - **Management always runs.** Protecting, managing and exiting an open
   position, and the end-of-day flatten, go ahead whatever steps 1-8 say;
   a no-entry window or a wait never blocks an exit or a risk reduction.
@@ -29,25 +29,28 @@ The ORDER of thinking, nothing more. It adds no filter and no veto:
 
 1. **HTF.** The 4h, 1h and 15m trends and structure frame everything
    below. The bias agrees with the gate's `Trend rule:` line; where they
-   differ, the Trend rule wins, and the plan says so.
-2. **Context.** The session window, the news, the regime, and the
-   account (phase 1's Budget and Attempt lines).
-3. **Location.** Price against VWAP, value, the nearest levels, sweeps.
+   differ, the Trend rule wins, and the plan says so. Read: `trend-vs-range`.
+2. **Context.** Window, news, regime, account (phase 1's Budget and
+   Attempt lines).
+3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
+   Read: `levels-and-reactions`, `breakout-vs-fakeout`.
 4. **Setup.** Which strategy fired, which side. Continuation is a strategy
    without `mtf: reversal`, with the Trend rule's prevailing trend;
-   reversal is one with it (a fade, at a level). Its STRATEGY.md and the
-   priority order judge it, not this label.
-5. **Confluence.** Count for, against, neutral: the read for its side,
-   other strategies on the bar, location, the candidate's `values`.
-6. **Entry.** Its trigger fired on a closed bar; never anticipate one.
-7. **Risk.** Stop and size from `order_plan` and the priority order;
-   its exit (target or trail); the room.
+   reversal is one with it (a fade). Its STRATEGY.md and the
+   priority order judge it, not this label. Read: `pullback-vs-reversal`;
+   setups: `mtf-rejection`, `mtf-breakout`.
+5. **Confluence.** Count the six items of `confluence-counting`; the
+   candidate's own `values` are always neutral.
+6. **Entry.** Its trigger fired on a closed bar; never anticipate.
+   Read: `candle-reading`.
+7. **Risk.** Stop and size (`order_plan`, the priority order); its exit
+   (target or trail); the room.
 8. **Decision.** Take, skip or wait, decided with the priority order;
    write its ONE main reason. The counts never overrule it.
 9. **Management.** What invalidates the trade; its exit. Never loosen the
-   stop.
+   stop. Read: `invalidation`.
 
-### Who does which step
+### Roles
 
 | Role | Steps |
 |---|---|
@@ -66,7 +69,7 @@ writes no PLAN line.
 ### The PLAN block
 
 Your reasoning, not a claim list. If your role's instructions give a
-fact-claim line, state facts only there, in its forms. Fields are the bar
+fact-claim line, state facts only there, in its forms. Fields are the
 briefing's (`m3`, `m15`, `h1`, and a `candidate` in `m3.candidates`):
 on your own timeframe's briefing `m3` is its `bar`: take `rule` and the
 candidates from the runner's briefing or the cycle prompt.
@@ -99,7 +102,7 @@ PLAN:
 2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
 4 Setup: vwap_reclaim long continuation
-5 Confluence: for 3, against 0, neutral 1: read aligned, values agree
+5 Confluence: for 4, against 0, neutral 2: aligned, VWAP, level, momentum
 6 Entry: trigger fired
 7 Risk: stop from order_plan, size 1, exit trail, room enough
 8 Decision: take - aligned continuation with room (priority order: full)

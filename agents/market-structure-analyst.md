@@ -2,7 +2,7 @@
 name: market-structure-analyst
 description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show, mcp__harness__bar_briefing
-role-skills: [market-structure, multi-timeframe-analysis, liquidity-concepts, market-snapshot, strategy-library, trader-process, harness-tools]
+role-skills: [market-structure, multi-timeframe-analysis, market-snapshot, strategy-library, trader-process, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, candle-reading, mtf-rejection, mtf-breakout, harness-tools]
 model: inherit
 ---
 
@@ -58,8 +58,10 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `liquidity-concepts`, `market-snapshot`, `strategy-library`, and
-   `harness-tools`.
+   `market-snapshot`, `strategy-library`,
+   `harness-tools`, `trend-vs-range`, `pullback-vs-reversal`,
+   `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
+   `mtf-rejection`, and `mtf-breakout`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 60m (120) and 15m
    (160). One request per timeframe (the rate limit is shared). Run
    `market_snapshot` and `mtf_read` on the 3m file.
