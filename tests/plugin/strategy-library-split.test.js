@@ -199,8 +199,8 @@ test('strategy-library split: the head trader still loads all of the old skill (
   const A = require('../../scripts/lib/autotrader');
   const prompt = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
   // The gate's list, then its parenthetical, then any skill it doesn't require (ALSO_LOAD): "load a, b, and c (the order
-  // gate refuses an entry without them), and d before deciding".
-  const sentence = /load ([^.(]*?)(?: \(the order gate refuses an entry without them\))?(?:, and [^.()]*?)? before deciding/.exec(prompt)[1];
+  // gate refuses an entry without them); also load d before deciding".
+  const sentence = /load ([^.(]*?)(?: \(the order gate refuses an entry without them\))?(?:; also load [^.()]*?)? before deciding/.exec(prompt)[1];
   assert.match(prompt, /\(the order gate refuses an entry without them\)/);
   for (const s of REQUIRED_FOR_ENTRY) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
 });

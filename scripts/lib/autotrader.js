@@ -425,8 +425,10 @@ const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills'
 // The skills an entry needs loaded (the order gate's skills-loaded check, REQUIRED_FOR_ENTRY), then the ones the head
 // trader loads every cycle that the gate does not require (ALSO_LOAD; none yet).
 const ALSO_LOAD = [];
-const andList = xs => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
-const loadList = gated => `${andList(REQUIRED_FOR_ENTRY)}${gated ? ' (the order gate refuses an entry without them)' : ''}${ALSO_LOAD.length ? `, and ${andList(ALSO_LOAD)}` : ''}`;
+const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
+/** The skills a cycle loads, as the prompt names them: "a, b, and c (the order gate refuses an entry without them); also load d and e". */
+const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>
+  `${andList(required)}${gated ? ' (the order gate refuses an entry without them)' : ''}${also.length ? `; also load ${andList(also)}` : ''}`;
 
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 // The outcomes a cycle may report (its result line's first word): the prompt and the autonomous-trading skill list
@@ -826,6 +828,7 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
+  loadList,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

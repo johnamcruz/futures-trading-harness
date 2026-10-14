@@ -1,6 +1,6 @@
 ---
 name: harness-root
-description: Find the harness root, written <root> (the folder with strategies/ and scripts/), from the briefing, FTH_ROOT or the workspace, and write absolute paths.
+description: Find the harness root (<root>) for absolute paths.
 ---
 
 # Harness Root

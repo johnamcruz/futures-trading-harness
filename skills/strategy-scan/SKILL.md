@@ -1,6 +1,6 @@
 ---
 name: strategy-scan
-description: Read a strategy scan, recent fires and a full result - candidates, why not, trend flags, confluence, freshness.
+description: Read strategy scans - candidates, why not, trend flags, confluence.
 ---
 
 # Strategy Scan

@@ -1,6 +1,6 @@
 ---
 name: strategy-gate-checks
-description: What the gate checks of a strategy entry - status, instruments, sessions, leg, trigger age, order consistency, policies, retired lanes.
+description: What the order gate checks of a strategy entry.
 ---
 
 # Strategy Gate Checks

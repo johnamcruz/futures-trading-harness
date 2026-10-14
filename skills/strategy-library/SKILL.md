@@ -1,6 +1,6 @@
 ---
 name: strategy-library
-description: Apply a strategy to a setup (body, trigger, filters, skip rules, stop, tag) and the priority order that takes, skips or sizes it.
+description: Apply a strategy, and the priority order that sizes or skips a setup.
 ---
 
 # Strategy Library
