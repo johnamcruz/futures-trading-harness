@@ -428,8 +428,10 @@ test('the cycle log\'s lookups for the report cache leave out the head trader\'s
   fs.writeFileSync(transcript, [task, own].join('\n'));
   L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'rejection' }, T + 5);
   L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'breakout' }, T + 7);
-  const { lookups } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
+  const { lookups, summary } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
   assert.deepStrictEqual(lookups, [{ at: T + 7, role, skill: 'breakout' }]);
+  // The cycle log's adherence numbers count the role's own lookup only.
+  assert.deepStrictEqual([summary.skillLookups.lookups, summary.skillLookups.byRole], [1, { [role]: 1 }]);
   // What the report cache stores with the analyst's report (report-cache.js recordReports): its own lookup only.
   assert.deepStrictEqual(L.lookupsInCall(lookups, role, call), ['breakout']);
   // Without the session's call in the transcript, both are the role's (the transcript can't show otherwise).
