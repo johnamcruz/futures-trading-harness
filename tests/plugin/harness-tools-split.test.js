@@ -5,8 +5,9 @@
 // head-trader cycle grows).
 //
 //   tool-arguments          how the tools take arguments and paths, what they refuse, `record`; skill_lookup's row
-//   bar-briefing            the bar_briefing, bars_fetch, market_snapshot and mtf_read rows; the blackouts rows (the
+//   bar-briefing            the bar_briefing, bars_fetch, market_snapshot and mtf_read rows; the blackouts_list row (the
 //                           briefing's `news`, and the no-briefing fallback it already names)
+//   news-blackouts          the blackouts_add row and its example call (the skill that builds the day's blackouts)
 //   order-plan, reason-check, prop-challenge-pacing   the order_plan, reason_check and combine_status rows
 //   strategy-tools          the five strategies rows and the scan example (strategy-scan and strategy-library are
 //                           loaded every head-trader cycle, so the rows would grow it there)
@@ -36,11 +37,13 @@ const flat = text => text.replace(/\s+/g, ' ');
 
 const BEFORE = 'tests/fixtures/skill-split/harness-tools.before.txt';
 const BEFORE_SHA256 = '1eb1759e1253d7b9032966b8c73fe73bccbedc22dbe13d26888a9025c6183576';
-const HOMES = ['tool-arguments', 'bar-briefing', 'order-plan', 'reason-check', 'prop-challenge-pacing', 'strategy-tools', 'user-commands'];
+const HOMES = ['tool-arguments', 'bar-briefing', 'news-blackouts', 'order-plan', 'reason-check', 'prop-challenge-pacing', 'strategy-tools', 'user-commands'];
 // The fixture's lines (1-based, inclusive), and single units, each home other than tool-arguments takes;
 // tool-arguments takes every other unit (the intro, the first two When to Use bullets, skill_lookup's row, the rules).
 const MOVED = {
-  'bar-briefing': { lines: [[29, 29], [36, 39], [43, 43], [93, 94], [96, 96], [110, 111]] },
+  'bar-briefing': { lines: [[29, 29], [36, 38], [43, 43], [93, 94], [96, 96], [110, 110]] },
+  // The blackouts_add row and its example call: the skill that builds the day's blackouts (no role holds the tool).
+  'news-blackouts': { lines: [[39, 39], [111, 111]] },
   'order-plan': { lines: [[35, 35], [107, 109]] },
   'reason-check': { lines: [[44, 44], [113, 119]] },
   // The combine_status row and its example call (already prop-challenge-pacing's first example line).
@@ -87,6 +90,10 @@ const ALLOWED = [
   // tool-arguments' When to Use lists what it holds (the rules for calling any tool, skill_lookup's row).
   { old: 'Any time a skill or role needs bars in a file, a strategy scan, indicator numbers, the multi-timeframe read, the news blackouts, the prop attempt\'s state, the journal\'s lessons, or a day\'s reconcile.',
     now: 'Calling any harness tool: its arguments, the paths it reads, what it refuses; skill_lookup\'s row.', reason: 'the When to Use of the skill that holds the general rules, not of every tool' },
+  // The strategy-authoring split (strategy-backtest has the backtest now).
+  { old: 'The one exception is authoring: the `strategy-researcher` role, which the user starts interactively for a new strategy, may run a backtest itself (the `strategy-authoring` skill); no trading role does.',
+    now: 'The one exception is authoring: the `strategy-researcher` role, which the user starts interactively for a new strategy, may run a backtest itself (the `strategy-backtest` skill); no trading role does.',
+    reason: 'the backtest is the strategy-backtest skill\'s since the strategy-authoring split' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
   { old: BRIEFING_CELL, now: m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || '')), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, and the m3 fields in the order briefing.js builds them' },
@@ -212,7 +219,7 @@ const homeOf = tool => SKILLS.filter(s => rowOf(skill(s), tool));
 // Each tool's row: its single home.
 const ROW_HOME = {
   bar_briefing: 'bar-briefing', bars_fetch: 'bar-briefing', market_snapshot: 'bar-briefing', mtf_read: 'bar-briefing',
-  blackouts_list: 'bar-briefing', blackouts_add: 'bar-briefing', order_plan: 'order-plan', reason_check: 'reason-check',
+  blackouts_list: 'bar-briefing', blackouts_add: 'news-blackouts', order_plan: 'order-plan', reason_check: 'reason-check',
   combine_status: 'prop-challenge-pacing', strategies_list: 'strategy-tools', strategies_show: 'strategy-tools',
   strategies_validate: 'strategy-tools', strategies_scan: 'strategy-tools', strategies_recent: 'strategy-tools',
   skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands',

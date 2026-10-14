@@ -1,6 +1,6 @@
 ---
 name: breakout
-description: The breakout setup on any timeframe (3m, 5m, 15m, 60m) - a completed candle closes beyond a key level with acceptance, then a retest holds or displacement continues - what it weighs by timeframe, strongest when a lower timeframe confirms a higher one. Today a read that supports or argues against a strategy that fired at the level, never an entry by itself.
+description: Use when a strategy fired at a key level and a completed candle, on any timeframe, may have closed beyond it. A read, never an entry by itself.
 ---
 
 # Breakout

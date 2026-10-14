@@ -1,6 +1,6 @@
 ---
 name: rejection
-description: The rejection setup on any timeframe (3m, 5m, 15m, 60m) - at a key level, a completed candle trades through and closes back inside - what it weighs by timeframe, strongest when a lower timeframe confirms a higher one. Today a read that supports or argues against a strategy that fired at the level, never an entry by itself.
+description: Use when a strategy fired at a key level and a completed candle, on any timeframe, may have rejected it. A read, never an entry by itself.
 ---
 
 # Rejection

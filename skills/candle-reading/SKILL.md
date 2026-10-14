@@ -38,7 +38,7 @@ rejection of the prior day's high outweighs a 3m one: `rejection`,
   met (`rejected`, `broke`, `touched`), only levels that existed before it
   opened. `unavailable` or missing (5m without 1m bars) is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side.
-- In strategy rules the same candle is `htfd_*` (strategy-authoring).
+- In strategy rules the same candle is `htfd_*` (strategy-rules).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body share |c - o| /
 range; wick shares (h - max(o, c)) / range and (min(o, c) - l) / range;

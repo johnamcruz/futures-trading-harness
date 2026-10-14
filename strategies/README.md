@@ -73,7 +73,7 @@ verify them before any live session.
 
 No strategy needs code. A mechanical trigger is written as `signal: rules`
 with `long:`/`short:` condition lists in the frontmatter (see
-`vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
+`vwap_reclaim/` and the `strategy-rules` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
 `signal: manual` and is judged by the agents from the body. Every shipped
 strategy is rules, including the ported `orb` and `cisd_ote` (a port until version 4, now

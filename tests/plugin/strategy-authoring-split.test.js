@@ -1,0 +1,105 @@
+'use strict';
+
+// The strategy-authoring skill was split by job: strategy-authoring keeps writing the document (the file, the
+// frontmatter keys, the body, porting faithfully, validating, promoting); strategy-rules takes the rules language
+// (conditions, groups, every series); strategy-backtest the backtest, the field study and the bar-source comparison.
+// This test proves nothing was lost or doubled: every sentence (and every table cell and code line) of the skill as
+// it was (tests/fixtures/skill-split/strategy-authoring.before.txt, frozen) is in the new homes exactly as many times
+// as before, byte-for-byte after whitespace is normalised, in its old order within each home. The only exceptions are
+// listed, each with its reason; an exception that no longer differs fails too, so the list can only shrink.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { units, differences } = require('./skill-split');
+const { orderErrors } = require('./skill-split-order');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+// skills/strategy-authoring/SKILL.md as main had it before the split (at e7433091): pinned, so a sentence can't be
+// dropped from the fixture and from its new home together.
+const BEFORE = 'tests/fixtures/skill-split/strategy-authoring.before.txt';
+const BEFORE_SHA256 = '5d89353effc4c6d34069fdbb046d4e2da44fd4767bd44e0b6795a3647bac146f';
+const HOMES = ['strategy-authoring', 'strategy-rules', 'strategy-backtest'];
+
+// Deliberate differences, each with its reason.
+const ALLOWED = [
+  // A pointer to a step that is now another skill.
+  { old: 'Bars the backtester builds from shorter ones, and CSV files, carry no broker fields (step 8 says how to backtest on them).',
+    now: 'Bars the backtester builds from shorter ones, and CSV files, carry no broker fields (the `strategy-backtest` skill says how to backtest on them).',
+    reason: 'step 8 is the strategy-backtest skill' },
+];
+
+const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
+
+test('strategy-authoring split: every unit of the old skill is in exactly one new home, in its old order', () => {
+  const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, BEFORE))).digest('hex');
+  assert.strictEqual(sha, BEFORE_SHA256, 'the fixture is the old skill, unchanged');
+  assert.deepStrictEqual(differences(read(BEFORE), homeTexts(), ALLOWED), []);
+  assert.deepStrictEqual(orderErrors(read(BEFORE), homeTexts(), HOMES, ALLOWED), [], 'moved text keeps its old order in each home');
+  for (const a of ALLOWED) assert.ok(a.reason, a.old);
+});
+
+test('strategy-authoring split: the comparison catches a lost, a doubled, an edited or a reordered sentence', () => {
+  const old = read(BEFORE);
+  const u = units(old);
+  assert.ok(u.length > 100, `the units are fine-grained (${u.length})`);
+  assert.ok(u.includes('Port faithfully.'), 'a short sentence is a unit');
+  assert.ok(u.includes('At most 12 conditions per side.'), 'a sentence is a unit');
+  assert.ok(u.includes('- adx(14) >= 20'), 'a code line is a unit');
+  const homes = homeTexts();
+  const at = name => HOMES.indexOf(name);
+  const swap = (name, text) => homes.map((h, i) => (i === at(name) ? text : h));
+  // A sentence as a pattern that matches it across line breaks.
+  const loose = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+  const S = 'At most 12 conditions per side.';
+  const rules = homes[at('strategy-rules')];
+  assert.match(rules, new RegExp(loose(S)));
+  // Lost, doubled, edited.
+  assert.notDeepStrictEqual(differences(old, swap('strategy-rules', rules.replace(new RegExp(loose(S)), '')), ALLOWED), []);
+  assert.notDeepStrictEqual(differences(old, swap('strategy-backtest', `${homes[at('strategy-backtest')]}\n${S}\n`), ALLOWED), []);
+  assert.notDeepStrictEqual(differences(old, swap('strategy-rules', rules.replace('(n up to 500; adx up to 250)', '(n up to 400; adx up to 250)')), ALLOWED), []);
+  // Reordered: two sentences of one paragraph swapped (nothing lost, the order changed).
+  const A1 = 'A rules strategy with only `long` rules can\'t be used to sell into an entry.';
+  const A0 = S;
+  const pair = new RegExp(`${loose(A0)}\\s+${loose(A1)}`);
+  assert.match(rules, pair);
+  const swapped = rules.replace(pair, `${A1} ${A0}`);
+  assert.deepStrictEqual(differences(old, swap('strategy-rules', swapped), ALLOWED), [], 'a swap loses nothing');
+  assert.notDeepStrictEqual(orderErrors(old, swap('strategy-rules', swapped), HOMES, ALLOWED), [], 'but changes the order');
+  // The changed pointer reverted to its old text (the exception no longer needed) fails: the list only shrinks.
+  assert.notDeepStrictEqual(differences(old, swap('strategy-rules', rules.replace(/the `strategy-backtest` skill says\s+how/, 'step 8 says how')), ALLOWED), []);
+  // A section heading dropped.
+  assert.notDeepStrictEqual(differences(old, swap('strategy-backtest', homes[at('strategy-backtest')].replace('## Examples', '## Example')), ALLOWED), []);
+});
+
+test('strategy-authoring split: each skill has a short "Use when" index line, and strategy-authoring points to the rest', () => {
+  const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+  for (const s of HOMES) {
+    const d = parseFrontmatter(read(`skills/${s}/SKILL.md`)).data.description;
+    assert.ok(d.length <= 160, `${s}: description ${d.length} chars, over 160`);
+    assert.match(d, /^Use when /, s);
+  }
+  const sa = read('skills/strategy-authoring/SKILL.md').replace(/\s+/g, ' ');
+  for (const s of HOMES.slice(1)) assert.match(sa, new RegExp(`the \`${s}\` skill`), `strategy-authoring points to ${s}`);
+  // The workflow keeps the backtest's place: before paper trading (old step 8's own text is in strategy-backtest).
+  assert.match(sa, /8\. Before paper trading, backtest it \(the `strategy-backtest` skill/);
+  // The schema table stays; the language and the backtest left it.
+  assert.match(sa, /\| `signal: policy` \|/);
+  assert.doesNotMatch(sa, /htfd_rejected|crosses_above`, |field-study\.js|compare-bars\.js|backtest\.js --data/);
+  // The roles that read the htfd_* functions point to where they are now.
+  for (const s of ['candle-reading', 'levels-and-reactions']) assert.match(read(`skills/${s}/SKILL.md`), /strategy-rules/, s);
+});
+
+test('strategy-authoring split: the strategy researcher loads what its method uses (the document and the rules language)', () => {
+  const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+  const sr = parseFrontmatter(read('agents/strategy-researcher.md')).data['role-skills'];
+  for (const s of ['strategy-authoring', 'strategy-rules']) assert.ok(sr.includes(s), s);
+  // Backtesting is not in its method (steps 1-6): strategy-authoring's step 8 points to strategy-backtest, which it
+  // loads with its skill tool when a session asks for a backtest.
+  assert.ok(!sr.includes('strategy-backtest'));
+  assert.match(read('skills/strategy-authoring/SKILL.md').replace(/\s+/g, ' '), /the `strategy-backtest` skill/);
+});
