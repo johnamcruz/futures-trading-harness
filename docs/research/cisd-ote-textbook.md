@@ -89,3 +89,72 @@ window, as N1.
 
 To be filled in after the census, below this line, without changing
 anything above it.
+
+**Verdict: nothing survives, and the textbook version scored worse than
+the old port on Train.** No N variant's BH-adjusted p is under 0.05 (all
+0.946) and no interval's lower bound is above zero. The textbook
+`cisd_ote` (N1) lost -0.113R a trade after costs, against the old port's
+-0.001R, and passed no prop attempt, against the port's 8.5%; the 3m-CISD
+and no-sweep variants lost too. Shown these results, the owner chose to
+replace the port with the textbook version anyway (the definition, not
+this score, is the decision). `cisd_ote` stays `paper` until a census and
+the owner promote it.
+
+Census run on 247,635 MNQ 3-minute bars (2021-05-02 to 2023-06-30, ten
+front contracts joined raw, every bar `train` by `roleOf`), as the method
+says. The backtester's data audit flagged 473 missing bars in 109 gaps (the
+largest 97 bars, 2022-11-30) and 18 opens more than 8 ATR from the prior
+close (the rolls and holiday reopenings); nothing was repaired.
+
+Columns: n trades; mean R after costs with its 95% day-block interval;
+profit factor of net dollars (it can exceed 1 while the mean R is
+negative: R weighs every trade the same, dollars weigh the wide stops
+more); win rate (net > 0); trades per Train month; RTH and overnight
+trades with their mean R; long and short; mean R by year; BH-adjusted p
+over N1-N3.
+
+| Variant | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | BH q |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| N1 (shipped) | 277 | -0.113 [-0.253, 0.032] | 1.01 | 34% | 10.7 | 164 / -0.044 | 113 / -0.214 | 117 / -0.010 | 160 / -0.188 | -0.02 / -0.17 / -0.12 | 0.946 |
+| N2 (3m CISD) | 466 | -0.097 [-0.211, 0.020] | 0.93 | 32% | 17.9 | 290 / -0.030 | 176 / -0.208 | 217 / -0.138 | 249 / -0.062 | -0.07 / -0.02 / -0.26 | 0.946 |
+| N3 (no sweep) | 1793 | -0.038 [-0.098, 0.020] | 0.98 | 34% | 69.0 | 393 / -0.052 | 1400 / -0.035 | 856 / -0.003 | 937 / -0.071 | -0.09 / 0.00 / -0.04 | 0.946 |
+| OLD (v3 port, reference) | 1089 | -0.001 [-0.091, 0.090] | 1.03 | 35% | 41.9 | 280 / -0.065 | 809 / 0.021 | 354 / 0.017 | 735 / -0.011 | -0.04 / -0.00 / 0.06 | not in the set |
+
+Exits: N1's trades ended at the 2R target 60 times, at the stop 159 and
+at end of day 58 (median stop 34.75 points: the 15m leg's origin is far
+from a 3m bounce, so a 2R target is often not reached by 15:50 ET). OLD's
+ended on its trail 322 times, at the stop 672 and at end of day 95
+(median stop 22.75 points).
+
+### Prop simulation
+
+N1 and OLD (no N variant survived), each as the only strategy of a `paper`
+copy of `prop_portfolio` (its rulebook's sizing and trail; the trail, not
+the 2R bracket, exits every trade), on the 100K account profile, 106
+attempts of 30 sessions starting every 5 trading days in Train (they
+overlap, so they are not 106 independent tries):
+
+| Variant | pass | blow | timeout | median sessions to pass | average profit | trades per attempt | expectancy (R) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| N1 | 0% (0) | 0% | 100% | - | -$634 | 13.8 | -0.146 |
+| OLD | 8.5% (9) | 0% | 91.5% | 9 | $26 | 48.1 | 0.014 |
+
+No blows (the sizing protects the account), and no pass rate near the 40%
+the promotion gate asks for.
+
+### What it says, read with care
+
+- The textbook rules trade about a quarter as often as the port (10.7
+  against 41.9 a month) and did worse on Train; neither has an edge after
+  costs. The port's mean is zero, not positive.
+- Requiring the key-level sweep (N1 against N3) cut trades by 85% and did
+  not raise the mean: on this definition the sweep is not the filter it
+  is taught as. A hypothesis for a next round, not a finding: the sweep
+  window (from the run's start) is narrow, and the levels (prior RTH,
+  overnight in RTH, prior session) are three of many a trader would use.
+- Overnight trades are the worst part of N1 and N2 (-0.21R); RTH alone is
+  near zero (N1 -0.044R on 164, N2 -0.030R on 290). Post hoc, with no
+  interval or test: where a next round might look, nothing more.
+- N1's shorts (-0.19R) did worse than its longs (-0.01R) over a period
+  that rose then fell; the code is symmetric (tests/lib/cisd.test.js), so
+  this is the sample, not the rules.

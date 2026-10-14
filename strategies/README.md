@@ -26,7 +26,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | Strategy | Signal | Status |
 |---|---|---|
 | `orb` | opening range breakout | active |
-| `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
+| `cisd_ote` | Textbook CISD on 15m after a key sweep + 3m bounce from the OTE zone (rewritten from the port, version 4) | paper |
 | `vwap_reclaim` | rules (written in Markdown) | active |
 | `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | active |
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | active |
@@ -76,15 +76,16 @@ with `long:`/`short:` condition lists in the frontmatter (see
 `vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
 `signal: manual` and is judged by the agents from the body. Every shipped
-strategy is rules, including the two ported strategies (`orb`, `cisd_ote`). Zone logic the
-rules can't spell out (cisd_ote) is a series the rules use (`cisd_ote_dir`).
+strategy is rules, including the ported `orb` and `cisd_ote` (a port until version 4, now
+the textbook CISD + OTE). Zone logic the rules can't spell out (cisd_ote's) is a series the
+rules use (`cisd_entry(15)`, scripts/lib/trading/cisd.js).
 
-The ports' rules trade exactly as the original bot's detectors do:
+The port's rules trade exactly as the original bot's detector does:
 `tests/lib/parity.test.js` checks every signal and stop against the original bot's
 own output on its data (and the retired ports' rules, kept as test
 fixtures, against theirs). `orb` trades the New York session, as its
 source does, and (a harness filter, not in the source) only in trend and
-transition regimes; `cisd_ote` has no `sessions`, `regimes`, or
+transition regimes; `cisd_ote` (paper since version 4) has no `sessions`, `regimes`, or
 `filters`, and the runner's sessions and end of day decide when it trades. To adapt one, add
 `regimes:` (or a filter) in a copy, and backtest both (`scripts/backtest.js`, see
 docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
@@ -102,6 +103,9 @@ contract), or skipped, and every trade exits by its trail.
   crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout) on
   NQ, ES, YM, and RTY (micros or
   minis), one `topstep_100k` attempt and one position at a time across them.
+  A paper one among them (cisd_ote, since version 4) stays paper: the policy
+  doesn't trade it live until it is promoted; it still counts toward
+  confluence and conflict in the scan.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
   A policy strategy trades one timeframe.
 

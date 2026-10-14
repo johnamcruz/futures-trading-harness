@@ -173,7 +173,7 @@ strategy loses, add one where it works.
 ```text
 strategies/
   orb/STRATEGY.md            opening range breakout
-  cisd_ote/STRATEGY.md       CISD + fib zone
+  cisd_ote/STRATEGY.md       CISD + OTE bounce (paper)
   vwap_reclaim/STRATEGY.md   VWAP reclaim, active
   ofi/STRATEGY.md            1m order-flow imbalance, active
   ofi_absorption/STRATEGY.md 1m absorption reversal, active
@@ -186,8 +186,9 @@ strategies/
 ```
 
 Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The two ported strategies (`orb`, `cisd_ote`)
-reproduce its signals bar for bar (`tests/lib/parity.test.js`). Four
+rules`); none is code. The ported `orb` reproduces its signals bar for bar
+(`tests/lib/parity.test.js`); `cisd_ote`, a port until version 4, is now the
+textbook CISD + OTE (paper; docs/research/cisd-ote-textbook.md). Four
 strategies (`bos`, `keltner`, `ema_cross`, `supertrend`) were retired on
 2026-10-13 (`strategies/README.md`, "Retired strategies"); the indicators
 and structure breaks they read stay in the briefing as confluence.
@@ -247,8 +248,9 @@ rules:
 To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
-`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. Two bundled
-strategies (`orb`, `cisd_ote`) are ported from an earlier Python trading bot.
+`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. One bundled
+strategy (`orb`) is ported from an earlier Python trading bot; `cisd_ote` was,
+until its textbook rewrite.
 
 ## What's inside
 
