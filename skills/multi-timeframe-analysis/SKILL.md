@@ -16,8 +16,9 @@ the day's bias (`daily-bias`), reading the labels from HTF to LTF
 
 ## When to Use
 
-- Every trade plan, before risk-manager phase 1: is this setup with the
-  higher timeframes, a pullback inside them, or against them?
+- Every trade plan, before risk-manager phase 1: each timeframe's trend, and
+  whether the trend rule allows the side (with them, a pullback or against
+  them: `htf-to-ltf`).
 
 ## How It Works
 
