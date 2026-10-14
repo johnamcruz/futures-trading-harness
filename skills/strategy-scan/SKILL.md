@@ -94,7 +94,7 @@ as candidates when in session; you evaluate their trigger from the body.
 ## Examples
 
 ```text
-strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2 (a candidate)
+strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)
 strategies_scan on 15m bars → no strategy trades 15m; it lists 1m and 3m → fetch 3m bars and scan those, not "no setup".
 strategies_scan name orb → filtersFailed ["mtf: ..."], mtf.longAllowed false → a trend long against the prevailing trend: never a candidate.
 ```

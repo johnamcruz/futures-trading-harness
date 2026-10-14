@@ -59,9 +59,10 @@ const STRUCTURE = ['When to Use', 'How It Works', 'Examples'];
 // Deliberate differences, each with its reason. An entry is { old, now?, copies?, reason }, as in the broker-mcp split.
 const ALLOWED = [
   // A truth fix in moved text (pre-existing): orb's `risk.min_rr` is 2 (strategies/orb/STRATEGY.md), and the scan's
-  // summary prints the stop in points, whole ticks and one contract's dollars (harness-tools/compact.js candidateLine).
+  // summary prints the stop in points, whole ticks and one contract's dollars, then the exit and the confluence, in full
+  // (harness-tools/compact.js candidateLine; orb's exit trails from 2R giving back 0.5R).
   { old: 'strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5 (a candidate)',
-    now: 'strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2 (a candidate)',
+    now: 'strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)',
     reason: 'the example as the scan prints it, with orb\'s own min R:R' },
 ];
 
