@@ -92,9 +92,9 @@ function parseTrigger(text) {
 
 const fires = (trigger, m3) => TRIGGERS[trigger.key].test(m3 || {}, trigger.value);
 const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
-/** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 /** Every situational skill marked for the head trader: what an entry needs when the cycle's facts can't be read. */
 const headSituationalSkills = (table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
+/** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
 const MAX_BYTES = 50 * 1024 * 1024;
 

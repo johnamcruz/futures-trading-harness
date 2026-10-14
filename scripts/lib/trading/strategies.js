@@ -577,7 +577,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
   return null;
 }
 
-module.exports = { withStyle,
+module.exports = {
   RETIRED,
   retiredNote,
   retiredCopies,
@@ -591,6 +591,7 @@ module.exports = { withStyle,
   loadStrategyFile,
   loadStrategies,
   scan,
+  withStyle,
   checkStrategyForOrder,
   componentRefusal,
   tradesRoot,
