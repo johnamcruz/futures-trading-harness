@@ -211,6 +211,33 @@ test('retired-lane is a hard rule: FTH_ORDER_GATE_SKIP=retired-lane does not ski
   }
 });
 
+test('retired-lane: an entry naming no known strategy is checked against every lane of its contract, even with the strategy check skipped', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
+  const home = trendHome();
+  const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy,setup-tag' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  const order = rationale => evaluateOrder({ input: entryOrder({ rationale }), entries: [plan()], now: NOW, config: skipping, strategies });
+  const tags = ['setup:nosuch long, stop 21480', 'setup:orb long, stop 21480', 'long, stop 21480 (no tag)'];
+  // No lane marked: nothing to refuse here (the skipped checks stay skipped).
+  for (const t of tags) assert.ok(!order(t).violations.some(v => v.check === 'retired-lane'), t);
+  // Another contract's lane marked: not this one's.
+  writeSignals(home, buildSignals([], { symbol: 'MES', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW, retiredLane: ['bos'] }));
+  for (const t of tags) assert.ok(!order(t).violations.some(v => v.check === 'retired-lane'), t);
+  // This contract's 1m lane marked (no strategy here trades 1m): every entry with no known strategy is refused.
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:59:00.000Z' }, stepMs: 60000, now: NOW, retiredLane: ['bos'] }));
+  for (const t of tags) {
+    const v = order(t).violations.find(x => x.check === 'retired-lane');
+    assert.ok(v, t);
+    assert.match(v.message, /names no known strategy, so no timeframe of its own, and the runner's 1m lane lists bos \(retired on 2026-10-13/);
+  }
+  // A known strategy on another timeframe (fx_orb, 3m) is checked on its own lane only, as before.
+  assert.ok(!order('setup:fx_orb long, stop 21480').violations.some(v => v.check === 'retired-lane'));
+  // An exit is never held.
+  const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the long', stopLossBracket: undefined }), entries: [], now: NOW, config: skipping, strategies });
+  assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
+});
+
 test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;

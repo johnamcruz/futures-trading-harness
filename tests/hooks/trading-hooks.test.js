@@ -471,6 +471,14 @@ test('order gate: an entry tagged with a retired strategy is refused, saying so;
   const skipped = gate(orderPayload(ORDER), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane' });
   assert.strictEqual(skipped.code, 2);
   assert.match(skipped.stderr, /\[retired-lane\]/);
+  // An unknown or retired name has no timeframe of its own: with the strategy check skipped, the lane still refuses it.
+  for (const tag of ['nosuch', 'bos']) {
+    const unknown = gate(orderPayload({ ...ORDER, rationale: `setup:${tag} long, stop 21480` }), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' });
+    assert.strictEqual(unknown.code, 2, tag);
+    assert.doesNotMatch(unknown.stderr, /\[strategy\]/, tag);
+    assert.match(unknown.stderr, new RegExp(`\\[retired-lane\\] setup:${tag} names no known strategy, so no timeframe of its own, and the runner's 3m lane lists keltner`), tag);
+  }
+  assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }).code, 0, 'exits still go');
 });
 
 test('order gate fails closed on malformed input', () => {

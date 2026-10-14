@@ -872,10 +872,11 @@ strategy." No gradual demotion: every strategy document goes, and
 `strategies/trade_lifecycle` is the only one. The harness places no entries
 between the deletion and composed's proof ("we won't trade until this is
 done and perfected"); the gate refuses any entry naming a deleted strategy
-(`strategies.js:562-566`), which is failing closed. Exits and protection
-return before every entry check (`order-gate.js:247`) and keep working
-throughout; the runner's exit management (`runner.js:405-424`,
-`exitPlan`) keeps a position's exit until it closes.
+(`strategies.js` `checkStrategyForOrder`), which is failing closed. Exits
+and protection return before every entry check (`order-gate.js`
+`evaluateOrder`, its first line) and keep working throughout; the runner's
+exit management (`runner.js`, `exitPlan`) keeps a position's exit until it
+closes.
 
 **Deleted documents.** Every folder under `strategies/`: `cisd_ote`,
 `crt_1h`, `crt_4h`, `ofi`, `ofi_absorption`, `orb`, `prop_flow_1m`,
@@ -883,9 +884,10 @@ throughout; the runner's exit management (`runner.js:405-424`,
 `vwap_reclaim`, except `prop_portfolio`, which stays as the account layer
 with no components (the owner, 2026-10-14; section 3.7). Done on
 2026-10-14: the ten rules strategies and `prop_flow_1m` are deleted and
-named in `RETIRED` (an entry or config naming one is refused, saying so),
-and `prop_flow_1m`'s rulebook entry went with it. `_template` and
-`README.md` are rewritten for `signal: composed` with `trade_lifecycle`.
+listed in `strategies/retired.json` (an entry or config naming one is
+refused, saying so), and `prop_flow_1m`'s rulebook entry went with it.
+Still to do, with `trade_lifecycle` in phase C: `_template` and
+`README.md` rewritten for `signal: composed`.
 
 **Kept as facts** (they feed the briefing, the candle facts or the
 snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
@@ -901,7 +903,7 @@ snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
 |---|---|---|
 | `trading/rules.js` | The rule compiler and evaluator | `readField`, `causalLevels`, `sideValuesText` (the briefing uses them, `briefing.js:92`) |
 | `trading/crt.js` | Its rule-only parts | The detector, now a fact |
-| `trading/strategies.js` | `scan` (`:471`), `recentSignals` (`:500`), `withConfluence` (`:526`), `RETIRED`, the policy component check (`:368-391`), `componentRefusal` (`:545`) | The loader, the validator, `withRulebook` (`:285`) for `prop_portfolio` |
+| `trading/strategies.js` | `scan`, `recentSignals`, `withConfluence`, `RETIRED`, the policy component check (in the validator), `componentRefusal` | The loader, the validator, `withRulebook` for `prop_portfolio` |
 | `trading/signal-state.js` | The trigger and retired-lane logic, the candidates in the record | The per-bar record the runner writes every bar and `lastRecordedBar` (`signal-state.js:202-209`), which `verdictBarProblem` needs (`prop-state.js:403-404`); bar timing (`sameBar`, `barMs`, `prop-state.js:21`) |
 | `trading/skills-loaded.js:66-76` (`SITUATIONAL`), `trading/skill-lookups.js:96-102, 119` | Triggers on `m3.candidates` and the signal record's setups | Rekeyed on the composed record's reads and skills (a `rejected` setup read requires `rejection`, any `ok` record `confluence-counting` and `invalidation`), in phase C. Until then no entry is possible, so no lookup is required |
 | `prop/trade-stream.js:35` (`scan`), `prop/evaluate-run.js:17` (`backtest/run.js`) | Building combine attempts from strategy scans | A trade stream from replay fills into `prop/attempts.js`, built before `scan` and `run.js` go, since the promotion gate (D9) evaluates on it |
