@@ -19,10 +19,7 @@ Whether price is more likely up or down today, from the higher timeframes
 Without `daily` the highest timeframe is the 4-hour: the alignment is then
 judged from it, and the plan says "no daily read". Fetch the daily bars once
 a session (premarket) and reuse the file; if the fetch fails, go on without
-them rather than retrying. The alignment and the
-trend rule in a trade plan are the briefing's (intraday frames); a daily
-read, if you have one (premarket's), is context only, never a second
-alignment.
+them rather than retrying.
 
 ### The bias
 

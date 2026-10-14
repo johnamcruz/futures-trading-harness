@@ -31,10 +31,11 @@ const HOMES = ['multi-timeframe-analysis', 'daily-bias', 'htf-to-ltf', 'timefram
 // Each moved home and the fixture's units it takes (units(BEFORE) indices, inclusive ranges); every other unit stays
 // in multi-timeframe-analysis (HOMES[0]).
 const MOVED = {
-  // When to Use's premarket line, the daily fallback and fetch, the daily as context, the bias score, the daily swings.
-  'daily-bias': [[4, 4], [29, 30], [35, 35], [81, 81], [87, 87]],
-  // When to Use's disagreement line, "Read the alignment" (table, policy ceiling, reversals), "Levels flow down".
-  'htf-to-ltf': [[6, 6], [63, 80], [82, 85], [88, 88]],
+  // When to Use's premarket line, the daily fallback and fetch, the bias score, the daily swings.
+  'daily-bias': [[4, 4], [29, 30], [81, 81], [87, 87]],
+  // When to Use's disagreement line; a plan's alignment is the briefing's, the daily only context (in the skill the head
+  // trader loads every cycle, not daily-bias); "Read the alignment" (table, policy ceiling, reversals); "Levels flow down".
+  'htf-to-ltf': [[6, 6], [35, 35], [63, 80], [82, 85], [88, 88]],
   // "Get the bars" and its table, "Run the read" (briefing fields, mtf_read calls, the bars path), the briefing levels.
   'timeframe-sources': [[8, 28], [31, 34], [36, 39], [86, 86]],
   // "In rules (mechanical strategies)".
@@ -156,22 +157,32 @@ test('multi-timeframe-analysis split: each skill has a short "Use when" index li
   assert.match(read('commands/mtf.md').replace(/\s+/g, ' '), /Use the `multi-timeframe-analysis` skill for: \$ARGUMENTS \(with the `htf-to-ltf` skill for each side's alignment, and `timeframe-sources` for the bars\)/);
 });
 
-/** The skills trade-session step 0 tells the head trader to load every cycle (its backticked skill names). */
-function headTraderLoads() {
-  const ts = read('skills/trade-session/SKILL.md');
-  const step0 = ts.slice(ts.indexOf('### 0. Load the skills'), ts.indexOf('### 1.'));
-  const names = [...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]).filter(n => fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md')));
-  return [...new Set(names)];
+/**
+ * The skills trade-session step 0 tells the head trader to load every cycle, by its instructions: the gated three
+ * ("Before any decision, load `a`, `b`, and `c`"), "Load `trader-process` too", and each "Load `<skill>` every cycle".
+ */
+function headTraderLoads(tradeSession) {
+  const step0 = tradeSession.slice(tradeSession.indexOf('### 0. Load the skills'), tradeSession.indexOf('### 1.')).replace(/\s+/g, ' ');
+  const out = [];
+  const gated = /Before any decision, load ([^.]*?) with the skill tool\./.exec(step0);
+  if (gated) out.push(...[...gated[1].matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]));
+  for (const m of step0.matchAll(/Load `([a-z][a-z-]+)` (?:too|every cycle)\b/g)) out.push(m[1]);
+  return [...new Set(out)];
 }
 
 test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cycle, so it still reads the alignment rule', () => {
-  const loads = headTraderLoads();
+  const ts = read('skills/trade-session/SKILL.md');
+  const loads = headTraderLoads(ts);
   for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_ENTRY, 'trader-process', 'htf-to-ltf']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
-  // Every unit of the old alignment section (the table, the policy ceiling) and its reversal paragraph is in a skill the
-  // head trader loads every cycle.
+  // Every unit of the old alignment section (the table, the policy ceiling), its reversal paragraph, and the rule that
+  // a plan's alignment is the briefing's (never the daily) is in a skill the head trader loads every cycle.
   const old = units(read(BEFORE));
   const loaded = new Set(loads.flatMap(s => units(read(`skills/${s}/SKILL.md`))));
-  for (let i = 63; i <= 83; i++) if (i !== 81) assert.ok(loaded.has(old[i]), `the head trader reads: ${old[i]}`);
+  for (const i of [35, ...Array.from({ length: 21 }, (_, k) => 63 + k).filter(i => i !== 81)]) assert.ok(loaded.has(old[i]), `the head trader reads: ${old[i]}`);
+  // Self-test: the instruction, not the name, counts; step 0 saying never to load it fails.
+  const never = ts.replace(/Load `htf-to-ltf` every cycle as\s+well/, 'Never load `htf-to-ltf`');
+  assert.notStrictEqual(never, ts);
+  assert.ok(!headTraderLoads(never).includes('htf-to-ltf'), '"Never load `htf-to-ltf`" is not a load');
 });
 
 test('multi-timeframe-analysis split: the market-structure analyst loads what its body uses; others point to the new homes', () => {

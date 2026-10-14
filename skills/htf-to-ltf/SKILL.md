@@ -14,6 +14,10 @@ trigger timeframe the entry (each frame's trend: `multi-timeframe-analysis`).
 
 ## How It Works
 
+The alignment and the trend rule in a trade plan are the briefing's (intraday
+frames); a daily read, if you have one (premarket's), is context only, never a
+second alignment.
+
 ### 1. Read the alignment
 
 From the highest timeframe down, for each side:
