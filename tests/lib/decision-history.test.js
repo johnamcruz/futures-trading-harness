@@ -73,15 +73,51 @@ test('what happened since: ticks moved, and a skipped setup\'s +1R or -1R first 
   assert.strictEqual(D.outcome({ ...skip('long'), side: undefined, action: 'no-trade' }, market(up, 2)[0]), 'since +8t');
 });
 
-test('what happened since an entry: its R now, stopped at -1R, or closed at a later flatten of the symbol', () => {
-  const entry = { at: at(0), symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: t(0), price: 100, tick: 0.25, action: 'entered', setup: 'orb', side: 'long', stop: 4, result: 'CYCLE RESULT: executed - orb long' };
-  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 101, 99, 101), bar(2, 101, 103, 100.5, 103), bar(3, 103, 103, 95, 95.5)];
-  assert.match(D.historyLines([entry], market(bars, 2))[0], /entered orb long @100: orb long; since \+12t, now \+0\.8R$/);
-  assert.match(D.historyLines([entry], market(bars, 3))[0], /; since -18t, stopped -1R$/);
-  const flat = { at: at(2), symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: t(2), price: 103, tick: 0.25, action: 'flattened', result: 'CYCLE RESULT: flattened - target zone' };
-  const lines = D.historyLines([entry, flat], market(bars, 3));
-  assert.match(lines[0], /; since \+12t, flattened \+0\.8R$/);
-  assert.match(lines[1], /^10:09 MNQ 3m flattened @103: target zone; since -30t$/);
+// An open trade as open-trades.js builds it from the broker's position.
+const openTrade = (over = {}) => ({ contractId: 'MNQ', side: 'long', sign: 1, entry: 94, risk: 10, initialStop: 84, stop: 84, target: null, rNow: 0.2, openedAt: new Date(T0 + STEP + 20000).toISOString(), ...over });
+const enteredAt0 = (over = {}) => ({ at: at(0), symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: t(0), price: 100, tick: 0.25, contract: 'MNQ', action: 'entered', setup: 'orb', side: 'long', stop: 4, result: 'CYCLE RESULT: executed - orb long', ...over });
+
+test('an entry\'s outcome is its real position: R from the fill while it is open, never "stopped" while the broker lists it', () => {
+  // Decision close 100, fill 94, initial stop 84 (1R = 10): a low of 89.5 is no stop while the position is open.
+  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 100, 89.5, 96)];
+  const h = D.withPositions([enteredAt0()], { trades: [openTrade({ rNow: 0.2 })], known: true, now: new Date(asOf(1) + 5000), market: market(bars, 1) });
+  assert.deepStrictEqual([h[0].trade.state, h[0].trade.fill, h[0].trade.risk], ['open', 94, 10]);
+  assert.match(D.historyLines(h, market(bars, 1))[0], /entered orb long @100: orb long; since -16t, open from 94, now \+0\.2R$/);
+  // Not yet matched to a position: said so, no R from the decision's price.
+  assert.match(D.historyLines([enteredAt0()], market(bars, 1))[0], /; since -16t, no position seen$/);
+  // An account that could not be read closes nothing.
+  const kept = D.withPositions(h, { trades: [], known: false, now: new Date(asOf(2)), market: market(bars, 1) });
+  assert.strictEqual(kept[0].trade.state, 'open');
+});
+
+test('an entry the runner closed by its trail reads the runner\'s R, not the initial stop a later bar went through', () => {
+  // The reviewer's case: a 2R/0.5R trail exits at +2R; a later bar falls through the initial stop.
+  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 125, 99, 120), bar(2, 120, 121, 80, 82)];
+  const open = D.withPositions([enteredAt0()], { trades: [openTrade({ rNow: 2.6, stop: 114 })], known: true, now: new Date(asOf(1) + 5000), market: market(bars, 1) });
+  const closes = { MNQ: { at: new Date(asOf(1) + 60000).toISOString(), r: 2 } };
+  const closed = D.withPositions(open, { trades: [], known: true, now: new Date(asOf(2) + 5000), market: market(bars, 2), closes });
+  assert.deepStrictEqual([closed[0].trade.state, closed[0].trade.r], ['closed', 2]);
+  const line = D.historyLines(closed, market(bars, 2))[0];
+  assert.match(line, /; since -72t, closed \+2R by the runner's exit$/);
+  assert.doesNotMatch(line, /stopped|now/);
+  // Closed by its working stop (a bracket fill): the stop's R from the fill; by its target likewise.
+  const atStop = D.withPositions(open, { trades: [], known: true, now: new Date(asOf(2) + 5000), market: market(bars, 2) });
+  assert.match(D.historyLines(atStop, market(bars, 2))[0], /closed \+2R at its stop$/);
+  const tgt = D.withPositions([enteredAt0()], { trades: [openTrade({ rNow: 0.6, stop: 84, target: 124 })], known: true, now: new Date(asOf(0) + 5000), market: market(bars, 0) });
+  const hit = D.withPositions(tgt, { trades: [], known: true, now: new Date(asOf(1) + 5000), market: market(bars, 1) });
+  assert.match(D.historyLines(hit, market(bars, 1))[0], /closed \+3R at its target$/);
+  // Gone with neither (a flatten by the agent): closed, no R guessed.
+  const flat = D.withPositions(tgt, { trades: [], known: true, now: new Date(asOf(0) + 9000), market: market(bars, 0) });
+  assert.match(D.historyLines(flat, market(bars, 0))[0], /closed$/);
+  // A closed entry stays closed; a new position on the root is never claimed by it.
+  const again = D.withPositions(closed, { trades: [openTrade({ openedAt: new Date(asOf(2) + 30000).toISOString() })], known: true, now: new Date(asOf(3)), market: market(bars, 2) });
+  assert.strictEqual(again[0].trade.state, 'closed');
+});
+
+test('a failed journal read after an executed cycle: details unavailable, no setup guessed from the scan', () => {
+  const e = D.decisionEntry({ at: at(0), symbols: ['MNQ'], result: 'CYCLE RESULT: executed - orb long', items: [item(0, 100, { scan: [fired('keltner', 'short', 2)] })], journalFailed: true });
+  assert.deepStrictEqual([e.action, e.setup, e.side, e.details], ['entered', undefined, undefined, 'unavailable']);
+  assert.match(D.historyLines([e], [])[0], /^10:03 MNQ 3m entered \(details unavailable\) @100: orb long; no position seen$/);
 });
 
 test('no look-ahead: a bar closing after this cycle\'s bar never changes the lines, whatever the list holds', () => {
@@ -157,13 +193,12 @@ test('ten decisions stay small: one compact line each, the block within 1,200 ch
   for (const l of D.historyLines(history, market(bars, 12))) assert.ok(l.length <= 160, l);
 });
 
-test('review fixes: an entry that worked first is not "stopped"; its target closes it; a short\'s R; string order sides', () => {
-  const long = { at: at(0), symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: t(0), price: 100, tick: 0.25, action: 'entered', setup: 'orb', side: 'long', stop: 2, result: 'CYCLE RESULT: executed - orb long' };
-  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 105, 99.5, 104), bar(2, 104, 104, 97, 97.5)];
-  assert.match(D.historyLines([long], market(bars, 2))[0], /; since -10t, best \+2\.5R, then the initial stop -1R$/);
-  assert.match(D.historyLines([{ ...long, target: 4 }], market(bars, 2))[0], /; since -10t, target \+2R$/);
-  const short = { ...long, side: 'short' };
-  assert.match(D.historyLines([short], market([bar(0, 99, 100, 99, 100), bar(1, 100, 100.5, 98.5, 99)], 1))[0], /; since -4t, now \+0\.5R$/);
+test('review fixes: a short position\'s R from its fill; string order sides', () => {
+  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 100.5, 98.5, 99)];
+  const short = D.withPositions([enteredAt0({ side: 'short' })], { trades: [openTrade({ side: 'short', sign: -1, entry: 100, risk: 2, stop: 102, rNow: 0.5 })], known: true, now: new Date(asOf(1) + 5000), market: market(bars, 1) });
+  assert.match(D.historyLines(short, market(bars, 1))[0], /; since -4t, open from 100, now \+0\.5R$/);
+  // A long position is not the short entry's.
+  assert.strictEqual(D.withPositions([enteredAt0({ side: 'short' })], { trades: [openTrade()], known: true, now: new Date(asOf(1)), market: market(bars, 1) })[0].trade, undefined);
   // The interface's place_order sides ('buy' | 'sell') and the take-profit bracket.
   const entries = [{ ts: at(0), kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb MNQ sell 1', data: { request: { side: 'sell', stopLossBracket: { ticks: 8 }, takeProfitBracket: { ticks: 16 } }, result: { success: true } } }];
   const e = D.decisionEntry({ at: at(0), symbols: ['MNQ'], result: 'CYCLE RESULT: executed - orb short', items: [item(0, 100)], entries });
@@ -181,15 +216,12 @@ test('review fixes: outcomes stop at the decision\'s trading day and contract; a
   assert.deepStrictEqual(D.historyLines([e], [{ ...m[0], contractId: 'MNQ:H27' }]), ['10-07 15:48 MNQ 3m skipped orb long @100: late']);
 });
 
-test('review fixes: a manage or flatten names no setup and the symbol its reason names; a flatten of that symbol closes its entry', () => {
+test('review fixes: a manage or flatten names no setup and the symbol its reason names', () => {
   const mes = { ...item(1, 5000, { scan: [fired('orb', 'long', 2)] }), symbol: 'MES', contractId: 'MES' };
   const f = D.decisionEntry({ at: at(1), symbols: ['MES', 'MNQ'], result: 'CYCLE RESULT: flattened - MNQ cut', items: [mes, item(1, 103)] });
   assert.deepStrictEqual([f.symbol, f.action, f.setup, f.price], ['MNQ', 'flattened', undefined, 103]);
   const m = D.decisionEntry({ at: at(1), symbols: ['MNQ'], result: 'CYCLE RESULT: managed - trailed the long', items: [item(1, 103, { scan: [fired('keltner', 'short', 2)] })] });
   assert.deepStrictEqual([m.action, m.setup, m.side], ['managed', undefined, undefined]);
-  const entry = { at: at(0), symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: t(0), price: 100, tick: 0.25, contract: 'MNQ', action: 'entered', setup: 'orb', side: 'long', stop: 4, result: 'CYCLE RESULT: executed - orb long' };
-  const bars = [bar(0, 99, 100, 99, 100), bar(1, 100, 103, 99.5, 103), bar(2, 103, 103, 90, 91)];
-  assert.match(D.historyLines([entry, f], market(bars, 2))[0], /flattened \+0\.8R$/);
 });
 
 test('review fixes: an earlier cycle\'s order placed after this bar closed (a cycle that overran) is not this cycle\'s entry', () => {
@@ -207,11 +239,7 @@ test('review fixes: an earlier cycle\'s order placed after this bar closed (a cy
   assert.deepStrictEqual([n.symbol, n.setup], ['MNQ', 'keltner']);
 });
 
-test('review fixes: an earlier day\'s open trade reads "by day end", and no-trades never collapse across trading days', () => {
-  const day1 = '2026-10-07T19:33:00.000Z'; // 15:33 ET
-  const e = { at: '2026-10-07T19:36:05.000Z', symbols: ['MNQ'], symbol: 'MNQ', tf: 3, bar: day1, price: 100, tick: 0.25, action: 'entered', setup: 'orb', side: 'long', stop: 5, result: 'CYCLE RESULT: executed - orb long' };
-  const bars = [{ t: day1, o: 100, h: 100, l: 100, c: 100 }, { t: '2026-10-07T19:36:00.000Z', o: 100, h: 100.5, l: 99.5, c: 100.5 }, bar(0, 90, 91, 89, 90)];
-  assert.match(D.historyLines([e], market(bars, 0))[0], /; since \+2t, by day end \+0\.1R$/);
+test('review fixes: no-trades never collapse across trading days', () => {
   const nt = ts => ({ at: ts, symbols: ['MNQ'], symbol: 'MNQ', tf: 3, action: 'no-trade', result: 'CYCLE RESULT: no-trade - nothing fired' });
   assert.strictEqual(D.historyLines([nt('2026-10-07T19:57:05.000Z'), nt(at(0)), nt(at(1))], market([], 1)).length, 2);
 });
