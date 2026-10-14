@@ -50,8 +50,7 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
   `mtf: reversal`): never enter against the prevailing trend, and wait while
   the 4h has fewer than 3 completed candles. With no trend on any of the three,
   both sides are open.
-- **Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`,
-  `ofi_absorption`, `value_area_reentry`): may fade it. That is their setup, a raid at a
+- **Reversal strategies** (`mtf: reversal`): may fade it. That is their setup, a raid at a
   higher-timeframe level; when they do, the priority order (strategy-library,
   step 2) decides them: level, size, target.
 
@@ -99,10 +98,9 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
 Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 
--> Longs are a pullback: wait for a 3m shift up (a BOS up, then a long setup such as vwap_reclaim), target the 1h swing high.
-   Shorts are counter: a 3m orb short is refused (scan and gate); only a
-   crt_1h raid of the 1h high could short (the priority order, step 2, decides it:
-   level, size, target).
+-> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.
+   Shorts are counter: a trend strategy's short is refused (scan and gate); a composed
+   short needs a 15m or 1h CHoCH down (the priority order, step 2).
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)

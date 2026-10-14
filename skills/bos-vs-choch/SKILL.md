@@ -66,11 +66,11 @@ developing.
 ## Examples
 
 ```text
-Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago. Read: the pullback ended.
-  vwap_reclaim long fired. Priority order: aligned, room -> take.
+Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
+  Reads: 1h bos up, at vwap rth, 3m choch up. Priority order: aligned, room -> take.
 Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50. Read: a 3m pullback, not a reversal.
-  vwap_reclaim short; the priority order (step 4, counter) decided skip.
+  A short: no 15m or 1h CHoCH down; the priority order (step 2) decided skip.
 Loser: 1h up; m3, then 15m CHoCH down through 21560.00. Read: reversal developing.
-  crt_1h short at 21548.75, stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
+  short at 21548.75 (15m choch down), stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
   a 15m CHoCH up through 21562.50: the CHoCH failed, price resumed. -34 ticks, -$17.00.
 ```

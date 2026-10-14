@@ -28,12 +28,12 @@ rules:
 ```
 
 The ported strategies keep their source's rules (parity); try a filter in a
-copy (e.g. `strategies/orb_mtf/`) and compare the two with
+copy (e.g. `strategies/<name>_mtf/`) and compare the two with
 `scripts/backtest.js`.
 
 ## Examples
 
 ```text
-orb      long at 21500.25, stop 21490.25 (40 ticks, $20.00 per MNQ), 4h DOWN
-orb_mtf  same bar: mtf_bias(240) >= 0 fails -> no trade; compare both with scripts/backtest.js
+<name>      long at 21500.25, stop 21490.25 (40 ticks, $20.00 per MNQ), 4h DOWN
+<name>_mtf  same bar: mtf_bias(240) >= 0 fails -> no trade; compare both with scripts/backtest.js
 ```

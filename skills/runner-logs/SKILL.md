@@ -27,5 +27,5 @@ score, not yours to edit). The cycle's log
 ## Examples
 
 ```text
-orb didn't fire at 10:33 ET -> logs/scans-<day>.jsonl, the 10:30 bar's record
+<name> didn't fire at 10:33 ET -> logs/scans-<day>.jsonl, the 10:30 bar's record
 ```

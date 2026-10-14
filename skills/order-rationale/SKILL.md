@@ -33,10 +33,10 @@ description: Writing an order's rationale the gate reads - the entry line (setup
 ## Examples
 
 ```text
-place_order {accountId, contractId:"MNQ", side:"buy", type:"market", size:1,
-  stopLossBracket:{ticks:40, type:"stop"}, takeProfitBracket:{ticks:80, type:"limit"},
-  rationale:"setup:orb long close above OR high 21500.00, stop 21490.00, target 21520.00, risk $20"}
+place_order {accountId, contractId:"MNQ", side:"buy", type:"limit", limitPrice:21540.25,
+  size:1, stopLossBracket:{ticks:111, type:"stop"}, takeProfitBracket:{ticks:231, type:"limit"},
+  rationale:"setup:trade_lifecycle long, stop 21512.50, target 21598.00, risk $55.50"}
 
-place_order {..., side:"sell", type:"stop", size:1, stopPrice:21490.00,
-  rationale:"[protect] stop for ORB long filled at 21500.25"}
+place_order {..., side:"sell", type:"stop", size:1, stopPrice:21512.50,
+  rationale:"[protect] long filled at 21540.25"}
 ```

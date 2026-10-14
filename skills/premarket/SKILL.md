@@ -51,7 +51,7 @@ description: Read-only game plan for the day, placing no orders. Use at the star
 ```text
 MNQ premarket 18:05 ET for the trading day 2026-10-08: daily range
 20900-21700, 1h uptrend, PDH 21640 / PDL 21480, settlement 21610. CPI 08:30
-tomorrow (blackout 08:25-08:40 ET). In play: vwap_reclaim (trend only) and value_area
-10:00-15:00 ET; orb in ny only (ADX gate). Avoid crt_1h longs below PDH. Budget
+tomorrow (blackout 08:25-08:40 ET). In play: composed longs with the 1h trend,
+10:00-15:00 ET; shorts only with a 15m or 1h CHoCH down; no longs into the PDH. Budget
 $40/trade, $160/day; stop after 2 losses.
 ```

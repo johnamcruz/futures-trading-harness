@@ -61,11 +61,11 @@ edge. The OTE bounce after a CISD showed no edge on Train either
 ```text
 Take: bullish leg 21478.25 -> 21530.25; ote 21489.25-21498.00 (mid 21493.50);
   a 3m bar to 21492.50 closes 21500.25 above the zone: bounced, after V 1.9x into the zone
-  with little progress (absorption). crt_1h long
-  fired with it. Priority order: aligned -> take.
+  with little progress (absorption). Reads: 15m cisd up, 15m in ote,
+  3m close top. Priority order: aligned -> take.
 Skip: bearish leg 21560.00 -> 21500.00, price 21520.00 = 0.333, not in the
-  zone (21537.25-21547.50); no candle closed back. No setup without a fired strategy.
-Loser: vwap_reclaim long at 21494.75, stop 21477.25 (17.50 pts = 70 ticks, $35.00 on 1 MNQ);
+  zone (21537.25-21547.50); no candle closed back, no close read yet. Priority order (step 1): skip.
+Loser: long at 21494.75, stop 21477.25 (17.50 pts = 70 ticks, $35.00 on 1 MNQ);
   inside the zone, the next 3m bar closed through the origin: -70 ticks, -$35.00.
   The touch was not a bounce; the stop held it to 1R.
 ```

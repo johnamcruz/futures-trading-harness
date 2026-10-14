@@ -58,9 +58,9 @@ pause (`pullback-vs-reversal`), not a range day.
 
 ```text
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10, crosses 1); BOS up 2 bars ago. Read: trend.
-  orb long fired. Priority order: aligned, room -> take.
+  Reads: 1h up, regime trend-up, 3m bos up. Priority order: aligned, room -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.
-  vwap_reclaim long; the priority order (step 4, mixed) decided skip.
-Loser: read trend; orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ);
+  Reads: regime transition, read long mixed; the priority order (contradicting facts) decided skip.
+Loser: read trend; long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ);
   CHoCH down, stopped: -17 ticks, -$8.50. A right read gives odds, not a promise.
 ```

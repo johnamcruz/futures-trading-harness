@@ -58,7 +58,7 @@ description: Use at the end of each session, from /eod, or at the runner's end-o
 ## Examples
 
 ```text
-EOD 2026-10-08: flat, 0 working orders. 3 trades (orb +2.0R, vwap_reclaim -1.0R,
-orb +0.1R scratch), net +$11.30 after fees, 0 rule breaks, 1 blocked order
-(time-window). Lesson: none (sample too small). Focus: orb only before 10:30.
+EOD 2026-10-08: flat, 0 working orders. 3 trades (trade_lifecycle +2.0R, -1.0R,
++0.1R scratch), net +$11.30 after fees, 0 rule breaks, 1 blocked order
+(time-window). Lesson: none (sample too small). Focus: the 15m rejection reads only before 10:30.
 ```

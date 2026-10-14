@@ -55,7 +55,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    cycles, and once one succeeds the next cycles carry the plan; on very
    short bars, such as 1-minute, a retry rarely fits between cycles, so a
    failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the
-   "day:" line; outside RTH the "overnight" line), each fired strategy's track
+   "day:" line; outside RTH the "overnight" line), each fired rules strategy's track
    record (a `paper` one is marked: plan it only), and each open trade's state
    (setup, initial risk, stop, target, R now, best and worst): the
    `trade-session` skill says how to weigh them. Times are New York time. A
@@ -147,7 +147,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
 ## Examples
 
 ```text
-CYCLE RESULT: no-trade - orb fired but relative volume 0.8x (skip rule)
+CYCLE RESULT: no-trade - compose_check: 3m momentum up false (volume 0.8x)
 CYCLE RESULT: managed - MNQ long from 21503.25 (1R 5.25), peak 21515.75 (+2.38R); runner trailed the stop to 21513.00 (+1.86R)
 CYCLE RESULT: blocked - [loss-streak] cooldown 18 min
 ```

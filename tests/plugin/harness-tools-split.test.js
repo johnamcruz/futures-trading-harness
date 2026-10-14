@@ -120,6 +120,44 @@ const ALLOWED = [
   { old: '`day` (YYYY-MM-DD), `timeframe`?, `json`?', reason: 'reconcile\'s arguments: its MCP schema' },
   { old: 'the day\'s signals against what was traded', reason: 'what reconcile returns: its MCP description' },
 ];
+
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "`strategies.js plan <bars> --symbol MNQ --strategy orb --side long [--account-id 7]`",
+    to: "`strategies.js plan <bars> --symbol MNQ --strategy <name> --side long [--account-id 7]`",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none",
+    to: "<name> long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "cisd_ote | paper | 3m | - | no | no rule set fired (long: cisd_entry(15) > 0; short: cisd_entry(15) < 0)",
+    to: "<other> | paper | 3m | - | no | no rule set fired",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "strategies_scan {\"bars\": \"/home/u/.futures-trading-harness/bars/MNQ-3m.json\", \"symbol\": \"MNQ\", \"name\": \"orb\"}",
+    to: "strategies_scan {\"bars\": \"/home/u/.futures-trading-harness/bars/MNQ-3m.json\", \"symbol\": \"MNQ\", \"name\": \"<name>\"}",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "→ orb's full result as JSON",
+    to: "→ its full result as JSON",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "order_plan {\"bars\": \"/home/u/.futures-trading-harness/bars/MNQ-3m.json\", \"symbol\": \"MNQ\", \"strategy\": \"vwap_reclaim\", \"side\": \"long\", \"accountId\": 7}",
+    to: "order_plan {\"bars\": \"/home/u/.futures-trading-harness/bars/MNQ-3m.json\", \"symbol\": \"MNQ\", \"strategy\": \"<name>\", \"side\": \"long\", \"accountId\": 7}",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "→ vwap_reclaim long: 1 MNQ at market (entry ref 21503.25) | stop 21498.00, below the entry: 5.25 pts = 21 ticks ($10.50/MNQ contract), stopLossBracket.ticks 21 | target 21513.75 (2R): 42 ticks, takeProfitBracket.ticks 42 | risk $10.50 = 1 x 21 ticks x $0.50/tick (before fees) | size 1: the minimum; no account budget sizes a rules strategy (position-sizing: size 1 until the setup has 30+ reviewed trades)",
+    to: "→ <name> long: 1 MNQ at market (entry ref 21503.25) | stop 21498.00, below the entry: 5.25 pts = 21 ticks ($10.50/MNQ contract), stopLossBracket.ticks 21 | target 21513.75 (2R): 42 ticks, takeProfitBracket.ticks 42 | risk $10.50 = 1 x 21 ticks x $0.50/tick (before fees) | size 1: the minimum; no account budget sizes a rules strategy (position-sizing: size 1 until the setup has 30+ reviewed trades)",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "place_order arguments: {\"accountId\":7,\"contractId\":\"MNQ\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":21,\"type\":\"stop\"},\"takeProfitBracket\":{\"ticks\":42,\"type\":\"limit\"},\"rationale\":\"setup:vwap_reclaim long at market from 21503.25 (the signal bar's close), stop 21498.00 (21 ticks), target 21513.75 (42 ticks), 1 MNQ risks $10.50\"}",
+    to: "place_order arguments: {\"accountId\":7,\"contractId\":\"MNQ\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":21,\"type\":\"stop\"},\"takeProfitBracket\":{\"ticks\":42,\"type\":\"limit\"},\"rationale\":\"setup:<name> long at market from 21503.25 (the signal bar's close), stop 21498.00 (21 ticks), target 21513.75 (42 ticks), 1 MNQ risks $10.50\"}",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+  { from: "- orb short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room no-trade (VWAP (rth) at 0.4R before the 2R it needs); ...",
+    to: "- <name> short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room no-trade (VWAP (rth) at 0.4R before the 2R it needs); ...",
+    reason: "every rules strategy is retired (strategies/retired.json): the tool examples name a placeholder <name>, not a retired strategy (fix/skills-stale-examples)" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
 const DROPPED = new Set(ALLOWED.filter(a => !a.copies && !a.now).map(a => a.old));
 
 /** The old units each home must hold: Map home -> Map unit -> count (tool-arguments takes every unit not moved). */
@@ -381,4 +419,8 @@ test('trade-session step 4 is main\'s, byte for byte (in trade-plan); the head t
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const prompt = prompts(validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
   assert.doesNotMatch(prompt, /order-plan/);
+});
+
+test('harness-tools-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

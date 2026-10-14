@@ -12,7 +12,7 @@ The fractal read: the higher timeframes give the side and the level, the
 ## When to Use
 
 - Price is coming into a key level and a setup may form there.
-- Checking a fired strategy's setup against the higher timeframes.
+- Checking a composed setup's reads against the higher timeframes.
 
 ## How It Works
 
@@ -27,8 +27,7 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3. **3m/5m: the trigger.** A completed candle closing the setup's way, with
-   momentum (`candle-reading`, `momentum-and-volume`). A fired strategy is
-   the entry.
+   momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
 4. **Where the idea is wrong.** Beyond the reaction's LTF structure
    (`invalidation`): check that the strategy's stop sits beyond it.
 5. **Where it aims.** The next HTF swing (`m3.swingTargets`);

@@ -15,8 +15,8 @@ description: Use when writing a strategy's `rules` and the series they read.
 Write mechanical triggers as `rules`, not code. Every item in a side
 must hold (AND); an item can be a group, `any: [...]` (one of them holds,
 OR) or `all: [...]` (every one), nested three deep, so one strategy can take
-two setups or two confirmations (see `value_area`: a POC rejection or
-breakout, confirmed by a broker field or expansion). The scan shows each
+two setups or two confirmations (a POC rejection or breakout, confirmed by
+a broker field or expansion). The scan shows each
 group's `parts`, so you can see which branch held.
 
 ### Conditions and series
@@ -43,7 +43,7 @@ higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
 `htfc_low(60) < htf_low(60)` says this hour swept the last hour's low.
 `crt_dir(m) crt_risk(m) crt_target(m)` are the Candle Range Theory sweep
 detector on m-minute candles (one setup per candle, tuned by the
-`crt*` params; see `crt_1h`). `mtf_bias(m)` is the m-minute trend as of
+`crt*` params). `mtf_bias(m)` is the m-minute trend as of
 the last m-minute candle completed before the bar (1 up, -1 down, 0 range;
 the `multi-timeframe-analysis` skill): `mtf_bias(240) >= 0` keeps a long
 out of a 4-hour downtrend.
@@ -137,7 +137,7 @@ that doesn't exist yet (indicator warm-up, no opening range yet) makes the
 condition false and the scan marks it `missing`. At most 12 conditions per
 side. A rules strategy with only `long` rules can't be used to sell into an
 entry. `validate` reports typos, unknown keys and series. Only a pattern the
-rules can't express (multi-bar zone logic like cisd_ote's) needs `manual` or
+rules can't express (multi-bar zone logic) needs `manual` or
 a new series in `scripts/lib/trading/rules.js` (with tests), used from the
 rules like `cisd_entry(15)`.
 

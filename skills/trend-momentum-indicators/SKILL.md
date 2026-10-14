@@ -56,11 +56,10 @@ regime (trend, range or transition, by the code's rule) is the
 ## Examples
 
 ```text
-3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. The
-regime-gated trend strategies (orb, value_area_breakout, vwap_reclaim) are
-gated off.
+3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars: metrics of a weak
+trend; the regime itself is `m3.regime.primary` (`trend-vs-range`).
 
 3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → expansion:
-a trend setup's long (orb, value_area_breakout) has momentum behind it;
-check that strategy's skip rules.
+a long's `3m momentum up` read has trend strength behind it (ADX has no
+side).
 ```

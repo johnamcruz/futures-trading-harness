@@ -1,22 +1,19 @@
 ---
 name: breakout
-description: Use when a strategy fired at a key level and a completed candle, on any timeframe, may have closed beyond it. A read, never an entry by itself.
+description: Use when a completed candle, on any timeframe, may have closed beyond a key level - the setup read. A read, never an entry by itself.
 ---
 
 # Breakout
 
 ## When to Use
 
-- A strategy fired at a key level, and the plan asks whether a completed
-  candle accepted price beyond it, on any timeframe (trader-process step 4).
+- Price is at a key level, and the plan asks whether a completed candle
+  accepted price beyond it, on any timeframe (trader-process step 4).
 
 ## How It Works
 
-**Today it is a read, not a trigger.** The order gate allows an entry
-only when a strategy fired on the bar. This setup supports, or argues
-against, a strategy that fired at the level (`orb`, `value_area_breakout`,
-`crt_1h`, `crt_4h`); a dedicated detector strategy for it is coming. It
-is never a reason to enter without a fired strategy.
+**A setup read, not an entry by itself.** It is stated with the other
+steps' reads and `compose_check` verifies them (`trade_lifecycle`).
 
 A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are
@@ -53,11 +50,9 @@ By PLAN step:
    that holds (a pullback: `pullback-vs-reversal`), with a rejection candle
    there (preferred), or a continuation displacement. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
-   low (high for a short); the stop is the strategy's
-   (`candidate.stopPoints`, `order_plan`): check it sits there
-   (`invalidation`). Aim for the next swing (`m3.swingTargets`); the room to
-   the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3's;
-   the target and exit stay the strategy's.
+   low (high for a short): the stop read names it (`invalidation`). Aim for
+   the next swing (`m3.swingTargets`); the room to the next level
+   (`inTheWay`) is step 3's.
 - **9 Manage**: a close back inside the level means the breakout failed:
    invalidation. A CHoCH against the trade on its timeframe or higher
    (`bos-vs-choch`) is one too.
@@ -73,10 +68,11 @@ positive on 38 trades, interval straddling zero. Not a finding.
 
 ```text
 Take: at the prior RTH high 21615.00, 1h and 15m up: on the 15m close a body beyond, close 21624.75
-  (top third); on the 3m close a retest low 21615.75 held with a hammer. orb long fired. Priority order -> take.
-Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (no acceptance);
-  value_area_breakout long fired; candidate.inTheWay session VAH at 0.5R. Priority order (step 3, room): skip.
+  (top third); on the 3m close a retest low 21615.75 held with a hammer. Reads: 1h up, above prior rth
+  high, 15m broke prior rth high up, 3m close top, stop 3m low 21615.75. Priority order -> take.
+Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (touched, no broke
+  read); the session VAH 0.5R in the way. Priority order (step 3, room): skip.
 Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a
-  retest held. orb long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
+  retest held. long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   a 15m close back inside at 21611.00. -34 ticks, -$17.00.
 ```

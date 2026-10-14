@@ -17,9 +17,9 @@ With the harness tools (`strategy-tools`):
 
 ```text
 strategies_list {}                       name, status, signal, instruments
-strategies_show {"name": "orb"}          the full STRATEGY.md
+strategies_show {"name": "<name>"}       the full STRATEGY.md
 strategies_scan {"bars": "<bars file>", "symbol": "MNQ"}                 summary: candidates, then a line per strategy
-strategies_scan {"bars": "<bars file>", "symbol": "MNQ", "name": "orb"}   one strategy's full result
+strategies_scan {"bars": "<bars file>", "symbol": "MNQ", "name": "<name>"}   one strategy's full result
 strategies_list {"json": true}           machine-readable
 strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fired on each of the last 5 bars
 ```
@@ -27,7 +27,7 @@ strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fi
 `recent` answers the skip rules about recent signals ("fired the other way
 in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
 a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
-fire, and cisd_ote's `cisd(15)`: the CISD level, the leg, the zone, the stop
+fire, and a `cisd(15)` detector's: the CISD level, the leg, the zone, the stop
 and the swept level.
 
 `strategies_scan` judges sessions at the current time (the harness clock: a
@@ -60,9 +60,8 @@ units are in the strategy's own document (`strategies_show`); never guess them. 
 market-snapshot with each strategy's `params`, and a full result reports:
 `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`: the trend-following strategies,
-`orb`, `value_area_breakout` and `vwap_reclaim`, never trade a range, and the order gate refuses
-their entries there too), `confluence` (on a strategy
+`inRegime` (fits the strategy's `regimes`: a trend-following one never trades a
+range, and the order gate refuses its entries there too), `confluence` (on a strategy
 that fired: the other strategies on its timeframe that fired the same side,
 `with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
 1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
@@ -80,5 +79,5 @@ as candidates when in session; you evaluate their trigger from the body.
 ## Examples
 
 ```text
-strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)
+strategies_scan → <name> long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)
 ```
