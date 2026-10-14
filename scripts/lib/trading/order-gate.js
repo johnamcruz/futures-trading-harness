@@ -24,7 +24,7 @@ const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
-const { checkTrigger, retiredLaneRefusal } = require('./signal-state');
+const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny } = require('./signal-state');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
@@ -279,6 +279,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   }
   // Hard rules, outside the skippable checks: the prop challenge's account and policy.
   const named = setup && strategies ? strategies.find(x => x.name === setup[1].toLowerCase()) : null;
+  // Hard rule: an entry naming no known, valid strategy (an unknown or retired name, or none) has no timeframe of its
+  // own, so it is checked against every lane of its contract: the skippable `strategy` check is not its only refusal.
+  if (strategies && !(named && named.valid !== false)) {
+    const anyLane = retiredLaneRefusalAny(config.home, { root: contractRoot(input.contractId), label: setup ? setup[1].toLowerCase() : null });
+    if (anyLane) violations.push({ check: 'retired-lane', message: anyLane });
+  }
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.

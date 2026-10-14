@@ -55,7 +55,7 @@ function homeBrokers(home, brokers, { broker = Object.keys(brokers)[0], env = nu
 
 /**
  * The shipped prop_portfolio's document with the fixture components (fx_break, fx_cross by default) and `active`:
- * it lists none and is on paper since its components retired (2026-10-14), so a test of the policy code gives it some.
+ * it lists none since its components retired (2026-10-14; it stays active, so it enters nothing), so a test of the policy code gives it some.
  */
 function withComponents(doc, components = ['fx_break', 'fx_cross']) {
   if (!/^strategies: \[[^\]\n]*\]/m.test(doc) || !/^status: \w+/m.test(doc)) throw new Error('prop_portfolio has no strategies list or status');

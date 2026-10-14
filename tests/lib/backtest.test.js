@@ -744,3 +744,35 @@ test('micros and minis: a policy strategy run sizes in micros, trades minis by i
   assert.deepStrictEqual(micro.trades, alone.trades);
   assert.ok(micro.trades.every(t => ['stop', 'target', 'trail', 'eod', 'end', 'blow', 'daily_limit', 'max_bars'].includes(t.reason)), [...new Set(micro.trades.map(t => t.reason))].join());
 });
+
+test('backtest: a level target the fill leaves under min_rr is not traded (fx_value_area_reentry, min_rr: 2)', () => {
+  // A balanced day-1 RTH session gives the prior value area; day 2 opens below it and closes back inside twice.
+  const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
+  const { profileSeries } = require('../../scripts/lib/trading/volume-profile');
+  const s = loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area_reentry');
+  assert.ok(s && s.risk.min_rr === 2 && s.exit.target && !s.exit.target_r, 'the fixture trades a level target with min_rr 2');
+  const S = 180000;
+  const bar = (ms, o, c, v = 100) => ({ t: new Date(ms).toISOString(), o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v });
+  const DAY1 = Date.UTC(2026, 9, 7, 13, 30); // 09:30 ET, 2026-10-07 (UTC-4)
+  const DAY2 = DAY1 + 864e5;
+  const bars = [bar(DAY1 - S, 100, 100)];
+  for (let k = 0; k < 130; k += 1) {
+    const c = 100 + 40 * Math.sin(k / 6) * (k % 2 ? 1 : 0.3);
+    bars.push(bar(DAY1 + k * S, bars[bars.length - 1].c, c, 100 + Math.round(200 * Math.exp(-((c - 100) ** 2) / 200))));
+  }
+  for (let k = 0; k < 30; k += 1) bars.push(bar(DAY2 - (30 - k) * S, 0, 0));
+  const p = profileSeries(bars, 'prior_rth').profile.at(-1);
+  assert.ok(p && p.val < p.poc && p.poc < p.vah, 'day 1 has a value area');
+  const v = p.val;
+  // Overnight below value, then 09:30 opens under it and two closes come back inside.
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, v - 3, v - 3)));
+  bars.push(bar(DAY2, v - 2, v + 1), bar(DAY2 + S, v + 1, v + 2));
+  const ev = createEvaluator(bars);
+  const fired = bars.map((b, i) => ev.at(s, i, { describe: false })).filter(r => r.direction);
+  assert.strictEqual(fired.length, 1, 'the setup fires once');
+  // The next bar opens so far up that the value area high is under 2R from the fill.
+  const gapTo = p.vah - 1.5 * fired[0].stopDistance;
+  const run = extra => runEngine([{ symbol: 'MNQ', bars: [...bars, ...extra], tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, window: 100 }).trades; // a short warm-up: these bars start a day before
+  assert.strictEqual(run([bar(DAY2 + 2 * S, gapTo, gapTo)]).length, 0, 'gapped under 2R: skipped');
+  assert.strictEqual(run([bar(DAY2 + 2 * S, v + 2, v + 2.5), bar(DAY2 + 3 * S, v + 2.5, p.vah + 1)]).length, 1, 'a normal fill trades');
+});

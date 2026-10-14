@@ -68,7 +68,30 @@ function retiredLaneRefusal(home, { root, strategy, timeframe }) {
   if (!home || !timeframe) return null;
   const rec = readSignals(home, root, timeframe);
   if (!rec || rec.error || !Array.isArray(rec.retiredLane) || !rec.retiredLane.length) return null;
-  return `setup:${strategy} trades ${timeframe} bars, and the runner's ${timeframe} lane lists ${rec.retiredLane.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. To trade on ${timeframe} again, remove the retired name from the runner config's lanes (or the lane) and restart the runner: its start clears this mark.`;
+  return laneMessage(`setup:${strategy} trades ${timeframe} bars`, timeframe, rec.retiredLane);
+}
+
+const laneMessage = (lead, timeframe, names) => `${lead}, and the runner's ${timeframe} lane lists ${names.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. To trade on ${timeframe} again, remove the retired name from the runner config's lanes (or the lane) and restart the runner: its start clears this mark.`;
+
+/**
+ * The same check for an entry that names no known, valid strategy (`label`: its setup tag, or null), which so has no
+ * timeframe of its own: refused while any of `root`'s records (one per lane timeframe) carries the mark. Only the
+ * `strategy` check refuses such an entry otherwise, and that one can be skipped. A message, or null.
+ */
+function retiredLaneRefusalAny(home, { root, label }) {
+  if (!home) return null;
+  let files;
+  try { files = fs.readdirSync(path.join(home, 'signals')); } catch (_err) { return null; }
+  const prefix = `${familyRoot(root)}-`;
+  const timeframes = files.filter(f => f.startsWith(prefix) && /^\d+m\.json$/.test(f.slice(prefix.length)))
+    .map(f => f.slice(prefix.length, -'.json'.length)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  for (const timeframe of timeframes) {
+    const rec = readSignals(home, root, timeframe);
+    if (rec && !rec.error && Array.isArray(rec.retiredLane) && rec.retiredLane.length) {
+      return laneMessage(`${label ? `setup:${label}` : 'This entry'} names no known strategy, so no timeframe of its own`, timeframe, rec.retiredLane);
+    }
+  }
+  return null;
 }
 
 /**
@@ -209,4 +232,4 @@ function lastRecordedBar(home, root, timeframe) {
   return { bar: rec.asOf, timeframe: tf };
 }
 
-module.exports = { candidateTrendRule, retiredLaneRefusal, syncRetiredMarks, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
+module.exports = { candidateTrendRule, retiredLaneRefusal, retiredLaneRefusalAny, syncRetiredMarks, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
