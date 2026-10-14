@@ -36,8 +36,10 @@ doesn't hold.
    strategies).
 2. (The file is the broker's `get_bars` JSON; a CSV file works too. The
    tools read only JSON and CSV.)
-3. Call the harness tool `market_snapshot` with the file and the contract
-   root (`symbol`: the volume profile's levels then come on its tick):
+3. Call the harness tool `market_snapshot` with the file. The volume
+   profile's levels come on the contract's tick: the root a harness bars
+   file is named for (`MNQ-3m.json`, as the runner and `bars_fetch` name
+   them), or `symbol` for a file named otherwise:
 
    ```text
    market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "symbol": "MNQ"}
@@ -73,9 +75,10 @@ doesn't hold.
      bars). Each: `poc`, `vah`, `val`, `price` (above, inside, or below
      value), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low
      volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of
-     them (`hvn`, `lvn`). With `symbol` the levels are on its tick; without
-     it they are to two decimals and fall between ticks: round to `tickSize`
-     before using one as an order price. Bar-based: say so.
+     them (`hvn`, `lvn`). On the contract's tick (as in the briefing) for a
+     harness bars file or with `symbol`; otherwise to two decimals, between
+     ticks: round to `tickSize` before using one as an order price.
+     Bar-based: say so.
    - `day` (RTH only, else null): the open against the prior RTH day
      (`openVs`: inside the prior value area, outside value inside the range,
      or outside the range), the `gap` from the prior close, the `openType`

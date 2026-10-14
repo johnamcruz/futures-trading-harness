@@ -47,6 +47,15 @@ function onTick(x, tick) {
 }
 
 /**
+ * A computed level (a volume profile's POC, value area or node) as the model is shown it: to the cent first, as the
+ * snapshot computes it and every distance and R is taken from it, then onto the tick. One rule wherever a level is
+ * shown (the briefing, market_snapshot, the prompt's day line), so a level never shows two prices.
+ */
+function levelOnTick(x, tick) {
+  return Number.isFinite(x) ? onTick(Math.round(x * 100) / 100, tick) : null;
+}
+
+/**
  * Micro and mini contracts on the same underlying (same price, same tick size;
  * the mini is worth `ratio` micros: 10, or 5 for silver). Bars are the family's; a trade picks one.
  */
@@ -104,4 +113,4 @@ function selectedLeg(root, symbols) {
   return symbols.find(x => x === f.micro || x === f.mini) || null;
 }
 
-module.exports = { CONTRACT_SPECS, FAMILIES, specFor, tickOf, onTick, familyOf, familyRoot, parseSelection, selectionOf, selectedSymbols, selectedLeg };
+module.exports = { CONTRACT_SPECS, FAMILIES, specFor, tickOf, onTick, levelOnTick, familyOf, familyRoot, parseSelection, selectionOf, selectedSymbols, selectedLeg };

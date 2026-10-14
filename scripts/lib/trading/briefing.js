@@ -71,7 +71,7 @@ const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
-const { familyRoot, tickOf, onTick } = require('./contracts');
+const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { sideTarget } = require('./order-plan');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText } = require('./rules');
@@ -160,8 +160,9 @@ const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
 function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null }) {
-  // A price level the model reads, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't list).
-  const level = x => (grid ? onTick(x, grid) : round2(x));
+  // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
+  // list). Display only: room, R and every other decision input are computed from the unrounded levels.
+  const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -220,8 +221,9 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     [`VWAP (${applies || 'session'})`, round2(vwapRef)],
     ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low], ['prior RTH close', (lv.priorRth || {}).close],
     ['overnight high', (lv.overnight || {}).high], ['overnight low', (lv.overnight || {}).low],
-    ['prior VAH', prior.vah], ['prior VAL', prior.val], ['prior POC', prior.poc],
-    ['session VAH', sess.vah], ['session VAL', sess.val], ['session POC', sess.poc],
+    // The profile's levels (row centers, off the tick) carry their shown price, on the tick.
+    ['prior VAH', prior.vah, level(prior.vah)], ['prior VAL', prior.val, level(prior.val)], ['prior POC', prior.poc, level(prior.poc)],
+    ['session VAH', sess.vah, level(sess.vah)], ['session VAL', sess.val, level(sess.val)], ['session POC', sess.poc, level(sess.poc)],
     ['last 3m swing high', st.lastSwingHigh], ['last 3m swing low', st.lastSwingLow],
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
@@ -257,8 +259,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         context: snap.context ? omit(snap.context, ['volVsAvg60', 'session']) : null,
         referenceStop: snap.referenceStop ? { distance: round2(snap.referenceStop.distance), long: round2(snap.referenceStop.long), short: round2(snap.referenceStop.short) } : null,
         swings: { high: st.lastSwingHigh, highAt: st.lastSwingHighAt, low: st.lastSwingLow, lowAt: st.lastSwingLowAt },
-        // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), open fair value gaps.
-        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs },
+        // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), fair value gaps open and partly filled.
+        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
@@ -278,8 +280,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // Today so far and the developing levels: they move bar by bar.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
-        sessionProfile: sess.poc ? { poc: level(sess.poc), vah: level(sess.vah), val: level(sess.val), hvnAbove: sess.hvnAbove, hvnBelow: sess.hvnBelow, lvnAbove: sess.lvnAbove, lvnBelow: sess.lvnBelow } : null,
-        priorProfileNodes: prior.poc ? { hvnAbove: prior.hvnAbove, hvnBelow: prior.hvnBelow, lvnAbove: prior.lvnAbove, lvnBelow: prior.lvnBelow } : null,
+        sessionProfile: sess.poc ? { poc: level(sess.poc), vah: level(sess.vah), val: level(sess.val), hvnAbove: level(sess.hvnAbove), hvnBelow: level(sess.hvnBelow), lvnAbove: level(sess.lvnAbove), lvnBelow: level(sess.lvnBelow) } : null,
+        priorProfileNodes: prior.poc ? { hvnAbove: level(prior.hvnAbove), hvnBelow: level(prior.hvnBelow), lvnAbove: level(prior.lvnAbove), lvnBelow: level(prior.lvnBelow) } : null,
         // Where price is against the levels.
         location: {
           priorValue: where(price, prior.val, prior.vah), sessionValue: sess.poc ? where(price, sess.val, sess.vah) : null,
@@ -335,7 +337,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const up = r.direction === 'long';
   // Its own three nearest levels in its direction, in its own R (its stop): the first is the one in its way.
   const ahead = merge(levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a)), tick).slice(0, 3)
-    .map(([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
+    .map(([name, p, shown]) => ({ name, price: shown ?? p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
   const exit = r.exit || {};
   const inTheWay = R > 0 ? ahead[0] || null : null;
   // Its target: a level target's distance (the scan's targetDistance), else targetR x its stop.
@@ -403,9 +405,10 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
   const closedAt = new Date(Date.parse(last.t) + minutes * 60000);
-  // The contract's tick (contracts.js): the volume profile's levels are given on it.
+  // The contract's tick (contracts.js): the volume profile's levels are shown on it. The snapshot stays unrounded
+  // (the room, R and every decision input read it); computeSections rounds only what it shows.
   const grid = tickOf(symbol);
-  const snap = snapshot({ bars, tickSize: grid });
+  const snap = snapshot({ bars });
   const read = mtfRead(bars);
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
@@ -437,12 +440,15 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
 }
 
-/** Levels within a tick of each other, as one with the names joined (sorted nearest first; the first price kept). */
+/**
+ * Levels within a tick of each other, as one with the names joined (sorted nearest first; the first price kept).
+ * A level is [name, price, shown?]: `shown` is its price as displayed (on the tick), never used for a distance.
+ */
 function merge(sorted, tick = 0.25) {
   const out = [];
-  for (const [name, p] of sorted) {
+  for (const [name, p, shown] of sorted) {
     const same = out.find(([, q]) => Math.abs(q - p) <= tick + 1e-9);
-    if (same) { if (!same[0].split(' / ').includes(name)) same[0] = `${same[0]} / ${name}`; } else out.push([name, p]);
+    if (same) { if (!same[0].split(' / ').includes(name)) same[0] = `${same[0]} / ${name}`; } else out.push([name, p, shown]);
   }
   return out;
 }
@@ -451,7 +457,7 @@ function merge(sorted, tick = 0.25) {
 function nearest(price, oneR, levels, tick = 0.25) {
   const pick = above => merge(levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
     .sort(([, a], [, b]) => (above ? a - b : b - a)), tick).slice(0, 3);
-  const one = ([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
+  const one = ([name, p, shown]) => ({ name, price: shown ?? p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
   return { above: pick(true).map(one), below: pick(false).map(one) };
 }
 

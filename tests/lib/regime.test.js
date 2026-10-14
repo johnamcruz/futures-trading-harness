@@ -24,7 +24,23 @@ test('a steady climb is trend-up and a steady fall trend-down', () => {
 test('a sideways oscillation is a range', () => {
   const r = classifyRegime(series(k => 100 + Math.sin(k / 2) * 2));
   assert.strictEqual(r.primary, 'range');
-  assert.ok(r.metrics.vwapCrosses >= 5 || r.metrics.adx < 18);
+  assert.ok(r.metrics.adx < 18);
+  assert.ok(!('vwapCrosses' in r.metrics), 'the count is named by its VWAP: sessionVwapCrosses');
+});
+
+test('chopping through the session VWAP is a range on the crosses alone (sessionVwapCrosses), whatever the ADX', () => {
+  // From 16:00 ET, so the 18:00 ET session open (and its VWAP) is inside the bars.
+  const t0 = Date.UTC(2026, 9, 7, 20, 0);
+  const bars = normalizeBars(Array.from({ length: 160 }, (_, k) => {
+    const c = 100 + Math.sin(k / 2) * 2;
+    return { t: new Date(t0 + k * 180000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 100 };
+  }));
+  const r = classifyRegime(bars);
+  assert.strictEqual(r.metrics.sessionVwapCrosses, 5);
+  // The ADX branch off (rangeAdx 0): the crosses alone make it a range ...
+  assert.strictEqual(classifyRegime(bars, { rangeAdx: 0 }).primary, 'range');
+  // ... and without enough crosses it isn't one.
+  assert.strictEqual(classifyRegime(bars, { rangeAdx: 0, rangeCrosses: 6 }).primary, 'transition');
 });
 
 test('volatility expansion is tagged high-vol; too few bars gives no regime', () => {

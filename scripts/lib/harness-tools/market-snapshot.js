@@ -5,7 +5,8 @@
  *
  *   snapshot { file, params, symbol }   file: bars file or '-' (get_bars JSON on stdin);
  *                               params: { name: number } overrides of trading/market-snapshot.js PARAMS;
- *                               symbol: the contract root, so the volume profile's levels are on its tick
+ *                               symbol: the contract root, so the volume profile's levels are on its tick (default:
+ *                               the root a harness bars file is named for, MNQ-3m.json: bars-fetch.js symbolOfBarsFile)
  *
  * Output: the snapshot as JSON (compact: on one line, as the harness tool
  * returns it). Use closed bars only, oldest first. Under a replay clock, bars
@@ -16,6 +17,7 @@ const { readBarsArg } = require('../backtest/data');
 const { PARAMS, snapshot: buildSnapshot } = require('../trading/market-snapshot');
 const { context, atClock } = require('./cli');
 const { tickOf } = require('../trading/contracts');
+const { symbolOfBarsFile } = require('../bars-fetch');
 
 const USAGE = 'usage: market-snapshot.js <bars.json | -> [--symbol=MNQ] [--param=value ...]';
 
@@ -33,7 +35,9 @@ function snapshot({ file, params = {}, symbol = null, compact = false } = {}, ct
   const overrides = {};
   for (const [name, raw] of Object.entries(params || {})) overrides[name] = paramValue(name, raw);
   const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
-  const snap = buildSnapshot({ bars, tickSize: symbol ? tickOf(symbol) : null }, overrides);
+  // The contract's tick: the symbol given, else the one the harness's bars file is named for (none: two decimals).
+  const root = symbol || symbolOfBarsFile(file);
+  const snap = buildSnapshot({ bars, tickSize: root ? tickOf(root) : null }, overrides);
   return { text: compact ? `${JSON.stringify(snap)}\n` : `${JSON.stringify(snap, null, 2)}\n` };
 }
 

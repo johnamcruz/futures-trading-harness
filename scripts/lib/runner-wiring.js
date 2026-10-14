@@ -58,6 +58,7 @@ const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
 const { barsArchiver } = require('./session/bars-archive');
 const { fieldValues } = require('./session/record');
+const { levelOnTick } = require('./trading/contracts');
 
 /**
  * The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades.
@@ -350,8 +351,10 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     dayContext: (sym, bars) => {
       const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
       const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
+      // The prior value area and POC as the briefing and market_snapshot show them (contracts.js levelOnTick).
+      const level = x => levelOnTick(x, tick);
       // In RTH the day so far; outside it, the overnight session against the prior day.
-      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round }) || describeOvernight(bars, { symbol: sym.symbol, round });
+      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round, level }) || describeOvernight(bars, { symbol: sym.symbol, round, level });
     },
     // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
     // the last reviewed trades' record on their own line.

@@ -44,7 +44,7 @@ Detail by timeframe:
   context: {"emaCrossesLast30":5,"adxFallingBars":0,"keltnerWidthVsAvg20":2.15,"bandCloseStreak":{"side":"below","bars":1},"supertrendFlipsLast20":1,"range5Atr":8.13}
   referenceStop: {"distance":3.6,"long":27007.9,"short":27015.1}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
-  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bearish","low":27081.75,"high":27083.25,"at":"20:09"}]}
+  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bearish","low":27081.75,"high":27083.25,"at":"20:09"}],"partlyFilledFvgs":[{"side":"bearish","low":27091.25,"high":27095.5,"gapLow":27083.75,"gapHigh":27095.5,"at":"20:01"},{"side":"bearish","low":27084,"high":27086.5,"gapLow":27077.25,"gapHigh":27086.5,"at":"20:04"}]}
   lastBreak: {"last":null,"previous":null}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27099.75,"side":"above","brokenAt":null}]
@@ -118,7 +118,7 @@ Detail by timeframe:
   context: {"emaCrossesLast30":3,"adxFallingBars":0,"keltnerWidthVsAvg20":1.32,"bandCloseStreak":{"side":"below","bars":1},"supertrendFlipsLast20":2,"range5Atr":6.71}
   referenceStop: {"distance":5.84,"long":26950.91,"short":26962.59}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
-  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bearish","low":27062.75,"high":27077.25,"at":"08:13"}]}
+  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bearish","low":27062.75,"high":27077.25,"at":"08:13"}],"partlyFilledFvgs":[{"side":"bearish","low":27056,"high":27062.25,"gapLow":27045.75,"gapHigh":27062.25,"at":"08:16"},{"side":"bearish","low":27043,"high":27044.5,"gapLow":27036.75,"gapHigh":27044.5,"at":"08:34"}]}
   lastBreak: {"last":null,"previous":null}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27079.75,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":26890,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26916.25,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26941.75,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":26995,"side":"above","brokenAt":"07:46"},{"name":"1h swing low","type":"low","price":26865,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":26890,"side":"below","brokenAt":null},{"name":"1h swing high","type":"high","price":27013.5,"side":"above","brokenAt":"07:46"}]
@@ -164,7 +164,7 @@ Summary (MNQ 1m, 22:19 ET):
 - VWAP (session): price above, 21 ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
 - Room above (R = the reference stop): session high / overnight high 27542.5 (4.5 pts, 1.63R), round number 27600 (62 pts, 22.51R).
-- Room below (R = the reference stop): round number 27500 (38 pts, 13.8R), session VAH 27473 (65 pts, 23.6R), prior RTH high 27462.5 (75.5 pts, 27.41R).
+- Room below (R = the reference stop): round number 27500 (38 pts, 13.8R), session VAH 27473 (64.89 pts, 23.56R), prior RTH high 27462.5 (75.5 pts, 27.41R).
 - Setups: none fired on this bar.
 
 Detail by timeframe:
@@ -189,12 +189,12 @@ Detail by timeframe:
   context: {"emaCrossesLast30":0,"adxFallingBars":0,"keltnerWidthVsAvg20":0.89,"bandCloseStreak":{"side":"above","bars":1},"supertrendFlipsLast20":1,"range5Atr":2.34}
   referenceStop: {"distance":2.75,"long":27535.25,"short":27540.75}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
-  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bullish","low":27511.75,"high":27512.25,"at":"21:48"}]}
+  liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[{"side":"bullish","low":27511.75,"high":27512.25,"at":"21:48"}],"partlyFilledFvgs":[{"side":"bullish","low":27510,"high":27510.5,"gapLow":27510,"gapHigh":27511.25,"at":"21:39"},{"side":"bullish","low":27512.5,"high":27518.5,"gapLow":27512.5,"gapHigh":27532.25,"at":"21:49"},{"side":"bullish","low":27526.25,"high":27533.75,"gapLow":27526.25,"gapHigh":27534.5,"at":"22:16"}]}
   lastBreak: {"last":null,"previous":null}
   sweeps: []
   htfLevels: [{"name":"15m swing low","type":"low","price":27344.25,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27366.75,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":27454.5,"side":"below","brokenAt":"20:58"},{"name":"1h swing low","type":"low","price":27064.5,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27130.25,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27344.25,"side":"below","brokenAt":null},{"name":"1h swing high","type":"high","price":27462.5,"side":"below","brokenAt":"20:58"}]
   untested1hSwings: [{"type":"low","price":27016.25,"t":"04-24 00:00"},{"type":"low","price":27064.5,"t":"04-24 05:00"},{"type":"low","price":27130.25,"t":"04-24 09:00"},{"type":"low","price":27344.25,"t":"18:00"}]
-  nearestLiquidity: {"above":[{"name":"session high / overnight high","price":27542.5,"points":4.5,"R":1.63},{"name":"round number","price":27600,"points":62,"R":22.51}],"below":[{"name":"round number","price":27500,"points":38,"R":13.8},{"name":"session VAH","price":27473,"points":65,"R":23.6},{"name":"prior RTH high","price":27462.5,"points":75.5,"R":27.41}]}
+  nearestLiquidity: {"above":[{"name":"session high / overnight high","price":27542.5,"points":4.5,"R":1.63},{"name":"round number","price":27600,"points":62,"R":22.51}],"below":[{"name":"round number","price":27500,"points":38,"R":13.8},{"name":"session VAH","price":27473,"points":64.89,"R":23.56},{"name":"prior RTH high","price":27462.5,"points":75.5,"R":27.41}]}
   today: {"openingRange":null,"rangeVsAdr":null}
   overnight: {"high":27542.5,"low":27344.25}
   sessionProfile: {"poc":27377,"vah":27473,"val":27344.25,"hvnAbove":null,"hvnBelow":27496,"lvnAbove":27541.5,"lvnBelow":27501.75}

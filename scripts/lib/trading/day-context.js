@@ -153,15 +153,19 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
   return out;
 }
 
-/** One line for a prompt: "MNQ day: opened 21462.50 below the prior value area ...". */
-function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100 } = {}) {
+/**
+ * One line for a prompt: "MNQ day: opened 21462.50 below the prior value area ...". `round` rounds prices; `level`
+ * the prior value area and POC (computed levels: contracts.js levelOnTick puts them on the tick), default `round`.
+ */
+function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100, level = round } = {}) {
   if (!d) return null;
   const r = x => (x === null || x === undefined ? '?' : round(x));
+  const lv = x => (x === null || x === undefined ? '?' : level(x));
   const adr = x => (d.adr ? `, ${(x / d.adr).toFixed(2)} ADR` : '');
   const parts = [`opened ${r(d.open)}${d.openVs ? ` ${d.openVs}` : ''}${d.gap !== null ? `, gap ${d.gap >= 0 ? '+' : ''}${r(d.gap)} from the prior close${d.adr ? ` (${(Math.abs(d.gap) / d.adr).toFixed(2)} ADR)` : ''}` : ''}`];
   // The levels the day trades against: the prior RTH day and this morning's overnight session.
   const p = d.prior;
-  if (p) parts.push(`prior day ${r(p.low)}-${r(p.high)}, close ${r(p.close)}${p.vah !== undefined ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}`);
+  if (p) parts.push(`prior day ${r(p.low)}-${r(p.high)}, close ${r(p.close)}${p.vah !== undefined ? `, value area ${lv(p.val)}-${lv(p.vah)} (POC ${lv(p.poc)})` : ''}`);
   if (d.overnight) parts.push(`overnight ${r(d.overnight.low)}-${r(d.overnight.high)}`);
   // What isn't known yet says when it will be.
   parts.push(d.openType ? `opening type ${d.openType}` : 'opening type due 10:00 ET (a read of the open, not an entry window)');
@@ -179,7 +183,8 @@ const GLOBEX_OPEN = 18 * 60;
  * Null in RTH, or when the bars don't hold the session's start or a whole
  * prior RTH day. From bars 0..last only.
  */
-function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100) / 100, params = {} } = {}) {
+/** The overnight line (see describeDay for `round` and `level`). */
+function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100) / 100, level = round, params = {} } = {}) {
   const n = bars.length;
   if (!n) return null;
   const last = bars[n - 1];
@@ -212,7 +217,7 @@ function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100)
   const toOpen = close >= RTH_CLOSE ? 24 * 60 - close + RTH_OPEN : Math.max(0, RTH_OPEN - close);
   const where = !p ? '' : last.c > p.vah ? ': price above the prior value area' : last.c < p.val ? ': price below the prior value area' : ': price inside the prior value area';
   // The session's state stated with it: the market has been open since 18:00 ET; 09:30 ET is only the RTH (cash) open.
-  return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET; ${closed ? 'market closed now, daily break until 18:00 ET' : 'market open now'}): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}${where}; ${toOpen === 0 ? 'RTH opens now (09:30 ET)' : `RTH (the 09:30 ET cash open, not the market open) in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min`}.`;
+  return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET; ${closed ? 'market closed now, daily break until 18:00 ET' : 'market open now'}): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${level(p.val)}-${level(p.vah)} (POC ${level(p.poc)})` : ''}${where}; ${toOpen === 0 ? 'RTH opens now (09:30 ET)' : `RTH (the 09:30 ET cash open, not the market open) in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min`}.`;
 }
 
 module.exports = { DEFAULTS, openingType, dayType, dayContextSeries, describeDay, describeOvernight, stepMinutes };

@@ -11,7 +11,7 @@ const { classifyRegime, vwapCrosses: crossesOf, REGIME_PARAMS } = require('./reg
 const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
-const { onTick } = require('./contracts');
+const { onTick, levelOnTick } = require('./contracts');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -275,7 +275,7 @@ function volumeProfile(bars, p, atrNow, level) {
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   const tickSize = input && !Array.isArray(input) && input.tickSize > 0 ? input.tickSize : null;
-  const level = x => (x === null || x === undefined ? null : tickSize ? onTick(x, tickSize) : round(x, 2));
+  const level = x => (x === null || x === undefined ? null : tickSize ? levelOnTick(x, tickSize) : round(x, 2));
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
   const series = signalSeries(bars, overrides);
   const { p, closes, emaFast, emaSlow, adx, atrStop, st, kc, sw, or } = series;
@@ -326,8 +326,8 @@ function snapshot(input, overrides = {}) {
       const d = dayContext.dayContextSeries(bars, { adrDays: p.adrDays, params: p }).day[i];
       if (!d) return null;
       // The prior day's profile levels on the tick, as the volume profile's (its high, low and close are traded prices).
-      const day = d.prior && tickSize ? { ...d, prior: { ...d.prior, ...Object.fromEntries(['val', 'poc', 'vah'].filter(k => Number.isFinite(d.prior[k])).map(k => [k, level(d.prior[k])])) } } : d;
-      return { ...day, line: dayContext.describeDay(day, tickSize ? { round: level } : {}) };
+      const prior = d.prior && tickSize ? { ...d.prior, ...Object.fromEntries(['val', 'poc', 'vah'].filter(k => Number.isFinite(d.prior[k])).map(k => [k, level(d.prior[k])])) } : d.prior;
+      return { ...d, prior, line: dayContext.describeDay(d, tickSize ? { round: x => onTick(x, tickSize), level } : {}) };
     })(),
     participation: participation(bars, p.orbMinutes),
     context: context(bars, series, at(atr14, i)),
