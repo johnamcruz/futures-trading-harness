@@ -266,12 +266,18 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
 });
 
-test('strategies whose stop is an expression (cisd_ote) are backtested', () => {
+test('strategies whose stop is an expression (cisd_risk(m)) are backtested', () => {
+  // The shipped cisd_ote (a 15m CISD after a key sweep) takes no trade on this fixture: a copy with its CISD on 3m
+  // candles and no sweep rule does, with its stop from cisd_risk(3).
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['cisd_ote'], outDir: dir, gate: false };
-  const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: {} });
+  const sdir = path.join(dir, 'strategies', 'fx_cisd3');
+  fs.mkdirSync(sdir, { recursive: true });
+  fs.writeFileSync(path.join(sdir, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'cisd_ote', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: cisd_ote$/m, 'name: fx_cisd3').replace(/\(15\)/g, '(3)').replace(/^ {4}- cisd_sweep\(3\) > 0.*\n/gm, ''));
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_cisd3'], outDir: dir, gate: false };
+  const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_STRATEGIES_DIRS: path.dirname(sdir) } });
   assert.deepStrictEqual(report.skipped || {}, {});
-  assert.ok(report.summary.trades > 0, 'cisd_ote trades');
+  assert.ok(report.summary.trades > 0, 'fx_cisd3 trades');
 });
 
 test('a stop expression with no positive distance makes no candidate', () => {

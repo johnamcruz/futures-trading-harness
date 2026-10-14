@@ -12,6 +12,7 @@ const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
 const { onTick, levelOnTick } = require('./contracts');
+const { SNAPSHOT_PARAMS: SNAPSHOT_CISD } = require('./cisd');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -22,6 +23,8 @@ const PARAMS = {
   atrStop: 20, stopAtrMult: 0.5,
   // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
   crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
+  // CISD and its OTE bounce (cisd_* / ote_* / in_ote series, scripts/lib/trading/cisd.js): defaults and meaning there.
+  ...SNAPSHOT_CISD,
   // Volume profile settings (vpRows, vpRowSize, ...): defaults and meaning in volume-profile.js.
   ...vp.PARAM_DEFAULTS,
   vpLookback: 360, // bars in the snapshot's rolling profile

@@ -33,7 +33,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr`; checked by the scan only, not at order time |
    | `exit` | Optional: `trail_activate_r` + `trail_giveback_r` (trail the stop from +NR, giving back MR; trend setups use 2 / 0.5), `target_r` (fixed target), `target` (a distance expression from the signal close, or `{ long, short }`, e.g. `crt_target(60)`: a target at a level instead of R), `max_bars` (time stop). Without it the target is `risk.min_rr`. The backtester and the live runner apply it |
    | `signal: policy` | A policy strategy: the prop challenge as a strategy (see `strategies/prop_portfolio`). `strategies` lists the rules strategies whose setups it trades, in priority order, all on its timeframe; `account` names `accounts/<name>/ACCOUNT.md` (the gate enforces its floor, daily limits, and size budget); its numbers live in its account's rulebook, `accounts/<account>/RULEBOOK.md` (`policies.<name>`: `sizing`, `exit`, `multipliers`, every key stated, a limit turned off only by `off`), the one place for them: a policy may not state them in its STRATEGY.md, and one the rulebook doesn't list is refused (the loader refuses both); `sizing` sets risk per trade from the cushion (`cushion_frac` ≤ 1, `cap_usd`, `clock_k`, `r_per_session`, `min_size_guard`, `drawdown_halve_usd`: halve the budget while the balance is at least that far below its peak, `stop_slippage_ticks`: the stop's expected slippage counted in each contract's risk, at least 1, the default and the backtester's fill slippage); `contracts` is `micro`, `mini`, or `auto` (minis once the size reaches one mini); its `exit` needs a trail (it exits every trade the policy strategy takes); each verdict is `full` (sized at the rulebook's multiplier) or `skip`; `risk.stop: strategy` keeps each setup's own stop. Each setup is taken at the largest size the budget allows, or skipped. `priority` (optional, a whole number 1 to 99, 1 first) orders policy strategies whose setups come in the same cycle on different runner lanes (timeframes): the lower number keeps its setup and the other is skipped as "lower priority" (equal or unset: the one on 3m or slower goes first), settled per runner, that is per account (a runner trades one account): a setup on another of its symbols collides too, and so does another policy's entry verdict from an earlier cycle while it is still open (unexpired, unused). Only policy strategies have these keys |
-   | `risk` | `stop` (`atr:<k>` = k × ATR(20), a distance expression such as `0.5 * atr(20)` or `cisd_ote_risk`, a map `{ long: <expr>, short: <expr> }` when each side's stop sits somewhere else (beyond a swept low or high, as in `crt_1h`), `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists and, when `max_risk_usd` is set, refuses an entry whose risk (size × stop ticks × the broker's tick value) is over it, or whose risk it can't compute (a market entry with its stop only in the rationale: give `stopLossBracket.ticks`); `min_rr` is applied by the agents (risk-manager), not by code. In a policy strategy, only its own `max_risk_usd` applies to its entries, not its components' |
+   | `risk` | `stop` (`atr:<k>` = k × ATR(20), a distance expression such as `0.5 * atr(20)` or `cisd_risk(15)`, a map `{ long: <expr>, short: <expr> }` when each side's stop sits somewhere else (beyond a swept low or high, as in `crt_1h`), `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists and, when `max_risk_usd` is set, refuses an entry whose risk (size × stop ticks × the broker's tick value) is over it, or whose risk it can't compute (a market entry with its stop only in the rationale: give `stopLossBracket.ticks`); `min_rr` is applied by the agents (risk-manager), not by code. In a policy strategy, only its own `max_risk_usd` applies to its entries, not its components' |
    | `source`, `version` | Where it came from; bump version on rule changes |
 
 3. Body (read by the agents): `## When to Use`, `## How It Works` (context
@@ -61,7 +61,10 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    high and low so far), `ib_high ib_low` (today's initial balance, the
    first hour, from the bar that completes it), `adr(n)` (the average RTH
    range of the last n complete days), `minute_et`,
-   `cisd_ote_dir cisd_ote_risk` (the original bot's CISD + OTE detector), and
+   the CISD on completed m-minute candles (`scripts/lib/trading/cisd.js`; the
+   `cisd` skill): `cisd_dir(m) cisd_level(m) cisd_sweep(m) ote_top(m)
+   ote_bot(m) in_ote(m)` and the OTE bounce `cisd_entry(m)` with its stop
+   distance `cisd_risk(m)` (m a whole number of the bars: 3, 15, 60 on 3m), and
    higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
    (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`
    (the one in progress, up to this bar); m divides a day (60 = 1 hour, 240 =
@@ -108,9 +111,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    condition false and the scan marks it `missing`. At most 12 conditions per
    side. A rules strategy with only `long` rules can't be used to sell into an
    entry. `validate` reports typos, unknown keys and series. Only a pattern the
-   rules can't express (multi-bar zone logic like cisd_ote) needs `manual` or
+   rules can't express (multi-bar zone logic like cisd_ote's) needs `manual` or
    a new series in `scripts/lib/trading/rules.js` (with tests), used from the
-   rules like `cisd_ote_dir`.
+   rules like `cisd_entry(15)`.
 8. Backtest it before paper trading (the user, or the `strategy-researcher`
    role in an interactive authoring session; never a trading run):
    `node <root>/scripts/backtest.js --data <bars.parquet|.xlsx|.csv> --symbol MNQ --strategy <name>`

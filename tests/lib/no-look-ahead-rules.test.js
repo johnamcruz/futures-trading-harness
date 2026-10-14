@@ -23,6 +23,7 @@ const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
 const { atrAt } = require('../../scripts/lib/replay/labels');
 const { simulate } = require('../../scripts/lib/replay/counterfactual');
+const { FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // Broker fields on every bar (as an order-flow server puts them), deterministic, so field() has values to read.
@@ -48,7 +49,9 @@ const same = (a, b) => (Number.isNaN(a) && Number.isNaN(b)) || Object.is(a, b) |
 // 240 minutes), and field() paths (one-level, nested, a digit key) at look-backs 0 to 500.
 const SERIES = [
   ...rules.NAMES,
-  ...[...rules.FUNCS].flatMap(f => (/^(htf|htfc|crt|mtf)/.test(f) ? [`${f}(60)`, `${f}(240)`] : [`${f}(5)`, `${f}(20)`])),
+  ...[...rules.FUNCS].flatMap(f => (/^(htf|htfc|crt|mtf)/.test(f) ? [`${f}(60)`, `${f}(240)`]
+    // The CISD series on completed 3m, 15m and 60m candles (cisd.js).
+    : /^(cisd|ote|in_ote)/.test(f) ? [`${f}(3)`, `${f}(15)`, `${f}(60)`] : [`${f}(5)`, `${f}(20)`])),
   'field:flow.x', 'field:flow.windows.3.x', 'field:flow.windows.5.x',
 ];
 const LOOKBACKS = [0, 1, 2, 3, 5, 20, 500];
@@ -131,7 +134,9 @@ test('the backtest engine fills an entry decided at bar t at bar t+1\'s open plu
 });
 
 test('the backtest engine\'s entries through bar T are the same with or without the bars after T', () => {
-  const { strategies } = loadStrategies(ROOT, {});
+  // The shipped 3m rules strategies, and the fixture ones (fx_break, fx_cross) so the file has entries before each cut
+  // (the textbook cisd_ote, which needs a 15m CISD after a key sweep, takes none in it).
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES });
   const rulesStrategies = strategies.filter(s => s.valid && s.signal === 'rules' && s.timeframe === '3m');
   const entries = (bars, last) => runEngine(market(bars), rulesStrategies, { timeframe: 3, gate: false }).trades
     .filter(tr => Date.parse(tr.entryTime) <= Date.parse(last))

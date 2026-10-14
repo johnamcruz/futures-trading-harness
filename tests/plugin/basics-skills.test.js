@@ -2,7 +2,7 @@
 
 // The trading-basics skills: small skills that teach a read each (trend vs range, pullback vs reversal, breakout vs
 // fakeout, levels and reactions, momentum and volume, absorption, invalidation, confluence counting, candle reading, BOS vs
-// CHoCH).
+// CHoCH, CISD, fib retracement).
 // Each is a read, never a veto: the priority order (strategy-library) decides. These tests pin their structure, that
 // every briefing field they name resolves on a real briefing built by briefing.js, their take, skip and losing
 // examples (tick-correct), the absence of veto language, their key sentences (a mutation fails), and the roles that
@@ -19,13 +19,13 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch', 'cisd', 'fib-retracement'];
 const SETUPS = ['mtf-rejection', 'mtf-breakout'];
 const file = s => `skills/${s}/SKILL.md`;
 
 // Who carries which (each role only what it uses; the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement'],
   'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
   'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
@@ -117,6 +117,21 @@ const PINS = {
     'After an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`), it is a continuation.',
     'A reversal rejection reads strongest with an HTF CHoCH its way (`bos-vs-choch`).',
     'or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).',
+  ],
+  cisd: [
+    'A down run: at least 2 consecutive bearish completed candles',
+    'The level: the OPEN of the run\'s first candle (`level`).',
+    'Confirmed when a completed candle CLOSES above that level, within 6 candles of the run',
+    'The CISD usually comes first: an early sign, not yet a change of structure.',
+    'It is evidence for a fired strategy\'s side, never a setup of its own',
+    'a 3m or 5m CISD in the 15m/1h trend\'s direction is the pullback ending',
+    'Never anticipate the bounce.',
+  ],
+  'fib-retracement': [
+    'The levels read: 0.5, 0.618, 0.705 and 0.79.',
+    'is 0.62 to 0.79 of the leg, mid 0.705',
+    'completed candles only, never the candle forming.',
+    'Never anticipate it: a touch is not a bounce.',
   ],
   'mtf-breakout': [
     'The order gate allows an entry only when a strategy fired on the bar.',
@@ -386,7 +401,7 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   }
   const tp = read('skills/trader-process/SKILL.md');
   const step = n => tp.slice(tp.indexOf(`${n}. **`), tp.indexOf(`${n + 1}. **`) > 0 ? tp.indexOf(`${n + 1}. **`) : tp.indexOf('### Roles'));
-  const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal'], 6: ['candle-reading'], 9: ['invalidation'] };
+  const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal', 'cisd'], 6: ['candle-reading'], 9: ['invalidation'] };
   // Step 5 counts confluence-counting's six items, and the candidate's own values are always neutral.
   assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`; the candidate\'s own `values` are always neutral.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
@@ -485,4 +500,32 @@ test('bos-vs-choch: the timeframes are read top-down, the same logic in the setu
   for (const s of ['bos-vs-choch', 'mtf-rejection', 'mtf-breakout', 'invalidation']) {
     assert.match(flat(read(file(s))), /timeframe or higher/, s);
   }
+});
+
+test('basics skills: the fib numbers have one home: fib-retracement states the code\'s, cisd and cisd_ote restate none', () => {
+  const { LEVELS, OTE } = require('../../scripts/lib/trading/fib');
+  const cisd = require('../../scripts/lib/trading/cisd');
+  const text = read(file('fib-retracement'));
+  const t = flat(text);
+  assert.ok(t.includes(`The levels read: ${LEVELS.slice(0, -1).join(', ')} and ${LEVELS[LEVELS.length - 1]}.`), 'the levels are fib.LEVELS');
+  assert.ok(t.includes(`is ${OTE.from} to ${OTE.to} of the leg, mid ${OTE.mid}`), 'the golden zone is fib.OTE');
+  // Every ratio the skill names (its examples' computed retracements aside) is one of the code's.
+  const known = new Set([...LEVELS, OTE.from, OTE.to, OTE.mid].map(String));
+  for (const m of text.split('## Examples')[0].matchAll(/\b0\.\d+\b/g)) assert.ok(known.has(m[0]), `fib-retracement names ${m[0]}, not a code ratio`);
+  // A changed ratio in the code (or the skill) fails.
+  assert.ok(!flat(text.replaceAll('0.705', '0.71')).includes(`mid ${OTE.mid}`));
+  // cisd and cisd_ote point to them, restating no ratio (as 0.62 or 62%).
+  const RATIO = /\b0?\.(?:5|618|62|705|79)\b|\b(?:50|61\.8|62|70\.5|79)%/;
+  assert.doesNotMatch(read(file('cisd')), RATIO);
+  assert.match(read(file('cisd')), /`fib-retracement`/);
+  const strategy = read('strategies/cisd_ote/STRATEGY.md');
+  assert.doesNotMatch(strategy.split('## What changed from version 3')[0], RATIO, 'cisd_ote names fib.OTE, not its numbers');
+  assert.match(strategy, /`fib\.OTE`/);
+  assert.match(strategy, /`cisd` skill/);
+  assert.match(strategy, /`fib-retracement` skill/);
+  // The CISD skill's run and wait are the code's defaults.
+  const c = flat(read(file('cisd')));
+  assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));
+  // pullback-vs-reversal points to both in a few words.
+  assert.match(flat(read(file('pullback-vs-reversal'))), /A CISD \(`cisd`\) is an earlier sign than the CHoCH; depth in fib terms: `fib-retracement`\./);
 });

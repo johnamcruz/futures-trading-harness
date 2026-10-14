@@ -27,7 +27,7 @@ Load the skills `strategy-authoring` and `strategy-library`.
    skip when), Examples with tick-correct arithmetic and a sample rationale,
    and the source path and parameters.
 5. If the trigger needs something the rules language can't express, add a
-   series to `scripts/lib/trading/rules.js` (as `cisd_ote_dir` does), with
+   series to `scripts/lib/trading/rules.js` (as `cisd_entry(m)` does), with
    tests, and write the strategy's rules with it.
 6. Validate with the harness tool `strategies_validate`, run
    `node <root>/tests/run-all.js` (when working in the repo), and report.

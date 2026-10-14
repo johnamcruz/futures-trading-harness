@@ -87,6 +87,7 @@ const PARAM_RULES = {
   swingK: 'int', orbMinutes: 'int', atrStop: 'int',
   stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
   crtSweepBars: 'int', crtShiftBars: 'int', crtMaxDepth: 'pos', crtMinRangeAtr: 'nonneg', crtBufferAtr: 'nonneg', crtMinRR: 'pos',
+  cisdMinRun: 'int', cisdMaxWait: 'int', cisdExpiry: 'int', cisdVoidTol: 'nonneg', cisdBufferAtr: 'nonneg',
   // Volume profile (prior_*, session_*, vp_*(n) series): rows or a row size in points, value area %, node detection %.
   vpRows: 'int', vpLookback: 'int', adrDays: 'int', vpRowSize: 'nonneg', vpValueArea: 'pos', vpNodePct: 'nonneg', vpTroughPct: 'nonneg', vpThreshold: 'nonneg',
 };

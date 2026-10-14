@@ -36,7 +36,7 @@ const DEFAULTS = {
   timeframe: 3, // minutes per bar; a cycle runs after each closed bar
   trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
   bars: null, // closed bars written to dataDir and scanned each bar; default max(2000, 3 trading days), so
-  // prior-day and overnight levels and long indicators match a backtest (cisd_ote still uses the last 500)
+  // prior-day and overnight levels and long indicators match a backtest
   dataDir: null, // default ~/.futures-trading-harness/bars (runner-owned; agents can read it but not write it)
   barDelaySeconds: 2, // wait after the scheduled close before polling
   barPollSeconds: 2, // between polls while waiting for the closed bar

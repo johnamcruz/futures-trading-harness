@@ -30,8 +30,8 @@ doesn't hold.
    Don't paste a `get_bars` reply into a file: thousands of bars are far more
    than a tool reply can carry. The default is enough for EMA(200), prior-day
    levels, and the multi-timeframe read up to the 4-hour trend (its EMA50
-   vote needs about 4000 3-minute bars). The windowed pieces (cisd_ote,
-   the regime) read their own trailing 500 bars, as their source did.
+   vote needs about 4000 3-minute bars). The regime reads its own trailing
+   500 bars, as its source did.
    3-minute bars match the strategy parameters (1-minute for the flow
    strategies).
 2. (The file is the broker's `get_bars` JSON; a CSV file works too. The

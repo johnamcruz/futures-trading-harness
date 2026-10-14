@@ -17,7 +17,8 @@
  *          profile, the latest BOS or CHoCH, sweeps of the key levels in the
  *          last 10 bars, the 1h swings not traded back to, the nearest
  *          liquidity above and below in points and ATR (room to run), where price is against the value areas, IB and prior RTH
- *          range, the scan's candidates, the trend rule  until the next base-bar close
+ *          range, the scan's candidates, the trend rule, and the latest CISD per timeframe (3m, 5m, 15m, 1h:
+ *          cisd.js, completed candles; its OTE zone and whether price is in it now)   until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -76,14 +77,15 @@ const fs = require('fs');
 const path = require('path');
 const { snapshot } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
-const { normalizeBars } = require('./indicators');
+const { normalizeBars, atr: atrOf } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
-const { sideValuesText } = require('./rules');
+const { sideValuesText, causalLevels } = require('./rules');
+const { cisdFacts } = require('./cisd');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -172,6 +174,26 @@ const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 const SESSION_ELSEWHERE = 'is in the runner\'s bar briefing (bar_briefing without a timeframe)';
 // The m3 fields a frame leaves out: the session's facts (computed on the runner's bars only).
 const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
+
+// The timeframes the CISD facts are read on (completed candles; one the bars can't build is unavailable).
+const CISD_FRAMES = [3, 5, 15, 60];
+
+/** The latest CISD per timeframe, compact (cisd.js cisdFacts; prices on the tick by `level`). */
+function cisdBlock(bars, level) {
+  const levels = causalLevels(bars);
+  const atr = atrOf(bars, 20);
+  const out = {};
+  for (const m of CISD_FRAMES) {
+    const f = cisdFacts(bars, m, { levels, atr, round: level });
+    if (f.unavailable) { out[f.tf] = `unavailable (${f.unavailable})`; continue; }
+    if (f.none) { out[f.tf] = 'none in these bars'; continue; }
+    out[f.tf] = {
+      dir: f.dir, level: f.level, confirmedClose: f.confirmedClose, sweep: f.sweep, leg: { origin: f.leg.origin, extreme: f.leg.extreme },
+      ote: f.ote, status: f.status, priceInOte: f.priceInOte, retracement: f.retracement,
+    };
+  }
+  return out;
+}
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
 function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
@@ -338,6 +360,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, news, lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: own ? side(price, runnerVwap) : side(price, vwapRef), tick })) : null,
         ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
+        // The latest CISD per timeframe on completed candles, with its displacement leg's OTE zone (cisd.js, fib.js).
+        cisd: cisdBlock(bars, level),
       },
     },
     m15: {
@@ -597,6 +621,8 @@ function summaryLines(b, et) {
     ...(room.at && room.at.length ? [`- At price: ${room.at.map(x => `${x.name} ${x.price}`).join(', ')}.`] : []),
     ...(room.roundNumbers ? [`- Round numbers: none (${room.roundNumbers}).`] : []),
   ];
+  const cisd = cisdLine(m3.cisd, et);
+  if (cisd) out.push(cisd);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
   else if (!m3.candidates || !m3.candidates.length) out.push('- Setups: none fired on this bar.');
@@ -607,6 +633,17 @@ function summaryLines(b, et) {
     }
   }
   return out;
+}
+
+/** The summary's CISD line: each timeframe's latest CISD and its OTE zone, the unavailable ones left out (null: none). */
+function cisdLine(block, et) {
+  if (!block || typeof block !== 'object') return null;
+  const parts = Object.entries(block).filter(([, x]) => !(typeof x === 'string' && x.startsWith('unavailable'))).map(([tf, x]) => {
+    if (typeof x === 'string') return `${tf} none`;
+    const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}` : `zone ${x.status}`;
+    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}`;
+  });
+  return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
 
 /** The briefing as text: the summary, then one block per section, with when it was computed and until when it holds. */
