@@ -52,14 +52,17 @@ change is (CLAUDE.md, "Before a pull request").
    targeted failure now decided right), on at least the rule's minimum
    decisions, discordant decisions and effect. A decision's repeats count
    once (the category most of them gave). A decision the scorecard left
-   `unchecked` on either side is left out for both sides (its blows still
-   count); too many left out is insufficient evidence, never kept. A change
+   `unchecked` on the champion's side is left out (its blows still count),
+   and more than 10% left out is insufficient evidence, never kept; one the
+   candidate turned `unchecked` where the champion's was judged counts as
+   broken, so a candidate can't hide a break by skipping on judgment. A change
    to a strategy or the rulebook is `blocked` until the evaluator (section
    10 step 9) screens it; a strategy's name, status, account, sizing,
    contracts, exit, instruments, timeframe, list and regime gate are never a
    proposal's to change, and a rulebook may only be tightened, key by key
-   (no limit raised or turned `off`, no multiplier raised or removed, no
-   exit changed, no key removed).
+   (no limit raised or turned `off`, no fact value's effective size
+   multiplier raised, including a value no entry lists, which is 0; no exit
+   changed, no key removed).
 5. **Kept:** the archive entry, `pr-body.md` and the proposal in the
    iteration's `promotion/` folder, and a local branch
    `train/<loopId>-i<n>-<id>` on the champion's commit. Review it, run

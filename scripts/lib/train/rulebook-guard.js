@@ -7,8 +7,10 @@
  *
  * - every limit equal or stricter, by its direction (DIRECTION below); `off` (no limit) never where the current
  *   value is a limit;
- * - multipliers: none removed, none of their values removed or raised, max_age_min never raised; new ones only
- *   lower sizes (a multiplier is at most 1), so they may be added;
+ * - multipliers, compared as the verdict applies them (effective): for every value of every fact, including the
+ *   values no entry lists (0: the setup is skipped), the effective multiplier never rises, and a fact is never
+ *   accepted staler; so a value added above 0 where it was unlisted, a raised value, or a removed entry is refused,
+ *   and duplicates are judged on their product;
  * - no policy added or removed; an exit (the trail) unchanged: it is searched (R10), never a limit to loosen;
  * - no item moved out of `enforced`;
  * - no key removed.
@@ -47,19 +49,46 @@ function limitLooser(key, at, was, now, out) {
   if (looser) out.push(`${at}: ${was} -> ${now} is looser (${DIRECTION[key] === 'higher' ? 'only a higher' : 'only a lower'} value is stricter)`);
 }
 
+/**
+ * The multipliers as the verdict applies them (trading/rulebook.js ceiling), per fact: every entry reading the fact
+ * multiplies in, a value an entry doesn't list scores 0 (the setup is skipped), and the youngest max_age_min of its
+ * entries decides when the fact is stale. Duplicate entries are normalized this way too.
+ */
+function effective(list) {
+  const groups = new Map();
+  for (const m of Array.isArray(list) ? list : []) {
+    if (!m || typeof m.fact !== 'string') continue;
+    if (!groups.has(m.fact)) groups.set(m.fact, []);
+    groups.get(m.fact).push(m);
+  }
+  const at = (entries, v) => entries.reduce((p, e) => {
+    const x = isMap(e.values) && Object.hasOwn(e.values, v) && typeof e.values[v] === 'number' ? e.values[v] : 0;
+    return p * x;
+  }, 1);
+  const maxAge = entries => Math.min(...entries.map(e => (typeof e.max_age_min === 'number' ? e.max_age_min : Infinity)));
+  return { groups, at, maxAge };
+}
+
+const EPS = 1e-12;
+
+/** Any fact value whose effective multiplier rises, or a fact accepted staler, is a loosening. */
 function multipliersLooser(at, was, now, out) {
   if (!Array.isArray(now)) { out.push(`${at}: removed or not a list`); return; }
-  const id = m => `${m && m.item}|${m && m.fact}`;
-  for (const m of Array.isArray(was) ? was : []) {
-    const n = now.find(x => id(x) === id(m));
-    if (!n) { out.push(`${at} ${id(m)}: removed (a size multiplier is never removed)`); continue; }
-    for (const [k, v] of Object.entries(m.values || {})) {
-      const nv = n.values ? n.values[k] : undefined;
-      if (nv === undefined) out.push(`${at} ${id(m)}.values.${k}: removed`);
-      else if (nv > v) out.push(`${at} ${id(m)}.values.${k}: ${v} -> ${nv} raises a size multiplier (only lower)`);
+  const b = effective(was);
+  const a = effective(now);
+  for (const fact of new Set([...b.groups.keys(), ...a.groups.keys()])) {
+    const before = b.groups.get(fact) || [];
+    const after = a.groups.get(fact) || [];
+    const keys = new Set([...before, ...after].flatMap(e => (isMap(e.values) ? Object.keys(e.values) : [])));
+    for (const v of keys) {
+      const x = before.length ? b.at(before, v) : 1;
+      const y = after.length ? a.at(after, v) : 1;
+      if (y > x + EPS) out.push(`${at} ${fact} = ${v}: the effective size multiplier rises from ${x} to ${y} (only lower)`);
     }
-    if (m.max_age_min !== undefined && (n.max_age_min === undefined || n.max_age_min > m.max_age_min)) {
-      out.push(`${at} ${id(m)}.max_age_min: ${m.max_age_min} -> ${n.max_age_min} accepts staler facts (only lower)`);
+    // A value no entry lists: 0 while any entry reads the fact, 1 once none does.
+    if (before.length && !after.length) out.push(`${at} ${fact}: removed; its unlisted values rise from 0 to 1 (a size multiplier is never removed)`);
+    if (before.length && after.length && a.maxAge(after) > b.maxAge(before)) {
+      out.push(`${at} ${fact}.max_age_min: ${b.maxAge(before)} -> ${a.maxAge(after)} accepts staler facts (only lower)`);
     }
   }
 }

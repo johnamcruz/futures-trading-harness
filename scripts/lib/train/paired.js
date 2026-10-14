@@ -28,7 +28,10 @@
  *   judge({ pairs, targets, failures, rule, mechanical, evaluator })   { verdict, reasons, tests }
  */
 
-const DECISION_RULE = Object.freeze({ alpha: 0.05, minPairs: 20, minDiscordant: 6, minEffect: 0.1, harmTolerance: 0.02 });
+// maxExcluded: the largest share of decisions the champion's scorecard left unchecked (left out of the test) before
+// the result is insufficient evidence.
+const DECISION_RULE = Object.freeze({ alpha: 0.05, minPairs: 20, minDiscordant: 6, minEffect: 0.1, harmTolerance: 0.02, maxExcluded: 0.1 });
+const LOWER_IS_TIGHTER = Object.freeze(['alpha', 'harmTolerance', 'maxExcluded']);
 const NO_DECISION = 'no decision';
 
 /** The rule with a config's overrides, each only tighter: alpha and the tolerance lower, the minimums higher. */
@@ -39,7 +42,7 @@ function ruleFrom(overrides = {}) {
   for (const [k, v] of Object.entries(o)) {
     if (!(k in DECISION_RULE)) { errors.push(`decision.${k}: not a rule setting (${Object.keys(DECISION_RULE).join(', ')})`); continue; }
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) { errors.push(`decision.${k}: a number`); continue; }
-    const looser = k === 'alpha' || k === 'harmTolerance' ? v > DECISION_RULE[k] : v < DECISION_RULE[k];
+    const looser = LOWER_IS_TIGHTER.includes(k) ? v > DECISION_RULE[k] : v < DECISION_RULE[k];
     if (looser) errors.push(`decision.${k}: ${v} would loosen the frozen rule (${DECISION_RULE[k]}); it may only be tightened`);
     else out[k] = v;
   }
@@ -125,15 +128,19 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   const reasons = [];
   const targetSet = new Set(targets || []);
   if (!targetSet.size) throw new Error('judge: a proposal names the failure categories it targets');
-  // A pair either side of which the scorecard couldn't check (`unchecked`) says nothing either way: left out for
-  // both sides alike (counted, never fixed or broken), so neither trading more nor less is favoured by it. Its blows
-  // still count. The decisions both sides made, of what is left, are the sample the minimums, the effect and the
-  // tolerance are counted on; decisions only the candidate made (pairUp) count as broken and for blows, never toward it.
-  const judged = pairs.filter(p => p.base.category !== 'unchecked' && p.cand.category !== 'unchecked');
-  const unchecked = pairs.length - judged.length;
+  // `unchecked` (the scorecard couldn't judge it), conservatively for the candidate:
+  // - the champion's decision unchecked (whatever the candidate's): left out, nothing can be said either way;
+  // - the champion's judged, the candidate's unchecked: broken for the candidate (it turned a judged decision into an
+  //   unjudged one, so it can't hide a break as unchecked), counted as its own failure category.
+  // More than maxExcluded of the decisions left out is insufficient evidence, never kept. Blows always count. The
+  // decisions both sides made, of the rest, are the sample the minimums, the effect and the tolerance are counted on;
+  // decisions only the candidate made (pairUp) count as broken and for blows, never toward it.
+  const judged = pairs.filter(p => p.base.category !== 'unchecked');
+  const explicit = pairs.filter(p => !p.base.implicit).length;
+  const excluded = pairs.filter(p => !p.base.implicit && p.base.category === 'unchecked').length;
   const n0 = judged.filter(p => !p.base.implicit).length;
-  // Fixed: a targeted failure the candidate decides right (never one it turns into another failure).
-  // Broken: a right decision the candidate decides otherwise.
+  // Fixed: a targeted failure the candidate decides right (never one it turns into another failure or unchecked).
+  // Broken: a right decision the candidate decides otherwise (unchecked included).
   let b = 0;
   let c = 0;
   for (const p of judged) {
@@ -145,16 +152,19 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   // The tolerance as stated, never looser: floor(harmTolerance x decisions), so under 50 decisions at 2% no decision
   // of a category may break.
   const tol = Math.floor(rule.harmTolerance * n0);
-  for (const k of [...new Set([...(failures || []), NO_DECISION])]) harm[k] = tally(judged, r => r.category === k);
+  for (const k of [...new Set([...(failures || []), 'unchecked', NO_DECISION])]) harm[k] = tally(judged, r => r.category === k);
   harm['any failure'] = tally(judged, r => r.category !== 'right');
   const blows = pairs.filter(p => p.cand.blow === true).length;
-  const tests = { pairs: n0, onlyCandidate: judged.length - n0, unchecked, target, harm, harmTolerance: tol, blows, rule };
+  const tests = { pairs: n0, onlyCandidate: judged.length - n0, excluded, excludedShare: explicit ? round(excluded / explicit) : 0, target, harm, harmTolerance: tol, blows, rule };
   if (blows) reasons.push(`${blows} blow(s) on the candidate's side: zero blows, no exception`);
   for (const [k, t] of Object.entries(harm)) {
     if (t.c - t.b > tol) reasons.push(`${k}: ${t.c} decision(s) broken against ${t.b} fixed, worse by more than the tolerance (${tol})`);
     else if (t.n >= rule.minDiscordant && t.pWorse <= rule.alpha) reasons.push(`${k}: significantly worse (p ${t.pWorse})`);
   }
   if (reasons.length) return { verdict: 'rejected', reasons, tests };
+  if (explicit && excluded / explicit > rule.maxExcluded) {
+    return { verdict: 'inconclusive', reasons: [`insufficient evidence: ${excluded} of ${explicit} decisions (${tests.excludedShare}) were unchecked on the champion's side; at most ${rule.maxExcluded}`], tests };
+  }
   if (evaluator && evaluator.available) {
     // A strategy or rulebook the evaluator never scored is not screened (R28): blocked, never kept.
     if (mechanical && (evaluator.uncovered || []).length) return { verdict: 'blocked', reasons: [`the evaluator scored no stream that reads ${evaluator.uncovered.join(', ')}: not screened (R28)`], tests };
@@ -163,7 +173,7 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   } else if (mechanical) {
     return { verdict: 'blocked', reasons: [`a strategy or rulebook change is screened by the evaluator first (R28): ${(evaluator && evaluator.why) || 'none available'}`], tests };
   }
-  if (n0 < rule.minPairs) return { verdict: 'inconclusive', reasons: [`insufficient evidence: ${n0} pairs judged; at least ${rule.minPairs}${unchecked ? ` (${unchecked} left out: unchecked on either side)` : ''}`], tests };
+  if (n0 < rule.minPairs) return { verdict: 'inconclusive', reasons: [`insufficient evidence: ${n0} pairs judged; at least ${rule.minPairs}${excluded ? ` (${excluded} left out: unchecked on the champion's side)` : ''}`], tests };
   if (target.n < rule.minDiscordant) return { verdict: 'inconclusive', reasons: [`${target.n} discordant pairs on the targeted measure; at least ${rule.minDiscordant}`], tests };
   if (target.effect < rule.minEffect) reasons.push(`effect ${target.effect} is under ${rule.minEffect}`);
   if (target.pBetter > rule.alpha) reasons.push(`no significant gain on the targeted measure (p ${target.pBetter} > ${rule.alpha})`);

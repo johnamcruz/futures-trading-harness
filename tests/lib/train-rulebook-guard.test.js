@@ -60,14 +60,42 @@ test('sizing: each key only stricter in its direction; off where a limit stands 
   if (dd !== 'drawdown_halve_usd: off') assert.match(errs(t, dd, 'drawdown_halve_usd: off'), /drawdown_halve_usd: .* turns a limit off/);
 });
 
-test('multipliers: only lower; never removed, a value never removed, max_age_min never raised', () => {
+test('multipliers, as the verdict applies them: no effective value rises, unlisted ones (0) included; never staler', () => {
   const t = tree();
   assert.strictEqual(errs(t, '          mixed: 0.5', '          mixed: 0.25'), '');
-  assert.match(errs(t, '          mixed: 0.5', '          mixed: 0.75'), /multipliers trend_rule\|mtf_read\.values\.mixed: 0\.5 -> 0\.75 raises a size multiplier/);
-  assert.match(errs(t, '          aligned: 1\n', ''), /values\.aligned: removed/);
-  assert.match(errs(t, '        max_age_min: 30', '        max_age_min: 60'), /max_age_min: 30 -> 60 accepts staler facts/);
+  assert.match(errs(t, '          mixed: 0.5', '          mixed: 0.75'), /multipliers mtf_read = mixed: the effective size multiplier rises from 0\.5 to 0\.75/);
+  // Dropping a listed value lowers it to 0 (skipped): stricter.
+  assert.strictEqual(errs(t, '          aligned: 1\n', ''), '');
+  // A value no entry listed scored 0: adding it above 0 raises it.
+  assert.match(errs(t, '          mixed: 0.5\n', '          mixed: 0.5\n          down: 1\n'), /mtf_read = down: the effective size multiplier rises from 0 to 1/);
+  assert.strictEqual(errs(t, '          mixed: 0.5\n', '          mixed: 0.5\n          down: 0\n'), '', 'listed at 0: still skipped');
+  assert.match(errs(t, '        max_age_min: 30', '        max_age_min: 60'), /mtf_read\.max_age_min: 30 -> 60 accepts staler facts/);
   const all = line(t, / {4}multipliers:\n(?: {6}.*\n)+/);
-  assert.match(errs(t, all, '    multipliers: []\n'), /multipliers trend_rule\|mtf_read: removed/);
+  assert.match(errs(t, all, '    multipliers: []\n'), /mtf_read: removed; its unlisted values rise from 0 to 1/);
+});
+
+test('multipliers: duplicates are judged on their product (removing one copy of two)', () => {
+  const m = (values, extra = {}) => ({ item: 'trend_rule', fact: 'mtf_read', values, ...extra });
+  const pol = list => ({ policies: { p: { sizing: {}, exit: {}, multipliers: list } } });
+  // Two copies at 0.5 multiply to 0.25; one copy left is 0.5: a rise.
+  assert.match(G.loosenings(pol([m({ mixed: 0.5 }), m({ mixed: 0.5 })]), pol([m({ mixed: 0.5 })])).join(), /mtf_read = mixed: the effective size multiplier rises from 0\.25 to 0\.5/);
+  // A second copy that only lowers: fine. Another fact added: its unlisted values were 1 (no entry), now 0: fine.
+  assert.deepStrictEqual(G.loosenings(pol([m({ mixed: 0.5 })]), pol([m({ mixed: 0.5 }), m({ mixed: 0.8 })])), []);
+  assert.deepStrictEqual(G.loosenings(pol([m({ mixed: 0.5 })]), pol([m({ mixed: 0.5 }), { item: 'room', fact: 'room_r', values: { ok: 1 } }])), []);
+  // The youngest max_age_min of a fact's entries decides; dropping it is staler.
+  assert.match(G.loosenings(pol([m({ mixed: 0.5 }, { max_age_min: 10 }), m({ mixed: 1 })]), pol([m({ mixed: 0.5 }), m({ mixed: 1 })])).join(), /max_age_min: 10 -> Infinity accepts staler facts/);
+});
+
+test('every key\'s direction: the looser way is refused and the stricter way passes, for each limit', () => {
+  const at = (k, v) => (k === 'daily_loss_soft' ? { daily_loss_soft: v } : { policies: { p: { sizing: { [k]: v }, exit: {}, multipliers: [] } } });
+  for (const [k, dir] of Object.entries(G.DIRECTION)) {
+    const stricter = dir === 'lower' ? 5 : 20;
+    const looser = dir === 'lower' ? 20 : 5;
+    assert.deepStrictEqual(G.loosenings(at(k, 10), at(k, stricter)), [], `${k}: ${10} -> ${stricter} is stricter`);
+    assert.match(G.loosenings(at(k, 10), at(k, looser)).join(), new RegExp(`${k}: 10 -> ${looser} is looser`), `${k}: 10 -> ${looser}`);
+  }
+  // Pinned, so a flipped direction fails here.
+  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher' });
 });
 
 test('exits, policies and the enforced classification: never loosened or changed', () => {

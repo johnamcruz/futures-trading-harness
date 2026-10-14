@@ -11,9 +11,10 @@ const many = (n, x) => Array(n).fill(x);
 
 test('the frozen decision rule: its numbers never fall, and a config may only tighten them', () => {
   assert.ok(Object.isFrozen(DECISION_RULE));
-  assert.ok(DECISION_RULE.alpha <= 0.05 && DECISION_RULE.minPairs >= 20 && DECISION_RULE.minDiscordant >= 6 && DECISION_RULE.minEffect >= 0.1 && DECISION_RULE.harmTolerance <= 0.02);
+  assert.ok(DECISION_RULE.alpha <= 0.05 && DECISION_RULE.minPairs >= 20 && DECISION_RULE.minDiscordant >= 6 && DECISION_RULE.minEffect >= 0.1 && DECISION_RULE.harmTolerance <= 0.02 && DECISION_RULE.maxExcluded <= 0.1);
   assert.deepStrictEqual(ruleFrom({ alpha: 0.01, minPairs: 40 }), { ...DECISION_RULE, alpha: 0.01, minPairs: 40 });
-  for (const loose of [{ alpha: 0.1 }, { minPairs: 10 }, { minDiscordant: 2 }, { minEffect: 0.05 }, { harmTolerance: 0.1 }]) {
+  assert.strictEqual(ruleFrom({ maxExcluded: 0.05 }).maxExcluded, 0.05);
+  for (const loose of [{ alpha: 0.1 }, { minPairs: 10 }, { minDiscordant: 2 }, { minEffect: 0.05 }, { harmTolerance: 0.1 }, { maxExcluded: 0.5 }]) {
     assert.throws(() => ruleFrom(loose), /loosen the frozen rule/, JSON.stringify(loose));
   }
   assert.throws(() => ruleFrom({ maxBlows: 1 }), /not a rule setting/);
@@ -90,14 +91,24 @@ test('judge: a fix that breaks another category beyond the tolerance is rejected
   assert.strictEqual(judge({ pairs: pairs([...many(25, 'wrong stated reason'), ...many(25, 'right')], [...many(25, 'right'), 'bad size', ...many(24, 'right')]), targets: ['wrong stated reason'], failures: FAILURES, rule: ruleFrom({ harmTolerance: 0.01 }) }).verdict, 'rejected');
 });
 
-test('a pair unchecked on either side is left out for both, symmetrically; too many left out is insufficient evidence', () => {
-  // The candidate trades where the champion stood aside, and the scorecard can't check those decisions: neither
-  // broken nor fixed. A champion's unchecked decision the candidate gets right is no fix either.
-  const left = judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(10, 'right'), ...many(5, 'unchecked')], [...many(20, 'right'), ...many(10, 'unchecked'), ...many(5, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
-  assert.deepStrictEqual([left.verdict, left.tests.pairs, left.tests.unchecked, left.tests.target.b, left.tests.target.c], ['kept', 20, 15, 20, 0]);
-  const thin = judge({ pairs: pairs([...many(15, 'wrong stated reason'), ...many(10, 'right')], [...many(15, 'right'), ...many(10, 'unchecked')]), targets: ['wrong stated reason'], failures: FAILURES });
-  assert.strictEqual(thin.verdict, 'inconclusive');
-  assert.match(thin.reasons[0], /insufficient evidence: 15 pairs judged; at least 20 \(10 left out: unchecked on either side\)/);
+test('unchecked, conservatively for the candidate: champion-checked candidate-unchecked is broken; champion-unchecked is left out, capped', () => {
+  // The reviewer's case: 30 targeted failures fixed, and 70 right decisions the candidate turned unchecked (skipped
+  // "on judgment"). Never kept: each of the 70 is broken.
+  const hide = judge({ pairs: pairs([...many(30, 'wrong stated reason'), ...many(70, 'right')], [...many(30, 'right'), ...many(70, 'unchecked')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(hide.verdict, 'rejected');
+  assert.deepStrictEqual([hide.tests.target.b, hide.tests.target.c, hide.tests.harm.unchecked.c], [30, 70, 70]);
+  assert.match(hide.reasons.join(), /unchecked: 70 decision\(s\) broken/);
+  // A targeted failure the candidate turns unchecked: never a fix, and broken.
+  const fail = judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(10, 'right')], [...many(19, 'right'), 'unchecked', ...many(10, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([fail.verdict, fail.tests.target.b, fail.tests.harm.unchecked.c], ['rejected', 19, 1]);
+  // The champion's unchecked decisions are left out, whatever the candidate did: within the cap (10%) the rest decides.
+  const ok = judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(16, 'right'), ...many(4, 'unchecked')], [...many(20, 'right'), ...many(16, 'right'), ...many(2, 'right'), ...many(2, 'bad size')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.deepStrictEqual([ok.verdict, ok.tests.pairs, ok.tests.excluded, ok.tests.excludedShare], ['kept', 36, 4, 0.1]);
+  // Over the cap: insufficient evidence, never kept.
+  const over = judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(15, 'right'), ...many(5, 'unchecked')], [...many(20, 'right'), ...many(15, 'right'), ...many(5, 'right')]), targets: ['wrong stated reason'], failures: FAILURES });
+  assert.strictEqual(over.verdict, 'inconclusive');
+  assert.match(over.reasons[0], /insufficient evidence: 5 of 40 decisions \(0\.125\) were unchecked on the champion's side; at most 0\.1/);
+  assert.strictEqual(judge({ pairs: pairs([...many(20, 'wrong stated reason'), ...many(16, 'right'), ...many(4, 'unchecked')], many(40, 'right')), targets: ['wrong stated reason'], failures: FAILURES, rule: ruleFrom({ maxExcluded: 0.05 }) }).verdict, 'inconclusive', 'a tighter cap');
   // Blows still count where the decision is unchecked.
   const blow = judge({ pairs: pairUp(many(20, 'wrong stated reason').map((c, i) => ({ key: `t${i}`, repeat: 0, category: c })), many(20, 'right').map((c, i) => ({ key: `t${i}`, repeat: 0, category: i === 0 ? 'unchecked' : c, blow: i === 0 }))), targets: ['wrong stated reason'], failures: FAILURES });
   assert.strictEqual(blow.verdict, 'rejected');
