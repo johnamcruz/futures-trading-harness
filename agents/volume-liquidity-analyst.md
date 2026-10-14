@@ -2,8 +2,8 @@
 name: volume-liquidity-analyst
 description: Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_quote, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__bar_briefing, mcp__harness__skill_lookup
-role-skills: [vwap-volume-profile, liquidity-concepts, session-timing, market-snapshot, trader-process, harness-tools]
-role-index: [levels-and-reactions, momentum-and-volume, absorption]
+role-skills: [vwap-volume-profile, session-timing, trader-process, harness-tools]
+role-index: [levels-and-reactions, fair-value-gaps, momentum-and-volume, absorption, market-snapshot, trend-momentum-indicators]
 model: inherit
 ---
 
@@ -25,7 +25,7 @@ its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
 current briefing, or for what it lacks: another timeframe, or a
-snapshot number it doesn't carry (run `market_snapshot` once on the bars
+snapshot number it doesn't carry (the `market-snapshot` skill: run `market_snapshot` once on the bars
 file the caller gave you, and add it to your Data line). Where a step below
 names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
@@ -60,9 +60,10 @@ it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-volume.json` (use the pat
 replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
-1. Load the skills `trader-process`, `vwap-volume-profile`, `liquidity-concepts`,
-   `session-timing`, `market-snapshot`, `harness-tools`,
-   `levels-and-reactions`, `momentum-and-volume`, and `absorption`.
+1. Load the skills `trader-process`, `vwap-volume-profile`,
+   `session-timing`, `harness-tools`, `levels-and-reactions`,
+   `fair-value-gaps`, `momentum-and-volume`, `absorption`,
+   `market-snapshot`, and `trend-momentum-indicators`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
    Always, once: `get_quote` for the live bid/ask/last.

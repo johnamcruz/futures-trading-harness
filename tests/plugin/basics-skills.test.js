@@ -19,15 +19,17 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch', 'fair-value-gaps'];
 const SETUPS = ['mtf-rejection', 'mtf-breakout'];
 const file = s => `skills/${s}/SKILL.md`;
 
-// Who carries which (each role only what it uses; the executor and the news analyst none).
+// Who carries which (each role only what it uses, and the homes of the retired skills it loaded: skill-retire.test.js;
+// the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout'],
-  'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
-  'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'mtf-rejection', 'mtf-breakout',
+    'momentum-and-volume'],
+  'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'levels-and-reactions'],
+  'volume-liquidity-analyst': ['levels-and-reactions', 'fair-value-gaps', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
   'trade-executor': [],
   'news-calendar-analyst': [],
@@ -64,6 +66,18 @@ const PINS = {
   'levels-and-reactions': [
     'No reaction is not a rejection.',
     'Which kind matters most is not measured',
+    'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other',
+    'Targets: the next untested liquidity pool in the trade\'s direction.',
+    'is no swing, so it is in neither.',
+  ],
+  'fair-value-gaps': [
+    'Price inside a gap is never "at an open FVG".',
+    'only the unfilled part is still a gap;',
+    'the gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
+    'A filled gap is in neither list. Never mark one by eye.',
+    'The briefing does not rank gaps among the levels in a setup\'s way',
+    'The room step stays the priority order\'s, on `inTheWay`.',
+    'Evidence**: not measured.',
   ],
   'momentum-and-volume': [
     'over the mean of the bars before them (the code takes 21)',
@@ -255,20 +269,26 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   assert.ok(flat(read(file('mtf-rejection'))).includes('is read in item 1 of `confluence-counting`'));
   // momentum-and-volume and confluence-counting define item 5 the same way.
   assert.match(cc, /\| 5 \|[^\n]*\| all with it \| all against it \| mixed or thin \|/);
-  assert.doesNotMatch(read('skills/market-snapshot/SKILL.md'), /liquidity-concepts/);
-  // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js).
+  // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js), stated once,
+  // in levels-and-reactions (liquidity-concepts retired: skill-retire.test.js).
   const ms = read('scripts/lib/trading/market-snapshot.js');
   assert.match(ms, /const tol = atrNow \? 0\.1 \* atrNow : 0;/);
   assert.match(ms, /const recentHighs = highs\.slice\(-12\);/);
-  assert.ok(flat(read('skills/liquidity-concepts/SKILL.md')).includes('two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other'));
-  assert.doesNotMatch(read('skills/liquidity-concepts/SKILL.md'), /~2 ticks/);
+  assert.ok(flat(read(file('levels-and-reactions'))).includes('two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other'));
+  assert.doesNotMatch(read(file('levels-and-reactions')), /~2 ticks/);
+  // Fair value gaps as the code computes them: the last 60 bars, the last 3 of each kind; an open gap untouched, a
+  // partly filled one traded into but not through (low-high the unfilled part).
+  assert.match(ms, /function fairValueGaps\(bars, n = 60\)/);
+  assert.match(ms, /openFvgs: open\.slice\(-3\),\n\s*partlyFilledFvgs: partly\.slice\(-3\),/);
+  assert.match(ms, /else if \(deepest > a\.h\) partly\.push\(\{ side: 'bullish', low: a\.h, high: deepest, gapLow: a\.h, gapHigh: c\.l, at \}\);/);
   // Unsourced numbers stay out of confluence-counting.
   assert.doesNotMatch(read(file('confluence-counting')), /46%|9 minutes|about half|quant audit/);
   // Each role only what it uses: the structure analyst reads levels and sweeps from the small skills.
   // Its core (role-skills) and its index (role-index: looked up as needed in opencode's index mode).
   const skillsOf = r => { const d = parseFrontmatter(read(`agents/${r}.md`)).data; return [...(d['role-skills'] || []), ...(d['role-index'] || [])]; };
-  assert.ok(!skillsOf('market-structure-analyst').includes('liquidity-concepts'));
-  assert.ok(skillsOf('volume-liquidity-analyst').includes('liquidity-concepts'));
+  for (const r of ['market-structure-analyst', 'volume-liquidity-analyst']) {
+    assert.ok(skillsOf(r).includes('fair-value-gaps') && skillsOf(r).includes('levels-and-reactions'), r);
+  }
 });
 
 test('basics skills: key sentences pinned; a changed one fails', () => {
@@ -392,8 +412,9 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
   assert.match(flat(step(4)), /setups: `mtf-rejection`, `mtf-breakout`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.
-  assert.match(read('skills/market-structure/SKILL.md'), /the `trend-vs-range` skill[^]*`pullback-vs-reversal`[^]*`breakout-vs-fakeout`[^]*the `invalidation` skill/);
-  assert.match(read('skills/liquidity-concepts/SKILL.md'), /`levels-and-reactions` skill's[^]*the `breakout-vs-fakeout` skill/);
+  // (market-structure and liquidity-concepts are retired; their content's homes: skill-retire.test.js.)
+  assert.ok(read(file('levels-and-reactions')).includes('`fair-value-gaps`'), 'levels-and-reactions points to fair-value-gaps');
+  assert.ok(read(file('fair-value-gaps')).includes('`levels-and-reactions`'), 'fair-value-gaps points to levels-and-reactions');
   assert.match(read('skills/vwap-volume-profile/SKILL.md'), /`momentum-and-volume` skill's[^]*the `absorption` skill/);
   assert.match(read('skills/trend-momentum-indicators/SKILL.md'), /`trend-vs-range` skill's/);
   // The generated opencode roles carry them in full.
@@ -422,18 +443,13 @@ test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exa
     const homes = all.filter(d => flat(read(file(d))).includes(sentence));
     assert.deepStrictEqual(homes, ['bos-vs-choch'], sentence);
   }
-  // A sentence still in market-structure (two homes) fails.
-  const ms = read(file('market-structure'));
-  assert.ok(!flat(ms).includes('BOS: a close'));
-  const twoHomes = d => [flat(read(file('bos-vs-choch'))), flat(`${ms} ${MOVED[2]}`)].filter(x => x.includes(d)).length;
+  // A sentence in a second skill (two homes) fails. (market-structure itself is retired: skill-retire.test.js.)
+  assert.ok(!fs.existsSync(path.join(ROOT, 'skills', 'market-structure')));
+  const other = flat(read(file('pullback-vs-reversal')));
+  assert.ok(!other.includes('BOS: a close'));
+  const twoHomes = d => [flat(read(file('bos-vs-choch'))), `${other} ${MOVED[2]}`].filter(x => x.includes(d)).length;
   assert.strictEqual(twoHomes(MOVED[2]), 2);
-  // The pointers: market-structure and the reads that use structure breaks.
-  assert.match(ms, /\*\*Events\*\*: BOS and CHoCH[^]*the\s+`bos-vs-choch` skill/);
-  const MS_POINTERS = ['1. **Swings**: how they are confirmed, the `bos-vs-choch` skill.', '6. **Higher timeframe wins** (`bos-vs-choch`, by timeframe).'];
-  for (const p of MS_POINTERS) {
-    assert.ok(flat(ms).includes(p), p);
-    assert.ok(!flat(ms).replace(p, '').includes(p), `removing: ${p}`);
-  }
+  // The reads that use structure breaks point to it.
   for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'mtf-rejection', 'mtf-breakout', 'confluence-counting', 'invalidation']) {
     assert.ok(read(file(s)).includes('`bos-vs-choch`'), s);
   }

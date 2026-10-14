@@ -2,7 +2,7 @@
 
 /**
  * Structure events computed from closed bars, so no role reads them by eye
- * (the market-structure and liquidity-concepts skills' definitions):
+ * (the bos-vs-choch, breakout-vs-fakeout and levels-and-reactions skills' definitions):
  *
  *   pivots(bars, k)              confirmed fractal swings: a high (low) above (below) the k bars on each side,
  *                                 confirmed k bars later; [{ type, price, t, i, confirmedAt }]
@@ -63,7 +63,7 @@ function lastBreaks(bars, k = 2) {
 }
 
 /**
- * Sweeps of named levels in the last n bars (the liquidity-concepts skill: trade through the level and close back
+ * Sweeps of named levels in the last n bars (the breakout-vs-fakeout skill: trade through the level and close back
  * inside within 1-3 bars). A high level: a bar trading above it, from a close at or below it, and a close back below
  * within that bar or the next two; a low level the same below. One per level (the most recent), key levels first
  * (`key: true`), then most recent first.

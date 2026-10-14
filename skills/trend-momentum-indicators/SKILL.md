@@ -1,6 +1,6 @@
 ---
 name: trend-momentum-indicators
-description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings for futures - trend presence, strength, volatility regime, and when each signal is unreliable. Use when a strategy gates on an indicator or when classifying the regime.
+description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings for futures - trend presence, strength, volatility regime, the regime and skip-rule counter fields, and when each signal is unreliable. Use when a strategy gates on an indicator or when classifying the regime.
 ---
 
 # Trend and Momentum Indicators
@@ -38,6 +38,18 @@ Regime: trend, range or transition, by the rule the code applies, is the
   market-snapshot; use that value, don't recompute). High → keep the $ risk
   constant: the wider stop means a smaller size; widen stops to structure.
   Low → breakouts fail more; prefer strategies that list it.
+- **The regime's fields** (`m3.regime`): primary (trend-up, trend-down,
+  range, transition), volatility (high, normal, low), tags, and the metrics
+  behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes
+  crossing the session VWAP in the last 30 bars, the same count as
+  `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).
+- **Skip-rule counters** (`m3.context`): the numbers the strategies' skip
+  rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`),
+  bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar
+  average (`keltnerWidthVsAvg20`: a squeeze is under 1), the band-close
+  streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars
+  (`supertrendFlipsLast20`), the last 5 bars' range in ATR (`range5Atr`).
+  Read a skip rule's number here; never estimate it.
 
 ## Examples
 

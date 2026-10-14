@@ -130,7 +130,7 @@ Removed from the repository; their documents stay in its history. Only the
 mechanical triggers are gone: the indicators they read (EMAs, ADX,
 SuperTrend, Keltner) and the structure breaks (BOS, CHoCH) stay in the bar
 briefing and the market snapshot as confluence data, and the skills still
-teach the concepts (`trend-momentum-indicators`, `market-structure`).
+teach the concepts (`trend-momentum-indicators`, `bos-vs-choch`).
 
 | Strategy | Signal | Retired | Why |
 |---|---|---|---|

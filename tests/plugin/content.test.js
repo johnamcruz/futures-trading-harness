@@ -333,7 +333,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
   // Codex can't take Read away (its sandbox reads files): a role without Read is told not to read files.
   // Its core skills, then its index (role-index), all readable.
-  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/market-structure\/SKILL\.md, [^)]*skills\/harness-tools\/SKILL\.md[^)]* under the harness root\): take bars and market data only through the tools above\./);
+  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/multi-timeframe-analysis\/SKILL\.md, [^)]*skills\/harness-tools\/SKILL\.md[^)]*skills\/fair-value-gaps\/SKILL\.md[^)]* under the harness root\): take bars and market data only through the tools above\./);
   assert.match(read('.codex/agents/trade-executor.toml'), /except your skills \(skills\/broker-mcp\/SKILL\.md, skills\/order-mechanics\/SKILL\.md, skills\/order-failures\/SKILL\.md, skills\/order-rationale\/SKILL\.md, skills\/trade-journal\/SKILL\.md, skills\/gate-refusals\/SKILL\.md, skills\/broker-refusals\/SKILL\.md under the harness root\)/, 'the executor can still load its skills');
   assert.doesNotMatch(read('.codex/agents/risk-manager.toml'), /Do not read files/, 'a role that has Read may');
   // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.

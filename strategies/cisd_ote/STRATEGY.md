@@ -36,7 +36,7 @@ setup; the steps below are what the series computes.
 
 ## When to Use
 
-- After a sweep of a liquidity pool (liquidity-concepts), when price displaces
+- After a sweep of a liquidity pool (levels-and-reactions), when price displaces
   hard in the opposite direction.
 - Any session (the source does not gate by time); prefer setups after a sweep.
 

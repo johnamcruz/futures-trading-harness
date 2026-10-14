@@ -1922,6 +1922,26 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   look('market-structure-analyst', 'mtf-breakout', 11);
   look('market-structure-analyst', 'breakout-vs-fakeout', 11);
   assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // A fair value gap ahead of the long (beyond price, open or partly filled): fair-value-gaps for the two roles that
+  // index it, the volume analyst too; a gap behind it requires nothing more.
+  const withGap = gap => writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(),
+    data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'allows' }], news: { inBlackout: false }, price: 21500, liquidity: { openFvgs: [], partlyFilledFvgs: [gap] } } } } });
+  withGap({ side: 'bearish', low: 21508.5, high: 21513, gapLow: 21506, gapHigh: 21513 });
+  const gapRefused = run(entryOrder());
+  assert.deepStrictEqual(checks(gapRefused), ['roles-ran']);
+  assert.match(gapRefused.violations[0].message, /market-structure-analyst reported without looking up fair-value-gaps/);
+  assert.match(gapRefused.violations[0].message, /volume-liquidity-analyst reported without looking up fair-value-gaps/);
+  assert.doesNotMatch(gapRefused.violations[0].message, /trend-momentum-analyst reported/);
+  look('market-structure-analyst', 'fair-value-gaps', 12);
+  look('volume-liquidity-analyst', 'fair-value-gaps', 12);
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  reset();
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 32);
+  look('market-structure-analyst', 'mtf-breakout', 11);
+  look('market-structure-analyst', 'breakout-vs-fakeout', 11);
+  withGap({ side: 'bullish', low: 21487, high: 21490.5, gapLow: 21487, gapHigh: 21493 });
+  assert.deepStrictEqual(run(entryOrder()).violations, [], 'a gap below a long is not in its way');
   // No trigger (no candidate on the bar): nothing is required.
   reset();
   brief([]);

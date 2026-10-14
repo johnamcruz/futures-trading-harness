@@ -18,8 +18,8 @@ const { tmpDir } = require('../helpers');
 const ROOT = path.resolve(__dirname, '..', '..');
 
 test('skill_lookup: the whole skill, wrapped with its name', () => {
-  const { body } = parseFrontmatter(fs.readFileSync(path.join(ROOT, 'skills', 'liquidity-concepts', 'SKILL.md'), 'utf8'));
-  assert.strictEqual(K.skillLookup({ skill: 'liquidity-concepts' }, { env: {} }).text, `<skill name="liquidity-concepts">\n${body.trim()}\n</skill>\n`);
+  const { body } = parseFrontmatter(fs.readFileSync(path.join(ROOT, 'skills', 'fair-value-gaps', 'SKILL.md'), 'utf8'));
+  assert.strictEqual(K.skillLookup({ skill: 'fair-value-gaps' }, { env: {} }).text, `<skill name="fair-value-gaps">\n${body.trim()}\n</skill>\n`);
 });
 
 test('skill_lookup: unknown skills, paths, and a skill folder that leads outside skills/ are refused', () => {
@@ -34,10 +34,10 @@ test('skill_lookup: unknown skills, paths, and a skill folder that leads outside
   fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
   fs.symlinkSync(outside, path.join(root, 'skills', 'evil'), 'dir');
   assert.throws(() => K.skillLookup({ skill: 'evil' }, { env: {}, root }), /is not a file under skills\/: refused/);
-  assert.throws(() => K.skillLookup({ skill: 'liquidity-concepts', role: '../x' }, { env: {} }), /--role/);
+  assert.throws(() => K.skillLookup({ skill: 'fair-value-gaps', role: '../x' }, { env: {} }), /--role/);
   // The tool's schema refuses them first.
   const schema = BY_NAME.get('skill_lookup').inputSchema;
-  assert.deepStrictEqual(validate(schema, { skill: 'liquidity-concepts', role: 'risk-manager' }), []);
+  assert.deepStrictEqual(validate(schema, { skill: 'fair-value-gaps', role: 'risk-manager' }), []);
   assert.match(validate(schema, { skill: '../x' }).join(';'), /must match/);
   assert.match(validate(schema, { skill: 'x', section: 'y' }).join(';'), /"section": unknown argument/);
   assert.match(validate(schema, {}).join(';'), /skill/);
@@ -46,19 +46,19 @@ test('skill_lookup: unknown skills, paths, and a skill folder that leads outside
 test('skill_lookup: a role\'s lookup in a runner\'s cycle is recorded; none outside one, none without a role, none refused', () => {
   const transcript = path.join(tmpDir(), 'cycle-transcript.jsonl');
   const env = { FTH_CYCLE_TRANSCRIPT: transcript };
-  K.skillLookup({ skill: 'liquidity-concepts', role: 'volume-liquidity-analyst' }, { env, wallNow: () => 123 });
-  K.skillLookup({ skill: 'liquidity-concepts' }, { env });
+  K.skillLookup({ skill: 'fair-value-gaps', role: 'volume-liquidity-analyst' }, { env, wallNow: () => 123 });
+  K.skillLookup({ skill: 'fair-value-gaps' }, { env });
   assert.throws(() => K.skillLookup({ skill: 'nope', role: 'volume-liquidity-analyst' }, { env }));
-  K.skillLookup({ skill: 'liquidity-concepts', role: 'volume-liquidity-analyst' }, { env: {} });
-  assert.deepStrictEqual(readLookups(transcript), [{ at: 123, role: 'volume-liquidity-analyst', skill: 'liquidity-concepts' }]);
+  K.skillLookup({ skill: 'fair-value-gaps', role: 'volume-liquidity-analyst' }, { env: {} });
+  assert.deepStrictEqual(readLookups(transcript), [{ at: 123, role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }]);
 });
 
 test('skill-lookup.js: the CLI prints the skill; a bad argument fails', () => {
   assert.deepStrictEqual(K.parseArgv(['--skill', 'a', '--role=b']), { skill: 'a', role: 'b' });
   assert.throws(() => K.parseArgv(['--section', 'x']), /unknown argument/);
-  const ok = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'skill-lookup.js'), '--skill', 'liquidity-concepts'], { encoding: 'utf8' });
+  const ok = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'skill-lookup.js'), '--skill', 'fair-value-gaps'], { encoding: 'utf8' });
   assert.strictEqual(ok.status, 0);
-  assert.match(ok.stdout, /^<skill name="liquidity-concepts">/);
+  assert.match(ok.stdout, /^<skill name="fair-value-gaps">/);
   const bad = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'skill-lookup.js'), '--skill', 'nope'], { encoding: 'utf8' });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr, /^\[skill-lookup\] no skill "nope"/);

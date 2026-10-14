@@ -42,9 +42,39 @@ test('triggers: each one fires on its briefing fact and not otherwise; the vocab
   assert.deepStrictEqual(SL.situationalSkills(null), []);
 });
 
+test('triggers: candidate.fvgAhead fires on an open or partly filled gap beyond price in a candidate\'s direction, and fails closed', () => {
+  const ahead = SL.parseTrigger('candidate.fvgAhead');
+  const fire = (candidates, liquidity, price = 21500) => SL.fires(ahead, { candidates, liquidity, price, news: { inBlackout: false } });
+  const above = { side: 'bearish', low: 21510, high: 21513 };
+  const below = { side: 'bullish', low: 21487, high: 21490.5 };
+  // A long: a gap above is ahead; one below is not. A short the mirror. Partly filled gaps (their unfilled part) count too.
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: [above], partlyFilledFvgs: [] }));
+  assert.ok(!fire([{ direction: 'long' }], { openFvgs: [below], partlyFilledFvgs: [] }));
+  assert.ok(fire([{ direction: 'short' }], { openFvgs: [], partlyFilledFvgs: [{ ...below, gapLow: 21487, gapHigh: 21493 }] }));
+  assert.ok(!fire([{ direction: 'short' }], { openFvgs: [above], partlyFilledFvgs: [] }));
+  // Any candidate with one ahead; none fired, or no gaps: nothing.
+  assert.ok(fire([{ direction: 'short' }, { direction: 'long' }], { openFvgs: [above] }));
+  assert.ok(!fire([], { openFvgs: [above] }));
+  assert.ok(!fire([{ direction: 'long' }], { openFvgs: [], partlyFilledFvgs: [] }));
+  assert.ok(!fire([{ direction: 'long' }], undefined), 'no liquidity facts: no gap listed');
+  // A gap whose edge is at price is not beyond it.
+  assert.ok(!fire([{ direction: 'long' }], { openFvgs: [{ low: 21490, high: 21500 }] }));
+  // Unreadable with a gap listed: fires (the lookup is required).
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: [below] }, null), 'no price');
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: [below] }, '21500'), 'a price that is not a number');
+  assert.ok(fire([{}], { openFvgs: [below] }), 'no direction');
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: [{ low: null, high: 21490.5 }] }), 'an edge missing');
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: [null] }), 'a gap that is not an object');
+  assert.ok(fire([{ direction: 'long' }], { openFvgs: 'garbage' }), 'a list that is not a list');
+  assert.throws(() => SL.parseTrigger('candidate.fvgAhead=1'), /takes no value/);
+  assert.strictEqual(SL.describeTrigger(ahead), 'an open or partly filled fair value gap lies ahead of a candidate');
+  // The shipped entry: the fair-value-gaps skill, for the roles that index it.
+  assert.deepStrictEqual(SL.SITUATIONAL.filter(e => e.when === 'candidate.fvgAhead'), [{ when: 'candidate.fvgAhead', skill: 'fair-value-gaps' }]);
+});
+
 test('skillsInTranscript: a whole-skill skill_lookup in the session\'s transcript counts as a load', () => {
   const ev = (tool, input, status = 'completed') => JSON.stringify({ type: 'tool_use', part: { tool, state: { status, input } } });
-  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'liquidity-concepts' }), ev('harness_skill_lookup', { skill: 'x' }, 'error')].join('\n'))], ['liquidity-concepts']);
+  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'fair-value-gaps' }), ev('harness_skill_lookup', { skill: 'x' }, 'error')].join('\n'))], ['fair-value-gaps']);
 });
 
 test('recordLookup / readLookups: only in a runner\'s cycle and with a role; bad lines skipped', () => {
@@ -100,7 +130,8 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
   // An old briefing (expired at the order's time): every situational skill of each index is required (fails closed).
   const stale = L.lookupRule({ home, transcript: file, contractId: 'MNQ', now: new Date('2026-10-07T15:00:00Z') });
-  assert.match(checkRolesRan(file, 'full', [], stale), /market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  assert.match(checkRolesRan(file, 'full', [], stale), /market-structure-analyst reported without looking up breakout-vs-fakeout, fair-value-gaps, mtf-breakout/);
+  assert.match(checkRolesRan(file, 'full', [], stale), /volume-liquidity-analyst reported without looking up fair-value-gaps/);
   assert.deepStrictEqual(stale.needs('risk-manager'), ['confluence-counting', 'invalidation']);
   assert.strictEqual(L.briefingFacts(home, 'MES', now), null, 'another root has no briefing');
   // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
@@ -128,7 +159,7 @@ test('the cycle log records the cycle\'s lookups and removes the run\'s lookups 
   const { writeCycleLog } = require('../../scripts/lib/cycle-log');
   const home = tmpDir();
   const transcript = path.join(home, 'cycle-transcript.jsonl');
-  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'liquidity-concepts' }, T);
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }, T);
   const { summary } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
   assert.deepStrictEqual(summary.skillLookups, { mode: 'index', lookups: 1, byRole: { 'volume-liquidity-analyst': 1 }, requiredCalls: 0, met: 0 });
   assert.ok(!fs.existsSync(L.lookupsFile(transcript)));
@@ -144,7 +175,10 @@ test('the runner\'s report cache: in index mode a role a lookup is required of o
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'allows' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager']);
   assert.deepStrictEqual(lookupRoles(b(m3([])), now, index), [], 'no candidate: the cache serves every role');
-  assert.deepStrictEqual(lookupRoles({ MNQ: null }, now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst'], 'no briefing: every role with a situational index runs');
+  // A gap ahead of a with-trend long: the two roles that index fair-value-gaps, and the risk manager (a candidate).
+  assert.deepStrictEqual(lookupRoles(b({ ...m3([{ direction: 'long', trendRule: 'allows' }]), price: 21500, liquidity: { openFvgs: [{ low: 21510, high: 21513 }], partlyFilledFvgs: [] } }), now, index).sort(),
+    ['market-structure-analyst', 'risk-manager', 'volume-liquidity-analyst']);
+  assert.deepStrictEqual(lookupRoles({ MNQ: null }, now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'], 'no briefing: every role with a situational index runs');
 });
 
 test('the head trader holds no skill_lookup: a lookup counts for the role it names, and only roles hold it', () => {
