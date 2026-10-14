@@ -169,6 +169,12 @@ test('preflight: an opencode run\'s opencode.json must be the one generated for 
   assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=full/);
   assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=index/);
   assert.throws(() => roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'bogus' }, 'opencode'), /one of full, index/);
+  // A full-mode file whose head trader still has index mode's own prompt (embedded skills, no skill tool): a full run
+  // refuses it too.
+  const full = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
+  full.agent['fth-head-trader'].prompt = JSON.parse(expectedFiles(ROOT)['workspace/opencode.json']).agent['fth-head-trader'].prompt;
+  fs.writeFileSync(path.join(dir, 'opencode.json'), JSON.stringify(full, null, 2));
+  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=full/);
 });
 
 test('the runner: an opencode run carries its FTH_ROLE_SKILLS (index by default); every other harness\'s run carries full', () => {

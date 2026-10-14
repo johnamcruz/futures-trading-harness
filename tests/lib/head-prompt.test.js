@@ -46,6 +46,14 @@ test('headPlan/headPrompt: index mode embeds each core skill whole, as a load re
   const named = new Set([...prompt.matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]).filter(s => names.includes(s)));
   assert.ok(named.size > H.CORE.length);
   for (const s of named) assert.match(agentsMd, new RegExp(`^- \`${s}\` \\(skills/${s}/SKILL\\.md\\): `, 'm'), s);
+  // Nothing embedded sends it to reload a skill it holds, or to a tool it lacks: trade-session step 0 and role-round
+  // say a skill in its prompt counts and name skill_lookup without a skill tool; skill_lookup says the head trader gives no role.
+  const flat = t => t.replace(/\s+/g, ' ');
+  assert.match(flat(prompt), /one already in your prompt counts: don't reload it \(no skill tool: skill_lookup\)/);
+  assert.match(flat(prompt), /load skills yourself \(your skill tool; none: skill_lookup or `SKILL\.md`\)/);
+  const tool = require('../../scripts/lib/harness-tools/registry').BY_NAME.get('skill_lookup');
+  assert.match(tool.description, /A role gives role \(its name\) in a cycle, the head trader none/);
+  assert.match(head, /\(no role: that is the roles'\)/);
   // Stable: the same text every generation (a cached prefix).
   assert.strictEqual(H.headPrompt(H.headPlan(ROOT, 'index')), prompt);
 });

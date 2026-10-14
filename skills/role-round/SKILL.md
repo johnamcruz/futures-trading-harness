@@ -32,7 +32,7 @@ every result before step 3. Always delegate to a harness role by its agent name
 agent: autonomous runs may allow only the harness roles. A role's call is that
 role's own analysis (the order gate counts it as its report): never ask a role
 to read, load or summarize skills or files for you; load skills yourself (your
-skill tool, or without one read their `SKILL.md`). Launch each so you wait
+skill tool; none: skill_lookup or `SKILL.md`). Launch each so you wait
 for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents (interactively), play each role yourself in turn; in an autonomous

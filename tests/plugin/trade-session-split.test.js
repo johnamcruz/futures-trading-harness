@@ -65,6 +65,14 @@ const ALLOWED = [
   { old: 'An order list may not show a bracket before the entry fills, so tell by the entry\'s own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind only, no `contractId` filter: the one whose `data.result.orderId` is the order; its `data.request` has `stopLossBracket` when the bracket went with it); step 6\'s note on a working entry adds context.',
     now: 'An order list may not show a bracket before the entry fills, so tell by the entry\'s own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind only, no `contractId` filter: the one whose `data.result.orderId` is the order; its `data.request` has `stopLossBracket` when the bracket went with it); entry-outcome\'s note on a working entry adds context.',
     reason: 'step 6\'s note on a working entry is the entry-outcome skill now' },
+  // opencode's head trader in index mode has these skills in its prompt and no skill tool (head-prompt.js): step 0 and
+  // the round say so, so it never reloads them or calls a tool it doesn't have (review). No path grows.
+  { old: 'The order gate refuses an entry from a session whose transcript doesn\'t show each one loaded (a load that returned an error, such as a skill not found, doesn\'t count: load it again by the name the error lists).',
+    now: 'The order gate refuses an entry until each is loaded (an errored load doesn\'t count: load it again by the name the error lists); one already in your prompt counts: don\'t reload it (no skill tool: skill_lookup).',
+    reason: 'a skill embedded in the head trader\'s prompt is loaded (the gate counts it on the runner\'s attestation); without a skill tool, skill_lookup' },
+  { old: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool, or without one read their `SKILL.md`).',
+    now: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool; none: skill_lookup or `SKILL.md`).',
+    reason: 'the head trader without a skill tool (opencode, index mode) reads a skill with skill_lookup, which the gate counts' },
 ];
 
 const homeTexts = () => HOMES.map(skill);

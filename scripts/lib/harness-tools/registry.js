@@ -199,7 +199,7 @@ const TOOLS = [
   },
   {
     name: 'skill_lookup', op: 'skill_lookup', script: 'skill-lookup',
-    description: 'Any whole skill of the harness by name (your skill index lists yours). Look one up only when the cycle needs it. Give role (your role\'s name) in a trading cycle: where the bar requires a skill of your index, your report counts for an entry only with that lookup. No skill: lists every skill (query filters). Read-only.',
+    description: 'Any whole skill of the harness by name (your skill index lists yours), read only when the cycle needs it. A role gives role (its name) in a cycle, the head trader none: where the bar requires a skill of its index, its report counts for an entry only with it. No skill: lists every skill (query filters). Read-only.',
     inputSchema: object({
       skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'The skill\'s name, e.g. fair-value-gaps.' },
       role: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'Your role\'s name, e.g. volume-liquidity-analyst.' },

@@ -37,6 +37,8 @@ const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, descri
 
 const HEAD_AGENT = 'fth-head-trader';
 const ATTEST_ENV = 'FTH_HEAD_PROMPT';
+/** The prompt's first sentence: how a config's head trader is seen to have this prompt (preflight.js roleSkillsMismatch). */
+const HEAD_MARK = 'You are the head trader of the futures trading harness.';
 /*
  * The skills the head trader reads every cycle (trade-session step 0, the runner's load list) and before a decision or
  * an entry (steps 2 to 4): the gate's lists come first, so none can be left out.
@@ -70,7 +72,7 @@ const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(e => e.he
 function headPrompt(plan, table = SITUATIONAL) {
   const names = plan.docs.map(d => d.name);
   const out = [
-    'You are the head trader of the futures trading harness. Your instructions are the workspace instructions (AGENTS.md, after this prompt): its rules always apply, and it lists the agent roles you delegate to.',
+    `${HEAD_MARK} Your instructions are the workspace instructions (AGENTS.md, after this prompt): its rules always apply, and it lists the agent roles you delegate to.`,
     '',
     `Your skills ${andList(names)} are below, already loaded (Your skills): every cycle reads them. Read them here; don't load them again. They name other skills a step needs (\`manage-position\` for an open position, \`leftover-orders\`, \`lean-cycle\`, \`entry-outcome\`, ...), all in the Skills list of AGENTS.md: read one whole with \`skill_lookup {"skill": "<name>"}\` (no role: that is the roles') only when this cycle needs it. \`skill_lookup {}\` lists every skill. You have no skill tool.`,
     '',
@@ -164,4 +166,4 @@ function attestedSkills(att, root, { transcript } = {}) {
   return att.skills.filter(s => embedded.includes(s));
 }
 
-module.exports = { HEAD_AGENT, ATTEST_ENV, CORE, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256 };
+module.exports = { HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256 };

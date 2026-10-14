@@ -907,6 +907,20 @@ test('the cycle prompt: opencode in index mode says the skills are in the head t
     assert.match(oc, /Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded \(don't load them again\): decide by them, then run the trade-session skill for MNQ/);
     assert.doesNotMatch(oc, /With your skill tool, load/);
     for (const s of REQUIRED_FOR_ENTRY) assert.ok(oc.includes(s), s);
+    // Only on the attestation the runner gives the gate (headAttestation): a workspace without the file, or whose head
+    // prompt leaves out a skill the sentence names, gets the load sentence, never "already loaded".
+    const root = tmpDir();
+    fs.mkdirSync(path.join(root, 'workspace'));
+    const loads = /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/;
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'no opencode.json');
+    fs.symlinkSync(path.join(ROOT, 'skills'), path.join(root, 'skills'));
+    const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
+    fs.writeFileSync(path.join(root, 'workspace', 'opencode.json'), JSON.stringify(json));
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), /are in your prompt, already loaded/, 'the same file, another root');
+    json.agent['fth-head-trader'].prompt = json.agent['fth-head-trader'].prompt.replace('<skill name="htf-to-ltf">', '<skill name="htf-to-ltf-x">');
+    fs.writeFileSync(path.join(root, 'workspace', 'opencode.json'), JSON.stringify(json));
+    assert.strictEqual(embedsSkills(validateConfig({ harness: 'opencode' }), root), false, 'htf-to-ltf not embedded');
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'partial');
     process.env.FTH_ROLE_SKILLS = 'full';
     assert.match(prompts(validateConfig({ harness: 'opencode' }), now).trade(items), /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/);
     delete process.env.FTH_ROLE_SKILLS;

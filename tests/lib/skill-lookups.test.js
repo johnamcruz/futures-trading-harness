@@ -186,13 +186,27 @@ test('lookupRule: a lookup the session made itself in a role\'s name (the head t
   assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null, 'the roles\' own lookups count');
   // The same record, but the session's transcript shows the head trader made it naming the role: not the role's.
   fs.writeFileSync(file, [...roles, own({ skill: 'pullback-vs-reversal', role: 'trend-momentum-analyst' }, 1.5)].join('\n'));
-  assert.deepStrictEqual([...L.sessionLookups(file)], ['trend-momentum-analyst\tpullback-vs-reversal']);
+  assert.deepStrictEqual(L.sessionLookups(file), [{ role: 'trend-momentum-analyst', skill: 'pullback-vs-reversal', start: T + 1.5, end: T + 1.5 }]);
   assert.match(checkRolesRan(file, 'full', [], rule()), /trend-momentum-analyst reported without looking up pullback-vs-reversal/);
+  // Only the session's own record goes: the role's own lookup of the same skill, made during its call, still counts.
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role: 'trend-momentum-analyst', skill: 'pullback-vs-reversal' }, T + 1.8);
+  assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
+  const recs = [{ at: T + 1.5, role: 'r', skill: 's' }, { at: T + 1.8, role: 'r', skill: 's' }, { at: T + 1.5, role: 'q', skill: 's' }];
+  fs.writeFileSync(file, own({ skill: 's', role: 'r' }, 1.5));
+  assert.deepStrictEqual(L.rolesOwn(recs, file), [recs[1], recs[2]]);
+  // A session call without times: one record of its pair goes (fails closed), never all of them.
+  fs.writeFileSync(file, JSON.stringify({ type: 'tool_use', part: { tool: 'harness_skill_lookup', state: { status: 'completed', input: { skill: 's', role: 'r' } } } }));
+  assert.deepStrictEqual(L.rolesOwn(recs, file).length, 2);
+  // Malformed events never throw and name nothing.
+  fs.writeFileSync(file, ['{"type":"tool_use","note":"skill_lookup"}', 'null', '"skill_lookup"', '{"type":"tool_use","part":{"tool":"harness_skill_lookup"}}', '{"type":"tool_use","part":{"tool":"harness_skill_lookup","state":{"input":null}}}'].join('\n'));
+  assert.deepStrictEqual(L.sessionLookups(file), []);
+  fs.writeFileSync(file, roles.join('\n'));
+  assert.deepStrictEqual(L.rolesOwn(recs, file), recs);
   // Its lookups without a role (its own reading) take nothing from any role.
   fs.writeFileSync(file, [...roles, own({ skill: 'pullback-vs-reversal' }, 1.5)].join('\n'));
-  assert.deepStrictEqual([...L.sessionLookups(file)], []);
+  assert.deepStrictEqual(L.sessionLookups(file), []);
   assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
-  assert.deepStrictEqual([...L.sessionLookups(path.join(dir, 'gone.jsonl'))], []);
+  assert.deepStrictEqual(L.sessionLookups(path.join(dir, 'gone.jsonl')), []);
 });
 
 test('lookupStats: lookups by role, and how many reports a requirement applied to and met', () => {
