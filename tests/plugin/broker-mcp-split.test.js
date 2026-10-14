@@ -20,6 +20,9 @@ const BEFORE = 'tests/fixtures/skill-split/broker-mcp.before.txt';
 // so a sentence can't be dropped from the fixture and from its new home together.
 const BEFORE_SHA256 = 'dc8cf0a817ec8b6a5eb27fb1a8642d5dc534e946ad754d7825db0276b7c05e35';
 const HOMES = ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'];
+// A skill split later (tests/plugin/gate-refusals-split.test.js): its pieces hold the units too; broker-mcp points to
+// gate-refusals, which points to the rest.
+const LATER = ['gate-refusals-limits', 'gate-refusals-positions', 'gate-refusals-cycle'];
 
 /**
  * A skill's units: its body (no frontmatter) in blocks (a heading, a list item, a table row, a paragraph, a code
@@ -67,18 +70,18 @@ const ALLOWED = [
     now: 'Never send the entry again (the gateway refuses new entries with `[order-pending]` until the order settles; the `order-failures` skill).',
     reason: 'the Failures and limits section is the order-failures skill' },
   { old: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see Errors.)',
-    now: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals` skill.)',
-    reason: 'the Errors table\'s row for it is in the gate-refusals skill' },
+    now: '(Right after a close whose reply was an error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals-positions` skill.)',
+    reason: 'the Errors table\'s row for it is in the gate-refusals-positions skill (gate-refusals was split later)' },
   // A truth fix in moved text: the kinds are the broker interface's (scripts/lib/broker/interface.js, JOURNAL), which
   // the old list left short (the trade-executor writes `exit`; the interface takes `entry` and `exit` too).
   { old: 'Kinds: `plan`, `note`, `review`, `lesson`; every `place_order` writes an `order_placed` entry by itself.',
     now: ['Kinds you write: `plan`, `entry`, `exit`, `review`, `lesson`, `note`.',
       'The server writes its own: every `place_order` an `order_placed` entry, a guardrail refusal an `order_blocked`, `close_position` and `partial_close_position` an `exit`, and `modify_order` with a reason a `note`.'],
     reason: 'the kinds as the broker interface states them (JOURNAL.agentWritten and serverWritten)' },
-  // Deliberately in two homes: both refusal skills carry the error table's header.
-  { old: 'Message', copies: 2, reason: 'the table header, in gate-refusals and broker-refusals' },
-  { old: 'Meaning', copies: 2, reason: 'the table header, in gate-refusals and broker-refusals' },
-  { old: 'Do', copies: 2, reason: 'the table header, in gate-refusals and broker-refusals' },
+  // Deliberately in five homes: every refusal skill carries the error table's header (gate-refusals in four pieces).
+  { old: 'Message', copies: 5, reason: 'the table header, in the four gate-refusals pieces and broker-refusals' },
+  { old: 'Meaning', copies: 5, reason: 'the table header, in the four gate-refusals pieces and broker-refusals' },
+  { old: 'Do', copies: 5, reason: 'the table header, in the four gate-refusals pieces and broker-refusals' },
 ];
 
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
@@ -101,7 +104,7 @@ function differences(beforeText, homeTexts) {
   return bad;
 }
 
-const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
+const homeTexts = () => [...HOMES, ...LATER].map(s => read(`skills/${s}/SKILL.md`));
 
 test('broker-mcp split: every unit of the old skill is in exactly one new home, byte-for-byte (whitespace normalised)', () => {
   const sha = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(ROOT, BEFORE))).digest('hex');
@@ -140,12 +143,12 @@ test('broker-mcp split: the comparison catches a lost, a doubled or an edited se
   // Edited: one word changed.
   assert.notDeepStrictEqual(differences(old, withFailures(homes[at].replace(/Reuse the runner's bars\s+file;/, 'Reuse the bars file;'))), []);
   // A changed sentence reverted to its old text (the exception no longer needed) also fails: the list only shrinks.
-  assert.notDeepStrictEqual(differences(old, withFailures(homes[at].replace('see the `gate-refusals` skill.)', 'see Errors.)'))), []);
+  assert.notDeepStrictEqual(differences(old, withFailures(homes[at].replace('see the `gate-refusals-positions` skill.)', 'see Errors.)'))), []);
 });
 
 test('broker-mcp split: each new skill answers one question in a short index line, and broker-mcp says where the rest is', () => {
   const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
-  for (const s of HOMES) {
+  for (const s of [...HOMES, ...LATER]) {
     const d = parseFrontmatter(read(`skills/${s}/SKILL.md`)).data.description;
     assert.ok(d.length <= 160, `${s}: description ${d.length} chars, over 160`);
   }

@@ -127,12 +127,16 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // (indexed) for the market-structure analyst; from the strategy-library split, strategy-scan and strategy-gate-checks
 // for the trading roles that load strategy-library, and strategy-gate-checks and harness-root for the strategy
 // researcher (which reads no scan; the trading roles get the root from the prompt). No role's prompt grows.
+// From the gate-refusals split (tests/plugin/gate-refusals-split.test.js): each role loads the pieces its body uses.
+// The risk manager (it places no order) takes gate-refusals-limits and gate-refusals-cycle (the size,
+// risk, prop and FACTS refusals its checks name); the executor gate-refusals (the order itself) and
+// gate-refusals-positions (managing a position): the limits and cycle rows are the head trader's to act on.
 const MAIN_SKILLS = {
   'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
   'news-calendar-analyst': ['session-timing', 'trader-process'],
-  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
+  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
   'strategy-researcher': ['strategy-authoring', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
-  'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'],
+  'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
   'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
   'volume-liquidity-analyst': ['vwap-volume-profile', 'liquidity-concepts', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'harness-tools'],

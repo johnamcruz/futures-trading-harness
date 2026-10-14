@@ -32,7 +32,7 @@ description: What to do when an order or read call errors or times out - never r
 - A position without a working protective stop (its bracket stop missing
   after the fill, a partial exit, cancelled by mistake): place a `[protect]`
   stop at once, or close the position. Nothing else comes first. (Right after a close whose reply was an
-  error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals` skill.)
+  error, the gate refuses the `[protect]`: `close_position` again; see the `gate-refusals-positions` skill.)
 
 ## Examples
 
