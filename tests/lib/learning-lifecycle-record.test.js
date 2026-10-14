@@ -54,3 +54,12 @@ test('the adapter reads the reads checker\'s field names: signature, skillSignat
   const r = fromLifecycleRecord(raw);
   assert.deepStrictEqual([r.signatures.read, r.signatures.skill, r.context.biasSide, r.reasons, r.reads[1].check, r.reads[0].check], ['bias:1h-bos-up', 'bias:bos-vs-choch', 'none', ['a read is false'], 'false', 'true']);
 });
+
+test('the adapter reads the record\'s plan objects (entry, stop, target with their price), its lane and contract; the run id from the run when absent', () => {
+  const a = record();
+  const raw = { ...a, schema: 1, lane: '3m', runId: undefined, plan: { entry: { type: 'limit', price: 100 }, stop: { source: '15m low', level: 98.25, price: 98, ticks: 8 }, target: { source: '1h swing', level: 104, price: 104, ticks: 16 }, rr: 2, size: 2, maxSize: 5 } };
+  const r = fromLifecycleRecord(raw, { runId: 'run-x' });
+  assert.deepStrictEqual([r.plan.entry, r.plan.stop, r.plan.target, r.plan.size, r.plan.rr, r.lane, r.contract, r.runId], [100, 98, 104, 2, 2, '3m', 'MNQ:2023-06', 'run-x']);
+  assert.strictEqual(fromLifecycleRecord({ ...raw, plan: { ...raw.plan, entry: { limit: 99.75 } } }).plan.entry, 99.75);
+  assert.strictEqual(fromLifecycleRecord({ ...raw, runId: 'own' }, { runId: 'run-x' }).runId, 'own');
+});

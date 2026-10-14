@@ -65,7 +65,7 @@ test('buildDecisions: entered from real fills, passed by counterfactual, refused
   assert.deepStrictEqual([entered.outcome.source, entered.outcome.R, entered.grade], ['fills', 1.5, 'win']);
   assert.deepStrictEqual([passed.outcome.source, passed.outcome.entryPrice, passed.outcome.exitReason, passed.outcome.R, passed.grade], ['counterfactual', 100, 'target', 2, 'missed-win']);
   assert.deepStrictEqual([tried.checked, tried.signatures.skill, nothing.checked], [1, null, 0]);
-  assert.deepStrictEqual([refused.refusal, refused.side, refused.outcome.exitReason, refused.grade], ['trade-lifecycle-reads', 'short', 'target', 'missed-win']);
+  assert.deepStrictEqual([refused.refusal, refused.side, refused.outcome.exitReason, refused.grade], ['trade-lifecycle-reads', 'short', 'target', 'refused-would-win']);
   assert.strictEqual(entered.role, 'practice-train');
   assert.strictEqual(entered.day, '2023-03-15');
   assert.deepStrictEqual(Object.keys(entered.context), ['regime', 'volatility', 'window', 'biasSide', 'alignment', 'dayType']);
@@ -81,6 +81,38 @@ test('grades: a pass that would have lost is a good pass; unfilled is neutral', 
   assert.strictEqual(E.gradeOf('passed', { R: null }), 'neutral-pass');
   assert.strictEqual(E.gradeOf('entered', { R: -1 }), 'loss');
   assert.strictEqual(E.gradeOf('none', null), null);
+  // The gate's refusals are graded apart from the model's passes.
+  assert.deepStrictEqual(['refused'].flatMap(d => [-1, 1, null].map(R => E.gradeOf(d, { R }))), ['refused-would-lose', 'refused-would-win', 'refused-neutral']);
+});
+
+test('a round trip is credited to the latest ok record before its fill, not an earlier one still open (A then B)', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  // A at t0 and B at t1 both long, A valid three bars, B one; the fill comes after B's record: B entered, A passed.
+  const A = fromLifecycleRecord(record({ at: t(0), expiresAt: t(3) }));
+  const B = fromLifecycleRecord(record({ at: t(1), expiresAt: t(2), skills: ['daily-bias', 'vwap-volume-profile', 'rejection', 'candle-reading', 'invalidation', 'top-down-entry'] }));
+  const rows = [[100.5, 100.75, 100.25, 100.5], [100.5, 100.75, 99.75, 100.25], [100.25, 104.25, 100, 104], [104, 104.5, 103, 103.5]];
+  const out = E.buildDecisions({
+    cycles: [0, 1].map(i => ({ at: t(i), roots: ['MNQ'] })), records: [A, B],
+    trips: [trip(new Date(ms(t(1)) + 30000).toISOString(), t(3), 100, 104)], barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25,
+  });
+  assert.deepStrictEqual(out.map(d => [d.cycleAt, d.decision, d.signatures.skill.slice(0, 15)]), [[t(0), 'passed', 'bias:bos-vs-cho'], [t(1), 'entered', 'bias:daily-bias']]);
+  // A fill before B's record is A's.
+  const early = E.buildDecisions({ cycles: [0, 1].map(i => ({ at: t(i), roots: ['MNQ'] })), records: [A, B], trips: [trip(new Date(ms(t(0)) + 30000).toISOString(), t(3), 100, 104)], barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25 });
+  assert.deepStrictEqual(early.map(d => d.decision), ['entered', 'passed']);
+});
+
+test('limitOutcome: a target on the fill bar is never credited; the limit never fills across the session or past end of day', () => {
+  // The fill bar reaches the target, the next bar the stop: a loss, the fill bar's target not counted.
+  const fillBarTarget = E.limitOutcome(plan({ rows: [[100.5, 104.5, 99.75, 104], [104, 104.25, 97.5, 98]], expiry: 1 }));
+  assert.deepStrictEqual([fillBarTarget.exitReason, fillBarTarget.R], ['stop', -1.125]);
+  // Expiry after end of day: the bar reaching end of day doesn't fill; nothing after it does.
+  const eod = ms(T0) + M3;
+  const late = E.limitOutcome({ ...plan({ rows: [[100.5, 101, 100.25, 100.75], [100.75, 101, 99, 99.5]], expiry: 3, eodMs: eod }) });
+  assert.deepStrictEqual([late.filled, late.exitReason], [false, 'unfilled']);
+  // A record whose expiry reaches into the next session: no fill in it.
+  const evening = '2023-03-15T19:57:00.000Z';
+  const cross = E.limitOutcome({ bars: bars(evening, [[100.5, 101, 100.25, 100.75], [100.75, 101, 99, 99.5]]).map((b, i) => (i ? { ...b, ms: Date.parse('2023-03-15T22:00:00Z'), t: '2023-03-15T22:00:00Z' } : b)), tfMs: M3, side: 'long', entry: 100, stop: 98, target: 104, fromMs: ms(evening), expiresMs: Date.parse('2023-03-16T00:00:00Z'), tick: 0.25 });
+  assert.deepStrictEqual([cross.filled, cross.exitReason], [false, 'unfilled']);
 });
 
 test('appendDecisions: append-only, each id once; readDecisions skips a torn line', () => {

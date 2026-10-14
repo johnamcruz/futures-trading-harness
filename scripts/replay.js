@@ -176,7 +176,7 @@ async function main(argv) {
   if (cmd === 'report') return report(argv);
   if (cmd === 'labels') return labels(argv);
   if (cmd === 'scorecard') return score(argv);
-  if (cmd === 'experience') return say(experienceLine(writeRunExperience(argv[1] && !argv[1].startsWith('--') ? argv[1] : '', { root: ROOT, barsFiles: barsArgs(argv) }))) || 0;
+  if (cmd === 'experience') { say(experienceLine(writeRunExperience(argv[1] && !argv[1].startsWith('--') ? argv[1] : '', { root: ROOT, barsFiles: barsArgs(argv) }))); return 0; }
   throw new Error(USAGE);
 }
 

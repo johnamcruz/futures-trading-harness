@@ -21,7 +21,9 @@
  *            the stop filled SLIPPAGE_TICKS worse (the backtester's market-stop slippage), the target at its price,
  *            out at the close of the bar that reaches end of day or the last bar of the trading day.
  * Grade: an entry's result (win, loss, scratch); a pass whose counterfactual lost is a `good-pass`, one that would
- * have won a `missed-win`, unfilled or flat a `neutral-pass`.
+ * have won a `missed-win`, unfilled or flat a `neutral-pass`; a gate refusal apart (refused-would-lose, refused-would-win,
+ * refused-neutral), never counted as the model's pass. A round trip belongs to the latest ok record at or before its
+ * opening fill whose order could have filled it (side, root, before the record expired).
  *
  * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
@@ -121,6 +123,8 @@ function gradeOf(decision, outcome) {
   if (decision === 'none') return null;
   const R = outcome ? outcome.R : null;
   if (decision === 'entered') return resultOf(R);
+  // The gate's refusal is not the model's pass: graded apart, so pass quality is the model's own.
+  if (decision === 'refused') return R === null || R === 0 ? 'refused-neutral' : R < 0 ? 'refused-would-lose' : 'refused-would-win';
   if (R === null || R === 0) return 'neutral-pass';
   return R < 0 ? 'good-pass' : 'missed-win';
 }
@@ -149,44 +153,53 @@ function buildDecisions({ cycles = [], records = [], trips = [], gateRefusals = 
     if (!byCycle.has(k)) byCycle.set(k, []);
     byCycle.get(k).push(r);
   }
-  const used = new Set();
-  const out = [];
+  // Each cycle and root with its records and its latest ok record (the one order_plan plans from).
+  const slots = [];
   for (const c of cycles) {
     const at = Date.parse(c.at);
     if (!Number.isFinite(at)) continue;
     for (const root of c.roots || []) {
       const recs = (byCycle.get(`${at}|${root}`) || []).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
       const ok = recs.filter(r => r.ok).pop() || null;
-      const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, writtenAt: now.toISOString() };
-      if (!ok) {
-        const day = tradingDayKey(new Date(at));
-        out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null,
-          exploratory: false, verified: false, reads: [], signatures: { skill: null, read: null }, context: null, plan: null, outcome: null, grade: null });
-        continue;
-      }
-      const fromMs = Date.parse(ok.at);
-      const expiresMs = ok.expiresAt ? Date.parse(ok.expiresAt) : fromMs + tfMs;
-      const want = ok.side === 'long' ? 'buy' : 'sell';
-      const trip = trips.find(t => !used.has(t) && t.openMs !== null && t.openMs >= fromMs && t.openMs <= expiresMs && t.side === want
-        && (!t.family || t.family === familyRoot(root)));
-      let decision = 'passed';
-      let refusal = null;
-      let outcome;
-      if (trip) {
-        used.add(trip);
-        decision = 'entered';
-        outcome = tripOutcome(trip, ok.plan, ok.side);
-      } else {
-        const refused = gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
-        if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
-        outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root) });
-      }
-      out.push({
-        ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
-        role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
-        reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
-      });
+      slots.push({ at, root, recs, ok, fromMs: ok ? Date.parse(ok.at) : null, expiresMs: ok ? (ok.expiresAt ? Date.parse(ok.expiresAt) : Date.parse(ok.at) + tfMs) : null });
     }
+  }
+  // A round trip belongs to the latest ok record at or before its opening fill whose order could have filled it (its
+  // side and root, the fill before the record expired), never to an earlier one still open: each record at most one.
+  const tripOf = new Map();
+  for (const t of trips.filter(x => x.openMs !== null).sort((a, b) => a.openMs - b.openMs)) {
+    const want = s => (s.ok.side === 'long' ? 'buy' : 'sell') === t.side;
+    const owner = slots.filter(s => s.ok && !tripOf.has(s) && want(s) && (!t.family || t.family === familyRoot(s.root)) && s.fromMs <= t.openMs && t.openMs <= s.expiresMs)
+      .sort((a, b) => b.fromMs - a.fromMs)[0];
+    if (owner) tripOf.set(owner, t);
+  }
+  const out = [];
+  for (const slot of slots) {
+    const { at, root, recs, ok, fromMs, expiresMs } = slot;
+    const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, writtenAt: now.toISOString() };
+    if (!ok) {
+      const day = tradingDayKey(new Date(at));
+      out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null,
+        exploratory: false, verified: false, reads: [], signatures: { skill: null, read: null }, context: null, plan: null, outcome: null, grade: null });
+      continue;
+    }
+    const trip = tripOf.get(slot) || null;
+    let decision = 'passed';
+    let refusal = null;
+    let outcome;
+    if (trip) {
+      decision = 'entered';
+      outcome = tripOutcome(trip, ok.plan, ok.side);
+    } else {
+      const refused = gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
+      if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
+      outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root) });
+    }
+    out.push({
+      ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
+      role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
+      reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
+    });
   }
   return out;
 }
