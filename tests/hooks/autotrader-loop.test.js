@@ -350,11 +350,17 @@ test('live loop: its lock file removed by hand is linked back; a lock it can\'t 
     fs.rmSync(file);
     await waitFor('the lock linked back', 80000, () => fs.existsSync(file) || run.runner.exitCode !== null);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), mine, 'its own record');
-    assert.match(run.io.out, /account lock: its file had vanished and stayed gone: linked it back/);
+    // The runner links the file back first and logs it after: the line reaches us a moment later through its stdout.
+    const relinked = /account lock: its file had vanished and stayed gone: linked it back/;
+    await waitFor('the linked-back log line', 10000, () => relinked.test(run.io.out) || run.runner.exitCode !== null);
+    assert.match(run.io.out, relinked);
     fs.writeFileSync(file, 'junk');
-    await waitFor('manage-only', 80000, () => fs.existsSync(stop) || run.runner.exitCode !== null);
+    // The kill switch is appended to (created, then written): wait for its text, not just the file.
+    await waitFor('manage-only', 80000, () => (fs.existsSync(stop) && fs.readFileSync(stop, 'utf8').includes('ALERT')) || run.runner.exitCode !== null);
     assert.match(fs.readFileSync(stop, 'utf8'), /ALERT: the account lock can't be confirmed as this runner's .*full risk management of the account continues/);
-    assert.match(run.io.out, /ERROR ALERT: the account lock can't be confirmed/);
+    const alerted = /ERROR ALERT: the account lock can't be confirmed/; // logged before the kill switch, read through a pipe
+    await waitFor('the alert log line', 10000, () => alerted.test(run.io.out) || run.runner.exitCode !== null);
+    assert.match(run.io.out, alerted);
     assert.strictEqual(run.runner.exitCode, null, 'it keeps running: the account is still managed');
     assert.strictEqual(fs.readFileSync(file, 'utf8'), 'junk', 'the lock is left alone');
   } finally {
