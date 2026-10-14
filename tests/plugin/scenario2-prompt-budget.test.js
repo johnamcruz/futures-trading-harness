@@ -27,7 +27,7 @@ const ROLE_MAX = {
   'fth-head-trader': 67313,
   'market-structure-analyst': 43667,
   'news-calendar-analyst': 10523,
-  'risk-manager': 74333,
+  'risk-manager': 74343,
   'strategy-researcher': 25662,
   'trade-executor': 30268,
   'trade-reviewer': 9195,

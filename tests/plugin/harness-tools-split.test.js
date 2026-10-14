@@ -70,11 +70,11 @@ const CISD = [
   ['with a pointer to the runner\'s `candles` and `swingTargets`', 'with a pointer to the runner\'s `candles`, `swingTargets` and `cisd`'],
 ];
 // Scenario 2's facts (docs/COMPOSED-ENTRY.md section 8, PR 5) in the briefing's m3, named in place without growing
-// the cell (it is embedded in the head trader's and the roles' prompts): the 4h candle and its sweep, the 4h targets.
+// the cell (it is embedded in the head trader's and the roles' prompts): the 4h candle, every candle's sweep of its previous one, the 4h targets.
 const SCENARIO2 = [
   ['`candles` (per timeframe, 3m, 5m, 15m and 1h, the last COMPLETED candle', '`candles` (per timeframe, 3m to 4h, the last COMPLETED candle'],
   ['a pattern label (doji, hammer, shooting star, bullish or bearish engulfing, inside, outside, displacement, or none), and the key levels',
-    'a pattern label (`candle-reading`), the 4h\'s `sweep` of the previous 4h high or low (closed back inside or not), and the key levels'],
+    'a pattern label (`candle-reading`), its `sweep` of the previous candle\'s high or low (closed back inside or not), and the key levels'],
   ['on the base bars, 15m and 1h, in points, ticks and R)', 'on the base bars, 15m, 1h and 4h, in points, ticks and R)'],
 ];
 /** The m3 fields from `location` to `trendRule` reordered as briefing.js builds them. */

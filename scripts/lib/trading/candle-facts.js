@@ -17,8 +17,11 @@
  * 4h candles open on the same grid: 18:00, 22:00, 02:00, 06:00, 10:00 and 14:00 ET. The session's last one (14:00 ET)
  * holds the bars up to the daily break and is completed on the next session's first bar (18:00 ET, or Sunday's open),
  * as any candle whose last sub-bar is missing: never from a clock or a calendar; its `closedAt` is the 18:00 ET
- * boundary. A 4h candle also states whether it traded beyond the previous 4h candle's high or low (prevSweep): a sweep
- * when it closed back inside that range (the sweep of the prior 4h low and close back), else the side it closed beyond.
+ * boundary.
+ *
+ * Every timeframe's candle states whether it traded beyond its previous candle's high or low (prevSweep, `sweep`): a
+ * sweep when it closed back inside that range (the sweep of the prior 4h low and close back), else the side it closed
+ * beyond. The one place the briefing says it (the CRT read uses it too).
  *
  *   completedSeries(bars, minutes, base)   { available, reason, candles, lastAt }: lastAt[i] the index of the last
  *                                          candle completed by bar i's close (-1 none)
@@ -81,9 +84,6 @@ const { zonedParts, tradingDayStart } = require('./clock');
 const { pivots } = require('./structure-events');
 
 const TIMEFRAMES = [3, 5, 15, 60, 240];
-// The timeframes whose candle states its sweep of the previous candle (prevSweep): the 4h, scenario 2's read (a
-// shorter one's is its relation to "previous <tf> high/low").
-const SWEEP_FRAMES = [240];
 const SESSION_OPEN = 18 * 60; // the session (trading day) opens at 18:00 ET
 const ATR_LEN = 14;
 const VOL_LEN = 20;
@@ -476,11 +476,10 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
 }
 
 /**
- * A SWEEP_FRAMES candle's `sweep` of its previous candle: { of, closedBack, closedBeyond } when it traded beyond its high
- * or low ({} on other timeframes; null: it stayed inside, or no previous).
+ * A candle's `sweep` of its previous candle: { of, closedBack, closedBeyond } when it traded beyond its high or low;
+ * null when it stayed inside, or without a previous candle.
  */
 function sweepField(m, c, prev) {
-  if (!SWEEP_FRAMES.includes(m)) return {};
   const s = prevSweep(c, prev);
   return { sweep: s ? { of: `previous ${label(m)} ${s.side === 'both' ? 'high and low' : s.side}`, closedBack: s.closedBack, closedBeyond: s.closedBeyond } : null };
 }
@@ -509,5 +508,5 @@ function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [mi
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  SWEEP_FRAMES, prevSweep,
+  prevSweep,
 };

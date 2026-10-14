@@ -83,7 +83,6 @@ test('prevSweep: traded beyond the previous candle\'s high or low, closed back i
   // Equal to the extreme is no sweep; no previous candle, none.
   assert.strictEqual(CF.prevSweep({ o: 101, h: 104, l: 98, c: 100 }, prev), null);
   assert.strictEqual(CF.prevSweep({ o: 101, h: 105, l: 97, c: 100 }, null), null);
-  assert.deepStrictEqual(CF.SWEEP_FRAMES, [240]);
 });
 
 // Monday 2026-06-15: the 06:00-10:00 ET candle holds 99-101; the 10:00-14:00 ET candle trades to 96 at 11:00 ET and
@@ -100,16 +99,19 @@ test('the briefing\'s 4h candle: the sweep of the prior 4h low and the close bac
   assert.strictEqual(h4.c, 100.5);
   assert.deepStrictEqual(h4.sweep, { of: 'previous 4h low', closedBack: true, closedBeyond: null });
   assert.strictEqual(h4.levels['previous 4h low'], 'rejected: closed back above');
-  // Only the 4h states a sweep; the other timeframes keep their relation to "previous <tf> low".
+  // Every timeframe states its own (the one place the briefing says it), named by its timeframe.
   const all = CF.briefingCandles({ bars: b, base: 3 });
-  for (const tf of ['3m', '15m', '1h']) assert.ok(!('sweep' in all[tf]), tf);
+  for (const tf of ['3m', '15m', '1h']) {
+    assert.ok('sweep' in all[tf], tf);
+    if (all[tf].sweep) assert.match(all[tf].sweep.of, new RegExp(`^previous ${tf} (high|low|high and low)$`));
+  }
   // A 4h candle without a sweep says so (null), never leaves it out.
   const quiet = CF.briefingCandles({ bars: sessionBars('2026-06-14T22:00:00Z', '2026-06-15T18:30:00Z'), base: 3 })['4h'];
   assert.strictEqual(quiet.sweep, null);
   // The rendered summary line.
   const brief = B.buildBriefing({ symbol: 'MNQ', bars: b, minutes: 3, roundSteps: defaultRoundSteps(), now: new Date('2026-06-15T18:30:00Z') });
   const text = B.renderBriefing(brief, { now: new Date('2026-06-15T18:30:00Z') });
-  assert.match(text, /^- 4h \(closed 14:00\): [^\n]*; swept the previous 4h low, closed back inside its range; /m);
+  assert.match(text, /^- 4h \(closed 14:00\): [^\n]*; swept the previous 4h low, closed back inside; /m);
   // Its relation to the previous 4h low may be past the four levels listed (rejected levels sort by level first): the
   // sweep is stated on its own, so the read never depends on that cut.
   assert.ok(!('previous 4h low' in brief.sections.m3.data.candles['4h'].levels));
@@ -118,11 +120,21 @@ test('the briefing\'s 4h candle: the sweep of the prior 4h low and the close bac
 
 test('the summary: a sweep only when the close is back inside; else the side it closed beyond', () => {
   const line = sweep => B.renderBriefing({ symbol: 'MNQ', minutes: 3, asOf: '2026-06-15T18:27:00.000Z', closedAt: '2026-06-15T18:30:00.000Z', price: 100, sections: { m3: { version: 'v', validUntil: '2026-06-15T18:33:00.000Z', data: { candles: { '4h': { closedAt: '2026-06-15T18:00:00.000Z', pattern: 'none', closeLocation: null, rangeAtr: null, volRatio: null, levels: {}, sweep } } } } } }, { now: new Date('2026-06-15T18:30:00Z') }).split('\n').find(l => l.startsWith('- 4h'));
-  assert.match(line({ of: 'previous 4h low', closedBack: true, closedBeyond: null }), /; swept the previous 4h low, closed back inside its range\.$/);
+  assert.match(line({ of: 'previous 4h low', closedBack: true, closedBeyond: null }), /; swept the previous 4h low, closed back inside\.$/);
   assert.match(line({ of: 'previous 4h low', closedBack: false, closedBeyond: 'low' }), /; traded beyond the previous 4h low, closed below its low\.$/);
   assert.match(line({ of: 'previous 4h high and low', closedBack: false, closedBeyond: 'high' }), /; traded beyond the previous 4h high and low, closed above its high\.$/);
   assert.ok(!/swept/.test(line({ of: 'previous 4h high', closedBack: false, closedBeyond: 'high' })));
   assert.strictEqual(line(null), '- 4h (closed 14:00): none.');
+});
+
+test('the 4h line is event-driven: in full within an hour of its close, then only a sweep closed back inside; never in the detail', () => {
+  const render = (sweep, closed) => B.renderBriefing({ symbol: 'MNQ', minutes: 3, asOf: '2026-06-15T18:27:00.000Z', closedAt: '2026-06-15T18:30:00.000Z', price: 100, sections: { m3: { version: 'v', validUntil: '2026-06-15T18:33:00.000Z', data: { candles: { '4h': { t: '2026-06-15T14:00:00.000Z', closedAt: closed, o: 1, h: 2, l: 0, c: 1, pattern: 'none', closeLocation: null, rangeAtr: null, volRatio: null, levels: {}, sweep } } } } } }, { now: new Date('2026-06-15T18:30:00Z') });
+  const has = text => /^- 4h /m.test(text);
+  assert.ok(has(render(null, '2026-06-15T18:00:00.000Z')), 'closed 30 minutes ago');
+  assert.ok(!has(render(null, '2026-06-15T14:00:00.000Z')), 'closed four hours ago, no event');
+  assert.ok(!has(render({ of: 'previous 4h high', closedBack: false, closedBeyond: 'high' }, '2026-06-15T14:00:00.000Z')), 'closed beyond: not a sweep');
+  assert.match(render({ of: 'previous 4h low', closedBack: true, closedBeyond: null }, '2026-06-15T14:00:00.000Z'), /^- 4h \(closed 10:00\); swept the previous 4h low, closed back inside\.$/m, 'a sweep closed back inside: that alone');
+  assert.ok(!/"4h"/.test(render(null, '2026-06-15T18:00:00.000Z').split('Detail by timeframe:')[1]), 'not in the detail');
 });
 
 test('a 4h candle is a fact only once completed: rebuilt with the bars cut at each bar\'s close, the same fact', () => {
@@ -173,15 +185,36 @@ test('4h swing targets: in swingTargets, as the 4h series says at the bar, uncha
 // The bytes the 4h facts add to the rendered briefing (the tool's text: docs/COMPOSED-ENTRY.md section 8). The head
 // trader's prompt doesn't carry the briefing; the skills that describe it stay within their bytes (no prompt growth).
 const H4_RENDER_BUDGET = 600;
+// Its typical cost over the fixture's bars (the line only on an event; the target always): at most this on average.
+const H4_TYPICAL_BUDGET = 150;
 
-test('byte budget: the 4h candle and targets add at most H4_RENDER_BUDGET bytes to the rendered briefing', () => {
-  const brief = B.buildBriefing({ symbol: 'NQ', bars: BARS, minutes: 3, roundSteps: defaultRoundSteps() });
-  const now = new Date(brief.closedAt);
-  const without = JSON.parse(JSON.stringify(brief));
-  const m3 = without.sections.m3.data;
-  delete m3.candles['4h'];
-  m3.swingTargets = { above: m3.swingTargets.above.filter(x => x.frame !== '4h'), below: m3.swingTargets.below.filter(x => x.frame !== '4h') };
-  const added = Buffer.byteLength(B.renderBriefing(brief, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
-  assert.ok(added > 0, 'the 4h facts are rendered');
-  assert.ok(added <= H4_RENDER_BUDGET, `${added} bytes added`);
+test('byte budget: the 4h facts add at most H4_RENDER_BUDGET bytes on any bar, H4_TYPICAL_BUDGET on average', () => {
+  const added = brief => {
+    const now = new Date(brief.closedAt);
+    const without = JSON.parse(JSON.stringify(brief));
+    const m3 = without.sections.m3.data;
+    delete m3.candles['4h'];
+    m3.swingTargets = { above: m3.swingTargets.above.filter(x => x.frame !== '4h'), below: m3.swingTargets.below.filter(x => x.frame !== '4h') };
+    return Buffer.byteLength(B.renderBriefing(brief, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
+  };
+  const sizes = [];
+  for (let i = 400; i < BARS.length; i += 23) sizes.push(added(B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, i + 1), minutes: 3, roundSteps: defaultRoundSteps() })));
+  const worst = Math.max(...sizes);
+  const typical = sizes.reduce((x, y) => x + y, 0) / sizes.length;
+  assert.ok(worst <= H4_RENDER_BUDGET, `worst ${worst} bytes`);
+  assert.ok(typical <= H4_TYPICAL_BUDGET, `typical ${typical} bytes`);
+});
+
+// The sweep clause on the other timeframes' lines (shown only when the candle traded beyond its previous one).
+const SWEEP_RENDER_BUDGET = 200;
+
+test('byte budget: the sweep clauses of the 3m to 1h lines add at most SWEEP_RENDER_BUDGET bytes on any bar', () => {
+  for (let i = 400; i < BARS.length; i += 41) {
+    const brief = B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, i + 1), minutes: 3, roundSteps: defaultRoundSteps() });
+    const now = new Date(brief.closedAt);
+    const without = JSON.parse(JSON.stringify(brief));
+    for (const [tf, c] of Object.entries(without.sections.m3.data.candles)) if (tf !== '4h' && !c.unavailable) c.sweep = null;
+    const added = Buffer.byteLength(B.renderBriefing(brief, { now })) - Buffer.byteLength(B.renderBriefing(without, { now }));
+    assert.ok(added <= SWEEP_RENDER_BUDGET, `bar ${i}: ${added} bytes`);
+  }
 });
