@@ -7,6 +7,7 @@
  *   snapshot   every bar: the account balance into combine/<account>.json
  *              (the gate refuses entries on a snapshot older than 10 min);
  *   endOfDay   after the end-of-day flatten: the day's closing balance;
+ *   recentFills the fills its last snapshot read ({ sinceMs, atMs, fills }), for the decision history to reuse;
  *   screen     at a setup: the sizing verdict (prop/verdict.js), recorded
  *              for the gate; a skipped setup starts no cycle.
  *
@@ -34,6 +35,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
   // The broker's journal (the harness's own order records): read only to know whether an order went through.
   const journalEntries = journal || (() => readJournal(resolveJournalPath({ ...env, FTH_HOME: home })));
   const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
+  let lastFills = null; // the fills the last snapshot read (recentFills)
   const warned = new Set();
   const warnOnce = (key, msg) => {
     if (warned.has(key)) return;
@@ -94,6 +96,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         if (!unchanged) {
           try {
             fills = await client.fillsSince(accountId, new Date(r.anchor.at));
+            if (Array.isArray(fills)) lastFills = { sinceMs: Date.parse(r.anchor.at), atMs: now.getTime(), fills };
           } catch (err) {
             fillsError = (err && err.message) || String(err) || 'the fills could not be read';
           }
@@ -121,6 +124,8 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
 
   return {
     accounts,
+    /** The fills the last snapshot read: { sinceMs, atMs, fills }, or null (none read yet). */
+    recentFills: () => lastFills,
     /**
      * The running attempts' state for the cycle prompt: balance, floor,
      * cushion, progress, the day, sessions left, each policy strategy's size

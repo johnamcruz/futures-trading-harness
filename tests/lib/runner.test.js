@@ -513,8 +513,13 @@ test('the event log records cycles, account reads, managed positions, stops move
   const closed = shut.events.find(e => e.kind === 'position_closed');
   assert.ok(closed && /trail/.test(closed.why) && closed.peakR >= 2 && typeof closed.rNow === 'number', JSON.stringify(closed));
   // The runner's own exit is kept for the decision history's real R (decision-history.js withPositions).
-  const own = shut.runner.state.runnerCloses && shut.runner.state.runnerCloses[closed.contractId];
-  assert.ok(own && Math.abs(own.r - closed.rNow) < 0.01 && Number.isFinite(Date.parse(own.at)), JSON.stringify(shut.runner.state.runnerCloses));
+  const own = (shut.runner.state.runnerExits || []).find(x => x.contractId === closed.contractId);
+  assert.ok(own && Math.abs(own.r - closed.rNow) < 0.01 && Number.isFinite(Date.parse(own.at)) && own.side === closed.side && Number.isFinite(Date.parse(own.openedAt)) && own.size === 1, JSON.stringify(shut.runner.state.runnerExits));
+  // The entered decision behind that position reads the runner's own exit R in the next prompts.
+  const entered = { at: new Date(et(10, 0)).toISOString(), symbols: ['MNQ'], result: 'CYCLE RESULT: executed - trendy long', symbol: 'MNQ', tf: 3, bar: new Date(et(9, 57)).toISOString(), price: 21500, tick: 0.25, contract: 'MNQ', action: 'entered', setup: 'trendy', side: 'long', entrySize: 1 };
+  const told = await trailSim({ tape: { 0: [21525, 21521, 21524], 3: [21524, 21518, 21519] }, modifyFails: 5, until: et(10, 12), stateIn: { day: new Date(et(10, 0)).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), premarketDone: true, eodDone: false, cycles: 0, history: [entered] } });
+  const toldExit = told.runner.state.runnerExits.at(-1);
+  assert.ok(told.prompts.some(p => p.includes(`entered trendy long @21500: trendy long; since`) && p.includes(`closed about ${toldExit.r > 0 ? '+' : ''}${Math.round(toldExit.r * 10) / 10}R (the runner's exit, at the bar close)`)), told.prompts.map(p => (p.match(/Your last [^\n]*?Don't flip-flop/) || [''])[0]).join('\n'));
   // Every cycle is timed and carries its result line; the account read for it is logged.
   const end = trail.events.find(e => e.kind === 'cycle_end');
   assert.ok(end && end.ok === true && end.result === 'CYCLE RESULT: managed - trade' && typeof end.ms === 'number' && end.symbols[0] === 'MNQ', JSON.stringify(end));
@@ -864,30 +869,63 @@ test('an executed cycle\'s history entry reads the order it placed from the jour
   assert.ok(logs.some(l => /error history: the journal unavailable \(journal locked\); the entry's details unavailable/.test(l)), logs.join('\n'));
 });
 
-test('an entered decision follows its real position across cycles: open from the fill with the broker trade\'s R, then closed once the account lists it no more', async () => {
+test('an entered decision follows its real position across cycles: open from the fill with the broker trade\'s R, then closed with the R of its closing fill, or unknown', async () => {
   const base = fakeMarket({ minutes: 3 });
   // Flat until 10:02, a long from 0.5 (stop 0.25 below, 1R = 0.25) until 10:05, then flat.
   const accountAt = c => ({
     positions: c.t >= et(10, 2) && c.t < et(10, 5) ? [{ id: 7, contractId: 'MNQ', type: 1, size: 1, averagePrice: 0.5, creationTimestamp: new Date(et(10, 0, 40)).toISOString() }] : [],
     orders: c.t >= et(10, 2) && c.t < et(10, 5) ? [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 0.25 }] : [],
   });
-  const market = { client: (c, p) => ({ ...base.client(c, p), async activeContract(symbol) { return { id: symbol, tickSize: 0.25 }; }, async accountState() { return accountAt(c); }, async accountBalance() { return 100000; } }) };
-  let n = 0;
-  const seen = [];
-  const r = await simulate({
-    cfg: { symbols: ['MNQ'], timeframe: 3, account: '7' }, from: et(10, 0), to: et(10, 10), market,
-    deps: {
-      runCycle: async (action, prompt) => { n += 1; seen.push(prompt); return { ok: true, timedOut: false, result: n === 1 ? 'CYCLE RESULT: executed - orb long' : 'CYCLE RESULT: managed - held' }; },
-      journalEntries: () => [{ ts: new Date(et(10, 0, 30)).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 0.25', data: { request: { side: 'buy', stopLossBracket: { ticks: 1 } }, result: { success: true } } }],
-    },
-  });
-  const prompts = seen;
-  assert.ok(prompts.some(p => /entered orb long @1: orb long; since 0t, open from 0\.5\./.test(p)), prompts.join('\n\n'));
-  // Gone at 10:05: the fake bars (low 0) went through its working stop 0.25 after it was last seen open.
-  assert.ok(prompts.some(p => /entered orb long @1: orb long; since 0t, closed -1R at its stop \|/.test(p)), prompts.join('\n\n'));
-  const entry = r.runner.state.history.find(h => h.action === 'entered');
-  assert.strictEqual(entry.trade.state, 'closed');
-  assert.strictEqual(entry.trade.fill, 0.5);
+  // The broker's fills: the opening buy, and the closing sell at 0.25 (its stop: -1R) at 10:04:30.
+  const fills = [
+    { id: 1, contractId: 'MNQ', creationTimestamp: new Date(et(10, 0, 40)).toISOString(), price: 0.5, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false, orderId: 11 },
+    { id: 2, contractId: 'MNQ', creationTimestamp: new Date(et(10, 4, 30)).toISOString(), price: 0.25, profitAndLoss: -0.5, fees: 0.37, side: 1, size: 1, voided: false, orderId: 12 },
+  ];
+  const run = async ({ fillsSince = null, prop = null } = {}) => {
+    const reads = [];
+    const market = { client: (c, p) => ({ ...base.client(c, p), async activeContract(symbol) { return { id: symbol, tickSize: 0.25 }; }, async accountState() { return accountAt(c); }, async accountBalance() { return 100000; }, ...(fillsSince ? { async fillsSince(id, start) { reads.push(start.toISOString()); return fillsSince(c); } } : {}) }) };
+    let n = 0;
+    const seen = [];
+    const r = await simulate({
+      cfg: { symbols: ['MNQ'], timeframe: 3, account: '7' }, from: et(10, 0), to: et(10, 10), market,
+      deps: {
+        runCycle: async (action, prompt) => { n += 1; seen.push(prompt); return { ok: true, timedOut: false, result: n === 1 ? 'CYCLE RESULT: executed - orb long' : 'CYCLE RESULT: managed - held' }; },
+        journalEntries: () => [{ ts: new Date(et(10, 0, 30)).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 0.25', data: { request: { side: 'buy', stopLossBracket: { ticks: 1 } }, result: { success: true, orderId: 11 } } }],
+        ...(prop ? { prop } : {}),
+      },
+    });
+    return { prompts: seen, reads, entry: r.runner.state.history.find(h => h.action === 'entered') };
+  };
+  // No fills to read: closed, its outcome unknown (never inferred from the bars, which went through its stop).
+  const blind = await run();
+  assert.ok(blind.prompts.some(p => /entered orb long @1: orb long; since 0t, open from 0\.5\./.test(p)), blind.prompts.join('\n\n'));
+  assert.ok(blind.prompts.some(p => /entered orb long @1: orb long; since 0t, closed, outcome unknown \|/.test(p)), blind.prompts.join('\n\n'));
+  assert.deepStrictEqual([blind.entry.trade.state, blind.entry.trade.fill], ['closed', 0.5]);
+  // The fills read: its loss, -1R, from the closing fill. Read once a cycle while unresolved, from the decision's time.
+  const read = await run({ fillsSince: c => fills.filter(f => Date.parse(f.creationTimestamp) <= c.t) });
+  assert.ok(read.prompts.some(p => /entered orb long @1: orb long; since 0t, closed -1R \|/.test(p)), read.prompts.join('\n\n'));
+  assert.ok(read.reads.length >= 1 && read.reads.every(s => s === read.entry.at), JSON.stringify(read.reads));
+  const resolvedReads = read.reads.length;
+  assert.ok(resolvedReads <= read.prompts.length, 'at most one read a cycle');
+  // A failed read: outcome unknown, the cycle goes on.
+  const failed = await run({ fillsSince: () => { throw new Error('search_trades: 503'); } });
+  assert.ok(failed.prompts.some(p => /closed, outcome unknown \|/.test(p)), failed.prompts.join('\n\n'));
+  // The prop hooks' read of this pass covers it: reused, no adapter read.
+  const propWith = (read) => {
+    let clockNow = 0;
+    return { snapshot: async now => { clockNow = now.getTime(); }, screen: s => s, endOfDay: async () => {}, recentFills: () => read(clockNow) };
+  };
+  const upTo = ms => fills.filter(f => Date.parse(f.creationTimestamp) <= ms);
+  const reused = await run({ fillsSince: () => { throw new Error('the adapter must not be read'); }, prop: propWith(now => ({ sinceMs: et(9, 30), atMs: now, fills: upTo(now) })) });
+  assert.ok(reused.prompts.some(p => /closed -1R \|/.test(p)), reused.prompts.join('\n\n'));
+  assert.deepStrictEqual(reused.reads, []);
+  // Not reused: a read from an earlier pass (this pass's snapshot skipped it), or one that doesn't reach back to the
+  // decision: the adapter is read instead.
+  const adapter = c => upTo(c.t);
+  const stale = await run({ fillsSince: adapter, prop: propWith(now => ({ sinceMs: et(9, 30), atMs: now - 180000, fills: [] })) });
+  assert.ok(stale.reads.length >= 1 && stale.prompts.some(p => /closed -1R \|/.test(p)), stale.prompts.join('\n\n'));
+  const short = await run({ fillsSince: adapter, prop: propWith(now => ({ sinceMs: et(10, 4), atMs: now, fills: [] })) });
+  assert.ok(short.reads.length >= 1 && short.prompts.some(p => /closed -1R \|/.test(p)), short.prompts.join('\n\n'));
 });
 
 test('the trade prompt carries the last closed bars and the model\'s own last cycle results', async () => {

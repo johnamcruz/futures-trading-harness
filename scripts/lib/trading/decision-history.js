@@ -21,24 +21,35 @@
  *   - the ticks moved from the decision's price to the last closed bar's close;
  *   - a skipped, no-trade or planned setup with a stop: whether price would have reached +1R or -1R from the
  *     decision's price first (a bar reaching both counts as -1R, the stop first), or neither yet;
- *   - an entered trade: its real position, never the decision's price (withPositions): while the broker lists it,
- *     "open from <fill>, now +xR" (the open trade's own R: fill and initial risk); once it is gone, "closed" with the
- *     R of the runner's own exit, else of the working stop or target a bar reached after it was last seen open
- *     (from the fill), else no R; "no position seen" while none was matched.
+ *   - an entered trade: its real position (withPositions; never the decision's price, never a guess), matched by
+ *     family as the runner manages positions: while the broker lists it, "open from <fill>, now +xR" (the open
+ *     trade's own R: fill and initial risk); once it is gone, "closed +xR" from its closing fills (matched exactly:
+ *     contract, side, size, after it opened), else "closed about +xR (the runner's exit, at the bar close)" from the
+ *     runner's own exit record of that exact position (contract, side, opening time) when it closed the whole entry
+ *     (its size: none after a scale-out), else "closed, outcome
+ *     unknown", winners and losers alike: a closed trade's R is never inferred from bars (stops trail, fills slip,
+ *     reads fail). Never seen open: its fills, else the runner's exit of a position opened in its window, else
+ *     "outcome unknown". A decision's window runs from when it was made to when the next one on its family and side
+ *     was: a position opened in it is that decision's only; one added to by another decision (a scale-in) is
+ *     unknown. When the account's positions could not be read, "position state unavailable", never a stale value.
  * Only bars of the decision's trading day and contract count (the runner flattens at end of day; a roll changes
  * the prices); a decision from an earlier trading day carries its date. A setup is named only on a decision about
  * one (entered, skipped, planned); a manage, flatten or block names the symbol its reason names. An executed cycle
  * whose journal could not be read names no setup ("details unavailable"): it is not guessed from the scan.
  * An entry from before these fields (only { at, symbols, result }) renders with what it has.
  *
- *   withPositions(history, { trades, known, now, market, closes })   the entered entries with their real position:
+ *   withPositions(history, { trades, known, now, exits, fills })   the entered entries with their real position:
  *       `trades` the open trades (open-trades.js), `known` whether the account's positions were read this cycle (a
- *       failed read closes nothing), `closes` the runner's own exits ({ [contractId]: { at, r } }).
+ *       failed read closes nothing), `exits` the runner's own exit records (exitRecords), `fills` the account's
+ *       fills (search_trades) since fillsNeededSince(history, now), or null when not read.
+ *   exitRecords(runnerExits, runnerCloses) / appendExit(runnerExits, record)   the runner's exit records: one per
+ *       position, append-only, the last EXITS_KEPT (the older one-per-contract runnerCloses read safely).
  */
 
 const { et } = require('./session-context');
 const { entryTime, contractRoot } = require('./journal');
 const { tradingDayKey } = require('./clock');
+const { familyRoot } = require('./contracts');
 
 // The result line's outcome word (autotrader.js CYCLE_OUTCOMES) -> the action the history names.
 const ACTIONS = { 'no-trade': 'no-trade', planned: 'planned', executed: 'entered', managed: 'managed', flattened: 'flattened', blocked: 'blocked', error: 'error' };
@@ -90,11 +101,11 @@ function placedSince(entries, sinceMs, startMs = sinceMs) {
   const req = (e.data && e.data.request) || {};
   const word = (SIDE_WORD.exec(text) || [])[1];
   const ticks = b => { const n = b && Number(b.ticks); return n > 0 ? n : null; };
-  return { root: e.contractId ? contractRoot(e.contractId) : null, setup: SETUP_TAG.exec(text)[1], side: sideOf(word) || sideOf(req.side), ticks: ticks(req.stopLossBracket), targetTicks: ticks(req.takeProfitBracket) };
+  return { root: e.contractId ? contractRoot(e.contractId) : null, setup: SETUP_TAG.exec(text)[1], side: sideOf(word) || sideOf(req.side), ticks: ticks(req.stopLossBracket), targetTicks: ticks(req.takeProfitBracket), orderId: e.data.result.orderId ?? e.orderId ?? null, size: Number(req.size) > 0 ? Number(req.size) : null };
 }
 
 /** The state.history entry for a cycle (see the module comment). */
-function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false }) {
+function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false, positions = null }) {
   const base = { at, symbols, result, ...(Array.isArray(lanes) && lanes.length ? { lanes } : {}) };
   const list = (items || []).filter(x => x && x.bar && x.bar.t);
   if (!list.length) return base;
@@ -119,13 +130,22 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   const same = setup && placed && setup.setup === placed.setup;
   const facts = placed
     ? { setup: placed.setup, side: placed.side || (same ? setup.side : null), stop: placed.ticks && tick ? num(placed.ticks * tick) : same ? setup.stop : null, target: placed.targetTicks && tick ? num(placed.targetTicks * tick) : same ? setup.target : null }
-    : setup ? { setup: setup.setup, side: setup.side, stop: setup.stop, target: setup.target } : {};
+    // An entry with no order of its own: its setup, side and stop are not guessed from the scan.
+    : setup && action0 !== 'entered' ? { setup: setup.setup, side: setup.side, stop: setup.stop, target: setup.target } : {};
   const why = setup && setup.why ? { why: String(setup.why) } : {};
   const contract = item.contractId || item.bar.contractId || null;
   return {
     ...base, symbol: item.symbol, tf: Number(item.minutes) || null, bar: item.bar.t, price: Number(item.bar.c), tick, ...(contract ? { contract } : {}), action,
     ...Object.fromEntries(Object.entries(facts).filter(([, x]) => x !== null && x !== undefined)), ...why,
     ...(unknown ? { details: 'unavailable' } : {}),
+    ...(placed && placed.orderId !== null && placed.orderId !== undefined ? { orderId: placed.orderId } : {}),
+    // Its entry order's size: a runner exit record is its R only when it closed all of it.
+    ...(placed && placed.size ? { entrySize: placed.size } : {}),
+    // "executed" with no successful entry order of its own in the journal (refused, or never placed): nothing is
+    // credited to it ("no order of its own seen").
+    ...(action === 'entered' && !placed && !journalFailed ? { noOrder: true } : {}),
+    // Flat on its family when the cycle began (any position of any kind on it is not flat): its fills can be told apart.
+    ...(Array.isArray(positions) && action === 'entered' && placed ? { flatAt: !positions.some(p => p && Number(p.size) > 0 && famOfId(p.contractId) === famOfId(contract || item.symbol)) } : {}),
   };
 }
 
@@ -173,60 +193,221 @@ function outcome(e, m) {
 
 const fmtR = v => { const x = Math.round(Number(v) * 10) / 10; return `${x > 0 ? '+' : ''}${x}R`; };
 
-/** An entered trade's real position (withPositions), never measured from the decision's price. */
+/**
+ * An entered trade's real position (withPositions), never measured from the decision's price, and never a guess:
+ * closed with the R of its closing fills, or about the R of the runner's exit at its bar's close, else "closed,
+ * outcome unknown"; a position the account read couldn't show is "state unavailable", a fill never seen
+ * "outcome unknown".
+ */
 function tradeText(e) {
   const t = e.trade;
-  if (!t) return 'no position seen';
+  if (t && t.state === 'closed') {
+    if (!Number.isFinite(t.r)) return 'closed, outcome unknown';
+    return t.how === 'runner' ? `closed about ${fmtR(t.r)} (the runner's exit, at the bar close)` : `closed ${fmtR(t.r)}`;
+  }
+  if (e.noOrder) return 'no order of its own seen: outcome unknown';
+  if (e.positionRead === false) return 'position state unavailable';
+  if (!t) return 'no position seen yet';
   if (t.state === 'open') return `open from ${num(t.fill)}${Number.isFinite(t.rNow) ? `, now ${fmtR(t.rNow)}` : ''}`;
-  return `closed${Number.isFinite(t.r) ? ` ${fmtR(t.r)}` : ''}${t.how ? ` ${t.how}` : ''}`;
+  return 'no open position seen: outcome unknown';
 }
 
-const rootOfId = id => { try { return contractRoot(id); } catch (_err) { return String(id || '').toUpperCase(); } };
+// A contract's family, as the runner manages positions (runner.js famOf): a micro and its mini are one family.
+const famOfId = id => { try { return familyRoot(contractRoot(id)); } catch (_err) { return String(id || '').toUpperCase(); } };
+
+/** How many of the runner's exit records it keeps (runner.js runnerExits): enough for a day's history. */
+const EXITS_KEPT = 50;
 
 /**
- * How a position last seen open (`tr`) closed by `nowMs`: the runner's own exit (`closes`), else the first bar,
- * closed after it was last seen and by now, through its working stop (first) or target, from the fill.
+ * The runner's exit records as a list [{ contractId, side, openedAt, at, r }]: `runnerExits` (append-only, one
+ * per position) and the older `runnerCloses` ({ [contractId]: { at, r, openedAt?, side? } }, one per contract),
+ * read safely: a record without its position's side and opening time names no position, so it credits none.
  */
-function closedTrade(tr, m, closes, nowMs) {
-  const seen = Date.parse(tr.seenAt);
-  const own = closes && tr.contractId ? closes[tr.contractId] : null;
-  if (own && Date.parse(own.at) > seen && Date.parse(own.at) <= nowMs && Number.isFinite(own.r)) return { ...tr, state: 'closed', r: own.r, how: 'by the runner\'s exit' };
-  const sign = tr.side === 'long' ? 1 : tr.side === 'short' ? -1 : 0;
-  const R = Number(tr.risk);
-  const done = (px, how) => ({ ...tr, state: 'closed', r: sign && R > 0 ? Math.round(sign * (px - tr.fill) / R * 100) / 100 : null, how });
-  if (m && m.minutes > 0 && sign) {
-    const step = m.minutes * 60000;
-    const until = Math.min(nowMs, Number.isFinite(m.asOf) ? m.asOf : nowMs);
-    for (const b of (Array.isArray(m.bars) ? m.bars : [])) {
-      const t = b && Date.parse(b.t);
-      if (!Number.isFinite(t) || t + step <= seen || t + step > until) continue;
-      if (Number.isFinite(tr.stop) && (sign > 0 ? Number(b.l) <= tr.stop : Number(b.h) >= tr.stop)) return done(tr.stop, 'at its stop');
-      if (Number.isFinite(tr.target) && (sign > 0 ? Number(b.h) >= tr.target : Number(b.l) <= tr.target)) return done(tr.target, 'at its target');
-    }
-  }
-  return { ...tr, state: 'closed', r: null, how: null };
+function exitRecords(runnerExits, runnerCloses) {
+  const list = Array.isArray(runnerExits) ? runnerExits.filter(x => x && typeof x === 'object') : [];
+  const old = runnerCloses && typeof runnerCloses === 'object' && !Array.isArray(runnerCloses)
+    ? Object.entries(runnerCloses).filter(([, c]) => c && typeof c === 'object').map(([contractId, c]) => ({ contractId, ...c })) : [];
+  return [...list, ...old];
 }
 
-/** The entered entries with their real position (see the module comment); the history is otherwise unchanged. */
-function withPositions(history, { trades = [], known = false, now, market = [], closes = {} } = {}) {
+/** Appends a runner exit record (one per position), keeping the last EXITS_KEPT. */
+function appendExit(runnerExits, record) {
+  return [...(Array.isArray(runnerExits) ? runnerExits : []), record].slice(-EXITS_KEPT);
+}
+
+// The record is this exact position's: its contract, side and opening time (a missing time is NaN: never equal).
+// The record closed the decision's whole entry (its closed size equals the entry order's size): a record of a
+// position partly closed before (a scale-out the history never saw) covers only the rest, so it is not the R.
+const wholeExit = (c, h) => Number(c.size) > 0 && Number(c.size) === Number(h.entrySize);
+
+const isPosition = (c, tr) => c.contractId === tr.contractId && c.side === tr.side
+  && Date.parse(c.openedAt) === Date.parse(tr.openedAt);
+
+// A fill's side (broker MCP interface: 0 buy, 1 sell) for a position's side: the opening side, or the closing one.
+const OPEN_SIDE = { long: 0, short: 1 };
+const CLOSE_SIDE = { long: 1, short: 0 };
+const fillTime = f => Date.parse(f && f.creationTimestamp);
+const usable = f => f && typeof f === 'object' && f.voided !== true && Number.isFinite(fillTime(f)) && Number(f.size) > 0 && Number.isFinite(Number(f.price));
+const isClosing = f => f.profitAndLoss !== null && f.profitAndLoss !== undefined;
+// A position with another order's fills in it (a scale-in, a manual add): no one decision's R.
+const MIXED = 'mixed';
+// How many fills reads a decision never seen open waits through before its outcome is final (unknown).
+const UNSEEN_READS = 10;
+
+/**
+ * The plan's 1R for a decision: its own stop distance (the entry order's stop bracket, or the setup's), else the
+ * risk an open trade showed from its initial stop when first seen (open-trades.js; never one measured to a working,
+ * possibly trailed, stop). Frozen once known; null when not known (its R is then unknown).
+ */
+function planRisk(h, prev, t) {
+  if (Number(h.stop) > 0) return Number(h.stop);
+  if (prev && Number(prev.risk) > 0) return Number(prev.risk);
+  const fromWorking = t && Array.isArray(t.notes) && t.notes.some(n => /risk from the working stop/.test(n));
+  return t && !fromWorking && Number(t.risk) > 0 ? Number(t.risk) : null;
+}
+
+/**
+ * The decision's own position in the account's fills, from when it was made: the account was flat on its family
+ * then (h.flatAt, read at its cycle's start); the first fill on the family after that opens it on its side, by its
+ * own entry order (its id, from the successful order_placed; none: no fills are ever credited to it), within its
+ * window (`until`); every opening fill after it is that same order's (another order's
+ * fill is a scale-in or a manual add: MIXED); then fills of the closing side on that contract that add up to it
+ * (closing it whoever sent them: the position is closed). Returns { contractId, size, fill, openedAt, exit, closedAt }
+ * (exit null while not closed), MIXED, or null when it can't be told (not flat, a foreign fill first, another
+ * contract of the family moving, a close larger than it).
+ */
+function ownTrade(h, fills, nowMs, until = Infinity) {
+  const from = Date.parse(h.at);
+  // Only a decision with its own successful order (its id): another order's fills are never credited to it.
+  if (!Array.isArray(fills) || h.flatAt !== true || !(h.side in OPEN_SIDE) || !Number.isFinite(from) || h.orderId === undefined || h.orderId === null) return null;
+  const fam = famOfId(h.contract || h.symbol);
+  const list = fills.filter(f => usable(f) && famOfId(f.contractId) === fam && fillTime(f) >= from && fillTime(f) <= nowMs)
+    .sort((a, b) => fillTime(a) - fillTime(b));
+  const first = list[0];
+  if (!first) return null;
+  // Its own order opens it, inside its window (from when it was made to when the next decision on its family and
+  // side was: defense in depth).
+  if (String(first.orderId) !== String(h.orderId) || fillTime(first) >= until) return null;
+  let size = 0;
+  let notional = 0;
+  let closed = 0;
+  let closeNotional = 0;
+  for (const f of list) {
+    if (f.contractId !== first.contractId) return null;
+    const n = Number(f.size);
+    if (!isClosing(f) && Number(f.side) === OPEN_SIDE[h.side]) {
+      if (closed > 0 || String(f.orderId) !== String(first.orderId)) return MIXED;
+      size += n;
+      notional += n * Number(f.price);
+    } else if (isClosing(f) && Number(f.side) === CLOSE_SIDE[h.side]) {
+      if (closed + n > size) return null;
+      closed += n;
+      closeNotional += n * Number(f.price);
+      if (closed === size) return { contractId: first.contractId, size, fill: notional / size, openedAt: first.creationTimestamp, exit: closeNotional / size, closedAt: f.creationTimestamp };
+    } else {
+      return null;
+    }
+  }
+  return { contractId: first.contractId, size, fill: notional / size, openedAt: first.creationTimestamp, exit: null, closedAt: null };
+}
+
+const rOf = (side, fill, exit, risk) => {
+  const sign = side === 'long' ? 1 : side === 'short' ? -1 : 0;
+  return sign && Number(risk) > 0 && Number.isFinite(Number(fill)) && Number.isFinite(Number(exit)) ? Math.round(sign * (Number(exit) - Number(fill)) / Number(risk) * 100) / 100 : null;
+};
+
+/**
+ * A decision's position seen open (`tr`) and gone by `nowMs`: closed with the R of its own closing fills (ownTrade:
+ * the same contract, opened at least at the size seen; after a scale-out every close counts, size-weighted: the R
+ * per contract), from the plan's risk; else, unless it scaled out (the record is one close's), about the R of the
+ * runner's own exit record of this exact position (at its bar's close); else with its outcome unknown, final once a
+ * fills read couldn't tell it.
+ */
+function closedTrade(h, tr, exits, fills, nowMs, until = Infinity) {
+  const own = tr.mixed ? MIXED : ownTrade(h, fills, nowMs, until);
+  if (own === MIXED) return { ...tr, state: 'closed', r: null, how: null, mixed: true };
+  const r = own && own.exit !== null && own.contractId === tr.contractId && own.size >= Number(tr.size) ? rOf(tr.side, own.fill, own.exit, tr.risk) : null;
+  if (r !== null) return { ...tr, state: 'closed', r, how: 'fills' };
+  const rec = tr.scaledOut ? null : exits.find(c => isPosition(c, tr) && wholeExit(c, h) && Date.parse(c.at) <= nowMs && Number.isFinite(c.r));
+  if (rec) return { ...tr, state: 'closed', r: rec.r, how: 'runner' };
+  return { ...tr, state: 'closed', r: null, how: null, ...(Array.isArray(fills) ? { final: true } : {}) };
+}
+
+/**
+ * The earliest decision time of an entered decision of the cycle's trading day whose outcome is still to be read
+ * (open, gone with no R yet and no fills read since, or never seen and still waiting): the runner reads the fills
+ * since then (once a cycle), else null.
+ */
+function fillsNeededSince(history, now) {
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const day = Number.isFinite(nowMs) ? tradingDayKey(new Date(nowMs)) : null;
+  const done = t => t && (t.final || t.mixed || (t.state === 'closed' && Number.isFinite(t.r)));
+  const open = (history || []).filter(h => h && h.action === 'entered' && !h.noOrder && Number.isFinite(Date.parse(h.at)) && tradingDayKey(new Date(Date.parse(h.at))) === day && !done(h.trade));
+  return open.length ? Math.min(...open.map(h => Date.parse(h.at))) : null;
+}
+
+/**
+ * The entered entries with their real position (see the module comment); the history is otherwise unchanged.
+ * `known` false (the account's positions couldn't be read): nothing is matched or closed, and every entry still
+ * open reads "position state unavailable" until a read succeeds. `exits`: exitRecords; `fills`: the account's
+ * fills since the earliest unresolved decision (fillsNeededSince), or null when not read.
+ */
+function withPositions(history, { trades = [], known = false, now, exits = [], fills = null } = {}) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const records = Array.isArray(exits) ? exits.filter(x => x && typeof x === 'object') : [];
   const list = (history || []).slice();
   const open = (trades || []).filter(t => t && t.contractId && Number.isFinite(Number(t.entry)))
     .sort((a, b) => (Date.parse(b.openedAt) || 0) - (Date.parse(a.openedAt) || 0));
   const claimed = new Set();
-  // Newest decision first: each open trade belongs to the latest entry on its root and side opened since it.
+  const famOfEntry = h => famOfId(h.contract || h.symbol);
+  // Each decision's window: from when it was made (its cycle's time; the order goes in during that cycle) to when
+  // the next decision on the family and side (or of an unknown side) was made. A position or exit opened in it is
+  // this decision's and no other's (the windows of one family and side never overlap).
+  const nextAt = i => {
+    const fam = famOfEntry(list[i]);
+    const side = list[i].side;
+    const x = list.slice(i + 1).find(y => y && y.action === 'entered' && Number.isFinite(Date.parse(y.at)) && famOfEntry(y) === fam && (!side || !y.side || y.side === side));
+    return x ? Date.parse(x.at) : Infinity;
+  };
+  // Newest decision first: each open trade belongs to the decision whose window it opened in.
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const h = list[i];
-    if (!h || h.action !== 'entered' || !h.bar || (h.trade && h.trade.state === 'closed')) continue;
-    const root = rootOfId(h.contract || h.symbol);
-    const t = open.find(x => !claimed.has(x) && rootOfId(x.contractId) === root && (!h.side || x.side === h.side)
-      && (!x.openedAt || Date.parse(x.openedAt) >= Date.parse(h.bar))
+    if (!h || h.action !== 'entered' || h.noOrder || !Number.isFinite(Date.parse(h.at)) || (h.trade && (h.trade.state === 'closed' || h.trade.final))) continue;
+    if (!known) { list[i] = { ...h, positionRead: false }; continue; }
+    const fam = famOfEntry(h);
+    const from = Date.parse(h.at);
+    const until = nextAt(i);
+    const t = open.find(x => !claimed.has(x) && famOfId(x.contractId) === fam && (!h.side || x.side === h.side)
+      && (!x.openedAt || (Date.parse(x.openedAt) >= from && Date.parse(x.openedAt) < until))
       && (!h.trade || !h.trade.openedAt || !x.openedAt || x.openedAt === h.trade.openedAt));
+    const { positionRead: _read, ...rest } = h;
     if (t) {
       claimed.add(t);
-      list[i] = { ...h, trade: { state: 'open', contractId: t.contractId, side: t.side, fill: Number(t.entry), risk: t.risk, stop: t.stop, target: t.target, rNow: t.rNow, openedAt: t.openedAt || null, seenAt: new Date(nowMs).toISOString() } };
-    } else if (h.trade && h.trade.state === 'open' && known) {
-      list[i] = { ...h, trade: closedTrade(h.trade, marketFor(h, market), closes, nowMs) };
+      const prev = h.trade && h.trade.state === 'open' ? h.trade : null;
+      // A size that grew while open: another order's fills in it (a scale-in or a foreign add): mixed. One that
+      // shrank (a scale-out, a partial close) is still its own: its fills tell its R; the runner's exit record (of
+      // one close) can't.
+      const last = prev ? Number(prev.cur ?? prev.size) : NaN;
+      const mixed = Boolean(prev && (prev.mixed || (Number.isFinite(last) && Number(t.size) > last)));
+      const scaledOut = Boolean(prev && (prev.scaledOut || (Number.isFinite(last) && Number(t.size) < last)));
+      const risk = planRisk(h, prev, prev ? null : t);
+      const fill = Number(t.entry);
+      list[i] = { ...rest, trade: { state: 'open', contractId: t.contractId, side: t.side, size: prev && Number.isFinite(Number(prev.size)) ? Number(prev.size) : Number(t.size), fill, risk, stop: t.stop, target: t.target, rNow: Number.isFinite(Number(t.last)) && t.last !== null ? rOf(t.side, fill, t.last, risk) : null, cur: Number(t.size), openedAt: t.openedAt || null, seenAt: new Date(nowMs).toISOString(), ...(mixed ? { mixed: true } : {}), ...(scaledOut ? { scaledOut: true } : {}) } };
+    } else if (h.trade && h.trade.state === 'open') {
+      list[i] = { ...rest, trade: closedTrade(h, h.trade, records, fills, nowMs, until) };
+    } else {
+      // Never seen open: its own fills (ownTrade, closed), else about the R of the runner's exit record of a position
+      // opened in its window (the runner closed it between cycles), else its outcome is unknown (a fill stopped out
+      // between cycles, or not filled yet), final after UNSEEN_READS fills reads that couldn't tell it.
+      const own = ownTrade(h, fills, nowMs, until);
+      if (own === MIXED) { list[i] = { ...rest, trade: { state: 'closed', r: null, how: null, mixed: true } }; continue; }
+      const r = own && own.exit !== null ? rOf(h.side, own.fill, own.exit, planRisk(h, null, null)) : null;
+      const rec = records.find(c => famOfId(c.contractId) === fam && wholeExit(c, h) && Number.isFinite(c.r) && c.side && (!h.side || c.side === h.side)
+        && Date.parse(c.openedAt) >= from && Date.parse(c.openedAt) < until && Date.parse(c.at) <= nowMs);
+      const reads = ((h.trade && h.trade.reads) || 0) + (Array.isArray(fills) ? 1 : 0);
+      list[i] = { ...rest, trade: r !== null ? { state: 'closed', contractId: own.contractId, side: h.side, size: own.size, fill: own.fill, openedAt: own.openedAt, r, how: 'fills' }
+        : rec ? { state: 'closed', contractId: rec.contractId, side: rec.side, r: rec.r, openedAt: rec.openedAt, how: 'runner' }
+          : { state: 'unknown', reads, ...(reads >= UNSEEN_READS ? { final: true } : {}) } };
     }
   }
   return list;
@@ -276,4 +457,4 @@ function historyLines(history, market = []) {
   });
 }
 
-module.exports = { ACTIONS, parseResult, decisionEntry, marketOf, outcome, historyLines, withPositions };
+module.exports = { ACTIONS, EXITS_KEPT, parseResult, decisionEntry, marketOf, outcome, historyLines, withPositions, exitRecords, appendExit, ownTrade, fillsNeededSince, UNSEEN_READS };

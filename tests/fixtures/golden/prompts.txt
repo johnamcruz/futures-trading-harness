@@ -188,7 +188,7 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.
   No account is configured: the runner reads no positions or orders (read get_account_snapshot if you need them).
-  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
+  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, position state unavailable | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
   Unreviewed: none.
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
@@ -221,7 +221,7 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.
   Account 7: state unavailable (HTTP 502); read get_account_snapshot before deciding anything.
-  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
+  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, position state unavailable | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
   Unreviewed: none.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
