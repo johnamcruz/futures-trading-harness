@@ -46,7 +46,7 @@ failed.
 **Confirmation** of a bounce at the zone: a rejection candle
 (`candle-reading`), or absorption at the zone (`absorption`): effort
 without result, heavy volume with little progress into the zone, or the
-broker's order-flow fields showing the other side absorbed, where a bar
+broker's own bar fields showing the other side absorbed, where a bar
 carries them (never derived from OHLCV).
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): buying a 0.5 or
