@@ -13,12 +13,8 @@ description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings f
 
 ## How It Works
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the
-`harness-tools` skill) holds this bar's indicators (`m3` `trend`,
-`context`, `regime`; `m15` `indicators`): use it, and compute only what it
-doesn't hold.
-
-Get every value from market-snapshot. Never estimate.
+The bar briefing holds these values (`m3` `trend`, `context`, `regime`;
+`m15` `indicators`); without one, `market-snapshot`. Never estimate.
 
 | Indicator | Settings | Read |
 |---|---|---|
@@ -34,8 +30,8 @@ Regime: trend, range or transition, by the rule the code applies, is the
 `momentum-and-volume` skill's.
 
 - **Volatility:** the computed regime calls it `high` when ATR(14) ≥ 1.4 ×
-  its 100-bar average and `low` at ≤ 0.7 × (`regime.volatility` in
-  market-snapshot; use that value, don't recompute). High → keep the $ risk
+  its 100-bar average and `low` at ≤ 0.7 × (`m3.regime.volatility`: use
+  it, don't recompute). High → keep the $ risk
   constant: the wider stop means a smaller size; widen stops to structure.
   Low → breakouts fail more; prefer strategies that list it.
 - **The regime's fields** (`m3.regime`): primary (trend-up, trend-down,
@@ -54,6 +50,11 @@ Regime: trend, range or transition, by the rule the code applies, is the
   streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars
   (`supertrendFlipsLast20`), the last 5 bars' range in ATR (`range5Atr`).
   Read a skip rule's number here; never estimate it.
+- **Skip-rule context**: the levels a skip rule names are `day.priorRth`,
+  `m3.overnight` and `m3.today.openingRange` (null until the range
+  closes); value is `m3.location` (judged on exact levels, so a VAH shown a
+  tick below price can read inside); the day type `m3.today.dayType`.
+  Meanings: `levels-and-reactions`, `vwap-volume-profile`.
 
 ## Examples
 
