@@ -99,6 +99,10 @@ test('skills: every flag the docs give a script is one it (or its library) reads
 // What an autonomous run reads: these skills and agents may only name commands it is allowed to run.
 const AUTONOMOUS = [
   'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'skills/premarket/SKILL.md',
+  // trade-session's pieces (tests/plugin/trade-session-split.test.js) and the refusal row of the gate's entry check.
+  'skills/role-round/SKILL.md', 'skills/lean-cycle/SKILL.md', 'skills/manage-position/SKILL.md', 'skills/leftover-orders/SKILL.md',
+  'skills/setup-judgment/SKILL.md', 'skills/day-context/SKILL.md', 'skills/trade-plan/SKILL.md', 'skills/entry-outcome/SKILL.md',
+  'skills/gate-refusals-skills/SKILL.md',
   'skills/runner-lanes/SKILL.md', 'skills/kill-switch/SKILL.md', 'skills/runner-logs/SKILL.md',
   'skills/end-of-day/SKILL.md', 'skills/market-snapshot/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md',
   'skills/strategy-library/SKILL.md', 'skills/strategy-scan/SKILL.md', 'skills/strategy-gate-checks/SKILL.md', 'skills/harness-root/SKILL.md',

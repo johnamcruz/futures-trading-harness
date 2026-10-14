@@ -1188,7 +1188,7 @@ test('skills-loaded: a parts-format (Qwen Code chat) transcript with the skills 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const call = (id, skill) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'skill', args: { skill: `futures-trading-harness:${skill}` } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'skill', response } }] } });
-  const lines = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, { output: `# ${s}` })]);
+  const lines = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, { output: `# ${s}` })]);
   const run = input => evaluateOrder({ input, entries: [plan()], now: NOW, config, transcriptPath: file });
   fs.writeFileSync(file, lines.join('\n'));
   assert.deepStrictEqual(run(entryOrder()).violations, []);
@@ -1203,15 +1203,15 @@ test('skills-loaded: a parts-format (Qwen Code chat) transcript with the skills 
 test('skills-loaded: strategy-library was split; an entry needs each piece (strategy-library, strategy-scan, strategy-gate-checks) as it needed the one skill', () => {
   const fs = require('fs');
   const path = require('path');
-  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY: AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.deepStrictEqual(REQUIRED_FOR_ENTRY, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
   const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
   const load = s => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: s } }] } });
   const run = input => evaluateOrder({ input, entries: [plan()], now: NOW, config, transcriptPath: file });
-  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(load).join('\n'));
+  fs.writeFileSync(file, [...REQUIRED_FOR_ENTRY, ...AT_ENTRY].map(load).join('\n'));
   assert.deepStrictEqual(run(entryOrder()).violations, [], 'the full set passes');
   for (const missing of REQUIRED_FOR_ENTRY) {
-    fs.writeFileSync(file, REQUIRED_FOR_ENTRY.filter(s => s !== missing).map(load).join('\n'));
+    fs.writeFileSync(file, [...REQUIRED_FOR_ENTRY, ...AT_ENTRY].filter(s => s !== missing).map(load).join('\n'));
     const r = run(entryOrder());
     assert.deepStrictEqual(checks(r), ['skills-loaded'], missing);
     assert.match(r.violations[0].message, new RegExp(`not loaded in this session: ${missing}\\.`), missing);
@@ -1221,6 +1221,82 @@ test('skills-loaded: strategy-library was split; an entry needs each piece (stra
   // The set before the split (strategy-library alone) no longer passes: the scan and gate-check text left it.
   fs.writeFileSync(file, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(load).join('\n'));
   assert.match(run(entryOrder()).violations[0].message, /not loaded in this session: strategy-scan, strategy-gate-checks\./);
+});
+
+// --- REQUIRED_AT_ENTRY: setup-judgment and trade-plan read before an entry (skills-loaded.js checkSkillsAtEntry). ---
+
+test('skills-at-entry: an entry needs setup-judgment and trade-plan read in the session; any harness transcript; exits, stops, stop moves, cuts and cancels never held', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
+  const dir = require('../helpers').tmpDir();
+  const file = path.join(dir, 'session.jsonl');
+  const claude = s => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: s } }] } });
+  const run = (input, over = {}) => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, ...over }, transcriptPath: file });
+  const RISK_REDUCING = ['[exit] flatten', '[protect] stop for the long at 21480', '[exit] cut size to 1', '[exit] partial close 1 of 2'];
+  // Each missing one refuses, named; the full set passes.
+  for (const missing of REQUIRED_AT_ENTRY) {
+    fs.writeFileSync(file, [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY.filter(s => s !== missing)].map(claude).join('\n'));
+    const r = run(entryOrder());
+    assert.deepStrictEqual(checks(r), ['skills-at-entry'], missing);
+    assert.match(r.violations[0].message, new RegExp(`not read in this session: ${missing}\\.`));
+    for (const rationale of RISK_REDUCING) assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], `${missing}: ${rationale}`);
+  }
+  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(claude).join('\n'));
+  assert.match(run(entryOrder()).violations[0].message, /not read in this session: setup-judgment, trade-plan\./);
+  fs.writeFileSync(file, [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].map(claude).join('\n'));
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // Full and index mode alike (an interactive session; the autonomous index-mode path is the gateway test below).
+  assert.deepStrictEqual(run(entryOrder(), { roleSkills: 'index' }).violations, []);
+  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(claude).join('\n'));
+  assert.deepStrictEqual(checks(run(entryOrder(), { roleSkills: 'index' })), ['skills-at-entry']);
+  // opencode: a skill tool load or, in index mode, a skill_lookup that returned the skill counts; a refused lookup doesn't.
+  const oc = (tool, input, output = 'ok') => JSON.stringify({ type: 'tool_use', part: { tool, state: { status: 'completed', input, output } } });
+  const base = REQUIRED_FOR_ENTRY.map(name => oc('skill', { name }));
+  fs.writeFileSync(file, [...base, oc('skill', { name: 'setup-judgment' }), oc('harness_skill_lookup', { skill: 'trade-plan' }, '<skill name="trade-plan">...')].join('\n'));
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  fs.writeFileSync(file, [...base, oc('skill', { name: 'setup-judgment' }), oc('harness_skill_lookup', { skill: 'trade-plan' }, 'Unknown skill "trade-plan"')].join('\n'));
+  assert.match(run(entryOrder()).violations[0].message, /not read in this session: trade-plan\./);
+  // Qwen Code's parts format: an errored load doesn't count.
+  const call = (id, s) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'skill', args: { skill: s } } }] } });
+  const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'skill', response } }] } });
+  const all = [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY];
+  fs.writeFileSync(file, all.flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, s === 'setup-judgment' ? { error: 'not found' } : { output: `# ${s}` })]).join('\n'));
+  assert.match(run(entryOrder()).violations[0].message, /not read in this session: setup-judgment\./);
+  // Fails closed: a transcript named but unreadable refuses the entry (not an exit); no transcript at all (a harness
+  // that passes none, as for REQUIRED_FOR_ENTRY): not applied.
+  const gone = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config, transcriptPath: path.join(dir, 'gone.jsonl') });
+  assert.deepStrictEqual(checks(gone), ['skills-at-entry']);
+  assert.match(gone.violations[0].message, /transcript can't be read/);
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ rationale: '[exit] flatten' }), entries: [plan()], now: NOW, config, transcriptPath: path.join(dir, 'gone.jsonl') }).violations, []);
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config }).violations, []);
+  // An autonomous run can't skip it (FTH_ORDER_GATE_SKIP is ignored there); interactively it is a named, skippable check.
+  assert.strictEqual(loadConfig({ FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'skills-at-entry' }).skipChecks.has('skills-at-entry'), false);
+});
+
+test('skills-at-entry: the gateway (checkOrder, the runner\'s cycle transcript) refuses an entry without them, in index mode too; a cancel or a partial close is never gated', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  const dir = require('../helpers').tmpDir();
+  const file = path.join(dir, 'cycle-transcript.jsonl');
+  const oc = name => JSON.stringify({ type: 'tool_use', part: { tool: 'skill', state: { status: 'completed', input: { name } } } });
+  const root = path.resolve(__dirname, '..', '..');
+  const has = (r, check) => r.violations.some(v => v.check === check);
+  for (const mode of ['index', 'full']) {
+    const env = { FTH_HOME: dir, FTH_CYCLE_TRANSCRIPT: file, FTH_ROLE_SKILLS: mode };
+    fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(oc).join('\n'));
+    const r = checkOrder(entryOrder(), { env, pluginRoot: root, now: NOW });
+    assert.strictEqual(r.allowed, false, mode);
+    assert.ok(has(r, 'skills-at-entry'), `${mode}: ${r.message}`);
+    assert.match(r.message, /\[skills-at-entry\] [^\n]*not read in this session: setup-judgment, trade-plan\./);
+    fs.writeFileSync(file, [...REQUIRED_FOR_ENTRY, 'setup-judgment', 'trade-plan'].map(oc).join('\n'));
+    assert.ok(!has(checkOrder(entryOrder(), { env, pluginRoot: root, now: NOW }), 'skills-at-entry'), mode);
+    fs.writeFileSync(file, '');
+    for (const tool of ['cancel_order', 'partial_close_position']) assert.strictEqual(checkOrder({ accountId: 7, contractId: CONTRACT, size: 1 }, { env, pluginRoot: root, now: NOW, tool }).allowed, true, tool);
+  }
 });
 
 // --- Tick specs: the broker's, as the translator recorded them (broker-specs.js). ---
@@ -1436,7 +1512,7 @@ test('max-risk: a policy strategy\'s entry is checked against its own cap, not i
 const fs = require('fs');
 const path = require('path');
 const ocEvent = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1' } } });
-const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ocEvent('skill', { name }));
+const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ocEvent('skill', { name }));
 const ocRoles = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].map(subagent_type => ocEvent('task', { subagent_type }));
 
 test('roles-ran: an autonomous full cycle enters only after the analysts and both risk-manager phases returned; exits are never held', () => {
@@ -1452,7 +1528,7 @@ test('roles-ran: an autonomous full cycle enters only after the analysts and bot
   assert.deepStrictEqual(run(entryOrder()).violations, []);
   // The opencode transcript is read for the skills too: a session that loaded none is refused for them.
   fs.writeFileSync(file, ocRoles.join('\n'));
-  assert.deepStrictEqual(checks(run(entryOrder())), ['skills-loaded']);
+  assert.deepStrictEqual(checks(run(entryOrder())), ['skills-at-entry', 'skills-loaded']);
   // Exits and protective stops never wait for roles.
   fs.writeFileSync(file, '');
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
@@ -1588,8 +1664,8 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
     assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], rationale);
     assert.deepStrictEqual(run(entryOrder({ rationale }), { ...auto, cycleTranscript: `${file}.gone` }).violations, [], rationale);
   }
-  // The transcript can't be read: refused by both checks (fails closed).
-  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['phase2-facts', 'roles-ran']);
+  // The transcript can't be read: refused by the three checks that read it (fails closed).
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['phase2-facts', 'roles-ran', 'skills-at-entry']);
   // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
   assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
   for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));

@@ -39,9 +39,20 @@ the prompt shows it (e.g. "MNQ 1m: tick_up short, trend rule reversal"): the
 order gate counts their reports for an entry only with the lookups that setup
 requires, as if it were in the bar briefing.
 
-**Analysts on their own timeframe.** When the prompt says "Each analyst
-reads its own timeframe", run them as trade-session step 2 says ("An
-analyst on its own timeframe").
+**An analyst on its own timeframe.** When the prompt says "Each analyst
+reads its own timeframe" (the runner config's `agents`, e.g. a 15m trend
+analyst and a 1h structure analyst), give that analyst its timeframe with the
+symbol ("timeframe 15m"): it reads `bar_briefing` with that `timeframe` (its
+own bar and the runner's m15, h1 and day parts it
+shares) and the bars file named there, and its `Data:` line names those
+versions (`bar15m@...`, then the shared parts). The analysts the prompt
+doesn't name read the runner's bars and briefing as the `role-round` skill
+says. Such a report,
+served under "Cached reports", holds until its own timeframe's next bar
+close, so it may be up to one of its bars old (a 1h report at 10:50 can be
+from 10:00): take this bar's facts (the trigger, the VWAP side, the
+candidates, the trend rule) from the runner's bar briefing, never from it.
+You merge every analyst's latest report and decide once for the cycle.
 
 Your last cycle results are those of the lanes that closed (each tagged
 with its lanes, e.g. "MNQ 1m"), plus the first lane's last 3 and those

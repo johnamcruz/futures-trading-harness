@@ -126,7 +126,8 @@ test('order-mechanics split: each role loads the piece its body uses', () => {
   assert.match(read('agents/risk-manager.md'), /working orders, with protective stops yes\/no/);
   assert.match(read('skills/order-mechanics/SKILL.md').replace(/\s+/g, ' '), /an order list may not show the bracket until the entry fills/);
   // The head trader's pointers about checking an order once still name the skill that has it.
-  for (const f of ['skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'rules/trading/risk-management.md']) {
+  // trade-session's pointers moved with their text (trade-session-split.test.js): its leftover orders and its step 6.
+  for (const f of ['skills/leftover-orders/SKILL.md', 'skills/entry-outcome/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'rules/trading/risk-management.md']) {
     assert.match(read(f), /the `order-mechanics` skill/, f);
   }
 });

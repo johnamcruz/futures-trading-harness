@@ -20,13 +20,17 @@ const claudeStream = skills => [
 ].join('\n');
 
 test('summarize: skills loaded, tool calls by name, shell commands, orders, and skills an entry needed', () => {
-  const all = summarize(claudeStream(['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']));
-  assert.deepStrictEqual(all.skills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
+  const all = summarize(claudeStream(['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']));
+  assert.deepStrictEqual(all.skills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
   assert.strictEqual(all.tools.mcp__broker__place_order, 2);
   assert.match(all.commands[0], /strategies\.js scan/);
   assert.strictEqual(all.orders.length, 2);
   assert.deepStrictEqual(all.missingSkills, []);
-  assert.deepStrictEqual(summarize(claudeStream(['trade-session'])).missingSkills, ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
+  assert.deepStrictEqual(summarize(claudeStream(['trade-session'])).missingSkills, ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
+  // The skills read before an entry (REQUIRED_AT_ENTRY) are named too; a skill_lookup of one counts (its "skill" argument).
+  const perCycle = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  assert.deepStrictEqual(summarize(claudeStream(perCycle)).missingSkills, ['setup-judgment', 'trade-plan']);
+  assert.deepStrictEqual(summarize(`${claudeStream([...perCycle, 'setup-judgment'])}\n{"skill": "trade-plan"}`).missingSkills, []);
   // Codex --json events.
   const codex = [JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'node mtf.js x' } }), JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {} } })].join('\n');
   assert.deepStrictEqual(toolCalls(codex).map(c => c.name), ['Bash', 'mcp__broker__get_bars']);
@@ -56,13 +60,13 @@ test('summarize: a Qwen transcript counts tools and orders reached through the t
   assert.deepStrictEqual(s.skills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library']);
   assert.deepStrictEqual(s.orders, [{ contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale: 'setup:supertrend long, stop 30827.5 (15 points = 60 ticks)' }]);
   // Recorded before strategy-library was split: its loads (Qwen's skill tool) count, and the two new pieces are missing.
-  assert.deepStrictEqual(s.missingSkills, ['strategy-scan', 'strategy-gate-checks']);
+  assert.deepStrictEqual(s.missingSkills, ['strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
   // The bridged call's own arguments, not the wrapper's.
   const scan = toolCalls(QWEN_CYCLE).find(c => c.name === 'mcp__harness__strategies_scan');
   assert.deepStrictEqual(Object.keys(scan.input).sort(), ['bars', 'symbol']);
   // Without its skills, a bridged entry is an entry without them.
   const noSkills = QWEN_CYCLE.replace(/"name":"skill"/g, '"name":"noop"').replace(/"skill":"futures-trading-harness:[a-z-]+"/g, '"x":"y"');
-  assert.deepStrictEqual(summarize(noSkills).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks']);
+  assert.deepStrictEqual(summarize(noSkills).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
   // A bridged shell command and an unanswered bridged order count (sent, its answer unknown); a string arguments field is parsed.
   const ev = (name, input, id) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
   const more = JSON.stringify([
@@ -85,7 +89,7 @@ test('summarize: a Qwen transcript counts tools and orders reached through the t
     ev('tool_call', order('setup:orb long d'), 'o4'), res('o4', true, [{ type: 'text', text: '  [tool_call bridge refused] Deferred tool "mcp__broker__place_order"' }]),
   ]);
   assert.deepStrictEqual(summarize(sneaky).orders.map(o => o.rationale.slice(-1)), [']', 'b', 'c'], 'only the error reply that is the bridge\'s refusal (text blocks too) is dropped');
-  assert.deepStrictEqual(summarize(sneaky).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'], 'the entries still raise the missing-skills alarm');
+  assert.deepStrictEqual(summarize(sneaky).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'], 'the entries still raise the missing-skills alarm');
 });
 
 test('writeCycleLog: the whole cycle (prompt, transcript, summary) and one summary line a day', () => {
@@ -133,7 +137,7 @@ test('summarize: an opencode transcript counts its tools, its orders (refused on
   const s = summarize(OPENCODE_CYCLE);
   assert.deepStrictEqual(s.tools, { skill: 3, mcp__harness__strategies_scan: 1, task: 1, mcp__broker__place_order: 2, mcp__broker__journal_add: 1, Bash: 1 });
   assert.deepStrictEqual(s.skills, ['trade-session', 'multi-timeframe-analysis'], 'the failed load is not a load');
-  assert.deepStrictEqual(s.missingSkills, ['strategy-library', 'strategy-scan', 'strategy-gate-checks']);
+  assert.deepStrictEqual(s.missingSkills, ['strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
   assert.deepStrictEqual(s.orders.map(o => [o.contractId, o.side, o.size, o.type]), [['MNQ', 0, 1, 2], ['MNQ', 0, 1, 2]]);
   assert.deepStrictEqual(s.commands, ['node -e 1']);
   assert.deepStrictEqual(toolCalls(OPENCODE_CYCLE).find(c => c.name === 'mcp__harness__strategies_scan').input, { symbol: 'MNQ', timeframe: '3m' });

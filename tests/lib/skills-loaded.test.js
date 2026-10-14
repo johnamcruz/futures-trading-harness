@@ -110,3 +110,24 @@ test('opencode JSON events (the runner\'s cycle transcript): completed skill loa
   fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(s => ev(s)).join('\n'));
   assert.strictEqual(checkSkillsLoaded(file), null);
 });
+
+test('checkSkillsAtEntry: setup-judgment and trade-plan read (a load or a skill_lookup), apart from REQUIRED_FOR_ENTRY; unreadable fails closed', () => {
+  const { checkSkillsAtEntry, loadedSkills, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
+  for (const s of REQUIRED_AT_ENTRY) assert.ok(!REQUIRED_FOR_ENTRY.includes(s), s);
+  const ev = (tool, input, output) => JSON.stringify({ type: 'tool_use', part: { tool, state: { status: 'completed', input, output } } });
+  const dir = tmpDir();
+  const file = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(name => ev('skill', { name }, 'x')).join('\n'));
+  assert.strictEqual(checkSkillsLoaded(file), null);
+  assert.match(checkSkillsAtEntry(file), /not read in this session: setup-judgment, trade-plan\./);
+  fs.writeFileSync(file, [ev('skill', { name: 'setup-judgment' }, 'x'), ev('harness_skill_lookup', { skill: 'trade-plan' }, '<skill name="trade-plan">')].join('\n'));
+  assert.strictEqual(checkSkillsAtEntry(file), null);
+  assert.deepStrictEqual([...loadedSkills(file)].sort(), ['setup-judgment', 'trade-plan']);
+  // No transcript: not applied (as checkSkillsLoaded); named but unreadable: refused, where checkSkillsLoaded passes.
+  assert.strictEqual(checkSkillsAtEntry(null), null);
+  const gone = path.join(dir, 'gone.jsonl');
+  assert.strictEqual(loadedSkills(gone), null);
+  assert.strictEqual(checkSkillsLoaded(gone), null);
+  assert.match(checkSkillsAtEntry(gone), /transcript can't be read/);
+});

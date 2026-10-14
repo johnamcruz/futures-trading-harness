@@ -19,7 +19,7 @@ description: Read-only game plan for the day, placing no orders. Use at the star
    `get_account_snapshot`, and the harness tool `combine_status` for a
    running prop attempt): today's game plan is sized from its balance, the
    room to the daily limits, and for an attempt the cushion and budget.
-2. Run in parallel (as in trade-session step 2): the three market analysts,
+2. Run in parallel (as in role-round): the three market analysts,
    `news-calendar-analyst` for the trading day's date (the date it ends on,
    as the prompt says), and `risk-manager` phase 1.
 3. Blackouts: add each proposed window with the append-only harness tool
