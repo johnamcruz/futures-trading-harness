@@ -16,6 +16,7 @@
  * the catch-up of a missed one, and housekeeping still flatten and cancel.
  *
  *   compareTools(got, want)                     -> [problem]
+ *   roleSkillsMismatch(root, env)               an opencode run's opencode.json not generated for its FTH_ROLE_SKILLS, or null
  *   checkToolsServer({ root, env, timeoutMs })  resolves, or rejects with what is wrong
  *   startPreflight({ root, env, once, killSwitchFile, warn, check })
  */
@@ -41,6 +42,23 @@ function compareTools(got, want = listTools()) {
   return problems;
 }
 
+/**
+ * An opencode run (FTH_ROLE_SKILLS set by the runner, PWD its directory): its opencode.json must be the one
+ * generated for that mode (role-skills.js), else the role prompts and the gate's lookup check disagree. null when it is.
+ */
+const INDEX_MARK = '## Your skill index'; // opencode.js indexPrompt's heading: a role prompt in index mode
+function roleSkillsMismatch(root, env = {}) {
+  if (env.FTH_ROLE_SKILLS === undefined || !env.PWD) return null;
+  const mode = require('../role-skills').modeOf(env);
+  const generated = m => require('../harness-sync').expectedFiles(root, { mode: m })['workspace/opencode.json'];
+  let got = null;
+  try { got = fs.readFileSync(path.join(env.PWD, 'opencode.json'), 'utf8'); } catch (_err) { /* missing */ }
+  // Full (the default): only a workspace with index-mode role prompts is refused (its roles would skip lookups the gate
+  // doesn't check), whatever checkout generated it; anything else is as before. Index: exactly the index-mode file.
+  const bad = mode === 'full' ? got !== null && got.includes(INDEX_MARK) : got !== generated('index');
+  return bad ? `${path.join(env.PWD, 'opencode.json')} is not the one generated for FTH_ROLE_SKILLS=${mode}: run FTH_ROLE_SKILLS=${mode} node scripts/sync-harness.js (the committed file is full)` : null;
+}
+
 async function checkToolsServer({ root, env = process.env, timeoutMs = 15000, command = process.execPath, args = null } = {}) {
   const script = path.join(root, 'scripts', 'harness-tools-mcp.js');
   const client = createMcpClient({ command, args: args || [script], env, timeoutMs, clientName: 'fth-runner-preflight' });
@@ -52,6 +70,8 @@ async function checkToolsServer({ root, env = process.env, timeoutMs = 15000, co
   } finally {
     client.close();
   }
+  const mismatch = roleSkillsMismatch(root, env);
+  if (mismatch) throw new Error(mismatch);
   const problems = compareTools(tools);
   if (problems.length) {
     throw new Error(`the harness tools server (${script}) does not offer the harness's tools (${problems.slice(0, 5).join('; ')}${problems.length > 5 ? `; and ${problems.length - 5} more` : ''}); update the checkout and re-run the installer`);
@@ -78,4 +98,4 @@ async function startPreflight({ root, env, once = null, killSwitchFile, warn = s
   }
 }
 
-module.exports = { compareTools, checkToolsServer, startPreflight };
+module.exports = { compareTools, roleSkillsMismatch, checkToolsServer, startPreflight };

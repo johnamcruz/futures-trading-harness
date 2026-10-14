@@ -41,7 +41,9 @@
  * its project from PWD, not the process's working directory.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
- *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs)
+ *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs: role-skills,
+ *                                then role-index), or in index mode (skillPlan, FTH_ROLE_SKILLS=index:
+ *                                role-skills.js) its core skills and an index of the rest (skill_lookup)
  *   agentConfig(agent)           a role as an opencode agent entry
  *   workspaceConfig(agents)      workspace/opencode.json's object
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch
@@ -53,6 +55,7 @@
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { scratchDir } = require('./bars-fetch');
+const { describeTrigger } = require('./trading/skills-loaded');
 
 const SCHEMA = 'https://opencode.ai/config.json';
 /** opencode's built-in agents; the harness's roles replace them. */
@@ -104,8 +107,13 @@ function agentPermission(tools) {
   return permission;
 }
 
-/** The body's "Load the skill(s) `a`, ... and `b`." sentence (the one `role-skills` repeats). */
+/** The body's "Load the skill(s) `a`, ... and `b`." sentence (the one `role-skills` and `role-index` together repeat). */
 const LOAD_SENTENCE = /Load the\s+skills?\s+(`[a-z-]+`(?:,?\s+(?:and\s+)?`[a-z-]+`)*)(\s+first)?\./;
+/** `a`, `b`, and `c`, as the body lists skills. */
+const skillList = names => {
+  const q = names.map(n => `\`${n}\``);
+  return q.length < 3 ? q.join(' and ') : `${q.slice(0, -1).join(', ')}, and ${q[q.length - 1]}`;
+};
 
 /**
  * A role's prompt: its body, with its "Load the skills" sentence saying they are below, then its skills in full
@@ -114,7 +122,9 @@ const LOAD_SENTENCE = /Load the\s+skills?\s+(`[a-z-]+`(?:,?\s+(?:and\s+)?`[a-z-]
  * server caches across calls.
  */
 function agentPrompt(agent) {
-  const docs = agent.skillDocs || [];
+  const plan = agent.skillPlan || null;
+  if (plan && plan.indexed.length) return indexPrompt(agent, plan);
+  const docs = plan ? plan.docs : (agent.skillDocs || []);
   if (!docs.length) return `${agent.body}\n`;
   return [
     agent.body.replace(LOAD_SENTENCE, (_m, list) => `Your skills ${list} are below, already loaded (Your skills, at the end).`),
@@ -125,6 +135,37 @@ function agentPrompt(agent) {
     '',
     ...docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']),
   ].join('\n');
+}
+
+/** The skill_lookup call a role makes, with its own name (the order gate counts a lookup by it). */
+const lookupCall = role => `\`skill_lookup {"skill": "<skill>", "role": "${role}"}\``;
+
+/**
+ * A role's prompt in index mode (role-skills.js skillPlan): its body, its core skills in full, then its index, one
+ * line per skill (name and description), which it reads whole with the harness tool skill_lookup when the cycle
+ * needs one, and the situations in which a lookup is required (skills-loaded.js SITUATIONAL).
+ */
+function indexPrompt(agent, plan) {
+  // Without its load sentence the body would still name the indexed skills to load: never generated silently.
+  if (!LOAD_SENTENCE.test(agent.body)) throw new Error(`agents/${agent.file || agent.name}: no "Load the skills ..." sentence to split into its core and its index`);
+  const out = [
+    // Its load sentence names core and index alike (the other adapters load them all, as before): here, two sentences.
+    agent.body.replace(LOAD_SENTENCE, () => `${plan.docs.length ? `Your skills ${skillList(plan.docs.map(d => d.name))} are below, already loaded (Your skills, at the end). ` : ''}Look up as needed: ${skillList(plan.indexed.map(d => d.name))}, listed in Your skill index (at the end); read one with skill_lookup only when this cycle needs it.`),
+    '',
+  ];
+  if (plan.docs.length) {
+    out.push('## Your skills (already loaded)', '',
+      `The skills this role uses every call (${plan.docs.map(d => d.name).join(', ')}) are below in full: they are loaded. Read them here; don't load them again with the skill tool.`,
+      '', ...plan.docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']));
+  }
+  out.push('## Your skill index', '',
+    `Your other skills, not loaded. Read one only when this cycle's situation needs it: ${lookupCall(agent.name)} returns the whole skill. Don't look up what the cycle doesn't need.`,
+    '', ...plan.indexed.map(d => `- ${d.name}: ${d.description}`), '');
+  if (plan.required.length) {
+    out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up in this call, before your report; otherwise the order gate doesn\'t count your report for an entry.', '',
+      ...plan.required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
+  }
+  return out.join('\n');
 }
 
 function agentConfig(agent) {
@@ -152,6 +193,9 @@ function sessionPermission(roles, denied = []) {
     // no wildcard: a merged config naming one can't reorder a wildcard after it.
     ...Object.fromEntries(Object.keys(require('./broker/interface').TOOLS).map(t => [`${BROKER_SERVER}_${t}`, t === 'place_order' ? 'deny' : 'allow'])),
     [`${HARNESS_SERVER}_*`]: 'allow',
+    // skill_lookup is the roles' (a lookup counts for the role it names: trading/skill-lookups.js); the head trader
+    // loads its skills with the skill tool.
+    [`${HARNESS_SERVER}_skill_lookup`]: 'deny',
   };
 }
 
@@ -287,4 +331,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
+module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };

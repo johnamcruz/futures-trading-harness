@@ -1,8 +1,9 @@
 ---
 name: market-structure-analyst
 description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
-tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show, mcp__harness__bar_briefing
-role-skills: [market-structure, multi-timeframe-analysis, market-snapshot, strategy-library, trader-process, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, candle-reading, mtf-rejection, mtf-breakout, harness-tools]
+tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show, mcp__harness__bar_briefing, mcp__harness__skill_lookup
+role-skills: [market-structure, multi-timeframe-analysis, market-snapshot, strategy-library, trader-process, harness-tools]
+role-index: [trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, candle-reading, mtf-rejection, mtf-breakout]
 model: inherit
 ---
 

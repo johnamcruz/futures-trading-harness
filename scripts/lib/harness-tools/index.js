@@ -20,6 +20,7 @@ const lessons = require('./lessons');
 const reconcile = require('./reconcile');
 const briefing = require('./briefing');
 const reasons = require('./reasons');
+const skills = require('./skills');
 
 const OPERATIONS = {
   strategies_list: strategies.list,
@@ -38,6 +39,7 @@ const OPERATIONS = {
   reconcile: reconcile.reconcile,
   bar_briefing: briefing.barBriefing,
   reason_check: reasons.check,
+  skill_lookup: skills.skillLookup,
 };
 
 module.exports = { OPERATIONS };

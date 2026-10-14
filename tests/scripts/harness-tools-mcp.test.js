@@ -383,5 +383,5 @@ test('harness-tools server main: only protocol messages reach stdout; anything e
   await new Promise(r => setImmediate(r));
   assert.strictEqual(got.out, '{"jsonrpc":"2.0","id":1,"result":{}}\n');
   assert.match(got.err, /stray print from an operation/);
-  assert.match(got.err, /16 tools ready/);
+  assert.match(got.err, /17 tools ready/);
 });

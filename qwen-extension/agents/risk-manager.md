@@ -21,6 +21,7 @@ tools:
   - mcp__broker__journal_read
   - mcp__harness__bar_briefing
   - mcp__harness__reason_check
+  - mcp__harness__skill_lookup
 approvalMode: default
 background: false
 ---

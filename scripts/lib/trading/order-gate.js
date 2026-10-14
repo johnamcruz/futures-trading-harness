@@ -25,8 +25,9 @@ const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal } = require('./signal-state');
-const { checkSkillsLoaded } = require('./skills-loaded');
+const { checkSkillsLoaded, REQUIRED_FOR_ENTRY, situationalSkills } = require('./skills-loaded');
 const { checkRolesRan } = require('./roles-ran');
+const { lookupRule, briefingFacts } = require('./skill-lookups');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
@@ -315,9 +316,13 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
   const transcript = transcriptPath || config.cycleTranscript;
-  add('skills-loaded', checkSkillsLoaded(transcript));
+  // In index mode (FTH_ROLE_SKILLS=index) the situational skills this bar's briefing triggers too (skills-loaded.js).
+  const situational = config.autonomous && config.roleSkills === 'index' ? situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now)) : [];
+  add('skills-loaded', checkSkillsLoaded(transcript, [...REQUIRED_FOR_ENTRY, ...situational.filter(s => !REQUIRED_FOR_ENTRY.includes(s))]));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
-  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || []) : null);
+  // In index mode (FTH_ROLE_SKILLS=index), a role's report counts only with the lookups this bar requires of it.
+  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now }) : null;
+  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);

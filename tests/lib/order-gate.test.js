@@ -1679,3 +1679,67 @@ test('account lock outside a runner: a live broker (apiUrlEnv) whose API URL is 
   const exit = checkOrder(entryOrder({ side: 'sell', rationale: '[exit] flatten' }), { env, pluginRoot: require('path').resolve(__dirname, '..', '..') });
   assert.ok(!exit.violations.some(v => v.check === 'account-lock'), exit.message);
 });
+
+// --- Index mode (FTH_ROLE_SKILLS=index): a role's report counts only with the lookups its bar requires (skill-lookups.js). ---
+test('skill lookups: in index mode an entry counts a role\'s report only with the lookups its bar requires; no trigger, no requirement; exits never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup, lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
+  const dir = require('../helpers').tmpDir();
+  const home = trendHome();
+  const file = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // opencode's task events carry the call's wall-clock start and end (ms).
+  const T = 1.8e12;
+  const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
+  fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
+    timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
+  const brief = candidates => writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates, news: { inBlackout: false } } } } });
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
+  const reset = () => { try { fs.unlinkSync(lookupsFile(file)); } catch (_err) { /* none */ } };
+  const index = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'index' };
+  const run = (input, cfg = index) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+  // A reversal candidate: the roles whose index lists its situational skills (skills-loaded.js SITUATIONAL) looked none up.
+  brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  const refused = run(entryOrder());
+  assert.deepStrictEqual(checks(refused), ['roles-ran']);
+  assert.match(refused.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, risk-manager phase 1/);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  // Full mode (the default): no lookup is required.
+  assert.deepStrictEqual(run(entryOrder(), { ...index, roleSkills: 'full' }).violations, []);
+  // Each role looked its own up during one of its calls (phase 2 for the risk manager): counted.
+  const all = () => {
+    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'pullback-vs-reversal', 12);
+    look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+    look('risk-manager', 'confluence-counting', 31);
+    look('risk-manager', 'invalidation', 32);
+  };
+  all();
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // One missing (a lookup outside its calls, or under another role's name, doesn't count): that role alone.
+  reset();
+  all();
+  fs.writeFileSync(lookupsFile(file), fs.readFileSync(lookupsFile(file), 'utf8').split('\n').filter(l => !l.includes('"mtf-rejection"')).join('\n'));
+  look('market-structure-analyst', 'mtf-rejection', 25);
+  look('trend-momentum-analyst', 'mtf-rejection', 15);
+  const one = run(entryOrder());
+  assert.match(one.violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up mtf-rejection/);
+  // A with-trend candidate requires the breakout skills of the structure analyst instead.
+  reset();
+  brief([{ name: 'orb', direction: 'long', trendRule: 'allows' }]);
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 32);
+  assert.match(run(entryOrder()).violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  look('market-structure-analyst', 'mtf-breakout', 11);
+  look('market-structure-analyst', 'breakout-vs-fakeout', 11);
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // No trigger (no candidate on the bar): nothing is required.
+  reset();
+  brief([]);
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // Exits and protective stops are never held, whatever was looked up.
+  brief([{ name: 'orb', direction: 'long', trendRule: 'reversal' }]);
+  assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
+  assert.deepStrictEqual(run(entryOrder({ rationale: '[protect] stop for the long' })).violations, []);
+});
