@@ -60,6 +60,10 @@ const ALLOWED = [
   { old: 'A full cycle still runs its analysts in parallel, except those whose report the prompt gives under "Cached reports" (trade-session step 2): those reports are this cycle\'s; don\'t launch the role again.',
     now: 'A full cycle still runs its analysts in parallel, except those whose report the prompt gives under "Cached reports" (role-round): those reports are this cycle\'s; don\'t launch the role again.',
     reason: 'cached reports moved from trade-session step 2 to role-round: the pointer names it, shorter' },
+  // The decision history tells a risk-manager veto apart from the model's own pass (decision-history.js vetoedIn).
+  { old: 'Each history line is one decision: time, symbol and lane, what you did (entered, skipped, planned, managed, no-trade, flattened, blocked, error), the setup and side, the price, your reason, and what happened since, from closed bars only: ticks moved, whether a skipped setup would have hit +1R or -1R first, an entry\'s real position (open from its fill with R now, closed with its R, or "unknown" or "unavailable": then you don\'t know, so don\'t guess).',
+    now: 'Each history line is one decision: time, symbol and lane, what you did (entered, skipped, vetoed, planned, managed, no-trade, flattened, blocked, error; skipped is your own pass, vetoed the risk manager\'s veto), the setup and side, the price, your reason, and what happened since, from closed bars only: ticks moved, whether a skipped or vetoed setup would have hit +1R or -1R first, an entry\'s real position (open from its fill with R now, closed with its R, or "unknown" or "unavailable": then you don\'t know, so don\'t guess).',
+    reason: 'the history\'s new action word, vetoed (the risk manager\'s veto), told apart from skipped (the model\'s own pass)' },
 ];
 
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction

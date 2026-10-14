@@ -1407,7 +1407,7 @@ function createRunner(deps) {
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed, positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
+            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

@@ -126,17 +126,26 @@ test('decision path: each trader-process step has a skill a role embeds, indexes
   assert.ok(!pointsTo(msa, 'position-sizing'));
 });
 
-test('decision path, veto: risk-manager phase 2 vetoes; no order is sent; recorded as a no-trade on the setup with the veto in its result', async () => {
+test('decision path, veto: risk-manager phase 2 vetoes; no order is sent; recorded as vetoed on the setup, told apart from the model\'s own pass', async () => {
   const w = D.world();
   const r = await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w, { verdict: 'VETO' }));
   assert.deepStrictEqual(D.placedAtBroker(w), []);
   assert.deepStrictEqual(D.gateLog(w), [], 'the executor was never called');
   const h = r.state.history.at(-1);
-  assert.deepStrictEqual([h.action, h.setup, h.side], [D.RESULT_ACTION['no-trade'], SETUP.strategy, SETUP.side]);
+  assert.deepStrictEqual([h.action, h.setup, h.side, h.bar], ['vetoed', SETUP.strategy, SETUP.side, FIRED_BAR]);
   assert.match(h.result, /vetoed/);
   // The cycle log's fact check sees the veto report.
   const rec = JSON.parse(fs.readFileSync(D.cycleLines(w).at(-1).file, 'utf8'));
   assert.deepStrictEqual(rec.factCheck.reports.map(x => x.verdict), ['VETO']);
+  // The next cycle's prompt shows it as vetoed, with what followed (its counterfactual's ground, as a pass's).
+  const next = await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'nothing new'));
+  assert.match(next.ran[0].prompt, new RegExp(`MNQ 3m vetoed ${SETUP.strategy} ${SETUP.side}`));
+  // Phase 2 approves and the model passes anyway: its own pass, skipped.
+  const w2 = D.world();
+  const own = D.entryCycle(w2).filter(x => !x.executor).map(x => (x.result ? { result: 'CYCLE RESULT: no-trade - approved, but I pass: the close came back inside the level' } : x));
+  const r2 = await D.pass(w2, decisionAt(FIRED_BAR), own);
+  assert.deepStrictEqual(D.placedAtBroker(w2), []);
+  assert.deepStrictEqual([r2.state.history.at(-1).action, r2.state.history.at(-1).setup], ['skipped', SETUP.strategy]);
 });
 
 test('decision path, entry: every skill, lookup, role and fact in place: the order goes, fills with its stop, and is recorded', async () => {
@@ -385,7 +394,5 @@ const COMPOSED = [
   'composed: the cycle log records every compose_check call (its record or refusal) beside factCheck; labels and the scorecard read the record, not "no setup"; a limit entry and the record\'s target are no clone reasons',
   'composed: the learning log: each decision\'s signature, context (regime, bias, session) and outcome in R is recorded append-only; experience_lookup reads it by signature with sample sizes, and its calls are recorded like skill_lookup\'s (required before an entry once D15 says so)',
   'composed, scenario 2 facts: the 4h candle that swept the prior 4h low and closed back, the 5m structure shift, the open 5m FVG and its retest, and the 4h high as a target are briefing fields',
-  // Record gaps these tests exposed (follow-ups).
-  'decision history: a risk-manager veto is told apart from the model\'s own pass (today both are skipped)',
 ];
 for (const t of COMPOSED) test.todo(t);
