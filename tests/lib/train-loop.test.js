@@ -276,13 +276,30 @@ test('checkedScorecard: any scorecard (a --steps one too) reads a run only after
   assert.strictEqual(called, 0);
   await plugged({ runDir, look: { purpose: 'judging', ledger: [] } });
   assert.strictEqual(called, 1);
-  // runLoop wraps the scorecard it is given: a plugged one is called only through the check.
+  // runLoop wraps the scorecard it is given: a run whose days its tuning look doesn't allow (a champion run that
+  // recorded Select days) is refused before the plugged scorecard is called.
   const w = world({ proposals: [fix] });
-  const seen = [];
-  const score = w.steps.scorecard;
-  w.steps.scorecard = opts => { seen.push(opts.look.purpose); return score(opts); };
+  let seen = 0;
+  w.steps.scorecard = async () => { seen += 1; return []; };
+  const replay = w.steps.runReplay;
+  w.steps.runReplay = async opts => {
+    const res = await replay(opts);
+    const m = store.openRun(opts.run.paths, { runId: opts.run.runId, hash: 'h' });
+    store.appendRecord(opts.run.paths, m, { t: '2023-09-13T14:33:02.000Z', day: '2023-09-13', kind: 'trade', ran: [] });
+    return res;
+  };
+  await assert.rejects(run(w, { dryRun: true }), /scorecard's look at 2022-03-09\.\.2023-09-13 is refused/);
+  assert.strictEqual(seen, 0);
+});
+
+test('a held-out ledger snapshot removed while the judging runs stops it at the next scorecard read', async () => {
+  const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
   await run(w, { dryRun: true });
-  assert.ok(seen.length && seen.every(p => p === 'tuning'));
+  const [kept] = readArchive(w.paths.archive);
+  const snapshot = path.join(w.paths.dir, `held-out-${kept.proposalId}`, 'ledger-before.jsonl');
+  const replay = w.steps.runReplay;
+  w.steps.runReplay = async opts => { fs.rmSync(snapshot, { force: true }); return replay(opts); };
+  await assert.rejects(L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /the held-out ledger snapshot .* is missing/);
 });
 
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {
