@@ -17,9 +17,8 @@ skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`.
 
 **The bar.** `m3.bar.rangeAtr` = (h - l) / ATR(14); `m3.context.range5Atr`
-= the last 5 bars' high-to-low / ATR(14). Close location = (c - l) / (h -
-l) from `m3.bar.c`, `m3.bar.h`, `m3.bar.l` (not a field yet: work it out;
-h = l is `unknown`).
+= the last 5 bars' high-to-low / ATR(14). Close location: a candle
+line's `close top|middle|bottom third`.
 
 **Participation** (`m3.participation`):
 
@@ -53,9 +52,10 @@ override the price-action read. In the count they are one item with the
 bar's momentum (`confluence-counting`, item 5): all with its side FOR, all
 against AGAINST, mixed neutral; never a veto.
 
-**The read.** Momentum: closes at the side's extreme, ranges at or above
-ATR, participation 1 or more, ADX rising. Fading: ADX falling, ranges
-shrinking, closes mid-range. High volume with little range: `absorption`.
+**The read.** Momentum: a candle line's `momentum up|down` (range ≥ 1
+ATR, close in the far third, volume ≥ the prior 20 candles' mean); the
+trend (ADX, EMAs) is separate. Fading: ADX falling, ranges shrinking,
+closes mid-range. High volume with little range: `absorption`.
 The indicators together are one item in the count (`confluence-counting`, item 5), never one each.
 
 **Evidence**: above-average volume on a first close through the IB high
