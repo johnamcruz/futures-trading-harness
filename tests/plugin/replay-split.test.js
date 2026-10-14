@@ -49,6 +49,14 @@ const ALLOWED = [
   { old: 'Scoring how closely the trader followed its rules: the adherence scorecard (step 11), for a replay run or a live session (step 12), and its flagged decisions, the failures the code found, for review.',
     now: 'Scoring how closely the trader followed its rules: the adherence scorecard (the `replay-scorecard` skill), for a replay run or a live session (the `live-session-records` skill), and its flagged decisions, the failures the code found, for review.',
     reason: 'steps 11 and 12 are the replay-scorecard and live-session-records skills' },
+  // A truth fix in kept text: the report's table as scripts/lib/replay/report.js prints it (toText: HEAD ends with a
+  // replay-clock column, and a total row follows the months).
+  { old: 'month times cycles failed stand-aside trades win rate mean R (n) expectancy net MAE R MFE R refusals by check',
+    now: 'month times cycles failed stand-aside trades win rate mean R (n) expectancy net MAE R MFE R refusals by check replay-clock',
+    reason: 'the report table has a replay-clock column' },
+  { old: '2024-03 2520 2541 0 91.3% 38 44.7% 0.21 (38) $9.42 $357.96 -0.48 1.12 plan-required 6, mtf-trend 3',
+    now: '2024-03 2520 2541 0 91.3% 38 44.7% 0.21 (38) $9.42 $357.96 -0.48 1.12 plan-required 6, mtf-trend 3 0',
+    reason: 'the month row carries its replay-clock count' },
 ];
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
@@ -139,4 +147,11 @@ test('replay and training-loop splits: the skill index every cycle reads (worksp
   assert.ok(now <= was, `the index lines are ${now} characters, over the old ${was}`);
   const agents = read('workspace/AGENTS.md');
   for (const s of [...HOMES, 'training-loop', 'training-verdict']) assert.ok(agents.includes(`- \`${s}\` (skills/${s}/SKILL.md): Use when `), s);
+});
+
+test('replay: the example report table is the one scripts/lib/replay/report.js prints', () => {
+  const R = require('../../scripts/lib/replay/report');
+  const row = key => ({ key, points: 2520, cycles: 2541, failed: 0, standAsideRate: 0.913, trades: 38, winRate: 0.447, meanR: 0.21, tradesWithR: 38,
+    expectancy: 9.42, net: 357.96, meanMaeR: -0.48, meanMfeR: 1.12, refusals: { 'plan-required': 6, 'mtf-trend': 3 }, replayClockRefusals: 0 });
+  assert.ok(read('skills/replay/SKILL.md').includes(R.toText({ months: [row('2024-03')], total: row('total') })));
 });

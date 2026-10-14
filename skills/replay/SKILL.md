@@ -181,8 +181,9 @@ node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03
 ```
 
 ```text
-month    times  cycles  failed  stand-aside  trades  win rate  mean R (n)  expectancy  net      MAE R  MFE R  refusals by check
-2024-03  2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3
+month    times  cycles  failed  stand-aside  trades  win rate  mean R (n)  expectancy  net      MAE R  MFE R  refusals by check             replay-clock
+2024-03  2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3  0
+total    2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3  0
 
 Combine verdict: topstep_100k (the policy strategies' account (prop_flow_1m, prop_portfolio)); each month a fresh attempt from $100000.00: ...
 2024-03  NOT YET: profit $357.96 of $6000.00 ($5642.04 to go), 14 of 21 day(s) traded
