@@ -47,7 +47,7 @@ overrule it. A missing field is `unknown` and counts neutral.
 ```text
 Take: vwap_reclaim long: 1 aligned, 2 orb with it, 3 above VWAP, 4 rejection, 5 momentum: for; 6 neutral.
   5 Confluence: for 5, against 0, neutral 1. Priority order: room -> take.
-Skip: orb long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 cisd_ote short, 3 below VWAP: against.
+Skip: orb long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 crt_1h short, 3 below VWAP: against.
   5 Confluence: for 0, against 2, neutral 4. Priority order (step 6, the other side): skip.
 Loser: for 4, against 0, neutral 2; vwap_reclaim long at 21522.75, stop 21516.50
   (6.25 pts = 25 ticks, $12.50 on 1 MNQ). -25 ticks, -$12.50. A high count is odds, not a promise.

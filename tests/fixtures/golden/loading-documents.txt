@@ -1,41 +1,47 @@
 strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
 strategy cisd_ote: {
-  "body": "4439 chars sha256:8dcfdfc2eb510a47",
-  "compiledRules": "sha256:65dca0ef09f7abe2",
-  "compiledStop": "sha256:e9af80523b56e6ac",
+  "body": "9046 chars sha256:379522650b4a03a9",
+  "compiledRules": "sha256:22c22c3f06d68e2e",
+  "compiledStop": "sha256:c5497faa7f3507dd",
   "compiledTarget": null,
-  "description": "ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from the original bot. Use after a liquidity sweep and displacement.",
+  "description": "Textbook CISD + OTE displacement and pullback - a strong completed 15-minute or 60-minute candle closes through the open of the run before it (a change in state of delivery); enter on the 3-minute bounce from the displacement leg's OTE zone, stop beyond the leg's origin. A prior key-level sweep is confluence, never required. Paper until a census and the owner promote it.",
   "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
   "instruments": [
     "MNQ",
     "MES",
     "MYM",
     "M2K"
   ],
-  "mtf": "reversal",
+  "mtf": "trend",
   "name": "cisd_ote",
+  "params": {
+    "cisdMinRun": 2,
+    "cisdMaxWait": 6,
+    "cisdExpiry": 12,
+    "cisdVoidTol": 0.05,
+    "cisdBufferAtr": 0.1,
+    "cisdMinBody": 0.6,
+    "cisdMinRangeAtr": 1,
+    "cisdHigherMinutes": 60
+  },
   "risk": {
-    "stop": "cisd_ote_risk",
+    "stop": "cisd_risk(15)",
     "min_rr": 2
   },
   "rules": {
     "long": [
-      "cisd_ote_dir > 0"
+      "cisd_entry(15) > 0"
     ],
     "short": [
-      "cisd_ote_dir < 0"
+      "cisd_entry(15) < 0"
     ]
   },
   "signal": "rules",
-  "source": "original bot, strategies/cisd_ote.py, cisd_ote_detect.py",
-  "status": "active",
+  "source": "the owner's CISD definition (change in state of delivery; the cisd skill) and the OTE golden zone (the fib-retracement skill), rewritten from the version 3 port of the original bot (strategies/cisd_ote.py, cisd_ote_detect.py); detector in scripts/lib/trading/cisd.js, fib levels in scripts/lib/trading/fib.js",
+  "status": "paper",
   "timeframe": "3m",
   "valid": true,
-  "version": 3
+  "version": 4
 }
 strategy crt_1h: {
   "body": "6989 chars sha256:7978f994ff460e05",

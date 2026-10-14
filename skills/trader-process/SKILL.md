@@ -7,7 +7,7 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 ## When to Use
 
-- Every trade cycle; each role for its steps.
+- Each cycle; each role for its steps.
 
 ## How It Works
 
@@ -37,7 +37,7 @@ It adds no filter and no veto:
 4. **Setup.** Which strategy fired, which side. Continuation is a strategy
    without `mtf: reversal`, with the Trend rule's prevailing trend;
    reversal is one with it (a fade). Its STRATEGY.md and the
-   priority order judge it, not this label. Read: `pullback-vs-reversal`;
+   priority order judge it, not this label. Read: `pullback-vs-reversal`, `cisd`;
    setups: `mtf-rejection`, `mtf-breakout`.
 5. **Confluence.** Count the six items of `confluence-counting`; the
    candidate's own `values` are always neutral.

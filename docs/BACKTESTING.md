@@ -142,7 +142,7 @@ broker's, `scripts/lib/backtest/sim-broker.js`, one per market; the engine
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
 | Manage | A bar that starts with a trade open only manages it (as in the original bot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as the original bot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the next bar's open (plus `slippageTicks`), or at the signal bar's close with `fill: close`. The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as the original bot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
+| Entry | Strategies are checked in priority order. The first candidate enters at the next bar's open (plus `slippageTicks`), or at the signal bar's close with `fill: close`. The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_risk(15)`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as the original bot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
 
 **The market session** always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday) and before `eodAt`, and every
@@ -376,9 +376,10 @@ proves this.
 ### Strategy correctness
 
 `tests/lib/parity.test.js` runs the shipped strategies' rules over the original bot's
-own NQ and RTY 3-minute data. It checks each ported strategy (`orb`,
-`cisd_ote`) against the signals the original bot's Python detectors produced
-on the same bars: same bar, same direction, same stop. The expected files
+own NQ and RTY 3-minute data. It checks the ported strategy (`orb`) against
+the signals the original bot's Python detectors produced on the same bars:
+same bar, same direction, same stop (`cisd_ote` was a port until its
+version 4 textbook rewrite; its signals in the expected files are left out). The expected files
 still hold the signals of the four ports retired on 2026-10-13 (`bos`,
 `ema_cross`, `keltner`, `supertrend`; `strategies/README.md`, "Retired
 strategies"), as the original bot produced them; the test leaves those out.

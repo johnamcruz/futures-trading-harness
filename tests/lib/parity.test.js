@@ -16,12 +16,14 @@ const DIR = path.join(__dirname, '..', 'fixtures', 'parity');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { FX_STRATEGIES } = require('../helpers');
 
-// The ports and their names in the original bot's output: the shipped ones (orb, cisd_ote), and the rules of the ports
+// The ports and their names in the original bot's output: the shipped one (orb), and the rules of the ports
 // retired on 2026-10-13 (strategies/README.md, "Retired strategies") as test fixtures, so the rule series they read
 // (swing crosses, EMA crosses with ADX, Keltner bands, SuperTrend flips) keep their parity: fx_break and fx_cross
 // (tests/fixtures/strategies-fx, the old bos and ema_cross rules), fx_keltner and fx_supertrend
 // (tests/fixtures/strategies-fx-parity).
-const NAMES = { orb: 'orb', cisd_ote: 'cisd_ote', fx_break: 'bos', fx_cross: 'ema', fx_keltner: 'keltner', fx_supertrend: 'supertrend' };
+// cisd_ote was a port until version 4 (2026-10-13): it is now the textbook CISD + OTE (strategies/cisd_ote), not the
+// bot's detector, so the bot's cisd_ote signals in the fixtures are left out.
+const NAMES = { orb: 'orb', fx_break: 'bos', fx_cross: 'ema', fx_keltner: 'keltner', fx_supertrend: 'supertrend' };
 // The STRATEGY.md files, as written: Markdown rules, no strategy code.
 const FX_DIRS = [FX_STRATEGIES, path.join(__dirname, '..', 'fixtures', 'strategies-fx-parity')].join(',');
 const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_DIRS }).strategies;
@@ -42,13 +44,14 @@ for (const sym of ['NQ', 'RTY']) {
         const r = ev.at(strategy(signal), i, { describe: false });
         if (!r.direction) continue;
         const d = r.direction === 'long' ? 1 : -1;
-        // The original bot's stop: 0.5 x ATR(20) from the close; cisd_ote: the zone pivot, measured from the entry bar's open.
-        const stop = signal === 'cisd_ote' ? bars[i].o - d * r.stopDistance : bars[i].c - d * r.stopDistance;
+        // The original bot's stop: 0.5 x ATR(20) from the close.
+        const stop = bars[i].c - d * r.stopDistance;
         got.push({ t: bars[i].t, s: name, d, stop: Math.round(stop * 100) / 100 });
       }
     }
     const key = x => `${new Date(x.t).toISOString()} ${x.s} ${x.d}`;
-    const want = new Map(expected.signals.map(x => [key(x), Math.round(x.stop * 100) / 100]));
+    const ported = new Set(Object.values(NAMES));
+    const want = new Map(expected.signals.filter(x => ported.has(x.s)).map(x => [key(x), Math.round(x.stop * 100) / 100]));
     const have = new Map(got.map(x => [key(x), x.stop]));
     assert.deepStrictEqual([...have.keys()].filter(k => !want.has(k)), [], 'signals the original bot does not fire');
     assert.deepStrictEqual([...want.keys()].filter(k => !have.has(k)), [], 'signals the harness misses');

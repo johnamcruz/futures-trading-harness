@@ -8,9 +8,8 @@
  *
  * Every mechanical strategy is Markdown rules (`signal: rules`), evaluated by
  * the rules engine over series computed once (causal: bar i only sees bars
- * 0..i). The cisd_ote series runs the original bot's detector on the trailing
- * `window` bars, as the source does. The shipped ports reproduce
- * the original bot's signals bar for bar (tests/lib/parity.test.js).
+ * 0..i). The regime reads the trailing `window` bars. The shipped orb port
+ * reproduces the original bot's signals bar for bar (tests/lib/parity.test.js).
  */
 
 const { PARAMS, signalSeries } = require('./market-snapshot');
@@ -55,7 +54,7 @@ function inSessions(strategy, now) {
 
 /**
  * @param bars normalized bars (indicators.normalizeBars), oldest first
- * @param opts.window bars of history for windowed pieces (cisd_ote, regime)
+ * @param opts.window bars of history for windowed pieces (the regime)
  */
 function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   const ms = bars.map(b => Date.parse(b.t));
@@ -75,7 +74,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   };
   const rulesSource = s => {
     const key = JSON.stringify(s.params || {});
-    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s), { window }));
+    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s)));
     return rulesCache.get(key);
   };
   const windowStart = i => Math.max(0, i - window + 1);
@@ -188,7 +187,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       ...(biases ? { mtf: mtf.ruleSummary(biases, s.mtf || 'trend') } : {}),
       ...(ruleDetail ? { rules: ruleDetail } : {}),
       // Detector state on this bar (e.g. a CRT sweep's range, extreme, and why it did or didn't fire).
-      ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i)) : {}),
+      ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i, JSON.stringify([s.rules, s.risk, s.exit]))) : {}),
     };
   }
 

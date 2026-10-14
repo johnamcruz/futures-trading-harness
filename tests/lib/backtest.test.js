@@ -266,7 +266,8 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
 });
 
-test('strategies whose stop is an expression (cisd_ote) are backtested', () => {
+test('strategies whose stop is an expression (cisd_ote: cisd_risk(15)) are backtested', () => {
+  // cisd_ote is paper; the backtester runs any strategy that isn't disabled.
   const dir = tmpDir();
   const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['cisd_ote'], outDir: dir, gate: false };
   const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: {} });

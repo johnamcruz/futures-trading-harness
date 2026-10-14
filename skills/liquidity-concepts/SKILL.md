@@ -36,7 +36,7 @@ it doesn't hold. The sweeps are computed there: never call one by eye.
    open FVG".
 4. **Use.** Targets: the next untested liquidity pool in the trade's
    direction. Room: the first level in a setup's way (`inTheWay`) is the
-   priority order's step 3 (strategy-library). Reversal setups (cisd_ote)
+   priority order's step 3 (strategy-library). Reversal setups (crt_1h)
    follow a sweep; continuation setups follow a break.
 
 ## Examples

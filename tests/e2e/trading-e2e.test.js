@@ -38,10 +38,17 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const dataDir = path.join(home, 'bars');
   const journal = writeJournal(home, []);
+  // An active reversal strategy with no session window to relabel the trade as: an active copy of cisd_ote (paper
+  // since its textbook rewrite; the shipped reversal ones keep New York hours, and this bar is at 00:09 ET).
+  const rev = path.join(home, 'strategies-rev', 'fx_reversal');
+  fs.mkdirSync(rev, { recursive: true });
+  fs.writeFileSync(path.join(rev, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'cisd_ote', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: cisd_ote$/m, 'name: fx_reversal').replace(/^status: paper\b.*$/m, 'status: active'));
   const env = {
     FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'),
-    FTH_STRATEGIES_DIRS: FX_STRATEGIES, // the fixtures fx_break and fx_cross: they fire long on the 04:09 bar
+    // The fixtures fx_break and fx_cross (they fire long on the 04:09 bar), and fx_reversal.
+    FTH_STRATEGIES_DIRS: [FX_STRATEGIES, path.dirname(rev)].join(','),
   };
   const strategies3m = loadStrategies(ROOT, env).strategies.filter(s => s.timeframe === '3m');
   const clockRef = { t: Date.parse('2026-04-28T03:58:30Z') };
@@ -75,7 +82,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     });
     const gate = (o, at = now) => checkOrder(o, { env, pluginRoot: ROOT, now: at });
     record.decisions.push({ what: 'the trigger', name, side, stop, ...gate(order(name, side)) });
-    record.decisions.push({ what: 'relabelled as a reversal', ...gate(order('cisd_ote', side)) });
+    record.decisions.push({ what: 'relabelled as a reversal', ...gate(order('fx_reversal', side)) });
     record.decisions.push({ what: 'counter-trend', ...gate(order(name, side === 'long' ? 'short' : 'long')) });
     record.decisions.push({ what: 'after the signal expired', ...gate(order(name, side), new Date(clockRef.t + 15 * 60000)) });
     // The trade closes at a loss and the reviewer writes it up (trade-review skill tags).

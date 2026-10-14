@@ -1,105 +1,186 @@
 ---
 name: cisd_ote
-description: ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from the original bot. Use after a liquidity sweep and displacement.
-version: 3
-status: active
+description: Textbook CISD + OTE displacement and pullback - a strong completed 15-minute or 60-minute candle closes through the open of the run before it (a change in state of delivery); enter on the 3-minute bounce from the displacement leg's OTE zone, stop beyond the leg's origin. A prior key-level sweep is confluence, never required. Paper until a census and the owner promote it.
+version: 4
+status: paper                 # textbook rewrite of the old port: paper until the census (docs/research/cisd-ote-textbook.md) and the owner promote it
 instruments: [MNQ, MES, MYM, M2K]
-timeframe: 3m
+timeframe: 3m                 # the trigger: the bounce is read on completed 3-minute bars
 signal: rules
-mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
+mtf: trend                    # with the prevailing HTF trend (a pullback ending), or either way with none (a range); a fade is refused by the trend rule
 rules:
   long:
-    - cisd_ote_dir > 0
+    - cisd_entry(15) > 0      # the bounce from a bullish 15m (or, with cisdHigherMinutes, 60m) CISD's OTE zone
   short:
-    - cisd_ote_dir < 0
-exit:
-  trail_activate_r: 2
-  trail_giveback_r: 0.5
+    - cisd_entry(15) < 0
+params:                       # the CISD hypotheses (scripts/lib/trading/cisd.js PARAMS; these are its defaults)
+  cisdMinRun: 2               # a run is at least 2 consecutive opposing candles
+  cisdMaxWait: 6              # the close through the run's open comes within 6 candles of the run's end
+  cisdExpiry: 12              # the zone is good for 12 CISD candles (3 hours on 15m) after the CISD
+  cisdVoidTol: 0.05           # a close more than 5% of the leg beyond the zone's far edge voids it
+  cisdBufferAtr: 0.1          # the stop sits 0.1 x ATR(20) of 3m bars beyond the leg's origin
+  cisdMinBody: 0.6            # the CISD candle is a strong displacement: body at least 0.6 of its range, the close in its extreme third,
+  cisdMinRangeAtr: 1          # ... and a range at least 1.0 x ATR(14) of that timeframe's candles, or a body engulfing the prior one
+  cisdHigherMinutes: 60       # the 60m CISD is taken too; when both bounce on one bar, the 60m one (the higher timeframe) wins
 risk:
-  stop: cisd_ote_risk
-  min_rr: 2
-source: original bot, strategies/cisd_ote.py, cisd_ote_detect.py
+  stop: cisd_risk(15)         # from the bounce's close to beyond the leg's origin (the run's extreme), of the CISD that fired
+  min_rr: 2                   # no exit block: the target is min_rr (2R), as a bracket
+source: the owner's CISD definition (change in state of delivery; the cisd skill) and the OTE golden zone (the fib-retracement skill), rewritten from the version 3 port of the original bot (strategies/cisd_ote.py, cisd_ote_detect.py); detector in scripts/lib/trading/cisd.js, fib levels in scripts/lib/trading/fib.js
 ---
 
 # Strategy: CISD + OTE (`setup:cisd_ote`)
 
-Source: the original bot's `cisd_ote.py` and `cisd_ote_detect.py`
-(cisd_tf=12 min, swing_period=3, tolerance=0.5, expiry_bars=9,
-liquidity_lookback=5, fib 0.5–0.705, displacement body ratio ≥ 0.3 and close
-strength ≥ 0.4, pivot stop). Zone tracking across bars is more than the
-rules language can say, so the detector is a rules series: `cisd_ote_dir`
-(1 long, -1 short, 0 none) and `cisd_ote_risk` (the stop distance to the
-zone pivot), from `scripts/lib/trading/cisd-ote.js`, a line-for-line port
-checked against the source's own output. The `rules` block above trades it,
-and `risk.stop` uses its distance. Read the rest of this file to judge the
-setup; the steps below are what the series computes.
+Read the `cisd` skill (what a CISD is, and how to read it by timeframe) and
+the `fib-retracement` skill (the OTE zone and the bounce) first: this
+strategy is the two put together, mechanically.
 
 ## When to Use
 
-- After a sweep of a liquidity pool (liquidity-concepts), when price displaces
-  hard in the opposite direction.
-- Any session (the source does not gate by time); prefer setups after a sweep.
+- **Trend pullback (the preferred use).** In a higher-timeframe trend, price
+  pulls back to a level; a CISD back in the trend's direction ends the
+  pullback, and the OTE bounce is the entry.
+- **Range.** At a range extreme (the range high or low, a value-area edge,
+  the prior day's high or low), a CISD back toward the middle, aiming at the
+  other side of the range.
+- Mechanically: after a run of 15-minute (or 60-minute) candles, a strong
+  completed candle closes back through the open of the run's first candle
+  (a displacement), and price then pulls back into the leg's OTE zone.
+- Stronger after a sweep of a key level (the prior RTH day's high or low,
+  the overnight high or low in RTH, the prior session's high or low):
+  confluence the scan reports (`cisd_sweep(15)`), never required.
+- Any session: the source doesn't gate by time. The order gate's entry
+  windows and daily limits still apply.
 
 ## How It Works
 
-1. **Potential CISD level.** On 12-minute bars, note the open of the first bar
-   that reverses a run of bars (a bullish bar after bearish bars marks a
-   bearish-CISD candidate at its open, and vice versa). Candidates expire after
-   9 bars.
-2. **Displacement.** A bar closes through the candidate level with a body ≥ 30%
-   of its range and closing strength ≥ 40% (bearish: (high − close) ÷ range;
-   bullish: (close − low) ÷ range), after price had moved at least 50% of the
-   way back (tolerance 0.5).
-3. **Sweep (preferred).** A swing high (for bearish) or low (for bullish) was
-   wicked within the last 5 bars. Not required, but setups with a sweep are
-   the cleaner variant.
-4. **Zone (as backtested, not textbook OTE).** Measure the displacement leg
-   and take the band between its 50% and 70.5% points *measured from the leg's
-   origin*:
-   - Bullish: leg low L (lowest low since the candidate) to the displacement
-     bar's high H, d = H − L. Zone = [L + 0.5d, L + 0.705d].
-   - Bearish: leg high H to the displacement bar's low L, d = H − L.
-     Zone = [H − 0.705d, H − 0.5d].
-   In retracement terms that is the 29.5%–50% pullback of the displacement.
-   A 12-minute close beyond the zone's far side (below the bottom for bullish,
-   above the top for bearish) invalidates it.
-5. **Entry** (entry_mode "bot"): a 3-minute bar trades into the zone and
-   reaches its bottom (a long's low at or below the zone bottom; a short's high
-   at or above it), after the 12-minute zone bar has closed. The signal fires
-   on the next 3-minute bar; enter at market on its close, as the original bot
-   does.
-6. **Stop:** the leg's origin (L for longs, H for shorts). The stop distance
-   is measured from that entry bar's open, as in the source, and applied from
-   the fill.
-7. **Exit:** hold the stop until the trade reaches +2R, then trail it 0.5R
-   behind the best price (the `exit` block).
+The detector is `scripts/lib/trading/cisd.js` (the rules series
+`cisd_entry(15)`, `cisd_risk(15)`, and `cisd_sweep(15)` as confluence; the briefing's `cisd`
+block shows the same facts per timeframe). Every step reads completed
+candles only.
 
-### Skip when (harness judgment: the source takes every signal)
+1. **CISD on 15m or 60m.** A run of at least `cisdMinRun` consecutive
+   bearish candles; then, within `cisdMaxWait` candles, a completed candle
+   closes above the open of the run's first candle: a bullish CISD at that
+   level. Bearish: the mirror (bullish run, close below its first open).
+   Both timeframes are read (`cisdHigherMinutes: 60`); when a 15m and a 60m
+   bounce fire on the same 3m bar, the 60m one is the trade (its stop).
+2. **A strong displacement (required).** The candle that closes through
+   the level must be strong (hypotheses, `scripts/lib/trading/cisd.js`):
+   body at least `cisdMinBody` of its range, its close in the extreme third
+   the CISD's way, and either a range of at least `cisdMinRangeAtr` x
+   ATR(14) of that timeframe's candles or a body engulfing the prior
+   candle's. A doji, a small body, long wicks or a close mid-range is a
+   weak CISD: no zone, no fib, no entry (the briefing's `displacement`).
+3. **The sweep (confluence, not required).** From the run's start to the
+   confirmation, a candle traded below a key low at or under the level and
+   a close came back above it (`cisd_sweep(15)`; bearish: a key high). A
+   CISD after a sweep is stronger confluence; the rules don't ask for it.
+4. **The OTE zone.** The displacement leg runs from the origin (the run's
+   extreme: the lowest low from the run's start to the confirmation, the
+   sweep extreme when there was a sweep) to the
+   extreme (the highest high since, extended while price keeps making new
+   highs before it first retraces into the zone). The zone is `fib.OTE` of
+   that leg (`scripts/lib/trading/fib.js`; the `fib-retracement` skill).
+5. **The bounce (the entry).** On 3-minute bars after the CISD's candle closed:
+   price trades into the zone, then a completed 3m bar that traded in the
+   zone closes back in the trade direction: above the zone's top, or
+   bullish with its close in the upper third of its range and inside the
+   zone (bearish: the mirror). Enter on that close; one entry per CISD.
+6. **Void and expiry.** A 3m close beyond the origin, or beyond the zone's
+   far edge by more than `cisdVoidTol` of the leg, voids the zone; so does
+   a newer CISD. The zone expires `cisdExpiry` candles of its timeframe
+   after the CISD.
+7. **Stop:** `cisdBufferAtr` x ATR(20) beyond the origin (the run's
+   extreme). **Target:** `min_rr` (2R), as a bracket: no exit block.
 
-- The 1-hour trend (EMA 9/21 on 60-minute) is strongly against the zone
-  direction and there was no sweep.
+Why 15m for the CISD and 3m for the trigger: the definition leans on key
+levels and the higher-timeframe context, and a 3m CISD (two red candles and
+a green close) fires many times a session on noise. A 15m CISD is the
+top-down pairing the `cisd` skill teaches (the 15m shift, the
+3m entry), and its leg is wide enough that a 3m bounce inside the zone can
+be told from a slice through it. The 60m CISD is the higher-timeframe
+shift; it is preferred when both fire. The CISD timeframes are the `(15)`
+in the rules and the stop and `cisdHigherMinutes`; `cisd_entry(3)` /
+`cisd_risk(3)` is the 3m variant the census also measures.
+
+Why `mtf: trend` (it was `reversal` through the first drafts of version 4):
+the owner's intent is a CISD with the trend on a pullback, or in a range.
+As a trend strategy, the trend rule passes a CISD in the prevailing
+higher-timeframe trend's direction, and both directions when no timeframe
+has a trend (a range); one against a prevailing trend is refused like any
+trend strategy's fade (the scan drops it, the backtester skips it, the
+order gate refuses it). A counter-trend CISD is still read in the `cisd`
+skill (`bos-vs-choch`), but this strategy doesn't trade it.
+
+### Skip when (judgment: the mechanics take every signal)
+
+- Mid-range with no level near the CISD, or chop (the `cisd` skill: where
+  it works, avoid chop). A `regimes` filter for chop was measured, not
+  shipped (docs/research/cisd-ote-textbook.md).
+- The first level ahead of the bounce is closer than 1R (levels-and-reactions).
 - Risk to the origin is above the position-sizing budget at size 1.
 
-**Known quirk (kept for parity with the source):** the detector runs on the
-trailing window at each closed 3-minute bar and executes only a touch on the
-first or second 3-minute bar of a 12-minute zone bin; touches on its third or
-fourth bar never trade, live or in a backtest (half the bins' bars). Offline
-statistics that scan the whole history see those touches and also read the
-12-minute bar's close, which ends after the touch: they overstate what this
-strategy trades. Judge it by the harness's own backtest.
+Absorption in the zone (the `absorption` skill) confirms the bounce; it is
+judgment, not a rule here. A flow-confirmed variant is a follow-up, to
+measure once order-flow fields are recorded (replay or live NQ): the rule
+is to use order flow where a bar carries it, never to infer it.
+
+## What changed from version 3 (the port), and why
+
+Version 3 was a line-for-line port of the original bot's `cisd_ote` (12m
+candles, a displacement-quality filter, a 50%-70.5% fib band measured from
+the leg's origin, which is a 29.5%-50% retracement, a market entry when a
+3m bar touched the band's bottom, and the stop at the pivot). Replaced, on
+the owner's decision, by the textbook definition:
+
+- **CISD** is the close through the open of the run's first candle, on 15m
+  or 60m, by a strong displacement candle (was 12m, with a 0.3 body-ratio
+  and 0.4 close-strength filter and a 50% tolerance).
+- **The zone** is the OTE golden zone of the displacement leg, `fib.OTE`
+  (was the 29.5%-50% retracement: a shallower pullback than OTE).
+- **The entry** is a completed 3m bounce from the zone (was a touch of the
+  band's bottom and a market entry on the next bar).
+- **The sweep** is of a key level and reported as confluence, never
+  required (was optional, of any 3-bar pivot). The owner's call: the
+  strategy is a basic displacement and pullback; the census's pre-registered
+  N1 required the sweep, the shipped rules are its variant N3.
+- **Symmetric.** Version 3 used the band's bottom as the entry limit for
+  both sides, so a short needed price to reach the band's far side from
+  below (the source's asymmetry, kept for parity). The rewrite mirrors
+  every step.
+- **Target** 2R as a bracket (was a 2R / 0.5R trail).
+- **A trend strategy** (`mtf: trend`; was `mtf: reversal`): with the trend
+  on a pullback, or either way in a range.
+
+The old port's parity tests against the bot's output went with the port
+(tests/lib/parity.test.js keeps `orb`); the census compares the two
+versions on Train (docs/research/cisd-ote-textbook.md): the textbook
+version scored worse than the port there, and the owner chose to replace
+the port anyway; it stays paper.
 
 ## Examples
 
 ```text
-12m: sweep of overnight high 21655 at 09:48 ET, then a bearish bar closes
-21618 through the CISD level 21631 (body 0.62, close strength 0.71).
-Leg high 21659.75, displacement low 21612.00, d = 47.75
-→ zone 21626.09–21635.88 (rounded 21626.00–21635.75).
-10:00 bar trades up to 21627.50 (into the zone, through its bottom); the scan
-fires short on the 10:03 bar. 10:03 open 21624.00, close 21622.00.
-Stop distance 21659.75 − 21624.00 = 35.75 (143 ticks); short at market
-21622.00, stop 21657.75, risk 143 ticks = $71.50/MNQ. Trail starts at +2R
-(21550.50); then the stop sits 0.5R (17.875, rounded up to the tick) above the best low.
-Risk is large: size 1 only if the budget allows.
-rationale: "setup:cisd_ote short OTE zone after sweep of ONH 21655, stop 21657.75, risk $71.50"
+Take (long). MNQ, 15m: two bearish candles from 09:45 ET (run open 21512.00);
+the 10:00 candle trades to 21478.25, under the overnight low 21480.50, and
+closes back above it; the 10:15 candle (O 21479.00, H 21517.75, L 21478.50,
+body 0.92 of its range, closing in its top third, engulfing the 10:00 body)
+closes 21515.25 > 21512.00: bullish
+CISD, after a sweep of the overnight low (confluence). Leg: origin 21478.25, extreme
+21530.25 (d = 52.00). OTE (fib.OTE of the leg, on the tick as the briefing shows
+it): 21489.25-21498.00, mid 21493.50.
+3m: the 11:00 bar trades to 21492.50 (in the zone) and closes 21500.25,
+above the zone's top: the bounce.
+ATR(20) 10.00 -> stop 21478.25 - 1.00 = 21477.25. Risk 23.00 pts = 92 ticks
+= $46.00/MNQ. Target 2R = 21546.25.
+rationale: "setup:cisd_ote long, 15m CISD (ON low swept), OTE bounce, stop 21477.25, risk $46.00"
+
+Skip. 15m bearish CISD at 21640.00, but its candle is a doji (body 0.08 of its
+range, closing mid-range): a weak displacement, no zone, no fib. No entry.
+Skip. 15m bearish CISD at 21640.00, strong; price pulls back into the zone,
+then a 3m bar closes beyond the zone's far edge by more than cisdVoidTol of
+the leg: the zone is void before any bounce. No entry.
+
+Loser. Same long as above: the 11:21 bar closes 21490.00, back in the zone;
+the 11:30 bar trades to 21477.00, through the stop 21477.25: -1R, $46.00
+plus costs. The zone held for one bar; the leg's origin didn't.
 ```

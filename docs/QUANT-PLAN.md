@@ -198,7 +198,8 @@ thousands of labels (one per decision time and symbol).
 
 ## What the label runs trade with
 
-- **Strategies**: the active rules strategies (`orb`, `cisd_ote`,
+- **Strategies** (as they were then; `cisd_ote` has since been rewritten
+  to the textbook CISD + OTE and is paper): the active rules strategies (`orb`, `cisd_ote`,
   `vwap_reclaim`, `crt_1h`, `crt_4h`, `value_area_reentry`,
   `value_area_breakout`), activated for the labels on the owner's call; the
   order-flow ones (and `value_area`, which needs order flow) stayed `paper`

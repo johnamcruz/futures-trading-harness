@@ -170,8 +170,10 @@ request, every time, whatever the size of the change:
    `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement),
    `docs/LEARNED-RULEBOOK.md` (the learned-policy design the prop code is
    built from), `docs/LIVE-DRY-RUN.md` (the runbook for live-money setup
-   that preflight points to), and `docs/research/mtf-setup-catalog.md` (the
-   census the basics skills cite as evidence).
+   that preflight points to), `docs/research/mtf-setup-catalog.md` (the
+   census the basics skills cite as evidence), and
+   `docs/research/cisd-ote-textbook.md` (the census the `cisd` and
+   `fib-retracement` skills and `cisd_ote` cite).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what

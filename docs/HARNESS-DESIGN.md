@@ -399,5 +399,6 @@ bar files through the same strategy evaluator the live scan uses.
   the journal-based checks remain a second, softer layer.
 - Codex agent roles can't be restricted to specific MCP tools in config; the
   executor-only rule is an instruction there. The gateway still applies.
-- The cisd_ote strategy mirrors the original bot's zone math (shorts enter at the
-  29.5% retracement), which differs from textbook OTE. Confirm it's intended.
+- The cisd_ote strategy mirrored the original bot's zone math (a 29.5%-50%
+  retracement, the same limit for both sides) until version 4, the owner's
+  textbook rewrite (OTE of the displacement leg, symmetric; paper).

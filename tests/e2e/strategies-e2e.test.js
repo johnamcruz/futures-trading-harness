@@ -51,7 +51,8 @@ function firstFire(s) {
 test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
   // value_area is active (the owner's decision after order flow moved to the broker servers): on this fixture, which
   // carries no flow, it fires on its range-expansion confirmation.
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['cisd_ote', 'crt_1h', 'crt_4h', 'orb', 'value_area']);
+  // cisd_ote is paper since its textbook rewrite (version 4): it is not driven here until the owner promotes it.
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['crt_1h', 'crt_4h', 'orb', 'value_area']);
   assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
   // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
   const ev = createEvaluator(BARS);
@@ -135,8 +136,8 @@ test('every strategy with rules provides its context on every scanned bar; a pap
       assert.ok(['trend', 'reversal'].includes(r.mtf.style), s.name);
     }
   }
-  // A paper strategy (a paper copy of value_area in the user's strategies folder; the repo's own strategies are all
-  // active): the gate refuses a live entry.
+  // A paper strategy (a paper copy of value_area in the user's strategies folder, one that fires on this fixture): the
+  // gate refuses a live entry.
   const home = tmpDir();
   const dir = path.join(home, 'strategies', 'value_area_paper');
   fs.mkdirSync(dir, { recursive: true });

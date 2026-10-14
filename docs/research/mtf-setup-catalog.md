@@ -205,6 +205,11 @@ Common pieces:
 
 ### F6. Higher-timeframe sweep plus CISD/OTE (rank 6)
 
+(Note added later: the `cisd_ote_dir` and `cisd_ote_risk` series this
+family's rules use were removed with `cisd_ote` version 4, the textbook
+rewrite (docs/research/cisd-ote-textbook.md); the F6 rules below no
+longer compile. The census (Results) ran them before that.)
+
 - **Rationale.** liquidity-concepts: "Reversal setups (cisd_ote strategy)
   need a sweep first"; `cisd_ote`'s own "When to Use": after a sweep of a
   liquidity pool, when price displaces the other way. The owner's example
@@ -970,6 +975,8 @@ risk:
 ```
 
 ### F6A `mtf_f6a_sweepcisd`
+
+(Uses the removed `cisd_ote_*` series: see the note under F6.)
 
 ```yaml
 mtf: reversal

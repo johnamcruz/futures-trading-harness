@@ -44,7 +44,8 @@ strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fi
 `recent` answers the skip rules about recent signals ("fired the other way
 in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
 a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
-fire, and cisd_ote's `hadSweep` and displacement.
+fire, and cisd_ote's `cisd(15)`: the CISD level, the leg, the zone, the stop
+and the swept level.
 
 `strategies_scan` judges sessions at the current time (the harness clock: a
 replay broker's replayed time when `FTH_REPLAY_NOW` is set); it takes no time
@@ -102,7 +103,7 @@ as candidates when in session; you evaluate their trigger from the body.
    `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
    `min_rr` stands in for it).
 3. Stop from `risk.stop`: `atr:<k>` or a distance expression (e.g.
-   cisd_ote's `cisd_ote_risk`) → the scan's `stopDistance`;
+   cisd_ote's `cisd_risk(15)`) → the scan's `stopDistance`;
    `structure`/`swing` → beyond the level the body names. Round the stop
    away from the entry to the tick (a long's stop down, a short's up), the
    target toward it; bracket ticks = `ceil(distance / tickSize)`.
@@ -192,6 +193,6 @@ against the recorded prevailing trend, or without a fresh record, is refused.
 strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5 (a candidate)
 strategies_show orb → skip rule "relative volume < 1.0x" → volume analyst reports 0.8x → no trade.
 
-strategies_scan → cisd_ote short, a candidate, stopDistance 18.5 → read the
-body's skip rules (sweep before the displacement?) → none apply → plan it.
+strategies_scan → crt_1h short, a candidate, stopDistance 18.5 → read the
+body's skip rules → none apply → plan it.
 ```

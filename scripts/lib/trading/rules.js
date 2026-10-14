@@ -45,9 +45,6 @@
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
- *   cisd_ote_dir  1 / -1 on a bar where a CISD + OTE zone entry fires (the original bot's
- *                 cisd_ote detector on the trailing window), else 0
- *   cisd_ote_risk that entry's stop distance (to the zone pivot), for risk.stop
  *   htf_open(m) htf_high(m) htf_low(m) htf_close(m)
  *               the previous m-minute candle (m divides a day: 60 = 1 hour,
  *               240 = 4 hours), candles aligned to the 18:00 ET open (4 hours:
@@ -60,6 +57,21 @@
  *               one per candle
  *   crt_risk(m) that setup's stop distance (to the sweep extreme plus a buffer)
  *   crt_target(m) its distance to the far side of the previous candle (the CRT target)
+ *   CISD on completed m-minute candles (scripts/lib/trading/cisd.js; m a whole number of
+ *   the bars, so on 3m bars 3, 15, 60, never 5; missing otherwise), the latest one as of this bar:
+ *   cisd_dir(m)   1 bullish, -1 bearish, 0 none yet
+ *   cisd_level(m) its level (the open of the run it closed through)
+ *   cisd_sweep(m) 1 when a key level (prior RTH day, overnight, prior session) was swept first, else 0
+ *   ote_top(m) ote_bot(m) its displacement leg's OTE zone (fib.OTE of the leg); missing once the
+ *               zone is void or expired
+ *   in_ote(m)   1 when this bar closed inside that zone, else 0
+ *   cisd_entry(m) 1 / -1 on the bar that bounces from the zone (a close back in the CISD's
+ *               direction after trading into it), one per CISD, else 0
+ *   cisd_risk(m)  that entry's stop distance (beyond the leg's origin, the run's extreme)
+ *               With the param cisdHigherMinutes H (e.g. 60), cisd_entry(m) and cisd_risk(m)
+ *               also take the H-minute CISD's bounce, H's first when both fire on a bar.
+ *   A CISD's zone needs a strong displacement candle (cisd.js; cisdMinBody,
+ *   cisdMinRangeAtr): after a weak one, ote_* are missing and no entry fires.
  *   mtf_bias(m) the m-minute trend as of the last m-minute candle completed
  *               before this bar: 1 up, -1 down, 0 range (scripts/lib/trading/mtf.js:
  *               close vs EMA20, EMA20 vs EMA50, swing structure; two of three).
@@ -86,12 +98,14 @@
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
  * Strategy `params` (orbMinutes, swingK, stPeriod, stMult, kcLen, kcMult,
- * kcAtr, and crtSweepBars, crtShiftBars, crtMaxDepth, crtMinRangeAtr,
- * crtBufferAtr, crtMinRR for crt_*) tune the series that use them.
+ * kcAtr, crtSweepBars, crtShiftBars, crtMaxDepth, crtMinRangeAtr,
+ * crtBufferAtr, crtMinRR for crt_*, and cisdMinRun, cisdMaxWait, cisdExpiry,
+ * cisdVoidTol, cisdBufferAtr, cisdMinBody, cisdMinRangeAtr, cisdHigherMinutes for
+ * the CISD series) tune the series that use them.
  */
 
 const ind = require('./indicators');
-const cisd = require('./cisd-ote');
+const cisd = require('./cisd');
 const crt = require('./crt');
 const mtf = require('./mtf');
 const { zonedParts } = require('./clock');
@@ -103,7 +117,8 @@ const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
-const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias']);
+const CISD_FUNCS = ['cisd_dir', 'cisd_level', 'cisd_sweep', 'ote_top', 'ote_bot', 'in_ote', 'cisd_entry', 'cisd_risk'];
+const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias', ...CISD_FUNCS]);
 // Volume profile fields: levels, and the nearest node above/below the close.
 const VP_LEVELS = ['poc', 'vah', 'val'];
 const VP_NODES = ['hvn_above', 'hvn_below', 'lvn_above', 'lvn_below'];
@@ -115,7 +130,7 @@ const NAMES = new Set([
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
   'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et',
-  'cisd_ote_dir', 'cisd_ote_risk', ...VP_NAMES,
+  ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
 const MAX_GROUP_ITEMS = 8;
@@ -367,27 +382,11 @@ function causalLevels(bars) {
 }
 
 /** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
-function seriesSource(bars, params, { window = 500 } = {}) {
+function seriesSource(bars, params) {
   const cache = new Map();
-  // The original bot's cisd_ote detector, run on the trailing window at every bar.
-  const cisdSeries = () => {
-    const atr = ind.atr(bars, params.atrStop || 20);
-    const withMs = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));
-    const dir = new Array(n).fill(0);
-    const risk = new Array(n).fill(NaN);
-    const info = new Array(n).fill(null);
-    for (let i = 0; i < n; i += 1) {
-      const from = Math.max(0, i - window + 1);
-      const sig = cisd.detect(withMs.slice(from, i + 1), atr.slice(from, i + 1));
-      if (sig) { dir[i] = sig.direction === 'long' ? 1 : -1; risk[i] = sig.risk; info[i] = { direction: sig.direction, entry: sig.entry, stop: sig.stop, hadSweep: sig.hadSweep, disp: sig.disp }; }
-    }
-    cache.set('cisd_ote_dir', dir);
-    cache.set('cisd_ote_risk', risk);
-    cache.set('cisd_ote_info', info);
-  };
   const n = bars.length;
   let lv = null;
-  const level = k => { lv = lv || causalLevels(bars); return lv[k]; };
+  const level = k => { lv = lv || causalLevels(bars); return k === null ? lv : lv[k]; };
   const field = f => bars.map(b => b[f]);
   const htfs = new Map();
   const htf = m => { if (!htfs.has(m)) htfs.set(m, ind.htfCandles(bars, m)); return htfs.get(m); };
@@ -401,6 +400,20 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     }
     return crts.get(m);
   };
+  // CISD on completed m-minute candles (cisd.js), once per m.
+  const cisds = new Map();
+  const oneCisd = m => cisd.cisdSeries(bars, m, { levels: level(null), atr: ind.atr(bars, params.atrStop || 20), params: cisd.paramsFrom(params) });
+  // With params.cisdHigherMinutes H (a whole number of m, above it), cisd_entry(m) and cisd_risk(m) also take the
+  // H-minute CISD's bounce, the higher one first when both fire on a bar (cisd.combineHigher); the rest stay m's own.
+  const cisdOf = m => {
+    if (!cisds.has(m)) {
+      const H = Number(params.cisdHigherMinutes) || 0;
+      const own = oneCisd(m);
+      cisds.set(m, H > m && H % m === 0 && 1440 % H === 0 ? cisd.combineHigher(own, oneCisd(H), H) : own);
+    }
+    return cisds.get(m);
+  };
+  const cisdField = (m, k) => { const c = cisdOf(m); return c.unavailable ? new Array(n).fill(NaN) : c[k]; };
   const dayCtx = new Map();
   const dayOf = adrDays => {
     if (!dayCtx.has(adrDays)) dayCtx.set(adrDays, dayContext.dayContextSeries(bars, { adrDays, params }));
@@ -438,6 +451,14 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'crt_risk': return crtOf(len).risk;
         case 'crt_target': return crtOf(len).target;
         case 'mtf_bias': return mtf.biasSeries(bars, len);
+        case 'cisd_dir': return cisdField(len, 'dir');
+        case 'cisd_level': return cisdField(len, 'level');
+        case 'cisd_sweep': return cisdField(len, 'sweep');
+        case 'ote_top': return cisdField(len, 'top');
+        case 'ote_bot': return cisdField(len, 'bottom');
+        case 'in_ote': return cisdField(len, 'inOte');
+        case 'cisd_entry': return cisdField(len, 'entry');
+        case 'cisd_risk': return cisdField(len, 'risk');
         case 'adr': return dayOf(len).adr;
         default:
           if (VP_FUNCS.includes(fn[1])) return profileOf('rolling', len)[fn[1].replace(/^vp_/, '')];
@@ -463,7 +484,6 @@ function seriesSource(bars, params, { window = 500 } = {}) {
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
       case 'overnight_high': case 'overnight_low': case 'rth_open': case 'rth_high': case 'rth_low': return level(key);
-      case 'cisd_ote_dir': case 'cisd_ote_risk': cisdSeries(); return cache.get(key);
       case 'ib_high': case 'ib_low': return dayOf(10)[key];
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
@@ -516,11 +536,16 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     if (!cache.has(key)) cache.set(key, make(key));
     return cache.get(key);
   };
-  /** What each detector this source has run says about bar i ({ 'crt(60)': {...} }), for logs and scan output. */
-  get.explain = i => {
+  /**
+   * What each detector this source has run says about bar i ({ 'crt(60)': {...} }), for logs and scan output. `text`
+   * (a strategy's rules, stop and target as text): only the detectors it names (crt_*(m), cisd_*(m) / ote_*(m) /
+   * in_ote(m)), never another strategy's that shares this source.
+   */
+  get.explain = (i, text = null) => {
+    const names = (kind, m) => text === null || new RegExp(`\\b(?:${kind === 'crt' ? 'crt_[a-z]+' : 'cisd_[a-z]+|ote_[a-z]+|in_ote'})\\(\\s*${m}\\s*\\)`).test(text);
     const out = {};
-    for (const [m, c] of crts) { const x = c.explain(i); if (x) out[`crt(${m})`] = x; }
-    if (cache.has('cisd_ote_info') && cache.get('cisd_ote_info')[i]) out.cisd_ote = cache.get('cisd_ote_info')[i];
+    for (const [m, c] of crts) { const x = names('crt', m) && c.explain(i); if (x) out[`crt(${m})`] = x; }
+    for (const [m, c] of cisds) { const x = names('cisd', m) && !c.unavailable && c.entries.get(i); if (x) out[`cisd(${m})`] = x; }
     return out;
   };
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
@@ -536,6 +561,11 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
     if (h && HTF.has(h[1]) && !h[1].startsWith('crt_') && h[1] !== 'mtf_bias') { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
+    // A CISD level or OTE edge moves when a new CISD replaces the last or its leg extends: a jump, not a price cross.
+    if (/^(cisd_level|ote_top|ote_bot)\(\d+\)$/.test(key)) {
+      const s = get(key);
+      return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];
+    }
     if (LEVELS.has(key)) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];

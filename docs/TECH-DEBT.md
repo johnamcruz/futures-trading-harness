@@ -89,8 +89,13 @@ impact first.
 item is removed from the list in the PR that fixes it.
 
 - **scripts/lib modules without a test of their own:** `backtest/parquet`,
-  `paths`, `trading/cisd-ote`,
+  `paths`,
   `trading/contracts` (exercised only through other modules' tests).
+- **Two completed-candle builders:** `trading/cisd.js` builds its timeframes
+  with `mtf.candles` from the base bars (so no 5m from 3m bars), while the
+  candle-facts branch adds 5m candles from a 1m lane's bars. Once that merges,
+  the CISD facts should read the same completed candles (and gain 5m on 3m
+  runners).
 - **CLIs over 200 lines, pinned at their size:** `scripts/autotrader.js` (401)
   and `scripts/mcp-gateway.js` (306): move logic to `scripts/lib/`.
 
