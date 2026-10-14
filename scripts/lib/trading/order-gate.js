@@ -24,10 +24,12 @@ const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
-const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny } = require('./signal-state');
+const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
+const { readBriefing } = require('./briefing');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
+const { familyRoot } = require('./contracts');
 const { attestedSkills, parseAttestation } = require('../head-prompt');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
@@ -51,6 +53,37 @@ const SIDE_WORD = /^\s*setup:[a-z0-9_-]+\s+(long|short|buy|sell)\b/i;
 
 // The order types a stop bracket may take, lowercase as the interface's enum: a stop leg (a limit or market leg is no stop).
 const STOP_BRACKET_TYPES = new Set(['stop', 'trailing_stop']);
+
+/**
+ * The bar the runner's cycle decides for the root's family, as its bar briefing is on (FTH_CYCLE_BRIEFING_BARS, several
+ * lanes; else FTH_CYCLE_BARS), or null outside a cycle: the briefing the lookups are judged by (skill-lookups.js).
+ */
+function briefingBarOf(config, root) {
+  const fam = familyRoot(root);
+  return (config.cycleBriefingBars || {})[fam] || (config.cycleBars || {})[fam] || null;
+}
+
+/**
+ * An autonomous entry on stale data, or null: the bar briefing of the order's root closed more than the signal age
+ * limit of its own bars ago (signalMaxAgeMin: 3 of its bars, FTH_SIGNAL_MAX_AGE_BARS, at most 45 min, capped by
+ * FTH_SIGNAL_MAX_AGE_MIN), however long the cycle ran. The cycle names its bar but no briefing (or no readable close)
+ * is there: refused (fails closed). Outside a runner's cycle with no briefing: nothing to judge. Entries only.
+ */
+function briefingAgeRefusal(config, root, now) {
+  if (!config.autonomous) return null;
+  const fam = familyRoot(root);
+  const named = briefingBarOf(config, root);
+  const b = readBriefing(config.home, root);
+  if (!b) return named ? `No bar briefing for ${fam}, though the cycle decides its bar at ${named}: the entry can't be checked against current data, so no entry this cycle.` : null;
+  const closed = Date.parse(b.closedAt);
+  const minutes = Number.isInteger(b.minutes) && b.minutes > 0 ? b.minutes : null;
+  const tf = minutes ? `${minutes}m` : null;
+  const limit = signalMaxAgeMin(tf, { bars: config.signalMaxAgeBars, capMin: config.signalMaxAgeCapMin, ceilingMin: config.signalMaxAgeCeilingMin });
+  if (!Number.isFinite(closed)) return `The ${fam} bar briefing (bar at ${b.asOf}) has no readable close time: its data's age can't be checked, so no entry this cycle.`;
+  const age = (now.getTime() - closed) / 60000;
+  if (age <= limit) return null;
+  return `Stale data: the ${fam} bar briefing's bar (at ${b.asOf}) closed ${age.toFixed(1)} min ago, over the ${limit} min limit (the signal age limit: ${config.signalMaxAgeBars || 3} bars of ${tf || '1 minute (no readable timeframe)'}, with its ceiling and cap): no entry on it. The cycle took too long; report the block and end the cycle (trade-session step 6). The next bar's cycle decides on fresh data. Exits, stops and closes are never held by this.`;
+}
 
 /** True when `b` is a stop bracket: {ticks: a whole number above 0, type: "stop" | "trailing_stop"}. */
 function isStopBracket(b) {
@@ -340,9 +373,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const transcript = transcriptPath || config.cycleTranscript;
   // In index mode (the default, FTH_ROLE_SKILLS not full) the situational skills this bar's briefing triggers too (skills-loaded.js).
   // The cycle's lanes unreadable (FTH_CYCLE_LANE_BARS set but not readable): every one marked for the head trader.
+  // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
+  // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
+  const factsBar = briefingBarOf(config, contractRoot(input.contractId));
   const situational = !(config.autonomous && config.roleSkills === 'index') ? []
     : config.cycleLaneBars === null ? headSituationalSkills()
-      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars));
+      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar));
   // opencode's head trader in index mode: the skills its prompt embeds count as loaded, only on the runner's attestation
   // (FTH_HEAD_PROMPT) checked now against the run's config file and the skills' current text (head-prompt.js), and only
   // for the runner's own cycle transcript (a hook's transcript is another harness's session). Anything off: none.
@@ -354,13 +390,20 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
-  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
+  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
   // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:
   // the same selection (roles-ran assessRound), the same cached list and the same lookups.
-  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: config.cycleBars, now, order: factsOrder(input, setup, named, config.home) }) : null;
+  // The cycle's bar per root as the briefing is on it (several lanes: FTH_CYCLE_BRIEFING_BARS, the first lane's, over
+  // FTH_CYCLE_BARS, which names the lane bar that closed): the briefing the facts are checked against.
+  const factsBars = { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) };
+  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home) }) : null;
   if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
+  // Hard rule: no entry on stale data (the owner's "data accurate and not stale"): the briefing's bar closed more than
+  // the signal age limit of its own bars ago, however long the cycle ran (briefingAgeRefusal).
+  const staleMsg = briefingAgeRefusal(config, contractRoot(input.contractId), now);
+  if (staleMsg) violations.push({ check: 'briefing-age', message: staleMsg });
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);

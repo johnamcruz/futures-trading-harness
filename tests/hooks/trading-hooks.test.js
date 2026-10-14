@@ -2556,3 +2556,67 @@ test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cache
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
+
+test('order gate hook, a long cycle: past its briefing\'s validUntil by the wall clock, the briefing of the cycle\'s bar (FTH_CYCLE_BARS) decides the required lookups and the cached key; no bar or another bar\'s: every lookup required; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
+  const BAR_T = '2026-10-07T14:24:00.000Z';
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  // The cycle's bar's briefing, expired by the wall clock the live gate reads (a delegated cycle outlasts its bar).
+  const brief = asOf => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf, closedAt: new Date(Date.now() - 4 * 60000).toISOString(), sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(Date.now() - 60000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
+  brief(BAR_T);
+  const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
+  const T = 1.8e12;
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
+    ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
+      .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
+  look('market-structure-analyst', 'rejection', 11);
+  look('market-structure-analyst', 'pullback-vs-reversal', 12);
+  look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+  const run = (extra, order = orderPayload()) => gate({ ...order, transcript_path: transcript }, { ...env, ...extra });
+  const BARS = { FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR_T }) };
+  // The cycle's bar named: its briefing's reversal candidate requires the lookups made, nothing more.
+  assert.doesNotMatch(run(BARS).stderr, /roles-ran/);
+  // None named, or another bar named: the expired briefing is no facts, every situational lookup required (fails closed).
+  for (const extra of [{}, { FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:27:00.000Z' }) }]) {
+    const r = run(extra);
+    assert.strictEqual(r.code, 2, JSON.stringify(extra));
+    assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up [^)]*breakout/, JSON.stringify(extra));
+  }
+  // A later bar's briefing written mid-cycle is not the cycle's: refused.
+  brief('2026-10-07T14:27:00.000Z');
+  assert.match(run(BARS).stderr, /\[roles-ran\]/);
+  brief(BAR_T);
+  // Served from the cache: the cached report's lookups count under the cycle's key past validUntil.
+  const p2 = path.join(dir, 'cycle-transcript-p2.jsonl');
+  fs.writeFileSync(p2, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
+    ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
+  const cached = key => ({ ...BARS, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
+    FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'], key }, 'trend-momentum-analyst': { skills: ['pullback-vs-reversal'], key } }) });
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`) }).stderr, /roles-ran/);
+  assert.match(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`), FTH_CYCLE_BARS: '' }).stderr, /market-structure-analyst was served from the report cache/);
+  const exit = run({}, orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }));
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate hook, briefing-age: an autonomous entry on a bar briefing older than 3 of its bars is refused with the bar\'s age, in the gate log too; a fresh one is not; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const BAR_T = '2026-10-07T14:24:00.000Z';
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR_T }) });
+  // An autonomous gate reads the wall clock: the bar closed 12 minutes ago on 3m bars (limit 9).
+  const brief = minAgo => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, asOf: BAR_T, closedAt: new Date(Date.now() - minAgo * 60000).toISOString(), sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [] } } } });
+  brief(12);
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[briefing-age\][^\n]*Stale data: the MNQ bar briefing's bar \(at 2026-10-07T14:24:00.000Z\) closed 12\.\d min ago, over the 9 min limit/);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
+  assert.ok(log.violations.some(v => v.check === 'briefing-age' && /closed 12\.\d min ago/.test(v.message)), JSON.stringify(log));
+  const exit = gate(orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  brief(1);
+  assert.doesNotMatch(gate(orderPayload(), env).stderr, /briefing-age/);
+});
