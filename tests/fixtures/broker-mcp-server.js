@@ -25,8 +25,8 @@ const { TOOLS } = require('../../scripts/lib/broker/interface');
 const { tradingDayStart } = require('../../scripts/lib/trading/clock');
 
 const MNQ = 'fake:MNQ:Z26';
-// The server's clock: its replayed time (FAKE_REPLAY_NOW), else the wall clock.
-const clock = () => (process.env.FAKE_REPLAY_NOW ? new Date(process.env.FAKE_REPLAY_NOW) : new Date());
+// The server's clock: its replayed time (FAKE_REPLAY_NOW), else (unset or not a time) the wall clock.
+const clock = () => (Number.isFinite(Date.parse(process.env.FAKE_REPLAY_NOW || '')) ? new Date(process.env.FAKE_REPLAY_NOW) : new Date());
 // Its one fill is in the trading day the server starts in (at its start time), never a fixed calendar date:
 // a dated fill ages out of the windows the harness reads (the trading day, a week back) as the calendar moves on.
 const FILL_AT = clock().toISOString();
