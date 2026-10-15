@@ -46,6 +46,7 @@
  *   configHash(run)                                  sha256 of what makes a run a run
  *   setupHash(run), setupBase(run)                   a run's setup (the arms of one evaluation share it); the same
  *                                                    without the library display (a library-display pair shares it)
+ *   setupFixed(run)                                  the setup without its code digest (a resume keeps it)
  *   lookArm(run)                                     the arm its look names (learning/looks.js ARM)
  */
 
@@ -297,12 +298,12 @@ function configHash(run, base = process.env) {
  * Not its runId, learning flag or experience index: the arms of one evaluation (learning/looks.js) share it and differ
  * in their index only (a library-display pair shares setupBase instead).
  */
-function setupHash(run) {
+function setupHash(run, { code = true } = {}) {
   const body = {
     // The runner config without the run's own folders (its runId is in their paths).
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
-    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
+    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root && code ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
     // the hash it had (its looks in the ledger stay its own).
@@ -312,6 +313,9 @@ function setupHash(run) {
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
+
+/** The setup without its code (setupHash's code digest): what a resumed look keeps (learning/looks.js), a code fix aside. */
+const setupFixed = run => setupHash(run, { code: false });
 
 /** The setup without the library display: the two arms of a library-display pair (learning/looks.js) share it. */
 const setupBase = run => setupHash({ ...run, libraryDisplay: false });
@@ -327,4 +331,4 @@ function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

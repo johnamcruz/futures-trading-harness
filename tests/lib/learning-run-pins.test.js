@@ -7,7 +7,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { pinForRun } = require('../../scripts/lib/learning/run-pins');
+const { pinForRun: pinWith } = require('../../scripts/lib/learning/run-pins');
 const X = require('../../scripts/lib/learning/experience-index');
 const L = require('../../scripts/lib/learning/setup-library');
 
@@ -18,6 +18,9 @@ test('pinForRun: a fresh run pins what its config names; a resume keeps its pins
   const built = tmp();
   const lib = L.writeLibrary(path.join(built, 'lib'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
   const idx = X.writeIndex(path.join(built, 'idx'), X.buildIndex([], { reps: 20 }));
+  // The arm the run's look names (replay/config.js lookArm), unless the test names another.
+  const armFor = r => `${X.armOf(r.experienceIndex)}${r.setupLibrary && r.libraryDisplay ? `+library:${L.readLibrary(r.setupLibrary).hash.slice(0, 16)}` : ''}`;
+  const pinForRun = (r, o) => pinWith(r, { arm: armFor(r), ...o });
   const run = (home, o = {}) => ({ paths: { runHome: home }, experienceIndex: null, setupLibrary: null, libraryDisplay: false, ...o });
 
   // Fresh: nothing named, nothing pinned.
@@ -42,6 +45,26 @@ test('pinForRun: a fresh run pins what its config names; a resume keeps its pins
   assert.throws(() => pinForRun(run(both, { experienceIndex: idx }), { fresh: false }), /pinned a history library at its start; a resume keeps it/);
   assert.throws(() => pinForRun(run(both, { setupLibrary: lib, libraryDisplay: true }), { fresh: false }), /pinned an experience index at its start/);
   assert.throws(() => pinForRun(run(both, { experienceIndex: idx, setupLibrary: lib }), { fresh: false }), /display on; a run keeps it/);
+
+  // A library pinned before libraryDisplay (no display key: shown then) can't resume, hidden or shown.
+  const old = tmp();
+  pinForRun(run(old, { setupLibrary: lib }), { fresh: true });
+  const pinFile = path.join(old, 'experience', 'library-pinned.json');
+  const { display: _d, ...preFlag } = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
+  fs.writeFileSync(pinFile, JSON.stringify(preFlag));
+  assert.throws(() => pinForRun(run(old, { setupLibrary: lib }), { fresh: false }), /pinned its history library before libraryDisplay/);
+  assert.throws(() => pinForRun(run(old, { setupLibrary: lib, libraryDisplay: true }), { fresh: false }), /before libraryDisplay/);
+
+  // What is pinned is what the arm names (a file replaced at its path after the look was taken is refused).
+  const ih = X.armOf(idx).slice(-16);
+  const lh = L.readLibrary(lib).hash.slice(0, 16);
+  assert.strictEqual(pinForRun(run(tmp(), { experienceIndex: idx, setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `with:${ih}+library:${lh}` }).length, 2);
+  assert.throws(() => pinForRun(run(tmp(), { experienceIndex: idx }), { fresh: true, arm: `with:${'0'.repeat(16)}` }), /the experience index pinned \([0-9a-f]{16}\) is not the one its look names \(0{16}\)/);
+  assert.throws(() => pinForRun(run(tmp(), { setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `without+library:${'0'.repeat(16)}` }), /the history library pinned .* is not the one its look names/);
+  assert.throws(() => pinForRun(run(tmp(), { experienceIndex: idx }), { fresh: true, arm: 'without' }), /is not the one its look names \(none\)/);
+  assert.strictEqual(pinForRun(run(tmp(), { setupLibrary: lib }), { fresh: true, arm: 'without' }).length, 1, 'a hidden library is in no arm');
+
+  assert.throws(() => pinWith(run(tmp()), { fresh: true }), /the arm its look named/);
 
   // Hidden by default.
   const hidden = tmp();

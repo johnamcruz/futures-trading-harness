@@ -21,7 +21,8 @@
  * their experience index only (the same config) or in the library's display only (below).
  *
  * A resumed run's look (the same evaluation, run id and purpose) is free, and it is the look it took: a resume naming
- * another arm than its ledger line is refused (its config and base digest the code, so a code fix doesn't strand it).
+ * another arm, or another setup without its code (`setup`), than its ledger line is refused (its config and base digest
+ * the code, so they are not compared: a code fix doesn't strand it).
  *
  * The history library's display (replay/config.js libraryDisplay) is an arm dimension of its own: an arm shown the
  * library ends in `+library:<library hash>` (e.g. `without+library:<hash>`), and its config hash (which names the
@@ -31,7 +32,7 @@
  * config (their index), or the same base and index (the display); never both. A look's `base` is kept only when it
  * isn't its config (a run without the display: the line it had).
  *
- * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, arm, config, base?, from, to, role, at } or a result
+ * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, arm, config, base?, setup?, from, to, role, at } or a result
  * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }.
  *
  *   checkLook(look, ledger, { budgets })    { ok, refusals, role, purpose, spent, remaining, budget, repeat, shared, hideOutcomes }
@@ -102,13 +103,17 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   const atRole = looksOf(ledger).filter(e => roleOfLook(e) === role);
   const prior = atRole.find(e => e.evaluation === l.evaluation && e.runId === l.runId && e.purpose === l.purpose);
   const repeat = Boolean(prior);
-  // A resume is the look it took: the same arm as its line (an old line without one keeps none). The arm names all the
-  // run is shown (its index, and the library with its display); its config and base are not compared, as they digest
-  // the code too (replay/config.js setupHash), so a code fix between a run's start and its resume stays a resume, as
-  // the manifest's configHash allows. The pins themselves can't change on a resume (learning/run-pins.js, pinIndex,
-  // pinLibrary).
+  // A resume is the look it took: the same arm as its line (an old line without one keeps none), and the same setup
+  // without its code (`setup`, replay/config.js setupFixed: a line that has one). The arm names all the run is shown
+  // (its index, and the library with its display); config and base are not compared, as they digest the code too, so a
+  // code fix between a run's start and its resume stays a resume, as the manifest's configHash allows; a run home
+  // deleted and started again with another runner config, model or documents is not. The pins can't change on a
+  // resume (learning/run-pins.js, pinIndex, pinLibrary).
   if (prior && prior.arm != null && prior.arm !== (l.arm || 'without')) {
     refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} as another arm (${l.arm || 'without'}, not ${prior.arm}): a resume keeps its arm (start another runId)`);
+  }
+  if (prior && prior.setup != null && prior.setup !== (l.setup || null)) {
+    refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} with another setup (${String(l.setup).slice(0, 12)}, not ${String(prior.setup).slice(0, 12)}: its runner config, window, documents or library changed): a resume keeps its setup (start another runId)`);
   }
   // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
   const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);
@@ -178,6 +183,7 @@ function recordLook(file, look, { create = false, now = new Date(), budgets = LO
       appendLook(file, {
         kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId, arm: look.arm || null, config: look.config || null,
         ...(look.base && look.base !== look.config ? { base: look.base } : {}),
+        ...(look.setup ? { setup: look.setup } : {}),
         from: sessionDate(look.from), to: sessionDate(look.to), role: r.role, at: now.toISOString(),
       });
     }

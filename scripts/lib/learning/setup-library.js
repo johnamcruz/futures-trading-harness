@@ -320,7 +320,8 @@ const learningRun = home => { try { return JSON.parse(fs.readFileSync(path.join(
 
 /**
  * Pin a library index for a run (its own copy, frozen by its hash); a run keeps the one it pinned, and whether the model
- * is shown it (`display`: off unless true; a pin from before the flag is off).
+ * is shown it (`display`, written either way; off unless true; a pin from before the flag reads as off, and a replay
+ * resume refuses it: learning/run-pins.js).
  */
 function pinLibrary(runHome, file, { display = false } = {}) {
   if (typeof display !== 'boolean') throw new Error('display: true or false');
@@ -333,7 +334,7 @@ function pinLibrary(runHome, file, { display = false } = {}) {
   if (pinned && pinned.hash !== doc.hash) throw new Error(`this run pinned library ${String(pinned.hash).slice(0, 16)}; a run keeps its library (start another runId for ${doc.hash.slice(0, 16)})`);
   if (pinned && (pinned.display === true) !== display) throw new Error(`this run pinned its library with the display ${pinned.display === true ? 'on' : 'off'}; a run keeps it (start another runId to change it)`);
   const copy = writeLibrary(dir, doc);
-  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, walkForward: true, ...(display ? { display: true } : {}) })}\n`);
+  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, walkForward: true, display })}\n`);
   return { file: copy, hash: doc.hash, display };
 }
 

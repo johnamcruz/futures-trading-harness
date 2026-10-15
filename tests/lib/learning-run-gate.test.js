@@ -124,7 +124,7 @@ test('scripts/replay.js run: the gate decides before the run home is seeded', ()
   // A judging run's look names its arm and its setup (replay/config.js setupHash), from the config alone.
   const live = replayRun('2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', ['--candidate', 'champ', '--evaluation', 'ev1']);
   const [taken] = fs.readFileSync(path.join(live.user, '.futures-trading-harness', 'learning', 'looks.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepStrictEqual([taken.arm, /^[0-9a-f]{64}$/.test(taken.config), taken.role], ['without', true, 'test']);
+  assert.deepStrictEqual([taken.arm, /^[0-9a-f]{64}$/.test(taken.config), /^[0-9a-f]{64}$/.test(taken.setup), taken.setup !== taken.config, taken.role], ['without', true, true, true, 'test']);
 });
 
 test('setupHash: the same for two runs of one setup (another runId, learning flag), another for another setup', () => {
@@ -232,6 +232,17 @@ test('library display: off unless the config says true, part of the setup; a pai
   // A code fix between start and resume changes the config and base (they digest scripts/), not the arm: still a resume.
   const fixed = K.checkLook(look('r-shown', on, { config: '1'.repeat(64), base: '2'.repeat(64) }), ledger);
   assert.deepStrictEqual([fixed.ok, fixed.repeat], [true, true], fixed.refusals.join());
+  // The setup without its code (setupFixed) is kept: a run home deleted and started again with another runner config
+  // under the same runId and arm is no free repeat.
+  const { setupFixed } = require('../../scripts/lib/replay/config');
+  assert.notStrictEqual(setupFixed(on), setupHash(on));
+  assert.notStrictEqual(setupFixed(on), setupFixed(off), 'the display is part of it');
+  const withSetup = [{ ...lines[0], setup: setupFixed(off) }];
+  assert.ok(K.checkLook(look('r-hidden', off, { setup: setupFixed(off), config: '3'.repeat(64), base: '3'.repeat(64) }), withSetup).ok, 'the same setup, other code: a resume');
+  const other = run({ setupLibrary: libA, autotrader: { ...raw({}).autotrader, timeframe: 5 } });
+  const rerun = K.checkLook(look('r-hidden', off, { setup: setupFixed(other) }), withSetup);
+  assert.strictEqual(rerun.ok, false);
+  assert.match(rerun.refusals.join(), /run r-hidden took its look in evaluation evD with another setup .*: a resume keeps its setup/);
   assert.deepStrictEqual([K.checkLook(look('r-hidden', off), ledger).ok, K.checkLook(look('r-hidden', off), ledger).repeat], [true, true], 'the same arm: a free repeat');
   // An old line without arm or config resumes as it was.
   const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test' }];
@@ -243,7 +254,8 @@ test('library display: off unless the config says true, part of the setup; a pai
   // Through the run gate: the base is carried into the look.
   const genv = { HOME: tmp(), FTH_HOME: tmp() };
   const gate = { from: D('2025-03-03T00:00:00Z'), to: D('2025-03-08T00:00:00Z'), env: genv, candidate: 'champ', evaluation: 'evG' };
-  G.startLearningRun(tmp(), { ...gate, runId: 'g-off', arm: lookArm(off), config: setupHash(off), base: setupBase(off) });
+  G.startLearningRun(tmp(), { ...gate, runId: 'g-off', arm: lookArm(off), config: setupHash(off), base: setupBase(off), setup: 's'.repeat(8) });
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(genv.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl'), 'utf8').trim().split('\n')[0]).setup, 's'.repeat(8), 'the gate records the setup');
   assert.strictEqual(G.startLearningRun(tmp(), { ...gate, runId: 'g-on', arm: lookArm(on), config: setupHash(on), base: setupBase(on) }).taken.ok, true);
   assert.throws(() => G.startLearningRun(tmp(), { ...gate, runId: 'g-nobase', arm: `with:${'b'.repeat(16)}+library:${hashA}`, config: setupHash(on) }), /names its setup without the display/);
   // scripts/replay.js run: the config's flag reaches the run's pin; without it the library is pinned hidden.

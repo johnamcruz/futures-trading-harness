@@ -240,7 +240,7 @@ test('experience_lookup: a pinned library is hidden unless the run enables its d
   // A broken library while hidden says nothing either (the model is never told of it).
   const pinFile = path.join(home, 'experience', 'library-pinned.json');
   const pin = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
-  assert.strictEqual(pin.display, undefined, 'a hidden pin is the line it had');
+  assert.strictEqual(pin.display, false, 'a hidden pin says so (a pin without the key is from before the flag)');
   fs.writeFileSync(pinFile, JSON.stringify({ ...pin, hash: 'f'.repeat(64) }));
   assert.doesNotMatch(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library/);
   fs.writeFileSync(pinFile, JSON.stringify(pin));
