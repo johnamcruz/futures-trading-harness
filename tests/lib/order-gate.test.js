@@ -2859,12 +2859,13 @@ test('trade_lifecycle, D2 ("CHoCH at or above the trend"): each tier on the gate
   assert.deepStrictEqual(lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' }).violations, []);
 });
 
+const LCP_NOW_D2 = new Date('2026-10-07T14:00:02Z');
 test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-checked reads)', () => {
   const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
   const read = (kind, form, dir = 'short', extra = {}) => ({ kind, form, dir, check: true, agrees: true, ...extra });
   const at = (biases, reads) => {
     const home = trendHome(require('../helpers').tmpDir(), { biases });
-    return reversalAllowed({ home, root: 'MNQ', side: 'short', check: { ok: true, reads } }).ok;
+    return reversalAllowed({ home, root: 'MNQ', side: 'short', check: { ok: true, reads }, now: LCP_NOW_D2, maxAgeMin: 15 }).ok;
   };
   const UP15 = { 240: 0, 60: 0, 15: 1 };
   const UP1H = { 240: 0, 60: 1, 15: 1 };
@@ -2903,4 +2904,30 @@ test('trade_lifecycle: the order is on the record\'s own contract; the briefing\
   TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: LC.EXPIRES });
   assert.deepStrictEqual(lcEval(h2).violations, [], 'before both');
   assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:01:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:01:00.000Z/);
+});
+
+test('trade_lifecycle, D2: a reversal never stands on a stale, future-dated or partly read multi-timeframe record ([mtf-trend])', () => {
+  const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
+  const choch = LC.briefing();
+  choch.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
+  const reads = LC.READS.map(x => (x.step === 'bias' ? { ...x, read: '1h choch up', skill: 'bos-vs-choch' } : x));
+  const home = (o = {}) => { const h = trendHome(require('../helpers').tmpDir(), { biases: { 240: 0, 60: -1, 15: -1 }, ...o }); LC.writeScenario(h, { reads, b: choch }); return h; };
+  // Fresh (closed 13:57, 3 min before now) with a 15-minute limit: the reversal stands.
+  assert.deepStrictEqual(checks(lcEval(home(), LC.order(), { config: { mtfMaxAgeMin: 15 } })), []);
+  // Older than the limit: refused, by the trend rule's own freshness and by no reversal.
+  assert.deepStrictEqual(checks(lcEval(home(), LC.order(), { config: { mtfMaxAgeMin: 2 } })), ['mtf-trend']);
+  // Dated after now: refused.
+  assert.deepStrictEqual(checks(lcEval(home({ closedAt: '2026-10-07T14:30:00.000Z' }), LC.order(), { config: { mtfMaxAgeMin: 15 } })), ['mtf-trend']);
+  // A frame not read (the 15m bias missing) with 1h down: no tier can be chosen, refused.
+  assert.deepStrictEqual(checks(lcEval(home({ biases: { 240: 0, 60: -1, 15: null } }), LC.order(), { config: { mtfMaxAgeMin: 15 } })), ['mtf-trend']);
+  // The same, on reversalAllowed itself.
+  const check = { ok: true, reads: [{ kind: 'break', form: '1h choch up', dir: 'long', check: true, agrees: true }] };
+  const at = (h, o = {}) => reversalAllowed({ home: h, root: 'MNQ', side: 'long', check, now: new Date('2026-10-07T14:00:02Z'), maxAgeMin: 15, ...o }).ok;
+  assert.strictEqual(at(home()), true);
+  assert.strictEqual(at(home(), { maxAgeMin: 2 }), false);
+  assert.strictEqual(at(home({ closedAt: '2026-10-07T14:30:00.000Z' })), false);
+  assert.strictEqual(at(home({ biases: { 240: 0, 60: -1, 15: null } })), false);
+  const noClose = home();
+  fs.writeFileSync(path.join(noClose, 'mtf', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', biases: { 240: 0, 60: -1, 15: -1 } }));
+  assert.strictEqual(at(noClose), false, 'no close time');
 });

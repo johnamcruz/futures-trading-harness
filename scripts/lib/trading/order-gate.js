@@ -338,7 +338,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // rule is judged as a reversal's. Anything else (no record standing, a tier short): the trend rule as before.
   const composedSide = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
   const composedReversal = Boolean(composedCheck && !composedCheck.message && composedSide
-    && reversalAllowed({ home: config.home, root: contractRoot(input.contractId), side: composedSide, check: composedCheck.check }).ok);
+    && reversalAllowed({ home: config.home, root: contractRoot(input.contractId), side: composedSide, check: composedCheck.check, now, maxAgeMin: config.mtfMaxAgeMin }).ok);
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.
