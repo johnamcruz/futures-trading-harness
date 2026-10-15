@@ -29,7 +29,18 @@ const RANGES = {
   'training-loop': [[0, 15], [20, 34], [43, 49]], // intro, config, plan, run, kept, held-out, status, tiers, safety, examples
   'training-verdict': [[16, 19], [35, 42]], // the verdict, the evaluator, the scorecard
 };
-const ALLOWED = [];
+const ALLOWED = [
+  { old: "**The evaluator** (section 10 step 9) verifies every change mechanically when the config names one (`\"evaluator\": { \"prop\", \"data\": { \"MNQ\": \"<bar file>\" }, ... }`, any `scripts/evaluate.js` setting): the champion and the candidate on the same bar files and seed; a blow, a gate failure the champion lacks, or a pass-rate lower bound that doesn't rise above the champion's rejects (a tie, the 0 of a short window included, shows nothing).",
+    copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+  { old: "Only a change that edits nothing the evaluator reads may tie, with identical results.",
+    copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+  { old: "Without one, a strategy or rulebook change stays `blocked`, and so does a change to a strategy its streams don't read, or to a rulebook (it reads none yet).",
+    copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+  { old: "On held-out windows it scores the candidate alone against the promotion gate, inside the judging's one look; a window too short for the gate's attempts and months fails it, so judge a mechanical change on windows long enough.",
+    copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+  { old: "Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the same: the one ledger is where the budget lives.",
+    copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+];
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 
@@ -58,13 +69,13 @@ test('training-loop split: the comparison catches a lost, a doubled, an edited, 
   assert.notDeepStrictEqual(differences(old, swap('training-verdict', v.replace(loose(S), '')), ALLOWED), []);
   assert.notDeepStrictEqual(differences(old, swap('training-loop', `${homes[at('training-loop')]}\n${S}\n`), ALLOWED), []);
   assert.notDeepStrictEqual(differences(old, swap('training-verdict', v.replace('more than 10% left out', 'more than 20% left out')), ALLOWED), []);
-  // Reordered: the evaluator and scorecard paragraphs swapped (nothing lost, the order changed).
-  const EV = /\*\*The evaluator\*\*[^]*?where the budget lives\.\n/.exec(v)[0];
+  // Reordered: the verdict and scorecard paragraphs swapped (nothing lost, the order changed).
+  const EV = /1\. \*\*The verdict is code\*\*[^]*?no key removed\)\.\n/.exec(v)[0];
   const SC = /\*\*The scorecard\*\*[^]*?under a new `loopId`\.\n/.exec(v)[0];
   const swapped = v.replace(EV, '\u0000').replace(SC, EV).replace('\u0000', SC);
   assert.deepStrictEqual(differences(old, swap('training-verdict', swapped), ALLOWED), [], 'a swap loses nothing');
   assert.notDeepStrictEqual(orderErrors(old, swap('training-verdict', swapped), HOMES, ALLOWED), [], 'but changes the order');
-  // Moved: the evaluator paragraph taken to training-loop's end, before its examples (nothing lost, order kept there).
+  // Moved: the verdict paragraph taken to training-loop's end, before its examples (nothing lost, order kept there).
   const moved = homes.map((h, i) => (i === at('training-verdict') ? h.replace(EV, '') : h.replace('## Examples', `${EV}\n## Examples`)));
   assert.deepStrictEqual(differences(old, moved, ALLOWED), [], 'a move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved, HOMES, RANGES, ALLOWED), [], 'but puts it in another home');

@@ -249,6 +249,11 @@ test('pin: only a learning practice run of the document\'s role; a run keeps its
   const loaded = C.loadPinnedCurated(home);
   assert.deepStrictEqual([loaded.fingerprint, loaded.list, loaded.windows.length], [p.fingerprint, 'mix', 20]);
   assert.doesNotThrow(() => C.pinCurated(home, curated), 'a resume pins the same');
+  // The run's pins at its start (learning/run-pins.js pinForRun, scripts/replay.js run) pin it and say so.
+  const { pinForRun } = require('../../scripts/lib/learning/run-pins');
+  const lines = pinForRun({ paths: { runHome: home }, curated: { ...curated, windows: C.loadPinnedCurated(home).windows } }, { fresh: true, arm: 'without' });
+  assert.deepStrictEqual(lines, [`curated list pinned: mix of ${p.fingerprint.slice(0, 16)}, 20 window(s)`]);
+  assert.throws(() => pinForRun({ paths: { runHome: home }, curated: { ...curated, list: 'chop', windows: [] } }, { fresh: true, arm: 'without' }), /a run keeps its list/);
   assert.throws(() => C.pinCurated(home, { ...curated, list: 'chop' }), /a run keeps its list/);
   const other = C.writeLists(dir, C.buildLists(world(), { use: 'practice', total: 20, seed: 2 }));
   assert.throws(() => C.pinCurated(home, { ...curated, file: other }), /changed since the run's config read it/, 'the file is the list the config resolved');

@@ -34,6 +34,11 @@
  *                    setup-focused run ran cycles only at selected bars, so its measures are said to be from one (a
  *                    later full-day evaluation is the comparable one)
  *
+ *   prop             the run's 30-day Monte Carlo prop score (prop/model-score.js scoreSummary), beside R and the skill
+ *                    numbers, in the owner's order: zero blows, pass within the account's sessions, median and p90 days to
+ *                    pass, blow and timeout rates; its label (real, or diagnostic for a curated or setup-focused run); null
+ *                    when not scored
+ *
  *   skillUsage       the run's skill-usage report (learning/skill-usage.js, skillUsageFor), when given: whether the model
  *                    used each skill where its read was true, correctly, what it missed, and the outcomes by skill;
  *                    an operator report, never shown to the model
@@ -90,7 +95,7 @@ function follows(list, index) {
   return out;
 }
 
-function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null, library = null, skillUsage = null } = {}) {
+function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null, library = null, skillUsage = null, prop = null } = {}) {
   const composed = decisions.filter(d => d.decision !== 'none');
   const entered = composed.filter(d => d.decision === 'entered');
   const stepsOf = d => new Set((d.reads || []).map(r => r.step).filter(s => STEPS.includes(s))).size;
@@ -108,6 +113,7 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
   return {
     practice: practice || null,
     library: library || null,
+    prop: prop || null,
     decisions: { total: decisions.length, composed: composed.length, entered: entered.length, passed: composed.filter(d => d.decision === 'passed').length, refused: composed.filter(d => d.decision === 'refused').length, none: decisions.length - composed.length },
     steps: { mean: r4(mean(composed.map(stepsOf))), allSix: composed.filter(d => stepsOf(d) === STEPS.length).length },
     skillsPerTrade: r4(mean(entered.map(d => new Set((d.reads || []).map(r => r.skill)).size))),
@@ -216,11 +222,15 @@ const usageText = u => (!u ? '' : u.error ? `skill usage: not read (${u.error})\
 
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
+/** The prop score in one line, the owner's order. */
+const propLine = p => `${p.realAttempts === 0 ? '0 independent attempts: resampled only, not evidence; ' : ''}prop Monte Carlo (${p.score}, ${p.days ?? '?'} distinct days, ${p.independentAttempts ?? '?'} independent attempts, sized at the code's ceiling): zero blows ${p.zeroBlows ? 'held' : 'FAILED'}, pass within ${p.sessions || '?'} days ${f2(p.passRate)} real / ${f2(p.resampledPassRate)} resampled (conditional on these days), `
+  + `days to pass median ${p.medianDaysToPass ?? '-'} p90 ${p.p90DaysToPass ?? '-'}, blow ${f2(p.blowRate)} (resampled ${f2(p.resampledBlowRate)}), timeout ${f2(p.timeoutRate)}`;
+
 function learningText(m) {
   const d = m.decisions;
   return `learning${m.practice ? ' (setup-focused practice)' : ''}: ${d.composed} composed (${d.entered} entered, ${d.passed} passed, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
     + `reads verified ${f2(m.reads.rate)} of ${m.reads.reads}; ${m.diversity.signatures} combinations, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed)' : ''}; `
-    + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}\n${usageText(m.skillUsage)}`;
+    + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}${m.prop ? `; ${propLine(m.prop)}` : ''}\n${usageText(m.skillUsage)}`;
 }
 
 function learningMarkdown(m) {
@@ -236,6 +246,7 @@ function learningMarkdown(m) {
     `- Combinations: ${m.diversity.signatures}, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed onto one)' : ''}`,
     `- Passes (the model's): ${m.passes.good} good, ${m.passes.missed} missed wins, ${m.passes.neutral} neutral (good rate ${f2(m.passes.goodRate)}); the gate's refusals apart: ${m.refusals.wouldLose} would have lost, ${m.refusals.wouldWin} would have won, ${m.refusals.neutral} neutral`,
     `- experience_lookup: ${m.lookups.calls} calls, ${m.lookups.decisions} composed decisions looked up (${f2(m.lookups.rate)})`,
+    ...(m.prop ? [`- The ${propLine(m.prop)}`] : []),
     `- Against the record (index ${m.record.index || (m.record.indexError ? `unreadable: ${m.record.indexError}` : 'none pinned')}, before each decision's day): followed ${m.record.all.followed}, against ${m.record.all.against}, neutral ${m.record.all.neutral}, no evidence ${m.record.all['no-evidence']}; after a lookup: followed ${m.record.withLookup.followed}, against ${m.record.withLookup.against}`,
     '', 'Frame (default: a 1h bias, 15m reaction and 3m confirmation read; other: any other), by context:', '',
     '| Context | Default: decisions, mean R, taken, taken mean R, win | Other: decisions, mean R, taken, taken mean R, win |',

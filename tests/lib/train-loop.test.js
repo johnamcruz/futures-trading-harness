@@ -35,8 +35,10 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
     tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }], proposer: trader, repeats: 2, seed: 3, maxFlagged: 20, controlPoints: 0,
     limits: { maxIterations: 1, maxModelCalls: 1000, maxWallMinutes: 30 }, ...over,
   });
-  const calls = { propose: 0, steps: [], branches: [], evaluator: 0, replay: 0 };
+  const calls = { propose: 0, steps: [], branches: [], evaluator: 0, replay: 0, preflight: [] };
   const steps = {
+    // The training preflight (learning/preflight.js), recorded: its own test below runs the real one.
+    preflight: (run, gate, opts) => { calls.preflight.push({ runId: run.runId, barsFiles: opts.barsFiles, noBars: opts.noBars }); return { ok: true, results: [], record: () => null }; },
     makeTree: dir => { fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), '# A\n'); fs.mkdirSync(path.join(dir, 'workspace')); return 'c0ffee'; },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
     seedRunHome: run => {
@@ -82,6 +84,30 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
 }
 
 const run = (w, opts = {}) => L.runLoop({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, ...opts });
+
+test('the champion\'s runs pass the training preflight first: a FAIL refuses the run before it is seeded; its facts read the loop\'s bars, or are N/A without them', async () => {
+  // Every run of the loop is checked, with no bars to give: facts N/A ("no bars given to the loop").
+  const w = world({ proposals: [] });
+  await run(w);
+  assert.ok(w.calls.preflight.length >= 1);
+  assert.deepStrictEqual(w.calls.preflight[0], { runId: 'l1-champion-t0', barsFiles: {}, noBars: 'no bars given to the loop' });
+  // With the evaluator's data source, its bars.
+  const P = require('../../scripts/lib/learning/preflight');
+  const withData = world({ proposals: [] });
+  withData.loop = { ...withData.loop, evaluator: { prop: 'prop_portfolio', data: { MNQ: '/bars/MNQ-3m.json' } } };
+  await run(withData);
+  assert.deepStrictEqual(withData.calls.preflight[0].barsFiles, { MNQ: '/bars/MNQ-3m.json' });
+  assert.strictEqual(withData.calls.preflight[0].noBars, null);
+  // The real preflight on the loop's stub tree (no strategies, no skills): FAIL, the run refused, nothing seeded or run.
+  const real = world({ proposals: [] });
+  delete real.steps.preflight;
+  await assert.rejects(run(real), /training preflight refused the run:[^]*FAIL strategy: trade_lifecycle is not a strategy/);
+  assert.strictEqual(real.calls.replay, 0);
+  assert.ok(!fs.existsSync(path.join(real.loop.workDir, 'runs', 'l1-champion-t0', 'learning-run.json')), 'not seeded');
+  // With no bars the facts check is N/A, never a FAIL, and the other checks still run.
+  const facts = P.runChecks({ run: { cfg: { symbols: ['MNQ'] } }, gate: {}, noBars: 'no bars given to the loop', read: {} }, [P.facts]);
+  assert.deepStrictEqual(facts.results, [{ check: 'facts', status: P.NA, detail: 'no bars given to the loop' }]);
+});
 
 test('one iteration: the fix is kept (a local branch, a PR body), the harm rejected; looks logged; the archive reproduces it', async () => {
   const w = world();

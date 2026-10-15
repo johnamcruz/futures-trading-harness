@@ -157,7 +157,7 @@ function locked(file, fn) {
   } catch (err) {
     // A run killed while it held the lock (SIGKILL) leaves the lock file: it is never broken automatically.
     if (/locked by another run/.test(err.message)) {
-      throw new Error(`the look ledger is locked: ${file}.lock exists. Another training loop (scripts/train-loop.js) or evaluator run (scripts/evaluate.js) holds it, or one was killed while holding it. Remove ${file}.lock by hand only when no training loop and no evaluator run is running.`, { cause: err });
+      throw new Error(`the look ledger is locked: ${file}.lock exists. Another training loop (scripts/train-loop.js) or evaluator run holds it, or one was killed while holding it. Remove ${file}.lock by hand only when no training loop and no evaluator run is running.`, { cause: err });
     }
     throw err;
   }

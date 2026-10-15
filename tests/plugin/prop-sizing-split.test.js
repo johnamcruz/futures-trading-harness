@@ -33,6 +33,26 @@ const SPLITS = {
     homes: ['prop-challenge-pacing', 'prop-evaluator', 'prop-pacing-judgment'],
     // Edits made since the split (skill-split-late.js), each with its reason.
     late: [
+      { from: "How often a policy strategy passes, blows or times out on history is the evaluator's answer.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "It is the user's command, as the backtester is; an agent never runs it: `node <root>/scripts/evaluate.js --prop <policy> --data <SYMBOL>=<bars file> --from <date> --to <date>` (`docs/BACKTESTING.md`, \"The two-layer evaluator\").",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "It prints the pass, blow and timeout rates with their intervals, the effective sample size (attempts that share no session), the resampled paths, the expectancy cuts, and the promotion gate's verdict.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "When you read or report its result:",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "**Only Train runs freely.** The evaluator refuses any other window without a look (`--look-candidate`, `--look-purpose tuning|judging`, `--ledger <file>`) that the ledger allows.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "It logs the look before reading a bar.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "Looking spends the out-of-sample budget: only the user decides to take one, knowing which window and what it spends.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "A refusal (`needs a look`, `retired`, `reserved`, `crosses a unit`) is final: report it, don't route around it with another window or tool.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "**Flow-off results.** For a policy whose strategies read broker fields, attempts outside the fields' coverage are marked `flowOff`.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
+      { from: "They show the policy without that branch, not as it trades live.",
+        to: null, reason: "the evaluator passage was rewritten (owner-approved, PR #196): a replay run's prop score is the Monte Carlo of the model's own trades (replay.js report); scripts/evaluate.js is deleted" },
       { from: "Its numbers (the `sizing`, the trail `exit`, the soft daily stop, and the verdict's multiplier items) are in the account's rulebook, `accounts/<name>/RULEBOOK.md`, the one place for them: read them there, never from a strategy or this skill.",
         to: "Its numbers (the `sizing`, the `exit`, the soft daily stop, the loss streak stop, and the verdict's multiplier items) are in the account's rulebook, `accounts/<name>/RULEBOOK.md`, the one place for them: read them there, never from a strategy or this skill.",
         reason: "feat/prop-portfolio-missing (owner-approved): the rulebook's exit has a mode and the account has a loss streak stop" },
@@ -160,7 +180,7 @@ function expectedHomes(s, beforeText) {
   const rest = new Map(all);
   for (const [home, m] of Object.entries(s.moved)) {
     const text = (m.lines || []).map(([a, b]) => lines.slice(a - 1, b).join('\n')).join('\n\n');
-    const want = count([...units(text), ...(m.units || [])].filter(u => !STRUCTURE.includes(u)));
+    const want = count([...units(text), ...(m.units || [])].filter(u => !STRUCTURE.includes(u) && !dropped.has(u)));
     for (const [u, n] of want) {
       if ((rest.get(u) || 0) < n) throw new Error(`${home}: "${u}" is not in the old skill ${n} time(s)`);
       rest.set(u, rest.get(u) - n);

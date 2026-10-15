@@ -15,7 +15,7 @@
  * logs to the ledger before it reads a bar, and every gate failure counts (the promotion gate, absolute).
  *
  * The loop config's `evaluator`: { prop (the policy strategy), data ({ SYMBOL: bar file at its timeframe }),
- * and any of scripts/evaluate.js's settings: seed (default: the loop's), paths, reps, meanBlock, every, cuts,
+ * and any of the evaluator run's settings: seed (default: the loop's), paths, reps, meanBlock, every, cuts,
  * entryDelayMs, faults, facts, and backtest options }. Without one the verifier is unavailable and a strategy or
  * rulebook change stays `blocked` (paired.js).
  *

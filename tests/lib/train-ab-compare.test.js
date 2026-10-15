@@ -3,6 +3,7 @@
 // The A/B comparison of two finished replay runs (scripts/lib/train/ab-compare.js, scripts/ab-compare.js): the setup
 // record and its refusals, the pairing, the paired verdicts, and the looks of held-back runs.
 const test = require('node:test');
+const PF = require('../fixtures/preflight');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
@@ -347,8 +348,10 @@ test('scripts/replay.js run records the setup at the run\'s start, the one its l
   const run = (start, end, flags = []) => {
     fs.writeFileSync(path.join(user, 'replay.json'), JSON.stringify({
       runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
-      autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 },
+      autotrader: PF.AUTOTRADER,
     }));
+    // The training preflight runs first: the run's 1m bars (--bars) and a 1m data lane (tests/fixtures/preflight.js).
+    flags = [...flags, '--bars', `MNQ=${PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10))}`];
     fs.mkdirSync(path.join(user, 'live'), { recursive: true });
     fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
     return spawnSync(process.execPath, [path.join(REPO, 'scripts', 'replay.js'), 'run', '--config', path.join(user, 'replay.json'), ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') }, timeout: 60000 });

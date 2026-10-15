@@ -407,6 +407,8 @@ test('driver, latency charged: an end of day not verified flat retries a minute 
   delete m.latency;
   fs.writeFileSync(b.w.run.paths.manifest, JSON.stringify(m));
   assert.strictEqual(resolve(unnamed).latency, false, 'started before the setting: pinned');
+  assert.strictEqual(resolve(unnamed).latencyPinnedResume, true, 'the preflight is told (it passes a pinned resume, noted)');
+  assert.strictEqual(cfg({ latency: true }).latencyPinnedResume, false);
   assert.strictEqual(cfg({ latency: true }).latency, true, 'named: as named');
 });
 

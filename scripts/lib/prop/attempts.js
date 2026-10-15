@@ -25,6 +25,8 @@
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
 const { pick } = require('./stats');
+const { loadConfig } = require('../trading/config');
+const { tradingDayStart } = require('../trading/clock');
 const { trailStep } = require('../trading/trail');
 const { SWING_TFS, afterTargetStep } = require('../trading/exit-trail');
 
@@ -60,27 +62,87 @@ function legsFor(account, symbol, { tickValue, feesPerSide = 0.37 } = {}) {
 const forcedNet = (want, perTick, fees) => Math.floor((want + fees) / perTick + 1e-9) * perTick - fees;
 
 /**
+ * The order gate's own loss limits (trading/config.js loadConfig, the one config the live gate reads, from the same
+ * env): the losing trades a trading day allows (FTH_MAX_DAILY_LOSSES, order-gate.js daily-loss-count) and the losses in
+ * a row that start a cooldown (FTH_MAX_CONSECUTIVE_LOSSES, FTH_LOSS_COOLDOWN_MIN, order-gate.js loss-streak). An
+ * autonomous run can't skip either (config.js skipChecks), so the simulator never takes an entry they would refuse.
+ */
+function gateLimits(env = process.env) {
+  const c = loadConfig(env);
+  return Object.freeze({ maxDailyLosses: c.maxDailyLosses, maxConsecutiveLosses: c.maxConsecutiveLosses, lossCooldownMin: c.lossCooldownMin });
+}
+
+/** A moment's offset into its trading day (ms), or NaN: a reweighted day joins trades of different dates by it. */
+const intoSession = (ms, dayOf = ms) => (Number.isFinite(ms) && Number.isFinite(dayOf) ? ms - tradingDayStart(new Date(dayOf)).getTime() : NaN);
+
+/**
+ * The gate's refusal of an entry, as order-gate.js gives it on the day's closes so far: `daily-losses` once the day's
+ * losing trades reach maxDailyLosses; `loss-cooldown` while the day's losing streak (a loss extends it, a win ends it,
+ * a scratch neither) is at maxConsecutiveLosses and the entry comes within lossCooldownMin of the last loss's exit,
+ * by the time into the session (a trade without times can't show the cooldown passed: refused, fails closed). Null
+ * when it would let the entry through.
+ */
+function gateRefusal(gate, day, t) {
+  if (!gate) return null;
+  if (day.losses >= gate.maxDailyLosses) return 'daily-losses';
+  if (day.streak >= gate.maxConsecutiveLosses) {
+    const at = intoSession(Date.parse(t.entryTime));
+    if (!(Number.isFinite(at) && Number.isFinite(day.lastLossAt) && at - day.lastLossAt >= gate.lossCooldownMin * 60000)) return 'loss-cooldown';
+  }
+  return null;
+}
+
+/**
  * One attempt over `days` ([{ day, trades }], in order) from a fresh account state. ctx: { account, sizing,
  * size, multiplier, mode, legsOf(trade) -> { legs, ratio }, maxDailyLoss (the engine's realized daily stop, 0
- * off), variant(trade, { first }) -> the trade to replay (or null to keep it), outageDay(dayIndex) -> true when
- * the runner is down that day }. Returns { status, sessions, profit, taken, skipped, passDays }.
+ * off), gate (the order gate's loss limits, gateLimits(); default the env's, as live; null only for a test that
+ * isolates another rule), variant(trade, { first }) -> the trade to replay (or null to keep it), outageDay(dayIndex) -> true when
+ * the runner is down that day, onDay(cs, dayIndex) -> called with the account as each day opens (read only: the
+ * account states the attempt passed through, prop/account-states.js), onTrade({ before, after, trade, net, gross, forced,
+ * dayIndex, counters }) after each trade taken and onSkip({ cs, trade, dayIndex, counters, why }) for each one the
+ * account layer passed over (both read only: the risk attribution, prop/evaluator.js) }. `counters`: the day's trades
+ * and losing trades so far and the session's losing streak (combine's lossStreak, live's prop-state.sessionLossStreak),
+ * as the attempt line shows them (combine.attemptFacts); the multiplier sees them too (multiplier(trade, { cs, counters })).
+ * Each trade (already re-exited under the policy's exit, exitAs, by the evaluator) meets the checks in this order, the
+ * first that refuses skipping it: (1) combine.entryBlock (the attempt over, the firm's daily limit, the soft daily stop,
+ * the account's loss_streak_stop for the rest of the session); (2) the engine's realized daily stop and a runner outage;
+ * (3) the order gate's count rules (gateRefusal: daily-losses, then loss-cooldown); (4) the multiplier; (5) the size.
+ * The streak is counted once (cs.lossStreak) and read by both (1) and (3): loss_streak_stop ends the session's entries,
+ * the gate's cooldown only pauses them, and a trade skipped by one is never counted again by the other.
+ * Returns { status, sessions, profit, taken, skipped }.
  */
 function runAttempt(days, ctx) {
-  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null } = ctx;
+  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null } = ctx;
+  const gate = ctx.gate === undefined ? gateLimits() : ctx.gate;
   let cs = combine.start(account);
   let taken = 0;
   let skipped = 0;
+  const view = x => Object.freeze({ ...x, days: Object.freeze([...x.days]) });
   for (let d = 0; d < days.length && cs.status === 'active'; d += 1) {
+    if (onDay) onDay(view(cs), d);
     let closed = 0;
     const outage = outageDay ? outageDay(d) : false;
     let first = true;
+    let tradesToday = 0;
+    let lossesToday = 0;
+    // The last loss's exit, by the time into the session (the gate's loss cooldown runs from it).
+    let lastLossAt = NaN;
+    // One count of the day's losses and losing streak for the gate, the attempt line and the loss streak stop: by the
+    // trade's P&L before fees, as the gate counts the broker's; the streak is combine's (cs.lossStreak, the session's).
+    const counters = () => Object.freeze({ tradesToday, lossesToday, lossStreak: cs.lossStreak || 0 });
+    const skip = (t0, why) => { skipped += 1; if (onSkip) onSkip({ cs: view(cs), trade: t0, dayIndex: d, counters: counters(), why }); };
     for (const t0 of days[d].trades) {
-      if (combine.entryBlock(cs) || (maxDailyLoss > 0 && closed <= -maxDailyLoss) || (outage && !first)) { skipped += 1; continue; }
-      const m = Number(multiplier(t0, { cs }));
-      if (!(m > 0)) { skipped += 1; continue; }
+      if (combine.entryBlock(cs)) { skip(t0, 'blocked'); continue; }
+      if ((maxDailyLoss > 0 && closed <= -maxDailyLoss) || (outage && !first)) { skip(t0, outage && !first ? 'outage' : 'daily-stop'); continue; }
+      const refused = gateRefusal(gate, { losses: lossesToday, streak: cs.lossStreak || 0, lastLossAt }, t0);
+      if (refused) { skip(t0, refused); continue; }
+      const m = Number(multiplier(t0, { cs, counters: counters() }));
+      if (!(m > 0)) { skip(t0, 'multiplier'); continue; }
       const { legs, ratio } = legsOf(t0);
       const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m) });
-      if (!plan || !(plan.size >= 1)) { skipped += 1; continue; }
+      if (!plan || !(plan.size >= 1)) { skip(t0, 'no-size'); continue; }
+      const before = cs;
+      const counted = counters();
       const leg = plan.root === legs.micro.root ? legs.micro : legs.mini;
       // A runner outage leaves the day's first trade unmanaged (a stop fault), and no more entries that day.
       const t = (outage ? stopFault(t0) : null) || (variant ? variant(t0, { first }) : null) || t0;
@@ -97,11 +159,17 @@ function runAttempt(days, ctx) {
       if (net === null) net = t.moveTicks * perTick - fees;
       net = Math.round(net * 100) / 100;
       // The loss streak counts the trade's P&L before fees, as the gate counts the broker's (a scratch moves it neither way).
-      cs = combine.applyClose(cs, net, Math.round((net + fees) * 100) / 100);
+      const gross = Math.round((net + fees) * 100) / 100;
+      cs = combine.applyClose(cs, net, gross);
       taken += 1;
       closed += net;
-      if (forced === 'blow') { cs = combine.blow(cs); break; }
+      tradesToday += 1;
+      // A re-exited trade's exit time is its exit bar's close (exitAs), or null when unknown: the cooldown then refuses.
+      if (gross < 0) { lossesToday += 1; lastLossAt = intoSession(Date.parse(t.exitTime), Date.parse(t0.entryTime)); }
+      if (forced === 'blow') cs = combine.blow(cs);
       if (forced === 'daily') cs = { ...cs, dayStopped: true };
+      if (onTrade) onTrade({ before: view(before), after: view(cs), trade: t0, net, gross, forced, dayIndex: d, counters: counted });
+      if (forced === 'blow') break;
     }
     if (cs.status === 'active') cs = combine.endDay(cs);
   }
@@ -142,7 +210,9 @@ function exitAs(t, exit, slipTicks = 1) {
   const troughs = [];
   const deeper = x => { if (x < low) { low = x; troughs.push(round6(x)); } };
   let move = null;
-  for (const [o, adv, fav, close] of t.path) {
+  let k = 0;
+  for (; k < t.path.length; k += 1) {
+    const [o, adv, fav, close] = t.path[k];
     if (adv <= stop) {
       const fill = Math.min(o, stop) - slipTicks;
       deeper(fill);
@@ -157,7 +227,17 @@ function exitAs(t, exit, slipTicks = 1) {
     if (step.close) { move = close; break; }
   }
   if (move === null) move = t.path[t.path.length - 1][3];
-  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode };
+  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode, ...exitTimeAt(t, k) };
+}
+
+/**
+ * The re-exited trade's exit time (the order gate's loss cooldown runs from it): the close of its exit bar `k`
+ * (t.pathEnds, ms per path bar; the end of the path when it ran out), never earlier than the fill exited; without
+ * pathEnds a recorded exit time is no longer the exit's, so it becomes null (the cooldown then refuses: fails closed).
+ */
+function exitTimeAt(t, k) {
+  if (Array.isArray(t.pathEnds) && t.pathEnds.length === t.path.length) return { exitTime: new Date(t.pathEnds[Math.min(k, t.pathEnds.length - 1)]).toISOString() };
+  return t.exitTime === undefined ? {} : { exitTime: null };
 }
 
 /** exitAs in mode target_then_trail: in the trade's own frame (ticks its way, 1R = its stop), exit-trail.js's rule. */
@@ -172,7 +252,8 @@ function afterTargetExit(t, exit, slipTicks) {
   const troughs = [];
   const deeper = x => { if (x < low) { low = x; troughs.push(round6(x)); } };
   let move = null;
-  for (let k = 0; k < t.path.length && move === null; k += 1) {
+  let k = 0;
+  for (; k < t.path.length; k += 1) {
     const [o, adv, fav, close] = t.path[k];
     if (adv <= trade.stop) {
       move = Math.min(o, trade.stop) - slipTicks;
@@ -183,10 +264,10 @@ function afterTargetExit(t, exit, slipTicks) {
     const swing = swings[k] === undefined ? null : swings[k];
     const step = afterTargetStep(trade, { h: fav, l: adv, c: close }, plan, 1, swing);
     Object.assign(trade, { stop: step.stop, peakR: step.peakR, armed: step.armed });
-    if (step.close) move = close;
+    if (step.close) { move = close; break; }
   }
   if (move === null) move = t.path[t.path.length - 1][3];
-  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode };
+  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode, ...exitTimeAt(t, k) };
 }
 
 /** The trade with its exit moved to `move` ticks (a deeper exit becomes its last trough). */
@@ -232,4 +313,4 @@ function stopFault(t) {
   return { ...t, moveTicks: t.noStop.closeTicks, troughTicks: w < 0 ? [...t.troughTicks.filter(x => x > w), w] : t.troughTicks.filter(x => x < 0) };
 }
 
-module.exports = { fullVerdict, defaultSize, legsFor, runAttempt, exitAs, withExit, expectancyR, cutTrade, overshootPools, redrawOvershoot, stopFault };
+module.exports = { fullVerdict, defaultSize, legsFor, gateLimits, gateRefusal, runAttempt, exitAs, withExit, expectancyR, cutTrade, overshootPools, redrawOvershoot, stopFault };
