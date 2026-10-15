@@ -273,6 +273,18 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   const text = scoreText(r);
   for (const want of [/1\. Zero blows \(hard gate\): held/, /2\. Pass within 30 trading days/, /3\. Days to pass: median/, /4\. Blow rate/, /Promotion gate: n\/a \(practice-validate is not out of sample; it would refuse: /]) assert.match(text, want);
   assert.ok(text.indexOf('1. Zero') < text.indexOf('2. Pass') && text.indexOf('2. Pass') < text.indexOf('3. Days') && text.indexOf('3. Days') < text.indexOf('4. Blow'), 'the owner\'s order');
+  // Two days hold no whole attempt: the first line says the resampled numbers are not evidence, and the resampled
+  // interval is labelled conditional on the run's days, never a count of independent attempts.
+  assert.match(text.split('\n')[0], /^0 independent attempts: resampled only, not evidence\. Prop Monte Carlo/);
+  assert.match(text.split('\n')[0], /2 distinct day\(s\), 0 independent attempt\(s\); every entry sized at the code's ceiling \(the verdict's\), not the model's own size/);
+  assert.match(text, /resampled [\d.]+% of 50 paths \(Wilson \[[^\]]+\], conditional on these 2 days\)/);
+  const long = scoreText({ ...r, runDays: 75, real: { ...r.real, attempts: 45 } });
+  assert.match(long.split('\n')[0], /^Prop Monte Carlo, .*75 distinct day\(s\), 2 independent attempt\(s\)/, 'real attempts: no warning, floor(75 / 30) independent');
+  const { learningText } = require('../../scripts/lib/learning/learning-report');
+  const { scoreSummary } = require('../../scripts/lib/prop/model-score');
+  const line = learningText({ decisions: { composed: 0, entered: 0, passed: 0, refused: 0, none: 0 }, steps: {}, reads: {}, diversity: {}, passes: { good: 0, missed: 0 }, lookups: {}, record: { all: {} }, prop: scoreSummary(r) });
+  assert.match(line, /; 0 independent attempts: resampled only, not evidence; prop Monte Carlo \(real, 2 distinct days, 0 independent attempts, sized at the code's ceiling\)/);
+  assert.match(line, /resampled \(conditional on these days\)/);
   // Rates given by hand make it a reweighted, diagnostic score.
   const ratesFile = path.join(home, 'rates.json');
   fs.writeFileSync(ratesFile, JSON.stringify({ sweep: { candidatesPerDay: 0.5 } }));

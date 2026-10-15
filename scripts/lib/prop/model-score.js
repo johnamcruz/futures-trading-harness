@@ -29,7 +29,8 @@
  *   pairRuns(runDirA, runDirB, { root, env, account, policy, barsFiles, seed, paths, reps, faults, now })   two runs of the
  *       same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired), each run's score
  *       logged beside its own look: the judge a skill change is kept by
- *   propScoreSection(runDir, { root, env, override, rates, barsFiles })   { result, text, markdown } (never throws)
+ *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
+ *   parseFaults(text)   the fault rates of `--faults stop=<rate>,outage=<rate>` ({} without it: faults not measured)
  *   scoreText(result), scoreMarkdown(result), scoreSummary(result)
  */
 
@@ -115,6 +116,28 @@ function pairRuns(runDirA, runDirB, { root = null, account, policy = null, barsF
   return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
 }
 
+/**
+ * Fault rates for the score from `--faults stop=<rate>,outage=<rate>` (a stop fault per trade: late, missing or refused;
+ * a runner outage per day): { stopFault, outage, measured: true } (the rates were given), {} without the flag.
+ */
+function parseFaults(text) {
+  if (text === undefined || text === null) return {};
+  const out = { stopFault: 0, outage: 0, measured: true };
+  const keys = { stop: 'stopFault', outage: 'outage' };
+  for (const part of String(text).split(',')) {
+    const m = /^\s*(stop|outage)\s*=\s*([0-9.]+)\s*$/.exec(part);
+    const v = m ? Number(m[2]) : NaN;
+    if (!m || !(v >= 0 && v <= 1)) throw new Error(`--faults: stop=<rate>,outage=<rate>, each from 0 to 1 (got ${String(text)})`);
+    out[keys[m[1]]] = v;
+  }
+  return out;
+}
+
+/** The faults the score injected: the given rates and what fired, or that none were measured. */
+const faultsText = (f, seen = {}) => (f.measured && (f.stopFault > 0 || f.outage > 0)
+  ? `faults at the given rates (stop ${f.stopFault} a trade, outage ${f.outage} a day; ${seen.injected || 0} stop fault(s) fired, ${seen.missed || 0} without a no-stop path, ${seen.outages || 0} outage day(s))`
+  : 'faults not measured (no rates given: --faults stop=<rate>,outage=<rate>)');
+
 const pct = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1)}%`);
 const iv = i => (i && i.lo !== null && i.lo !== undefined ? `[${pct(i.lo)}, ${pct(i.hi)}]` : '[-]');
 const num = x => (x === null || x === undefined ? '-' : String(x));
@@ -124,16 +147,21 @@ function scoreLines(r) {
   const S = r.inputs.sessions;
   const rs = r.resampled;
   const zero = r.blown === 0;
+  // The evidence: the run's distinct session days, and the attempts among them that share no session. Resampled paths
+  // reuse those days: their interval is conditional on them, never a count of independent attempts.
+  const D = r.runDays;
+  const independent = Math.floor(D / S);
+  const head = r.real.attempts === 0 ? '0 independent attempts: resampled only, not evidence. ' : '';
   const lines = [
-    `Prop Monte Carlo, ${S}-day attempts (${r.account}, ${r.sizingFrom}): ${r.score}${r.diagnostic ? ', never a promotion score' : ''}`,
+    `${head}Prop Monte Carlo, ${S}-day attempts (${r.account}, ${r.sizingFrom}): ${r.score}${r.diagnostic ? ', never a promotion score' : ''}; ${D} distinct day(s), ${independent} independent attempt(s); every entry sized at the code's ceiling (the verdict's), not the model's own size`,
     `1. Zero blows (hard gate): ${zero ? 'held' : 'FAILED'}: ${r.blown} blow(s) over ${r.real.attempts} real attempts, ${rs.paths} resampled paths and the expectancy cuts`,
-    `2. Pass within ${S} trading days: ${pct(r.passRate)} of ${r.attempts} real attempts (bootstrap ${iv(r.intervals.pass)}, Wilson at ${r.ess} independent ${iv(r.intervals.passAtEss)}); resampled ${pct(rs.passRate)} of ${rs.paths} (Wilson ${iv(rs.mcInterval)})`,
+    `2. Pass within ${S} trading days: ${pct(r.passRate)} of ${r.attempts} real attempts (bootstrap ${iv(r.intervals.pass)}, Wilson at ${r.ess} independent ${iv(r.intervals.passAtEss)}); resampled ${pct(rs.passRate)} of ${rs.paths} paths (Wilson ${iv(rs.mcInterval)}, conditional on these ${D} days)`,
     `3. Days to pass: median ${num(r.medianDaysToPass)}, p90 ${num(r.p90DaysToPass)} (real); median ${num(rs.medianDaysToPass)}, p90 ${num(rs.p90DaysToPass)} (resampled)`,
     `4. Blow rate ${pct(r.blowRate)} (bootstrap ${iv(r.intervals.blow)}, Wilson at ${r.real.ess} independent ${iv(r.intervals.blowAtEss)}), timeout rate ${pct(r.timeoutRate)} (bootstrap ${iv(r.intervals.timeout)}, Wilson at ${r.ess} independent ${iv(r.intervals.timeoutAtEss)}) (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
     ['test', 'final'].includes(r.window.role)
       ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
       : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,
-    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.ratesFrom ? `, from ${r.ratesFrom}` : ''}${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured'} (stop ${r.inputs.faults.stopFault}, outage ${r.inputs.faults.outage}${rs.faults && rs.faults.injected + rs.faults.missed ? `; ${rs.faults.injected} fired, ${rs.faults.missed} without a no-stop path` : ''})`,
+    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.ratesFrom ? `, from ${r.ratesFrom}` : ''}${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); ${faultsText(r.inputs.faults, rs.faults)}`,
   ];
   if (r.attribution) {
     const a = r.attribution.states;
@@ -162,6 +190,7 @@ function scoreSummary(r) {
     score: r.score, account: r.account, sessions: r.inputs.sessions, zeroBlows: r.blown === 0, passRate: r.passRate, resampledPassRate: r.resampled.passRate,
     medianDaysToPass: r.medianDaysToPass, p90DaysToPass: r.p90DaysToPass, blowRate: r.blowRate, timeoutRate: r.timeoutRate,
     resampledBlowRate: r.resampled.blowRate, attempts: r.attempts, paths: r.resampled.paths, promotion: r.promotion.passes,
+    realAttempts: r.real.attempts, days: r.runDays, independentAttempts: Math.floor(r.runDays / r.inputs.sessions), sizedAt: 'ceiling',
   };
 }
 
@@ -199,7 +228,7 @@ function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
  * The section for the replay's report and the end of a run: { result, text, markdown, summary }; a run that can't be
  * scored says why (never throws: the report still writes).
  */
-function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, curated = null, barsFiles = {}, riskActions = true, now = new Date() } = {}) {
+function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, curated = null, barsFiles = {}, faults = {}, riskActions = true, now = new Date() } = {}) {
   try {
     const { loadAccounts, accountNamed } = require('../trading/accounts');
     const { loadStrategies } = require('../trading/strategies');
@@ -212,7 +241,7 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
     if (!pick.name) throw new Error(pick.why);
     const account = accountNamed(root, pick.name, env);
     const nat = ratesFor(dir, { ratesFile, curated });
-    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, barsFiles, riskActions, now });
+    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, barsFiles, faults, riskActions, now });
     if (nat) result.ratesFrom = nat.from;
     result.accountWhy = pick.why;
     return { result, text: `\n${scoreText(result)}`, markdown: scoreMarkdown(result), summary: scoreSummary(result) };
@@ -222,4 +251,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { resolveAccount, policyFor, scoreRun, pairRuns, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { resolveAccount, policyFor, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

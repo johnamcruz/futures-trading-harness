@@ -256,7 +256,7 @@ function scoreStream(stream, opts) {
   const pathOf = rand => stats.stationaryPath(days.length, S, { meanBlock, rand, regimes, byRegime }).map(k => days[k]);
   const attr = attribution ? createAttribution() : null;
   // Stop faults drawn on the base paths: fired (the trade ran unprotected), or missed (no no-stop path to run it on).
-  const faultCount = { injected: 0, missed: 0 };
+  const faultCount = { injected: 0, missed: 0, outages: 0 };
   const resample = (label, transform = null) => {
     const prand = stats.streamFor(seed, `paths:${label}`);
     const vrand = stats.streamFor(seed, `variants:${label}`);
@@ -268,7 +268,11 @@ function scoreStream(stream, opts) {
       const watch = attr && label === 'base' ? attr.observe(list) : {};
       const o = at.runAttempt(list, {
         ...ctx, ...watch,
-        outageDay: () => rates.outage > 0 && vrand() < rates.outage,
+        outageDay: () => {
+          const out = rates.outage > 0 && vrand() < rates.outage;
+          if (out && label === 'base') faultCount.outages += 1;
+          return out;
+        },
         variant: t0 => {
           let t = transform ? transform(t0) : t0;
           t = at.redrawOvershoot(t, pools.get(t.symbol), vrand);

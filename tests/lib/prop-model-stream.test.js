@@ -113,7 +113,8 @@ test('fault injection fires on model trades: every trade carries the full set of
   assert.strictEqual(faulty.inputs.noFaultPath, 0);
   assert.ok(faulty.resampled.faults.injected > 0, 'stop faults fired on the model trades');
   assert.strictEqual(faulty.resampled.faults.missed, 0, 'none dropped out for want of a no-stop path');
-  assert.deepStrictEqual(score({}).resampled.faults, { injected: 0, missed: 0 });
+  assert.deepStrictEqual(score({}).resampled.faults, { injected: 0, missed: 0, outages: 0 });
+  assert.ok(score({ outage: 0.5 }).resampled.faults.outages > 0, 'outage days fired');
 });
 
 test('a fill no record placed is left out (a real score refuses it); trades open together are listed; the no-stop worst covers the fill\'s bar', () => {
@@ -187,4 +188,29 @@ test('bracketExit: on the fill bar only the worse is taken (the stop at its fill
   assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target' });
   assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target' }, 'a fill at the bar\'s open: the whole bar follows it');
   assert.strictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 100, h: 101, l: 99, c: 100 }], i: 0, partial: true }), null, 'the bars end first');
+});
+
+test('fault rates reach the score from the CLI (--faults): given, they fire; without, "faults not measured"', () => {
+  const { spawnSync } = require('child_process');
+  const { propScoreSection, parseFaults } = require('../../scripts/lib/prop/model-score');
+  const root = path.resolve(__dirname, '..', '..');
+  assert.deepStrictEqual(parseFaults(undefined), {});
+  assert.deepStrictEqual(parseFaults('stop=0.02,outage=0.01'), { stopFault: 0.02, outage: 0.01, measured: true });
+  for (const bad of ['stop=2', 'stop=-1', 'flat=0.1', 'stop=x', '']) assert.throws(() => parseFaults(bad), /--faults: stop=<rate>,outage=<rate>/, bad);
+  const { dir } = knownRun();
+  const sec = propScoreSection(dir, { root, faults: parseFaults('stop=1,outage=0.5') });
+  assert.strictEqual(sec.error, undefined, sec.error);
+  const f = sec.result.resampled.faults;
+  assert.ok(f.injected > 0 && f.outages > 0, JSON.stringify(f));
+  assert.match(sec.text, /faults at the given rates \(stop 1 a trade, outage 0\.5 a day; [1-9]\d* stop fault\(s\) fired, 0 without a no-stop path, [1-9]\d* outage day\(s\)\)/);
+  assert.match(propScoreSection(dir, { root }).text, /faults not measured \(no rates given/);
+  // The CLI threads the flag to the score; a bad one is refused.
+  const cli = path.join(root, 'scripts', 'replay.js');
+  const env = { ...process.env, FTH_HOME: path.join(dir, '..', '..'), FTH_ENV_FILE: path.join(dir, 'none.env') };
+  const rep = spawnSync(process.execPath, [cli, 'report', dir, '--faults', 'stop=1'], { encoding: 'utf8', env });
+  assert.strictEqual(rep.status, 0, rep.stderr);
+  assert.match(rep.stdout, /faults at the given rates \(stop 1 a trade, outage 0 a day; [1-9]\d* stop fault\(s\) fired/);
+  const bad = spawnSync(process.execPath, [cli, 'report', dir, '--faults', 'stop=5'], { encoding: 'utf8', env });
+  assert.strictEqual(bad.status, 1);
+  assert.match(bad.stderr, /--faults: stop=<rate>,outage=<rate>/);
 });
