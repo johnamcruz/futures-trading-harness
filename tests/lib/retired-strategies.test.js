@@ -138,7 +138,7 @@ test('configs and documents naming a retired strategy are refused with the reaso
   }
   // A backtest asked for one: refused, saying it was retired.
   for (const n of NAMES) {
-    assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: [n], gate: false, outDir: dir }, { root: ROOT, outRoot: dir }),
+    assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, feesPerSide: 0.37, data: { MNQ: path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: [n], gate: false, outDir: dir }, { root: ROOT, outRoot: dir }),
       new RegExp(`unknown strategy "${n}" \\(retired on ${DATE(n)}`), n);
   }
 });

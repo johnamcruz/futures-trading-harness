@@ -246,12 +246,12 @@
   },
   "combine status": {
     "status": 0,
-    "stdout": "test_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "test_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; no size budget (no policy strategy trades this account; sizing lives only in a policy's rulebook entry); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine status --json": {
     "status": 0,
-    "stdout": "{\n  \"attempts\": [\n    {\n      \"account\": \"test_50k\",\n      \"started\": true,\n      \"startedAt\": \"2026-10-07T13:05:30.000Z\",\n      \"days\": 0,\n      \"status\": \"active\",\n      \"balance\": 50000,\n      \"floor\": 48000,\n      \"cushion\": 2000,\n      \"profit\": 0,\n      \"target\": 3000,\n      \"progress\": 0,\n      \"dayPnl\": 0,\n      \"sessionsDone\": 0,\n      \"sessionsLeft\": 30,\n      \"budgets\": [\n        {\n          \"strategy\": null,\n          \"budgetUsd\": 400\n        }\n      ],\n      \"budgetUsd\": 400,\n      \"snapshotAt\": null,\n      \"entryBlock\": \"the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\"\n    }\n  ],\n  \"verdicts\": []\n}\n",
+    "stdout": "{\n  \"attempts\": [\n    {\n      \"account\": \"test_50k\",\n      \"started\": true,\n      \"startedAt\": \"2026-10-07T13:05:30.000Z\",\n      \"days\": 0,\n      \"status\": \"active\",\n      \"balance\": 50000,\n      \"floor\": 48000,\n      \"cushion\": 2000,\n      \"profit\": 0,\n      \"target\": 3000,\n      \"progress\": 0,\n      \"dayPnl\": 0,\n      \"sessionsDone\": 0,\n      \"sessionsLeft\": 30,\n      \"budgets\": [\n        {\n          \"strategy\": null,\n          \"budgetUsd\": null\n        }\n      ],\n      \"budgetUsd\": null,\n      \"snapshotAt\": null,\n      \"entryBlock\": \"the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\"\n    }\n  ],\n  \"verdicts\": []\n}\n",
     "stderr": ""
   },
   "combine status --account": {
@@ -261,7 +261,7 @@
   },
   "combine status unknown account": {
     "status": 0,
-    "stdout": "no account profile named nope: every started attempt\ntest_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "no account profile named nope: every started attempt\ntest_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; no size budget (no policy strategy trades this account; sizing lives only in a policy's rulebook entry); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine record-day": {
@@ -271,7 +271,7 @@
   },
   "combine status after day": {
     "status": 0,
-    "stdout": "test_50k: active, balance $50250 (floor $48250, cushion $2000), profit $250 of $3000, day $0, 1 sessions done, 29 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "test_50k: active, balance $50250 (floor $48250, cushion $2000), profit $250 of $3000, day $0, 1 sessions done, 29 left; no size budget (no policy strategy trades this account; sizing lives only in a policy's rulebook entry); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine stop": {

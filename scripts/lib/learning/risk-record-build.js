@@ -25,8 +25,10 @@ const fs = require('fs');
 const path = require('path');
 const { riskDayEntry, buildRiskIndex } = require('./risk-record-index');
 
-const PATHS = 1000;
-const REPS = 1000;
+const { MC_SIZE } = require('../prop/mc-size');
+// The Monte Carlo's one default size (prop/mc-size.js).
+const PATHS = MC_SIZE.paths;
+const REPS = MC_SIZE.reps;
 
 const acted = d => (d.passed || []).length > 0 || d.trades.some(t => (t.actions || []).length > 0);
 

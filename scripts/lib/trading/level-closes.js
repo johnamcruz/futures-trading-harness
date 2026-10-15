@@ -26,10 +26,8 @@
 
 const ind = require('./indicators');
 const vp = require('./volume-profile');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
-const GLOBEX_OPEN = 18 * 60;
 const ORB_MINUTES = 15; // market-snapshot PARAMS.orbMinutes: the opening range the briefing shows
 const MAX_CLOSES = 20;
 
@@ -60,8 +58,8 @@ function closesInARow(bars, va, i, side, keep = () => true) {
 function levelCloses(bars, i, { levels = null } = {}) {
   const out = {};
   if (!(i >= 0 && i < bars.length)) return out;
-  const vw = memo(bars, 'vwap', () => ({ rth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE), session: ind.anchoredVwap(bars, GLOBEX_OPEN) }));
-  const newSession = k => ind.sessionKey(bars[k].t, GLOBEX_OPEN) !== ind.sessionKey(bars[k - 1].t, GLOBEX_OPEN);
+  const vw = memo(bars, 'vwap', () => ({ rth: ind.anchoredVwap(bars, RTH_OPEN_MIN, RTH_CLOSE_MIN), session: ind.anchoredVwap(bars, GLOBEX_OPEN_MIN) }));
+  const newSession = k => ind.sessionKey(bars[k].t, GLOBEX_OPEN_MIN) !== ind.sessionKey(bars[k - 1].t, GLOBEX_OPEN_MIN);
   const vwap = { rth: crossed(bars, vw.rth, i), session: crossed(bars, vw.session, i, newSession) };
   const v = Object.fromEntries(Object.entries(vwap).filter(([, x]) => x));
   if (Object.keys(v).length) out.vwapCrossed = v;
@@ -74,8 +72,8 @@ function levelCloses(bars, i, { levels = null } = {}) {
   const side = valueSide(bars[i].c, va);
   if (side === 'above' || side === 'below') out.closesBeyondValue = { side, closes: closesInARow(bars, va, i, side) };
   const open = levels && levels.rth_open ? levels.rth_open[i] : NaN;
-  const today = ind.sessionKey(bars[i].t, RTH_OPEN);
-  const inRth = k => { const m = ind.etInfo(bars[k].t).minute; return m >= RTH_OPEN && m < RTH_CLOSE && ind.sessionKey(bars[k].t, RTH_OPEN) === today; };
+  const today = ind.sessionKey(bars[i].t, RTH_OPEN_MIN);
+  const inRth = k => { const m = ind.etInfo(bars[k].t).minute; return m >= RTH_OPEN_MIN && m < RTH_CLOSE_MIN && ind.sessionKey(bars[k].t, RTH_OPEN_MIN) === today; };
   if (side === 'inside' && Number.isFinite(open) && inRth(i)) {
     const opened = open > va.vah ? 'above' : open < va.val ? 'below' : null;
     if (opened) out.backInsideValue = { opened, closes: closesInARow(bars, va, i, 'inside', inRth) };

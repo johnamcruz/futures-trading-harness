@@ -256,4 +256,13 @@ function rootWithPolicies(policies = {}, opts = {}) {
   return root;
 }
 
-module.exports = { withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+/**
+ * A whole sizing for tests that size a prop attempt (combine.js SIZING_KEYS): the code has no default (a policy's
+ * rulebook entry holds the real values), so a test states every key. Fixture numbers, not a shipped rulebook's.
+ */
+const TEST_SIZING = Object.freeze({ cushion_frac: 0.2, cap_usd: 0, clock_k: 0, r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 0, stop_slippage_ticks: 1 });
+const testSizing = (extra = {}) => ({ ...TEST_SIZING, ...extra });
+/** A plain backtest's fee per contract per side in tests: a fee is never assumed (no account, no contract-table fee). */
+const TEST_FEE = 0.37;
+
+module.exports = { TEST_SIZING, testSizing, TEST_FEE, withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

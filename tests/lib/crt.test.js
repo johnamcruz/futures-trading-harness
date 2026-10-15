@@ -285,7 +285,7 @@ test('backtest --debug writes the strategy\'s verdict on every bar, and trades.j
   const dir = tmpDir();
   const data = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
   const env = { ...process.env, ...FX_ENV };
-  const { runDir } = runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: [CRT_1H], gate: false, window: 200, debug: CRT_1H, outDir: dir }, { root: ROOT, outRoot: dir, env });
+  const { runDir } = runBacktest({ symbols: ['MNQ'], timeframe: 3, feesPerSide: 0.37, data: { MNQ: data }, strategies: [CRT_1H], gate: false, window: 200, debug: CRT_1H, outDir: dir }, { root: ROOT, outRoot: dir, env });
   const lines = fs.readFileSync(path.join(runDir, `decisions-${CRT_1H}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
   assert.strictEqual(lines.length, 1499);
   assert.ok(lines.every(l => l.name === CRT_1H && l.t && l.detail && l.detail['crt(60)'].reason));
@@ -294,5 +294,5 @@ test('backtest --debug writes the strategy\'s verdict on every bar, and trades.j
   assert.ok(fired.length >= 1);
   const trades = fs.readFileSync(path.join(runDir, 'trades.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
   assert.ok(trades.length >= 1 && trades.every(t => t.setup && t.setup.detail['crt(60)'].reason === 'fired' && t.target !== null));
-  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: [CRT_1H], gate: false, debug: 'fx_crt_4h', outDir: dir }, { root: ROOT, outRoot: dir, env }), /debug: fx_crt_4h is not among the strategies/);
+  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, feesPerSide: 0.37, data: { MNQ: data }, strategies: [CRT_1H], gate: false, debug: 'fx_crt_4h', outDir: dir }, { root: ROOT, outRoot: dir, env }), /debug: fx_crt_4h is not among the strategies/);
 });

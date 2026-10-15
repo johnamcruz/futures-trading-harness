@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
+const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs, FX_GOLDEN, TEST_SIZING, testSizing } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
 // Role skills full (FTH_ROLE_SKILLS=full, as the runner sets for every harness but opencode): index mode's lookup rule,
@@ -502,7 +502,7 @@ const MINI = {
 // A policy strategy tagged setup:orb (the helpers' order) trading micros on the mini account.
 const propStrategy = (extra = {}) => ({
   name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null,
-  strategies: ['ema_cross'], account: 'mini', contracts: 'micro', timeframe: '3m', ...extra,
+  strategies: ['ema_cross'], account: 'mini', contracts: 'micro', timeframe: '3m', sizing: TEST_SIZING, ...extra,
 });
 // Its strategy, active: the setup a verdict names (the gate refuses a component that isn't active).
 const EMA_CROSS = { name: 'ema_cross', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m', mtf: 'trend' };
@@ -877,7 +877,7 @@ test('combine: the gate sizes with the policy strategy\'s own stop_slippage_tick
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
-  const slow = propStrategy({ sizing: { stop_slippage_ticks: 3 } });
+  const slow = propStrategy({ sizing: testSizing({ stop_slippage_ticks: 3 }) });
   assert.deepStrictEqual(prop.budgetPlan(home, MINI, slow, 'MNQ', 40), { root: 'MNQ', size: 17, riskPerContract: 22.24 });
   assert.deepStrictEqual(prop.budgetPlan(home, MINI, propStrategy(), 'MNQ', 40), { root: 'MNQ', size: 18, riskPerContract: 21.24 });
   prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, maxSize: 18, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });

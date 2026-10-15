@@ -99,7 +99,7 @@ async function handleClientLine(line, check, log = () => {}) {
 }
 
 /** How long the gateway waits on one of its own calls to the server (an account read) before it fails closed. */
-const CALL_TIMEOUT_MS = 15000;
+const { CALL_TIMEOUT_MS } = require('./gate-timing');
 /**
  * How long the contract translator waits on one of its own lookups (search_contracts, get_contract). Seconds longer than
  * the callers that read through the translator wait on a call (the gateway's account reads, CALL_TIMEOUT_MS; the

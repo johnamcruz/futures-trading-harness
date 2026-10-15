@@ -33,7 +33,7 @@ const { evaluateRules, seriesSource } = require('./trading/rules');
 const { PARAMS } = require('./trading/market-snapshot');
 const { inSessions, timeframeMs, DEFAULT_WINDOW } = require('./trading/evaluator');
 
-const ATR_PERIOD = 14;
+const { ATR_PERIOD } = require('./trading/indicators'); // the reads' ATR, one home
 const DEFAULT_LEVELS = Object.freeze([0.6, 0.8]);
 // A class needs this many events over this many trading days for intervals, differences and a cost verdict:
 // a handful of events in a day or two gives a degenerate interval, never evidence.

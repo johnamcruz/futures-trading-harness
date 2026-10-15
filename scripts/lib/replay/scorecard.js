@@ -495,7 +495,7 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
   const cfgAt = configsOf(dir, run.manifest);
   const why = unfinishedWhy(run.manifest, run.days);
   if (why && !unfinished) throw new Error(`run ${run.manifest.runId} is not finished (${why}): run it to its end first, or write the scorecard outside the run home with --out <dir> (it holds what came after each decision, which a resumed run could read)`);
-  const { labels, summary: ls } = labelRun(dir, { strategies, outcomeBars, unfinished });
+  const { labels, summary: ls } = labelRun(dir, { strategies, accounts, outcomeBars, unfinished });
   const rec = runRecords(home, { strategies, outcomeBars });
   const records = [];
   const notScored = {};

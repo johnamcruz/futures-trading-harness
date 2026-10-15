@@ -22,7 +22,7 @@ const { spawn } = require('child_process');
 const { lineSplitter } = require('../trading/mcp-gateway');
 
 const PROTOCOL_VERSION = '2025-06-18';
-const DEFAULT_TIMEOUT_MS = 15000;
+const { CALL_TIMEOUT_MS: DEFAULT_TIMEOUT_MS } = require('../trading/gate-timing');
 
 class McpError extends Error {}
 

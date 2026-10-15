@@ -39,7 +39,7 @@ const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/tradin
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : DEFAULT_LANE_TIMEOUT_MS;
-const LEDGER_TTL_MS = 30000;
+const { PENDING_ORDER_TTL_MS: LEDGER_TTL_MS } = require('./lib/trading/gate-timing');
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
 
 async function accountViolations(args, caller, now, ledger, extraOrders = []) {

@@ -46,7 +46,7 @@ const MAX = 3;
 /** The unfilled gaps of candles[0..j] as of source bar `upto`, each with the last completed candle's retest. */
 function gapsOn({ src, upto, candles, j }, { window = WINDOW, max = MAX } = {}) {
   const cs = candles.slice(0, j + 1);
-  const atr = ind.atr(cs, 14);
+  const atr = ind.atr(cs, ind.ATR_PERIOD);
   const last = cs[j];
   const out = [];
   for (let k = Math.max(2, cs.length - window); k < cs.length; k += 1) {

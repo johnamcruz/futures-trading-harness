@@ -16,6 +16,7 @@
  */
 
 const ind = require('./indicators');
+const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const REGIME_PARAMS = {
   trendAdx: 20,
@@ -58,10 +59,10 @@ function classifyRegime(bars, overrides = {}) {
   const i = n - 1;
   const closes = bars.map(b => b.c);
   const adx = ind.adx(bars, 14);
-  const atr = ind.atr(bars, 14);
+  const atr = ind.atr(bars, ind.ATR_PERIOD);
   const ema20 = ind.ema(closes, 20);
   const ema50 = ind.ema(closes, 50);
-  const vwap = ind.anchoredVwap(bars, 18 * 60); // session VWAP is defined around the clock
+  const vwap = ind.anchoredVwap(bars, GLOBEX_OPEN_MIN); // session VWAP is defined around the clock
 
   const adxNow = finite(adx[i]);
   const atrNow = finite(atr[i]);

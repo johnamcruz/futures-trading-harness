@@ -25,6 +25,7 @@ const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
+const { PENDING_ORDER_TTL_MS } = require('./gate-timing');
 
 const POSITION_SIGN = { 1: 1, 2: -1 };
 // On a call the gateway names (mcp-gateway.js canonicalArgs): () => a naming function from one read of the contract
@@ -88,7 +89,7 @@ function openPositions(positions, contractId) {
  */
 const hasBracket = b => b !== undefined && b !== null && !(typeof b === 'object' && Object.keys(b).length === 0);
 
-function pendingState(ledger, contractId, observed, now, ttlMs = 30000, { exact = false, resting = new Set() } = {}) {
+function pendingState(ledger, contractId, observed, now, ttlMs = PENDING_ORDER_TTL_MS, { exact = false, resting = new Set() } = {}) {
   const root = contractRoot(contractId);
   const live = (ledger || [])
     .filter(e => (exact ? e.contractId === contractId : contractRoot(e.contractId) === root) && now.getTime() - e.at < ttlMs)
@@ -102,7 +103,7 @@ function pendingState(ledger, contractId, observed, now, ttlMs = 30000, { exact 
 }
 
 /** Net change still expected from recent market orders (projected minus observed). */
-function pendingNet(ledger, contractId, observed, now, ttlMs = 30000) {
+function pendingNet(ledger, contractId, observed, now, ttlMs = PENDING_ORDER_TTL_MS) {
   return pendingState(ledger, contractId, observed, now, ttlMs).projected - observed;
 }
 
@@ -211,7 +212,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   // Hard: not skippable.
   if (propAttempt) {
     const anyOpen = positions.filter(p => positionSize(p) > 0);
-    const inFlight = (ledger || []).filter(e => now.getTime() - e.at < 30000);
+    const inFlight = (ledger || []).filter(e => now.getTime() - e.at < PENDING_ORDER_TTL_MS);
     // A working order anywhere on the account (a resting entry on another market) can fill into a
     // second position next to this one: each was sized from the whole cushion.
     const working = (orders || []).map(o => (o && o.contractId) || 'an unnamed contract');

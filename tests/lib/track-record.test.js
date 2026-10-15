@@ -59,7 +59,7 @@ test('live record: the journal\'s reviewed trades of the setup, paper excluded, 
 test('backtest --record writes each strategy\'s own record (run alone), and only on plain runs', () => {
   const home = tmpDir();
   const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
-  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
+  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--fees', '0.37', ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
   const joint = run(['--strategy', 'fx_cross,fx_break', '--record', '--out', path.join(home, 'joint')]);
   assert.strictEqual(joint.status, 0, joint.stderr);
   const alone = run(['--strategy', 'fx_cross', '--out', path.join(home, 'alone')]);
@@ -112,7 +112,7 @@ test('a record from another version of the strategy is flagged stale', () => {
 test('--record with min-confluence still records each strategy alone, with its trades', () => {
   const home = tmpDir();
   const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--strategy', 'fx_cross', '--min-confluence', '2', '--record', '--out', path.join(home, 'bt')], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--fees', '0.37', '--strategy', 'fx_cross', '--min-confluence', '2', '--record', '--out', path.join(home, 'bt')], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.ok(readRecord(home, 'fx_cross').summary.trades > 0, 'alone, confluence is not required');
   assert.ok(readRecord(home, 'fx_cross').definition, 'fingerprinted');

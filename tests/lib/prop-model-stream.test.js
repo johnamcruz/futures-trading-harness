@@ -108,7 +108,7 @@ test('fault injection fires on model trades: every trade carries the full set of
   }
   assert.ok(stream.days.every(d => typeof d.regime === 'string'));
   assert.ok(stream.trades.some(t => t.overshootTicks !== null), 'a stop exit carries its overshoot');
-  const score = faults => scoreStream(stream, { pass: checkModelWindow({ run: { runId: 'run1', from: '2023-03-15', to: '2023-03-18', learning: true, role: 'practice-train' } }), account: ACCOUNT, contracts: 'micro', paths: 300, reps: 100, seed: 2, faults, attribution: true });
+  const score = faults => scoreStream(stream, { pass: checkModelWindow({ run: { runId: 'run1', from: '2023-03-15', to: '2023-03-18', learning: true, role: 'practice-train' } }), account: ACCOUNT, rulebook: { sizing: require('../helpers').TEST_SIZING }, contracts: 'micro', paths: 300, reps: 100, seed: 2, faults, attribution: true });
   const faulty = score({ stopFault: 1 });
   assert.strictEqual(faulty.inputs.noFaultPath, 0);
   assert.ok(faulty.resampled.faults.injected > 0, 'stop faults fired on the model trades');
