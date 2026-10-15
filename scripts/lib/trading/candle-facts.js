@@ -32,8 +32,9 @@
  *   candleSeries(bars, minutes, base)      per-bar facts (the rules language's htfd_* series), memoised on the bars
  *   relationSeries(bars, minutes, base, level, { at })   per-bar relation to a level series ('open', 'close', 'now')
  *   swingTargetSeries(bars, minutes, base) per bar: the nearest untaken confirmed swing high above / low below the close
- *   briefingCandles({ bars, base, fine, levelsAt, crtFrames })   the briefing's `candles` block (last bar; fine: 1m
- *                                          bars for a timeframe the base bars can't build)
+ *   briefingCandles({ bars, base, fine, levelsAt, zonesAt, crtFrames })   the briefing's `candles` block (last bar; fine:
+ *                                          1m bars for a timeframe the base bars can't build; zonesAt(openIdx): the gap
+ *                                          edges as of the candle's open, read into `fvgRelations`)
  *   holdingSwingsAt(bars, minutes, base, idx)   the swings still holding as of bar idx
  *   briefingTargets({ bars, minutes, price, oneR, tick })    the briefing's `swingTargets` block (last bar)
  *   briefingRangeTargets({ bars, base, price, oneR, tick, index })   the briefing's `rangeTargets`: per frame (1h, 4h)
@@ -417,7 +418,7 @@ const roundsIn = (c, step) => {
  * a later one has), else the one before is the last completed; never a partial one. Without 1m bars it is
  * unavailable (named why); with 1m bars that stopped (their last completed candle more than one candle old), too.
  */
-function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
+function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt = null, roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
   const closeOf = k => Date.parse(bars[k].t) + base * 60000;
@@ -466,6 +467,15 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
       found.push({ name, price, rel: rel.relation, dir: rel.dir, text: rel.relation === 'touched' ? 'touched' : RELATION_TEXT[rel.relation][rel.dir] });
     }
     found.sort((x, y) => (REL_RANK[x.rel] - REL_RANK[y.rel]) || (levelRank(x.name) - levelRank(y.name)));
+    // The fair value gaps' edges as they stood at the candle's open (zonesAt(openIdx): [name, price, side]), by the same
+    // relation rule: a gap the candle itself fills still counts, so its failure reads broke, never rejected.
+    const zones = [];
+    for (const z of zonesAt && openIdx >= 0 ? zonesAt(openIdx) : []) {
+      const [name, price, side] = Array.isArray(z) ? z : [];
+      const rel = typeof name === 'string' ? relation(c, price, prev ? prev.c : NaN) : null;
+      if (!rel || rel.relation === 'none' || zones.some(x => x.name === name && x.price === price)) continue;
+      zones.push({ name, price, side: side || null, rel: rel.relation, dir: rel.dir });
+    }
     out[label(m)] = {
       t: c.t, closedAt: c.closedAt, o: c.o, h: c.h, l: c.l, c: c.c, v: Number.isFinite(c.v) ? c.v : null,
       body: r2(f.body), upperWick: r2(f.upperWick), lowerWick: r2(f.lowerWick), closeLocation: f.closeLocation,
@@ -480,6 +490,9 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
       // Every relation, structured and uncapped (the text above keeps MAX_LEVELS): what the composed-entry reads checker
       // (composed-reads.js) verifies against. Never rendered (briefing.js detailEntries and candleLines leave it out).
       relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),
+      // How it met the fair value gaps' edges ('<tf> fvg low|high', fvg-frames.js fvgEdgesAt), uncapped and never
+      // rendered either: the composed-entry FVG reads verify against it. Only when the caller gives the gaps.
+      ...(zonesAt ? { fvgRelations: zones } : {}),
     };
   }
   return out;

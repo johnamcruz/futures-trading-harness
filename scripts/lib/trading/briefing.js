@@ -99,7 +99,7 @@ const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets 
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
-const { fvgFrames, fvgLine } = require('./fvg-frames');
+const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
 const { structure5m, structureLine } = require('./m5-structure');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -354,6 +354,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     ...(idx === bars.length - 1 ? ownLevels : named(idx)).filter(([name]) => MOVING.test(name)),
     ...(openIdx >= 0 ? [15, 60].flatMap(m => holdingSwingsAt(bars, m, minutes, openIdx)) : []).map(x => [`${x.label} swing ${x.type} ${x.price}`, x.price]),
   ];
+  // The fair value gaps' edges as of a base bar (a candle's open), once per bar: the candles' fvgRelations.
+  const zones = new Map();
+  const zonesOf = k => { if (!zones.has(k)) zones.set(k, fvgEdgesAt({ bars, base: minutes, fine, at: k })); return zones.get(k); };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -438,7 +441,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         brokerFields: brokerFieldsAt(bars, bars.length - 1),
         // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
-        candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
+        // fvgRelations: how each candle met the 5m, 15m and 1h gaps' edges as they stood at its open (fvg-frames.js).
+        candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, zonesAt: zonesOf, roundStep }),
         swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60, 240] }),
         // The last completed 1h and 4h candle's high, mid and low as targets, and the side the candle forming since has
         // taken, only when it has (candle-facts.js; the runner's, as above).

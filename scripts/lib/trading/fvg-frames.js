@@ -28,6 +28,11 @@
  *   fvgFrames({ bars, base, fine, frames, at })         the briefing's `fvgs`: { '5m': [...] | 'unavailable (...)', ... }
  *   fvgLine(fvgs, et, { price, near })                  the summary's event-driven line (et: a time as the briefing
  *                                                       shows it), or null
+ *   fvgEdges(fvgs)                                      every unfilled gap's edges as levels: [['<tf> fvg low|high', price,
+ *                                                       side]] (an open gap's low and high, a partly filled one's unfilled part)
+ *   fvgEdgesAt({ bars, base, fine, frames, at })        fvgEdges(fvgFrames(...)) as of base bar at: the gap edges a completed
+ *                                                       candle that opened after that bar's close is read against
+ *                                                       (candle-facts.js briefingCandles `zonesAt`)
  */
 
 const ind = require('./indicators');
@@ -97,4 +102,25 @@ function fvgLine(fvgs, et = x => x, { price = NaN, near = NaN } = {}) {
   return parts.length ? `- FVGs near price or retested (completed candles): ${parts.join('; ')}.` : null;
 }
 
-module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames, fvgLine };
+/** What is left of a gap: [low, high] (open: the whole gap; partly: its unfilled part), else null. */
+const leftOf = g => (!g || typeof g !== 'object' ? null : g.state === 'open' ? [g.low, g.high]
+  : g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null);
+
+/** Every unfilled gap's edges as named levels: [['<tf> fvg low', low, side], ['<tf> fvg high', high, side], ...]. */
+function fvgEdges(fvgs) {
+  const out = [];
+  for (const [tf, v] of Object.entries(fvgs && typeof fvgs === 'object' ? fvgs : {})) {
+    for (const g of Array.isArray(v) ? v : []) {
+      const left = leftOf(g);
+      if (!left || left.length !== 2 || !left.every(Number.isFinite)) continue;
+      out.push([`${tf} fvg low`, left[0], g.side], [`${tf} fvg high`, left[1], g.side]);
+    }
+  }
+  return out;
+}
+
+/** The gap edges as of base bar `at`'s close (none outside the bars). */
+const fvgEdgesAt = ({ bars, base, fine = null, frames = FRAMES, at }) => (Number.isInteger(at) && at >= 0 && at < bars.length
+  ? fvgEdges(fvgFrames({ bars, base, fine, frames, at })) : []);
+
+module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames, fvgLine, leftOf, fvgEdges, fvgEdgesAt };
