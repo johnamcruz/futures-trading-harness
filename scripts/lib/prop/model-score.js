@@ -22,7 +22,10 @@
  * none: combine.DEFAULT_SIZING, said so.
  *
  *   resolveAccount({ override, attempts, runnerAccount, strategies, accounts })   { name, why } (name null: none)
- *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, barsFiles, seed, paths, reps, attribution, now })
+ *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, barsFiles, seed, paths, reps, faults, attribution, now })
+ *   pairRuns(runDirA, runDirB, { root, env, account, policy, barsFiles, seed, paths, reps, faults, now })   two runs of the
+ *       same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired), each run's score
+ *       logged beside its own look: the judge a skill change is kept by
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles })   { result, text, markdown } (never throws)
  *   scoreText(result), scoreMarkdown(result), scoreSummary(result)
  */
@@ -31,7 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { readModelStream } = require('./model-stream');
 const { reweightStream } = require('./natural-rate');
-const { checkModelWindow, scoreStream } = require('./evaluator');
+const { checkModelWindow, scoreStream, scorePaired } = require('./evaluator');
 const { recordScore, ledgerPath } = require('../learning/looks');
 
 const RATES_FILE = 'natural-rates.json';
@@ -52,15 +55,24 @@ function policyFor(strategies, accountName) {
   return (strategies || []).find(s => s && s.valid !== false && s.signal === 'policy' && s.account === accountName && s.status !== 'disabled') || null;
 }
 
-function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, attribution = true, env = process.env, now = new Date() }) {
-  if (!account) throw new Error('an account profile to score against');
+/** A run's stream and its checked pass: a real score refuses an unsettled entry, or a fault rate its trades can't take. */
+function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now }) {
   const { stream, run } = readModelStream(runDir, { root, barsFiles });
   const diagnostic = rates || weights ? 'reweighted' : run.practice ? 'setup-focused' : null;
   if (!diagnostic && stream.excluded.length) {
     throw new Error(`${stream.excluded.length} entr${stream.excluded.length === 1 ? 'y' : 'ies'} without a settled outcome (${stream.excluded.slice(0, 3).map(x => `${x.root} ${x.bar}: ${x.why}`).join('; ')}): a real score never leaves one out`);
   }
+  if (!diagnostic && Number(faults && faults.stopFault) > 0 && stream.noStop.missing) {
+    throw new Error(`${stream.noStop.missing} trade(s) without a no-stop path (no bars after the fill): an injected stop fault would silently drop out of them; give the run's bars (--bars)`);
+  }
   const ledger = run.ledger || ledgerPath(env);
   const pass = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(ledger, entry), now });
+  return { stream, run, diagnostic, pass };
+}
+
+function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, env = process.env, now = new Date() }) {
+  if (!account) throw new Error('an account profile to score against');
+  const { stream, run, diagnostic, pass } = streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now });
   let s = stream;
   if (diagnostic === 'reweighted') {
     const { runDecisions } = require('../learning/run-experience');
@@ -69,13 +81,23 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   }
   const sizing = policy ? policy.sizing || null : null;
   const result = scoreStream(s, {
-    pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, attribution,
+    pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, faults, attribution,
   });
   return {
     ...result, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
     sizingFrom: policy ? `${policy.name}'s rulebook` : 'the default sizing (no policy strategy trades this account)',
     trades: stream.trades.length, runDays: stream.days.length, excluded: stream.excluded, adverse: stream.adverse, reweighted: s.reweighted || null,
   };
+}
+
+function pairRuns(runDirA, runDirB, { root = null, account, policy = null, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
+  if (!account) throw new Error('an account profile to score against');
+  const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
+  const b = streamAndPass(runDirB, { root, barsFiles, faults, env, now });
+  const res = scorePaired(a.stream, b.stream, {
+    passA: a.pass, passB: b.pass, account, rulebook: { sizing: policy ? policy.sizing || null : null }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, faults,
+  });
+  return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
 }
 
 const pct = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1)}%`);
@@ -92,13 +114,13 @@ function scoreLines(r) {
     `1. Zero blows (hard gate): ${zero ? 'held' : 'FAILED'}: ${r.blown} blow(s) over ${r.real.attempts} real attempts, ${rs.paths} resampled paths and the expectancy cuts`,
     `2. Pass within ${S} trading days: ${pct(r.passRate)} of ${r.attempts} real attempts (bootstrap ${iv(r.intervals.pass)}, Wilson at ${r.ess} independent ${iv(r.intervals.passAtEss)}); resampled ${pct(rs.passRate)} of ${rs.paths} (Wilson ${iv(rs.mcInterval)})`,
     `3. Days to pass: median ${num(r.medianDaysToPass)}, p90 ${num(r.p90DaysToPass)} (real); median ${num(rs.medianDaysToPass)}, p90 ${num(rs.p90DaysToPass)} (resampled)`,
-    `4. Blow rate ${pct(r.blowRate)} ${iv(r.intervals.blow)}, timeout rate ${pct(r.timeoutRate)} ${iv(r.intervals.timeout)} (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
+    `4. Blow rate ${pct(r.blowRate)} (bootstrap ${iv(r.intervals.blow)}, Wilson at ${r.real.ess} independent ${iv(r.intervals.blowAtEss)}), timeout rate ${pct(r.timeoutRate)} (bootstrap ${iv(r.intervals.timeout)}, Wilson at ${r.ess} independent ${iv(r.intervals.timeoutAtEss)}) (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
     `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`,
-    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured (0)'}`,
+    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured'} (stop ${r.inputs.faults.stopFault}, outage ${r.inputs.faults.outage}${rs.faults && rs.faults.injected + rs.faults.missed ? `; ${rs.faults.injected} fired, ${rs.faults.missed} without a no-stop path` : ''})`,
   ];
   if (r.attribution) {
     const a = r.attribution.states;
-    lines.push(`By account state (resampled): ${Object.entries(a).map(([k, v]) => `${k} ${v.taken} taken / ${v.passed} passed, mean R ${num(v.meanR)}, in blown ${pct(v.blowShare)}, in passed ${pct(v.passShare)}`).join('; ')}`);
+    lines.push(`By account state (resampled): ${Object.entries(a).map(([k, v]) => `${k} ${v.taken} taken / ${v.passed} passed, mean R (gross) ${num(v.meanR)}, in blown ${pct(v.blowShare)}, in passed ${pct(v.passShare)}`).join('; ')}`);
     const f = r.attribution.flagged.slice(0, 5);
     if (f.length) lines.push(`Decisions that cost attempts: ${f.map(x => `${x.kind} ${x.symbol} ${x.bar || x.id} (${x.count} path(s))`).join('; ')}`);
   }
@@ -149,4 +171,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { RATES_FILE, resolveAccount, policyFor, scoreRun, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { RATES_FILE, resolveAccount, policyFor, scoreRun, pairRuns, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

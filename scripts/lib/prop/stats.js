@@ -122,7 +122,7 @@ function groupBy(keys) {
   return m;
 }
 
-/** The median of a list of numbers (the upper middle for an even count, as prop/challenge.js), or null. */
+/** The median of a list of numbers (the upper middle for an even count), or null. */
 function median(xs) {
   if (!xs.length) return null;
   const s = xs.slice().sort((a, b) => a - b);

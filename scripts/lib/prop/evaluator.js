@@ -13,7 +13,7 @@
  *   before any bar of the window is read; each scoring of a held-out stream is a look of its own. A
  *   reasoning-fix look is refused: a mechanical score is a claim about the market.
  * - Real paths (R7): an attempt from every distinct start day (every `every`-th) that leaves room for a
- *   whole attempt before the window ends (as prop/challenge.js starts them). Rates have a block bootstrap
+ *   whole attempt before the window ends (`sessions` sessions after the start). Rates have a block bootstrap
  *   interval (blocks of `sessions` sessions, R15) and a Wilson interval at the effective sample size
  *   (non-overlapping attempts).
  * - Resampled paths (R9): `paths` attempts of `sessions` days drawn by a stationary block bootstrap over the
@@ -224,7 +224,7 @@ function scoreStream(stream, opts) {
   const branch = Array.isArray(stream.fieldBranch) && stream.fieldBranch.length > 0;
   const covers = d => !branch || attemptFlowCovered(d, S);
 
-  // Real paths: every distinct start day leaving room for a whole attempt (prop/challenge.js starts).
+  // Real paths: every distinct start day leaving room for a whole attempt before the window ends.
   const startIdx = [];
   for (let i = 0; i < days.length - S; i += 1) if (i % every === 0) startIdx.push(i);
   const real = startIdx.map(i => {
@@ -253,6 +253,8 @@ function scoreStream(stream, opts) {
   const pools = at.overshootPools(inWindow);
   const pathOf = rand => stats.stationaryPath(days.length, S, { meanBlock, rand, regimes, byRegime }).map(k => days[k]);
   const attr = attribution ? createAttribution() : null;
+  // Stop faults drawn on the base paths: fired (the trade ran unprotected), or missed (no no-stop path to run it on).
+  const faultCount = { injected: 0, missed: 0 };
   const resample = (label, transform = null) => {
     const prand = stats.streamFor(seed, `paths:${label}`);
     const vrand = stats.streamFor(seed, `variants:${label}`);
@@ -268,7 +270,10 @@ function scoreStream(stream, opts) {
         variant: t0 => {
           let t = transform ? transform(t0) : t0;
           t = at.redrawOvershoot(t, pools.get(t.symbol), vrand);
-          return rates.stopFault > 0 && vrand() < rates.stopFault ? at.stopFault(t) || t : t;
+          if (!(rates.stopFault > 0 && vrand() < rates.stopFault)) return t;
+          const f = at.stopFault(t);
+          if (label === 'base') faultCount[f ? 'injected' : 'missed'] += 1;
+          return f || t;
         },
       });
       if (attr && label === 'base') attr.end(o.status);
@@ -311,10 +316,13 @@ function scoreStream(stream, opts) {
       timeout: boot(gatePop.map(o => (o.status === 'timeout' ? 1 : 0)), 'interval:timeout'),
       // The exact effective count (rate x ESS), never rounded: rounding moves the interval up as often as down.
       passAtEss: stats.wilson(pop.attempts ? (pop.passed / pop.attempts) * ess : 0, ess, level),
+      // Blows and timeouts at the effective sample size too: neighbouring starts share most of their sessions.
+      blowAtEss: stats.wilson(all.attempts ? (all.blown / all.attempts) * essAll : 0, essAll, level),
+      timeoutAtEss: stats.wilson(pop.attempts ? (pop.timeout / pop.attempts) * ess : 0, ess, level),
     },
     ess, blows,
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },
-    resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true },
+    resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true, faults: faultCount },
     cuts: cutResults,
     ...(attr ? { attribution: attr.result() } : {}),
     coverage: {
@@ -330,6 +338,8 @@ function scoreStream(stream, opts) {
     inputs: {
       sessions: S, every, seed, paths, reps, level, cuts, sizing, contracts, maxDailyLoss, expectancyR: Math.round(eR * 10000) / 10000,
       entryDelayMs: stream.entryDelayMs, faults: { ...rates, measured: Boolean(faults.measured) },
+      // Trades a stop fault can't reach (no no-stop path): with a fault rate above 0 they run as recorded.
+      noFaultPath: inWindow.filter(t => !t.noStop).length, rBasis: stream.rBasis || 'gross',
       multiplier: rulebook.multiplier ? 'rulebook' : 'full (today\'s verdict)',
     },
     runtimeMs: { layer1: stream.runtimeMs ?? null, layer2: Date.now() - started },

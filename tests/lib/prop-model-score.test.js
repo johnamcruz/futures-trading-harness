@@ -241,9 +241,9 @@ test('the account-policy hook: a candidate rulebook scored through the same Mont
   // Skip low-confluence setups: a multiplier on the record's alignment (an enforced item).
   const skipCounter = scoreCandidate(A, { ...cand, multipliers: [{ item: 'multipliers', fact: 'alignment', values: { aligned: 1, counter: 0 } }] }, { ...opts, pass: checkModelWindow({ run: run(), candidateRulebook: true }) });
   assert.ok(skipCounter.resampled.blowRate < base.resampled.blowRate, 'the hook moves the score');
-  // A stand-down near the limit: no entry while the cushion is under half the max loss.
-  const stand = scoreCandidate(A, { ...cand, stand_down: 0.5 }, { ...opts, pass: checkModelWindow({ run: run(), candidateRulebook: true }) });
-  assert.ok(stand.resampled.attempts === base.resampled.attempts && stand.candidate.stand_down === 0.5);
+  // A stand-down: no entry while the cushion is under 90% of the max loss.
+  const stand = scoreCandidate(A, { ...cand, stand_down: 0.9 }, { ...opts, pass: checkModelWindow({ run: run(), candidateRulebook: true }) });
+  assert.ok(stand.resampled.blowRate < base.resampled.blowRate && stand.candidate.stand_down === 0.9, 'standing down near the limit blows less');
   assert.throws(() => checkModelWindow({ run: run({ from: '2025-03-03', to: '2025-03-08', role: 'test', look: { evaluation: 'e' } }), candidateRulebook: true, logScore: () => {} }), /never scored on test/);
 });
 
@@ -300,4 +300,33 @@ test('scoreRun: a real score never leaves an unsettled entry out', () => {
     fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null }] }] });
   assert.throws(() => scoreRun(dir, { account: ACCOUNT, paths: 10, reps: 10 }), /without a settled outcome .* a real score never leaves one out/);
   void M3;
+});
+
+test('pairRuns: two replay runs of the same days through the same paths; a fault rate a real score\'s trades can\'t take is refused', () => {
+  const { pairRuns } = require('../../scripts/lib/prop/model-score');
+  const days = weekdays('2023-03-06', 4);
+  const mk = loses => multiDayRun({
+    days: days.map((day, k) => {
+      const t0 = `${day}T14:00:00.000Z`;
+      const exit = loses && k % 2 ? 98.5 : 103;
+      return {
+        day, times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 103.5, 98.25, 103]],
+        fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:01:00Z`, price: 100, size: 1, side: 0, profitAndLoss: null },
+          { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:05:00Z`, price: exit, size: 1, side: 1, profitAndLoss: (exit - 100) * 2 }],
+      };
+    }),
+  });
+  const good = mk(false);
+  const bad = mk(true);
+  const res = pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 200, reps: 200 });
+  assert.deepStrictEqual(res.runs, { a: 'run1', b: 'run1' });
+  assert.ok(res.diff.resampled.passRate.diff >= 0, JSON.stringify(res.diff.resampled.passRate));
+  assert.ok(res.a.resampled.passRate >= res.b.resampled.passRate);
+  // No bars after a fill: no no-stop path, so a stop fault rate is refused for a real score.
+  const t0 = '2023-03-15T14:00:00.000Z';
+  const bare = multiDayRun({ days: [{ day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [],
+    fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+      { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:05:00Z', price: 101, size: 1, side: 1, profitAndLoss: 2 }] }] });
+  assert.throws(() => scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10, faults: { stopFault: 0.01 } }), /without a no-stop path .* silently drop out/);
+  assert.strictEqual(scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10 }).score, 'real');
 });

@@ -395,7 +395,13 @@ as written, with these readings and inputs:
 trades (`scripts/lib/prop/model-stream.js`: R and ticks from the replay
 broker's fills, the adverse and no-stop paths from the run's own bars, each
 trade's order within its day and its record's context; a day the model passed
-is a no-trade day). That score is the replay's report (`prop/model-score.js`,
+is a no-trade day; each day's regime by `trade-stream.js` `dayRegimes` on the
+run's bars). Every trade carries the fields layer 2 reads (the adverse path,
+a stop exit's overshoot, the no-stop path a stop fault runs on: a real score
+with a fault rate refuses trades without one, and the result counts the
+faults fired), and its R is gross (move over stop, as the expectancy cuts'
+base; the attempts settle net dollars). Pass, blow and timeout rates are
+also given at the effective sample size. That score is the replay's report (`prop/model-score.js`,
 in the owner's order: zero blows, the pass rate within `sessions`, the median
 and 90th-percentile days to pass, the blow and timeout rates with their
 intervals). Its windows are the learning split's (`learning/splits.js`), not

@@ -24,11 +24,16 @@
  *   noStop            the worst move and the last close to the day's end (trade-stream.js noStopPath) on the run's own
  *                     bars, used only when a stop fault is injected; null without the bars;
  *   day, seq          the session day it settled (experience-log.js settledDay) and its order within it, by its fill;
+ *   r                 gross R: the price move from the fill to the exit over the stop distance, before fees (the
+ *                     stream's `rBasis`); layer 2 settles net dollars (fees per contract), and its expectancy cuts are
+ *                     on the same gross basis (attempts.js expectancyR: move over stop);
  *   facts             the record's context (regime, volatility, window, biasSide, alignment, dayType), its skill
  *                     signature, exploratory, frame, and its curated list when the run tagged one (`list`).
  * Every session day the run replayed is a day of the stream: a day the model passed (passes, plain passes, refusals)
- * is a no-trade day, with its count of the model's passes (`passes`, for the risk attribution). A day's regime is the
- * volatility its first composed record read, else 'normal'.
+ * is a no-trade day, with its count of the model's passes (`passes`, for the risk attribution). A day's regime is
+ * trade-stream.js dayRegimes on the run's bars (its range against the days before it, as the mechanical stream
+ * computed it) for the regime-matched bootstrap joins; a day without bars takes the volatility its first composed
+ * record read, else 'normal'.
  *
  * An entered decision without a settled outcome (still open, fills unreadable, no stop distance, no contract spec) is
  * left out and listed in `excluded` with why; a real score refuses a stream with any (prop/model-score.js), since a
@@ -41,7 +46,7 @@
 
 const { SLIPPAGE_TICKS } = require('../replay/counterfactual');
 const { specFor, familyRoot } = require('../trading/contracts');
-const { noStopPath } = require('./trade-stream');
+const { noStopPath, dayRegimes } = require('./trade-stream');
 const { runDecisions } = require('../learning/run-experience');
 const { parseAt } = require('../autotrader');
 
@@ -110,7 +115,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
  * of day (autotrader parseAt), or null (to the trading day's end); specOf(root): the contract spec (tickSize,
  * tickValue, feesPerSide).
  */
-function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor }) {
+function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null }) {
   const started = Date.now();
   if (!(tfMs > 0)) throw new Error('tfMs: the run\'s bar length in ms');
   if (decisions.some(d => d && d.hidden)) throw new Error('the run\'s outcomes are hidden (a reasoning-fix look): no trade stream');
@@ -135,11 +140,12 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   }
   const days = keys.map(day => {
     const list = byDay.get(day).sort((a, b) => (a.entryMs - b.entryMs) || String(a.id).localeCompare(String(b.id)));
-    return { day, regime: regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, trades: list.map((t, seq) => { const { entryMs: _m, ...rest } = t; return Object.assign(rest, { seq }); }) };
+    return { day, regime: (regimes && regimes.get(day)) || regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, trades: list.map((t, seq) => { const { entryMs: _m, ...rest } = t; return Object.assign(rest, { seq }); }) };
   });
   const all = days.flatMap(d => d.trades);
   return {
-    source: 'model', days, trades: all, excluded, fieldBranch: [], entryDelayMs: null, slippageTicks: SLIPPAGE_TICKS, timeframe: tfMs / 60000,
+    source: 'model', rBasis: 'gross', days, trades: all, excluded, fieldBranch: [], entryDelayMs: null, slippageTicks: SLIPPAGE_TICKS, timeframe: tfMs / 60000,
+    noStop: { known: all.filter(t => t.noStop).length, missing: all.filter(t => !t.noStop).length },
     adverse: { bars: all.filter(t => t.adverse === 'bars').length, bound: all.filter(t => t.adverse === 'bound').length },
     decisions: { total: decisions.length, entered: decisions.filter(d => d && d.decision === 'entered').length },
     runtimeMs: Date.now() - started,
@@ -154,7 +160,12 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const gate = r.gate || null;
   if (gate && gate.hideOutcomes) throw new Error(`run ${r.manifest.runId} is a reasoning-fix look: its outcomes are hidden, so it has no trade stream`);
   const eod = r.cfg && r.cfg.eodAt ? parseAt(r.cfg.eodAt) : null;
-  const stream = modelStream({ decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod });
+  // The day regimes on the first symbol's bars (the regime-matched joins), as the mechanical stream's.
+  const roots = [...new Set(r.decisions.filter(d => d && d.root).map(d => d.root))];
+  const first = (Array.isArray(r.cfg.symbols) && r.cfg.symbols[0] ? familyRoot(r.cfg.symbols[0]) : null) || roots[0] || null;
+  const bars = first ? r.barsFor(first) || [] : [];
+  const regimes = bars.length && r.tfMs ? dayRegimes(bars, r.tfMs) : null;
+  const stream = modelStream({ decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes });
   return {
     stream,
     run: {

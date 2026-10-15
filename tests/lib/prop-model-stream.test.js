@@ -45,7 +45,7 @@ test('readModelStream: a known replay run becomes the expected stream (R and tic
   const { dir } = knownRun();
   const { stream, run } = readModelStream(dir);
   assert.strictEqual(stream.source, 'model');
-  assert.deepStrictEqual(stream.days.map(d => [d.day, d.trades.length, d.passes, d.regime]), [['2023-03-15', 1, 0, 'normal'], ['2023-03-16', 1, 0, 'normal'], ['2023-03-17', 0, 1, 'normal']]);
+  assert.deepStrictEqual(stream.days.map(d => [d.day, d.trades.length, d.passes, d.regime]), [['2023-03-15', 1, 0, 'normal'], ['2023-03-16', 1, 0, 'normal'], ['2023-03-17', 0, 1, 'low']], "the regime: the day's range against the days before it (trade-stream.js dayRegimes)");
   const [a, b] = stream.trades;
   // Long from 100 (the fill), out at 98.5: -6 ticks of an 8-tick stop, R -0.75; troughs from the bars, the 97.5 low
   // held at the stop's fill (-9: 8 ticks and a tick of slippage); closed above the stop: no overshoot.
@@ -61,7 +61,7 @@ test('readModelStream: a known replay run becomes the expected stream (R and tic
   );
   assert.deepStrictEqual(a.facts, { regime: 'trend-up', volatility: 'normal', window: 'ny-am', biasSide: 'with', alignment: 'aligned', dayType: 'normal', skill: a.facts.skill, exploratory: false, frame: 'default', list: null });
   assert.ok(a.facts.skill, 'the skill signature');
-  assert.deepStrictEqual([stream.excluded, stream.adverse], [[], { bars: 2, bound: 0 }]);
+  assert.deepStrictEqual([stream.excluded, stream.adverse, stream.noStop, stream.rBasis], [[], { bars: 2, bound: 0 }, { known: 2, missing: 0 }, 'gross']);
   assert.deepStrictEqual([run.runId, run.from, run.to, run.learning, run.role, run.hideOutcomes], ['run1', '2023-03-15', '2023-03-18', true, 'practice-train', false]);
 });
 
@@ -93,4 +93,25 @@ test('readModelStream: a reasoning-fix look hides its outcomes, so no stream; an
   assert.throws(() => readModelStream(open.dir), /not finished/);
   const { run } = readModelStream(knownRun({ gate: null }).dir);
   assert.deepStrictEqual([run.learning, run.role, run.look], [false, null, null]);
+});
+
+test('fault injection fires on model trades: every trade carries the full set of fields layer 2 reads', () => {
+  const at = require('../../scripts/lib/prop/attempts');
+  const { checkModelWindow, scoreStream } = require('../../scripts/lib/prop/evaluator');
+  const { ACCOUNT } = require('../fixtures/prop-model');
+  const { stream } = readModelStream(knownRun().dir);
+  for (const t of stream.trades) {
+    assert.ok(Array.isArray(t.troughTicks) && t.troughTicks.length, 'an adverse path');
+    assert.ok(t.noStop, 'a no-stop path');
+    assert.ok(at.stopFault(t), 'so a stop fault changes the trade, never silently drops out');
+    assert.notDeepStrictEqual(at.stopFault(t), t);
+  }
+  assert.ok(stream.days.every(d => typeof d.regime === 'string'));
+  assert.ok(stream.trades.some(t => t.overshootTicks !== null), 'a stop exit carries its overshoot');
+  const score = faults => scoreStream(stream, { pass: checkModelWindow({ run: { runId: 'run1', from: '2023-03-15', to: '2023-03-18', learning: true, role: 'practice-train' } }), account: ACCOUNT, contracts: 'micro', paths: 300, reps: 100, seed: 2, faults, attribution: true });
+  const faulty = score({ stopFault: 1 });
+  assert.strictEqual(faulty.inputs.noFaultPath, 0);
+  assert.ok(faulty.resampled.faults.injected > 0, 'stop faults fired on the model trades');
+  assert.strictEqual(faulty.resampled.faults.missed, 0, 'none dropped out for want of a no-stop path');
+  assert.deepStrictEqual(score({}).resampled.faults, { injected: 0, missed: 0 });
 });
