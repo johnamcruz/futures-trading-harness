@@ -14,9 +14,11 @@
  *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl; the config's experienceIndex (and setupLibrary) is pinned for the
  *       run (learning/experience-index.js)
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
- *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>]   month by month, with each
- *       month's combine verdict (a fresh attempt each month; account: --account, the runner config's, the prop
- *       strategy's, else topstep_100k); writes report.md
+ *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>] [--natural-rates file] [--faults
+ *       stop=R,outage=R] (the score's stop-fault and outage rates; `run` takes it too; without: faults not measured)   month by
+ *       month, with the 30-day Monte Carlo prop score of the model's trades (prop/model-score.js: zero blows, pass
+ *       within 30 days, median and p90 days to pass, blow and timeout rates; a curated run's, with its natural rates,
+ *       is diagnostic) and the learning measures; writes report.md. `run` prints the score when the run finishes
  *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
  *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups;
  *       --out: write elsewhere (required for an unfinished run, outside its run home)
@@ -51,8 +53,8 @@ const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
 const { summarize, toMarkdown, toText } = require('./lib/replay/report');
-const { resolveAccount, evaluate, verdictText, verdictMarkdown } = require('./lib/replay/verdict');
-const { loadAccounts, accountNamed } = require('./lib/trading/accounts');
+const { propScoreSection, parseFaults } = require('./lib/prop/model-score');
+const { loadAccounts } = require('./lib/trading/accounts');
 const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
@@ -64,7 +66,7 @@ const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--bars SYM=file ...] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--bars SYM=file ...] [--faults stop=R,outage=R] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] [--faults stop=R,outage=R] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -93,23 +95,21 @@ function points(run) {
 }
 
 function report(argv) {
-  const dir = arg(argv, '--config') ? load(argv).paths.runDir : argv.slice(1).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--account');
+  const cfg = arg(argv, '--config') ? load(argv) : null;
+  const dir = cfg ? cfg.paths.runDir : argv.slice(1).find((a, i, all) => !a.startsWith('--') && !['--account', '--natural-rates', '--bars', '--faults'].includes(all[i - 1]));
   if (!dir || dir.startsWith('--')) throw new Error(USAGE);
   outcomesShown(dir, 'report');
   const { manifest, days } = readRun(path.resolve(dir));
   const summary = summarize(days);
-  // The combine verdict: the account named, else the run's runner config's, the prop strategy's, or the default.
-  let runner = {};
-  try { runner = JSON.parse(fs.readFileSync(path.join(dir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { /* none: no runner account */ }
-  const pick = resolveAccount({ override: arg(argv, '--account'), runnerAccount: runner.account, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts });
-  const verdict = evaluate(days, accountNamed(ROOT, pick.name, process.env), { daysDone: manifest.daysDone || null, why: pick.why });
+  // The 30-day Monte Carlo of the model's trades (prop/model-score.js): the account named, else the run's attempt, ...
+  const prop = propScoreSection(dir, { root: ROOT, override: arg(argv, '--account'), ratesFile: arg(argv, '--natural-rates') || null, curated: cfg && cfg.curated, barsFiles: barsArgs(argv), faults: parseFaults(arg(argv, '--faults')) });
   const file = path.join(path.resolve(dir), 'report.md');
-  // The learning measures, when the run has an experience log, and its skill usage (learning/learning-report.js).
+  // The learning measures, when the run has an experience log, its skill usage (learning/learning-report.js), the prop score beside them.
   const learned = learning.readLearning(path.resolve(dir, '..', '..'));
   const usage = learning.skillUsageFor(dir, { barsFiles: barsArgs(argv) });
-  const measures = learned ? learning.learningMeasures({ ...learned, skillUsage: usage }) : null;
-  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}${measures ? `\n${learning.learningMarkdown(measures)}` : usage ? `\n${learning.usageMarkdown(usage)}` : ''}`);
-  process.stdout.write(toText(summary) + verdictText(verdict) + (measures ? learning.learningText(measures) : learning.usageText(usage)));
+  const measures = learned ? learning.learningMeasures({ ...learned, skillUsage: usage, prop: prop.summary }) : null;
+  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${prop.markdown}${measures ? `\n${learning.learningMarkdown(measures)}` : usage ? `\n${learning.usageMarkdown(usage)}` : ''}`);
+  process.stdout.write(toText(summary) + prop.text + (measures ? learning.learningText(measures) : learning.usageText(usage)));
   say(`wrote ${file}`);
   return 0;
 }
@@ -174,10 +174,10 @@ async function run(argv) {
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   say(res.stopped ? `${res.stopped}; run it again to resume` : `done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
-  // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
-  if (res.done) {
+  if (res.done) { // a finished learning run logs its experience (learning/run-experience.js), then its stage report and prop score
     try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
     for (const line of require('./lib/replay/stage').stageReport(r, { root: ROOT, env: process.env, barsFiles: barsArgs(argv) })) say(line);
+    process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT, curated: r.curated, faults: parseFaults(arg(argv, '--faults')), riskActions: false }).text);
   }
   return res.stopped && !/max-cycles/.test(res.stopped) ? 1 : 0;
 }

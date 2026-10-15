@@ -17,7 +17,7 @@
  * - its no-stop path: the worst move and the last close until the end of the day, for a stop that wasn't
  *   working (an injected fault, R9);
  * - its price path, bar by bar from the fill to the end of its day ([open, adverse, favourable, close] in ticks
- *   the trade's way), and its own exit (its component's target in ticks from the fill and its trail, the policy's
+ *   the trade's way; pathEnds: when each of those bars closes), and its own exit (its component's target in ticks from the fill and its trail, the policy's
  *   exit aside), and the structure trail's swing levels along that path (each swing timeframe a rulebook may name, as
  *   confirmed by each bar's close), so the second layer can exit it under another exit mode (prop/attempts.js exitAs);
  * - its facts, by the functions live uses, never a copy: the scan (trading/strategies.js scan: the
@@ -100,6 +100,12 @@ function pricePath(book, t, opts) {
   const at = x => round6((sign * (x - t.entry)) / book.tickSize);
   const idx = pathIndexes(book, t, opts);
   return idx.length ? idx.map(k => { const b = book.bars[k]; return [at(b.o), at(sign > 0 ? b.l : b.h), at(sign > 0 ? b.h : b.l), at(b.c)]; }) : null;
+}
+
+/** When each bar of the trade's price path closes (ms): a re-exited trade's exit time (prop/attempts.js exitAs). */
+function pathEnds(book, t, opts) {
+  const idx = pathIndexes(book, t, opts);
+  return idx.length ? idx.map(k => book.bars[k].ms + opts.tfMs) : null;
 }
 
 /** The book's bar indexes of a trade's path: from the fill bar to the end of that trading day (the end-of-day flatten). */
@@ -226,6 +232,7 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
       overshootTicks: stopped ? Math.max(0, round6((sign * (t.initialStop - t.exit)) / tick - slip)) : null,
       noStop: noStopPath(book, t, { tfMs, eod }),
       path: pricePath(book, t, { tfMs, eod }),
+      pathEnds: pathEnds(book, t, { tfMs, eod }),
       swingPath: swingPath(book, t, { tfMs, eod }),
       ownExit: ownExit(t, strategies.find(x => x.name === t.strategy) || null, tick),
       facts: facts ? factsAt(book, t, { strategies, tfMin, count, roundSteps }) : { error: 'facts not computed (facts: false)' },
@@ -251,4 +258,4 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
   };
 }
 
-module.exports = { tradeStream, tradingDays, delayFromCycles, dayRegimes, noStopPath, pricePath, swingPath, ownExit, factsAt };
+module.exports = { tradeStream, tradingDays, delayFromCycles, dayRegimes, noStopPath, pricePath, pathEnds, swingPath, ownExit, factsAt };

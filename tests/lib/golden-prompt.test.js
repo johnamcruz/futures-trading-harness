@@ -54,7 +54,9 @@ function state({ ext = false } = {}) {
     positions: [{ contractId: 'MNQ', type: 1, size: 2, averagePrice: 27420.25 }], workingOrders: 2,
     orders: [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 2, stopPrice: 27410.25 }, { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 2, limitPrice: 27440.25 }],
     openTrades: ['MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.'],
-    attempts: [{ account: 'mini', status: 'active', asOf: NOW.toISOString(), balance: 50412.5, floor: 48412.5, cushion: 2000, profit: 412.5, target: 3000, dayPnl: 112.5, sessionsLeft: 26, sessionsDone: 4, budgets: [{ strategy: 'prop_portfolio', budgetUsd: 400 }], entryBlock: null }],
+    attempts: [{ account: 'mini', status: 'active', asOf: NOW.toISOString(), balance: 50412.5, floor: 48412.5, cushion: 2000, profit: 412.5, target: 3000, dayPnl: 112.5, sessionsLeft: 26, sessionsDone: 4, budgets: [{ strategy: 'prop_portfolio', budgetUsd: 400 }], entryBlock: null,
+      // combine.attemptFacts: the attempt line's further facts (day, profit needed, room to the limits, today's counts, consistency).
+      facts: { day: 5, sessions: 30, sessionsLeft: 26, needed: 2587.5, dailyRoom: 1112.5, softStop: 500, softRoom: 612.5, tradesToday: 2, lossesToday: 1, lossStreak: 0, consistencyCap: 300 } }],
   };
   return { items, account };
 }

@@ -29,7 +29,7 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 // skills/replay/SKILL.md as main had it before the split (at e7433091): the fixture file, and the skill it rebuilds.
 const BEFORE = 'tests/fixtures/skill-split/replay.before.txt';
 const FIXTURE_SHA256 = '0df6a47878bfbbe621aebc7a96c1d13dd739865048a6afe0e29691becee55f1d';
-const BEFORE_SHA256 = '6c47a7115f375c5d6281472d413c418566228392391eca76048ed3f45fb3773d';
+const BEFORE_SHA256 = '3337bfd37b371d77f878bf78ca899e7a197ba78cd630cdbd2f655652c65c5737';
 const HOMES = ['replay', 'replay-resume', 'replay-labels', 'replay-scorecard', 'live-session-records'];
 // Each home's old units, by index into the old skill's units (inclusive ranges).
 const RANGES = {
@@ -61,10 +61,35 @@ const ALLOWED = [
   { old: '**The loop**, one process per decision time (the replay clock is frozen per process): the broker\'s clock moves to the time (fills in between happen in the broker), then `autotrader.js --once` runs one pass of the live loop there with `FTH_REPLAY_NOW`.',
     now: '**The loop**, one process per decision time (the replay clock is frozen per process, or, with the run\'s `latency` on, the default for a learning run, runs with the wall clock from each decision time, so the cycle\'s own time is charged as live): the broker\'s clock moves to the time (fills in between happen in the broker), then `autotrader.js --once` runs one pass of the live loop there with `FTH_REPLAY_NOW`.',
     reason: 'a latency-charged replay runs its clock during a step' },
+  // The combine verdict's passage and its sample output, replaced by the prop score.
+  { old: "[line 0 reworded away] [line 1 reworded away] balance (fresh each month is the default; one month never carries into the next), by the same `combine.js` rules the backtester uses: PASS (and the day it passed: profit at the target at a day's end, with the best day at most `consistency_pct` of the profit), FAIL (the rule and the day: equity at the max-loss floor, which trails the end-of-day high for `trailing_eod`), or NOT YET (profit vs target, what consistency still needs, days traded); plus the max loss used vs the limit, the daily P&L path, and a year summary (months passed, failed, not yet).",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "The firm's daily loss limit flattens the account there and stops the day, not the attempt (whichever of the daily limit and the floor is nearer is reached first); what was still open then, positions opened after it that day, and positions carried in from the month before are left out.",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "Money is every fill's P&L less its fees.",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "Intraday equity is approximated from each round trip's MAE, at its `maeTime` when the broker sends one (said in the output).",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "Account: `--account <name>`, else the runner config's `account` when it names an account profile, else the policy strategies' [line 2 reworded away].",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "Report the verdict as replayed, never as a guarantee of a live result.",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "[line 8 reworded away]",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "2024-03 NOT YET: profit $357.96 of $6000.00 ($5642.04 to go), 14 of 21 day(s) traded",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "max loss used $612.50 of $3000.00 (closest to the floor on 2024-03-12); intraday from MAE on 38 of 38 closing fill(s)",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
+  { old: "Summary: 0 passed, 0 failed, 1 not yet, of 1 month(s).",
+    copies: 0, reason: "the combine verdict became the prop score (owner-approved rewrite, PR #196): the Monte Carlo of the model's own trades replaces the per-month verdict" },
 ];
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
-const before = () => rebuild(read(BEFORE), read('skills/replay/SKILL.md'));
+// The pinned lines a later rewrite took out of the skill (the combine verdict became the prop score, which names no
+// account or firm time): markers 0-2 (the verdict's reset-time and account lines) and 8 (its sample output), each stood
+// in for by a placeholder so the old units stay checkable. The units they sit in are dropped (ALLOWED, copies 0).
+const GONE = { 0: '[line 0 reworded away]', 1: '[line 1 reworded away]', 2: '[line 2 reworded away]. Report the verdict', 8: '[line 8 reworded away]' };
+const before = () => rebuild(read(BEFORE), read('skills/replay/SKILL.md'), GONE);
 
 test('replay split: the fixture is the old skill, its pinned lines kept verbatim in the replay skill', () => {
   assert.strictEqual(sha256(fs.readFileSync(path.join(ROOT, BEFORE))), FIXTURE_SHA256, 'the fixture is unchanged');
@@ -72,10 +97,10 @@ test('replay split: the fixture is the old skill, its pinned lines kept verbatim
   assert.strictEqual(sha256(before()), BEFORE_SHA256, 'the rebuilt skill is the old one, byte for byte');
   // A pinned line edited, dropped or moved out of the replay skill breaks the rebuild.
   const r = read('skills/replay/SKILL.md');
-  const pinned = `${r.split('\n').filter(pinnedLine)[4]}\n`; // the prop policy's log line
+  const pinned = `${r.split('\n').filter(pinnedLine)[1]}\n`; // the prop policy's log line
   assert.ok(r.includes(pinned));
-  assert.notStrictEqual(sha256(rebuild(read(BEFORE), r.replace(pinned, pinned.replace(' until', ' once')))), BEFORE_SHA256);
-  assert.throws(() => rebuild(read(BEFORE), r.replace(pinned, '')), /9 markers, 8 pinned lines/);
+  assert.notStrictEqual(sha256(rebuild(read(BEFORE), r.replace(pinned, pinned.replace(' until', ' once')), GONE)), BEFORE_SHA256);
+  assert.throws(() => rebuild(read(BEFORE), r.replace(pinned, ''), GONE), /9 markers \(4 reworded away\), 4 pinned lines/);
 });
 
 test('replay split: every unit of the old skill is in exactly one new home, its own, in its old order', () => {

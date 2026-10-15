@@ -32,12 +32,16 @@
  * config (their index), or the same base and index (the display); never both. A look's `base` is kept only when it
  * isn't its config (a run without the display: the line it had).
  *
- * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, arm, config, base?, setup?, from, to, role, at } or a result
- * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }.
+ * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, arm, config, base?, setup?, from, to, role, at }, a result
+ * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }, or a score { kind: 'score',
+ * evaluation, candidate, runId, role, from, to, rulebook, diagnostic, at } (a prop Monte Carlo of a run's trades, logged
+ * beside the run's look; never a look itself).
  *
  *   checkLook(look, ledger, { budgets })    { ok, refusals, role, purpose, spent, remaining, budget, repeat, shared, hideOutcomes }
  *   recordLook(file, look, { create, now, budgets })   check, then append under the lock; throws when refused
  *   recordResult(file, result, { now })     a test evaluation's result (pass lets its candidate take the final look)
+ *   recordScore(file, entry)                a Monte Carlo score of a run, beside its look (refused without it)
+ *   scoresOf(ledger)                        the scores logged
  *   lookUsage(ledger)                       per role: looks, runs, evaluations spent
  *   ledgerPath(env)
  */
@@ -78,7 +82,8 @@ const roleOfLook = e => {
     return null;
   }
 };
-const looksOf = ledger => [...RECORDED_LOOKS, ...ledger.filter(e => e && e.kind !== 'result')];
+// A score (recordScore) reads the outcomes a look already allowed: never a look of its own, never a budget spent.
+const looksOf = ledger => [...RECORDED_LOOKS, ...ledger.filter(e => e && e.kind !== 'result' && e.kind !== 'score')];
 const resultsOf = ledger => ledger.filter(e => e && e.kind === 'result');
 
 function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
@@ -203,6 +208,25 @@ function recordResult(file, { evaluation, candidate, result }, { now = new Date(
   });
 }
 
+/**
+ * A Monte Carlo score of a run's trades (prop/evaluator.js checkModelWindow builds the entry): appended beside the run's
+ * look, which must be in the ledger (the same run, evaluation and role); every score is kept, so how often a sealed run
+ * was scored, and with which rulebook, is on the record. Never counted as a look. Throws without the look.
+ */
+function recordScore(file, entry) {
+  const e = entry || {};
+  if (e.kind !== 'score' || !ID.test(String(e.runId || '')) || !ID.test(String(e.evaluation || '')) || typeof e.role !== 'string') throw new Error('a score names its run, its evaluation and its role (kind: score)');
+  return underLock(file, false, ledger => {
+    const look = looksOf(ledger).find(l => l.runId === e.runId && l.evaluation === e.evaluation && roleOfLook(l) === e.role);
+    if (!look) throw new Error(`no ${e.role} look of run ${e.runId} (evaluation ${e.evaluation}) in the ledger: a run's outcomes are scored only through the look it took before its first cycle`);
+    appendLook(file, { ...e });
+    return e;
+  });
+}
+
+/** The scores in the ledger (recordScore), oldest first. */
+const scoresOf = ledger => (Array.isArray(ledger) ? ledger.filter(e => e && e.kind === 'score') : []);
+
 /** Per role: { looks, runs, evaluations (judging), validateRuns }. */
 function lookUsage(ledger) {
   const out = {};
@@ -223,4 +247,4 @@ function lookUsage(ledger) {
  */
 const ledgerPath = (env = process.env) => path.join(harnessHome({}, String(env.HOME || '').trim() || os.homedir()), 'learning', 'looks.jsonl');
 
-module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, lookUsage, ledgerPath };
+module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, recordScore, scoresOf, lookUsage, ledgerPath };

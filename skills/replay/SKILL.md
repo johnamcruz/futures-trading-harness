@@ -118,26 +118,19 @@ broker.
    R, and the gate's refusals by check (`replay-clock` refusals are the
    replay's plumbing, counted apart). It also writes `report.md` in the run's
    folder.
-   **The combine verdict**: each calendar month (by trading day, 17:00 CT,
-   Topstep's daily reset) scored as a fresh prop attempt from the account's starting
-   balance (fresh each month is the default; one month never carries into
-   the next), by the same `combine.js` rules the backtester
-   uses: PASS (and the day it passed: profit at the target at a day's end,
-   with the best day at most `consistency_pct` of the profit), FAIL (the
-   rule and the day: equity at the max-loss floor, which trails the
-   end-of-day high for `trailing_eod`), or NOT YET (profit vs target, what
-   consistency still needs, days traded); plus the max loss used vs the
-   limit, the daily P&L path, and a year summary (months passed, failed,
-   not yet). The firm's daily loss limit flattens the account there and
-   stops the day, not the attempt (whichever of the daily limit and the
-   floor is nearer is reached first); what was still open then, positions
-   opened after it that day, and positions carried in from the month before
-   are left out. Money is every fill's P&L less its fees.
-   Intraday equity is approximated from each round trip's MAE, at its
-   `maeTime` when the broker sends one (said in the output). Account: `--account <name>`, else the runner config's `account`
-   when it names an account profile, else the policy strategies'
-   account, else `topstep_100k`; the output says which and why. Report the verdict
-   as replayed, never as a guarantee of a live result.
+   **The prop score**: the Monte Carlo of the run's own trades
+   (`scripts/lib/prop/model-score.js`), in order: zero blows (the hard gate);
+   the pass rate within the account's `sessions` trading days; the median and
+   p90 days to pass; the blow and timeout rates with their intervals (also at
+   the effective sample size). A full-day run's score is `real`. A curated
+   run's is "diagnostic (reweighted)", at its lists' natural rates (give its
+   `--config`); a setup-focused run's is "diagnostic (setup-focused)". Neither
+   is a promotion score. `report` also scores the model's risk actions (pass,
+   day-stop, size-down, early-exit) against their counterfactuals by account
+   state. Account: `--account <name>`, else the run's own attempt, else the
+   runner config's `account` when it names a profile, else the policy
+   strategies' account; with none the run is not scored. Report the score as
+   replayed, never as a guarantee of a live result.
 
 8. **The prop policy.** A policy strategy (for example `prop_portfolio`,
    `account: topstep_100k`) names a prop account; with an account in the
@@ -198,8 +191,13 @@ month    times  cycles  failed  stand-aside  trades  win rate  mean R (n)  expec
 2024-03  2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3  0
 total    2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3  0
 
-Combine verdict: topstep_100k (the policy strategies' account (prop_flow_1m, prop_portfolio)); each month a fresh attempt from $100000.00: ...
-2024-03  NOT YET: profit $357.96 of $6000.00 ($5642.04 to go), 14 of 21 day(s) traded
-         max loss used $612.50 of $3000.00 (closest to the floor on 2024-03-12); intraday from MAE on 38 of 38 closing fill(s)
-Summary: 0 passed, 0 failed, 1 not yet, of 1 month(s).
+Prop Monte Carlo, 30-day attempts (<account>, prop_portfolio's rulebook): real; 44 distinct day(s), 1 independent attempt(s); every entry sized at the code's ceiling (the verdict's), not the model's own size
+  1. Zero blows (hard gate): held: 0 blow(s) over 14 real attempts, 2000 resampled paths and the expectancy cuts
+  2. Pass within 30 trading days: 100.0% of 14 real attempts (bootstrap [0.0%, 100.0%], Wilson at 1 independent [27.0%, 100.0%]); resampled 92.7% of 2000 paths (Wilson [91.6%, 93.5%], conditional on these 44 days)
+  3. Days to pass: median 21, p90 22 (real); median 22, p90 27 (resampled)
+  4. Blow rate 0.0% (bootstrap [0.0%, 100.0%], Wilson at 1 independent [0.0%, 73.0%]), timeout rate 0.0% (bootstrap [0.0%, 100.0%], Wilson at 1 independent [0.0%, 73.0%]) (real); resampled blow 0.0%, timeout 7.3%
+  Promotion gate: n/a (practice-train is not out of sample; it would refuse: too small an out-of-sample test (1 independent of 14 attempts over 1 month(s); at least 20 independent over 2))
+  From 44 of the model's trades (its fills) over 44 session day(s); adverse path from bars on 44, the stop bound on 0; R gross (price over the stop; the attempts settle net dollars); faults not measured (no rates given: --faults stop=<rate>,outage=<rate>)
+  By account state (resampled): fresh 2000 taken / 0 passed, mean R (gross) 0.773, in blown 0.0%, in passed 92.7%; mid 31307 taken / 0 passed, mean R (gross) 0.8129, in blown 0.0%, in passed 88.3%; near-target 11073 taken / 0 passed, mean R (gross) 0.6315, in blown 0.0%, in passed 94.7%; near-mll 0 taken / 0 passed, mean R (gross) -, in blown -, in passed -
+  Decisions that cost attempts: near-target-forced MNQ 2023-05-01T13:57:00.000Z (61 path(s)); near-target-forced MNQ 2023-04-27T13:57:00.000Z (36 path(s)); near-target-forced MNQ 2023-04-06T13:57:00.000Z (26 path(s)); near-target-forced MNQ 2023-04-10T13:57:00.000Z (26 path(s)); near-target-forced MNQ 2023-03-16T13:57:00.000Z (25 path(s))
 ```

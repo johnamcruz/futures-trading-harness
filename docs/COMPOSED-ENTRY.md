@@ -1030,7 +1030,10 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 - **PR 9.** **Attempts from replay fills:** the trade stream from replay
   fills into `prop/attempts.js`, replacing `prop/trade-stream.js`'s scan and
   `prop/evaluate-run.js`'s `backtest/run.js`, so the promotion gate keeps
-  an input.
+  an input. Built: `prop/model-stream.js` (the run's fills and
+  records into the stream `prop/attempts.js` and `prop/evaluator.js` read),
+  scored at the end of every replay and in its report (`prop/model-score.js`);
+  the scan path stays until its deletion is decided.
 - **PR 10.** **Dead code,** one PR per area of section 9's table (runner and
   lanes, keeping the per-bar record; gate and fact claims; replay;
   backtest; tools).
