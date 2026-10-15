@@ -24,7 +24,8 @@
  *
  * One ledger: every look goes to the canonical ledger (looks.js ledgerPath, the default home's, whatever FTH_HOME), never one named
  * per run, so no run starts a budget of its own; the run keeps the ledger's path and a resume under another is
- * refused. What was decided is kept with the run's own record (<run dir>/learning-run.json, with a copy in the run
+ * refused. What was decided is kept with the run's own record (<run dir>/learning-run.json, with the schedule's
+ * fingerprint it started under (schedule.js), and a copy in the run
  * home for the tools a cycle calls) and checked again on every resume: a resumed run keeps its role and its look,
  * and its repeat look is free (only to a resume: a fresh home without its record is refused, before it is seeded);
  * the ledger refuses a resume naming another arm than its look
@@ -48,6 +49,7 @@ const { writeJsonAtomic } = require('../harness-run');
 const { rolesBetween, assertUse, touchesHeldBack, SEALED } = require('./splits');
 const { recordLook, checkLook, ledgerPath } = require('./looks');
 const { readLedger } = require('../prop/ledger-file');
+const schedule = require('../schedule');
 
 const FILE = 'learning-run.json';
 const PRACTICE_ROLES = Object.freeze(['practice-train', 'practice-validate']);
@@ -140,7 +142,9 @@ function startLearningRun(runHome, opts = {}) {
     // Checked again here for a caller without a run dir (checkLearningRun refuses it before seeding when it has one).
     if (taken.repeat && !before) throw new Error(repeatRefusal(opts, d));
   }
-  if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, startedAt: now.toISOString() });
+  // The schedule the run started under (schedule.js fingerprint), kept with its decision: the preflight's schedule check
+  // compares it, and its look's ledger line carries the same.
+  if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, schedule: schedule.fingerprint(), startedAt: now.toISOString() });
   return { ...kept, taken };
 }
 

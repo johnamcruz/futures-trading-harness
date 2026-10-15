@@ -1,0 +1,387 @@
+{
+ "note": "Every day 2020-01-01..2027-01-31 (each run from..to inclusive): its learning and prop role and look rule and flow coverage, frozen from the code before config/schedule.json (tests/lib/schedule-golden.test.js).",
+ "runs": [
+  {
+   "from": "2020-01-01",
+   "to": "2020-12-31",
+   "learning": {
+    "role": "practice-train",
+    "look": {
+     "purposes": [],
+     "budget": null,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": null,
+   "flow": false
+  },
+  {
+   "from": "2021-01-01",
+   "to": "2021-04-30",
+   "learning": {
+    "role": "practice-train",
+    "look": {
+     "purposes": [],
+     "budget": null,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "train",
+    "block": "train",
+    "part": null,
+    "llm": false,
+    "from": "2021-01-01",
+    "to": "2023-07-01",
+    "look": {
+     "purposes": [
+      "tuning",
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2021-05-01",
+   "to": "2023-06-30",
+   "learning": {
+    "role": "practice-train",
+    "look": {
+     "purposes": [],
+     "budget": null,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "train",
+    "block": "train",
+    "part": null,
+    "llm": false,
+    "from": "2021-01-01",
+    "to": "2023-07-01",
+    "look": {
+     "purposes": [
+      "tuning",
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": true
+  },
+  {
+   "from": "2023-07-01",
+   "to": "2024-06-30",
+   "learning": {
+    "role": "practice-train",
+    "look": {
+     "purposes": [],
+     "budget": null,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "select",
+    "block": "select",
+    "part": null,
+    "llm": false,
+    "from": "2023-07-01",
+    "to": "2024-07-01",
+    "look": {
+     "purposes": [
+      "judging"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": true
+  },
+  {
+   "from": "2024-07-01",
+   "to": "2024-12-31",
+   "learning": {
+    "role": "practice-validate",
+    "look": {
+     "purposes": [
+      "validate"
+     ],
+     "budget": null,
+     "needsTestPass": false,
+     "validateCap": 3
+    }
+   },
+   "prop": {
+    "role": "oos",
+    "block": "oos",
+    "part": null,
+    "llm": false,
+    "from": "2024-07-01",
+    "to": "2025-07-01",
+    "look": {
+     "purposes": [
+      "judging"
+     ],
+     "budget": "window",
+     "budgetLooks": 3
+    }
+   },
+   "flow": true
+  },
+  {
+   "from": "2025-01-01",
+   "to": "2025-06-30",
+   "learning": {
+    "role": "test",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 3,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "oos",
+    "block": "oos",
+    "part": null,
+    "llm": false,
+    "from": "2024-07-01",
+    "to": "2025-07-01",
+    "look": {
+     "purposes": [
+      "judging"
+     ],
+     "budget": "window",
+     "budgetLooks": 3
+    }
+   },
+   "flow": true
+  },
+  {
+   "from": "2025-07-01",
+   "to": "2025-11-30",
+   "learning": {
+    "role": "test",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 3,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "recent",
+    "block": "recent",
+    "part": null,
+    "llm": false,
+    "from": "2025-07-01",
+    "to": "2026-07-01",
+    "look": {
+     "purposes": [
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": true
+  },
+  {
+   "from": "2025-12-01",
+   "to": "2025-12-31",
+   "learning": {
+    "role": "test",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 3,
+     "needsTestPass": false,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "recent",
+    "block": "recent",
+    "part": null,
+    "llm": false,
+    "from": "2025-07-01",
+    "to": "2026-07-01",
+    "look": {
+     "purposes": [
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2026-01-01",
+   "to": "2026-05-31",
+   "learning": {
+    "role": "final",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 1,
+     "needsTestPass": true,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "recent",
+    "block": "recent",
+    "part": null,
+    "llm": false,
+    "from": "2025-07-01",
+    "to": "2026-07-01",
+    "look": {
+     "purposes": [
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2026-06-01",
+   "to": "2026-06-30",
+   "learning": {
+    "role": "final",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 1,
+     "needsTestPass": true,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "recent",
+    "block": "recent",
+    "part": null,
+    "llm": true,
+    "from": "2025-07-01",
+    "to": "2026-07-01",
+    "look": {
+     "purposes": [
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2026-07-01",
+   "to": "2026-09-30",
+   "learning": {
+    "role": "final",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 1,
+     "needsTestPass": true,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "walk-forward",
+    "block": "2026-H2",
+    "part": "tuning",
+    "llm": true,
+    "from": "2026-07-01",
+    "to": "2026-10-01",
+    "look": {
+     "purposes": [
+      "tuning",
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2026-10-01",
+   "to": "2026-12-31",
+   "learning": {
+    "role": "final",
+    "look": {
+     "purposes": [
+      "judging",
+      "reasoning-fix"
+     ],
+     "budget": 1,
+     "needsTestPass": true,
+     "validateCap": null
+    }
+   },
+   "prop": {
+    "role": "walk-forward",
+    "block": "2026-H2",
+    "part": "held-out",
+    "llm": true,
+    "from": "2026-10-01",
+    "to": "2027-01-01",
+    "look": {
+     "purposes": [
+      "judging"
+     ],
+     "budget": "walk-forward held-out",
+     "budgetLooks": 3
+    }
+   },
+   "flow": false
+  },
+  {
+   "from": "2027-01-01",
+   "to": "2027-01-31",
+   "learning": null,
+   "prop": {
+    "role": "reserve",
+    "block": "2027-H1",
+    "part": null,
+    "llm": true,
+    "from": "2027-01-01",
+    "to": "2027-07-01",
+    "look": {
+     "purposes": [],
+     "budget": null,
+     "budgetLooks": null
+    }
+   },
+   "flow": false
+  }
+ ]
+}

@@ -82,6 +82,10 @@ test('one ledger: the run keeps its ledger\'s path, and the ledger is the defaul
   G.startLearningRun(home, { ...sealed, env });
   assert.strictEqual(G.readLearningRun(runDir).ledger, path.join(env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl'));
   assert.deepStrictEqual(G.readLearningRun(home), G.readLearningRun(runDir), 'the run home keeps a copy for the cycle\'s tools');
+  // The run and its look's ledger line record the schedule they were taken under (scripts/lib/schedule.js).
+  const fp = require('../../scripts/lib/schedule').fingerprint();
+  assert.deepStrictEqual(G.readLearningRun(runDir).schedule, fp);
+  assert.deepStrictEqual(require('../../scripts/lib/prop/ledger-file').readLedger(G.readLearningRun(runDir).ledger).map(e => e.schedule), [fp]);
   // Another FTH_HOME, the same home folder: the same ledger, so the resume runs (no fresh budget).
   assert.strictEqual(G.startLearningRun(home, { ...sealed, env: { ...env, FTH_HOME: tmp() } }).taken.repeat, true);
   assert.throws(() => G.startLearningRun(home, { ...sealed, env: { HOME: tmp(), FTH_HOME: env.FTH_HOME } }), /one ledger \(the same home\)/);
