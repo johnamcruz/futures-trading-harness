@@ -9,8 +9,8 @@
  *       every reaction moment of the bars in [from, to) (practice-train only; 1m bars are aggregated) -> one record a line
  *   node scripts/setup-library.js index <library.jsonl> ... [--out dir] [--seed N]
  *       the walk-forward index of the records -> <out>/library-<hash>.json (default <FTH_HOME>/experience)
- *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy (a replay config's
- *       setupLibrary pins it at the run's start)
+ *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy, hidden from the model (a
+ *       replay config's setupLibrary pins it at the run's start; only its libraryDisplay shows it)
  *   node scripts/setup-library.js show <index file> [--top N]    the cells with enough samples, best mean R first
  */
 

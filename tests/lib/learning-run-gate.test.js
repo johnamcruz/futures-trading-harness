@@ -84,15 +84,14 @@ test('one ledger: the run keeps its ledger\'s path, and the ledger is the defaul
 });
 
 /** scripts/replay.js run on a config for [start, end), with flags: { status, stdout, stderr, user, live }. */
-function replayRun(start, end, flags = [], over = {}) {
-  const user = tmp();
+function replayRun(start, end, flags = [], over = {}, user = tmp()) {
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
     runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
     autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...over,
   }));
   const live = path.join(user, 'live');
-  fs.mkdirSync(live);
+  fs.mkdirSync(live, { recursive: true });
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'replay.js'), 'run', '--config', config, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live }, timeout: 60000 });
   return { ...r, user, live };
@@ -225,6 +224,20 @@ test('library display: off unless the config says true, part of the setup; a pai
   refused(look('r-x', on, { base: setupHash(on) }), /names its setup without the display \(base\)/);
   refused(look('r-x', off, { base: 'f'.repeat(64) }), /is not shown the history library: its base is its config/);
   refused(look('r-y', on), /has its without\+library:[0-9a-f]{16} arm already/);
+  // A resume is the look it took (the reviewer's case: a hidden arm resumed as the shown one would be a free second arm).
+  const resumed = K.checkLook(look('r-hidden', on), ledger);
+  assert.strictEqual(resumed.ok, false);
+  assert.match(resumed.refusals.join(), /run r-hidden took its look in evaluation evD as another arm \(arm without\+library:[0-9a-f]{16}, not without; config [0-9a-f]{12}, not [0-9a-f]{12}\): a resume keeps its arm, config and base/);
+  assert.match(K.checkLook(look('r-shown', off), ledger).refusals.join(), /run r-shown took its look .* as another arm \(arm without, not without\+library/);
+  assert.match(K.checkLook(look('r-shown', on, { base: 'e'.repeat(64) }), ledger).refusals.join(), /base eeeeeeeeeeee, not /);
+  assert.deepStrictEqual([K.checkLook(look('r-hidden', off), ledger).ok, K.checkLook(look('r-hidden', off), ledger).repeat], [true, true], 'the same arm: a free repeat');
+  // An old line without arm or config resumes as it was.
+  const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test' }];
+  assert.ok(K.checkLook({ ...look('r-old', off), evaluation: 'evOld' }, old).ok);
+  // The same config is the same display and base: an arm claiming the shown display on the hidden arm's setup is refused.
+  const same = K.checkLook(look('r-z', off, { arm: `with:${'c'.repeat(16)}+library:${hashA}`, base: 'd'.repeat(64) }), one);
+  assert.strictEqual(same.ok, false);
+  assert.match(same.refusals.join(), /arm with:c{16}\+library:[0-9a-f]{16} has r-hidden's setup .* but not its library display or base/);
   // Through the run gate: the base is carried into the look.
   const genv = { HOME: tmp(), FTH_HOME: tmp() };
   const gate = { from: D('2025-03-03T00:00:00Z'), to: D('2025-03-08T00:00:00Z'), env: genv, candidate: 'champ', evaluation: 'evG' };
@@ -237,6 +250,12 @@ test('library display: off unless the config says true, part of the setup; a pai
     assert.match(r.stdout, said, r.stderr);
     assert.strictEqual(L.libraryShown(path.join(r.user, 'replays', 'r')), display === true);
   }
+  // A resume can't pin a library its run started without (its look named no display).
+  const first = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
+  const again = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, libraryDisplay: true }, first.user);
+  assert.strictEqual(again.status, 1, again.stdout);
+  assert.match(again.stderr, /this run started without a history library; a resume can't pin one/);
+  assert.strictEqual(L.libraryShown(path.join(first.user, 'replays', 'r')), false);
 });
 
 test('setup-focused practice: allowed on practice-train and practice-validate, kept on resume; refused on test, final and runs not learning', () => {

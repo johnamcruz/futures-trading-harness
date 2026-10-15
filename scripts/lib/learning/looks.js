@@ -16,8 +16,12 @@
  *   practice-train       no look: practice
  *
  * An evaluation id belongs to its first look: another candidate, purpose or window under it is refused, and it holds
- * at most MAX_ARMS runs, each a different arm (with:<index>, without, shuffled:<index>) of the same run setup (its
- * config hash): a judging look names both, so the arms differ in their experience index only.
+ * at most MAX_ARMS runs, each a different arm (with:<index>, without, shuffled:<index>, each with +library:<library>
+ * when shown the history library) naming its run setup (config hash): a judging look names both, so two arms differ in
+ * their experience index only (the same config) or in the library's display only (below).
+ *
+ * A resumed run's look (the same evaluation, run id and purpose) is free, and it is the look it took: a resume naming
+ * another arm, config or base than its ledger line is refused.
  *
  * The history library's display (replay/config.js libraryDisplay) is an arm dimension of its own: an arm shown the
  * library ends in `+library:<library hash>` (e.g. `without+library:<hash>`), and its config hash (which names the
@@ -57,6 +61,8 @@ const LIBRARY_ARM = /\+library:[0-9a-f]{16}$/;
 const indexArm = arm => String(arm || '').replace(LIBRARY_ARM, '');
 /** The setup without the library display: the look's base, or its config when it has none (no display). */
 const baseOf = e => e.base || e.config;
+/** Whether an arm is shown the history library (the `+library` suffix; replay/config.js lookArm, via scripts/replay.js, is its only producer). */
+const shownArm = arm => LIBRARY_ARM.test(String(arm || ''));
 /** Looks taken before the ledger existed, so it starts true. */
 const RECORDED_LOOKS = Object.freeze([
   Object.freeze({ kind: 'look', evaluation: 'llm-replay-2026-06', candidate: 'llm-replay-2026-06', purpose: 'reasoning-fix', runId: 'llm-replay-2026-06', from: '2026-06-01', to: '2026-06-06', role: 'final', what: 'LLM replay, June 1-5 2026, adherence only' }),
@@ -94,7 +100,17 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   if (role === 'practice-validate' && l.purpose !== 'validate') refusals.push(`practice-validate takes validate looks only, not ${String(l.purpose)}`);
   if (SEALED.includes(role) && l.purpose === 'validate') refusals.push(`${role} is sealed: a judging or reasoning-fix look, not validate`);
   const atRole = looksOf(ledger).filter(e => roleOfLook(e) === role);
-  const repeat = atRole.some(e => e.evaluation === l.evaluation && e.runId === l.runId && e.purpose === l.purpose);
+  const prior = atRole.find(e => e.evaluation === l.evaluation && e.runId === l.runId && e.purpose === l.purpose);
+  const repeat = Boolean(prior);
+  // A resume is the look it took: the same arm, config and base as its line (fields the line has; an old line without them keeps none).
+  if (prior) {
+    const differs = [
+      prior.arm != null && prior.arm !== (l.arm || 'without') ? `arm ${l.arm || 'without'}, not ${prior.arm}` : null,
+      prior.config != null && prior.config !== (l.config || null) ? `config ${String(l.config).slice(0, 12)}, not ${String(prior.config).slice(0, 12)}` : null,
+      prior.config != null && baseOf(prior) !== baseOf(l) ? `base ${String(baseOf(l)).slice(0, 12)}, not ${String(baseOf(prior)).slice(0, 12)}` : null,
+    ].filter(Boolean);
+    if (differs.length) refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} as another arm (${differs.join('; ')}): a resume keeps its arm, config and base (start another runId)`);
+  }
   // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
   const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);
   if (first && refusals.length === 0) {
@@ -110,8 +126,15 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
     // display (the same base and index); each a different arm.
     if (!arms.has(l.runId)) {
       for (const e of runs.filter(x => x.config)) {
-        if (l.config === e.config) continue;
-        const pair = baseOf(e) === baseOf(l) && indexArm(e.arm) === indexArm(l.arm) && LIBRARY_ARM.test(e.arm) !== LIBRARY_ARM.test(l.arm);
+        // The same config: the index differs, and the display and base must agree with it (the config names both).
+        if (l.config === e.config) {
+          if (shownArm(e.arm) !== shownArm(l.arm) || baseOf(e) !== baseOf(l)) {
+            refusals.push(`evaluation ${l.evaluation}: arm ${l.arm} has ${e.runId}'s setup (config ${String(e.config).slice(0, 12)}) but not its library display or base (arm ${e.arm})`);
+            break;
+          }
+          continue;
+        }
+        const pair = baseOf(e) === baseOf(l) && indexArm(e.arm) === indexArm(l.arm) && shownArm(e.arm) !== shownArm(l.arm);
         if (!pair) {
           refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index, or only in the history library's display; this run's setup (config ${String(l.config).slice(0, 12)}, arm ${l.arm}) is not ${e.runId}'s (config ${String(e.config).slice(0, 12)}, arm ${e.arm})`);
           break;

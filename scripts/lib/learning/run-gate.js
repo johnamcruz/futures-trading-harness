@@ -26,7 +26,8 @@
  * per run, so no run starts a budget of its own; the run keeps the ledger's path and a resume under another is
  * refused. What was decided is kept with the run's own record (<run dir>/learning-run.json, with a copy in the run
  * home for the tools a cycle calls) and checked again on every resume: a resumed run keeps its role and its look,
- * and its repeat look is free. A run declared not learning is recorded as such: the learning loop's own tools (the
+ * and its repeat look is free; the ledger refuses a resume naming another arm, config or base than its look
+ * (looks.js checkLook), and scripts/replay.js another index or library (learning/run-pins.js). A run declared not learning is recorded as such: the learning loop's own tools (the
  * experience log, the index, the pinned record) refuse it, so it never teaches and is never shown a record.
  *
  *   checkLearningRun(opts)      the gate's answer, nothing recorded (before the run home is seeded); throws when refused

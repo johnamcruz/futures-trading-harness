@@ -42,6 +42,7 @@
  * (the setup read alone), walk-forward by day (a statistic for day D counts only rows known before D), with each
  * reaction's no-room days; hashed, and pinned per run (pinLibrary) next to the experience index, never mixed with it.
  * The pin keeps whether the model is shown it (`display`, off unless asked); a run keeps both its library and that.
+ * The CLI's pin (scripts/setup-library.js pin) pins it hidden: only a replay config's libraryDisplay shows it.
  *
  *   STANDARD                               the standard, one line (the lookup shows it)
  *   scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf, sessions })   [record], causal, deterministic

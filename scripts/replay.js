@@ -56,8 +56,7 @@ const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
-const { pinIndex } = require('./lib/learning/experience-index');
-const { pinLibrary } = require('./lib/learning/setup-library');
+const { pinForRun } = require('./lib/learning/run-pins');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
@@ -166,8 +165,7 @@ async function run(argv) {
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
-  if (r.experienceIndex) say(`experience index pinned: ${pinIndex(r.paths.runHome, r.experienceIndex).hash.slice(0, 16)}`);
-  if (r.setupLibrary) say(`history library pinned: ${pinLibrary(r.paths.runHome, r.setupLibrary, { display: r.libraryDisplay }).hash.slice(0, 16)}${r.libraryDisplay ? ', shown to the model' : ', not shown to the model (libraryDisplay off)'}`);
+  for (const line of pinForRun(r, { fresh })) say(line);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);
