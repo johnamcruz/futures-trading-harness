@@ -23,6 +23,11 @@
  * The state (risk-attribution.js stateOf) is the Monte Carlo's own, as the path stands when the decision comes up:
  * each arm reverts its kind of action only in its state ('all': in any), so the difference is that state's actions'.
  *
+ * The base is the model as it traded: every entry at its own share of the ceiling (never fewer than one contract when
+ * it filled one), so its rates differ from the run's score (which sizes every entry at the full ceiling); each line
+ * shows the base beside the difference. Like the score, an arm settles each trade alone: a pass taken, or an entry held
+ * past the next one, is replayed after it, not beside it (the overlap a real score refuses is not checked here).
+ *
  *   KINDS, STATES
  *   riskActionArms()                     { base, arms: { '<kind>|<state>': decide } } for scoreArms
  *   scoreRiskActions(stream, opts)       { counterfactual: true, base, actions: { kind: { n, byState: { state: row } } } }
@@ -38,7 +43,8 @@ const KINDS = Object.freeze(['pass', 'day-stop', 'size-down', 'early-exit']);
 const STATES = Object.freeze([...STATE_LIST, 'all']);
 const MAX_BYTES = 4096;
 
-const own = t => ({ fraction: t.sizeFraction ?? 1 });
+// The model's own share of the ceiling; a share that rounds to no contract still takes one (the model filled one).
+const own = t => ({ fraction: t.sizeFraction ?? 1, keepOne: true });
 
 /** The model's own decisions (base) and one arm per kind of action and state that reverts it there. */
 function riskActionArms() {
@@ -90,6 +96,7 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
  */
 function riskActionRecord(result, { minN = 10, maxBytes = MAX_BYTES } = {}) {
   if (!result || !result.actions) throw new Error('riskActionRecord: a scoreRiskActions result');
+  if (result.look && ['test', 'final'].includes(result.look.role)) throw new Error(`a ${result.look.role} run's outcomes are judged, never shown to the model: no risk-action record`);
   const cells = [];
   for (const kind of KINDS) {
     for (const state of STATES) {

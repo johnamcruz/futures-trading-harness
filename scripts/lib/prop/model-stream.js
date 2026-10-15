@@ -105,8 +105,9 @@ function pathOf({ side, entryPrice, exitPrice, entryTime, exitTime, risk, tick, 
   const last = troughTicks.length ? troughTicks[troughTicks.length - 1] : 0;
   if (moveTicks < Math.min(0, last)) troughTicks = [...troughTicks, moveTicks];
   const path = Number.isFinite(entryMs) && bars.length ? noStopPath({ bars, tickSize: tick }, { direction: side, entryTime, entry: entryPrice }, { tfMs, eod }) : null;
-  // noStopPath starts at the first bar opening after the fill; the fill's own bar is in the adverse path: the worse.
-  const noStop = path ? { ...path, worstTicks: Math.min(path.worstTicks, ...troughTicks) } : null;
+  // noStopPath starts at the first bar opening after the fill; the fill's own bar, unclamped (no stop was working): the worse.
+  const fillBar = path && fromBars ? adversePath(bars, { entryMs, exitMs: entryMs, tfMs, side, entry: entryPrice, tick, floor: -Infinity }) || [] : [];
+  const noStop = path ? { ...path, worstTicks: Math.min(path.worstTicks, ...troughTicks, ...fillBar) } : null;
   return {
     stopTicks, moveTicks, troughTicks, adverse: fromBars ? 'bars' : 'bound', stopped, noStop, entryMs, exitMs,
     overshootTicks: stopped ? Math.max(0, round6((s * (stopPx - exitPrice)) / tick - SLIPPAGE_TICKS)) : null,
@@ -204,10 +205,15 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   }
   // Round trips of the run's fills no record placed: each entered decision credits the leg that opened at its entry.
   if (Array.isArray(trips)) {
-    const credited = new Set(decisions.filter(d => d && d.decision === 'entered' && d.outcome && d.outcome.entryTime)
-      .map(d => `${familyRoot(d.root) || d.root}|${d.side === 'long' ? 'buy' : 'sell'}|${Date.parse(d.outcome.entryTime)}`));
+    // Counted, not a set: two legs opening at one instant are two fills, and one entered decision credits one leg.
+    const credited = new Map();
+    for (const d of decisions.filter(x => x && x.decision === 'entered' && x.outcome && x.outcome.entryTime)) {
+      const k = `${familyRoot(d.root) || d.root}|${d.side === 'long' ? 'buy' : 'sell'}|${Date.parse(d.outcome.entryTime)}`;
+      credited.set(k, (credited.get(k) || 0) + 1);
+    }
     for (const t of trips) {
-      if (!Number.isFinite(t.openMs) || credited.has(`${t.family}|${t.side}|${t.openMs}`)) continue;
+      const k = `${t.family}|${t.side}|${t.openMs}`;
+      if (Number.isFinite(t.openMs) && credited.get(k) > 0) { credited.set(k, credited.get(k) - 1); continue; }
       excluded.push({ id: null, root: t.family || null, bar: new Date(t.openMs).toISOString(), why: 'a fill no record placed' });
     }
   }
@@ -269,7 +275,7 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const regimes = bars.length && r.tfMs ? dayRegimes(bars, r.tfMs) : null;
   // The verdict each entry was sized under (the policy's ceiling, prop-state's verdicts file): the bar, side and market.
   const verdicts = readVerdicts(r.home).filter(v => v && v.action === 'full');
-  const verdictOf = d => verdicts.find(v => v.bar === d.bar && v.direction === d.side && (familyRoot(v.symbol) || v.symbol) === (familyRoot(d.root) || d.root)) || null;
+  const verdictOf = d => verdicts.filter(v => v.bar === d.bar && v.direction === d.side && (familyRoot(v.symbol) || v.symbol) === (familyRoot(d.root) || d.root)).pop() || null;
   const stream = modelStream({
     decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf,
   });

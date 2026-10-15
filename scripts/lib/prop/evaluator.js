@@ -354,15 +354,23 @@ function scoreStream(stream, opts) {
  * One attempt over `list` on path `p`, its random draws (the day's outage, each trade's overshoot and fault, by its
  * order within the day) from sources of their own, so two runs or two arms on the same path meet the same faults
  * whatever else a day's trades consumed. decide(trade, { cs, counters }) (optional): an arm's choice for each item, null
- * to skip it, or { fraction, trade } (the size share and the trade to replay in its place).
+ * to skip it, or { fraction, trade, keepOne } (the size share, the trade to replay in its place, and keepOne: a share
+ * that rounds to no contract still takes one, as the model did when it filled at least one).
  */
 function pairedRunner({ ctx, rates, seed, pools }) {
   return (list, p, decide = null) => {
     let day = 0;
     let out = false;
     const chosen = new Map();
+    const keep = new Set();
     return at.runAttempt(list, {
       ...ctx,
+      size: args => {
+        const plan = ctx.size(args);
+        if ((plan && plan.size >= 1) || !keep.has(args.trade) || !(args.fraction > 0)) return plan;
+        const full = ctx.size({ ...args, fraction: 1 });
+        return full && full.size >= 1 ? { ...full, size: 1 } : plan;
+      },
       onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },
       outageDay: () => out,
       ...(decide ? {
@@ -370,6 +378,7 @@ function pairedRunner({ ctx, rates, seed, pools }) {
           const c = decide(t0, info);
           if (!c) return 0;
           chosen.set(t0, c.trade || t0);
+          if (c.keepOne) keep.add(t0); else keep.delete(t0);
           // Inside the rulebook's own ceiling: the arm's share times its multiplier.
           return c.fraction * Number(ctx.multiplier(c.trade || t0, info));
         },
@@ -409,7 +418,8 @@ function scoreArms(stream, opts) {
   });
   const S = account.sessions;
   const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
-  const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools(stream.days.flatMap(d => [...d.trades, ...(d.passed || [])])) });
+  // The overshoots the run's own fills showed (a counterfactual's stop fill carries no gap of its own).
+  const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools(stream.days.flatMap(d => d.trades.filter(t => !t.counterfactual))) });
   const regimes = days.map(d => d.regime || 'normal');
   const byRegime = stats.groupBy(regimes);
   const prand = stats.streamFor(seed, 'paths:arms');

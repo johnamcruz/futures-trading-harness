@@ -144,7 +144,7 @@ function scoreLines(r) {
       if (!a.n) continue;
       const all = a.byState.all;
       const states = Object.entries(a.byState).filter(([k, v]) => k !== 'all' && v.applied).map(([k, v]) => `${k} ${v.applied} paths, saved ${v.savedBlows}/caused ${v.causedBlows} blows, cost ${v.costPasses}/gained ${v.gainedPasses} passes`);
-      lines.push(`Risk action ${kind} (counterfactual: reverted on the same paths; ${a.n} decision(s)): pass rate ${sign(all.diff.passRate)} (${all.effect.pass}), blow rate ${sign(all.diff.blowRate)} (${all.effect.blow})${states.length ? `; by state: ${states.join('; ')}` : ''}`);
+      lines.push(`Risk action ${kind} (counterfactual: reverted on the same paths; ${a.n} decision(s)): pass rate ${sign(all.diff.passRate)} (${all.effect.pass}), blow rate ${sign(all.diff.blowRate)} (${all.effect.blow}) against the model as it traded (pass ${pct(r.riskActions.base.passRate)}, blow ${pct(r.riskActions.base.blowRate)}, at its own sizes)${states.length ? `; by state: ${states.join('; ')}` : ''}`);
     }
   }
   return lines;
@@ -173,7 +173,7 @@ function ratesFor(runDir, file) {
  * The section for the replay's report and the end of a run: { result, text, markdown, summary }; a run that can't be
  * scored says why (never throws: the report still writes).
  */
-function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, barsFiles = {}, now = new Date() } = {}) {
+function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, barsFiles = {}, riskActions = true, now = new Date() } = {}) {
   try {
     const { loadAccounts, accountNamed } = require('../trading/accounts');
     const { loadStrategies } = require('../trading/strategies');
@@ -185,7 +185,7 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
     const pick = resolveAccount({ override, attempts: runningAttempts(path.resolve(dir, '..', '..')), runnerAccount: runner.account, strategies, accounts: loadAccounts(root, env).accounts });
     if (!pick.name) throw new Error(pick.why);
     const account = accountNamed(root, pick.name, env);
-    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: ratesFor(dir, ratesFile), barsFiles, now });
+    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: ratesFor(dir, ratesFile), barsFiles, riskActions, now });
     result.accountWhy = pick.why;
     return { result, text: `\n${scoreText(result)}`, markdown: scoreMarkdown(result), summary: scoreSummary(result) };
   } catch (err) {

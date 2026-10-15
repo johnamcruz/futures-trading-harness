@@ -134,5 +134,13 @@ test('a fill no record placed is left out (a real score refuses it); trades open
   // A mid-bar fill whose own bar holds the deepest low: the no-stop worst is at least as deep as the adverse path.
   const bars = [{ ms: Date.parse('2023-03-15T14:00:00.000Z'), o: 100, h: 100.5, l: 97, c: 99.5 }, { ms: Date.parse('2023-03-15T14:03:00.000Z'), o: 99.5, h: 101.5, l: 99.25, c: 101 }];
   const t = modelStream({ decisions: [entered('d', '2023-03-15T14:01:00.000Z', '2023-03-15T14:05:00.000Z')], dayKeys: ['2023-03-15'], tfMs: M3, barsFor: () => bars }).trades[0];
-  assert.deepStrictEqual([t.troughTicks, t.noStop.worstTicks], [[-9], -9], 'the fill bar\'s low, held at the stop\'s fill, in both');
+  assert.deepStrictEqual([t.troughTicks, t.noStop.worstTicks], [[-9], -12], 'held at the stop\'s fill with the stop working; unprotected, the fill bar\'s whole 97 low');
+});
+
+test('two fills opening at one instant: one entered decision credits one of them; the other is left out', () => {
+  const d = { id: 'a', decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T13:57:00.000Z', plan: { entry: 100, stop: 98 }, context: {}, signatures: {},
+    outcome: { source: 'fills', entryPrice: 100, exitPrice: 101, entryTime: '2023-03-15T14:01:00.000Z', exitTime: '2023-03-15T14:20:00.000Z', exitReason: 'closed', R: 0.5 } };
+  const ms = Date.parse('2023-03-15T14:01:00.000Z');
+  const s = modelStream({ decisions: [d], dayKeys: ['2023-03-15'], tfMs: M3, trips: [{ family: 'MNQ', side: 'buy', openMs: ms }, { family: 'MNQ', side: 'buy', openMs: ms }] });
+  assert.deepStrictEqual(s.excluded.map(x => x.why), ['a fill no record placed']);
 });

@@ -129,8 +129,9 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
  * -0.42"), the whole text at most maxBytes (fewest-sample lines dropped first). Counts over Monte Carlo paths: a trade
  * is counted once per path it was taken on. Kept apart from the model's trade cells.
  */
-function riskRecord(attribution, { minN = 10, maxBytes = MAX_BYTES, source = null } = {}) {
+function riskRecord(attribution, { minN = 10, maxBytes = MAX_BYTES, source = null, role = null } = {}) {
   if (!attribution || !attribution.states) throw new Error('riskRecord: a risk attribution (prop/evaluator.js, attribution: true)');
+  if (['test', 'final'].includes(role)) throw new Error(`a ${role} run's outcomes are judged, never shown to the model: no risk record`);
   const line = (label, c) => `${label}: n ${c.n}, ${c.blows} in attempts that blew, ${c.passes} that passed, mean R ${c.meanR === null ? '-' : c.meanR}`;
   const stateLines = STATES.map(s => ({ n: attribution.states[s].taken, text: line(STATE_WORDS[s], { n: attribution.states[s].taken, blows: attribution.states[s].ledToBlow, passes: attribution.states[s].ledToPass, meanR: attribution.states[s].meanR }) })).filter(x => x.n >= minN);
   const cellLines = attribution.cells.filter(c => c.n >= minN).map(c => ({ n: c.n, text: line(`${STATE_WORDS[c.state]}, ${c.key}=${c.value}`, c) }));

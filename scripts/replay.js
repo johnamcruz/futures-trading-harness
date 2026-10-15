@@ -173,7 +173,7 @@ async function run(argv) {
   // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
   if (res.done) {
     try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
-    process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT }).text);
+    process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT, riskActions: false }).text);
   }
   return res.stopped && !/max-cycles/.test(res.stopped) ? 1 : 0;
 }

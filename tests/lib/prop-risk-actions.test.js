@@ -66,13 +66,15 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
 });
 
 /**
- * A scripted case: every day a winner the model took, and a setup it passed on that, taken, loses with a gap 60 ticks
+ * A scripted case: every day an entry the model took (one loser in six gapping 60 ticks past its stop), and a setup it passed on that, taken, loses with a gap 60 ticks
  * past the stop; and an entry it closed early at -10 ticks that, held, would have run to its stop with the same gap.
  */
 function scripted() {
   const days = weekdays('2022-01-03', 120);
   return modelStreamOf(days, (d, k) => {
-    const take = modelTrade(`${d}-w`, k % 3 === 2 ? -40 : 60, {}, { entryTime: `${d}T14:00:00.000Z`, actions: [] });
+    // The run's own fills show the gap (the overshoot pool is the real fills'): one loser in six gapped 60 ticks.
+    const take = k % 6 === 2 ? modelTrade(`${d}-w`, -101, {}, { entryTime: `${d}T14:00:00.000Z`, actions: [], troughTicks: [-101], overshootTicks: 60 })
+      : modelTrade(`${d}-w`, k % 3 === 2 ? -40 : 60, {}, { entryTime: `${d}T14:00:00.000Z`, actions: [] });
     const early = modelTrade(`${d}-e`, -10, {}, { entryTime: `${d}T15:00:00.000Z`, actions: ['early-exit'], hold: { moveTicks: -101, troughTicks: [-101], overshootTicks: 60, r: -101 / 40, noStop: null } });
     return k % 2 ? [take, early] : [take];
   }, {}).days.map((day, k) => ({
@@ -103,4 +105,20 @@ test('the paired difference has the right sign on a scripted case: passing a gap
   assert.match(rec.text, /^Risk actions \(counterfactual/);
   assert.match(rec.text, /in any state, standing down \(a pass on a valid setup\): n \d+ paths, saved \d+ blows, caused \d+, cost \d+ passes, gained \d+/);
   assert.ok(Buffer.byteLength(riskActionRecord(r, { minN: 1, maxBytes: 200 }).text) <= 200);
+});
+
+test('the base is the model as it traded: a share under one contract still takes the one it filled; the records refuse a sealed run', () => {
+  const { riskActionArms } = require('../../scripts/lib/prop/risk-actions');
+  const { scoreArms } = require('../../scripts/lib/prop/evaluator');
+  const { riskRecord } = require('../../scripts/lib/prop/risk-attribution');
+  const days = weekdays('2022-01-03', 40);
+  // A ceiling of one contract ($20 budget against a $21.24 risk, under the guard), the model's half of it.
+  const stream = modelStreamOf(days, d => [modelTrade(`${d}-0`, 4000, {}, { entryTime: `${d}T14:00:00.000Z`, sizeFraction: 0.5, actions: ['size-down'] })]);
+  const run = { runId: 'r', from: '2022-01-03', to: '2022-03-01', learning: true, role: 'practice-train' };
+  const opts = { account: ACCOUNT, contracts: 'micro', paths: 50, reps: 50, seed: 1, rulebook: { sizing: { cushion_frac: 0.01 } } };
+  const { base } = riskActionArms();
+  assert.strictEqual(scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), base }).base.passRate, 1, 'every entry taken at one contract');
+  assert.strictEqual(scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), base: t => ({ fraction: t.sizeFraction }) }).base.passRate, 0, 'without it, half of one contract is none');
+  assert.throws(() => riskActionRecord({ actions: {}, look: { role: 'test' } }), /judged, never shown/);
+  assert.throws(() => riskRecord({ states: {}, cells: [] }, { role: 'final' }), /judged, never shown/);
 });
