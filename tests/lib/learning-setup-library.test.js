@@ -58,6 +58,23 @@ test('the same-candle rule: every traded record confirms on a candle that closed
   }
 });
 
+test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
+  const count = {};
+  for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
+  assert.deepStrictEqual(count, { traded: 68, 'no-room': 21, 'not-composable': 12, 'no-confirmation': 20, 'no-entry-window': 2 });
+  // A traded record whose window had an earlier confirming close that did not compose.
+  const later = RECORDS.filter(r => r.status === 'traded').find(r => {
+    for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {
+      const bar = new Date(t).toISOString();
+      const b = briefAt(bar);
+      if (!L.entryRead(b.sections.m3.data.candles['3m'], r.side, '3m')) continue;
+      if (L.composeAt(b, r.reaction, { side: r.side, tick: 0.25 }).status !== 'traded') return true;
+    }
+    return false;
+  });
+  assert.ok(later, 'a later close traded after an earlier confirming close failed to compose');
+});
+
 test('a checker or plan refusal is not-composable with its problem, never no-room; no-room is a verified target short of 2:1', () => {
   for (const r of RECORDS.filter(x => x.status === 'no-room')) assert.match(r.why, /R:R .* under the strategy's min 2|no level on the winning side/, r.id);
   const r = RECORDS.find(x => x.status === 'traded');

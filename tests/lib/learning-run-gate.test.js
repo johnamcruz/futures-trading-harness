@@ -138,6 +138,25 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
   assert.strictEqual(h({}), h({ runId: 'b', learning: true }));
   assert.notStrictEqual(h({}), h({ autotrader: { ...raw({}).autotrader, timeframe: 5 } }));
   assert.notStrictEqual(h({}), h({ end: '2025-03-03T16:00:00Z' }));
+  // The history library, by its own hash: two arms differing only in their pinned library are two setups, so an
+  // evaluation refuses the second; the same library under another path is the same setup.
+  const L = require('../../scripts/lib/learning/setup-library');
+  const K = require('../../scripts/lib/learning/looks');
+  const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+  const libA = L.writeLibrary(path.join(user, 'libA'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
+  const libB = L.writeLibrary(path.join(user, 'libB'), L.buildLibraryIndex([rec('2022-03-02')], { reps: 20 }));
+  const copyA = path.join(user, 'copyA.json');
+  fs.copyFileSync(libA, copyA);
+  assert.strictEqual(h({}), h({}), 'no library: the hash it had');
+  assert.notStrictEqual(h({ setupLibrary: libA }), h({}));
+  assert.notStrictEqual(h({ setupLibrary: libA }), h({ setupLibrary: libB }));
+  assert.strictEqual(h({ setupLibrary: libA }), h({ setupLibrary: copyA }));
+  const arm = (runId, setupLibrary) => ({ evaluation: 'evL', candidate: 'champ', purpose: 'judging', runId, from: '2025-03-03', to: '2025-03-04', arm: runId === 'r-with' ? `with:${'a'.repeat(16)}` : 'without', config: h({ runId, setupLibrary }) });
+  const ledger = [{ kind: 'look', ...arm('r-without', libA), role: 'test' }];
+  const other = K.checkLook(arm('r-with', libB), ledger);
+  assert.strictEqual(other.ok, false);
+  assert.match(other.refusals.join(), /its arms differ only in their experience index/);
+  assert.ok(K.checkLook(arm('r-with', libA), ledger).ok, 'the same library: a valid arm');
 });
 
 

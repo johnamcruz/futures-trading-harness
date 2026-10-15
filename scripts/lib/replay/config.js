@@ -292,6 +292,10 @@ function setupHash(run) {
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
+    // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
+    // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
+    // the hash it had (its looks in the ledger stay its own).
+    ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
