@@ -1,5 +1,7 @@
 {
  "scan": 2,
+ "scanHash": "dbb832080a0b7af229e6a82f0804acf74f826d37c09eb3f1a7d33eba11466f49",
+ "about": "Regenerated, not edited: node scripts/regen-tunable-pins.js. scan is the scanner's version and scanHash the hash of tests/plugin/tunable-scan.js: a changed scanner needs a higher scan (a test refuses otherwise), and a higher scan than the base's needs literals equal to what the scanner counts now. constants only shrink and are never reset.",
  "constants": {
   "scripts/hooks/hook-input.js": {
    "DEFAULT_MAX_STDIN": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"

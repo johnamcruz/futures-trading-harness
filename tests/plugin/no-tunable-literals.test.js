@@ -14,6 +14,12 @@
 //   goes into a config file, and the code reads it). A listed mechanical form (`mechanics`: a protocol's code, each with
 //   its reason) is not counted.
 //
+// The pins are regenerated, not edited: node scripts/regen-tunable-pins.js (scripts/lib/tunable-pins.js). `scan` is the
+// scanner's version and `scanHash` the hash of tests/plugin/tunable-scan.js: a scanner whose hash differs from the pinned
+// one fails (regenerate), a scanner whose hash differs from the base branch's needs a higher `scan` than the base's, and
+// a `scan` higher than the base's (counts and mechanics start over) needs the committed counts to EQUAL what the scanner
+// counts now, so a restart can't pad them. The constants list stays shrink-only and is never reset.
+//
 // The pins only shrink: a constant moved to config leaves the list, a file whose count fell lowers its pin, and the
 // list is checked against the base branch's (a new name, an edited reason or a higher count there is refused).
 const test = require('node:test');
@@ -22,23 +28,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const S = require('./tunable-scan');
+const { scanHash, counts } = require('../../scripts/lib/tunable-pins');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const PINS_REL = 'tests/plugin/no-tunable-literals.pins.json';
 const PINS = JSON.parse(fs.readFileSync(path.join(REPO, PINS_REL), 'utf8'));
 
-function current() {
-  const constants = {};
-  const literals = {};
-  for (const f of S.scriptFiles(REPO)) {
-    const text = fs.readFileSync(path.join(REPO, f), 'utf8');
-    const names = [...new Set(S.constantsIn(text).map(c => c.name))];
-    if (names.length) constants[f] = names.sort();
-    const n = S.literalCount(text, { mechanics: Object.keys(PINS.mechanics || {}) });
-    if (n) literals[f] = n;
-  }
-  return { constants, literals };
-}
+const current = () => counts(REPO, Object.keys(PINS.mechanics || {}));
 
 /** The base branch's pins (git merge-base HEAD origin/main), or null when the base has no such file yet. */
 function basePins() {
@@ -91,7 +87,7 @@ function againstBase(pins, base) {
   }
   // A wider scan (a higher `scan` number in the pins, raised in a reviewed change that says why) counts what the base's
   // scan did not see: its mechanics and per-file counts start over. The constants' list still only shrinks.
-  if ((pins.scan || 1) > (base.scan || 1)) return problems;
+  if ((pins.scan || 1) > (base.scan || 1)) return problems; // equality with the scanner's counts: the test below
   for (const [form, why] of Object.entries(pins.mechanics || {})) {
     const was = (base.mechanics || {})[form];
     if (!was) problems.push(`mechanics: ${form} is not listed on the base branch: the list may only shrink`);
@@ -105,6 +101,30 @@ test('guard: the pins only shrink against the base branch, and a listed reason i
   const base = basePins();
   if (base === null) return; // the change that brings the guard
   assert.deepStrictEqual(againstBase(PINS, base), []);
+});
+
+/** The scan version against the base's: a changed scanner needs a higher `scan`. */
+function scanAgainstBase(pins, base) {
+  if (pins.scanHash === base.scanHash) return [];
+  return (pins.scan || 1) > (base.scan || 1) ? [] : [`the scanner (tests/plugin/tunable-scan.js) differs from the base branch's but scan is ${pins.scan || 1}, not above the base's ${base.scan || 1}: run node scripts/regen-tunable-pins.js`];
+}
+
+test('guard: the pinned scanner hash is the scanner\'s (a changed scanner needs its pins regenerated)', () => {
+  assert.strictEqual(PINS.scanHash, scanHash(REPO), 'tests/plugin/tunable-scan.js changed: run node scripts/regen-tunable-pins.js (it raises scan and rewrites the counts)');
+});
+
+test('guard: a changed scanner raises `scan` above the base\'s, and a raised `scan` pins exactly the scanner\'s counts', () => {
+  const base = basePins();
+  if (base === null) return;
+  assert.deepStrictEqual(scanAgainstBase(PINS, base), []);
+  if ((PINS.scan || 1) > (base.scan || 1)) assert.deepStrictEqual(current().literals, PINS.literals, 'a restart of the counts equals what the scanner counts now');
+  // The rules themselves.
+  const was = { scan: 2, scanHash: 'aa' };
+  assert.deepStrictEqual(scanAgainstBase(was, was), []);
+  assert.match(scanAgainstBase({ scan: 2, scanHash: 'bb' }, was).join(), /differs from the base branch's but scan is 2/);
+  assert.deepStrictEqual(scanAgainstBase({ scan: 3, scanHash: 'bb' }, was), []);
+  assert.match(scanAgainstBase({ scan: 1, scanHash: 'bb' }, { constants: {} }).join(), /but scan is 1/);
+  assert.deepStrictEqual(scanAgainstBase({ scan: 2, scanHash: 'bb' }, { constants: {} }), [], 'a base without scan counts as 1');
 });
 
 test('guard: the base comparison catches a name added, a reason edited and a count raised', () => {

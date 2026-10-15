@@ -73,6 +73,47 @@ test('modify_order under a refused config file: an entry order is not resized or
   assert.deepStrictEqual(checks(run({ orderId: 31, limitPrice: 21390 }, long2, [stop, entry])), ['config-critical']);
 });
 
+test('modify_order under a refused config file: a bracket stop or target of a working entry may only lose risk (a smaller size, a stop toward the entry)', () => {
+  const critical = { ...config, configCritical: 'CRITICAL config error: the training config (x) is refused', skipChecks: new Set(['config-critical', 'modify-entry', 'modify-size']) };
+  const run = (input, orders) => evaluateModifyAccount({ input, positions: [], orders, config: critical });
+  // A long entry (buy limit 21400, 2 lots) with its bracket: a stop 21380 and a target 21440.
+  const entry = { id: 31, contractId: CONTRACT, side: 0, type: 1, size: 2, limitPrice: 21400 };
+  const stop = { id: 32, contractId: CONTRACT, side: 1, type: 4, size: 2, stopPrice: 21380 };
+  const stop2 = { id: 34, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21380 };
+  const target = { id: 33, contractId: CONTRACT, side: 1, type: 1, size: 2, limitPrice: 21440 };
+  const book = [entry, stop, target];
+  const ok = input => assert.deepStrictEqual(run(input, book), [], JSON.stringify(input));
+  const refused = (input, orders = book) => assert.deepStrictEqual(checks(run(input, orders)), ['config-critical'], JSON.stringify(input));
+  ok({ orderId: 32, stopPrice: 21390 }); // tightened toward the entry
+  ok({ orderId: 32, stopPrice: 21400 }); // up to the entry price
+  ok({ orderId: 33, size: 1 }); // a target cut
+  assert.deepStrictEqual(run({ orderId: 32, size: 1 }, [entry, stop, stop2, target]), [], 'a stop cut that the other stops still cover');
+  refused({ orderId: 32, stopPrice: 21370 }); // loosened
+  refused({ orderId: 32, stopPrice: 21410 }); // past the entry
+  refused({ orderId: 32, stopPrice: 21380 }); // not moved
+  refused({ orderId: 32, size: 1 }); // leaves 1 of 2 without a stop
+  refused({ orderId: 32, size: 3 }); // larger
+  refused({ orderId: 33, size: 3 });
+  refused({ orderId: 33, limitPrice: 21420 }); // a target is not repriced
+  refused({ orderId: 32, size: 1, stopPrice: 21370 }); // a good cut cannot carry a bad move
+  refused({ orderId: 32, trailPrice: 21390 });
+  refused({ orderId: 32, stopPrice: 21390, limitPrice: 21385 }); // a good stop move cannot carry another price field
+  refused({ orderId: 31, limitPrice: 21390 }); // the entry itself
+  refused({ orderId: 31, limitPrice: 21410 });
+  refused({ orderId: 31, size: 3 });
+  refused({ orderId: 31, size: 1 });
+  refused({ orderId: 32 }); // nothing to cut
+  refused({ orderId: 32, stopPrice: 21390 }, [stop, target]); // no working entry: a leftover
+  refused({ orderId: 32, stopPrice: 21390 }, [{ ...entry, limitPrice: undefined, type: 2 }, stop]); // an entry without a price
+  refused({ orderId: 32, stopPrice: 21370 }, [entry, { ...stop, stopPrice: 21395 }]); // a stop above... still loosened
+  // A short entry mirrors: sell limit 21400 with a buy stop 21420.
+  const sEntry = { ...entry, side: 1 };
+  const sStop = { id: 35, contractId: CONTRACT, side: 0, type: 4, size: 2, stopPrice: 21420 };
+  assert.deepStrictEqual(run({ orderId: 35, stopPrice: 21410 }, [sEntry, sStop]), []);
+  assert.deepStrictEqual(checks(run({ orderId: 35, stopPrice: 21430 }, [sEntry, sStop])), ['config-critical']);
+  assert.deepStrictEqual(checks(run({ orderId: 35, stopPrice: 21390 }, [sEntry, sStop])), ['config-critical'], 'past the entry');
+});
+
 test('entries are refused while a position is open', () => {
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: long1, config })), ['position-open']);
   assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [], config }), []);
