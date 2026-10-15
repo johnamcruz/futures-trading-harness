@@ -134,7 +134,7 @@ function parseFaults(text) {
 }
 
 /** The faults the score injected: the given rates and what fired, or that none were measured. */
-const faultsText = (f, seen = {}) => (f.measured && (f.stopFault > 0 || f.outage > 0)
+const faultsText = (f, seen = {}) => (f.measured
   ? `faults at the given rates (stop ${f.stopFault} a trade, outage ${f.outage} a day; ${seen.injected || 0} stop fault(s) fired, ${seen.missed || 0} without a no-stop path, ${seen.outages || 0} outage day(s))`
   : 'faults not measured (no rates given: --faults stop=<rate>,outage=<rate>)');
 
