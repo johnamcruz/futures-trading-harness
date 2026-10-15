@@ -30,7 +30,7 @@ function world() {
   const live = path.join(dir, 'live');
   fs.mkdirSync(live);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: ['node', '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL', env: ['SIM_DATA', 'SIM_API_KEY'] } } }));
-  const env = { PATH: process.env.PATH, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json'), SIM_DATA: '/data/a', SIM_API_KEY: 'hunter2-secret' };
+  const env = { PATH: process.env.PATH, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json'), SIM_DATA: '/data/a', SIM_API_KEY: 'fake-credential-value' };
   return { dir, env, roots: { base: fakeRoot(dir), skill: fakeRoot(dir, { skill: 'v2' }), code: fakeRoot(dir, { code: 'v2' }) } };
 }
 
@@ -82,7 +82,7 @@ test('the setup record: written once at a run\'s start, its pinned parts, and ne
   assert.match(rec.pinned.list, /^window 2023-03-06T14:00:00.000Z\.\.2023-03-06T20:00:00.000Z$/);
   assert.strictEqual(rec.pinned.index, 'without');
   assert.ok(rec.config['cfg.account'] && !('practice.seed' in rec.config) && !('cfg.dataDir' in rec.config), 'the seed is pinned, the run\'s own folders are no part of it');
-  assert.ok(!JSON.stringify(rec).includes('hunter2'), 'a credential never reaches the record');
+  assert.ok(!JSON.stringify(rec).includes('fake-credential'), 'a credential never reaches the record');
   // Another data setting is other data; the credential's value is no part of the setup.
   assert.notStrictEqual(AB.setupRecord(run, { env: { ...w.env, SIM_DATA: '/data/b' } }).pinned.data, rec.pinned.data);
   assert.strictEqual(AB.setupRecord(run, { env: { ...w.env, SIM_API_KEY: 'other' } }).pinned.data, rec.pinned.data);
@@ -123,7 +123,7 @@ test('setups: refused unless they share stage, list or window, seed, market, dat
   assert.deepStrictEqual(AB.compareSetups(base, shown).refusals, []);
   refused({ ...shown, base: 'e'.repeat(64) }, /config field libraryDisplay differs: declare it/);
   // A credential-like setting's value is never printed.
-  assert.match(AB.compareSetups({ ...base, config: { ...base.config, 'gate.FTH_X_TOKEN': '"a"' } }, base, { field: 'gate.FTH_X_TOKEN' }).differs.join(''), /gate.FTH_X_TOKEN: \(redacted\) vs \(redacted\)/);
+  assert.match(AB.compareSetups({ ...base, config: { ...base.config, 'gate.FTH_X_TOKEN': '"a"' } }, base, { field: 'gate.FTH_X_TOKEN' }).differs.join(''), /gate.FTH_X_TOKEN: \(redacted\) vs \(redacted\)/); // check-secrets: allow (a fake credential-like name)
 });
 
 test('pairing: one decision per (root, bar); an entry\'s legs averaged, a pass 0; another bar is not a pair', () => {
