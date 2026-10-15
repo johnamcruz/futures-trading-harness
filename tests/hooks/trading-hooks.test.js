@@ -2688,6 +2688,35 @@ test('order gate (hook): a trade_lifecycle entry is judged on its compose record
   }
 });
 
+test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
+  // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
+  const b = LC.briefing();
+  b.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
+  b.sections.m3.data.candles['4h'] = { o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
+    relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }],
+    fvgRelations: [{ name: '15m fvg low', price: 21472, side: 'bullish', rel: 'rejected', dir: 'up' }] };
+  const run = rejection => {
+    const home = trendHome(tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
+    const reads = [{ step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' }, ...LC.READS.filter(x => x.step !== 'bias'),
+      { step: 'setup', skill: 'rejection', read: rejection }];
+    LC.writeScenario(home, { reads, b });
+    return gate(orderPayload(LC.order()), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env);
+  };
+  // The gap edge's rejection is true (the record stands), but it is no 4h rejection of a level: the trend rule refuses.
+  const gap = run('4h rejected 15m fvg low up');
+  assert.strictEqual(gap.code, 2);
+  assert.match(gap.stderr, /\[mtf-trend\]/);
+  assert.doesNotMatch(gap.stderr, /\[composed-reads\]/);
+  // A real 4h rejection of a key level with the 1h CHoCH: it goes.
+  const level = run('4h rejected previous 4h low up');
+  assert.strictEqual(level.code, 0, level.stderr);
+  // An exit against the same trend always goes.
+  const home = trendHome(tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }),
+    setup([], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT }).env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to the broker; a record for the other side or a false read never reaches it; an exit goes', async () => {
   const { spawn } = require('child_process');
   const run = async (prepare, messages, extra = {}) => {
