@@ -38,7 +38,7 @@ A learning run lies inside one window. A replay outside the split declares
 Set up the harness, the replay broker and the model server as `docs/OPERATING.md`
 describes ("Setup", "Replay") and `docs/BACKTESTING.md` (the bar data). Your
 model and machine settings stay in your own local config, never in the repo.
-The replay driver passes the account's limits (`max_contracts`, `daily_loss_limit`) to the replay broker through the variables its `brokers.json` entry names (`limits`; `mcp-configs/README.md`): change a limit in the account file, once. The preflight's `broker-limits` check confirms the broker reports them.
+The replay driver passes the account's limits (`max_contracts`, `daily_loss_limit`) to the replay broker through the variables its `brokers.json` entry names (`limits`; `mcp-configs/README.md`): change a limit in the account file, once. The size limit is the smallest `max_contracts` among the run's symbols (the broker has one size limit); an account that states none for them refuses a learning run. The preflight's `broker-limits` check confirms the broker reports them, and fails a learning run on a replay broker it cannot read.
 
 **Curated lists.** Code scans history for setup moments, then picks seeded,
 year-balanced lists:

@@ -535,20 +535,28 @@ function monteCarlo(ctx) {
 /**
  * The replay broker's limits against the account's (learning/broker-limits.js): its order and position size at least the
  * account's max_contracts and its daily loss limit the account's daily_loss_limit, else practice would not equal live.
- * A limit the broker's get_server_config does not give is N/A, never guessed; a broker that can't be read is a WARN.
+ * A limit the broker's get_server_config does not give is N/A, never guessed; a replay broker that can't be read is a FAIL on a
+ * learning run (a WARN on any other); a live broker is N/A without starting its server. The account is the run's own (`run.limits`).
  */
 function brokerLimits(ctx) {
-  const p = policyOf(ctx);
-  const account = p ? ctx.read.accountProfile(p.account) : null;
   const entry = ctx.read.brokerEntry(ctx.run);
-  const symbols = (ctx.run.cfg || {}).symbols;
+  // The account the run itself uses (the replay config's `limits`: prop, account states, else the policy's), never another.
+  const want = ctx.run.limits || null;
+  const learning = ctx.run.learning === true || (ctx.gate || {}).learning === true;
   const { compareLimits } = require('./broker-limits');
   // A replay broker whose brokers.json entry maps no limit variable can't be given the account's: FAIL, read or not.
-  const mapped = compareLimits({ config: null, account, symbols, entry });
+  const mapped = compareLimits({ config: null, want, entry, learning });
   if (mapped.status === FAIL) return r('broker-limits', FAIL, mapped.detail);
+  // A live broker's limits are its own: its server is not started to ask.
+  if (entry && entry.replay !== true) return r('broker-limits', NA, 'the broker is not a replay server: its limits are its own');
   const config = ctx.read.brokerConfig(ctx.run);
-  if (config && config.error) return r('broker-limits', WARN, `the broker's configuration could not be read (${config.error}): its limits are not checked`);
-  const x = compareLimits({ config, account, symbols, entry });
+  if (config && config.error) {
+    // Practice equals live: a learning run on a replay broker whose limits can't be read is not known to have the account's.
+    return learning && entry && entry.replay === true
+      ? r('broker-limits', FAIL, `the replay broker's configuration could not be read (${config.error}): a learning run needs its limits confirmed to be the account's`)
+      : r('broker-limits', WARN, `the broker's configuration could not be read (${config.error}): its limits are not checked`);
+  }
+  const x = compareLimits({ config, want, entry, learning });
   return r('broker-limits', x.status, x.detail);
 }
 

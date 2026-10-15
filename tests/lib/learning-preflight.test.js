@@ -40,7 +40,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
   return {
     run: {
       runId: 'r', learning: true, start: D('2022-03-07T14:30:00Z'), end: D('2022-03-07T15:00:00Z'), cfg: { ...PF.AUTOTRADER, harness: 'opencode', barDelaySeconds: 2 },
-      practice: PF.PRACTICE, curated: { file: 'c.json', list: 'mix', fingerprint: 'f1' }, latency: true, libraryDisplay: false, experienceIndex: 'i.json', prop: null, stage: 1, ...run,
+      practice: PF.PRACTICE, curated: { file: 'c.json', list: 'mix', fingerprint: 'f1' }, latency: true, libraryDisplay: false, experienceIndex: 'i.json', prop: null, stage: 1, limits: { dailyLoss: 2000, maxOrderSize: 100, maxPositionSize: 100, symbol: 'MNQ', caps: { MNQ: 100 }, missing: [] }, ...run,
     },
     gate: { from: D('2022-03-07T14:30:00Z'), to: D('2022-03-07T15:00:00Z'), runId: 'r', learning: true, ...gate },
     read: {
@@ -394,8 +394,8 @@ function replayRun(start, over = {}, flags = []) {
   fs.writeFileSync(config, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, noWeb: true, ...over }));
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
-  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', config, '--bars', `MNQ=${bars}`, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live }, timeout: 60000 });
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')], replay: true, limits: { dailyLoss: 'FAKE_MAX_DAILY', maxOrderSize: 'FAKE_MAX_ORDER', maxPositionSize: 'FAKE_MAX_POSITION' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL', 'FAKE_REPLAY_NOW'] } } }));
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', config, '--bars', `MNQ=${bars}`, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live, FAKE_REPLAY_NOW: start }, timeout: 60000 });
   return { ...r, user, home: path.join(user, 'replays', 'r'), config, bars };
 }
 
@@ -436,12 +436,13 @@ test('scripts/training-preflight.js: 0 on a pass, 1 on a FAIL, 2 on a usage erro
     return f;
   };
   fs.mkdirSync(path.join(user, 'live'));
-  fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
-  const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') } });
+  fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')], replay: true, limits: { dailyLoss: 'FAKE_MAX_DAILY', maxOrderSize: 'FAKE_MAX_ORDER', maxPositionSize: 'FAKE_MAX_POSITION' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL', 'FAKE_REPLAY_NOW'] } } }));
+  const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live'), FAKE_REPLAY_NOW: '2022-03-07T14:30:00Z' } });
   const ok = run(['--config', write({}), '--bars', `MNQ=${bars}`]);
   assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
   assert.match(ok.stdout, /^PASS strategy: /m);
   assert.match(ok.stdout, /^PASS monte-carlo: the 30-day Monte Carlo scores the run/m);
+  assert.match(ok.stdout, /^PASS broker-limits: the replay broker.s limits match the account.s/m, "the real server, started as the driver starts it, reports the limits the driver passed");
   assert.match(ok.stdout, /^PASS account-facts: .*a fresh attempt: balance, floor, cushion/m);
   const bad = run(['--config', write({ practice: undefined }), '--bars', `MNQ=${bars}`]);
   assert.strictEqual(bad.status, 1);

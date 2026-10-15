@@ -3,19 +3,18 @@
 /**
  * The broker-limits preflight check's logic: the replay broker's own guardrails (get_server_config: maxOrderSize,
  * maxPositionSize, maxDailyLoss; docs/BROKER-MCP-INTERFACE.md) against the account's (ACCOUNT.md max_contracts per
- * symbol, daily_loss_limit; trading/accounts.js accountLimits). The replay driver passes the account's limits to the
+ * symbol, daily_loss_limit; trading/accounts.js accountLimits, held by the run as its `limits`: the one source). The replay driver passes the account's limits to the
  * replay broker through the env variable names its brokers.json entry gives (`limits`; replay/config.js replayEnv);
  * this confirms the broker reports them. A replay broker left on its defaults would refuse or cap real-sized orders,
  * or stop the day early, so practice would not equal live. The harness reaches the broker only through the adapter.
  *
- *   compareLimits({ config, account, symbols, entry })  -> { status: 'PASS' | 'FAIL' | 'N/A', detail }
+ *   compareLimits({ config, want, entry, learning })  -> { status: 'PASS' | 'FAIL' | 'N/A', detail }
  *   missingMapping(entry)                               -> the limits a replay broker's entry names no variable for
  *   readBrokerConfig(root, env)                         -> the server's get_server_config answer, or { error } (synchronous)
  */
 
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { accountLimits } = require('../trading/accounts');
 
 const KEYS = Object.freeze(['dailyLoss', 'maxOrderSize', 'maxPositionSize']);
 const SETTING = 'the account\'s ACCOUNT.md (the replay driver passes it to the broker; mcp-configs/README.md)';
@@ -29,21 +28,32 @@ function missingMapping(entry) {
   return KEYS.filter(k => typeof m[k] !== 'string' || !m[k]);
 }
 
-function compareLimits({ config, account, symbols, entry }) {
+/**
+ * `want` is the run's own limits (the replay config's `limits`, trading/accounts.js accountLimits of the account the run
+ * uses), or null when the run has no account. `learning`: a learning run, where a size the account does not state is a FAIL
+ * (the broker would run on its defaults, so practice would not equal live), else it is not judged.
+ */
+function compareLimits({ config, want, entry, learning = false }) {
   if (entry && entry.replay === true) {
     const miss = missingMapping(entry);
     if (miss.length) return { status: 'FAIL', detail: `the replay broker "${entry.name || 'broker'}" has no limits.${miss.join(', limits.')} in its brokers.json entry (the env variable name of each limit), so the account's limits can't be passed to it` };
   }
   if (!config || typeof config !== 'object') return { status: 'N/A', detail: 'the broker\'s configuration was not read' };
   if (config.replay !== true) return { status: 'N/A', detail: 'the broker is not a replay server (get_server_config does not report replay: true): its limits are its own' };
-  if (!account) return { status: 'N/A', detail: 'no account profile to compare the broker\'s limits with' };
-  const want = accountLimits(account, symbols);
+  if (!want) return { status: 'N/A', detail: 'no account the run uses to compare the broker\'s limits with' };
   const bad = [];
   const na = [];
+  const missing = want.missing || [];
+  const noCap = `the account states no contract cap for ${missing.join(', ') || 'the run\'s symbols'}`;
+  const caps = Object.entries(want.caps || {});
+  const differ = new Set(caps.map(([, n]) => n)).size > 1;
+  const strict = differ ? ` (the strictest of ${caps.map(([s, n]) => `${s} ${n}`).join(', ')}: the broker has one size limit for every symbol)` : '';
   for (const key of ['maxOrderSize', 'maxPositionSize']) {
-    if (!isSize(config[key])) na.push(`${key} (get_server_config gives none)`);
-    else if (want[key] === null) na.push(`${key} (the account states no max_contracts for ${(symbols || []).join(', ') || 'the run\'s symbols'})`);
-    else if (config[key] < want[key]) bad.push(`${key} ${config[key]} is below the account's max_contracts ${want[key]} (${want.symbol}): set it from ${SETTING}`);
+    if (want[key] === null) {
+      if (learning) bad.push(`${key}: ${noCap}, so the broker would run on its own default; state max_contracts in ${SETTING}`);
+      else na.push(`${key} (${noCap})`);
+    } else if (!isSize(config[key])) na.push(`${key} (get_server_config gives none)`);
+    else if (config[key] < want[key]) bad.push(`${key} ${config[key]} is below the account's max_contracts ${want[key]} (${want.symbol})${strict}: set it from ${SETTING}`);
   }
   const limit = want.dailyLoss > 0 ? want.dailyLoss : 'off';
   if (!isLoss(config.maxDailyLoss)) na.push('maxDailyLoss (get_server_config gives none)');
@@ -51,7 +61,7 @@ function compareLimits({ config, account, symbols, entry }) {
   const notJudged = na.length ? `; not judged: ${na.join('; ')}` : '';
   if (bad.length) return { status: 'FAIL', detail: `the replay broker's limits are not the account's: ${bad.join('; ')}${notJudged}` };
   if (na.length === KEYS.length) return { status: 'N/A', detail: `not judged: ${na.join('; ')}` };
-  return { status: 'PASS', detail: `the replay broker's limits match the account's${notJudged}` };
+  return { status: 'PASS', detail: `the replay broker's limits match the account's${strict}${notJudged}` };
 }
 
 /** get_server_config through the adapter, in a child (the preflight is synchronous); { error } when it can't be read. */

@@ -383,8 +383,8 @@ test('scripts/replay.js run records the setup at the run\'s start, the one its l
     // The training preflight runs first: the run's 1m bars (--bars) and a 1m data lane (tests/fixtures/preflight.js).
     flags = [...flags, '--bars', `MNQ=${PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10))}`];
     fs.mkdirSync(path.join(user, 'live'), { recursive: true });
-    fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
-    return spawnSync(process.execPath, [path.join(REPO, 'scripts', 'replay.js'), 'run', '--config', path.join(user, 'replay.json'), ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') }, timeout: 60000 });
+    fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'broker-mcp-server.js')], replay: true, limits: { dailyLoss: 'FAKE_MAX_DAILY', maxOrderSize: 'FAKE_MAX_ORDER', maxPositionSize: 'FAKE_MAX_POSITION' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL', 'FAKE_REPLAY_NOW'] } } }));
+    return spawnSync(process.execPath, [path.join(REPO, 'scripts', 'replay.js'), 'run', '--config', path.join(user, 'replay.json'), ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live'), FAKE_REPLAY_NOW: '2022-03-07T14:30:00Z' }, timeout: 60000 });
   };
   const file = path.join(user, 'replays', 'r', 'replay', 'r', AB.SETUP_FILE);
   run('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z');

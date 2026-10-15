@@ -337,12 +337,21 @@ function liveBrokerVars(env) {
   return vars;
 }
 
-/** The account the active policy strategy trades (its `account`), or null: none, or one that doesn't load. */
+/**
+ * The account the active policy strategy trades (its `account`), or null: none, or one that doesn't load. More than one
+ * active policy naming different accounts is refused (load order must never decide which account's limits the broker gets).
+ */
 function policyAccount(root, env) {
   if (!root) return null;
+  let names;
   try {
-    const p = require('../trading/strategies').loadStrategies(root, env).strategies.find(s => s.signal === 'policy' && s.status === 'active' && s.account);
-    return p ? require('../trading/accounts').accountNamed(root, p.account, env) : null;
+    names = [...new Set(require('../trading/strategies').loadStrategies(root, env).strategies.filter(s => s.signal === 'policy' && s.status === 'active' && s.account).map(s => s.account))];
+  } catch (_err) {
+    return null;
+  }
+  if (names.length > 1) throw new Error(`invalid replay config:\n- more than one active policy strategy names an account (${names.sort().join(', ')}): the replay broker's limits come from one; pass the run's account (prop) or keep one policy active`);
+  try {
+    return names.length ? require('../trading/accounts').accountNamed(root, names[0], env) : null;
   } catch (_err) {
     return null;
   }
@@ -455,8 +464,9 @@ function runSettings(run, base = process.env) {
   // every allowlisted name is one of `env`).
   const names = [...new Set(b.env || [])].filter(k => !own.has(k) && !CREDENTIAL.test(k));
   const brokerSettings = Object.fromEntries(names.sort().map(k => [k, env[k] ?? null]));
-  // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
-  const brokerEntry = { ...b, limits: undefined, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
+  // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run). The entry's `limits`
+  // mapping stays in it: an edit of the variables the account's limits go into is another run.
+  const brokerEntry = { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
   return { gate, brokerEntry, brokerSettings };
 }
 
