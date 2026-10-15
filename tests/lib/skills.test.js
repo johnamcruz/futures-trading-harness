@@ -115,7 +115,7 @@ const AUTONOMOUS = [
   'agents/news-calendar-analyst.md', 'agents/risk-manager.md', 'agents/trade-executor.md', 'agents/trade-reviewer.md',
 ];
 // Commands the docs give to the user (the skill says so where it names them); agents never run them.
-const USER_ONLY = new Set(['combine.js start', 'combine.js stop', 'combine.js record-day', 'backtest.js', 'evaluate.js', 'check-secrets.js', 'sync-harness.js', 'install.js', 'autotrader.js']);
+const USER_ONLY = new Set(['combine.js start', 'combine.js stop', 'combine.js record-day', 'backtest.js', 'replay.js report', 'check-secrets.js', 'sync-harness.js', 'install.js', 'autotrader.js']);
 
 test('skills: every command an autonomous skill or agent names is allowed for Claude and Qwen runs', () => {
   for (const f of AUTONOMOUS) assert.ok(DOCS.some(d => d.rel === f), `${f} is missing; update the list`);

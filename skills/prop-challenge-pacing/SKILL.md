@@ -39,6 +39,11 @@ it:
 - In autonomous runs the cycle prompt carries each running attempt's state
   (balance, floor, cushion, profit, the day, sessions left, the size budget,
   any entry block) and the live verdicts, from the runner's latest snapshot.
+  It also carries facts only (the gate enforces the limits): the day of the
+  attempt, the profit still needed, the room to the daily limit and to the soft
+  stop, today's trades and losses, the losing streak, and, with a consistency
+  rule, the most today may make and still meet it, which caps today's useful
+  profit and is not a target.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;

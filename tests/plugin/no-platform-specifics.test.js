@@ -67,7 +67,7 @@ const SHRINK_ONLY = [
   ['scripts/lib/trading/order-gate.js', 'firm-time'],
   ['scripts/lib/trading/reasons.js', 'account'],
   ['scripts/lib/trading/report-cache.js', 'account'],
-  ['skills/replay/SKILL.md', 'firm account firm-time'],
+  ['skills/replay/SKILL.md', 'account'],
   ['strategies/README.md', 'account'],
   ['strategies/prop_portfolio/STRATEGY.md', 'account'],
   ['tests/e2e/mock-trading-e2e.test.js', 'account'],
