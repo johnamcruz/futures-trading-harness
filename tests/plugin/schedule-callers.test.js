@@ -71,10 +71,16 @@ t('scorecardLook', () => {
   fs.writeFileSync(path.join(dir, 'learning-run.json'), JSON.stringify({ learning: true, role: 'practice-train' }));
   return lib('learning/scorecard-look').learningLook(dir, { manifest: { runId: 'r' }, days: { '2023-06-05': {} } }).role;
 });
+t('checkedScorecard', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-probe-'));
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId: 'r', source: 'replay' }));
+  fs.writeFileSync(path.join(dir, '2023-03-06.jsonl'), '');
+  return lib('train/loop').checkedScorecard(() => 'scored')({ runDir: dir, look: { purpose: 'tuning', ledger: [] } });
+});
 t('modelVerifier', () => lib('train/model-verifier').windowErrors([{ from: '2023-06-05', to: '2023-06-06' }], []).length);
 t('trainLoop', () => lib('train/loop').judgeHeldOut({ loop: { heldOutWindows: [{ from: '2023-03-06', to: '2023-03-10' }] }, heldOutLook: true, env: { HOME: os.tmpdir() }, root: process.cwd() }));
-Promise.resolve(out.trainLoop).then(v => { out.trainLoop = v; }, e => { out.trainLoop = 'threw: ' + e.message.split('\\n')[0]; })
-  .then(() => process.stdout.write(JSON.stringify(out)));
+const settle = k => Promise.resolve(out[k]).then(v => { out[k] = v; }, e => { out[k] = 'threw: ' + e.message.split('\\n')[0]; });
+Promise.all([settle('trainLoop'), settle('checkedScorecard')]).then(() => process.stdout.write(JSON.stringify(out)));
 `;
 
 function probe(source) {
@@ -105,6 +111,7 @@ test('every caller reads the schedule through the resolver: moving the config mo
     scorecard: ['train', /^threw: .*select \[2023-01-01, 2024-07-01\) allows judging looks only, not tuning/],
     scorecardLook: ['practice-train', /^threw: .*are practice-validate, not the practice-train window/],
     modelVerifier: [0, 1],
+    checkedScorecard: ['scored', /^threw: .*select \[2023-01-01, 2024-07-01\) allows judging looks only, not tuning/],
     runGate: ['practice-train', /^threw: learning run refused: practice-validate months need the validate flag/],
     trainLoop: [/^threw: heldOutWindows 2023-03-06..2023-03-10: not inside one held-out unit/, /^threw: (?!heldOutWindows)/],
   };
