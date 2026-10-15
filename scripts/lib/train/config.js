@@ -17,6 +17,9 @@
  *   maxProposals    proposals per iteration (1-5, default 2)
  *   limits          { maxIterations (default 1), maxModelCalls (default 200), maxWallMinutes (default 240) }
  *   decision        tighter settings of the frozen decision rule (paired.js ruleFrom); never looser
+ *   learning        the learning gate of its window runs (learning/run-gate.js, as replay.js run): { evaluation (required
+ *                   for any window outside practice-train; each window's is <evaluation>.<label>), validate }; never reasoningFix; the candidate is the
+ *                   loop's look's. A replay config with "learning": false declares runs that never teach
  *   evaluator       the mechanical verifier (train/evaluator.js): { prop, data: { SYMBOL: bar file }, ...settings };
  *                   none: a strategy or rulebook change stays blocked
  *
@@ -59,6 +62,20 @@ function int(v, [def, min, max], key, errors) {
   return v;
 }
 
+const LEARNING_KEYS = ['evaluation', 'validate'];
+
+/** The loop's learning settings (learning/run-gate.js), checked: null when none. */
+function learningErrors(l, errors) {
+  if (l === undefined || l === null) return null;
+  if (typeof l !== 'object' || Array.isArray(l)) { errors.push(`learning: { ${LEARNING_KEYS.join(', ')} }`); return null; }
+  for (const k of Object.keys(l)) if (!LEARNING_KEYS.includes(k)) errors.push(`learning.${k}: not a setting (${LEARNING_KEYS.join(', ')})`);
+  if (l.evaluation !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(l.evaluation))) errors.push('learning.evaluation: an evaluation id (letters, digits, ".", "_", "-")');
+  if (l.validate !== undefined && typeof l.validate !== 'boolean') errors.push('learning.validate: true or false');
+  // A reasoning-fix look hides its outcomes; the loop reads every outcome (its scorecards, its paired test): refused.
+  if (l.reasoningFix !== undefined) errors.push('learning.reasoningFix: refused in the training loop, which reads every outcome (a reasoning-fix look hides them)');
+  return { ...l };
+}
+
 function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const errors = [];
@@ -82,12 +99,15 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   try { evaluator = resolveEvaluator(r.evaluator, baseDir); } catch (err) { errors.push(err.message); }
   let rule = null;
   try { rule = ruleFrom(r.decision); } catch (err) { errors.push(err.message); }
+  const learning = learningErrors(r.learning, errors);
   if (errors.length) throw new Error(`invalid training-loop config:\n- ${errors.join('\n- ')}`);
   // A replay config's autotrader given as a path resolves against this file's folder.
   if (typeof replay.autotrader === 'string') replay = { ...replay, autotrader: readSpec(replay.autotrader, baseDir, 'replay.autotrader') };
   const loop = {
     loopId: r.loopId, replay, proposer, tuningWindows: r.tuningWindows, heldOutWindows: r.heldOutWindows || null,
     repeats, seed, maxFlagged, controlPoints, maxProposals, limits, rule, evaluator,
+    // Only when set: a loop without it keeps its hash (a resumed loop is the same loop).
+    ...(learning ? { learning } : {}),
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
   };
   const { limits: _l, ...identity } = loop;

@@ -56,6 +56,8 @@ const E = require('./evaluator');
 const { replayFor } = require('./config');
 const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
+const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
+const { rolesBetween } = require('../learning/splits');
 
 class Stop extends Error {}
 
@@ -185,6 +187,24 @@ async function championTree(ctx) {
   });
 }
 
+/**
+ * A window run's learning gate: the run's window and `"learning"` flag (the loop's replay config), the loop's
+ * `learning` settings (validate; never reasoningFix: the loop reads every outcome) and, outside practice-train, its evaluation id (the loop's, one per window:
+ * <evaluation>.<label>), required
+ * there as replay.js run requires --evaluation; the candidate is the loop's look's.
+ */
+function learningGate(ctx, run, look, label) {
+  const l = ctx.loop.learning || {};
+  let practice = false;
+  try { practice = rolesBetween(run.start, run.end).every(r => r === 'practice-train'); } catch (_err) { /* the gate names it */ }
+  const looked = run.learning !== false && !practice;
+  return {
+    from: run.start, to: run.end, runId: run.runId, learning: run.learning,
+    candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked && l.evaluation ? `${l.evaluation}.${label}` : null,
+    validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
+  };
+}
+
 /** The champion's continuous runs of a set of windows, with checkpoints; then their decisions. */
 async function championRuns(ctx, { tag, windows, tree, look }) {
   if (!ctx.state.done[`look:${tag}`]) {
@@ -199,7 +219,15 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     const checkpoints = path.join(W(ctx), 'checkpoints', label);
     runs.push({ label, window, runDir: run.paths.runDir, checkpoints, run });
     if (ctx.state.done[`run:${label}`]) continue;
+    // The learning gate (learning/run-gate.js), as replay.js run applies it: checked before the run home is seeded,
+    // its look taken before the first cycle, its decision checked again on resume. The point runs start from this
+    // run's checkpoints (decision-points.js runPoint copies its home), so they inherit what it was allowed.
+    const gate = learningGate(ctx, run, look, label);
+    checkLearningRun(gate);
     ctx.steps.seedRunHome(run, { root: tree, userEnv: ctx.env });
+    const learned = (ctx.steps.startLearningRun || startLearningRun)(run.paths.runHome, gate);
+    // The loop reads every outcome (scorecards, the paired test): a run whose outcomes are hidden never runs in it.
+    if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);
     ctx.check();
     const left = ctx.loop.limits.maxModelCalls - ctx.state.modelCalls;
     const deps = D.checkpointDeps(ctx.steps.stepDeps(run, tree), { run, dir: checkpoints });

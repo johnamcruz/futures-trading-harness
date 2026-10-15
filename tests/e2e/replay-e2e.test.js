@@ -33,13 +33,13 @@ function setup() {
   }));
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
-    runId: 'e2e', workDir: path.join(user, 'replays'), broker: 'replaymock',
-    start: '2026-10-07T13:31:00Z', end: '2026-10-07T13:40:00Z', premarket: false,
+    runId: 'e2e', workDir: path.join(user, 'replays'), broker: 'replaymock', learning: false,
+    start: '2027-10-06T13:31:00Z', end: '2027-10-06T13:40:00Z', premarket: false,
     autotrader: { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
   }));
   // A long MNQ open at 21490 in the replay account; the exchange's price is 21500.
-  const init = { positions: [{ id: 1, accountId: 7, contractId: MNQ_ID, creationTimestamp: '2026-10-07T13:00:00.000Z', type: 1, size: 1, averagePrice: 21490 }] };
+  const init = { positions: [{ id: 1, accountId: 7, contractId: MNQ_ID, creationTimestamp: '2027-10-06T13:00:00.000Z', type: 1, size: 1, averagePrice: 21490 }] };
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init), FAKE_HARNESS_ORDERS: '1' };
   return { user, live, config, env, runHome: path.join(user, 'replays', 'e2e'), runDir: path.join(user, 'replays', 'e2e', 'replay', 'e2e') };
 }
@@ -51,21 +51,21 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   const w = setup();
   const pts = replay(w, ['points', '--config', w.config]);
   assert.strictEqual(pts.status, 0, pts.stderr);
-  assert.match(pts.stdout, /2026-10-07 {2}0 premarket, 3 trade, 0 eod/);
+  assert.match(pts.stdout, /2027-10-06 {2}0 premarket, 3 trade, 0 eod/);
 
   // Two decision times, then stop (a budget cap): the run resumes from there.
   const first = replay(w, ['run', '--config', w.config, '--max-cycles', '2']);
   assert.strictEqual(first.status, 0, `${first.stdout}\n${first.stderr}`);
-  const day = path.join(w.runDir, '2026-10-07.jsonl');
+  const day = path.join(w.runDir, '2027-10-06.jsonl');
   let recs = lines(day);
-  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:33:02.000Z', '2026-10-07T13:36:02.000Z']);
+  assert.deepStrictEqual(recs.map(r => r.t), ['2027-10-06T13:33:02.000Z', '2027-10-06T13:36:02.000Z']);
 
   const second = replay(w, ['run', '--config', w.config]);
   assert.strictEqual(second.status, 0, `${second.stdout}\n${second.stderr}`);
   recs = lines(day);
-  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:33:02.000Z', '2026-10-07T13:36:02.000Z', '2026-10-07T13:39:02.000Z'], 'one line per decision time, none repeated');
+  assert.deepStrictEqual(recs.map(r => r.t), ['2027-10-06T13:33:02.000Z', '2027-10-06T13:36:02.000Z', '2027-10-06T13:39:02.000Z'], 'one line per decision time, none repeated');
   const manifest = JSON.parse(fs.readFileSync(path.join(w.runDir, 'manifest.json'), 'utf8'));
-  assert.deepStrictEqual(manifest.daysDone, ['2026-10-07']);
+  assert.deepStrictEqual(manifest.daysDone, ['2027-10-06']);
   assert.match(manifest.hash, /^[0-9a-f]{64}$/);
 
   for (const r of recs) {
@@ -88,7 +88,7 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   // The first close went through the gateway to the broker and closed the long: one fill, P&L +$20.00 (10 points = 40 ticks x $0.50).
   const fills = recs.flatMap(r => r.trades);
   assert.strictEqual(fills.length, 1, JSON.stringify(fills));
-  assert.deepStrictEqual([fills[0].contractId, fills[0].profitAndLoss, fills[0].creationTimestamp], ['MNQ', 20, '2026-10-07T13:33:02.000Z']);
+  assert.deepStrictEqual([fills[0].contractId, fills[0].profitAndLoss, fills[0].creationTimestamp], ['MNQ', 20, '2027-10-06T13:33:02.000Z']);
   assert.strictEqual(recs[0].trades.length, 1);
   const state = JSON.parse(fs.readFileSync(path.join(w.runDir, 'broker', 'state.json'), 'utf8'));
   assert.ok(state.calls.some(c => c.tool === 'close_position' && c.args.contractId === MNQ_ID), 'the broker saw its own contract id');
@@ -103,7 +103,7 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
 
   const rep = replay(w, ['report', w.runDir]);
   assert.strictEqual(rep.status, 0, rep.stderr);
-  assert.match(rep.stdout, /2026-10 +3 +3 +0 +100\.0% +1 +100\.0%/);
+  assert.match(rep.stdout, /2027-10 +3 +3 +0 +100\.0% +1 +100\.0%/);
   assert.ok(fs.existsSync(path.join(w.runDir, 'report.md')));
   // Labels (stage 2) from the same run: one per decision time, joined to the gate's log and the fills.
   const lab = replay(w, ['labels', w.runDir]);
@@ -158,33 +158,33 @@ test('replay every Nth bar with Qwen: a cycle at each decision time; the $versio
   fs.writeFileSync(path.join(bin, 'qwen'), `#!/bin/sh\nexec "${process.execPath}" "${HARNESS}" "$@"\n`, { mode: 0o755 });
   const cfg = JSON.parse(fs.readFileSync(w.config, 'utf8'));
   const { command: _c, ...autotrader } = cfg.autotrader;
-  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, end: '2026-10-07T13:50:00Z', everyNthBar: 2, autotrader: { ...autotrader, harness: 'qwen' } }));
+  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, end: '2027-10-06T13:50:00Z', everyNthBar: 2, autotrader: { ...autotrader, harness: 'qwen' } }));
   const { FAKE_HARNESS_ORDERS: _o, ...env } = w.env;
   // The first cycle ends with a summary instead of its result line: logged as none reported, a failed cycle (one
   // toward maxConsecutiveErrors), recorded as an attempt, and its decision time runs again (then with its result).
-  w.env = { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_QWEN_SETTINGS_VERSION: '4', FAKE_HARNESS_NO_RESULT: '(2026-10-07T13:36:02.000Z)', FAKE_HARNESS_NO_RESULT_ONCE: path.join(w.user, 'no-result-once') };
+  w.env = { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_QWEN_SETTINGS_VERSION: '4', FAKE_HARNESS_NO_RESULT: '(2027-10-06T13:36:02.000Z)', FAKE_HARNESS_NO_RESULT_ONCE: path.join(w.user, 'no-result-once') };
 
   const pts = replay(w, ['points', '--config', w.config]);
   assert.strictEqual(pts.status, 0, pts.stderr);
-  assert.match(pts.stdout, /2026-10-07 {2}0 premarket, 3 trade, 0 eod/);
+  assert.match(pts.stdout, /2027-10-06 {2}0 premarket, 3 trade, 0 eod/);
   const run = replay(w, ['run', '--config', w.config]);
   assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
   assert.doesNotMatch(run.stdout, /no cycle/);
   // The day file: the failed attempt (retried), then the same time run again, then the others.
-  const raw = lines(path.join(w.runDir, '2026-10-07.jsonl'));
+  const raw = lines(path.join(w.runDir, '2027-10-06.jsonl'));
   assert.deepStrictEqual(raw.map(r => [r.t, Boolean(r.retried), r.ran.map(x => [x.ok, x.result])]), [
-    ['2026-10-07T13:36:02.000Z', true, [[false, 'CYCLE RESULT: (none reported)']]],
-    ['2026-10-07T13:36:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
-    ['2026-10-07T13:42:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
-    ['2026-10-07T13:48:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
+    ['2027-10-06T13:36:02.000Z', true, [[false, 'CYCLE RESULT: (none reported)']]],
+    ['2027-10-06T13:36:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
+    ['2027-10-06T13:42:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
+    ['2027-10-06T13:48:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
   ]);
   assert.strictEqual(raw[0].step.code, 1, 'the step whose cycle failed exits 1');
   const manifest = JSON.parse(fs.readFileSync(path.join(w.runDir, 'manifest.json'), 'utf8'));
   assert.deepStrictEqual([manifest.finished, manifest.cycleRetry], [true, undefined], 'nothing left to run again');
   // Read as a run: every second 3-minute bar of the session (09:30, 09:36, 09:42, 09:48 ET), inside the window, one
   // decision each; the failed attempt is folded into its time's line.
-  const recs = require('../../scripts/lib/replay/store').readRun(w.runDir).days['2026-10-07'];
-  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:36:02.000Z', '2026-10-07T13:42:02.000Z', '2026-10-07T13:48:02.000Z']);
+  const recs = require('../../scripts/lib/replay/store').readRun(w.runDir).days['2027-10-06'];
+  assert.deepStrictEqual(recs.map(r => r.t), ['2027-10-06T13:36:02.000Z', '2027-10-06T13:42:02.000Z', '2027-10-06T13:48:02.000Z']);
   assert.deepStrictEqual(recs.map(r => (r.retries || []).length), [1, 0, 0]);
   assert.match(run.stdout, /13:36:02\.000Z trade: trade CYCLE RESULT: \(none reported\): a failed cycle \(try 1\); this time runs again/);
   for (const r of recs) {
