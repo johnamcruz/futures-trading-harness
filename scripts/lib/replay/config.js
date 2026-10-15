@@ -63,6 +63,8 @@
  *   replayEnv(base, run, { at, brokers })             the environment for a process at replayed time `at`
  *   brokerErrors(env, run)                           [message]: the broker isn't a usable replay broker
  *   configHash(run)                                  sha256 of what makes a run a run
+ *   runSettings(run, base)                           { gate, brokerEntry, brokerSettings }: the gate's settings and the
+ *                                                    broker's entry and settings (no credential) the hash reads
  *   setupHash(run), setupBase(run)                   a run's setup (the arms of one evaluation share it); the same
  *                                                    without the library display (a library-display pair shares it)
  *   setupFixed(run)                                  the setup without its code digest (a resume keeps it)
@@ -334,7 +336,11 @@ function brokerErrors(env, run) {
  * replay broker's entry and settings, and the strategies, accounts,
  * skills, agents and rules the cycles read. Nothing about where it was started from.
  */
-function configHash(run, base = process.env) {
+/**
+ * The gate's settings and the replay broker's entry and settings (never a credential) a run runs under: part of its
+ * config hash, and of its setup record (train/ab-compare.js: the same market and data).
+ */
+function runSettings(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
   // The role-skills mode as the runner reads it (unset or blank is index, the default): one mode, one hash.
@@ -349,6 +355,13 @@ function configHash(run, base = process.env) {
   // every allowlisted name is one of `env`).
   const names = [...new Set(b.env || [])].filter(k => !own.has(k) && !CREDENTIAL.test(k));
   const brokerSettings = Object.fromEntries(names.sort().map(k => [k, env[k] ?? null]));
+  // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
+  const brokerEntry = { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
+  return { gate, brokerEntry, brokerSettings };
+}
+
+function configHash(run, base = process.env) {
+  const { gate, brokerEntry, brokerSettings } = runSettings(run, base);
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
@@ -358,7 +371,7 @@ function configHash(run, base = process.env) {
     ...(run.stage ? { stage: run.stage } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
-    brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
+    brokerEntry, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
     // The curated list a run replays (its decision times are the list's): named only when there is one.
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
@@ -414,4 +427,4 @@ function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
