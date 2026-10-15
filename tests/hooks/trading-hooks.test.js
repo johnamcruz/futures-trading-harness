@@ -934,7 +934,7 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
   // The lookup hangs: the account read waits on it and the gate fails closed at one call timeout (15 s), as on
   // main; nothing waits on a lookup of its own first, and nothing reaches the server.
   const hung = await run({ FAKE_DROP: 'search_contracts' });
-  assert.match(hung.text, /the order gate could not run \((list_open_positions|list_open_orders|search_trades) timed out\)/, 'whichever account read times out first');
+  assert.match(hung.text, /the order gate could not run \((list_open_positions|list_open_orders) timed out\)/, 'whichever account read times out first (an exit never reads the fills)');
   assert.deepStrictEqual(hung.sent, []);
   // One call timeout (15 s), timed from the gateway being up: under the translator's lookup timeout (20 s), so waiting on
   // the lookup before the account reads (or a second timeout) fails it, and a loaded machine's late timer does not.
@@ -1132,6 +1132,34 @@ test('MCP gateway: an entry for a regime-gated strategy (fx_orb) fetches its bar
   // An exit naming the strategy is never regime-checked.
   const exit = await gatewayRun({ ...FX, FAKE_POSITIONS: LONG1, FAKE_BARS: 'not json' }, [call(4, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten setup:fx_orb' })]);
   assert.strictEqual(text(exit.byId[4]), 'forwarded:tools/call:place_order');
+});
+
+test('MCP gateway wiring: a failed, lost or null search_trades never holds an [exit] or a [protect] (they never ask for the fills); an entry is still refused', { timeout: 60000 }, async () => {
+  const text = r => r.result.content[0].text;
+  const exit = id => call(id, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' });
+  const protect = id => call(id, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' });
+  for (const fault of [{ FAKE_ERROR: 'search_trades' }, { FAKE_DROP: 'search_trades' }, { FAKE_TRADES: 'null' }]) {
+    const argsFile = path.join(tmpDir(), 'args.jsonl');
+    const label = JSON.stringify(fault);
+    // Each on its own gateway (once an exit is sent, the long counts as closed for the next order), each timed:
+    // no call timeout (15 s) waited on.
+    const timed = async msg => {
+      const t0 = Date.now();
+      const r = await gatewayRun({ ...fault, FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile }, [msg]);
+      assert.ok(Date.now() - t0 < require(path.join(REPO, 'scripts', 'lib', 'trading', 'mcp-gateway')).CALL_TIMEOUT_MS, `${label}: waited on a read it never uses`);
+      return r;
+    };
+    const ex = await timed(exit(1));
+    const pr = await timed(protect(2));
+    assert.strictEqual(text(ex.byId[1]), 'forwarded:tools/call:place_order', `${label}: ${text(ex.byId[1])}`);
+    assert.strictEqual(text(pr.byId[2]), 'forwarded:tools/call:place_order', `${label}: ${text(pr.byId[2])}`);
+    const asked = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l).name);
+    assert.ok(!asked.includes('search_trades'), `${label}: an exit asked for the fills`);
+  }
+  // An entry still reads the fills: a broker error there refuses it (fail closed), with the close_position hint.
+  const entry = await gatewayRun({ FAKE_ERROR: 'search_trades' }, [call(3, 'place_order', ORDER)]);
+  assert.ok(entry.byId[3].result.isError);
+  assert.match(text(entry.byId[3]), /the order gate could not run \(search_trades failed: [^)]*\)\. The order was not sent; close_position still flattens\./);
 });
 
 test('MCP gateway wiring: an entry without its stopLossBracket is refused and never reaches the broker; with it, no stop-defined refusal', async () => {

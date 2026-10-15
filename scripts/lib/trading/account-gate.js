@@ -145,8 +145,10 @@ function restingSize(orders, contractId, sideSign, types) {
  */
 function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null }) {
   const ledger = ledgerNamed(input, given);
-  // Missing or malformed account data must block, never read as "flat".
-  for (const [name, v] of Object.entries({ positions, orders, trades })) {
+  // Missing or malformed account data must block, never read as "flat". The fills count losses for entries only:
+  // an [exit] / [protect] never reads them (accountFacts doesn't fetch them), so a fault there never holds one.
+  const reads = isRiskReducing(input.rationale) ? { positions, orders } : { positions, orders, trades };
+  for (const [name, v] of Object.entries(reads)) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
   // A position of unknown size is no flat account: the check refuses (fail closed). An entry reads every
@@ -440,13 +442,18 @@ function regimeViolation(strategy, bars, config) {
   return [{ check: 'regime', message: `setup:${strategy.name} trades only in ${strategy.regimes.join(', ')}; the ${strategy.timeframe} regime is ${now}.` }];
 }
 
-/** The account's positions, working orders and (withTrades) today's fills, read from the server through `caller`. */
-async function accountFacts(args, caller, withTrades = true) {
+/**
+ * The account's positions, working orders and, for an entry, today's fills, read from the server through `caller`.
+ * `entry`: whether the call is an entry (by default, a place_order whose rationale is not [exit] / [protect]). Only an
+ * entry counts losses, so only an entry asks for the fills: a rejected, late or lost search_trades never holds an exit
+ * or a protective stop. Without them `trades` is null, which evaluateAccount refuses for an entry (fail closed).
+ */
+async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale)) {
   const accountId = args.accountId;
   const [positions, orders, trades] = await Promise.all([
     caller.call('list_open_positions', { accountId }).then(r => parseToolJson(r, 'list_open_positions')),
     caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
-    withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
+    entry === true ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : null,
   ]);
   // The call itself (in place: the gateway judges and records this object) and the account, named from one read
   // of the contract cache taken now, after the reads that may have looked the front month up (a new day, a roll).
