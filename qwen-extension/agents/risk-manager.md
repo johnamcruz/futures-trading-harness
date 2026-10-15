@@ -98,14 +98,14 @@ reports instead; don't fetch bars for them.
 
 Check, in order, and stop at the first failure. The briefing's `m3`
 `candidates` give each setup's facts (`facts`, `inTheWay`, `needR`,
-`blocked`, and `values`: the broker fields its rules read, whose meaning
-and units are in the strategy's own document):
+`blocked`, `values`):
 context for the checks below, never a check of their own.
 
 0. The trigger fired: the scan lists the strategy as a candidate in this
    direction on the last closed bar (or, for a manual strategy, the plan
    quotes the trigger on closed bars and you can see it in the bars), or, for
-   a policy strategy, a live verdict matches the plan. Otherwise VETO. The
+   a policy strategy, a live verdict matches the plan, or
+   `order_plan` plans this bar's compose record for the side. Otherwise VETO. The
    briefing's `m3` `candidates` is `null` (the scan failed or the bar wasn't
    scanned): VETO a rules strategy; what fired is unknown. (The
    gate checks rules strategies' triggers from the signal record; a manual
@@ -120,7 +120,7 @@ its facts; the order decides.
    on the side the prevailing trend allows (the briefing's `m3` `trendRule`;
    without a current briefing, the `Trend rule:` line the plan quotes, or the
    scan's `mtf`): the priority order's step 2 (the gate refuses a trend
-   strategy against it anyway). The alignment for the side (the briefing's
+   strategy against it anyway, a composed trade with step 2's CHoCH excepted). The alignment for the side (the briefing's
    `m15` `alignment.long` / `alignment.short`): its step 4. Other strategies
    fired the other side on the same bar (the scan's `confluence.against`):
    its step 6.
@@ -131,14 +131,15 @@ its facts; the order decides.
    `tickSize` (from `get_contract`).
 5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
    budget. Recompute; don't trust the plan's arithmetic: for a rules
-   strategy's candidate or a policy verdict, call `order_plan` with the plan's
+   strategy's candidate, a policy verdict or a compose record, call `order_plan` with the plan's
    bars file, symbol, strategy, and side, and compare its stop and target
    ticks, the sides they sit on, and the risk per contract with the plan's;
    different stop ticks or a stop on the wrong side is a VETO with
    order_plan's stop as the fix. Size is not order_plan's to set: a plan may
    be smaller (the priority order may halve it), a
-   policy verdict's entry is at most order_plan's size, and a rules
-   strategy's size follows position-sizing; then risk $ = risk per contract ×
+   policy verdict's entry is at most order_plan's size, a rules
+   strategy's size follows position-sizing, and a composed entry's the
+   record's (order_plan refuses it over its cap or verdict); then risk $ = risk per contract ×
    the plan's size. Approve the plan's numbers as order_plan shows them; never
    supply tick numbers of your own. Its refusal (not a candidate now, the other side, a
    verdict the gate would refuse) is a VETO; a tick-spec refusal: `get_contract`,
@@ -212,7 +213,7 @@ One VERDICT line per report.
 For example:
 
 ```text
-VERDICT: APPROVE - size 1, risk $10.50, orb long with the 1h up trend, room to 2R
+VERDICT: APPROVE - size 5, risk $277.50, trade_lifecycle long with the 1h up trend, 2.08R
 FACTS: window opening drive; entries allowed; trend long allowed; read long aligned; room long enough; vwap above
 ```
 

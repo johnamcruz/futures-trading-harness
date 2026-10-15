@@ -74,16 +74,16 @@ test('trader-process: it orders the thinking and adds no filter; the priority or
     'It adds no filter and no veto',
     '**The priority order decides** (strategy-library, "The priority order"): take, skip and size.',
     "Only its hard stops and the gate's end a plan early.",
-    '**No setup without a fired strategy.**',
-    'are confluence only: they never make a trade on their own.',
+    // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
+    '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Protecting, managing and exiting an open position, and the end-of-day flatten, go ahead whatever steps 1-8 say; a no-entry window or a wait never blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is written `unknown` (or `unavailable`); never estimate one.",
     'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
     'Never loosen the stop.',
-    'Its STRATEGY.md and the priority order judge it, not this label.',
+    '**Setup.** The setup reads and the side (`trade-lifecycle`), with the trend or against it.',
+    '**Risk.** Stop (`invalidation`), size, exit (target or trail), the room; the numbers from `order_plan` or the compose record.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
     "The bias agrees with the gate's `Trend rule:` line; where they differ, the Trend rule wins, and the plan says so.",
-    "Continuation is a strategy without `mtf: reversal`, with the Trend rule's prevailing trend;",
     'The three market analysts never write step 2: a cached report would carry a stale window.',
     "In a cached report, take this bar's 3m facts from the briefing.",
     "Phase 2 writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.",
@@ -113,8 +113,6 @@ test('trader-process: the PLAN is reasoning, not a claim list, and its fields ar
     'h1.h4.trend', 'h1.h1.trend', 'm15.frame.trend', 'm3.trendRule',
     'm3.window', 'm3.windowEntries', 'm3.news.inBlackout', 'm3.regime.primary',
     'm3.vwap.side', 'm3.location.priorValue', 'm3.nearestLiquidity',
-    'candidate.name', 'candidate.direction',
-    'candidate.inTheWay.R', 'candidate.needR',
   ]);
   const b = realBriefing();
   const roots = { m3: b.sections.m3.data, m15: b.sections.m15.data, h1: b.sections.h1.data, candidate: b.sections.m3.data.candidates[0] };
@@ -146,18 +144,20 @@ test('trader-process: the PLAN is reasoning, not a claim list, and its fields ar
   assert.ok(PRIMARY.includes(regime), regime);
   const win = /window ([a-z ]+?),/.exec(example[1])[1];
   assert.ok(briefing.includes(`'${win}'`), win);
-  // The example's setup names a strategy that exists, is active and is a continuation (no `mtf: reversal`).
-  // Relaxed on 2026-10-14: the strategy named in the skill's example was retired that day, and skills are kept as
-  // they are by the owner's decision, so a name retired that day is accepted, its kind checked against its rules as
-  // kept in the fixture that holds them unchanged (tests/fixtures/strategies-golden/fx_<name>).
-  const [, strat, kind] = /^4 Setup: ([a-z0-9_]+) (?:long|short) (continuation|reversal)$/.exec(example[3]);
-  const shipped = fs.existsSync(path.join(ROOT, 'strategies', strat, 'STRATEGY.md'));
-  const { RETIRED } = require('../../scripts/lib/trading/strategies');
-  if (!shipped) assert.strictEqual(RETIRED[strat], '2026-10-14', `${strat}: neither shipped nor retired on 2026-10-14`);
-  const doc = shipped ? read(`strategies/${strat}/STRATEGY.md`) : read(`tests/fixtures/strategies-golden/fx_${strat}/STRATEGY.md`);
-  const meta = parseFrontmatter(doc).data;
-  assert.strictEqual(meta.status, 'active', strat);
-  assert.strictEqual(meta.mtf === 'reversal', kind === 'reversal', strat);
+  // The example's setup and entry lines are reads in compose_check's closed forms (composed-reads.js), each of its
+  // step's kind, agreeing with the side: a retired strategy's name, or a read of another step, fails.
+  const { parseRead } = require('../../scripts/lib/trading/composed-reads');
+  const KIND = { 3: ['relation', 'pattern', 'cisd', 'ote', 'swept'], 5: ['close', 'momentum'] };
+  const [, side, setupReads] = /^4 Setup: (long|short), (.+)$/.exec(example[3]);
+  const entryReads = /^6 Entry: (.+)$/.exec(example[5])[1];
+  for (const [i, list] of [[3, setupReads], [5, entryReads]]) {
+    for (const r of list.split(', ')) {
+      const p = parseRead(r);
+      assert.ok(KIND[i].includes(p.kind), `line ${i + 1}: "${r}" is a ${p.kind} read`);
+      if (p.value === 'up' || p.value === 'top') assert.strictEqual(side, 'long', r);
+    }
+  }
+  assert.strictEqual(parseRead('vwap_reclaim long continuation').kind, 'unknown');
   // The example's rule is the briefing's own Trend rule line, as the briefing writes it.
   const rule = /rule (.+)$/.exec(example[0])[1];
   assert.ok(`${b.sections.m3.data.trendRule}`.startsWith(`Trend rule: ${rule}`), rule);
@@ -185,7 +185,7 @@ test('trader-process: on an analyst\'s own timeframe, m3 is the frame\'s bar par
   // The frame carries no trend rule of its own, and the skill says where the rule and the setups come from.
   assert.match(bar.trendRule, /not in a 15m briefing/);
   assert.ok(!('candidates' in bar));
-  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; candidates and `nearestLiquidity`, the briefing's of the lane trading them."));
+  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`, the briefing's of the lane trading."));
 });
 
 test('trader-process: a candidate with nothing in its way has room, not an unknown one', () => {
@@ -195,7 +195,7 @@ test('trader-process: a candidate with nothing in its way has room, not an unkno
   // No level ahead, a known stop: inTheWay is null, stopPoints is set (what the skill's guidance reads).
   assert.strictEqual(c.inTheWay, null);
   assert.ok(c.stopPoints > 0);
-  assert.ok(flat(read(SKILL)).includes('A null `candidate.inTheWay` with a stop (`stopPoints`) means nothing in its way: room enough, not `unknown`.'));
+  assert.ok(flat(read(SKILL)).includes('No level in the way (a null `inTheWay`) with a stop means room enough, not `unknown`.'));
   // Without a stop, inTheWay is null too: that one is unknown (the guidance names the stop).
   const noStop = B.candidate({ ...r, stopDistance: null }, 100, [['prior RTH high', 120]], {});
   assert.strictEqual(noStop.inTheWay, null);
@@ -256,7 +256,7 @@ test('trader-process: the executor executes; it carries no PLAN and no analysis'
   const { data, body } = parseFrontmatter(read('agents/trade-executor.md'));
   assert.deepStrictEqual([...data['role-skills'], ...(data['role-index'] || [])], ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals']);
   assert.ok(body.includes("You execute. You don't analyse, re-plan, or second-guess."));
-  assert.ok(flat(body).includes('- Entry: enter only on the approved verdict and its fired trigger; never anticipate.'));
+  assert.ok(flat(body).includes('- Entry: enter only on the approved verdict and its trigger (a fired strategy, or this bar\'s compose record); never anticipate.'));
   assert.ok(flat(body).includes('- Management: protect and exit, always; move stops or scale out as the plan says.'));
   assert.doesNotMatch(body, /trader-process|trader process|PLAN|\b[1-9] (?:HTF|Context|Location|Setup|Confluence|Risk|Decision)\b/);
   assert.ok(!read('skills/trader-process/SKILL.md').includes('| trade-executor |'));

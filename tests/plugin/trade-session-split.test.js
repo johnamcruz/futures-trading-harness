@@ -78,7 +78,129 @@ const ALLOWED = [
   { old: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool, or without one read their `SKILL.md`).',
     now: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool; none: skill_lookup or `SKILL.md`).',
     reason: 'the head trader without a skill tool (opencode, index mode) reads a skill with skill_lookup, which the gate counts' },
+  { old: "Never argue a trend strategy into a counter-trend trade.",
+    now: "Never argue a trend strategy into a counter-trend trade; a composed one goes against it only with a true CHoCH its way at or above the trend's frame (`trade-lifecycle`).",
+    reason: "owner decision D2 (fix/skills-composed-process): a composed entry may go against the trend with a verified CHoCH at or above the trend's frame its way" },
+  { old: "The read for the candidate's side sets its size by the priority order (strategy-library, step 4).",
+    copies: 0,
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here" },
+  { old: "Put the read in the plan entry.",
+    now: "Put the read for the side in the plan entry.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here" },
+  { old: "A policy verdict (below) is a ceiling: the priority order halves or skips it like any setup.",
+    now: "A policy verdict is a ceiling, never an order.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here; the policy's one component is trade_lifecycle (D4)" },
+  { old: "Apply its steps in order; the size is the smaller of the verdict's (or position-sizing's) and what they allow.",
+    now: "Apply its steps in order.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here" },
+  { old: "No candidate, a failed skip rule, an event within 15 minutes, or an unanswered red flag → **no trade**: journal a short `note` with the reason and what would change it, and end.",
+    now: "No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an unanswered red flag → **no trade**: journal a short `note` with the reason and what would change it, and end.",
+    reason: "the skill audit (fix/skills-composed-process, S1): the composed trade (trade_lifecycle, the one strategy) is a setup too, not only a scan candidate" },
+  { old: "Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium, scan: orb",
+    now: "Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium), volume",
+    reason: "the skill audit (fix/skills-composed-process): the example is a composed trade (orb is retired), tick-correct" },
+  { old: "candidate long), volume long (rel-vol 1.6x), no events until 14:00, risk budget",
+    now: "long (rel-vol 1.6x), no events until 14:00. compose_check long OK. Plan (numbers",
+    reason: "the example's old line (orb, retired): the composed example replaces it" },
+  { old: "$40/trade. orb skip rules clear. Plan (numbers from order_plan): long 21503.25,",
+    now: "from the record): limit long 21540.25, stop 21512.50 (111 ticks = $55.50),",
+    reason: "the example's old line (orb, retired): the composed example replaces it" },
+  { old: "stop 21498.00 (1R = 5.25 pts = 21 ticks = $10.50), 1 MNQ; exit: trail from +2R",
+    now: "target 21598.00 (231 ticks, 2.08R), 1 MNQ.",
+    reason: "the example's old line (orb, retired): the composed example replaces it" },
+  { old: "(21513.75), giving back 0.5R.",
+    copies: 0,
+    reason: "the example's old line (orb, retired): the composed example replaces it" },
+  { old: "Verdict APPROVE. Executed with a stop bracket only, stop working.",
+    now: "Verdict APPROVE. Executed with stop and target brackets, stop working.",
+    reason: "the example's old line (orb, retired): the composed example replaces it" },
+  { old: "No candidate → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    now: "No candidate and no setup you compose (`trade_lifecycle`) → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    reason: "the skill audit (fix/skills-composed-process, S1): the composed trade (trade_lifecycle, the one strategy) is a setup too, not only a scan candidate" },
+  { old: "A candidate → `risk-manager` phase 1 and 2, then execute.",
+    now: "A candidate or a composed setup → `risk-manager` phase 1 and 2, then execute.",
+    reason: "the skill audit (fix/skills-composed-process, S1): the composed trade (trade_lifecycle, the one strategy) is a setup too, not only a scan candidate" },
+  { old: "**Read each setup's facts first** (the briefing's summary, and `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`: what the trend rule says for its side, the multi-timeframe read for its side, the first level in its way in its own R against the room it needs, confluence, the VWAP side, the window; `values`, also in the \"fired on this bar\" line: the broker fields its fired side's rules read, on this bar (an `any(...)` group's held branches only), where a field's meaning and units are in the strategy's own document).",
+    now: "**Read each setup's facts first**: a composed setup's are your reads and the record's plan, each checked by `compose_check` (`trade_lifecycle`); a candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`.",
+    reason: "the skill audit (fix/skills-composed-process, S1): the composed trade (trade_lifecycle, the one strategy) is a setup too, not only a scan candidate; a rules candidate's broker-field values went with the retired rules strategies" },
+  { old: "Never plan the component strategy (e.g.",
+    now: "Never tag the component (`trade_lifecycle`) yourself; the gate refuses it.",
+    reason: "the skill audit (fix/skills-composed-process, D4): prop_portfolio's one component is trade_lifecycle (orb is retired)" },
+  { old: "`orb`) yourself; the gate refuses it.",
+    copies: 0,
+    reason: "the second half of the sentence above (orb is retired)" },
+  { old: "Otherwise pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    now: "Otherwise compose one (`trade_lifecycle`), or pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    reason: "the skill audit (fix/skills-composed-process, S1): the composed trade (trade_lifecycle, the one strategy) is a setup too, not only a scan candidate" },
+  { old: "`journal_add {kind:\"plan\", contractId, tags:[\"setup:<name>\", \"<SYMBOL>\", \"regime:<primary>\"]}`: thesis, trigger (what happened, price, time), entry, stop, exit, size (position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's P&L, and for a prop attempt the cushion and size budget), skip rules checked, analyst agreement, and what each role reported that the plan rests on: the structure bias and the level the entry and stop sit against (market structure); the VWAP side, the value area or POC, the nearest liquidity in the trade's way (the candidate's `inTheWay` in the briefing's `m3` `candidates`: the first level in its direction in points and R, where 1R is its own stop; with `order_plan`'s stop, check there is room to the target or the trail's activation, and a level closer than 1R is a skip under the skip rules that name it), and the session window (the briefing's `m3` `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the multi-timeframe alignment for the side (aligned, pullback, mixed, counter) and the size it implies; and risk-manager phase 1's budget and pace.",
+    now: "`journal_add {kind:\"plan\", contractId, tags:[\"setup:<name>\", \"<SYMBOL>\", \"regime:<primary>\"]}`: thesis, trigger (what happened, price, time), entry, stop, exit, size (position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's P&L, and for a prop attempt the cushion and size budget), skip rules checked, analyst agreement, and what each role reported that the plan rests on: the structure bias and the level the entry and stop sit against (market structure); the VWAP side, the value area or POC, the nearest liquidity in the trade's way (`inTheWay`, the compose record's or a candidate's: the first level in its direction in points and R, where 1R is its own stop: check there is room to the target or the trail's activation), and the session window (the briefing's `m3` `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the multi-timeframe alignment for the side (aligned, pullback, mixed, counter) and the size it implies; and risk-manager phase 1's budget and pace.",
+    reason: "the skill audit (fix/skills-composed-process, X2): a composed trade's room is its compose record's inTheWay (trade-plan-edits.js)" },
+  { old: "The exit follows the strategy's `exit` (shown in the scan):",
+    now: "The exit: a composed trade's target is the record's level (`trade_lifecycle`); a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):",
+    reason: "the skill audit (fix/skills-composed-process, X2): a composed trade's exit is its record's target (trade-plan-edits.js)" },
+  { old: "The runner (or you, without one) trails it from `trailActivateR` with `trailGivebackR` give-back; read both from the scan's `exit`, don't assume them.",
+    now: "The runner (or you, without one) trails it from `trailActivateR` with `trailGivebackR` give-back; read both from its `exit`, don't assume them.",
+    reason: "a policy's trail is its rulebook's exit, not the scan's (trade-plan-edits.js)" },
+  { old: "**Target level:** with `exit.target` the scan gives `targetDistance`: the target is the signal bar's close ± that distance (e.g. a CRT range's far side).",
+    copies: 0,
+    reason: "only retired rules strategies had a target distance (trade-plan-edits.js)" },
+  { old: "**Time stop:** with `maxBars`, close at market after that many bars in the trade if neither the stop nor the target has filled.",
+    copies: 0,
+    reason: "only retired rules strategies had a time stop (trade-plan-edits.js)" },
+  { old: "**The exact numbers come from `order_plan`**, not from your own arithmetic: once you have chosen the strategy and the side (the steps above: the trigger, the trend rule, the skip rules, the account), call it with them, e.g.",
+    now: "**The exact numbers come from `order_plan`** (a rules strategy, a policy verdict) **or the compose record** (`trade_lifecycle`), not from your own arithmetic: once you have chosen the strategy and the side, call it with them, e.g.",
+    reason: "the skill audit (fix/skills-composed-process, X2): numbers from order_plan or the compose record (trade-plan-edits.js)" },
+  { old: "`order_plan {\"bars\": \"<bars file>\", \"symbol\": \"MNQ\", \"strategy\": \"orb\", \"side\": \"long\"}`.",
+    now: "`order_plan {\"bars\": \"<bars file>\", \"symbol\": \"MNQ\", \"strategy\": \"<name>\", \"side\": \"long\"}`.",
+    reason: "orb is retired: the example names a strategy (trade-plan-edits.js)" },
+  { old: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have.",
+    now: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have; a composed trade's is the size you stated, at most the record's `maxSize`.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here (trade-plan-edits.js)" },
+  { old: "A different size from your plan changes only `size`, and the risk scales with it: smaller for a `mixed` read or a reversal fade, and, for a rules strategy, larger only as position-sizing allows (a setup with 30+ reviewed trades and positive expectancy, within the budget and caps).",
+    now: "A different size from your plan changes only `size`, and the risk scales with it.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here (trade-plan-edits.js)" },
 ];
+
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "**Confluence.** Several strategies firing the same side on the bar (the scan's `confluence.with`, the prompt's \"fired on this bar\" line) is a stronger setup: say so in the plan, and prefer it over a lone signal.",
+    to: "**Confluence.** A composed setup's: the count of `confluence-counting`.",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: a composed setup counts confluence-counting's items; the strategies-firing rules are the rules strategies'" },
+  { from: "Strategies firing both sides (`confluence.against`) is a conflict: stand aside (the priority order, step 6: no exception).",
+    to: "Rules strategies firing the same side on the bar (`confluence.with`) are a stronger setup; both sides (`confluence.against`) a conflict: stand aside (the priority order, step 6: no exception).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: one sentence for the rules strategies" },
+  { from: "The backtest reports results by confluence (`byConfluence`); trust it over a feeling that agreement helps.",
+    to: "Trust the backtest's `byConfluence` over a feeling that agreement helps.",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: shortened, so the head prompt doesn't grow" },
+  { from: "No candidate and no setup you compose (`trade_lifecycle`) → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    to: "No candidate and no setup you compose (`trade-lifecycle`) → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "**Read each setup's facts first**: a composed setup's are your reads and the record's plan, each checked by `compose_check` (`trade_lifecycle`); a candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`.",
+    to: "**Read each setup's facts first**: a composed setup's are your reads and the record's plan, each checked by `compose_check` (`trade-lifecycle`); a candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "Otherwise compose one (`trade_lifecycle`), or pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    to: "Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "The exit: a composed trade's target is the record's level (`trade_lifecycle`); a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):",
+    to: "The exit: a composed trade's target is the record's level (`trade-lifecycle`); a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "**The exact numbers come from `order_plan`** (a rules strategy, a policy verdict) **or the compose record** (`trade_lifecycle`), not from your own arithmetic: once you have chosen the strategy and the side, call it with them, e.g.",
+    to: "**The exact numbers come from `order_plan`** (a rules strategy, a policy verdict, or `trade_lifecycle`'s compose record: `trade-lifecycle`), not from your own arithmetic: once you have chosen the strategy and the side, call it with them, e.g.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174); order_plan plans the compose record (#173)" },
+  { from: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have; a composed trade's is the size you stated, at most the record's `maxSize`.",
+    to: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have; a composed trade's is the size you stated, refused over its cap (in an attempt, also the verdict).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: order_plan refuses a composed size over its cap and, in an attempt, the verdict" },
+  { from: "A different size from your plan changes only `size`, and the risk scales with it.",
+    to: "A different size from your plan changes only `size`, and the risk scales with it: for a rules strategy, smaller for a `mixed` read or a reversal fade, and larger only as position-sizing allows (a setup with 30+ reviewed trades and positive expectancy, within the budget and caps).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: the halving and the size steps stay for a rules strategy" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
 
 const homeTexts = () => HOMES.map(skill);
 
@@ -143,7 +265,8 @@ test('trade-session split: trade-plan is step 4 byte for byte (tests/plugin/harn
   const tp = skill('trade-plan');
   const body = tp.slice(tp.indexOf('## How It Works\n\n') + '## How It Works\n\n'.length, tp.indexOf('## Examples'));
   const old = read(BEFORE);
-  assert.strictEqual(`### 4. Plan\n\n${body}`, old.slice(old.indexOf('### 4. Plan'), old.indexOf('### 5. Verdict')));
+  // With the edits made since, each with its reason (trade-plan-edits.js).
+  assert.strictEqual(`### 4. Plan\n\n${body}`, require('./trade-plan-edits').edited(old.slice(old.indexOf('### 4. Plan'), old.indexOf('### 5. Verdict'))));
 });
 
 // The head trader's reading per cycle, by path: workspace/AGENTS.md (its skill index), the skills it loads every cycle
@@ -210,4 +333,8 @@ test('trade-session split: the gate requires setup-judgment and trade-plan at en
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);
   assert.match(row, /Exits, `\[protect\]` stops, stop moves, size cuts and cancels still go\./);
+});
+
+test('trade-session-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

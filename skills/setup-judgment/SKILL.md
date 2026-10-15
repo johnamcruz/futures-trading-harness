@@ -12,14 +12,10 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 
 ## How It Works
 
-- **Read each setup's facts first** (the briefing's summary, and `facts`,
-  `inTheWay`, `needR` and `blocked` in `m3` `candidates`: what the trend rule
-  says for its side, the multi-timeframe read for its side, the first level
-  in its way in its own R against the room it needs, confluence, the VWAP
-  side, the window; `values`, also in the "fired on this bar" line: the
-  broker fields its fired side's rules read, on this bar (an `any(...)`
-  group's held branches only), where a field's meaning and units are in the
-  strategy's own document). They are context, not a verdict: judge the setup by its
+- **Read each setup's facts first**: a composed setup's are your reads and
+  the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
+  candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3`
+  `candidates`. They are context, not a verdict: judge the setup by its
   strategy's STRATEGY.md (`strategies_show`: its context filter and skip
   rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`,
   its min R:R). A setup the trend rule allows, `aligned` for its side, with
@@ -41,7 +37,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   strategy>`, its contract and side, its stop ticks, at most its size) per the
   `prop-challenge-pacing` skill only when the priority order says take, at
   the size it allows; no trade when there is none, it says skip, or the
-  order says no. Never plan the component strategy (e.g. `orb`) yourself; the
+  order says no. Never tag the component (`trade_lifecycle`) yourself; the
   gate refuses it.
 - **Track record.** Each strategy that fired carries its record: the
   recorded backtest (overall, in this regime, at this hour, when there are
@@ -51,13 +47,12 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   say which in the plan. Under 30 trades is anecdotal, not evidence. No
   record ("no backtest recorded") is the weakest case, not a neutral one, and
   a STALE record (the strategy changed since) doesn't describe it.
-- **Confluence.** Several strategies firing the same side on the bar (the
-  scan's `confluence.with`, the prompt's "fired on this bar" line) is a
-  stronger setup: say so in the plan, and prefer it over a lone signal. Strategies firing
-  both sides (`confluence.against`) is a conflict: stand aside (the priority
-  order, step 6: no exception). The backtest reports results by confluence
-  (`byConfluence`); trust it over a feeling that agreement helps.
-- Otherwise pick at most one strategy that is a `candidate` in the scan in
+- **Confluence.** A composed setup's: the count of `confluence-counting`.
+  Rules strategies firing the same side on the bar (`confluence.with`) are a
+  stronger setup; both sides (`confluence.against`) a conflict: stand aside
+  (the priority order, step 6: no exception). Trust the backtest's
+  `byConfluence` over a feeling that agreement helps.
+- Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in
   this direction on the last closed bar (candidates are already in session and
   in regime: the trigger fired), or a manual strategy whose trigger you
   verified on closed bars and whose `regimes` fit; quote the trigger in the
@@ -80,5 +75,5 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 ## Examples
 
 ```text
-orb long: aligned, room 2.4R, confluence 2 -> take; reason_check
+trade_lifecycle long: compose_check OK, read long aligned, nothing in its way -> take; reason_check
 ```

@@ -1,6 +1,6 @@
 ---
 name: invalidation
-description: Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong and what makes management exit. Never moves a stop; never a veto.
+description: Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong, the stop read, what makes management exit; never a veto.
 ---
 
 # Invalidation
@@ -22,19 +22,18 @@ breakout long, back inside the level (`breakout-vs-fakeout`); a reversal
 long after a sweep, beyond its extreme (`m3.sweeps[].wick`). Shorts: the
 mirror.
 
-**The stop is the strategy's**: `candidate.stopPoints` (its 1R), in ticks
-by `order_plan`; a structure stop's level is in its STRATEGY.md. This
-skill never moves, widens or replaces it.
+**The stop read** (step stop) names that level: `stop <tf> low|high
+<price>` (a completed candle's), `stop [<tf>] swing low|high <price>` (a
+confirmed swing: `m3.swings`, `m3.liquidity`, `m3.htfLevels`) or `stop
+<level> <price>`. Code places the stop one tick beyond it, at least the
+larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never
+widened: name a farther level, or pass. This skill never moves, widens or
+replaces it.
 
-**The read**: for a long the stop is entry minus `candidate.stopPoints`.
-Invalidation above the stop: consistent. Below it: the stop can be hit
-while the idea stands; say so on line 7, a fact, never a reason to change
-the stop. `m3.referenceStop.long`, `m3.referenceStop.short` compare.
-
-**What makes management exit**: the stop, the target or trail, the time
-stop (`candidate.exit.maxBars`), the end-of-day flatten, and the cases
-the trade-session skill names. A close beyond the invalidation before the
-stop goes on line 9 as `invalidation hit`; acting on it is management's
+**What makes management exit**: the stop, the target or trail, the
+end-of-day flatten, and the cases `manage-position` names. A close beyond
+the invalidation before the stop goes on line 9 as `invalidation hit`, a
+fact, never a reason to change the stop; acting on it is management's
 call under trade-session, never a wider stop. Stops move toward the
 market only.
 
@@ -44,15 +43,15 @@ against the trade's own: on the trade's timeframe or higher
 `h1.lastBreak.last`) it is an invalidation sign for line 9; on a lower
 one it is mostly noise.
 
-Line 9: `9 Manage: invalidation <price, what>, exit <the strategy's exit>`.
+Line 9: `9 Manage: invalidation <price, what>, exit <target|trail>`.
 
 ## Examples
 
 ```text
-Take: orb long at 21503.25, stopPoints 4.25: stop 21499.00; invalidation 3m swing low 21500.50,
-  above the stop: consistent. Priority order -> take. 9 Manage: invalidation 21500.50, exit trail.
-Skip: crt_1h long; invalidation the sweep wick 21474.00; inTheWay 0.8R.
-  Priority order (step 3, room): skip.
-Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); the next bar
-  traded through the swing low and the stop in one move: stopped at 21499.00. -17 ticks, -$8.50.
+Take: long at 21540.25, invalidation the 15m low 21512.75 (the candle that rejected prior VAH):
+  stop 15m low 21512.75 -> stop 21512.50, 111 ticks. 9 Manage: invalidation 21512.75, exit target.
+Skip: long at 21540.25, invalidation the 3m low 21538.75: stop 21538.50 is 7 ticks, under the
+  8-tick floor; compose_check refuses it, no farther level: priority order (step 1): skip.
+Loser: long at 21540.25, stop 21512.50 (27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next bars
+  traded through the 15m low and the stop in one move: stopped at 21512.50. -111 ticks, -$55.50.
 ```

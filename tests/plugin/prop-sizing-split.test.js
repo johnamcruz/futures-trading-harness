@@ -31,6 +31,15 @@ const SPLITS = {
     before: 'tests/fixtures/skill-split/prop-challenge-pacing.before.txt',
     sha256: 'fab004b179da5f5ce4d4b89b42a7a16323927845fba4c7e1acb92dd611fb548d',
     homes: ['prop-challenge-pacing', 'prop-evaluator', 'prop-pacing-judgment'],
+    // Edits made since the split (skill-split-late.js), each with its reason.
+    late: [
+      { from: "Entries under an attempt go through `prop_portfolio`'s verdict on `trade_lifecycle`: `compose_check` asks for it, with the record's side and stop (`trade_lifecycle`), and records it at the record's bar: the strategy, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        to: "Entries under an attempt go through `prop_portfolio`'s verdict on `trade_lifecycle`: `order_plan` for `trade_lifecycle` records it once per compose record, from its side and stop, at its bar (`trade-lifecycle`): the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        reason: "review of #169: as the merged code does it (#172-#174): order_plan for trade_lifecycle records the policy's verdict once per compose record (lifecycle-order.js, prop/composed-verdict.js)" },
+      { from: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then exactly as given: rationale `setup:<policy strategy> ...`, that contract and side, at most that size, `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the policy strategy's name, the bars file and its `symbol`, the micro whose bars the runner scans, gives exactly these arguments, or refuses with the gate's reason).",
+        to: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then as given: rationale `setup:<policy strategy> ...`, the record's contract and side, at most the lower of the verdict's size and the composed cap, the record's ticks (`order_plan` for `trade_lifecycle` gives exactly these arguments, or refuses with the gate's reason).",
+        reason: "review of #169: as the merged code does it (#172-#174): the record's contract, side and ticks, at most the lower of the verdict and the composed cap" },
+    ],
     moved: {
       // "Scoring a policy strategy on history (the evaluator)", its body.
       'prop-evaluator': { lines: [[124, 146]] },
@@ -41,19 +50,97 @@ const SPLITS = {
       // Section headings dropped: each section is now a skill, named by its own heading.
       { old: 'Scoring a policy strategy on history (the evaluator)', reason: 'now the prop-evaluator skill' },
       { old: 'Pacing by judgment (no account profile)', reason: 'now the prop-pacing-judgment skill, whose When to Use and How It Works state its scope' },
+      { old: "`prop_portfolio`) is the prop challenge as a strategy: it trades the setups of the rules strategies it lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit), sized from the cushion in the selected contract (`contracts: micro | mini | auto` only when none is selected): each setup gets the largest size its `sizing` allows, or is skipped.",
+        now: "`prop_portfolio`) is the prop challenge as a strategy: it trades its component's setups (`trade_lifecycle`) on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit), sized from the cushion in the selected contract (`contracts: micro | mini | auto` only when none is selected): each setup gets the largest size its `sizing` allows, or is skipped.",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "At each setup the runner records a verdict: the strategy that fired, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        now: "Entries under an attempt go through `prop_portfolio`'s verdict on `trade_lifecycle`: `compose_check` asks for it, with the record's side and stop (`trade_lifecycle`), and records it at the record's bar: the strategy, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so (it may skip it or halve it), and then exactly as given: rationale `setup:<policy strategy> ...`, that contract and side, at most that size, `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the policy strategy's name, the bars file and its `symbol`, the micro whose bars the runner scans, gives exactly these arguments, or refuses with the gate's reason).",
+        now: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then exactly as given: rationale `setup:<policy strategy> ...`, that contract and side, at most that size, `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the policy strategy's name, the bars file and its `symbol`, the micro whose bars the runner scans, gives exactly these arguments, or refuses with the gate's reason).",
+        reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved" },
+      { old: "Once a newer bar is recorded without a verdict for its setup (for example the component fired again and no new verdict came), the old one is refused (`[policy] ... the latest verdict is for the 3m bar opened X; the setup on the bar opened Y has no verdict yet`), as is a verdict that names no bar: stand aside until the next setup's verdict.",
+        now: "Once a newer bar is recorded without a verdict for its setup, the old one is refused (`[policy] ... the latest verdict is for the 3m bar opened X; the setup on the bar opened Y has no verdict yet`), as is a verdict that names no bar: stand aside until the next setup's verdict.",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle: a component no longer \"fires\"" },
+      { old: "**Before the first live entry** (the user's steps, not an agent's): the policy strategy must be `active` (`prop_portfolio` and `prop_flow_1m` are; their sizing rules decide each verdict), and the user starts the attempt with `combine.js start`.",
+        now: "**Before the first live entry** (the user's steps, not an agent's): the policy strategy must be `active` (`prop_portfolio` is; its sizing rules decide each verdict), and the user starts the attempt with `combine.js start`.",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "**Two policies, one account.** `prop_portfolio` (3-minute) and `prop_flow_1m` (1-minute) both trade the same account (the `account` both name).",
+        copies: 0,
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "The runner trades one timeframe, so only one of them has setups in a run: enter only as the policy its verdict names (`setup:<that policy>`).",
+        copies: 0,
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "Both draw on the one attempt.",
+        copies: 0,
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle" },
+      { old: "Within one runner (one harness home) the gate holds one cushion and one position at a time across the account; it does not see another runner's entries, so a second runner on the same broker account must not be started (a per-account lock is coming).",
+        now: "**One runner per account.** Within one runner (one harness home) the gate holds one cushion and one position at a time across the account; it does not see another runner's entries, so a second runner on the same broker account must not be started (the account lock refuses one).",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle; the account lock (account-lock.js) is built, no longer \"coming\"" },
+      { old: "**A policy trades only its active strategies.** A `paper` strategy stays paper inside a policy: the runner passes over its setup (it takes the next active strategy that fired; with none, the policy has no setup that bar), and the gate refuses an entry whose latest verdict names a strategy that isn't active, or none it knows (`[policy] setup:<policy>: the latest verdict's setup is from <name>: <name> has status \"paper\": ...`; it can't be skipped).",
+        now: "**A policy trades only its active strategies.** A `paper` component stays paper inside a policy: the gate refuses an entry whose latest verdict names a strategy that isn't active, or none it knows (`[policy] setup:<policy>: the latest verdict's setup is from <name>: <name> has status \"paper\": ...`; it can't be skipped).",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle: the one component is trade_lifecycle, no other strategy to pass to" },
+      { old: "prop_portfolio: long setup from orb: full, at most 4 NQ with a 40-tick stop",
+        now: "prop_portfolio: long setup from trade_lifecycle: full, at most 4 NQ with a 40-tick stop",
+        reason: "the skill audit (fix/skills-composed-process, S3/D4): prop_flow_1m and the rules components are retired; entries under an attempt go through prop_portfolio's verdict on trade_lifecycle; orb is retired" },
+      { old: "$207.80 each, $831.20 in all). Halved by the priority order: 22 micros, 2 NQ.",
+        now: "$207.80 each, $831.20 in all). With MNQ selected the verdict is 45 MNQ ($955.80).",
+        reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved" },
+      { old: "With MNQ selected the verdict is 45 MNQ ($955.80), halved 22 MNQ.",
+        copies: 0,
+        reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; the MNQ verdict joins the line above" },
     ],
   },
   'position-sizing': {
     before: 'tests/fixtures/skill-split/position-sizing.before.txt',
     sha256: 'ad2b70ca7fa99844f29287fe5cb751e97f64d6fcfd336b7b7cc73e54daf45790',
     homes: ['position-sizing', 'micro-mini-specs'],
+    late: [
+      { from: "**Caps:** the broker server's `maxOrderSize` and `maxPositionSize` (`get_server_config`); size 1 on micros until the setup has 30+ reviewed trades with positive expectancy.",
+        to: "**Caps:** the broker server's `maxOrderSize` and `maxPositionSize` (`get_server_config`); size 1 on micros for a rules strategy until its setup has 30+ reviewed trades with positive expectancy.",
+        reason: "review of #169: as the merged code does it (#172-#174): the size-1 rule is a rules strategy's; a composed trade's size is its own under its cap" },
+      { from: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (its components' caps don't apply).",
+        to: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (a rules component's caps don't apply; `trade_lifecycle`'s cap does: the lower of it and the verdict).",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap applies under the verdict (lifecycle-order.js)" },
+      { from: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).",
+        to: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade it plans the compose record (`trade-lifecycle`; refused over its cap).",
+        reason: "review of #169: as the merged code does it (#172-#174): order_plan plans the compose record (#173)" },
+      { from: "risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick",
+        to: "risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
+      { from: "(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)",
+        to: "(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
+    ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.
       'micro-mini-specs': { lines: [[18, 28]], units: ['The table is for sanity checks only:'] },
     },
-    allowed: [],
+    allowed: [
+      { old: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill).",
+        now: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).",
+        reason: "the skill audit (fix/skills-composed-process, X2): a composed trade's numbers are its compose record's" },
+      { old: "order_plan for an orb long on MNQ, stop distance 5.25 pts:",
+        now: "compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):",
+        reason: "the skill audit (fix/skills-composed-process): orb is retired; the example is a composed trade, tick-correct" },
+      { old: "stop 5.25 pts = 21 ticks ($10.50/MNQ contract), size 1, risk $10.50 = 1 x 21 ticks x $0.50/tick",
+        now: "risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick",
+        reason: "the composed example (above)" },
+      { old: "(the same distance on MES: 21 ticks x $1.25 = $26.25)",
+        now: "(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)",
+        reason: "the composed example (above), MES at $1.25 a tick" },
+    ],
   },
 };
+
+// The late edits applied to each split's allow-list; one that matches nothing fails (the list only shrinks).
+const { withLate } = require('./skill-split-late');
+const LATE_STALE = [];
+for (const s of Object.values(SPLITS)) {
+  const r = withLate(s.allowed, s.late || [], units(fs.readFileSync(path.join(ROOT, s.before), 'utf8')));
+  s.allowed = r.allowed;
+  LATE_STALE.push(...r.stale.map(l => l.from));
+}
 
 /** The old units each home must hold: Map home -> Map unit -> count (the kept skill takes every unit not moved). */
 function expectedHomes(s, beforeText) {
@@ -79,9 +166,11 @@ function expectedHomes(s, beforeText) {
 function homeErrors(s, beforeText, homeTexts) {
   const expected = expectedHomes(s, beforeText);
   const old = new Set(units(beforeText));
+  // An edited unit (an allow-list `now`) counts as its old text, in the home its old section maps to.
+  const nowToOld = new Map(s.allowed.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
   const bad = [];
   s.homes.forEach((home, i) => {
-    const got = count(units(homeTexts[i]).filter(u => old.has(u) && !STRUCTURE.includes(u)));
+    const got = count(units(homeTexts[i]).map(u => nowToOld.get(u) || u).filter(u => old.has(u) && !STRUCTURE.includes(u)));
     const want = expected.get(home);
     for (const u of new Set([...got.keys(), ...want.keys()])) {
       if ((got.get(u) || 0) !== (want.get(u) || 0)) bad.push(`${home}: ${JSON.stringify(u)} ${got.get(u) || 0} time(s), its old section maps ${want.get(u) || 0} here`);
@@ -215,4 +304,8 @@ test('micro-mini-specs: every row whose roots contracts.js lists agrees with it 
     }
   }
   assert.ok(checked >= 8, `checked ${checked}`);
+});
+
+test('prop and sizing splits: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

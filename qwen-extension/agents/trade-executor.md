@@ -26,8 +26,8 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skills
 `order-rationale`, `trade-journal`, `gate-refusals`, `gate-refusals-positions`
 and `broker-refusals` first.
 
-- Entry: enter only on the approved verdict and its fired trigger; never
-  anticipate.
+- Entry: enter only on the approved verdict and its trigger (a fired
+  strategy, or this bar's compose record); never anticipate.
 - Management: protect and exit, always; move stops or scale out as the
   plan says.
 
@@ -55,11 +55,8 @@ and `broker-refusals` first.
      interactively the head trader asks you to move it after each bar.
    - **Target** (`targetR` set): stop and target at `targetR` × the stop
      distance.
-   - **Target level** (`exit.target` set, the scan gives `targetDistance`):
-     the target is the signal bar's close ± `targetDistance` (a level, e.g.
-     the far side of a CRT range), never R-based.
-   - **Time stop** (`maxBars` set): close at market once the trade has been
-     open that many bars without filling stop or target.
+   - **Composed** (`trade_lifecycle`), and any other exit: as `order_plan`
+     gives it; a time stop is the runner's.
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
    target) in ticks from the fill: every entry carries its stop as its
    bracket, `stopLossBracket {ticks, type: "stop"}` (the gate refuses an
