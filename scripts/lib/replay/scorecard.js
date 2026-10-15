@@ -94,6 +94,7 @@ const F = require('./failures');
 const { checkLook } = require('../prop/looks');
 const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
 const { roleOf } = require('../prop/splits');
+const { learningLook } = require('../learning/scorecard-look');
 
 const VERSION = 1;
 // This scorecard grades composed setups on their own compose record (the training preflight checks for it).
@@ -249,6 +250,9 @@ function lookAt(run, { purpose = null, candidate = null, ledger = null } = {}) {
  */
 function takeLook(dir, { purpose = null, candidate = null, ledgerFile = null } = {}, now = new Date()) {
   const run = readRun(dir);
+  // A learning run (learning-run.json) follows the learning split and its ledger, which the gate already wrote to.
+  const learning = learningLook(dir, run, { purpose });
+  if (learning) return learning;
   if (!ledgerFile) return lookAt(run, { purpose, candidate, ledger: null });
   const file = path.resolve(expandHome(ledgerFile));
   return withLedgerLock(file, () => {
@@ -485,7 +489,7 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
   const run = readRun(dir);
   // Scoring a run looks at its days: the look ledger's rules decide first (refused: nothing is read); a look already
   // checked and recorded (writeScorecard with a ledger file) is not checked twice.
-  const taken = look[TAKEN] || lookAt(run, look);
+  const taken = look[TAKEN] || learningLook(dir, run, look) || lookAt(run, look);
   const hide = taken.purpose === 'reasoning-fix';
   // The runner config at each decision's time (a live session restarted on another config: labels.js configsOf).
   const cfgAt = configsOf(dir, run.manifest);
