@@ -865,12 +865,15 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
+    // The entry reads' extras (the net move, the gap relation): on the lines the entry reads from, not the
+    // event-driven ones (4h), which keep their own byte budget.
+    const extras = !(tf in EVENT_FRAMES);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
-      c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
+      extras && c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
       c.momentum === 'up' || c.momentum === 'down' ? `momentum ${c.momentum}` : null].filter(Boolean).join(', ');
-    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${gapText(c)}.`);
+    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
