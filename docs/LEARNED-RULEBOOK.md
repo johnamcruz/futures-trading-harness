@@ -1344,8 +1344,9 @@ and trims about 700 more lines in about 30 files.
   imports.
 - `challenge-env.js`'s combine simulator (`tradingDays`, `createEnv`,
   `runAttempt`, `evaluate`, without rewards and actions; about 90 lines).
-  The backtester's prop runs use it, and the attempt simulation (R6) builds
-  on it.
+  The backtester's prop runs used it, and the attempt simulation (R6) builds
+  on it. It became `prop/challenge.js`, retired with those runs on
+  2026-10-14; its `tradingDays` moved to `prop/trade-stream.js`.
 - The promotion gate's numbers and `gateFailures`, and the split windows
   (R15).
 - The market features (section 9).
