@@ -26,7 +26,7 @@
  * behind it (stop and target distances, detector state on the signal bar).
  *
  * The prop runs (`prop`, `every`: combine attempts of a policy strategy) are retired
- * (docs/research/mechanical-prop-backtester.md). policyStrategy, barsAt and
+ * (docs/BACKTESTING.md, "Prop challenges (retired)"). policyStrategy, barsAt and
  * validateBacktestConfig stay: the two-layer evaluator (prop/evaluate-run.js) uses them.
  */
 
@@ -95,7 +95,7 @@ function validateBacktestConfig(raw, baseDir) {
   }
   if (raw && raw.bundle !== undefined) throw new Error('invalid backtest config:\n- bundle: trained policy bundles are retired');
   for (const k of ['prop', 'every']) {
-    if (raw && raw[k] !== undefined && raw[k] !== null) throw new Error(`invalid backtest config:\n- ${k}: the backtester's prop runs are retired (docs/research/mechanical-prop-backtester.md)`);
+    if (raw && raw[k] !== undefined && raw[k] !== null) throw new Error(`invalid backtest config:\n- ${k}: the backtester's prop runs are retired (docs/BACKTESTING.md, "Prop challenges (retired)")`);
   }
   const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, debug: null, walkForward: null, record: false, ...(raw || {}) };
   const errors = [];
