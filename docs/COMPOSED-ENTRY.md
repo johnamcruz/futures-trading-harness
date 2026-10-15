@@ -283,7 +283,9 @@ disagreeing read refuses it, naming the read.
 runner passes the cycle bar; without it `briefingFor` would return the
 briefing current at the wall clock, so the tool refuses rather than guess.
 It then works out the plan in code and appends a record to
-`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl` (one file per index family; its
+`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl` (one shard per index family
+and trading day: the session date of the record's bar, at the 18:00 ET
+rollover, so the gate reads the cycle bar's one shard; its
 schema is `RECORD_KEYS` in `trading/trade-lifecycle.js`), the way the runner
 records policy verdicts (`prop-state.js:526`):
 
@@ -533,7 +535,7 @@ computes.
 
 | Source | Gives the log |
 |---|---|
-| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
+| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
 | Cycle log (`cycle-log.js`: `<FTH_HOME>/logs/cycles-<day>.jsonl`) | The cycle's result, its `compose_check` and `experience_lookup` calls, the gate's refusals |
 | Decision history (`decision-history.js`) | The action words (entered, skipped, no-trade) and its fill matching for an entered trade's real R (`closedTrade`, `decision-history.js:326`). The history itself is not the log: the runner keeps only the last ten (`runner.js:1410`) |
 | Counterfactual (`replay/counterfactual.js:70`, `simulate`) | A pass's R from the record's stop and target distances, with the backtester's slippage |

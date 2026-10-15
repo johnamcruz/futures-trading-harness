@@ -41,6 +41,7 @@ const { sessionDate } = require('../learning/splits');
 const { MAX_PER_BAR, reserveLookup } = require('../learning/experience-lookups');
 const { loadPinnedLibrary, libraryCellAt, noRoomBefore, setupKeyOf } = require('../learning/setup-library');
 const { familyRoot } = require('../trading/contracts');
+const { daysNear } = require('../trading/trade-lifecycle');
 const { context } = require('./cli');
 
 const USAGE = 'usage: experience-lookup.js --symbol <ROOT> [--alternative <step>:<skill> (at most 2)] [--role <role>]';
@@ -75,10 +76,15 @@ function exampleLines(ex) {
   return `- ${ex.day} ${ex.side || ''} ${ex.decision}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}: ${reads}`;
 }
 
-/** The latest verified record for the root that hasn't expired at `now`. */
+/**
+ * The latest verified record for the root that hasn't expired at `now`: read from the root's day shards around `now`
+ * alone (a record live at `now` is on a bar of the day before, of or after it: trade-lifecycle.js daysNear), never
+ * the whole run's record.
+ */
 function candidateFor(home, root, now) {
   const t = now.getTime();
-  const live = readRecords(home).filter(r => familyRoot(r.root) === familyRoot(root) && r.ok && Date.parse(r.at) <= t && (!r.expiresAt || Date.parse(r.expiresAt) > t));
+  const live = readRecords(home, { root: familyRoot(root), days: daysNear(now) })
+    .filter(r => familyRoot(r.root) === familyRoot(root) && r.ok && Date.parse(r.at) <= t && (!r.expiresAt || Date.parse(r.expiresAt) > t));
   return live.length ? live[live.length - 1] : null;
 }
 

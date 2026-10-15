@@ -466,6 +466,26 @@ test('order gate: a trade-lifecycle entry (signal: composed) outside a runner cy
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard alone; that shard unreadable refuses it (fails closed); its exit goes', () => {
+  const LC = require('../fixtures/lifecycle');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  LC.writeScenario(env.FTH_HOME);
+  // Every other day's shard unreadable: never opened, so the record stands.
+  for (const day of ['2026-10-05', '2026-10-06', '2026-10-08']) fs.mkdirSync(TL.recordFile(env.FTH_HOME, 'MNQ', day));
+  const ok = gate(orderPayload(LC.order()), env);
+  assert.doesNotMatch(ok.stderr, /\[composed-reads\]/);
+  // The bar's own day unreadable: refused, named.
+  fs.renameSync(TL.recordFile(env.FTH_HOME, 'MNQ', '2026-10-07'), path.join(env.FTH_HOME, 'moved.jsonl'));
+  fs.mkdirSync(TL.recordFile(env.FTH_HOME, 'MNQ', '2026-10-07'));
+  const entry = gate(orderPayload(LC.order()), env);
+  assert.strictEqual(entry.code, 2);
+  assert.match(entry.stderr, /\[composed-reads\] setup:trade_lifecycle: the check failed \(the compose record \S+2026-10-07\.jsonl can't be read \(EISDIR\)\): no entry \(fails closed\)/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
   const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);

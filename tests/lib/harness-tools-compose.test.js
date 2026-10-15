@@ -43,7 +43,7 @@ test('compose_check: scenario 1 is OK, the plan in code, one record appended per
   assert.strictEqual(rec.signature, 'bias:1h-bos-up+bias:above-prior-rth-range+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:1h-swing-1.5-2.5r');
   assert.strictEqual(rec.context.trendSide, 'with');
   // Under FTH_HOME, never the repository.
-  assert.ok(recordFile(home, 'MNQ').startsWith(home));
+  assert.ok(recordFile(home, 'MNQ', '2026-04-23').startsWith(home) && fs.existsSync(recordFile(home, 'MNQ', '2026-04-23')));
   // Append-only: a second call adds a line.
   composeCheck({ symbol: 'MNQ', side: 'short', reads: SCENARIO_1, size: 1 }, ctx);
   const all = readRecords(home, 'MNQ');
@@ -81,7 +81,7 @@ test('compose_check: arguments refused before anything is recorded; the CLI\'s a
   assert.throws(() => composeCheck({ symbol: 'mnq', side: 'long', reads: [], size: 1 }, ctx), /--symbol/);
   assert.throws(() => composeCheck({ symbol: 'MNQ', side: 'flat', reads: [], size: 1 }, ctx), /--side/);
   assert.throws(() => composeCheck({ symbol: 'MNQ', side: 'long', reads: 'x', size: 1 }, ctx), /--reads/);
-  assert.ok(!fs.existsSync(recordFile(home, 'MNQ')));
+  assert.ok(!fs.existsSync(path.join(home, 'trade-lifecycle')));
   assert.deepStrictEqual(parseArgv(['--symbol', 'MNQ', '--side=long', '--size', '2', '--reads', '[{"step":"bias"}]']), { symbol: 'MNQ', side: 'long', size: 2, reads: [{ step: 'bias' }] });
   assert.throws(() => parseArgv(['--reads', '{bad']), /--reads: JSON/);
   assert.throws(() => parseArgv(['--bogus']), /unknown argument/);

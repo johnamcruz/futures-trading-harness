@@ -252,7 +252,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   let composed;
   try {
     const symbols = ((context && context.symbols) || []).map(x => x && x.symbol).filter(Boolean);
-    composed = env ? require('./trading/lifecycle-runner').cycleComposed(home, require('./trading/check-order').cycleId(env), symbols) : [];
+    composed = env ? require('./trading/lifecycle-runner').cycleComposed(home, require('./trading/check-order').cycleId(env), symbols, cycleAt) : [];
   } catch (_err) { composed = []; }
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);

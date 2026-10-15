@@ -3,7 +3,7 @@
 /**
  * compose_check (scripts/compose-check.js; the harness tool compose_check): the head trader's trade-lifecycle
  * combination, its reads checked against this cycle's bar briefing (trading/composed-reads.js) and its plan worked out
- * in code (trading/trade-lifecycle.js), appended as one record to <FTH_HOME>/trade-lifecycle/<ROOT>.jsonl. Read-only
+ * in code (trading/trade-lifecycle.js), appended as one record to <FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl. Read-only
  * but for that record; it places nothing and decides nothing (a calculator and a checker). Every call is recorded,
  * refused ones too, so the record covers what was tried.
  *
