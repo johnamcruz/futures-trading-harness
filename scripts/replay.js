@@ -173,8 +173,7 @@ async function run(argv) {
   for (const line of pinForRun(r, { fresh, arm: gate.arm })) say(line);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
-  if (res.stopped) say(`${res.stopped}; run it again to resume`);
-  else say(`done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
+  say(res.stopped ? `${res.stopped}; run it again to resume` : `done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
   // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
   if (res.done) {
     try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
