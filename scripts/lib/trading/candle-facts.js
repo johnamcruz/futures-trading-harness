@@ -33,7 +33,7 @@
  *   relationSeries(bars, minutes, base, level, { at })   per-bar relation to a level series ('open', 'close', 'now')
  *   swingTargetSeries(bars, minutes, base) per bar: the nearest untaken confirmed swing high above / low below the close
  *   briefingCandles({ bars, base, fine, levelsAt, zonesAt, crtFrames })   the briefing's `candles` block (last bar; fine:
- *                                          1m bars for a timeframe the base bars can't build; zonesAt(openIdx): the gap
+ *                                          1m bars for a timeframe the base bars can't build; zonesAt(openIdx, openMs): the gap
  *                                          edges as of the candle's open, read into `fvgRelations`)
  *   holdingSwingsAt(bars, minutes, base, idx)   the swings still holding as of bar idx
  *   briefingTargets({ bars, minutes, price, oneR, tick })    the briefing's `swingTargets` block (last bar)
@@ -467,12 +467,13 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       found.push({ name, price, rel: rel.relation, dir: rel.dir, text: rel.relation === 'touched' ? 'touched' : RELATION_TEXT[rel.relation][rel.dir] });
     }
     found.sort((x, y) => (REL_RANK[x.rel] - REL_RANK[y.rel]) || (levelRank(x.name) - levelRank(y.name)));
-    // The fair value gaps' edges as they stood at the candle's open (zonesAt(openIdx): [name, price, side]), by the same
-    // relation rule: a gap the candle itself fills still counts, so its failure reads broke, never rejected.
+    // The fair value gaps' edges as they stood at the candle's open (zonesAt(openIdx, its open in ms): [name, price,
+    // side]), by the relation rule read through the gap's side (gapRelation): a gap the candle itself fills still
+    // counts, so its failure reads broke, never rejected.
     const zones = [];
-    for (const z of zonesAt && openIdx >= 0 ? zonesAt(openIdx) : []) {
+    for (const z of zonesAt && openIdx >= 0 ? zonesAt(openIdx, Date.parse(c.t)) : []) {
       const [name, price, side] = Array.isArray(z) ? z : [];
-      const rel = typeof name === 'string' ? relation(c, price, prev ? prev.c : NaN) : null;
+      const rel = typeof name === 'string' ? gapRelation(relation(c, price, prev ? prev.c : NaN), name, side) : null;
       if (!rel || rel.relation === 'none' || zones.some(x => x.name === name && x.price === price)) continue;
       zones.push({ name, price, side: side || null, rel: rel.relation, dir: rel.dir });
     }
@@ -496,6 +497,22 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
     };
   }
   return out;
+}
+
+/**
+ * A candle's relation to a fair value gap's edge, by the gap's side: a bullish gap (support) is rejected only up (the
+ * bounce) and broken only down through its low (the failure: a close beyond its far edge); a bearish gap the mirror
+ * (rejected down, broken up through its high). Anything else that met the edge (a close inside the gap, a gap of
+ * unknown side) is touched. null without a relation.
+ */
+function gapRelation(rel, name, side) {
+  if (!rel || rel.relation === 'none' || rel.relation === 'touched') return rel;
+  const edge = / fvg (low|high)$/.exec(name);
+  const bull = side === 'bullish';
+  const bear = side === 'bearish';
+  const ok = rel.relation === 'rejected' ? (bull && rel.dir === 'up') || (bear && rel.dir === 'down')
+    : (bull && rel.dir === 'down' && edge && edge[1] === 'low') || (bear && rel.dir === 'up' && edge && edge[1] === 'high');
+  return ok ? rel : { relation: 'touched', dir: null };
 }
 
 /**
@@ -577,11 +594,13 @@ function briefingRangeTargets({ bars, base, price, oneR, tick = 0.25, frames = R
  * and then only a current candle (the one ending on the last boundary, or the one before while the 1m bars don't
  * reach the close yet). { src, upto, candles, j }: src the bars they are built from, upto the last of them closed by
  * the close, j the last candle completed by then; or { unavailable } with why (never approximated). Only the bars
- * closed by bar `at`'s close are read: bars after it change nothing.
+ * closed by bar `at`'s close are read: bars after it change nothing. `until` (ms, at or after that close and before the
+ * next base bar's): the 1m bars are read up to it instead (a candle's open between base closes, e.g. a 5m open).
  */
-function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length - 1 }) {
+function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length - 1, until = null }) {
   if (!(at >= 0 && at < bars.length)) return { unavailable: 'no bars' };
-  const closedAt = Date.parse(bars[at].t) + base * 60000;
+  const barClose = Date.parse(bars[at].t) + base * 60000;
+  const closedAt = Number.isFinite(until) && until >= barClose && until < barClose + base * 60000 ? until : barClose;
   let src = bars;
   let upto = at;
   let s = completedSeries(bars, minutes, base);
@@ -607,5 +626,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation,
 };

@@ -90,13 +90,15 @@ test('a bounce off a gap is a rejection of its edge, read on the completed candl
 });
 
 test('a failed gap is a break of its edge, never a bounce: the gap the candle fills is read as it stood at its open', () => {
-  // Through the whole gap, closed at 97.5 with most of the body below it: broke both edges, down. The gap is filled
-  // (gone from the gaps now), but the candle is read against the gap at its open.
+  // Through the whole gap, closed at 97.5 with most of the body below it: broke its low (the far edge), down. The gap
+  // is filled (gone from the gaps now), but the candle is read against the gap at its open. Through the near edge (the
+  // high) is no failure: touched.
   const { bars, candle, briefing } = afterGap([104, 104.5, 97, 97.5]);
   assert.deepStrictEqual(F.fvgFrames({ bars, base: 3, frames: [15] })['15m'], []);
-  assert.deepStrictEqual(candle.fvgRelations.map(r => [r.name, r.rel, r.dir]), [['15m fvg low', 'broke', 'down'], ['15m fvg high', 'broke', 'down']]);
+  assert.deepStrictEqual(candle.fvgRelations.map(r => [r.name, r.rel, r.dir]), [['15m fvg low', 'broke', 'down'], ['15m fvg high', 'touched', null]]);
   assert.strictEqual(one('15m rejected 15m fvg low up', briefing).check, false);
   assert.strictEqual(one('15m rejected 15m fvg high up', briefing).check, false);
+  assert.strictEqual(one('15m broke 15m fvg high down', briefing).check, false);
   const broke = one('15m broke 15m fvg low down', briefing);
   assert.deepStrictEqual([broke.check, broke.dir], [true, 'short']);
   // As a long's setup it is refused: the bounce is false, the break is against the long.
@@ -109,6 +111,44 @@ test('a failed gap is a break of its edge, never a bounce: the gap the candle fi
   const failed = CR.checkReads({ reads: reads.map(x => (x.step === 'setup' ? { ...x, read: '15m broke 15m fvg low down' } : x)), side: 'long', briefing: b });
   assert.strictEqual(failed.ok, false);
   assert.strictEqual(failed.reads.find(x => x.step === 'setup').agrees, false);
+});
+
+test('a gap edge reads by the gap\'s side: a close inside a bullish gap is no break; only a close beyond its far edge is', () => {
+  // Opened 104.5 above the bullish gap 101-103, closed 101.25 inside it (most of the body under its high): the gap
+  // held so far, so it neither broke nor bounced; both edges are touched.
+  const { candle, briefing } = afterGap([104.5, 105, 101, 101.25]);
+  assert.deepStrictEqual(candle.fvgRelations.map(r => [r.name, r.rel, r.dir]), [['15m fvg low', 'touched', null], ['15m fvg high', 'touched', null]]);
+  assert.strictEqual(one('15m broke 15m fvg high down', briefing).check, false);
+  assert.strictEqual(one('15m touched 15m fvg high', briefing).check, true);
+  // The rule itself, by side and edge.
+  const R = (relation, dir) => ({ relation, dir });
+  const g = CF.gapRelation;
+  assert.deepStrictEqual(g(R('rejected', 'up'), '15m fvg low', 'bullish'), R('rejected', 'up'));
+  assert.deepStrictEqual(g(R('rejected', 'up'), '15m fvg high', 'bullish'), R('rejected', 'up'));
+  assert.deepStrictEqual(g(R('rejected', 'down'), '15m fvg high', 'bullish'), R('touched', null));
+  assert.deepStrictEqual(g(R('broke', 'down'), '15m fvg low', 'bullish'), R('broke', 'down'));
+  assert.deepStrictEqual(g(R('broke', 'down'), '15m fvg high', 'bullish'), R('touched', null), 'a close inside the gap');
+  assert.deepStrictEqual(g(R('broke', 'up'), '15m fvg high', 'bullish'), R('touched', null));
+  assert.deepStrictEqual(g(R('rejected', 'down'), '1h fvg high', 'bearish'), R('rejected', 'down'));
+  assert.deepStrictEqual(g(R('rejected', 'up'), '1h fvg low', 'bearish'), R('touched', null));
+  assert.deepStrictEqual(g(R('broke', 'up'), '1h fvg high', 'bearish'), R('broke', 'up'));
+  assert.deepStrictEqual(g(R('broke', 'up'), '1h fvg low', 'bearish'), R('touched', null), 'a close inside the gap');
+  assert.deepStrictEqual(g(R('broke', 'down'), '1h fvg low', 'bearish'), R('touched', null));
+  assert.deepStrictEqual(g(R('rejected', 'up'), '15m fvg low', null), R('touched', null), 'a gap of unknown side');
+  assert.deepStrictEqual(g(R('touched', null), '15m fvg low', 'bullish'), R('touched', null));
+  assert.deepStrictEqual(g(R('none', null), '15m fvg low', 'bullish'), R('none', null));
+  assert.strictEqual(g(null, '15m fvg low', 'bullish'), null);
+});
+
+test('a bearish gap mirrors it: rejected down is the hold, broke up through its high the failure', () => {
+  // A bearish 15m gap 97-99 (fvg-frames.test.js), then up into it.
+  const bear = [[100, 101, 99, 99.5], [99.5, 99.75, 93.75, 94], [94, 97, 93, 93.5]];
+  const at = last => {
+    const bars = barsOf([...FLAT, ...bear, last]);
+    return CF.briefingCandles({ bars, base: 3, timeframes: [15], zonesAt: k => F.fvgEdgesAt({ bars, base: 3, frames: [15], at: k }) })['15m'].fvgRelations.map(r => [r.name, r.rel, r.dir]);
+  };
+  assert.deepStrictEqual(at([93.5, 99.25, 93, 96]), [['15m fvg low', 'rejected', 'down'], ['15m fvg high', 'rejected', 'down']]);
+  assert.deepStrictEqual(at([96, 103, 95.5, 102.5]), [['15m fvg low', 'touched', null], ['15m fvg high', 'broke', 'up']]);
 });
 
 test('a gap is only a level for candles that opened after it was known: the candle that makes it has none', () => {

@@ -2883,6 +2883,9 @@ test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-ch
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h rejected previous 4h high down')]), true);
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '15m rejected previous 4h high down')]), false, 'a 15m rejection');
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h broke previous 4h high down')]), false, 'a break, not a rejection');
+  for (const gap of ['5m', '15m', '1h']) {
+    assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', `4h rejected ${gap} fvg low down`)]), false, `a ${gap} gap's edge is no key level`);
+  }
   // Not against the trend, no record, or no standing check: no reversal (the trend rule as before).
   assert.strictEqual(at({ 240: -1, 60: -1, 15: -1 }, [read('break', '1h choch down')]), false);
   assert.strictEqual(reversalAllowed({ home: require('../helpers').tmpDir(), root: 'MNQ', side: 'short', check: { ok: true, reads: [] } }).ok, false);

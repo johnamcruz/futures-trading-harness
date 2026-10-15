@@ -356,7 +356,11 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   ];
   // The fair value gaps' edges as of a base bar (a candle's open), once per bar: the candles' fvgRelations.
   const zones = new Map();
-  const zonesOf = k => { if (!zones.has(k)) zones.set(k, fvgEdgesAt({ bars, base: minutes, fine, at: k })); return zones.get(k); };
+  const zonesOf = (k, until) => {
+    const key = `${k}:${until}`;
+    if (!zones.has(key)) zones.set(key, fvgEdgesAt({ bars, base: minutes, fine, at: k, until }));
+    return zones.get(key);
+  };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
