@@ -16,8 +16,9 @@
  *   size-down   an entry filled under the ceiling of the verdict it was sized under; the counterfactual takes the
  *               ceiling (the model's share is otherwise kept: the base sizes every entry at the model's own share)
  *   early-exit  an entry closed before its stop, its target and end of day; the counterfactual holds it to its bracket
- *               (limitOutcome's rule on the run's bars). A stop the model tightened, a trail the runner moved and a
- *               manual close are one action here: nothing recorded tells them apart (the closing order's origin would)
+ *               (limitOutcome's rule on the run's bars). An exit the runner made (its trail, its time stop: its event
+ *               log, model-stream.js runnerExit) is the policy's and no action; a stop the model tightened and a manual
+ *               close are one action here (nothing recorded tells those two apart)
  * Only outcomes the run observed or limitOutcome's rule on the run's own bars: no other future data.
  *
  * The state (risk-attribution.js stateOf) is the Monte Carlo's own, as the path stands when the decision comes up:
@@ -36,15 +37,12 @@
  *   riskActionRecord(result, { minN, maxBytes })   { kind, cells, text } at most 4 KB, each line with its sample size
  */
 
-const { scoreArms } = require('./evaluator');
+const { scoreArms, ownShare: own } = require('./evaluator');
 const { STATES: STATE_LIST, stateOf, HELD_OUT } = require('./risk-attribution');
 
 const KINDS = Object.freeze(['pass', 'day-stop', 'size-down', 'early-exit']);
 const STATES = Object.freeze([...STATE_LIST, 'all']);
 const MAX_BYTES = 4096;
-
-// The model's own share of the ceiling; a share that rounds to no contract still takes one (the model filled one).
-const own = t => ({ fraction: t.sizeFraction ?? 1, keepOne: true });
 
 /** The model's own decisions (base) and one arm per kind of action and state that reverts it there. */
 function riskActionArms() {
@@ -69,7 +67,7 @@ const effectOf = i => (i.lo > 0 ? 'raised' : i.hi < 0 ? 'lowered' : 'no signific
 
 function scoreRiskActions(stream, opts = {}) {
   const { base, arms } = riskActionArms();
-  const r = scoreArms(stream, { ...opts, base, arms });
+  const r = scoreArms(stream, { ...opts, base, arms, sized: 'own' });
   const all = stream.days.flatMap(d => [...d.trades, ...(d.passed || [])]);
   const actions = {};
   for (const kind of KINDS) {

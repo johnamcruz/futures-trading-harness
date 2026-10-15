@@ -8,7 +8,11 @@
  *     the same resampled day blocks, the same faults; A is the champion, B the challenger, every difference A minus B).
  *     Its real attempts (one per start day, a block bootstrap in blocks of the account's sessions S) are the evidence;
  *     its resampled paths redraw the window's own days, so their intervals shrink with `paths` whatever the effect:
- *     they are conditional on those days, and only (a) and (b) read them;
+ *     they are conditional on those days, and only (a) and (b) read them. Each side is scored as the model traded
+ *     (scorePaired sized 'own'): every entry at its own filled share of the ceiling and, where it took itself out (an
+ *     early exit, a tightened stop), at its own exit, so its stage-2 risk decisions count; the ceiling-sized result is
+ *     reported beside it (`ceiling`), never judged. A curated run is refused (its moments are outcome-balanced and its
+ *     rebuilt days drawn): the keep rule pairs full-day windows, at least (minBlocks + 1) x S session days each;
  *   - the paired decision measures (train/paired.js pairUp and tally): process adherence (the scorecard's category per
  *     decision, right or not) and the correct-read rate (a decision's reads all verified true or not), each by an exact
  *     one-sided McNemar test.
@@ -43,8 +47,8 @@
  * back learning window (practice-validate, test, final), read through the learning ledger's looks the runs took before
  * their first cycle (learning/run-gate.js; pairRuns checks each run's look, prop/evaluator.js checkModelWindow);
  * lookErrors refuses a judging that would need more looks than a window's budget has left. A diagnostic score (a
- * curated or setup-focused run) can keep a change on tuning, labelled diagnostic, but never on held-out months, and
- * never promotes. The frozen promotion gate (prop/promotion.js) stays the final gate: held-out judging reports the
+ * setup-focused run) can keep a change on tuning, labelled diagnostic, but never on held-out months, and never
+ * promotes; a curated run is never paired (pairRuns refuses it, and the loop's config refuses a curated list). The frozen promotion gate (prop/promotion.js) stays the final gate: held-out judging reports the
  * challenger's verdict from it (`promotion`), and a kept change is never a promotion.
  *
  * A kept change is a PR for the owner (train/loop.js promote): nothing here merges, pushes or edits a document.
@@ -248,7 +252,7 @@ function decide(windows, { rule = DECISION_RULE, heldOut = false } = {}) {
     decisionChecks(w.label, 'correct-read rate', w.reads, w.readsWhy, rule, rejected, open);
   }
   if (rejected.length) return { verdict: 'rejected', reasons: rejected, diagnostic, pooled: null };
-  if (heldOut && diagnostic) open.push('a diagnostic score (curated or setup-focused) never judges held-out months and never promotes: only full-day runs');
+  if (heldOut && diagnostic) open.push('a diagnostic score (setup-focused) never judges held-out months and never promotes: only full-day runs');
   if (sessions.size > 1) open.push('the windows were scored with different sessions: no pooled interval');
   if (open.length) return { verdict: 'inconclusive', reasons: open, diagnostic, pooled: null };
   // (c) i: one pooled interval on the primary measure over every window's real start days, stacked window by window.
@@ -330,6 +334,9 @@ function windowOut(w) {
     diff: { passRate: ivOf(real.passRate), blowRate: ivOf(real.blowRate), medianDaysToPass: ivOf(real.medianDaysToPass) },
     resampled: { conditional: RESAMPLED, passRate: ivOf(rs.passRate), blowRate: ivOf(rs.blowRate), medianDaysToPass: ivOf(rs.medianDaysToPass) },
     champion: m.a && m.a.real, challenger: m.b && m.b.real, score: m.b && m.b.score, adherence: w.adherence, reads: w.reads, readsWhy: w.readsWhy,
+    sizedAs: m.sizedAs || 'ceiling',
+    // Beside the judged result: every entry at the code's ceiling under the policy exit, labelled, never judged.
+    ...(m.ceiling ? { ceiling: { label: m.ceiling.label, blows: m.ceiling.blows, verdict: m.ceiling.verdict, passRate: ivOf(m.ceiling.diff.real.passRate), blowRate: ivOf(m.ceiling.diff.real.blowRate) } } : {}),
   };
 }
 

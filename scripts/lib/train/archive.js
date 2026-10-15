@@ -72,6 +72,8 @@ function modelLines(m) {
     '| --- | ---: | ---: | --- | --- | --- | --- | --- | --- |',
     ...(m.windows || []).map(w => `| ${w.label} | ${w.attempts === undefined ? '-' : w.attempts} | ${w.blows ? w.blows.b : '-'} | ${iv(w.diff && w.diff.passRate)} | ${iv(w.diff && w.diff.blowRate)} | ${iv(w.diff && w.diff.medianDaysToPass)} | ${rs(w)} | ${w.adherence ? `${w.adherence.c}/${w.adherence.b}` : '-'} | ${w.reads ? `${w.reads.c}/${w.reads.b}` : '-'} |`),
     '', 'The resampled figures redraw each window\'s own days: they are conditional on those days (Monte Carlo precision, not evidence) and only rules (a) and (b) read them.',
+    '', 'Each side is scored as the model traded: every entry at its own filled share of the code\'s ceiling, and its own exit where it took itself out (the policy exit re-exits only what the bracket closed).',
+    ...(m.windows || []).filter(w => w.ceiling).map(w => `- ${w.label} at the code's ceiling (${w.ceiling.label}): challenger blows ${w.ceiling.blows ? w.ceiling.blows.b : '-'}, pass rate (real) ${iv(w.ceiling.passRate)}, blow rate (real) ${iv(w.ceiling.blowRate)}`),
     '', 'The promotion gate (prop/promotion.js, frozen) is still the final gate: this change is kept for review, not promoted.',
   ];
 }
