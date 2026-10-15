@@ -354,8 +354,9 @@ Learning must see the broker fields a decision was made on, so:
 **Status of R6-R9 (step 9): built.** The code is `scripts/lib/prop/`
 (`trade-stream.js` is layer 1, `attempts.js` layer 2, `evaluator.js` the
 scoring and the window and look checks, `stats.js` the statistics,
-`evaluate-run.js` the run). The CLI is `scripts/evaluate.js`, and
-`docs/BACKTESTING.md` ("The two-layer evaluator") describes its use. Built
+`evaluate-run.js` the run). The CLI `scripts/evaluate.js` was deleted; a replay run is scored by
+`scripts/lib/prop/model-score.js`, and `docs/BACKTESTING.md` ("The two-layer
+evaluator") describes the layers. Built
 as written, with these readings and inputs:
 
 - **Inputs, not defaults.** The rulebook's values (`rulebook.sizing`, and
@@ -390,6 +391,41 @@ as written, with these readings and inputs:
   engine does.
 - **Left to the search (R8, R9, step 11).** Choosing among candidates: the
   lower bound as the objective, the trade-off report, and the flat region.
+
+**The model's trades (built).** Layer 2 also scores the model's own replay
+trades (`scripts/lib/prop/model-stream.js`: R and ticks from the replay
+broker's fills, the adverse and no-stop paths from the run's own bars, each
+trade's order within its day and its record's context; a day the model passed
+is a no-trade day; each day's regime by `trade-stream.js` `dayRegimes` on the
+run's bars). Every trade carries the fields layer 2 reads (the adverse path,
+a stop exit's overshoot, the no-stop path a stop fault runs on: a real score
+with a fault rate refuses trades without one, and the result counts the
+faults fired), and its R is gross (move over stop, as the expectancy cuts'
+base; the attempts settle net dollars). Pass, blow and timeout rates are
+also given at the effective sample size. That score is the replay's report (`prop/model-score.js`,
+in the owner's order: zero blows, the pass rate within `sessions`, the median
+and 90th-percentile days to pass, the blow and timeout rates with their
+intervals). Its windows are the learning split's (`learning/splits.js`), not
+the schedule's: a run's look is taken in the learning ledger before its first
+cycle (`learning/run-gate.js`), and each score of a practice-validate, test or
+final run is logged beside that look (`learning/looks.js` `recordScore`).
+Practice-train is free. A curated practice run is rebuilt at each list's
+natural frequency (`prop/natural-rate.js`) and scored `diagnostic
+(reweighted)`, a setup-focused one `diagnostic (setup-focused)`; the promotion
+gate refuses both. Beside it: the paired comparison of two runs of the same
+days through the same paths, blocks and faults (`evaluator.js`
+`scorePaired`, the judge for keeping a skill change), the risk attribution by
+the account state at each decision (`prop/risk-attribution.js`), the model's
+risk actions inside the code's ceilings (a pass on a valid setup, a stop for
+the day after a loss, a size under the verdict's ceiling, an exit before the
+stop or target) each scored against its counterfactual on the same paths
+(`prop/risk-actions.js`, labelled counterfactual: only what the run observed
+and the experience log's limitOutcome rule), the account
+states drawn from the attempt paths for practice (`prop/account-states.js`,
+not yet shown to a replay: that needs the replay broker to start at the drawn
+balance), and the account-policy hook that scores a candidate rulebook on the
+model's trades (`prop/rulebook-score.js`, refused on test and final; no search
+built, no rulebook value changed).
 
 **R6. Evaluator, in two layers.**
 
@@ -1162,7 +1198,7 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
 9. The two-layer evaluator and the attempt simulation (R6-R9). Built
-   (`scripts/lib/prop/`, `scripts/evaluate.js`; section 5 says how it reads
+   (`scripts/lib/prop/`; section 5 says how it reads
    R6-R9, and what it still takes as inputs).
 10. Calibration: the registry, the measurements and the reports (R11-R13),
    the flow strategies' thresholds among them, on covered months (R34).

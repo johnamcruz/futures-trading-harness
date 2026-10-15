@@ -187,6 +187,36 @@ function balanceCheck(anchor, balance, fills) {
 const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math.abs(c.diff) <= BALANCE_TOLERANCE);
 
 /**
+ * The day's trade counts for the attempt line (combine.attemptFacts): trades closed today and losing ones (the losing
+ * streak is the session's, sessionLossStreak: one source). From the fills this snapshot read (since the day's anchor,
+ * the first flat snapshot); else the day's last counts, only when nothing moved since them (`unchanged`); else, on the
+ * day's first snapshot (its anchor, flat), none yet. Null when unknown (a position open, the fills unread or
+ * unreadable): never stale counts shown as current. Facts only, never a block.
+ */
+function dayCounts(record, day, fills, fresh, open, unchanged = false) {
+  const prev = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === day ? record.snapshot.counts : null;
+  let today = null;
+  if (Array.isArray(fills)) {
+    // Lazily: the account gate reads this module's state, so it can't be loaded with it.
+    const { closingFills, fillLossState } = require('./account-gate');
+    today = { trades: closingFills(fills).length, losses: fillLossState(fills).losses };
+  } else if (prev && unchanged) today = prev;
+  else if (fresh && open === 0) today = { trades: 0, losses: 0 };
+  if (!today) return null;
+  return { day, trades: today.trades, losses: today.losses };
+}
+
+/**
+ * Today's trades and losses for combine.attemptFacts, from the attempt's latest snapshot when it is of today; nulls
+ * otherwise. The losing streak is not here: the attempt line reads sessionLossStreak, its one source.
+ */
+function attemptCounts(record, now = new Date()) {
+  const c = record && record.snapshot && record.snapshot.counts;
+  if (!c || c.day !== tradingDayKey(now)) return { tradesToday: null, lossesToday: null };
+  return { tradesToday: c.trades, lossesToday: c.losses };
+}
+
+/**
  * Save the latest balance and open-position count (the gate reads them),
  * returning the state. A snapshot on a new trading day whose previous
  * snapshot's day has no recorded close marks that close as missed: the
@@ -253,9 +283,10 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
     }
   }
   const state = { ...cs, lossStreak: lossStreak.count };
+  const counts = dayCounts(record, day, fillsError ? undefined : fills, fresh, open, unchanged && !fillsError);
   writeJson(combineFile(home, account.name), {
     ...record, missedClose, missedCloses: missed, peak: cs.peak, anchor, lossStreak,
-    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(state), block: combine.entryBlock(state), state },
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(state), block: combine.entryBlock(state), state, counts },
   });
   return state;
 }
@@ -617,6 +648,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

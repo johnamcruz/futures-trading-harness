@@ -18,7 +18,7 @@ Autonomous cycle.
   3 more trade cycles today after this one, then manage-only.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   M2K prop_portfolio: long setup from bos, verdict full: enter only as setup:prop_portfolio, M2K buy, at most 4, stopLossBracket {ticks: 36, type: "stop"} (prop-challenge-pacing skill).
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
@@ -61,7 +61,7 @@ Autonomous cycle.
   3 more trade cycles today after this one, then manage-only.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   M2K prop_portfolio: long setup from bos, verdict full: enter only as setup:prop_portfolio, M2K buy, at most 4, stopLossBracket {ticks: 36, type: "stop"} (prop-challenge-pacing skill).
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
@@ -104,7 +104,7 @@ Autonomous cycle.
   3 more trade cycles today after this one, then manage-only.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   M2K prop_portfolio: long setup from bos, verdict full: enter only as setup:prop_portfolio, M2K buy, at most 4, stopLossBracket {ticks: 36, type: "stop"} (prop-challenge-pacing skill).
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
@@ -134,7 +134,7 @@ Autonomous cycle.
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   M2K prop_portfolio: long setup from bos, verdict full: enter only as setup:prop_portfolio, M2K buy, at most 4, stopLossBracket {ticks: 36, type: "stop"} (prop-challenge-pacing skill).
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
@@ -167,7 +167,7 @@ Autonomous cycle.
   3 more trade cycles today after this one, then manage-only.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   M2K prop_portfolio: long setup from bos, verdict full: enter only as setup:prop_portfolio, M2K buy, at most 4, stopLossBracket {ticks: 36, type: "stop"} (prop-challenge-pacing skill).
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
@@ -264,7 +264,7 @@ Autonomous cycle.
   3 more trade cycles today after this one, then manage-only.
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:15 MNQ no-trade: nothing fired | 10:21 MNQ 3m skipped keltner short @27358: against the 15m trend; since -130t, would hit -1R first | 10:24 MNQ 3m entered orb long @27364.75: orb long 2 MNQ at 27420.25; since -157t, open from 27420.25, now +0.4R | 10:27 MNQ 3m managed @27365: stop held; since -158t | 10:30 MNQ 3m managed @27359.5: stop held; since -136t.
   Don't flip-flop without a new reason.
   Unreviewed: none.
@@ -293,7 +293,7 @@ Autonomous cycle.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the premarket skill for MNQ on account 7, for the trading day ending 2026-04-27 (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -304,7 +304,7 @@ Autonomous cycle.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the end-of-day skill on account 7 for the trading day ending 2026-04-27, on 3-minute bars (the reconcile tool with day 2026-04-27 and timeframe 3): flatten every position and cancel working orders without asking, then review and summarize.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -315,7 +315,7 @@ Autonomous cycle.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
-  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
+  mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the end-of-day skill on account 7 for the trading day ending 2026-04-24 (a catch-up: that day's end of day did not run; review and reconcile 2026-04-24, not today), on 3-minute bars (the reconcile tool with day 2026-04-24 and timeframe 3): flatten every position and cancel working orders without asking, then review and summarize.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

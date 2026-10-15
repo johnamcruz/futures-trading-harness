@@ -19,15 +19,22 @@ const pinnedLine = line => {
 };
 
 /**
- * The old skill, rebuilt: each marker in `fixture` replaced, in order, by the next pinned line of `skillText`. Throws
+ * The old skill, rebuilt: each marker in `fixture` replaced, in order, by the next pinned line of `skillText`, except the
+ * markers (by index) in `gone`, whose line a later rewrite took out of the skill: those get the placeholder given. Throws
  * when the counts differ; the caller pins the result's sha256, so a pinned line changed or reordered fails there.
  */
-function rebuild(fixture, skillText) {
+function rebuild(fixture, skillText, gone = {}) {
   const pinned = skillText.split('\n').filter(pinnedLine);
   const markers = fixture.split('\n').filter(l => l === MARKER).length;
-  if (pinned.length !== markers) throw new Error(`${markers} markers, ${pinned.length} pinned lines in the skill`);
+  const goneCount = Object.keys(gone).length;
+  if (pinned.length !== markers - goneCount) throw new Error(`${markers} markers (${goneCount} reworded away), ${pinned.length} pinned lines in the skill`);
   let i = 0;
-  return fixture.split('\n').map(l => (l === MARKER ? pinned[i++] : l)).join('\n');
+  let m = 0;
+  return fixture.split('\n').map(l => {
+    if (l !== MARKER) return l;
+    const at = m++;
+    return at in gone ? gone[at] : pinned[i++];
+  }).join('\n');
 }
 
 const sha256 = text => crypto.createHash('sha256').update(text).digest('hex');

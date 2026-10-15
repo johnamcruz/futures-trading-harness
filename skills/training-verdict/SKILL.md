@@ -33,21 +33,13 @@ edit. Code decides; the model never does.
    multiplier raised, including a value no entry lists, which is 0; no exit
    changed, no key removed).
 
-**The evaluator** (section 10 step 9) verifies every change mechanically
-when the config names one (`"evaluator": { "prop", "data": { "MNQ":
-"<bar file>" }, ... }`, any `scripts/evaluate.js` setting): the champion
-and the candidate on the same bar files and seed; a blow, a gate failure
-the champion lacks, or a pass-rate lower bound that doesn't rise above the
-champion's rejects (a tie, the 0 of a short window included, shows
-nothing). Only a change that edits nothing the evaluator reads may tie,
-with identical results. Without one, a
-strategy or rulebook change stays `blocked`, and so does a change to a
-strategy its streams don't read, or to a rulebook (it reads none yet). On
-held-out windows it scores the candidate alone against the promotion gate,
-inside the judging's one look; a window too short for the gate's attempts
-and months fails it, so judge a mechanical change on windows long enough.
-Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the
-same: the one ledger is where the budget lives.
+**The evaluator** today scores no trades: the mechanical engine skips
+`trade_lifecycle`'s structural stop. A skill or rulebook change is judged by
+`pairRuns` (`scripts/lib/prop/model-score.js`): two replay runs of the same
+days through the same Monte Carlo paths. Zero blows comes first; then the
+paired difference in the pass rate within `sessions` trading days, the blow
+rate and the median days to pass, each with its interval. Until the loop
+calls it, a strategy or rulebook change stays `blocked`.
 
 **The scorecard** is section 10 step 2's (`replay/scorecard.js`, read
 through an adapter in `scripts/lib/train/loop.js`), under the look's rules:

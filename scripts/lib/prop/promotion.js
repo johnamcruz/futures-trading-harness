@@ -16,7 +16,8 @@ const PROMOTION_GATE = Object.freeze({ minPassRate: 0.4, maxBlows: 0, minAttempt
  * few independent attempts or months, any blow in any month, or a pass rate
  * under the gate's minimum (or under a higher `minPassRate`). `minWinRate`
  * adds an optional win-rate floor. A missing or malformed result fails closed.
- * oos: { attempts, passed, blown, ess, trades?, wins?, months: { 'YYYY-MM': { blown, ... } } }.
+ * oos: { attempts, passed, blown, ess, trades?, wins?, diagnostic?, months: { 'YYYY-MM': { blown, ... } } };
+ * a result marked `diagnostic` always fails.
  *
  * Independent evidence (docs/LEARNED-RULEBOOK.md R7): attempts started on
  * neighbouring days share most of their sessions, so 21 daily starts over one
@@ -32,6 +33,9 @@ function gateFailures(oos, minPassRate = PROMOTION_GATE.minPassRate, minWinRate 
     return ['the out-of-sample result is missing or malformed'];
   }
   const out = [];
+  // A diagnostic score (a curated run reweighted to natural rates, a setup-focused run: prop/evaluator.js) is
+  // practice's measure, never evidence for promotion, whatever its numbers.
+  if (oos.diagnostic) out.push(`a diagnostic score (${typeof oos.score === 'string' ? oos.score : 'diagnostic'}) is never a promotion score: only a full-day run is`);
   const months = Object.entries(oos.months);
   if (oos.ess < G.minAttempts || months.length < G.minMonths) {
     out.push(`too small an out-of-sample test (${oos.ess} independent of ${oos.attempts} attempts over ${months.length} month(s); at least ${G.minAttempts} independent over ${G.minMonths})`);

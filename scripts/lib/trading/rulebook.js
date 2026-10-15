@@ -273,4 +273,4 @@ function ceiling(items = [], facts = {}, now = new Date()) {
   return { multiplier: Math.max(0, Math.min(1, multiplier)), why };
 }
 
-module.exports = { FILE, OFF, ITEMS, KEYS, SIZING_KEYS, EXIT_KEYS, EXIT_MODES, TRAIL_BY, limit, validateRulebook, loadRulebookFile, policyEntry, ceiling };
+module.exports = { FILE, OFF, ITEMS, KEYS, SIZING_KEYS, EXIT_KEYS, EXIT_MODES, TRAIL_BY, SIZING_RULES, SOFT_RULE, limit, validateRulebook, multiplierErrors, loadRulebookFile, policyEntry, ceiling };

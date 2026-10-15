@@ -39,6 +39,13 @@ it:
 - In autonomous runs the cycle prompt carries each running attempt's state
   (balance, floor, cushion, profit, the day, sessions left, the size budget,
   any entry block) and the live verdicts, from the runner's latest snapshot.
+  Its facts (attempt day, profit needed, room to the daily limit and
+  `daily_loss_soft`, today's trades and losses, the session's losing streak,
+  consistency headroom)
+  let you stand down before the gate refuses: a stop taking most of the room,
+  losses one short of the gate's limits, or headroom spent ends the day; a
+  thin cushion takes only the clearest setup; little profit left, protect
+  it. Headroom is a cap, not a target.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;

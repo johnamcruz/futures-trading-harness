@@ -122,11 +122,21 @@ function groupBy(keys) {
   return m;
 }
 
-/** The median of a list of numbers (the upper middle for an even count, as prop/challenge.js), or null. */
+/** The median of a list of numbers (the upper middle for an even count), or null. */
 function median(xs) {
   if (!xs.length) return null;
   const s = xs.slice().sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)];
 }
 
-module.exports = { rng, streamFor, pick, quantile, blockBootstrap, wilson, effectiveSampleSize, stationaryPath, groupBy, median, round4 };
+/**
+ * The q-quantile of a list of numbers by the nearest rank above (the slow side for days to pass: a p90 never
+ * reads faster than the attempts were), or null.
+ */
+function quantileUp(xs, q) {
+  if (!xs.length) return null;
+  const s = xs.slice().sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.max(0, Math.ceil(q * (s.length - 1))))];
+}
+
+module.exports = { rng, streamFor, pick, quantile, quantileUp, blockBootstrap, wilson, effectiveSampleSize, stationaryPath, groupBy, median, round4 };
