@@ -115,7 +115,9 @@ function labelTake(d, rules) {
 function labelPass(d) {
   const sc = d.scorecard;
   if (sc && sc.category !== 'right' && sc.category !== 'unchecked') return out('incorrect', [`the scorecard grades the pass ${sc.category}`]);
-  const reads = readsVerdict(d.record);
+  // The reads of the valid record it passes on (a refused record's false reads are the checker doing its job: the
+  // model was told, and stood aside).
+  const reads = isObj(d.record) && d.record.ok === true ? readsVerdict(d.record) : { status: 'none' };
   if (reads.status === 'false') return out('incorrect', [`the pass states a false read (${reads.why})`]);
   if (d.account && d.account.standDown === true) return out('correct', [`the account state calls for standing down (${d.account.why})`]);
   const ex = d.expected || {};

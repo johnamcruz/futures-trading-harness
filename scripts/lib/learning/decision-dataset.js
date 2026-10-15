@@ -85,10 +85,10 @@ const countBy = (xs, f) => xs.reduce((m, x) => m.set(f(x), (m.get(f(x)) || 0) + 
 const shareOf = (n, total) => (total ? Math.round((n / total) * 10000) / 10000 : 0);
 const tally = (xs, f) => Object.fromEntries([...countBy(xs, f)].sort(([a], [b]) => String(a).localeCompare(String(b))));
 
-/** Keep `n` of the decisions `pick` selects (seeded draws), every other decision kept. */
+/** Keep `n` of the decisions `pick` selects (seeded draws), every other decision kept; never the whole list away. */
 function keepOnly(list, pick, n, seed, label) {
   const group = list.filter(pick);
-  if (group.length <= n) return list;
+  if (group.length <= n || group.length === list.length) return list;
   const keep = new Set(shuffled(group, `${seed}|${label}`).slice(0, Math.max(0, n)));
   return list.filter(d => !pick(d) || keep.has(d));
 }
@@ -105,7 +105,8 @@ function violations(list, rules, stage) {
   else if (takes / tp.length < lo - 1e-9 || takes / tp.length > hi + 1e-9) v.push(`take share ${shareOf(takes, tp.length)} outside [${lo}, ${hi}]`);
   for (const [k, n] of countBy(list, d => d.skill)) if (n / list.length > rules.maxSkillShare + 1e-9) v.push(`skill ${k} at ${shareOf(n, list.length)} over ${rules.maxSkillShare}`);
   const years = countBy(list, d => d.year);
-  for (const [k, n] of years) if (n / list.length > rules.maxYearShare + 1e-9) v.push(`year ${k} at ${shareOf(n, list.length)} over ${rules.maxYearShare}`);
+  // A year's cap applies among two or more years (one year alone is minYears's to allow or refuse).
+  if (years.size > 1) for (const [k, n] of years) if (n / list.length > rules.maxYearShare + 1e-9) v.push(`year ${k} at ${shareOf(n, list.length)} over ${rules.maxYearShare}`);
   if (years.size < rules.minYears) v.push(`${years.size} year(s), under ${rules.minYears}`);
   if (stage === 2) {
     const near = list.filter(d => d.accountState === 'near-mll').length;
