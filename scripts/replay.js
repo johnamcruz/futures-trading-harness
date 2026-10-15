@@ -27,7 +27,7 @@
  *       judging, --ledger <file> (required for judging; an allowed look is appended to it), --candidate <name>
  *   node scripts/replay.js experience <run dir> [--bars SYM=file ...]   the learning loop's experience log (<run
  *       home>/experience/decisions.jsonl; learning/run-experience.js), of a learning run that passed the gate; `run`
- *       writes it when the run finishes.
+ *       writes it when the run finishes; `report` adds the learning measures (learning/learning-report.js).
  *   report, labels and scorecard read a live session's folder (<FTH_HOME>/sessions/<day>, session/live.js) as a run's
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
@@ -57,6 +57,7 @@ const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinIndex, armOf } = require('./lib/learning/experience-index');
+const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -99,8 +100,11 @@ function report(argv) {
   const pick = resolveAccount({ override: arg(argv, '--account'), runnerAccount: runner.account, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts });
   const verdict = evaluate(days, accountNamed(ROOT, pick.name, process.env), { daysDone: manifest.daysDone || null, why: pick.why });
   const file = path.join(path.resolve(dir), 'report.md');
-  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}`);
-  process.stdout.write(toText(summary) + verdictText(verdict));
+  // The learning measures, when the run has an experience log (learning/learning-report.js).
+  const learned = learning.readLearning(path.resolve(dir, '..', '..'));
+  const measures = learned ? learning.learningMeasures(learned) : null;
+  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}${measures ? `\n${learning.learningMarkdown(measures)}` : ''}`);
+  process.stdout.write(toText(summary) + verdictText(verdict) + (measures ? learning.learningText(measures) : ''));
   say(`wrote ${file}`);
   return 0;
 }

@@ -241,6 +241,9 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   try { if (transcript) { const L = require('./trading/skill-lookups'); lookups = L.rolesOwn(L.readLookups(transcript), transcript); } } catch (_err) { /* none */ }
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
   if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at: cycleAt, laneBars });
+  // The cycle's experience_lookup calls (learning/experience-lookups.js), kept with the cycle: their file goes with it.
+  const experience = transcript ? cycleExperienceLookups(transcript) : [];
+  if (experience.length) summary.experienceLookups = experience;
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded
   // for review; the scorecard reads its own reasonChecks, not this record (wiring it in is a separate change). Never throws.
   const factCheck = cycleFactChecks({ home, output, context, now: cycleAt });
@@ -308,4 +311,16 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock, gateOrders, RISK_REDUCING };
+/** The cycle's experience_lookup records, read once and their file removed (it lives beside the transcript). Never throws. */
+function cycleExperienceLookups(transcript) {
+  try {
+    const { readExperienceLookups, lookupsFile } = require('./learning/experience-lookups');
+    const records = readExperienceLookups(transcript);
+    try { fs.unlinkSync(lookupsFile(transcript)); } catch (_err) { /* none */ }
+    return records;
+  } catch (_err) {
+    return [];
+  }
+}
+
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleExperienceLookups, cycleClock, gateOrders, RISK_REDUCING };
