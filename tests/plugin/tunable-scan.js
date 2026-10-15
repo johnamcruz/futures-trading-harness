@@ -6,11 +6,15 @@
  *
  *   constantsIn(text)    [{ name, line }]: UPPER_CASE constants whose value states a numeric literal, and lower-case
  *                        ones stated as numbers (other than 0 and 1) or arithmetic of numbers
- *   literalCount(text)   the number of numeric literals (other than 0 and 1) in a comparison, a default value, an
- *                        object literal's value, Math.max / Math.min arguments or a fractional factor (x * 0.35),
+ *   literalCount(text)   the number of numeric literals (other than 0 and 1) in a comparison, a default value, a
+ *                        fallback (x || 5, x ?? 5), a property assignment (this.k = 5), a bare numeric call argument
+ *                        (setTimeout(f, 5000), list.slice(0, 20)), an object literal's value, Math.max / Math.min arguments or a fractional factor (x * 0.35),
  *                        outside a named constant's own statement (the constant is listed with its reason);
  *                        { mechanics }: regular expressions (sources) of listed mechanical forms, not counted
  *   scriptFiles(repo)    every .js under scripts/lib, scripts/hooks and scripts/*.js, repo-relative with '/'
+ *
+ * The scan is heuristic, line by line: it counts per file, and a literal it can't see (an argument over several lines, a
+ * number built from other names) is not counted.
  *
  * A literal inside a string, a template's text, a regular expression or a comment is not counted.
  */
@@ -26,6 +30,11 @@ const DEFAULT = new RegExp(String.raw`[({,]\s*[A-Za-z_$][\w$]*\s*=\s*-?(${NUM})(
 // An object literal's numeric value ({ minN: 20 }, a key quoted or not), and a fractional factor (x * 0.35, 0.5 * y).
 const OBJECT = new RegExp(String.raw`[{,]\s*(?:[A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*-?(${NUM})(?![\w$.])`, 'g');
 const FRACTION = new RegExp(String.raw`(?<!\*)\*\s*-?(\d*\.\d+(?:e[-+]?\d+)?)(?![\w$.])|(?<![\w$.])(\d*\.\d+(?:e[-+]?\d+)?)\s*\*(?!\*)`, 'g');
+// A default stated after a fallback operator (x || 5, x ?? 0.5), and a number assigned to a property (this.k = 5, x.k = 5; not
+// ==, <=, +=). A call argument that is a bare number (setTimeout(f, 5000), list.slice(0, 20)) is found by callArgs().
+const FALLBACK = new RegExp(String.raw`(?:\|\||\?\?)\s*-?(${NUM})(?![\w$.])`, 'g');
+const PROP_ASSIGN = new RegExp(String.raw`(?<![\w$])(?:this|[A-Za-z_$][\w$]*)(?:\.[A-Za-z_$][\w$]*|\[[^\]]*\])+\s*(?<![=!<>+\-*/%&|^])=(?!=)\s*-?(${NUM})(?![\w$.])`, 'g');
+const NOT_A_CALL = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'typeof', 'await', 'of', 'in', 'async']);
 const ANY_NUM = new RegExp(String.raw`(?<![\w$.])(${NUM})(?![\w$.])`, 'g');
 // A lower-case constant stated as a number or arithmetic of numbers (const half = 0.5; let tries = 3 * 2;).
 const LOWER = new RegExp(String.raw`^\s*(?:const|let|var)\s+([a-z][\w$]*)\s*=\s*([-+*/().\s\d_e]+);`);
@@ -139,6 +148,30 @@ function mathArgs(line) {
   return out;
 }
 
+/** The bare numeric arguments of each call on a line: [{ at, x }] (the number's offset). A name before "(" makes it a call. */
+function callArgs(line) {
+  const out = [];
+  for (let i = 0; i < line.length; i += 1) {
+    if (line[i] !== '(') continue;
+    const name = /([A-Za-z_$][\w$]*)\s*$/.exec(line.slice(0, i));
+    if (!name || NOT_A_CALL.has(name[1])) continue;
+    let depth = 1;
+    let j = i + 1;
+    let from = j;
+    const cut = end => {
+      const arg = line.slice(from, end);
+      const m = new RegExp(String.raw`^\s*-?(${NUM})\s*$`).exec(arg);
+      if (m) out.push({ at: from + arg.indexOf(m[1]), x: m[1] });
+    };
+    for (; j < line.length && depth; j += 1) {
+      const ch = line[j];
+      if ('([{'.includes(ch)) depth += 1;
+      else if (')]}'.includes(ch)) { depth -= 1; if (!depth) cut(j); } else if (ch === ',' && depth === 1) { cut(j); from = j + 1; }
+    }
+  }
+  return out;
+}
+
 /**
  * The numeric literals (other than 0 and 1) that look like a threshold: in a comparison, a default value, an object
  * literal's value, a Math.max / Math.min call's arguments, or a fractional factor. A literal two of these see counts once.
@@ -155,7 +188,7 @@ function literalCount(text, { mechanics = [] } = {}) {
     const l = allowed.reduce((s, re) => s.replace(re, x => ' '.repeat(x.length)), raw);
     const seen = new Set();
     const count = (at, x) => { if (!MECHANICAL.has(x) && !seen.has(at)) { seen.add(at); n += 1; } };
-    for (const re of [COMPARE, DEFAULT, OBJECT, FRACTION]) {
+    for (const re of [COMPARE, DEFAULT, OBJECT, FRACTION, FALLBACK, PROP_ASSIGN]) {
       re.lastIndex = 0;
       let m;
       while ((m = re.exec(l))) {
@@ -166,6 +199,7 @@ function literalCount(text, { mechanics = [] } = {}) {
     for (const { from, text: args } of mathArgs(l)) {
       for (const m of args.matchAll(ANY_NUM)) count(from + m.index, m[1]);
     }
+    for (const { at, x } of callArgs(l)) count(at, x);
   }
   return n;
 }

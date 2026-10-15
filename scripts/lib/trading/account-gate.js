@@ -302,6 +302,7 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
  * contract month (a protective stop or a target).
  * - size: only a decrease; a protective stop's cut must leave the stops
  *   covering the position (cut it after a partial exit, not before);
+ * - a refused config file (CRITICAL): an entry order is not modified at all;
  * - price: only orders that work an open position may be repriced (moving
  *   an entry or a leftover order would open a trade past the entry checks:
  *   cancel it and place a new order through the gate), and a protective
@@ -333,6 +334,13 @@ function evaluateModifyAccount({ input = {}, positions, orders, config, ledger =
   const pendingNote = observed === projected ? '' : ` once recent orders fill (net ${projected})`;
   const isStop = STOP_TYPES.has(Number(order.type));
   const root = contractRoot(order.contractId);
+
+  // A refused config file (config.configCritical, tunables.js): an entry order (one that works no open position) is not
+  // changed at all, in size or price; a protective stop or a target is, as usual (those reduce risk). Never skippable.
+  if (config && config.configCritical && !works) {
+    violations.push({ check: 'config-critical', message: `${config.configCritical} Order ${order.id} is an entry (it works no open ${root} position): it can't be resized or repriced. Cancel it, or leave it. Protective stops and targets can still be modified.` });
+    return violations;
+  }
 
   if (input.size !== undefined && input.size !== null) {
     const size = Number(input.size);

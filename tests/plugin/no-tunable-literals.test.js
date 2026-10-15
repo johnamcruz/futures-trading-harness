@@ -8,8 +8,9 @@
 //   table, a parse or input limit, an interface fact, a float tolerance, the exchange hours, a schema, a function's
 //   local, a definition the skills teach, a document's code ceiling, contract facts) or the frozen promotion gate;
 //   A lower-case constant stated as numbers (const half = 0.5) is one too;
-// - a numeric literal other than 0 and 1 in a comparison, a default value, an object literal's value, Math.max /
-//   Math.min arguments or a fractional factor (x * 0.35): counted per file, and the count may not grow (a new threshold
+// - a numeric literal other than 0 and 1 in a comparison, a default value, a fallback (x || 5, x ?? 5), an object literal's
+//   value, a number assigned to a property (this.k = 5), a bare numeric call argument (setTimeout(f, 5000), list.slice(0, 20)),
+//   Math.max / Math.min arguments or a fractional factor (x * 0.35): counted per file, and the count may not grow (a new threshold
 //   goes into a config file, and the code reads it). A listed mechanical form (`mechanics`: a protocol's code, each with
 //   its reason) is not counted.
 //
@@ -139,6 +140,10 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
     ['const stop = atr * 0.35;', 1], ['const t = 1.5 * range;', 1], ['const p = 2 ** 0.5;', 0], ['const q = x * 2;', 0], ['const r = x * .5;', 1],
     // One literal two patterns see counts once.
     ['f({ k: 0.5 * x });', 1],
+    // A fallback default (x || 5, x ?? 0.5), a number assigned to a property, a bare numeric call argument.
+    ['const n = opts.n || 5;', 1], ['const w = cfg.w ?? 0.5;', 1], ['const z = a || 0;', 0], ['const o = a ?? 1;', 0],
+    ['this.limit = 40;', 1], ['state.retries = 3;', 1], ['state.flags[k] = 9;', 1], ['this.n = 0;', 0], ['state.on = 1;', 0], ['this.n += 4;', 0],
+    ['setTimeout(done, 5000);', 1], ['const top = list.slice(0, 20);', 1], ['const tail = list.slice(-4);', 1], ['go(f(0), 1);', 0], ['if (ready) setTimeout(g, 0);', 0],
   ]) assert.strictEqual(S.literalCount(line), n, line);
   // A listed mechanical form (with its reason in the pins) is not counted; any other number on the line still is.
   const mechanics = ['exitCode:\\s*2\\b'];
@@ -146,6 +151,11 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
   assert.strictEqual(S.literalCount('return { stderr: m, exitCode: 2 };', { mechanics }), 0);
   assert.strictEqual(S.literalCount('return { exitCode: 2, retries: 5 };', { mechanics }), 1);
   assert.strictEqual(S.literalCount('return { exitCode: 3 };', { mechanics }), 1, 'only the listed form');
+  // The reasoned mechanics are the pins' (PINS.mechanics: digits of a printed number, a timestamp's field positions, a
+  // process exit code, ...): each listed form passes, its neighbour that states a count does not.
+  const real = Object.keys(PINS.mechanics);
+  for (const [line, n] of [['x.toFixed(2);', 0], ['x.padStart(2, "0");', 0], ['JSON.stringify(v, null, 2);', 0], ['d.toISOString().slice(0, 10);', 0], ['process.exit(2);', 0], ['argv.slice(2);', 0],
+    ['round(x, 3);', 0], ['list.slice(0, 10);', 1], ['setTimeout(f, 30);', 1], ['x.toFixed(2) + (y || 30);', 1]]) assert.strictEqual(S.literalCount(line, { mechanics: real }), n, line);
   // A named constant's own statement is not counted (the constant is listed with its reason instead).
   assert.strictEqual(S.literalCount('const T = Object.freeze({\n  a: 7,\n  b: x * 0.5,\n});\nif (y > 9) z();'), 1);
   // A planted threshold in a real file raises its count past the pin.
@@ -154,7 +164,8 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
   assert.strictEqual(S.literalCount(`${text}\nif (adx >= 25) trend = true;\n`), S.literalCount(text) + 1);
   assert.ok(S.constantsIn(`${text}\nconst TREND_ADX = 25;\n`).some(c => c.name === 'TREND_ADX'));
   // Each new pattern, planted in the real file, raises its count too.
-  for (const planted of ['const cut = { trendAdx: 25 };', 'const lo = Math.max(18, adx);', 'const slope = atr * 0.3;']) {
+  for (const planted of ['const cut = { trendAdx: 25 };', 'const lo = Math.max(18, adx);', 'const slope = atr * 0.3;', 'const a = opts.adx || 25;', 'const b = opts.adx ?? 25;',
+    'this.adxCut = 25;', 'cfg.adxCut = 25;', 'setTimeout(check, 2500);', 'const first = list.slice(0, 25);']) {
     assert.strictEqual(S.literalCount(`${text}\n${planted}\n`), S.literalCount(text) + 1, planted);
   }
   assert.ok(S.constantsIn(`${text}\nconst trendAdx = 25;\n`).some(c => c.name === 'trendAdx'));

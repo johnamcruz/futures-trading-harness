@@ -10,40 +10,33 @@
  * change the attempt the gate trades under).
  */
 
-const strategies = require('./strategies');
-const marketSnapshot = require('./market-snapshot');
-const mtf = require('./mtf');
-const blackouts = require('./blackouts');
-const bars = require('./bars');
-const combine = require('./combine');
-const lessons = require('./lessons');
-const reconcile = require('./reconcile');
-const briefing = require('./briefing');
-const reasons = require('./reasons');
-const skills = require('./skills');
-const compose = require('./compose');
-const experience = require('./experience');
+/**
+ * Each module loads on its first call, not when the server starts: a module whose constants read a refused config
+ * file (config/training.json, config/replay.json) throws the critical error from its call, so the harness tools
+ * still load and list, and only the operation that needs the file reports it.
+ */
+const lazy = (file, name) => (...args) => require(`./${file}`)[name](...args);
 
 const OPERATIONS = {
-  strategies_list: strategies.list,
-  strategies_show: strategies.show,
-  strategies_validate: strategies.validate,
-  strategies_scan: strategies.scan,
-  strategies_recent: strategies.recent,
-  order_plan: strategies.plan,
-  market_snapshot: marketSnapshot.snapshot,
-  mtf: mtf.mtf,
-  blackouts_list: blackouts.list,
-  blackouts_add: blackouts.add,
-  bars_fetch: bars.fetch,
-  combine_status: combine.status,
-  lessons: lessons.lessons,
-  reconcile: reconcile.reconcile,
-  bar_briefing: briefing.barBriefing,
-  reason_check: reasons.check,
-  skill_lookup: skills.skillLookup,
-  compose_check: compose.composeCheck,
-  experience_lookup: experience.experienceLookup,
+  strategies_list: lazy('strategies', 'list'),
+  strategies_show: lazy('strategies', 'show'),
+  strategies_validate: lazy('strategies', 'validate'),
+  strategies_scan: lazy('strategies', 'scan'),
+  strategies_recent: lazy('strategies', 'recent'),
+  order_plan: lazy('strategies', 'plan'),
+  market_snapshot: lazy('market-snapshot', 'snapshot'),
+  mtf: lazy('mtf', 'mtf'),
+  blackouts_list: lazy('blackouts', 'list'),
+  blackouts_add: lazy('blackouts', 'add'),
+  bars_fetch: lazy('bars', 'fetch'),
+  combine_status: lazy('combine', 'status'),
+  lessons: lazy('lessons', 'lessons'),
+  reconcile: lazy('reconcile', 'reconcile'),
+  bar_briefing: lazy('briefing', 'barBriefing'),
+  reason_check: lazy('reasons', 'check'),
+  skill_lookup: lazy('skills', 'skillLookup'),
+  compose_check: lazy('compose', 'composeCheck'),
+  experience_lookup: lazy('experience', 'experienceLookup'),
 };
 
 module.exports = { OPERATIONS };

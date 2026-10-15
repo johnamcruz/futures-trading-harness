@@ -18,7 +18,8 @@
  *   compareTools(got, want)                     -> [problem]
  *   roleSkillsMismatch(root, env, harness)      an opencode run's opencode.json not generated for its FTH_ROLE_SKILLS, or null
  *   checkToolsServer({ root, env, harness, timeoutMs })  resolves, or rejects with what is wrong
- *   startPreflight({ root, env, harness, once, killSwitchFile, warn, check })
+ *   startPreflight({ root, env, harness, once, killSwitchFile, warn, check, critical })  a refused config file (critical()) is
+ *                                               logged, never a kill switch: 'config-critical'
  */
 
 const fs = require('fs');
@@ -83,7 +84,7 @@ async function checkToolsServer({ root, env = process.env, harness = null, timeo
   return tools.length;
 }
 
-async function startPreflight({ root, env, harness = null, once = null, killSwitchFile, warn = s => process.stderr.write(s), check = checkToolsServer }) {
+async function startPreflight({ root, env, harness = null, once = null, killSwitchFile, warn = s => process.stderr.write(s), check = checkToolsServer, critical = () => require('../tunables').critical() }) {
   try {
     await check({ root, env, harness });
     return 'ok';
@@ -92,6 +93,13 @@ async function startPreflight({ root, env, harness = null, once = null, killSwit
     if (once === 'eod') {
       warn(`[autotrader] warning: ${err.message}\n`);
       return 'warned';
+    }
+    // A refused config file is a critical error of its own: said here, never a kill switch (fixing the file must be
+    // enough; the gate refuses new entries and the runner runs exits-only while it is refused).
+    const refused = critical();
+    if (refused) {
+      warn(`[autotrader] ${refused.message}\n`);
+      return 'config-critical';
     }
     // Appended, as the workspace guard does: a kill switch already on keeps its other reasons.
     // If even that fails, the start fails (trading can't be turned off, so it doesn't start).

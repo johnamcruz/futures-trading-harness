@@ -54,6 +54,25 @@ test('a refused config file (config.configCritical): every entry is refused with
   assert.deepStrictEqual(checks(evaluateAccount({ input: order({ rationale: '[exit] x' }), positions: [], config: critical })), ['exposure']);
 });
 
+test('modify_order under a refused config file: an entry order is not resized or repriced (never skippable); a protective stop or target, and a stop move, still go', () => {
+  const critical = { ...config, configCritical: 'CRITICAL config error: the training config (x) is refused', skipChecks: new Set(['config-critical', 'modify-entry', 'modify-size']) };
+  const run = (input, positions, orders) => evaluateModifyAccount({ input, positions, orders, config: critical });
+  const entry = { id: 31, contractId: CONTRACT, side: 0, type: 1, size: 2, limitPrice: 21400 };
+  for (const input of [{ orderId: 31, limitPrice: 21390 }, { orderId: 31, limitPrice: 21410 }, { orderId: 31, size: 1 }, { orderId: 31, size: 3 }]) {
+    const v = run(input, [], [entry]);
+    assert.deepStrictEqual(checks(v), ['config-critical'], JSON.stringify(input));
+    assert.match(v[0].message, /^CRITICAL config error: the training config \(x\) is refused Order 31 is an entry/);
+  }
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const stop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 2, stopPrice: 21480 };
+  const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 2, limitPrice: 21600 };
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21490 }, long2, [stop, target]), [], 'a stop move toward the market');
+  assert.deepStrictEqual(run({ orderId: 12, limitPrice: 21580 }, long2, [stop, target]), [], 'a target');
+  assert.deepStrictEqual(checks(run({ orderId: 9, stopPrice: 21470 }, long2, [stop, target])), ['modify-protection'], 'a stop loosened is still refused');
+  // An entry order beside an open position is still an entry.
+  assert.deepStrictEqual(checks(run({ orderId: 31, limitPrice: 21390 }, long2, [stop, entry])), ['config-critical']);
+});
+
 test('entries are refused while a position is open', () => {
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: long1, config })), ['position-open']);
   assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [], config }), []);
