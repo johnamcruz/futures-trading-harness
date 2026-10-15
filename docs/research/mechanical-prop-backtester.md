@@ -5,7 +5,7 @@ to list only `trade_lifecycle` (`signal: composed`, `stop: structure`). The
 backtest engine takes only setups with a mechanical stop distance
 (`backtest/engine.js` `prepare`: `stop "structure" has no mechanical
 distance`). So none of the tools below produces a trade from today's only
-policy. A Monte Carlo over the model's replay trades replaces them. This
+policy. A Monte Carlo over the model's replay trades is to replace them. This
 note keeps what they taught.
 
 | Part | Status |
@@ -72,17 +72,17 @@ reads. The CLI is a thin wrapper over it.
   attempts on Train, with 0% blows. "With no edge, the sizing protects the
   account and the attempts run out of time."
 - `docs/research/cisd-ote-textbook.md` (615bd690, 9a06c666, daa4147d,
-  506d184c): N1 0% and the old port 8.5% of 106 attempts; S 14.2%, ST
-  10.4% and SC 14.2%, all with 0% blows. In Select, the chop filter (SC
-  15.9%, 7 of 44) lost to ST (18.2%, 8 of 44) and was not shipped.
+  fb4ec6b0): N1 0% and the old port 8.5% of 106 attempts; S 14.2%, ST
+  10.4% and SC 14.2%, all with 0% blows. None came near the 40% the
+  promotion gate asks for.
 - d6298c69: 21 daily starts of a 21-session attempt is an effective sample
   of 1. The promotion gate now counts its minimum on the effective sample
   size, and fails closed without one. A bootstrap with fewer than two whole
   blocks is degenerate ([0, 1]), not a zero-width interval.
 - The layer-1/layer-2 split reproduced the engine's own attempts exactly,
   start by start, on bars with gaps that blow the account and trip the
-  daily limit, except where layer 2 skips a trade (R6, "Known
-  approximation").
+  daily limit, except where layer 2 skips a trade
+  (`docs/LEARNED-RULEBOOK.md` section 5, "Known approximation").
 
 ## What the model-trade Monte Carlo must keep
 
@@ -92,7 +92,7 @@ reads. The CLI is a thin wrapper over it.
 | Live sizing, slippage-safe, times the rulebook's multiplier; legs priced as the engine does | `attempts.js`: kept |
 | Adverse path replayed against the floor and the daily limit inside a trade | `attempts.js` reads `troughTicks`: the replay trades must supply them |
 | Overshoot redrawn per market | `attempts.js`/`evaluator.js`: needs `overshootTicks` on each stop exit |
-| Stop faults and outages | `evaluator.js`: a trade without `noStop` gets no fault (`stopFault` returns null and the trade runs as recorded), so replay trades need `noStop` or faults silently drop out |
+| Stop faults and outages | `evaluator.js` injects them through `attempts.js` `stopFault`: a trade without `noStop` gets no fault (`stopFault` returns null and the trade runs as recorded), so replay trades need `noStop` or faults silently drop out |
 | Stationary block bootstrap, regime-matched joins | `evaluator.js`, `stats.js`: needs `regime` on each day (`trade-stream.js` `dayRegimes` computes it) |
 | Block-bootstrap and Wilson intervals at the ESS; expectancy cuts; every blow counted at the top | `evaluator.js`, `stats.js`: kept |
 | Flow coverage (`flowOff` attempts) | `evaluator.js`: kept; needs the stream's `fieldBranch` |

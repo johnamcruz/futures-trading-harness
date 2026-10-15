@@ -647,6 +647,18 @@ test('a prop run sizes with the policy strategy\'s own stop_slippage_ticks, as l
   assert.deepStrictEqual(first({ stop_slippage_ticks: 3 }), [21, 14]);
 });
 
+test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {
+  // (Moved from the retired backtester prop-run test: the engine computes no facts, so an enforced item fails closed.)
+  const bars = propSeries(30);
+  const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
+  const exit = { trail_activate_r: 2, trail_giveback_r: 0.5 };
+  const prop = multipliers => ({ strategy: { exit, ...(multipliers ? { multipliers } : {}) }, components: ['trendy'], contracts: 'micro' });
+  const plain = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop: prop(null) });
+  assert.ok(plain.trades.length > 0);
+  const gated = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop: prop([{ item: 'multipliers', fact: 'probe', values: { ok: 1 } }]) });
+  assert.deepStrictEqual(gated.trades, [], 'a multiplier item without its fact skips every setup (fails closed)');
+});
+
 test('a policy run picks only from the strategies it trades, but a left-out paper one still counts as disagreement, as in the live scan', () => {
   const bars = propSeries(30);
   const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
