@@ -21,6 +21,11 @@ hypotheses; a missing field is `unknown`.
   `m3.sweeps[].name`, `m3.sweeps[].price`, `m3.sweeps[].key` (prior RTH
   or overnight extreme), `m3.sweeps[].back`, `m3.sweeps[].bars`,
   `m3.sweeps[].wick` (the extreme), `m3.sweeps[].close`. Never by eye.
+  Read: `swept <level>`.
+- **A candle's sweep** is another fact: a completed candle that traded
+  beyond its previous candle's high or low and closed back inside
+  (`sweep` in `m3.candles`), read as its relation
+  (`15m rejected previous 15m high down`; `rejection`).
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more). Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
   swing with `brokenAt` set (`m3.htfLevels`), or a location that changed

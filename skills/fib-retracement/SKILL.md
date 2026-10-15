@@ -32,9 +32,11 @@ a bullish or a bearish leg. The levels read: 0.5, 0.618, 0.705 and 0.79.
 **The golden zone (OTE)** is 0.62 to 0.79 of the leg, mid 0.705 (`ote`:
 `top`, `bottom`, `mid`).
 
-**Premium and discount.** Above the leg's 0.5 level is premium, below it
-discount: a long from a bullish leg's discount, a short from a bearish
-leg's premium (hypothesis).
+**Premium and discount.** Above the leg's 0.5
+level is premium, below it discount: a long from a bullish leg's discount,
+a short from a bearish leg's premium (hypothesis). The briefing's
+`m3.location.sessionRangeHalf` is the session's range so far split the
+same way (`premium`, `discount`, `equilibrium`), not a swing leg.
 
 **The bounce.** Price trades into the zone; THEN a completed candle closes
 back in the leg's direction: for a bullish leg, above the zone's top, or

@@ -11,7 +11,6 @@ description: Use when judging trend vs rotation day, a breakout's participation,
 - Grading a breakout's participation.
 - Choosing pullback entry areas.
 - Placing targets and judging room: the next high or low volume node.
-- The value area strategies (`value_area_reentry`, `value_area_breakout`).
 
 ## How It Works
 

@@ -20,7 +20,8 @@ second alignment.
 
 ### 1. Read the alignment
 
-From the highest timeframe down, for each side:
+From the highest timeframe down, for each side (`m15.alignment`; read
+`read <side> <label>`):
 
 | Label | Means | What to do |
 |---|---|---|
@@ -32,13 +33,8 @@ From the highest timeframe down, for each side:
 For a composed trade the label is a reason in its plan, never a cut (the
 priority order, strategy-library).
 
-Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`,
-`value_area_reentry`) trade
-against the lower timeframes by design, and the trend rule lets them fade
-the prevailing trend. Judge the setup against the timeframe above its range
-candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against
-that one too, it is a `counter` reversal (the priority order, step 2, decides it: level,
-size, target).
+A composed entry against the prevailing trend needs the CHoCH tier of
+`trade-lifecycle` (strategy-library: the priority order, step 2).
 
 ### 2. Levels flow down
 

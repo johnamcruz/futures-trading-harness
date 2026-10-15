@@ -39,8 +39,8 @@ highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
 MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
 traded through. A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither. Targets: the next untested
-liquidity pool in the trade's direction. Reversal setups (crt_1h)
-follow a sweep; continuation setups follow a break.
+liquidity pool in the trade's direction. Reversals follow a sweep,
+continuations a break.
 
 **Which matter now**: the nearest, `m3.nearestLiquidity.above` and
 `m3.nearestLiquidity.below` (in points and R); for a setup,
@@ -52,10 +52,10 @@ docs/research/mtf-setup-catalog.md).
 
 **Reactions**, on closed bars:
 
-- rejection: reaches it, closes back away in the far third, no close
-  beyond (`candle-reading`; per timeframe `m3.candles`, in rules strategy-rules);
+- rejection: traded through, closed back (`rejection`; per timeframe
+  `m3.candles`, in rules strategy-rules);
 - acceptance: closes beyond that hold (`breakout-vs-fakeout`);
-- sweep: through and back within 1-3 bars, `m3.sweeps`;
+- sweep: `breakout-vs-fakeout` (`m3.sweeps`);
 - none yet: not reached. No reaction is not a rejection.
 
 No call until the close; wicks are information, not signals.

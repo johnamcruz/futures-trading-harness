@@ -121,6 +121,58 @@ const ALLOWED = {
   ],
 };
 
+// Edits made to the new skills since the rename (skill-split-late.js), each with its reason: the coverage test holds
+// each skill to its edited text, and an edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = {
+  rejection: [
+    { from: "Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).",
+      to: "Completed candles only, on 3m, 5m, 15m, 1h and 4h (`candle-reading`).",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "**1 HTF**: the 60m and 15m bias (`h1.h1.trend`, `m15.frame.trend`) and `trend-vs-range`.",
+      to: "**1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`) and `trend-vs-range`.",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "**4 Setup**: a completed candle rejects the level: it trades through and closes back inside, with a long wick and the close in the opposite third, or an engulfing at the level (`candle-reading`; each timeframe's entry of `m3.candles`: `rejected`).",
+      to: ["**4 Setup**: a completed candle rejects the level: the briefing's relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).","A long wick, the close in the opposite third or an engulfing grade its strength (`candle-reading`); a candle's sweep of its previous candle is one too (`breakout-vs-fakeout`)."],
+      reason: "a rejection is the briefing's relation (traded through, closed back); the wick, the close third and an engulfing grade it; a candle's sweep is one (the skill audit, fix/skills-concept-owners)" },
+    { from: "**6 Entry**: after a 15m or 60m rejection, a completed 3m or 5m candle confirms the same way: a displacement candle, or a break of the small pullback structure (`m3.lastBreak.last`).",
+      to: "**6 Entry**: after a 15m or 1h rejection, a completed 3m or 5m candle confirms the same way: a displacement candle, or a break of the small pullback structure (`m3.lastBreak.last`).",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "Take: at the RTH VWAP 21520.50, 60m and 15m up: on the 15m close a wick to 21517.25, close 21523.00",
+      to: "Take: at the RTH VWAP 21520.50, 1h and 15m up: on the 15m close a wick to 21517.25, close 21523.00",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "Skip: at the swing high 21588.25 (3m, a minor level), 60m and 15m up: on the 3m close a shooting star",
+      to: "Skip: at the swing high 21588.25 (3m, a minor level), 1h and 15m up: on the 3m close a shooting star",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "Loser: at the prior RTH low 21402.00: on the 60m close a rejection (L 21396.75, C 21405.50), on the",
+      to: "Loser: at the prior RTH low 21402.00: on the 1h close a rejection (L 21396.75, C 21405.50), on the",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+  ],
+  breakout: [
+    { from: "Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).",
+      to: "Completed candles only, on 3m, 5m, 15m, 1h and 4h (`candle-reading`).",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "**1 HTF**: the 60m and 15m bias (`h1.h1.trend`, `m15.frame.trend`) agrees with the break, or the range is mature (`trend-vs-range`).",
+      to: "**1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`) agrees with the break, or the range is mature (`trend-vs-range`).",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "**4 Setup**: a completed candle closes beyond the level with acceptance: a strong close in the extreme third, the body beyond the level, not just a wick (`breakout-vs-fakeout`, `candle-reading`).",
+      to: "**4 Setup**: a completed candle closes beyond the level with acceptance (the briefing's `broke`: `<tf> broke <level> up|down`): a strong close in the extreme third, the body beyond the level, not just a wick (`breakout-vs-fakeout`, `candle-reading`).",
+      reason: "the briefing's relation and its read form (the skill audit, fix/skills-concept-owners)" },
+    { from: "Take: at the prior RTH high 21615.00, 60m and 15m up: on the 15m close a body beyond, close 21624.75",
+      to: "Take: at the prior RTH high 21615.00, 1h and 15m up: on the 15m close a body beyond, close 21624.75",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+    { from: "Loser: at the overnight high 21614.75: on the 60m close a body beyond, close 21629.50; on the 3m close a",
+      to: "Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a",
+      reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
+  ],
+};
+const LATE_STALE = [];
+for (const h of Object.keys(LATE)) {
+  const r = withLate(ALLOWED[h], LATE[h], units(read(PAIRS[h].file)));
+  ALLOWED[h] = r.allowed;
+  LATE_STALE.push(...r.stale.map(l => `${h}: ${l.from}`));
+}
+
 /** What differs between an old skill and its new home, beyond that home's allowed exceptions: [] when nothing does. */
 function differences(beforeText, homeText, home) {
   const before = count(units(beforeText));
@@ -151,6 +203,7 @@ test('setup rename: every unit of each old skill is in its new skill, as often a
     assert.strictEqual(sha, PAIRS[h].sha256, `${PAIRS[h].file}: the fixture is the old skill, unchanged`);
   }
   assert.deepStrictEqual(allDifferences(), []);
+  assert.deepStrictEqual(LATE_STALE, [], 'every late edit matches a unit');
   for (const a of HOMES.flatMap(h => ALLOWED[h])) assert.ok(a.reason, a.old);
 });
 

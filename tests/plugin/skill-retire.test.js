@@ -92,15 +92,21 @@ const SKIP_RULES = /\bskip rules?\b/i;
 const SKIP_CONTEXT = '**Skip-rule context**';
 const ALLOWED = {
   'liquidity-concepts': [
+    { old: 'Reversal setups (crt_1h) follow a sweep; continuation setups follow a break.', home: [[S('levels-and-reactions'), 'Reversals follow a sweep, continuations a break.']], reason: 'crt_1h is retired (strategies/retired.json)' },
     { old: 'Liquidity Concepts', home: null, reason: 'the retired skill\'s title' },
+    // The strong middle bar is the cisd skill's, stated there once (fix/skills-concept-owners): fair-value-gaps points to it.
+    { old: "**Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's low (bullish) or bar 1's low is above bar 3's high (bearish), with a strong displacement middle bar the gap's way (the `cisd` skill's strong candle: body at least 0.6 of its range, close in the extreme third, range at least 1.0 x ATR(14) or engulfing).",
+      home: [[S('fair-value-gaps'), 'with a strong displacement middle bar the gap\'s way (the `cisd` skill\'s strong candle).']], reason: 'the strong candle\'s numbers are the cisd skill\'s, not restated' },
+    { old: 'A gap behind a weak middle bar (a doji, a small body, a close mid-range, the wrong way) is no FVG.',
+      home: [[S('fair-value-gaps'), 'A gap behind a weak middle bar, or one the wrong way, is no FVG.']], reason: 'what makes it weak is the cisd skill\'s' },
     { old: 'Choosing targets and judging whether a breakout will hold.', home: [[S('levels-and-reactions'), 'Targets: the next untested liquidity pool in the trade\'s direction.']], reason: 'a trigger of the retired skill: targets are levels-and-reactions\'' },
-    { old: 'Explaining a fast move through a level followed by a reversal.', home: [[S('levels-and-reactions'), 'sweep: through and back within 1-3 bars, `m3.sweeps`;']], reason: 'a trigger of the retired skill: the sweep reaction' },
+    { old: 'Explaining a fast move through a level followed by a reversal.', home: [[S('levels-and-reactions'), 'sweep: `breakout-vs-fakeout` (`m3.sweeps`);']], reason: 'a trigger of the retired skill: the sweep reaction' },
     { old: 'In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing` skill) holds this bar\'s liquidity (`m3` `liquidity`, `sweeps`, `htfLevels`, `nearestLiquidity`): use it, and compute only what it doesn\'t hold.',
       home: [[A('volume-liquidity-analyst'), 'Start from the bar briefing: `bar_briefing {"symbol": "<SYMBOL>"}`.']], reason: 'the role\'s own Method says it' },
     { old: 'The sweeps are computed there: never call one by eye.', home: [[A('volume-liquidity-analyst'), 'in the last 10 bars, key levels first; computed, never by eye)']], reason: 'the role\'s own step 5 says it' },
     { old: '**Resting liquidity** (stops cluster just beyond obvious levels): the levels and their fields are the `levels-and-reactions` skill\'s.',
       home: [[S('levels-and-reactions'), '**Resting liquidity** (stops cluster just beyond obvious levels).']], reason: 'now in levels-and-reactions itself' },
-    { old: '**Sweep vs break**: the `breakout-vs-fakeout` skill.', home: [[S('levels-and-reactions'), 'sweep: through and back within 1-3 bars, `m3.sweeps`;']], reason: 'a pointer; the sweep reaction is levels-and-reactions\' (the role\'s), the full read breakout-vs-fakeout\'s' },
+    { old: '**Sweep vs break**: the `breakout-vs-fakeout` skill.', home: [[S('levels-and-reactions'), 'sweep: `breakout-vs-fakeout` (`m3.sweeps`);']], reason: 'a pointer; the sweep reaction is levels-and-reactions\' (the role\'s), the full read breakout-vs-fakeout\'s' },
     { old: '**Use.** Targets: the next untested liquidity pool in the trade\'s direction.', home: [[S('levels-and-reactions'), 'Targets: the next untested liquidity pool in the trade\'s direction.']], reason: 'the "Use." label dropped' },
     { old: 'Room: the first level in a setup\'s way (`inTheWay`) is the priority order\'s step 3 (strategy-library).',
       home: [[S('levels-and-reactions'), 'for a setup, `candidate.inTheWay` and `candidate.ahead` in its own R.'], [S('levels-and-reactions'), 'prior VAL 21480.00 5 ticks below, inTheWay 0.3R.']], reason: 'levels-and-reactions already says it' },
@@ -111,13 +117,14 @@ const ALLOWED = {
       '"overnight high / prior RTH high"). The 09:39 ET 3m bar wicks to 21624.00 and',
       'closes 21606.00. → sweep of a double liquidity pool (m3.sweeps lists it). A',
       'short idea is wrong above 21624.00 (the invalidation skill).',
-    ].map(old => ({ old, home: [[S('levels-and-reactions'), 'Hypothesis: levels a few ticks apart act as one zone.'], [S('levels-and-reactions'), 'sweep: through and back within 1-3 bars, `m3.sweeps`;']],
+    ].map(old => ({ old, home: [[S('levels-and-reactions'), 'Hypothesis: levels a few ticks apart act as one zone.'], [S('levels-and-reactions'), 'sweep: `breakout-vs-fakeout` (`m3.sweeps`);']],
       reason: 'the example\'s lesson (levels a tick apart are one pool; a wick through and a close back is a sweep) is levels-and-reactions\'' })),
   ],
   'market-structure': [
+    { old: 'Within a trend, pullbacks into discount (premium for shorts) are where continuation setups sit.', home: [[S('pullback-vs-reversal'), 'within a trend, pullbacks into discount (premium for shorts) are where continuation setups sit.']], reason: 'kept in pullback-vs-reversal after its pointer to fib-retracement, which owns premium and discount (fix/skills-concept-owners)' },
     { old: 'Market Structure', home: null, reason: 'the retired skill\'s title' },
     { old: 'Forming a directional bias on any timeframe.', home: [[S('trend-vs-range'), 'Trader-process step 1 (HTF), and the regime in step 2.']], reason: 'a trigger of the retired skill: the bias is trend-vs-range\'s read' },
-    { old: 'Choosing where a stop belongs (behind structure, not at an arbitrary distance).', home: [[S('trend-vs-range'), 'A stop belongs behind structure (a swing), not at an arbitrary distance; the stop itself stays the strategy\'s (`invalidation`).'], [A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
+    { old: 'Choosing where a stop belongs (behind structure, not at an arbitrary distance).', home: [[S('trend-vs-range'), 'A stop belongs behind structure (a swing), not at an arbitrary distance (`invalidation`).'], [A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
       reason: 'trend-vs-range keeps "behind structure" (the stop stays the strategy\'s); the analyst reports where its bias is wrong' },
     { old: 'Deciding whether a breakout is continuation or a reversal attempt.', home: [[S('bos-vs-choch'), 'No one timeframe is the signal; read them top-down.']], reason: 'a trigger of the retired skill: bos-vs-choch reads it' },
     { old: 'In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing` skill) holds this bar\'s structure (`m3`, `m15`, `h1`): use it, and compute only what it doesn\'t hold.',
@@ -129,7 +136,7 @@ const ALLOWED = {
       home: [[S('bos-vs-choch'), 'No one timeframe is the signal; read them top-down.'], [S('pullback-vs-reversal'), 'A lower-timeframe CHoCH inside an intact higher-timeframe structure is a pullback.'],
         [S('breakout-vs-fakeout'), 'No call before the close.']], reason: 'pointers to the three skills' },
     { old: '**Location.** Split the current dealing range (last major swing low to high) at 50%: above is premium, below is discount.',
-      home: [[S('pullback-vs-reversal'), '**Premium and discount.** Split the current dealing range (last major swing low to high) at 50%: above is premium, below is discount.']], reason: 'moved to pullback-vs-reversal, under its own label' },
+      home: [[S('fib-retracement'), 'Above the leg\'s 0.5 level is premium, below it discount']], reason: 'moved to pullback-vs-reversal, then to fib-retracement, its one owner (fix/skills-concept-owners); pullback-vs-reversal points there' },
     { old: '**Invalidation**: the `invalidation` skill (the stop stays the strategy\'s).', home: [[A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']],
       reason: 'a pointer; the stop is the strategy\'s, the analyst reports where its bias is wrong' },
     { old: '**Higher timeframe wins** (`bos-vs-choch`, by timeframe).', home: [[S('bos-vs-choch'), 'A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.']], reason: 'superseded wording: #121 reads the timeframes top-down' },
@@ -180,7 +187,7 @@ const ALLOWED = {
     { old: '`liquidity`: the last 4 swing highs and lows, equal highs/lows (within 0.1 x ATR), fair value gaps (3-bar gaps with a strong displacement middle bar, the CISD strength rule), open (`openFvgs`: not traded back into) and partly filled ones (`partlyFilledFvgs`: traded into, not through; `low` to `high` is the part still unfilled, `gapLow` to `gapHigh` the whole gap).',
       home: [[S('levels-and-reactions'), '(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`)', LIQ], [S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)', LIQ],
         [S('levels-and-reactions'), 'open FVGs `m3.liquidity.openFvgs` and partly filled ones `m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`)', LIQ],
-        [S('fair-value-gaps'), 'with a strong displacement middle bar the gap\'s way (the `cisd` skill\'s strong candle:', LIQ]], reason: 'levels-and-reactions lists them; fair-value-gaps reads the gaps and defines them (the strong middle bar, #129)' },
+        [S('fair-value-gaps'), 'with a strong displacement middle bar the gap\'s way (the `cisd` skill\'s strong candle).', LIQ]], reason: 'levels-and-reactions lists them; fair-value-gaps reads the gaps and defines them (the strong middle bar, #129)' },
     { old: '`context`: the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars, bars of falling ADX, Keltner width vs its 20-bar average (a squeeze is under 1), the band-close streak, SuperTrend flips in the last 20 bars, the last 5 bars\' range in ATR, the session\'s high and low so far, and the last bar\'s volume vs its 60-bar average (`volVsAvg60`).',
       home: [[S('trend-momentum-indicators'), '**Skip-rule counters** (`m3.context`): the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`), bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar average (`keltnerWidthVsAvg20`: a squeeze is under 1), the band-close streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars (`supertrendFlipsLast20`), the last 5 bars\' range in ATR (`range5Atr`).', CTX],
         [S('market-snapshot'), 'Only in this tool\'s output: `context.volVsAvg60` (the last bar\'s volume vs its 60-bar average) and `context.session` (the session\'s high and low so far;']], reason: 'the briefing\'s counters to trend-momentum-indicators; the two the briefing lacks stay here' },
@@ -189,7 +196,7 @@ const ALLOWED = {
     { old: 'No strategy\'s skip rule reads it; the strategies whose rules compare volume with an average compute it in their own rules (`vol_sma`), and the scan reports the result.',
       home: [[S('market-snapshot'), 'No strategy\'s skip rule reads `volVsAvg60`; the strategies whose rules compare volume with an average compute it in their own rules (`vol_sma`), and the scan reports the result.']], reason: '"it" named' },
     { old: '`regime`: primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average).',
-      home: [[S('trend-momentum-indicators'), '**The regime\'s fields** (`m3.regime`): primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average, `atrRatio`).', REGIME], [A('volume-liquidity-analyst'), 'session count is the regime\'s own (`regime.metrics.sessionVwapCrosses`)', REGIME]], reason: 'moved to trend-momentum-indicators' },
+      home: [[S('trend-momentum-indicators'), '**The regime\'s metrics** (`m3.regime.metrics`): ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`, ATR vs its average (`atrRatio`).', REGIME], [S('trend-vs-range'), '**The computed regime** (`m3.regime.primary`;', REGIME], [A('volume-liquidity-analyst'), 'session count is the regime\'s own (`regime.metrics.sessionVwapCrosses`)', REGIME]], reason: 'moved to trend-momentum-indicators; the primary regime is trend-vs-range\'s, the volatility the Volatility bullet\'s, the VWAP count vwap-volume-profile\'s (fix/skills-concept-owners)' },
     { old: 'Fractal swings need strictly higher/lower neighbours (2 bars each side), so a flat top or bottom (bars side by side at the same high or low) is no swing.',
       home: [[S('levels-and-reactions'), 'A flat top or bottom (bars side by side at the same high or low) is no swing, so it is in neither.', LIQ], [S('levels-and-reactions'), '(3m swings, 2 bars each side:', LIQ]], reason: 'moved to levels-and-reactions, next to the equal highs and lows' },
     { old: '`liquidity.equalHighs`/`equalLows` are pairs of separate confirmed swings within 0.1 x ATR(14) of each other (see levels-and-reactions); a flat top shows up in neither.',
@@ -356,7 +363,7 @@ test('skill retire: the comparison catches a lost, a doubled or an edited unit, 
   const read2 = f => (f === S('levels-and-reactions') ? flatLr.replace(T, '') : read(f));
   assert.notDeepStrictEqual(differences('liquidity-concepts', withLr(flatLr.replace(T, '')), read2).bad, []);
   // A rewritten fragment in two skills (two homes) fails.
-  const P = '**Premium and discount.** Split the current dealing range (last major swing low to high) at 50%: above is premium, below is discount.';
+  const P = 'Above the leg\'s 0.5 level is premium, below it discount';
   assert.notDeepStrictEqual(differences('market-structure', { ...texts, 'bos-vs-choch': `${texts['bos-vs-choch']}\n\n${P}\n` }).bad, []);
   // An exception for a unit the old skill never had fails (the list only shrinks).
   ALLOWED['market-structure'].push({ old: 'Not in the old skill.', home: null, reason: 'x' });
