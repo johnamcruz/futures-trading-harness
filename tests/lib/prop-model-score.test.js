@@ -1,5 +1,7 @@
 'use strict';
 
+const { TEST_SIZING, testSizing } = require('../helpers');
+
 // The prop Monte Carlo of the model's replay trades: the model pass and the learning ledger (prop/evaluator.js
 // checkModelWindow, learning/looks.js recordScore), the curated reweighting (prop/natural-rate.js) and its diagnostic
 // label, the promotion gate's refusal of it, the paired comparison and the risk attribution (the acceptance test:
@@ -16,7 +18,7 @@ const { reweightStream, naturalRates, validateRates, poisson } = require('../../
 const { sampleAccountStates } = require('../../scripts/lib/prop/account-states');
 const { scoreCandidate, validateCandidate } = require('../../scripts/lib/prop/rulebook-score');
 const { createAttribution, riskRecord, stateOf } = require('../../scripts/lib/prop/risk-attribution');
-const { scoreRun, scoreText, resolveAccount, propScoreSection } = require('../../scripts/lib/prop/model-score');
+const { scoreRun, pairRuns, scoreText, resolveAccount, propScoreSection } = require('../../scripts/lib/prop/model-score');
 const looks = require('../../scripts/lib/learning/looks');
 const { readLedger } = require('../../scripts/lib/prop/ledger-file');
 const { rng } = require('../../scripts/lib/prop/stats');
@@ -25,7 +27,9 @@ const at = require('../../scripts/lib/prop/attempts');
 const { ACCOUNT, M3, record, tmpHome, multiDayRun, weekdays, modelTrade, modelStreamOf } = require('../fixtures/prop-model');
 
 const run = (extra = {}) => ({ runId: 'r1', from: '2022-01-03', to: '2022-09-01', learning: true, role: 'practice-train', look: null, hideOutcomes: false, ...extra });
-const quick = { account: ACCOUNT, contracts: 'micro', paths: 200, reps: 300, seed: 3 };
+const quick = { account: ACCOUNT, contracts: 'micro', paths: 200, reps: 300, seed: 3, rulebook: { sizing: TEST_SIZING } };
+// The policy a scored run sizes by (scoreRun and pairRuns refuse a run with none): a whole test sizing.
+const POLICY = { name: 'fx_policy', sizing: TEST_SIZING };
 const DAYS = weekdays('2022-01-03', 60);
 const steady = () => modelStreamOf(DAYS, (d, k) => [modelTrade(`${d}-0`, k % 3 === 2 ? -40 : 60)]);
 
@@ -185,7 +189,7 @@ function acceptance() {
   const mk = (d, x, i) => modelTrade(`${d}-${i}`, x.move, { alignment: x.q === 'high' ? 'aligned' : 'counter' },
     x.move === -71 ? { overshootTicks: 30, troughTicks: [-71], noStop: { worstTicks: -200, closeTicks: -150 } } : { noStop: { worstTicks: -60, closeTicks: x.move } });
   const A = modelStreamOf(days, (d, k) => script[k].map((x, i) => mk(d, x, i)));
-  const sizing = { ...combine.DEFAULT_SIZING, cushion_frac: 0.4 };
+  const sizing = testSizing({ cushion_frac: 0.4 });
   const legs = at.legsFor(ACCOUNT, 'MNQ', { tickValue: 0.5 });
   const passed = new Set();
   let cs = combine.start(ACCOUNT);
@@ -201,7 +205,7 @@ function acceptance() {
   }
   const B = modelStreamOf(days, (d, k) => script[k].map((x, i) => mk(d, x, i)).filter(t => !passed.has(t.id)));
   B.days.forEach((d, k) => { d.passes = script[k].length - d.trades.length; });
-  return { A, B, passed, opts: { ...quick, paths: 400, reps: 400, rulebook: { sizing: { cushion_frac: 0.4 } }, faults: { stopFault: 0.02 } } };
+  return { A, B, passed, opts: { ...quick, paths: 400, reps: 400, rulebook: { sizing: testSizing({ cushion_frac: 0.4 }) }, faults: { stopFault: 0.02 } } };
 }
 
 test('acceptance: the paired comparison tells the more selective rule near the max loss limit (more passes, fewer blows) from taking everything', () => {
@@ -230,7 +234,7 @@ test('acceptance: the paired comparison tells the more selective rule near the m
 test('scorePaired with a rulebook per side: B sized under its own (a candidate\'s pass), A unchanged; the same draws; the raw start days', () => {
   const { A, opts } = acceptance();
   const one = scorePaired(A, A, { ...opts, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) });
-  const tight = { sizing: { cushion_frac: 0.1 }, candidate: true };
+  const tight = { sizing: testSizing({ cushion_frac: 0.1 }), candidate: true };
   const two = scorePaired(A, A, { ...opts, rulebookB: tight, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }), candidateRulebook: true }) });
   assert.deepStrictEqual(two.a, { ...one.a }, 'side A is scored as before');
   assert.notDeepStrictEqual(two.b.resampled, two.a.resampled, 'side B is sized under its own rulebook');
@@ -265,7 +269,7 @@ function riskRuns() {
     hold: of((d, i, win) => trade(d, i, win)),
     cut: of((d, i, win) => (win ? trade(d, i, win) : trade(d, i, win, { moveTicks: -10, r: -0.25, troughTicks: [-10], actions: ['early-exit'] }))),
     size: f => of((d, i, win) => trade(d, i, win, { sizeFraction: f, actions: f < 1 ? ['size-down'] : [] })),
-    opts: { ...quick, paths: 300, reps: 300, rulebook: { exit: { mode: 'target' }, sizing: { cushion_frac: 0.4 } } },
+    opts: { ...quick, paths: 300, reps: 300, rulebook: { exit: { mode: 'target' }, sizing: testSizing({ cushion_frac: 0.4 }) } },
   };
 }
 const pair = (A, B, opts) => scorePaired(A, B, { ...opts, passA: checkModelWindow({ run: run({ runId: 'champ' }) }), passB: checkModelWindow({ run: run({ runId: 'chall' }) }) });
@@ -324,7 +328,7 @@ test('scorePaired: side B is exited under its own rulebook exit (A\'s unchanged)
   const pa = () => checkModelWindow({ run: run({ runId: 'ea' }) });
   const pb = () => checkModelWindow({ run: run({ runId: 'eb' }) });
   const same = scorePaired(S, S, { ...quick, passA: pa(), passB: pb() });
-  const exited = scorePaired(S, S, { ...quick, rulebookB: { exit: { mode: 'target' } }, passA: pa(), passB: pb() });
+  const exited = scorePaired(S, S, { ...quick, rulebookB: { sizing: TEST_SIZING, exit: { mode: 'target' } }, passA: pa(), passB: pb() });
   assert.deepStrictEqual(exited.a, same.a, 'side A keeps its own exit (the recorded one)');
   assert.notDeepStrictEqual(exited.b.real, same.b.real, 'side B was re-exited under its own rulebook');
   assert.ok(exited.b.real.passRate < same.b.real.passRate, 'every B trade stops out on its path: B passes less');
@@ -374,9 +378,9 @@ test('risk attribution: by account state, with the decisions that cost attempts 
 
 test('account states: drawn from the Monte Carlo\'s own attempt paths, bucketed, seeded and hashed; each record reads back to its state', () => {
   const { A } = acceptance();
-  const one = sampleAccountStates(A, { account: ACCOUNT, sizing: { cushion_frac: 0.4 }, contracts: 'micro', seed: 4, paths: 100, perBucket: 3 });
-  const again = sampleAccountStates(A, { account: ACCOUNT, sizing: { cushion_frac: 0.4 }, contracts: 'micro', seed: 4, paths: 100, perBucket: 3 });
-  const other = sampleAccountStates(A, { account: ACCOUNT, sizing: { cushion_frac: 0.4 }, contracts: 'micro', seed: 5, paths: 100, perBucket: 3 });
+  const one = sampleAccountStates(A, { account: ACCOUNT, sizing: testSizing({ cushion_frac: 0.4 }), contracts: 'micro', seed: 4, paths: 100, perBucket: 3 });
+  const again = sampleAccountStates(A, { account: ACCOUNT, sizing: testSizing({ cushion_frac: 0.4 }), contracts: 'micro', seed: 4, paths: 100, perBucket: 3 });
+  const other = sampleAccountStates(A, { account: ACCOUNT, sizing: testSizing({ cushion_frac: 0.4 }), contracts: 'micro', seed: 5, paths: 100, perBucket: 3 });
   assert.strictEqual(one.hash, again.hash, 'the same seed, the same draw');
   assert.notStrictEqual(one.hash, other.hash, 'another seed, another draw');
   assert.match(one.hash, /^[0-9a-f]{64}$/);
@@ -391,9 +395,9 @@ test('account states: drawn from the Monte Carlo\'s own attempt paths, bucketed,
 
 test('the account-policy hook: a candidate rulebook scored through the same Monte Carlo; its values checked by the rulebook\'s rules; never on a sealed run', () => {
   const { A } = acceptance();
-  const cand = { sizing: { cushion_frac: 0.4, cap_usd: 'off', drawdown_halve_usd: 'off', min_size_guard: 1.5, stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3 }, daily_loss_soft: 'off', stand_down: 0, multipliers: [] };
+  const cand = { sizing: testSizing({ cushion_frac: 0.4, cap_usd: 'off', drawdown_halve_usd: 'off', min_size_guard: 1.5, stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3 }), daily_loss_soft: 'off', stand_down: 0, multipliers: [] };
   assert.deepStrictEqual(validateCandidate(cand), []);
-  assert.match(validateCandidate({ ...cand, sizing: { ...cand.sizing, cap_usd: 0 } }).join(), /sizing.cap_usd/);
+  assert.match(validateCandidate({ ...cand, sizing: testSizing({ ...cand.sizing, cap_usd: 0 }) }).join(), /sizing.cap_usd/);
   assert.match(validateCandidate({ ...cand, stand_down: 2 }).join(), /stand_down/);
   assert.match(validateCandidate({ ...cand, multipliers: [{ item: 'room', fact: 'alignment', values: { aligned: 1 } }] }).join(), /classified enforced/);
   const opts = { ...quick, paths: 300, faults: { stopFault: 0.02 } };
@@ -423,7 +427,13 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
       { day: '2024-07-16', times: ['2024-07-16T14:00:00.000Z'], rows: [] },
     ],
   });
-  const r = scoreRun(dir, { account: ACCOUNT, paths: 50, reps: 100 });
+  // No policy (no rulebook sizing): refused before any look is spent, never scored on a code default.
+  for (const policy of [null, { name: 'p', sizing: { cushion_frac: 0.2 } }]) {
+    assert.throws(() => scoreRun(dir, { account: ACCOUNT, policy, paths: 50, reps: 100 }), /no policy strategy with a whole rulebook sizing trades it/);
+    assert.throws(() => pairRuns(dir, dir, { account: ACCOUNT, policy, paths: 50, reps: 100 }), /no policy strategy with a whole rulebook sizing trades it/);
+  }
+  assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 0, 'no look spent on a refused score');
+  const r = scoreRun(dir, { account: ACCOUNT, policy: POLICY, paths: 50, reps: 100 });
   assert.deepStrictEqual([r.score, r.role, r.trades, r.runDays, r.look.kind, r.look.runId], ['real', 'practice-validate', 1, 2, 'score', 'run1']);
   assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 1);
   const text = scoreText(r);
@@ -458,12 +468,11 @@ test('scoreRun: a real score never leaves an unsettled entry out', () => {
   const t0 = '2023-03-15T14:00:00.000Z';
   const { dir } = multiDayRun({ days: [{ day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25]],
     fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null }] }] });
-  assert.throws(() => scoreRun(dir, { account: ACCOUNT, paths: 10, reps: 10 }), /without a settled outcome .* a real score never leaves one out/);
+  assert.throws(() => scoreRun(dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10 }), /without a settled outcome .* a real score never leaves one out/);
   void M3;
 });
 
 test('pairRuns: two replay runs of the same days through the same paths; a fault rate a real score\'s trades can\'t take is refused', () => {
-  const { pairRuns } = require('../../scripts/lib/prop/model-score');
   const days = weekdays('2023-03-06', 4);
   const mk = loses => multiDayRun({
     days: days.map((day, k) => {
@@ -478,7 +487,7 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
   });
   const good = mk(false);
   const bad = mk(true);
-  const res = pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 200, reps: 200 });
+  const res = pairRuns(good.dir, bad.dir, { account: ACCOUNT, policy: POLICY, paths: 200, reps: 200 });
   assert.deepStrictEqual(res.runs, { a: 'run1', b: 'run1' });
   // Judged as the model traded (its own sizes and exits), the ceiling-sized line beside it, labelled.
   assert.deepStrictEqual([res.sizedAs, res.ceiling.sizedAs], ['own', 'ceiling']);
@@ -486,18 +495,18 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
   assert.ok(res.diff.resampled.passRate.diff >= 0, JSON.stringify(res.diff.resampled.passRate));
   assert.ok(res.a.resampled.passRate >= res.b.resampled.passRate);
   // policyB: each side under its own policy; candidateB: B's a candidate rulebook, its pass checked for one.
-  const cand = pairRuns(good.dir, good.dir, { account: ACCOUNT, policy: { sizing: { cushion_frac: 0.3 } }, policyB: { sizing: { cushion_frac: 0.1 } }, candidateB: true, paths: 50, reps: 50 });
+  const cand = pairRuns(good.dir, good.dir, { account: ACCOUNT, policy: { sizing: testSizing({ cushion_frac: 0.3 }) }, policyB: { sizing: testSizing({ cushion_frac: 0.1 }) }, candidateB: true, paths: 50, reps: 50 });
   assert.strictEqual(cand.paired.oneRulebook, false);
-  assert.strictEqual(pairRuns(good.dir, good.dir, { account: ACCOUNT, paths: 50, reps: 50 }).paired.oneRulebook, true);
+  assert.strictEqual(pairRuns(good.dir, good.dir, { account: ACCOUNT, policy: POLICY, paths: 50, reps: 50 }).paired.oneRulebook, true);
   // rootB: run B's records read with its own tree (the training loop's challenger), run A's with root.
-  assert.throws(() => pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 10, reps: 10, rootB: path.resolve(bad.dir, '..', '..', '..') }), new RegExp(`${path.resolve(bad.dir, '..', '..').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is inside the repository`));
+  assert.throws(() => pairRuns(good.dir, bad.dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10, rootB: path.resolve(bad.dir, '..', '..', '..') }), new RegExp(`${path.resolve(bad.dir, '..', '..').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is inside the repository`));
   // No bars after a fill: no no-stop path, so a stop fault rate is refused for a real score.
   const t0 = '2023-03-15T14:00:00.000Z';
   const bare = multiDayRun({ days: [{ day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [],
     fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
       { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:05:00Z', price: 101, size: 1, side: 1, profitAndLoss: 2 }] }] });
-  assert.throws(() => scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10, faults: { stopFault: 0.01 } }), /without a no-stop path .* silently drop out/);
-  assert.strictEqual(scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10 }).score, 'real');
+  assert.throws(() => scoreRun(bare.dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10, faults: { stopFault: 0.01 } }), /without a no-stop path .* silently drop out/);
+  assert.strictEqual(scoreRun(bare.dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10 }).score, 'real');
 });
 
 test('scorePaired: zero blows first: a run with a blow never beats one without, however fast it passes', () => {
@@ -506,7 +515,7 @@ test('scorePaired: zero blows first: a run with a blow never beats one without, 
   const A = modelStreamOf(days, (d, k) => [k === 150 ? modelTrade(`${d}-0`, -900, {}, { troughTicks: [-900], overshootTicks: 859 }) : modelTrade(`${d}-0`, k % 3 === 2 ? -40 : 120)]);
   // B's losses close a tick inside the stop (no stop exit, so no overshoot drawn from A's gap).
   const B = modelStreamOf(days, (d, k) => [modelTrade(`${d}-0`, k % 3 === 2 ? -39 : 60)]);
-  const res = scorePaired(A, B, { ...quick, contracts: 'micro', rulebook: { sizing: { cushion_frac: 0.4 } }, passA: checkModelWindow({ run: run({ runId: 'a', to: '2023-03-01' }) }), passB: checkModelWindow({ run: run({ runId: 'b', to: '2023-03-01' }) }) });
+  const res = scorePaired(A, B, { ...quick, contracts: 'micro', rulebook: { sizing: testSizing({ cushion_frac: 0.4 }) }, passA: checkModelWindow({ run: run({ runId: 'a', to: '2023-03-01' }) }), passB: checkModelWindow({ run: run({ runId: 'b', to: '2023-03-01' }) }) });
   assert.ok(res.blows.a > 0 && res.blows.b === 0, JSON.stringify(res.blows));
   assert.ok(res.a.resampled.medianDaysToPass < res.b.resampled.medianDaysToPass, 'A passes faster');
   assert.strictEqual(res.verdict, 'B better');
@@ -522,7 +531,7 @@ test('scoreRun: trades open at the same time (a scale-in) are refused in a real 
       { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:04:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
       { id: 3, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:08:00Z', price: 101, size: 2, side: 1, profitAndLoss: 4 },
     ] }] });
-  assert.throws(() => scoreRun(dir, { account: ACCOUNT, paths: 10, reps: 10 }), /open at the same time .* a real score refuses them/);
+  assert.throws(() => scoreRun(dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10 }), /open at the same time .* a real score refuses them/);
 });
 
 test('a curated run is reweighted at its lists\' natural rates from the curated scan\'s candidate counts; without its document it is not scored', () => {
@@ -569,9 +578,9 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
   assert.strictEqual(sec.result.promotion.passes, false);
   assert.match(propScoreSection(dir, { root }).text, /not scored \(a curated run is scored at its lists' natural rates/);
   // The keep rule's paired judge never reads a curated run (outcome-balanced moments, drawn days): refused before any score.
-  const { pairRuns } = require('../../scripts/lib/prop/model-score');
+
   const before = looks.scoresOf(readLedger(ledger)).length;
-  assert.throws(() => pairRuns(dir, dir, { account: ACCOUNT, paths: 10, reps: 10 }), /run1 is a curated run: a paired judge never reads one .* replay full-day windows/);
+  assert.throws(() => pairRuns(dir, dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10 }), /run1 is a curated run: a paired judge never reads one .* replay full-day windows/);
   assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, before, 'refused before any score is logged');
   assert.match(propScoreSection(dir, { root, curated: { file, list: 'trend-up' } }).text, /not scored \(the run pinned curated list/);
 });
@@ -600,7 +609,7 @@ test('keepOne takes one micro, never a whole mini; the risk record refuses an at
   // A ceiling of many micros (auto would trade minis), the model's share 1% of it: rounds to none, so one micro.
   const stream = modelStreamOf(days, d => [modelTrade(`${d}-0`, 200, {}, { entryTime: `${d}T14:00:00.000Z`, sizeFraction: 0.01 })]);
   const run = { runId: 'r', from: '2022-01-03', to: '2022-03-01', learning: true, role: 'practice-train' };
-  const r = scoreArms(stream, { account: ACCOUNT, contracts: 'auto', paths: 20, reps: 20, seed: 1, rulebook: { sizing: { cushion_frac: 1 } }, pass: checkModelWindow({ run }), base: () => ({ fraction: 0.01, keepOne: true }) });
+  const r = scoreArms(stream, { account: ACCOUNT, contracts: 'auto', paths: 20, reps: 20, seed: 1, rulebook: { sizing: testSizing({ cushion_frac: 1 }) }, pass: checkModelWindow({ run }), base: () => ({ fraction: 0.01, keepOne: true }) });
   // One micro: +200 ticks x $0.50 = $100 a day, under the $3,000 target in 30 days: never a pass (one mini would pass in 3).
   assert.strictEqual(r.base.passRate, 0);
   assert.throws(() => rr({ states: {}, cells: [], role: 'test' }), /judged, never shown/);

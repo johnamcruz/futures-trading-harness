@@ -11,7 +11,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const RB = require('../../scripts/lib/trading/rulebook');
-const { DEFAULT_SIZING } = require('../../scripts/lib/trading/combine');
+const { SIZING_KEYS, sizingErrors } = require('../../scripts/lib/trading/combine');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
@@ -101,7 +101,7 @@ function judge(root, account, shipped) {
   for (const old of shipped.policies) {
     const p = policies.find(x => x.name === old.name);
     if (!p || !p.valid) { refused = true; continue; }
-    for (const k of Object.keys(DEFAULT_SIZING)) {
+    for (const k of SIZING_KEYS) {
       if (p.sizing[k] === old.sizing[k]) continue;
       if (LOOSER[k](p.sizing[k], old.sizing[k], p.sizing)) looser.push(`${p.name}.sizing.${k} ${p.sizing[k]}`);
       else stricter = true;
@@ -187,10 +187,10 @@ test('nothing enforced takes a code default: every enforced value the code reads
     assert.strictEqual(a.loss_streak_stop, RB.limit(raw.loss_streak_stop), `${account}: the loss streak stop is the rulebook's`);
     for (const [name, entry] of Object.entries(raw.policies || {})) {
       const p = SHIPPED_POLICIES.find(x => x.name === name);
-      // Every sizing key the code reads (DEFAULT_SIZING's) is written in the file: the defaults never fill a gap.
-      assert.deepStrictEqual(Object.keys(entry.sizing).sort(), Object.keys(DEFAULT_SIZING).sort(), `${file}: ${name}.sizing states every key`);
+      // Every sizing key the code reads (combine.js SIZING_KEYS) is written in the file: there is no code default.
+      assert.deepStrictEqual(Object.keys(entry.sizing).sort(), [...SIZING_KEYS].sort(), `${file}: ${name}.sizing states every key`);
       assert.deepStrictEqual(p.sizing, Object.fromEntries(Object.entries(entry.sizing).map(([k, v]) => [k, RB.limit(v)])), `${name}: loaded as written`);
-      assert.deepStrictEqual({ ...DEFAULT_SIZING, ...p.sizing }, p.sizing, `${name}: the code's merge with its defaults changes nothing`);
+      assert.deepStrictEqual(sizingErrors(p.sizing), [], `${name}: a whole sizing, as the code requires`);
       // Every exit key written (the mode and both trail values, `off` included); loaded as the rulebook reads it.
       assert.deepStrictEqual(Object.keys(entry.exit).sort(), [...RB.EXIT_KEYS].sort(), `${file}: ${name}.exit states every key`);
       assert.deepStrictEqual(p.exit, RB.policyEntry(raw, name).exit, `${name}: the exit as written`);

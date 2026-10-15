@@ -68,6 +68,7 @@
  */
 
 const path = require('path');
+const { MC_SIZE, MC_MAX } = require('../prop/mc-size');
 const { DECISION_RULE, pairUp, tally, harmReasons } = require('./paired');
 const { rolesBetween, SEALED } = require('../learning/splits');
 const { decisionsByKey } = require('./ab-compare');
@@ -89,11 +90,11 @@ function resolveModelScore(raw) {
   const errors = [];
   for (const k of Object.keys(raw)) if (!KEYS.includes(k)) errors.push(`modelScore.${k}: not a setting (${KEYS.join(', ')}); the seed is the loop's, the same for both sides`);
   if (typeof raw.account !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(raw.account)) errors.push('modelScore.account: the account profile the attempts run under (accounts/<name>)');
-  for (const k of ['paths', 'reps']) if (raw[k] !== undefined && !(Number.isInteger(raw[k]) && raw[k] >= 200 && raw[k] <= 20000)) errors.push(`modelScore.${k}: a whole number from 200 to 20000`);
+  for (const k of ['paths', 'reps']) if (raw[k] !== undefined && !(Number.isInteger(raw[k]) && raw[k] >= 200 && raw[k] <= MC_MAX)) errors.push(`modelScore.${k}: a whole number from 200 to ${MC_MAX}`);
   let faults = {};
   try { faults = require('../prop/model-score').parseFaults(raw.faults); } catch (err) { errors.push(`modelScore.faults: ${err.message}`); }
   if (errors.length) throw new Error(errors.join('\n'));
-  return Object.freeze({ account: raw.account, paths: raw.paths || 2000, reps: raw.reps || 2000, faults });
+  return Object.freeze({ account: raw.account, paths: raw.paths || MC_SIZE.paths, reps: raw.reps || MC_SIZE.reps, faults });
 }
 
 const rolesOf = w => { try { return rolesBetween(w.from, w.to); } catch (err) { return [`(${err.message})`]; } };

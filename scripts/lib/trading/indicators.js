@@ -8,6 +8,7 @@
  */
 
 const { zonedParts } = require('./clock');
+const { RTH_OPEN_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const ET = 'America/New_York';
 
@@ -73,8 +74,17 @@ function trueRange(bars) {
     : Math.max(b.h - b.l, Math.abs(b.h - bars[i - 1].c), Math.abs(b.l - bars[i - 1].c))));
 }
 
+/**
+ * The two ATR lengths, one home each (no module restates them). ATR_PERIOD: the reads' ATR (candle facts, CISD
+ * displacement, FVG size, the regime, the MTF read, the field studies). STOP_ATR_PERIOD: the stop and floor ATR (the
+ * snapshot's atrStop and stop distance, the market features' atr20, the replay labels' stop multiples, the stop floor).
+ * The live briefing reads both; a change to either changes what the model is shown.
+ */
+const ATR_PERIOD = 14;
+const STOP_ATR_PERIOD = 20;
+
 /** Wilder ATR (compute_atr): first value at index period-1, including the first bar's range. */
-function atr(bars, period = 14) {
+function atr(bars, period = ATR_PERIOD) {
   return rma(trueRange(bars), period);
 }
 
@@ -194,14 +204,14 @@ function etInfo(t) {
  * otherwise. The trading day starts at the 18:00 ET open, so the evening
  * session has no range until the new one closes (never the closed day's).
  */
-function openingRange(bars, minutes = 15, openMin = 9 * 60 + 30) {
+function openingRange(bars, minutes = 15, openMin = RTH_OPEN_MIN) {
   const n = bars.length;
   const high = new Array(n).fill(NaN);
   const low = new Array(n).fill(NaN);
   let day = null; let oh = NaN; let ol = NaN;
   for (let i = 0; i < n; i += 1) {
     const { minute } = etInfo(bars[i].t);
-    const d = sessionKey(bars[i].t, 18 * 60);
+    const d = sessionKey(bars[i].t, GLOBEX_OPEN_MIN);
     if (d !== day) { day = d; oh = NaN; ol = NaN; }
     if (minute >= openMin && minute < openMin + minutes) {
       oh = Number.isNaN(oh) ? bars[i].h : Math.max(oh, bars[i].h);
@@ -264,8 +274,8 @@ function htfCandles(bars, minutes) {
   let prev = null;
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
-    const sinceOpen = (etInfo(b.t).minute - 18 * 60 + 1440) % 1440;
-    const session = sessionKey(b.t, 18 * 60);
+    const sinceOpen = (etInfo(b.t).minute - GLOBEX_OPEN_MIN + 1440) % 1440;
+    const session = sessionKey(b.t, GLOBEX_OPEN_MIN);
     const idx = Math.floor(sinceOpen / minutes);
     const key = `${session}#${idx}`;
     if (!cur || cur.key !== key) {
@@ -290,6 +300,8 @@ function htfCandles(bars, minutes) {
 }
 
 module.exports = {
+  ATR_PERIOD,
+  STOP_ATR_PERIOD,
   htfCandles,
   normalizeBars,
   ema,

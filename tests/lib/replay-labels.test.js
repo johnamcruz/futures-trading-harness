@@ -276,6 +276,19 @@ test('labels: future bars change counterfactuals only, never a decision-time fie
   assert.deepStrictEqual([none.labels[4].counterfactual.simulated, none.labels[4].counterfactual.reason, none.summary.unsimulated, none.summary.skippedUnsimulated], [false, 'strategy not found', 2, 1]);
 });
 
+test('labels: a skipped setup\'s counterfactual net is priced with the run\'s policy account fee, null without one', () => {
+  const { runDir } = fullRun();
+  const policy = { name: 'pol', signal: 'policy', account: 'acct', valid: true };
+  const acct = fees => ({ name: 'acct', fees_per_side: fees });
+  const cf = accounts => labelRun(runDir, { budgetUsd: 40, strategies: [...STRATEGIES, policy], accounts }).labels[4].counterfactual;
+  const priced = cf([acct({ MNQ: 0.37 })]);
+  assert.strictEqual(priced.simulated, true);
+  assert.strictEqual(priced.net, Math.round((priced.pnl - 0.74) * 100) / 100, 'a round trip at the account\'s fee');
+  assert.strictEqual(cf([]).net, null, 'no account: the net is unknown');
+  assert.strictEqual(cf([acct({ MES: 0.37 })]).net, null, 'no fee stated for the root: unknown');
+  assert.strictEqual(cf([acct({ MNQ: 0.37 })]).pnl, cf([]).pnl, 'the gross does not depend on the fee');
+});
+
 test('labels: deterministic and idempotent; written in the run dir, refused inside the repository', () => {
   const run = fullRun();
   const a = writeLabels(run.runDir, { budgetUsd: 40 });

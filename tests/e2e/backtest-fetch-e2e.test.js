@@ -90,7 +90,7 @@ function run(withField) {
   const calls = fs.readFileSync(args, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => c.name === 'get_bars');
   const bars = fs.readFileSync(out, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   const backtest = (strategy, dir) => {
-    const r = node(['--data', out, '--symbol', 'MNQ', '--timeframe', '3', '--strategy', strategy, '--no-gate', '--out', path.join(home, dir)]);
+    const r = node(['--data', out, '--symbol', 'MNQ', '--fees', '0.37', '--timeframe', '3', '--strategy', strategy, '--no-gate', '--out', path.join(home, dir)]);
     assert.strictEqual(r.status, 0, r.stderr + r.stdout);
     return { log: r.stdout, report: JSON.parse(fs.readFileSync(path.join(home, dir, 'report.json'), 'utf8')), md: fs.readFileSync(path.join(home, dir, 'report.md'), 'utf8') };
   };

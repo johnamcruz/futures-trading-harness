@@ -19,7 +19,7 @@ const prop = require('../../scripts/lib/trading/prop-state');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
-const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder: anyEntry, trendHome: anyHome, tmpDir, writeJournal, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
+const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder: anyEntry, trendHome: anyHome, tmpDir, writeJournal, recordBrokerSpecs, FX_GOLDEN, TEST_SIZING } = require('../helpers');
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { createServerAttestation } = require('../../scripts/lib/broker/allow-list');
 
@@ -42,7 +42,7 @@ const MINI = {
   name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod',
   daily_loss_limit: 1000, daily_loss_soft: 500, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50 }, fees_per_side: { MNQ: 0.37 },
 };
-const POLICY = { name: 'fx_orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null, strategies: ['fx_cross'], account: 'mini', contracts: 'micro', timeframe: '3m' };
+const POLICY = { name: 'fx_orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null, strategies: ['fx_cross'], account: 'mini', contracts: 'micro', timeframe: '3m', sizing: TEST_SIZING };
 const EMA_CROSS = { name: 'fx_cross', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m', mtf: 'trend' };
 function propGate({ balance = 50000, policy = false, verdict = policy ? null : {} } = {}) {
   const home = trendHome();

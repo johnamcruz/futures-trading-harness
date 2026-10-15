@@ -142,8 +142,8 @@ test('adapter: N/A with none selected; a stale adapter (its skills or prompt dig
 
 test('each check fails on a broken fixture', () => {
   const cases = [
-    [P.strategy, { lifecycle: { max_risk_usd: undefined, risk: { stop: 'structure', min_rr: 2, max_risk_usd: 301 } } }, /max_risk_usd 301/],
-    [P.strategy, { lifecycle: { risk: { stop: 'structure', min_rr: 1.5, max_risk_usd: 300 } } }, /min_rr 1.5/],
+    [P.strategy, { lifecycle: { risk: { stop: 'structure', min_rr: 2 } } }, /max_risk_usd undefined, not a dollar cap above 0/],
+    [P.strategy, { lifecycle: { risk: { stop: 'structure', min_rr: 0, max_risk_usd: 300 } } }, /min_rr 0, not a reward:risk above 0/],
     [P.strategy, { lifecycle: { risk: { stop: 'swing', min_rr: 2, max_risk_usd: 300 } } }, /not structure/],
     [P.strategy, { lifecycle: { status: 'paper' } }, /not active/],
     [P.strategy, { lifecycle: { signal: 'rules' } }, /not composed/],

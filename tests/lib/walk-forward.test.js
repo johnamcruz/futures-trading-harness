@@ -97,14 +97,14 @@ test('scripts/backtest.js --walk-forward writes walk-forward.md and prints the o
     'exit:', '  target_r: 2', 'risk:', '  stop: atr:1', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
   ].join('\n'));
   const out = path.join(dir, 'out');
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', data, '--symbol', 'MNQ', '--strategy', 'xo', '--no-gate',
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', data, '--symbol', 'MNQ', '--fees', '0.37', '--strategy', 'xo', '--no-gate',
     '--walk-forward', '--grid', 'exit.target_r=1,2', '--train-months', '2', '--test-months', '1', '--min-trades', '5', '--out', out],
   { encoding: 'utf8', env: { ...process.env, FTH_STRATEGIES_DIRS: path.join(dir, 'strategies'), FTH_HOME: dir } });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /out of sample, tuned: \d+ trades/);
   assert.match(r.stdout, /out of sample, defaults: \d+ trades/);
   assert.ok(fs.existsSync(path.join(out, 'walk-forward.md')) && fs.existsSync(path.join(out, 'walk-forward.json')));
-  const two = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', data, '--symbol', 'MNQ', '--walk-forward', '--grid', 'exit.target_r=1'],
+  const two = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', data, '--symbol', 'MNQ', '--fees', '0.37', '--walk-forward', '--grid', 'exit.target_r=1'],
     { encoding: 'utf8', env: { ...process.env, FTH_STRATEGIES_DIRS: path.join(dir, 'strategies'), FTH_HOME: dir } });
   assert.strictEqual(two.status, 1);
   assert.match(two.stderr, /walkForward: name exactly one strategy/);

@@ -1,5 +1,7 @@
 'use strict';
 
+const { TEST_SIZING, testSizing } = require('../helpers');
+
 const test = require('node:test');
 const assert = require('node:assert');
 const combine = require('../../scripts/lib/trading/combine');
@@ -16,7 +18,7 @@ const trade = (move, extra = {}) => ({
   troughTicks: move < 0 ? [move] : [], overshootTicks: null, noStop: null, facts: {}, ...extra,
 });
 const ten = () => ({ root: 'MNQ', size: 10, riskPerContract: 11.24 });
-const ctx = (extra = {}) => ({ account: account(extra.account), sizing: combine.DEFAULT_SIZING, size: ten, mode: 'micro', legsOf: t => at.legsFor(account(), t.symbol, { tickValue: t.tickValue }), ...extra, ...(extra.account ? { account: account(extra.account) } : {}) });
+const ctx = (extra = {}) => ({ account: account(extra.account), sizing: TEST_SIZING, size: ten, mode: 'micro', legsOf: t => at.legsFor(account(), t.symbol, { tickValue: t.tickValue }), ...extra, ...(extra.account ? { account: account(extra.account) } : {}) });
 const days = (...perDay) => perDay.map((trades, k) => ({ day: `2022-03-${String(k + 1).padStart(2, '0')}`, trades }));
 
 test('attempts: a pass on the day the profit reaches the target (60 ticks x $5 - $7.40 = $292.60 a day: day 4)', () => {
@@ -69,7 +71,7 @@ test('attempts: the default sizing is today\'s contractPlan from the budget and 
   const cs = combine.start(a);
   const { legs, ratio } = at.legsFor(a, 'MNQ', { tickValue: 0.5 });
   const t = trade(10);
-  const plan = mode => at.defaultSize({ cs, trade: t, sizing: combine.DEFAULT_SIZING, legs, mode, ratio, fraction: 1 });
+  const plan = mode => at.defaultSize({ cs, trade: t, sizing: TEST_SIZING, legs, mode, ratio, fraction: 1 });
   // 0.2 x $1,000 = $200 budget; (20 + 1) x $0.50 + $0.74 = $11.24 a micro: 17 micros, or (auto) 1 NQ.
   assert.deepStrictEqual(plan('auto'), combine.contractPlan({ dollars: 200, room: 600, stopTicks: 20, legs, mode: 'auto', fraction: 1, ratio, slipTicks: 1 }));
   assert.deepStrictEqual([plan('micro').root, plan('micro').size, plan('auto').root, plan('auto').size], ['MNQ', 17, 'NQ', 1]);
@@ -142,7 +144,7 @@ test('attempts: pacing (clock_k) is tunable on the default sizing: a k sizes dow
   const sizes = sizing => {
     const seen = [];
     const size = a => { const p = at.defaultSize(a); seen.push(p ? p.size : 0); return p; };
-    at.runAttempt(days([trade(60)]), ctx({ size, sizing: { ...combine.DEFAULT_SIZING, cushion_frac: 0.5, ...sizing }, account: { sessions: 1 } }));
+    at.runAttempt(days([trade(60)]), ctx({ size, sizing: testSizing({ cushion_frac: 0.5, ...sizing }), account: { sessions: 1 } }));
     return seen[0];
   };
   const off = sizes({ clock_k: 0 });

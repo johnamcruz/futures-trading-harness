@@ -1,5 +1,7 @@
 'use strict';
 
+const { TEST_SIZING, testSizing } = require('../helpers');
+
 // The model's risk actions (scripts/lib/prop/risk-actions.js): each detected from a fixture run (prop/model-stream.js),
 // each scored against its counterfactual through the same Monte Carlo paths (prop/evaluator.js scoreArms), with the
 // paired difference of the right sign on a scripted case, and the per-state record under 4 KB with its sample sizes.
@@ -55,7 +57,7 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
   assert.ok(stream.trades.every(t => !t.counterfactual), 'a pass is never a trade of the score');
   // Each scored against its counterfactual.
   const run = { runId: 'run1', from: '2023-03-15', to: '2023-03-18', learning: true, role: 'practice-train' };
-  const r = scoreRiskActions(stream, { pass: checkModelWindow({ run }), account: ACCOUNT, contracts: 'micro', paths: 100, reps: 100, seed: 1 });
+  const r = scoreRiskActions(stream, { pass: checkModelWindow({ run }), account: ACCOUNT, contracts: 'micro', paths: 100, reps: 100, seed: 1, rulebook: { sizing: TEST_SIZING } });
   assert.strictEqual(r.counterfactual, true);
   for (const k of KINDS) {
     assert.strictEqual(r.actions[k].n, 1, k);
@@ -64,10 +66,10 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
   }
   // The run's score carries them, labelled counterfactual.
   const { scoreRun, scoreText } = require('../../scripts/lib/prop/model-score');
-  const scored = scoreRun(dir, { account: ACCOUNT, paths: 50, reps: 50 });
+  const scored = scoreRun(dir, { account: ACCOUNT, policy: { name: 'fx_policy', sizing: TEST_SIZING }, paths: 50, reps: 50 });
   assert.strictEqual(scored.riskActions.counterfactual, true);
   assert.match(scoreText(scored), /Risk action day-stop \(counterfactual: reverted on the same paths; 1 decision\(s\)\): pass rate/);
-  assert.strictEqual(scoreRun(dir, { account: ACCOUNT, paths: 50, reps: 50, riskActions: false }).riskActions, null);
+  assert.strictEqual(scoreRun(dir, { account: ACCOUNT, policy: { name: 'fx_policy', sizing: TEST_SIZING }, paths: 50, reps: 50, riskActions: false }).riskActions, null);
 });
 
 /**
@@ -93,7 +95,7 @@ test('the paired difference has the right sign on a scripted case: passing a gap
   const stream = modelStreamOf(days.map(d => d.day), (_d, k) => days[k].trades);
   stream.days.forEach((d, k) => { d.passed = days[k].passed.map(p => ({ ...p, day: d.day })); });
   const run = { runId: 'r', from: '2022-01-03', to: '2022-07-01', learning: true, role: 'practice-train' };
-  const r = scoreRiskActions(stream, { pass: checkModelWindow({ run }), account: ACCOUNT, contracts: 'micro', paths: 300, reps: 300, seed: 2, rulebook: { sizing: { cushion_frac: 0.45 } } });
+  const r = scoreRiskActions(stream, { pass: checkModelWindow({ run }), account: ACCOUNT, contracts: 'micro', paths: 300, reps: 300, seed: 2, rulebook: { sizing: testSizing({ cushion_frac: 0.45 }) } });
   for (const k of ['pass', 'early-exit']) {
     const row = r.actions[k].byState.all;
     assert.ok(row.savedBlows > row.causedBlows, `${k}: saved ${row.savedBlows}, caused ${row.causedBlows}`);
@@ -120,7 +122,7 @@ test('the base is the model as it traded: a share under one contract still takes
   // A ceiling of one contract ($20 budget against a $21.24 risk, under the guard), the model's half of it.
   const stream = modelStreamOf(days, d => [modelTrade(`${d}-0`, 4000, {}, { entryTime: `${d}T14:00:00.000Z`, sizeFraction: 0.5, actions: ['size-down'] })]);
   const run = { runId: 'r', from: '2022-01-03', to: '2022-03-01', learning: true, role: 'practice-train' };
-  const opts = { account: ACCOUNT, contracts: 'micro', paths: 50, reps: 50, seed: 1, rulebook: { sizing: { cushion_frac: 0.01 } } };
+  const opts = { account: ACCOUNT, contracts: 'micro', paths: 50, reps: 50, seed: 1, rulebook: { sizing: testSizing({ cushion_frac: 0.01 }) } };
   const { base } = riskActionArms();
   assert.strictEqual(scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), base }).base.passRate, 1, 'every entry taken at one contract');
   assert.strictEqual(scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), base: t => ({ fraction: t.sizeFraction }) }).base.passRate, 0, 'without it, half of one contract is none');
@@ -142,7 +144,7 @@ test('a counterfactual arm never takes an entry the gate would refuse: after the
   const run = { runId: 'r', from: '2022-01-03', to: '2022-01-15', learning: true, role: 'practice-train' };
   const base = t => (t.counterfactual ? null : { fraction: 1 });
   const arms = { take: t => ({ fraction: 1, changed: Boolean(t.counterfactual) }) };
-  const opts = { account: ACCOUNT, contracts: 'micro', paths: 20, reps: 20, seed: 1, base, arms };
+  const opts = { account: ACCOUNT, contracts: 'micro', paths: 20, reps: 20, seed: 1, base, arms, rulebook: { sizing: TEST_SIZING } };
   // Three losses a day, the gate's limit of three (its loss streak cools down for hours after the second, too).
   const gated = scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), gate: { maxDailyLosses: 3, maxConsecutiveLosses: 99, lossCooldownMin: 0 } });
   assert.strictEqual(gated.arms.take.applied, 0, 'the 19:00 setup comes after the third loss: refused, as live');

@@ -43,6 +43,7 @@ const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
 const { CONTRACT_SPECS, parseSelection } = require('../trading/contracts');
+const { feePerSide } = require('../trading/accounts');
 const { marketHoursErrors } = require('../autotrader');
 const walkForward = require('./walk-forward');
 const { fieldPaths, fieldCoverage, describeMissing, describeCoverage } = require('./bar-fields');
@@ -86,14 +87,19 @@ function writeDecisions(file, markets, s, cfg) {
   return lines.length;
 }
 
-/** Validate a backtest config. Returns the normalized settings. */
-function validateBacktestConfig(raw, baseDir) {
+/** Validate a backtest config (`account`: a policy run's account profile, whose fees it prices with). Returns the normalized settings. */
+function validateBacktestConfig(raw, baseDir, { account = null } = {}) {
   for (const k of ['account', 'policy', 'sizing']) {
     if (raw && raw[k] !== undefined && raw[k] !== null) {
       throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy (signal: policy); the backtester's prop runs are retired`);
     }
   }
   if (raw && raw.bundle !== undefined) throw new Error('invalid backtest config:\n- bundle: trained policy bundles are retired');
+  // A policy run's limits are its account's (ACCOUNT.md max_contracts, daily_loss_limit; RULEBOOK.md daily_loss_soft): the
+  // plain run's backtest-only maxDailyLoss and maxContracts are never used for it, so stating one is refused.
+  for (const k of account ? ['maxDailyLoss', 'maxContracts'] : []) {
+    if (raw && raw[k] !== undefined) throw new Error(`invalid backtest config:\n- ${k}: a policy run's limits are its account's (${account.name}: ACCOUNT.md and RULEBOOK.md), not the backtest's`);
+  }
   for (const k of ['prop', 'every']) {
     if (raw && raw[k] !== undefined && raw[k] !== null) throw new Error(`invalid backtest config:\n- ${k}: the backtester's prop runs are retired (docs/BACKTESTING.md, "Prop challenges (retired)")`);
   }
@@ -144,11 +150,19 @@ function validateBacktestConfig(raw, baseDir) {
     const file = typeof d === 'string' ? d : d && d.file;
     if (!file) { errors.push(`data.${symbol}: a bar file`); continue; }
     if (!(spec.tickSize > 0 && spec.tickValue > 0)) { errors.push(`data.${symbol}: tickSize and tickValue (not a known contract)`); continue; }
-    markets.push({
-      symbol, file: path.resolve(baseDir, file), sheet: spec.sheet || null, tickSize: spec.tickSize, tickValue: spec.tickValue,
-      // The symbol's own fee wins over the run-wide one.
-      feesPerSide: (typeof d === 'object' && d && d.feesPerSide !== undefined ? d.feesPerSide : null) ?? cfg.feesPerSide ?? spec.feesPerSide ?? 0.37,
-    });
+    // A fee is never assumed. A plain run states it: the symbol's own, else the run-wide one. A policy's run
+    // (`account`) takes its account's (ACCOUNT.md fees_per_side) and refuses one stated here (one home).
+    const own = typeof d === 'object' && d && d.feesPerSide !== undefined ? d.feesPerSide : null;
+    let fee = own ?? cfg.feesPerSide;
+    if (account) {
+      if (fee !== null && fee !== undefined) { errors.push(`data.${symbol}.feesPerSide and feesPerSide: a policy run's fees are its account's (${account.name} ACCOUNT.md fees_per_side)`); continue; }
+      fee = feePerSide(account, symbol);
+      if (fee === null) { errors.push(`data.${symbol}: no fees_per_side.${symbol} in the ${account.name} profile (ACCOUNT.md); a fee is never assumed`); continue; }
+    } else if (!(typeof fee === 'number' && Number.isFinite(fee) && fee >= 0)) {
+      errors.push(`feesPerSide: no fee for ${symbol}; state the fee per contract per side (--fees, the run-wide feesPerSide, or data.${symbol}.feesPerSide): a fee is never assumed`);
+      continue;
+    }
+    markets.push({ symbol, file: path.resolve(baseDir, file), sheet: spec.sheet || null, tickSize: spec.tickSize, tickValue: spec.tickValue, feesPerSide: fee });
   }
   if (errors.length) throw new Error(`invalid backtest config:\n- ${errors.join('\n- ')}`);
   return { ...cfg, start, end, markets };

@@ -14,6 +14,7 @@ const dayContext = require('./day-context');
 const { onTick, levelOnTick } = require('./contracts');
 const { SNAPSHOT_PARAMS: SNAPSHOT_CISD, strongCandle } = require('./cisd');
 const { closeLocation } = require('./candle-facts');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -21,7 +22,7 @@ const PARAMS = {
   kcLen: 20, kcMult: 1.5, kcAtr: 20,
   swingK: 2,
   orbMinutes: 15,
-  atrStop: 20, stopAtrMult: 0.5,
+  atrStop: ind.STOP_ATR_PERIOD, stopAtrMult: 0.5,
   // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
   crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
   // CISD and its OTE bounce (cisd_* / ote_* / in_ote series, scripts/lib/trading/cisd.js): defaults and meaning there.
@@ -32,9 +33,6 @@ const PARAMS = {
   adrDays: 10, // days in the average daily range (day-context.js)
 };
 
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
-const GLOBEX_OPEN = 18 * 60;
 
 const at = (arr, i) => (i >= 0 && i < arr.length && Number.isFinite(arr[i]) ? arr[i] : null);
 const round = (x, d = 4) => (x === null ? null : Math.round(x * 10 ** d) / 10 ** d);
@@ -54,32 +52,32 @@ function rthDaysOf(bars) {
   const days = new Map();
   for (const b of bars) {
     const { day, minute } = etDayMinute(b.t);
-    if (minute < RTH_OPEN || minute >= RTH_CLOSE) continue;
-    const d = days.get(day) || { open: b.o, high: -Infinity, low: Infinity, close: null, whole: minute === RTH_OPEN };
+    if (minute < RTH_OPEN_MIN || minute >= RTH_CLOSE_MIN) continue;
+    const d = days.get(day) || { open: b.o, high: -Infinity, low: Infinity, close: null, whole: minute === RTH_OPEN_MIN };
     d.high = Math.max(d.high, b.h); d.low = Math.min(d.low, b.l); d.close = b.c;
     days.set(day, d);
   }
-  const complete = [...days.keys()].filter(d => d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE)).sort();
+  const complete = [...days.keys()].filter(d => d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE_MIN)).sort();
   return { days, complete };
 }
 
 function levels(bars) {
   const last = bars[bars.length - 1];
-  const session = ind.sessionKey(last.t, GLOBEX_OPEN);
+  const session = ind.sessionKey(last.t, GLOBEX_OPEN_MIN);
   // A day whose 09:30 bar isn't in the data is partial: no levels from it (as the rules engine).
   const { days: rthDays, complete } = rthDaysOf(bars);
   let onHigh = null; let onLow = null;
   for (const b of bars) {
     const { minute } = etDayMinute(b.t);
-    if (minute >= RTH_OPEN && minute < RTH_CLOSE) continue;
-    if (ind.sessionKey(b.t, GLOBEX_OPEN) === session && !(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
+    if (minute >= RTH_OPEN_MIN && minute < RTH_CLOSE_MIN) continue;
+    if (ind.sessionKey(b.t, GLOBEX_OPEN_MIN) === session && !(minute >= RTH_CLOSE_MIN && minute < GLOBEX_OPEN_MIN)) {
       onHigh = onHigh === null ? b.h : Math.max(onHigh, b.h);
       onLow = onLow === null ? b.l : Math.min(onLow, b.l);
     }
   }
   const priorDays = complete.filter(d => rthDays.get(d).whole);
   // The overnight session counts only if the data starts before it (its 18:00 ET open is in the data).
-  const overnightWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
+  const overnightWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN_MIN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN_MIN;
   const prior = priorDays.length ? rthDays.get(priorDays[priorDays.length - 1]) : null;
   return {
     priorRth: prior ? { day: priorDays[priorDays.length - 1], high: prior.high, low: prior.low, close: prior.close } : null,
@@ -151,10 +149,10 @@ function participation(bars, orbMinutes) {
   const last3 = mean(bars.slice(-3).map(vol));
   const prior20 = mean(bars.slice(Math.max(0, i - 23), i - 2).map(vol));
   // By trading day (from the 18:00 ET open): the evening session has no opening range yet.
-  const dayOf = b => ind.sessionKey(b.t, GLOBEX_OPEN);
+  const dayOf = b => ind.sessionKey(b.t, GLOBEX_OPEN_MIN);
   const now = { ...etMinute(bars[i].t), day: dayOf(bars[i]) };
-  const orBars = bars.filter(b => { const e = etMinute(b.t); return dayOf(b) === now.day && e.minute >= RTH_OPEN && e.minute < RTH_OPEN + orbMinutes; });
-  const orAvg = now.minute >= RTH_OPEN + orbMinutes && orBars.length ? mean(orBars.map(vol)) : null;
+  const orBars = bars.filter(b => { const e = etMinute(b.t); return dayOf(b) === now.day && e.minute >= RTH_OPEN_MIN && e.minute < RTH_OPEN_MIN + orbMinutes; });
+  const orAvg = now.minute >= RTH_OPEN_MIN + orbMinutes && orBars.length ? mean(orBars.map(vol)) : null;
   const yesterday = [...bars].reverse().find(b => dayOf(b) !== now.day && etMinute(b.t).minute === now.minute);
   return {
     lastBarVolume: vol(bars[i]),
@@ -180,7 +178,7 @@ const vwapCrosses = (bars, vwap) => crossesOf(bars, vwap, bars.length - REGIME_P
  * bars j-2..j and the ATR at j-1 only: the gap is known when bar 3 completes. { side, low, high, at (the middle bar) }.
  * `atr14`: ATR(14) of `bars` (computed when not given).
  */
-function fvgAt(bars, j, atr14 = ind.atr(bars, 14)) {
+function fvgAt(bars, j, atr14 = ind.atr(bars, ind.ATR_PERIOD)) {
   if (j < 2) return null;
   const a = bars[j - 2];
   const m = bars[j - 1];
@@ -196,7 +194,7 @@ function fvgAt(bars, j, atr14 = ind.atr(bars, 14)) {
  * part still unfilled, gapLow-gapHigh the whole gap), and filled (traded through: dropped). Oldest first. `atr14`:
  * ATR(14) of `bars` (computed when not given).
  */
-function fairValueGaps(bars, n = 60, atr14 = ind.atr(bars, 14)) {
+function fairValueGaps(bars, n = 60, atr14 = ind.atr(bars, ind.ATR_PERIOD)) {
   const open = [];
   const partly = [];
   for (let j = Math.max(2, bars.length - n); j < bars.length; j += 1) {
@@ -291,9 +289,9 @@ function context(bars, series, atrNow) {
   let flips = 0;
   for (let j = from(20); j < n; j += 1) if (st.direction[j] && st.direction[j - 1] && st.direction[j] !== st.direction[j - 1]) flips += 1;
   const last5 = bars.slice(-5);
-  const session = ind.sessionKey(bars[i].t, GLOBEX_OPEN);
-  const inSession = bars.filter(b => ind.sessionKey(b.t, GLOBEX_OPEN) === session);
-  const sessionWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
+  const session = ind.sessionKey(bars[i].t, GLOBEX_OPEN_MIN);
+  const inSession = bars.filter(b => ind.sessionKey(b.t, GLOBEX_OPEN_MIN) === session);
+  const sessionWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN_MIN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN_MIN;
   const vol = bars.slice(-60).map(b => Number(b.v) || 0);
   const volAvg = vol.length && vol.some(v => v > 0) ? vol.reduce((a, b) => a + b, 0) / vol.length : null;
   return {
@@ -342,9 +340,9 @@ function snapshot(input, overrides = {}) {
   const i = bars.length - 1;
   const ema50 = ind.ema(closes, 50);
   const ema200 = ind.ema(closes, 200);
-  const atr14 = ind.atr(bars, 14);
-  const vwapSession = ind.anchoredVwap(bars, GLOBEX_OPEN);
-  const vwapRth = ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE);
+  const atr14 = ind.atr(bars, ind.ATR_PERIOD);
+  const vwapSession = ind.anchoredVwap(bars, GLOBEX_OPEN_MIN);
+  const vwapRth = ind.anchoredVwap(bars, RTH_OPEN_MIN, RTH_CLOSE_MIN);
 
   const adxNow = at(adx, i);
   const adxSlope = adxNow !== null && at(adx, i - p.adxSlopeBars) !== null ? adxNow - adx[i - p.adxSlopeBars] : null;
@@ -420,8 +418,8 @@ function levelsAsOf(bars, i, overrides = {}) {
     AS_OF.set(bars, {
       key,
       or: ind.openingRange(bars, p.orbMinutes),
-      vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN),
-      vwapRth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE),
+      vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN_MIN),
+      vwapRth: ind.anchoredVwap(bars, RTH_OPEN_MIN, RTH_CLOSE_MIN),
       prior: vp.profileSeries(bars, 'prior_rth', { options }).profile,
       day: dayContext.dayContextSeries(bars, { adrDays: p.adrDays, params: p }).day,
     });

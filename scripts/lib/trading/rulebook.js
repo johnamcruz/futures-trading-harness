@@ -24,11 +24,10 @@
 const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
-const { DEFAULT_SIZING } = require('./combine');
+const { SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS } = require('./combine');
 const { SWING_TFS } = require('./exit-trail');
 
-/** The sizing keys every policy entry states (each key the sizing reads), and the exit keys every entry states. */
-const SIZING_KEYS = Object.freeze(Object.keys(DEFAULT_SIZING));
+/** The exit keys every policy entry states (its sizing keys: combine.js SIZING_KEYS, each key the sizing reads). */
 const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf']);
 /**
  * How a policy's trades exit (every key stated; a key the mode doesn't use is `off`):
@@ -110,7 +109,7 @@ const SIZING_RULES = {
   r_per_session: [positive, 'the R a session makes, above 0'],
   min_size_guard: [nonneg, 'a multiple of the budget, 0 or more'],
   drawdown_halve_usd: [offOrPositive, `dollars above 0, or ${OFF} (no drawdown halving)`],
-  stop_slippage_ticks: [x => typeof x === 'number' && Number.isFinite(x) && x >= 1, 'ticks, at least 1'],
+  stop_slippage_ticks: [x => typeof x === 'number' && Number.isFinite(x) && x >= MIN_STOP_SLIPPAGE_TICKS, `ticks, at least ${MIN_STOP_SLIPPAGE_TICKS}`],
 };
 const EXIT_RULE = [x => x === OFF || (positive(x) && x <= 50), `R above 0, at most 50, or ${OFF} (no trail)`];
 /** A whole number of losing trades, at least 1, or off: 0 is refused (a slip of the pen would turn the stop off unseen). */

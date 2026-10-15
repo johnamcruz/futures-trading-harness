@@ -48,7 +48,7 @@ const markets = () => [
   { symbol: 'MNQ', bars: series(25, 5), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 },
   { symbol: 'MES', bars: series(25, 9, 5000), tickSize: 0.25, tickValue: 1.25, feesPerSide: 0.37 },
 ];
-const engine = { timeframe: 3, gate: false, fill: 'next-open', slippageTicks: 1, gateConfig: loadConfig({}), window: 160, start: Date.parse('2026-01-08T00:00:00Z') };
+const engine = { timeframe: 3, gate: false, fill: 'next-open', slippageTicks: 1, gateConfig: loadConfig({}), window: 160, start: Date.parse('2026-01-08T00:00:00Z'), sizing: require('../helpers').TEST_SIZING };
 
 /** Pairs of trades open at the same time (entry before the other's exit, both ways). */
 const overlaps = trades => {

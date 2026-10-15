@@ -104,7 +104,7 @@ test('a backtest on finer bars that carry broker fields: refused when a strategy
   const bars = [];
   for (let k = 0; k < 600; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
-  const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV, log: m => logs.push(m) });
+  const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, feesPerSide: 0.37, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV, log: m => logs.push(m) });
   assert.throws(() => run(['fx_value_area', 'fx_orb']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and fx_value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
   const logs = [];
   run(['fx_orb'], logs);
@@ -124,7 +124,7 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
   const run = (name, bars) => {
     const file = path.join(dir, `${name}.json`);
     fs.writeFileSync(file, JSON.stringify({ bars }));
-    return runBacktest({ symbols: ['MNQ'], timeframe: 1, data: { MNQ: file }, strategies: ['fx_ofi_absorption'], gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV }).report;
+    return runBacktest({ symbols: ['MNQ'], timeframe: 1, feesPerSide: 0.37, data: { MNQ: file }, strategies: ['fx_ofi_absorption'], gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV }).report;
   };
   const withFlow = run('with', absorbed(true));
   assert.ok(withFlow.summary.trades >= 1 && withFlow.trades.every(t => t.strategy === 'fx_ofi_absorption' && t.direction === 'long'), JSON.stringify(withFlow.summary));

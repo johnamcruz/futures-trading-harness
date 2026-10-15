@@ -563,7 +563,7 @@ of day. By default it also applies the harness's other rules (sessions,
 order-gate limits); `--no-gate` drops those to compare with the original bot.
 
 ```bash
-node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
+node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --fees <fee> --start 2025-01-01 --end 2025-04-01   # --fees: required
 node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.example.json
 ```
 

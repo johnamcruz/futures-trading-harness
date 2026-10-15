@@ -41,6 +41,7 @@ const { historyBars, parseAt } = require('../autotrader');
 const { exitPlan } = require('../trading/evaluator');
 const { SWING_TFS, swingSeries } = require('../trading/exit-trail');
 const { roundHalfEven } = require('../backtest/engine');
+const { REGIME_PARAMS } = require('../trading/regime');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 
@@ -66,8 +67,13 @@ function delayFromCycles(durationsMs, percentile = 0.9) {
 
 /**
  * Each trading day's volatility regime, from the first market's bars: the day's range against the mean range
- * of the `lookback` days before it (only earlier days: causal): 'high' at 1.25x or more, 'low' at 0.8x or
- * less, else 'normal' (and 'normal' before any history). Map day key -> regime.
+ * of the `lookback` days before it (only earlier days: causal): 'high' at the live regime's highVol multiple or more,
+ * 'low' at its lowVol multiple or less (trading/regime.js REGIME_PARAMS, the cutoffs' one home), else 'normal' (and
+ * 'normal' before any history). Map day key -> regime.
+ * Sharing 1.4 / 0.7 with the live regime is deliberate: a different statistic (a day's range against the mean of the
+ * days before it, not a bar's ATR ratio), the same cutoffs, so one number says what a high or low volatility day is.
+ * Fewer days clear them than at the old 1.25 / 0.8, so on a short window stats.js has fewer high/low days and falls
+ * back to the whole pool.
  */
 function dayRegimes(bars, tfMs, lookback = 20) {
   const ranges = new Map();
@@ -84,7 +90,7 @@ function dayRegimes(bars, tfMs, lookback = 20) {
     const range = r.h - r.l;
     const recent = past.slice(-lookback);
     const mean = recent.length ? recent.reduce((a, x) => a + x, 0) / recent.length : null;
-    out.set(k, !mean ? 'normal' : range >= 1.25 * mean ? 'high' : range <= 0.8 * mean ? 'low' : 'normal');
+    out.set(k, !mean ? 'normal' : range >= REGIME_PARAMS.highVol * mean ? 'high' : range <= REGIME_PARAMS.lowVol * mean ? 'low' : 'normal');
     past.push(range);
   }
   return out;
@@ -227,7 +233,7 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
     const stopped = t.reason === 'stop';
     return {
       day: tradingDayKey(new Date(Date.parse(t.exitTime))), symbol: t.symbol, strategy: t.strategy, direction: t.direction,
-      entryTime: t.entryTime, exitTime: t.exitTime, reason: t.reason, tickSize: tick, tickValue: book.tickValue, feesPerSide: book.feesPerSide ?? 0.37,
+      entryTime: t.entryTime, exitTime: t.exitTime, reason: t.reason, tickSize: tick, tickValue: book.tickValue,
       stopTicks, moveTicks, r: t.r, maeR: t.maeR, mfeR: t.mfeR, troughTicks: t.troughTicks || [],
       overshootTicks: stopped ? Math.max(0, round6((sign * (t.initialStop - t.exit)) / tick - slip)) : null,
       noStop: noStopPath(book, t, { tfMs, eod }),

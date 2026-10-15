@@ -24,10 +24,10 @@ entries the live harness would see, with no model or API in the loop.
 ## How It Works
 
 ```bash
-# A quick run on one file
-node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
+# A quick run on one file: --fees is your fee per contract per side (required; a fee is never assumed)
+node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --fees <fee> --start 2025-01-01 --end 2025-04-01
 
-# A configured run
+# A configured run (state its feesPerSide first)
 cp mcp-configs/backtest.example.json backtest.json
 node scripts/backtest.js --config backtest.json
 
@@ -73,9 +73,9 @@ at its timeframe:
 ```bash
 # value_area (3 minutes, also inside prop_portfolio) and ofi (1 minute)
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 3 --out data/MNQ-3m.jsonl
-node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --timeframe 3 --strategy value_area
+node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --fees <fee> --timeframe 3 --strategy value_area
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 1 --out data/MNQ-1m.jsonl
-node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
+node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --fees <fee> --timeframe 1 --strategy ofi,ofi_absorption
 ```
 
 `fetch` asks the broker's `get_bars` for bars of that size (`--timeframe`:
@@ -155,7 +155,9 @@ enforces:
   - the daily losing-trade count (both count losses before fees, from
     P&L as the broker reports it; a scratch neither adds to nor ends a streak)
   - the daily entry cap
-- The broker MCP server's daily dollar loss limit (`maxDailyLoss`).
+- The broker MCP server's daily dollar loss limit (`maxDailyLoss`): a plain run's, backtest-only. A policy
+  strategy's run (the evaluator) takes its account's limits instead (`daily_loss_limit` in its `ACCOUNT.md`,
+  `daily_loss_soft` in its `RULEBOOK.md`) and refuses a `maxDailyLoss` or `maxContracts` stated for it.
 
 **`gate: false`** (`--no-gate`) drops those limits (not the market session).
 Use it to compare with the original bot.
@@ -195,12 +197,12 @@ trail, and `max_bars` if set), whichever rules strategy found the setup: a
 | `strategies` | all mechanical ones on the timeframe | Names in priority order |
 | `gate` | true | Harness rules, as above |
 | `sessions`, `eodAt` | 18:00-15:50 ET, 15:50 ET | Runner schedule: sessions inside the 18:00-16:00 ET session (with `gate`; `asia`, `london`, `ny` work); `eodAt` required, no later than 16:00 ET |
-| `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk |
+| `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk (`maxContracts`: plain runs only, never an account's) |
 | `slippageTicks` | 1 | Against you on entries and stop fills |
 | `fill` | `next-open` | `next-open`: an entry fills at the next bar's open (live, the order goes in after the cycle that read the closed bar); a setup whose fill bar opens through its stop or target, or falls after end of day or in a new day, expires (counted in the report). `close`: at the signal bar's close, as the original bot |
 | `walkForward` | null | `{ grid, trainMonths, testMonths, minTrades }`: walk-forward test of one strategy (`--walk-forward --grid key=v1,v2`); see below |
-| `feesPerSide` | per contract (micros $0.37) | Dollars per contract per side |
-| `maxDailyLoss` | 500 | Daily dollar loss that ends the day (0 = off) |
+| `feesPerSide` | required (`--fees`) | Dollars per contract per side, run-wide or per symbol in `data`; a fee is never assumed. A policy strategy's run takes its account's (`fees_per_side` in its `ACCOUNT.md`) and refuses one stated here |
+| `maxDailyLoss` | 500 | Daily dollar loss that ends the day (0 = off); plain runs only, never an account's |
 | `window` | 500 | Bars of history per evaluation (the original bot's BARS_WINDOW) |
 | `outDir` | `<FTH_HOME>/backtests/<run>` | Results |
 
@@ -228,7 +230,7 @@ Each run writes these files to the run directory:
   you expected didn't trade:
 
   ```bash
-  node scripts/backtest.js --data NQ_3min.csv --symbol MNQ --strategy crt_1h --debug crt_1h
+  node scripts/backtest.js --data NQ_3min.csv --symbol MNQ --fees <fee> --strategy crt_1h --debug crt_1h
   grep '"reason":"fired"' ~/.futures-trading-harness/backtests/<run>/decisions-crt_1h.jsonl
   ```
 
@@ -247,7 +249,7 @@ the signal by evidence. Re-record after changing a strategy or adding data;
 plain runs only (not with `--walk-forward`).
 
 ```bash
-node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy orb,value_area --record
+node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --fees <fee> --strategy orb,value_area --record
 ```
 
 ### Prop challenges (retired)
@@ -373,7 +375,7 @@ retired (2026-10-13); today the same command runs the strategies shipped
 now:
 
 ```text
-$ node scripts/backtest.js --data data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01
+$ node scripts/backtest.js --data data/NQ_3min.csv --symbol MNQ --fees <fee> --start 2026-03-01 --end 2026-04-01
 [backtest] bos, cisd_ote, ema_cross, keltner, orb, supertrend, vwap_reclaim on MNQ (2701 3m bars)
 [backtest] 85 trades | win 24% | mean -0.281R | sum -23.92R | PF 0.64 | net $-1707.4 | max DD $1967.24 | 5.1 s
 [backtest]   bos          n=42   win=24%  meanR=-0.215 sumR=-9.03
@@ -395,7 +397,7 @@ out-of-sample trades count, next to the strategy's own parameters on the
 same months:
 
 ```bash
-node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy crt_1h \
+node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --fees <fee> --strategy crt_1h \
   --walk-forward --grid crtMinRR=1.5,2,2.5 --grid exit.max_bars=20,40 --train-months 6 --test-months 1
 ```
 

@@ -116,18 +116,12 @@ function scanned() {
     .filter(f => fs.existsSync(path.join(ROOT, f)) && fs.lstatSync(path.join(ROOT, f)).isFile());
 }
 
-// combine.js DEFAULT_SIZING: the schema's defaults for a sizing key a rulebook leaves out (off for the cap, the
-// drawdown halving and the clock; the floor under the stop's expected slippage). Not a rulebook value: no policy
-// takes one when its rulebook states the key.
-const DEFAULTS = { file: 'scripts/lib/trading/combine.js', block: /const DEFAULT_SIZING = \{[^]*?\n\};/ };
-
 test('R1: no rulebook value is restated anywhere else: not in code, skills, agents, rules, commands, strategies or documents', () => {
   const vals = values();
   assert.ok(vals.length >= 10, 'the rulebooks hold today\'s values');
   const hits = [];
   for (const f of scanned()) {
     let text = read(f);
-    if (f === DEFAULTS.file) text = text.replace(DEFAULTS.block, '');
     // opencode's config holds each prompt (embedded skills included) as one JSON string, one line: scanned as the
     // prompt's own lines, as its sources are (a policy named anywhere in a whole prompt isn't one on the line).
     if (f === 'workspace/opencode.json') {
