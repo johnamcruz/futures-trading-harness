@@ -21,7 +21,10 @@
  *             On the parity fixtures 'wide' selects most bars (VWAP and the developing profile are met by nearly every
  *             candle), so 'key' is the default. `phase` is `reaction` on the entry bar that completed that candle,
  *             `confirmation` on the entry-timeframe closes after it while it is still the last completed candle (the
- *             window ends when the next setup candle completes: it is superseded);
+ *             window ends when the next setup candle completes: it is superseded). The reaction bar stays selected (the
+ *             model notes the setup there) but is never the only one: an entry read is on a candle closed after the
+ *             setup candle (the gate's same-candle rule), so the setup timeframe holds at least two runner bars
+ *             (autotrader.js validateConfig) and every window has a confirmation close after the reaction bar;
  *   quiet     a seeded sample of the other bars (quietSample, deterministic by seed, symbol and bar), so the model still
  *             practises passing on quiet bars;
  *   none      otherwise: no cycle (the bar is still polled, briefed, scanned and recorded as live).
@@ -110,7 +113,7 @@ function setupMoment(candles, { setupTf = DEFAULTS.setupTf, barClose, levels = D
   const candle = { t: c.t, closedAt: c.closedAt };
   if (!reactions.length) return { available: true, moment: false, phase, candle, reactions, reason: `the last ${key} candle met no key level` };
   const top = reactions[0];
-  return { available: true, moment: true, phase, candle, reactions, reason: `${key} ${top.rel} ${top.name}${reactions.length > 1 ? ` (+${reactions.length - 1})` : ''}, ${phase}` };
+  return { available: true, moment: true, phase, candle, reactions, reason: `${key} ${top.rel} ${top.name}${reactions.length > 1 ? ` (+${reactions.length - 1})` : ''}, ${phase === 'reaction' ? 'reaction (the setup; confirmation from the next close)' : phase}` };
 }
 
 /** Whether a bar is in the quiet sample: sha256(seed|symbol|bar) as a share, below the rate. */

@@ -1752,3 +1752,16 @@ test('practice: a failed selector or an unreadable account runs the bar (never h
   });
   assert.ok(r.cycles.filter(c => c.action === 'trade').length >= 9);
 });
+
+test('practice, signal trigger: a held position runs every bar though no bar is a moment (the selector is told it is open)', async () => {
+  const pm = practiceMarket({ openFrom: et(10, 10), openTo: et(10, 31) });
+  const told = [];
+  const { cycles } = await simulate({
+    cfg: { timeframe: 3, account: '7', trigger: 'signal', sessions: ['09:30-15:00@America/New_York'] }, from: et(9, 59), to: et(11, 0), market: pm,
+    deps: { practiceSelect: (item, open) => { told.push(open); return open ? { run: true, why: 'manage', reason: 'practice: managing' } : { run: false, why: 'none', reason: 'practice: none' }; } },
+  });
+  const bars = cycles.filter(c => c.action === 'trade' || c.action === 'manage').map(c => Date.parse(barOpens(c)[0].split('@')[1]) + 180000);
+  assert.ok(bars.length >= 6 && bars.length <= 7, `managed bars: ${bars.length}`);
+  assert.ok(bars.every(t => t > et(10, 10) && t <= et(10, 31)));
+  assert.ok(told.includes(true), 'the selector heard the position');
+});

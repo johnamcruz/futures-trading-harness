@@ -20,6 +20,10 @@ test('validateConfig: practice is checked and filled; it needs an account; absen
   assert.deepStrictEqual(validateConfig({ ...BASE, practice: { seed: 2 } }).practice, { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 2, levels: 'key', reactions: ['rejected', 'broke'] });
   assert.throws(() => validateConfig({ ...BASE, practice: { setupTf: 2 } }), /practice.setupTf/);
   assert.throws(() => validateConfig({ ...BASE, account: undefined, practice: {} }), /practice: needs an account/);
+  // The same-candle rule: the setup timeframe holds a confirmation close after the reaction bar.
+  assert.throws(() => validateConfig({ ...BASE, practice: { setupTf: 5 } }), /practice.setupTf: 5m must be a whole number of at least two 3m bars/);
+  assert.doesNotThrow(() => validateConfig({ ...BASE, timeframe: 1, practice: { setupTf: 5 } }));
+  assert.throws(() => validateConfig({ ...BASE, timeframe: 15, practice: { setupTf: 15 } }), /at least two 15m bars/);
 });
 
 test('practiceSelector: none without practice; refused live, without a learning run, and on test, final or a run not learning', () => {

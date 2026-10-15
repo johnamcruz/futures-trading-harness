@@ -237,6 +237,11 @@ function validateConfig(raw) {
     errors.push(...p.errors);
     if (p.practice) cfg.practice = p.practice;
     if (!cfg.account) errors.push('practice: needs an account (every bar with a position or working order runs its cycle)');
+    // The reaction bar only notes the setup (an entry read is on a candle closed after it): the window needs a later
+    // close of the runner's bars inside the same setup candle's life, so the setup timeframe is a multiple of at least two bars.
+    if (p.practice && Number.isInteger(cfg.timeframe) && !(p.practice.setupTf % cfg.timeframe === 0 && p.practice.setupTf >= 2 * cfg.timeframe)) {
+      errors.push(`practice.setupTf: ${p.practice.setupTf}m must be a whole number of at least two ${cfg.timeframe}m bars (a confirmation close after the reaction bar)`);
+    }
   }
   if (laneSpec.lanes.slice(1).some(l => l.trigger === 'signal') && !cfg.account) errors.push('account: required with a lane on trigger "signal" (to see open positions)');
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
