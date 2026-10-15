@@ -244,11 +244,14 @@ for a long; their mirrors for a short. A long with `1h bos down` is refused,
 even though the read is true. A read with no direction (`at prior VAH`,
 `value inside`) agrees with either side. The only exception is the verified
 reversal of owner decision D2: a trend or break read against the side is
-allowed when the combination also has a true 15m or 1h CHoCH the order's way,
-on a timeframe at or below that CHoCH's (a 15m CHoCH never excuses the 1h or
-4h trend; a 3m CHoCH excuses nothing). It is the reads' agreement only: the
-gate's trend rule has its own tiers (D2): the prevailing frame (the
-multi-timeframe record) is faded only on a CHoCH at or above it.
+allowed when the combination also holds that frame's D2 tier the order's way:
+a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH, a
+4h frame a 1h CHoCH plus a 4h candle that rejected a key level (a gap's edge is
+none). A 15m CHoCH never excuses the 1h or 4h trend; a 3m CHoCH excuses
+nothing. The gate's trend rule fades the prevailing frame (the
+multi-timeframe record) on the same tiers, one definition (`D2_TIERS`,
+`composed-reads.js`), so a record that names the 4h trend it fades stands
+exactly when the trend rule lets it.
 
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend
@@ -265,8 +268,9 @@ the entry each hold a true read pointing to the side (the reaction and its
 confirmation; reads without a direction, such as `touched`, `at`, `swept`,
 `volume high` or `participation high`, and a setup `in ote`, only support
 them), the confirmation comes after the reaction (when the setup's pointing
-reads are candle reads, an entry read pointing the side is on a candle that
-closed after the last of them: the 3m after the 15m rejection, never the 15m
+reads name a candle, a relation's or pattern's or a CISD's confirming
+candle, an entry read pointing the side is on a candle that closed after the
+last of them: the 3m after the 15m rejection or the 15m CISD, never that
 candle itself or the last 3m inside it; a setup candle without a close time
 refuses), and the stop and target reads are present. Any false, unchecked or
 disagreeing read refuses it, naming the read.
