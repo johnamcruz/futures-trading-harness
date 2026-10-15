@@ -18,7 +18,7 @@
  *   limits          { maxIterations (default 1), maxModelCalls (default 200), maxWallMinutes (default 240) }
  *   decision        tighter settings of the frozen decision rule (paired.js ruleFrom); never looser
  *   learning        the learning gate of its window runs (learning/run-gate.js, as replay.js run): { evaluation (required
- *                   for any window outside practice-train; each window's is <evaluation>.<label>), validate, reasoningFix }; the candidate is the
+ *                   for any window outside practice-train; each window's is <evaluation>.<label>), validate }; never reasoningFix; the candidate is the
  *                   loop's look's. A replay config with "learning": false declares runs that never teach
  *   evaluator       the mechanical verifier (train/evaluator.js): { prop, data: { SYMBOL: bar file }, ...settings };
  *                   none: a strategy or rulebook change stays blocked
@@ -62,7 +62,7 @@ function int(v, [def, min, max], key, errors) {
   return v;
 }
 
-const LEARNING_KEYS = ['evaluation', 'validate', 'reasoningFix'];
+const LEARNING_KEYS = ['evaluation', 'validate'];
 
 /** The loop's learning settings (learning/run-gate.js), checked: null when none. */
 function learningErrors(l, errors) {
@@ -70,7 +70,9 @@ function learningErrors(l, errors) {
   if (typeof l !== 'object' || Array.isArray(l)) { errors.push(`learning: { ${LEARNING_KEYS.join(', ')} }`); return null; }
   for (const k of Object.keys(l)) if (!LEARNING_KEYS.includes(k)) errors.push(`learning.${k}: not a setting (${LEARNING_KEYS.join(', ')})`);
   if (l.evaluation !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(l.evaluation))) errors.push('learning.evaluation: an evaluation id (letters, digits, ".", "_", "-")');
-  for (const k of ['validate', 'reasoningFix']) if (l[k] !== undefined && typeof l[k] !== 'boolean') errors.push(`learning.${k}: true or false`);
+  if (l.validate !== undefined && typeof l.validate !== 'boolean') errors.push('learning.validate: true or false');
+  // A reasoning-fix look hides its outcomes; the loop reads every outcome (its scorecards, its paired test): refused.
+  if (l.reasoningFix !== undefined) errors.push('learning.reasoningFix: refused in the training loop, which reads every outcome (a reasoning-fix look hides them)');
   return { ...l };
 }
 

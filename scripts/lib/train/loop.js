@@ -189,7 +189,7 @@ async function championTree(ctx) {
 
 /**
  * A window run's learning gate: the run's window and `"learning"` flag (the loop's replay config), the loop's
- * `learning` settings (validate, reasoningFix) and, outside practice-train, its evaluation id (the loop's, one per window:
+ * `learning` settings (validate; never reasoningFix: the loop reads every outcome) and, outside practice-train, its evaluation id (the loop's, one per window:
  * <evaluation>.<label>), required
  * there as replay.js run requires --evaluation; the candidate is the loop's look's.
  */
@@ -201,7 +201,7 @@ function learningGate(ctx, run, look, label) {
   return {
     from: run.start, to: run.end, runId: run.runId, learning: run.learning,
     candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked && l.evaluation ? `${l.evaluation}.${label}` : null,
-    validate: looked && l.validate === true, reasoningFix: looked && l.reasoningFix === true, endOfDay: run.endOfDay, runDir: run.paths.runDir, env: ctx.env,
+    validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
   };
 }
 
@@ -225,7 +225,9 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     const gate = learningGate(ctx, run, look, label);
     checkLearningRun(gate);
     ctx.steps.seedRunHome(run, { root: tree, userEnv: ctx.env });
-    startLearningRun(run.paths.runHome, gate);
+    const learned = (ctx.steps.startLearningRun || startLearningRun)(run.paths.runHome, gate);
+    // The loop reads every outcome (scorecards, the paired test): a run whose outcomes are hidden never runs in it.
+    if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);
     ctx.check();
     const left = ctx.loop.limits.maxModelCalls - ctx.state.modelCalls;
     const deps = D.checkpointDeps(ctx.steps.stepDeps(run, tree), { run, dir: checkpoints });

@@ -3,7 +3,7 @@
 /**
  * The learning ledger (learning/splits.js windows): every replay of the learning loop that looks at months outside
  * practice-train is logged here before its first cycle (learning/run-gate.js), and the sealed windows' budgets are
- * spent here. Its own file, <FTH_HOME>/learning/looks.jsonl, in the prop ledger's format (prop/looks.js parseLedger,
+ * spent here. Its own file, ~/.futures-trading-harness/learning/looks.jsonl (the default home, whatever FTH_HOME), in the prop ledger's format (prop/looks.js parseLedger,
  * prop/ledger-file.js: JSON lines, appended under a lock), so the two budgets never mix.
  *
  * The owner's rules (the defaults, BUDGETS and FINAL_NEEDS_TEST_PASS):
@@ -16,7 +16,8 @@
  *   practice-train       no look: practice
  *
  * An evaluation id belongs to its first look: another candidate, purpose or window under it is refused, and it holds
- * at most MAX_ARMS runs.
+ * at most MAX_ARMS runs, each a different arm (with:<index>, without, shuffled:<index>) of the same run setup (its
+ * config hash): a judging look names both, so the arms differ in their experience index only.
  *
  * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, from, to, role, at } or a result
  * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }.
@@ -29,6 +30,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { harnessHome } = require('../paths');
 const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
@@ -40,6 +42,8 @@ const FINAL_NEEDS_TEST_PASS = true;
 const MAX_ARMS = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without). */
+const ARM = /^(?:without|with:[0-9a-f]{16}|shuffled:[0-9a-f]{16})$/;
 /** Looks taken before the ledger existed, so it starts true. */
 const RECORDED_LOOKS = Object.freeze([
   Object.freeze({ kind: 'look', evaluation: 'llm-replay-2026-06', candidate: 'llm-replay-2026-06', purpose: 'reasoning-fix', runId: 'llm-replay-2026-06', from: '2026-06-01', to: '2026-06-06', role: 'final', what: 'LLM replay, June 1-5 2026, adherence only' }),
@@ -86,9 +90,16 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
     if (first.candidate !== l.candidate || first.purpose !== l.purpose || roleOfLook(first) !== role || !span || first.from !== span[0] || first.to !== span[1]) {
       refusals.push(`evaluation ${l.evaluation} is ${first.candidate}'s ${first.purpose} look at ${first.from}..${first.to}: another candidate, purpose or window takes an evaluation id of its own`);
     }
-    const arms = new Set(looksOf(ledger).filter(e => e.evaluation === l.evaluation).map(e => e.runId));
+    const runs = looksOf(ledger).filter(e => e.evaluation === l.evaluation);
+    const arms = new Set(runs.map(e => e.runId));
     if (!arms.has(l.runId) && arms.size >= MAX_ARMS) refusals.push(`evaluation ${l.evaluation} has its ${MAX_ARMS} arms (${[...arms].join(', ')})`);
+    // The arms differ in their index only: the same run setup (its config hash), each a different arm.
+    if (!arms.has(l.runId)) {
+      if (first.config && l.config !== first.config) refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index; this run's setup (config ${String(l.config).slice(0, 12)}) is not ${String(first.config).slice(0, 12)}'s`);
+      if (l.arm && runs.some(e => e.arm === l.arm)) refusals.push(`evaluation ${l.evaluation} has its ${l.arm} arm already`);
+    }
   }
+  if (SEALED.includes(role) && l.purpose === 'judging' && !(l.arm && ARM.test(l.arm) && l.config)) refusals.push('a judging look names its arm (with:<index>, without, shuffled:<index>) and its run setup (config hash)');
   const judged = new Set(atRole.filter(e => e.purpose === 'judging').map(e => e.evaluation));
   const shared = l.purpose === 'judging' && judged.has(l.evaluation);
   const budget = SEALED.includes(role) ? budgets[role] : null;
@@ -119,7 +130,7 @@ function recordLook(file, look, { create = false, now = new Date(), budgets = LO
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
     if (!r.repeat) {
       appendLook(file, {
-        kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId,
+        kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId, arm: look.arm || null, config: look.config || null,
         from: sessionDate(look.from), to: sessionDate(look.to), role: r.role, at: now.toISOString(),
       });
     }
@@ -153,6 +164,10 @@ function lookUsage(ledger) {
   return Object.fromEntries(Object.entries(out).map(([k, u]) => [k, { looks: u.looks, runs: u.runs.size, evaluations: u.evaluations.size }]));
 }
 
-const ledgerPath = (env = process.env) => path.join(harnessHome(env), 'learning', 'looks.jsonl');
+/**
+ * The one ledger: under the default harness home (~/.futures-trading-harness), whatever FTH_HOME says, so a run under
+ * another home never starts a budget of its own. `env.HOME` names the home folder (os.homedir() without it).
+ */
+const ledgerPath = (env = process.env) => path.join(harnessHome({}, String(env.HOME || '').trim() || os.homedir()), 'learning', 'looks.jsonl');
 
 module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, checkLook, recordLook, recordResult, lookUsage, ledgerPath };
