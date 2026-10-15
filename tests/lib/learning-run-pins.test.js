@@ -12,7 +12,7 @@ const X = require('../../scripts/lib/learning/experience-index');
 const L = require('../../scripts/lib/learning/setup-library');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-run-pins-'));
-const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+const rec = day => ({ v: L.VERSION, validBars: 2, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
 
 test('pinForRun: a fresh run pins what its config names; a resume keeps its pins and never adds or drops one', () => {
   const built = tmp();

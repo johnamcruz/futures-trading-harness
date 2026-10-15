@@ -144,7 +144,7 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
   // evaluation refuses the second; the same library under another path is the same setup.
   const L = require('../../scripts/lib/learning/setup-library');
   const K = require('../../scripts/lib/learning/looks');
-  const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+  const rec = day => ({ v: L.VERSION, validBars: 2, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
   const libA = L.writeLibrary(path.join(user, 'libA'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
   const libB = L.writeLibrary(path.join(user, 'libB'), L.buildLibraryIndex([rec('2022-03-02')], { reps: 20 }));
   const copyA = path.join(user, 'copyA.json');
@@ -173,7 +173,7 @@ test('library display: off unless the config says true, part of the setup; a pai
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') };
   const raw = o => ({ runId: 'a', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2025-03-03T14:30:00Z', end: '2025-03-03T15:00:00Z', premarket: false, autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...o });
   const run = o => resolveReplay(raw(o), { baseDir: user, env, root: ROOT });
-  const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+  const rec = day => ({ v: L.VERSION, validBars: 2, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
   const libA = L.writeLibrary(path.join(user, 'libA'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
   const libB = L.writeLibrary(path.join(user, 'libB'), L.buildLibraryIndex([rec('2022-03-02')], { reps: 20 }));
   const hashA = L.readLibrary(libA).hash.slice(0, 16);
@@ -186,7 +186,9 @@ test('library display: off unless the config says true, part of the setup; a pai
   // with a library and no display: their looks in the ledger stay theirs.
   const before = r => crypto.createHash('sha256').update(JSON.stringify({
     cfg: { ...r.cfg, dataDir: null, workdir: null }, broker: r.broker, start: r.start.toISOString(), end: r.end.toISOString(), everyNth: r.everyNth,
-    premarket: r.premarket, endOfDay: r.endOfDay, prop: r.prop || null, harness: treeDigest(ROOT, HARNESS_DIRS), code: treeDigest(ROOT, CODE_DIRS),
+    premarket: r.premarket, endOfDay: r.endOfDay, prop: r.prop || null,
+    // A learning run charges its latency (replay/latency.js): named in the setup, as setupHash names it.
+    ...(r.latency ? { latency: true } : {}), harness: treeDigest(ROOT, HARNESS_DIRS), code: treeDigest(ROOT, CODE_DIRS),
     ...(r.setupLibrary ? { library: L.readLibrary(r.setupLibrary).hash } : {}),
   })).digest('hex');
   for (const o of [{}, { setupLibrary: libA }, { setupLibrary: libA, libraryDisplay: false }]) assert.strictEqual(setupHash(run(o)), before(run(o)), JSON.stringify(o));
