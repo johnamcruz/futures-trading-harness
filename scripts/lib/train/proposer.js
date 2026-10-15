@@ -18,6 +18,9 @@
  *   proposerEnv(base, scratch)                    the proposer's environment
  *   propose({ cfg, tree, flagged, home, baseEnv, maxProposals, run })   { proposals, output, code }: tree is the
  *                                                 proposer's own copy (its working directory), home its scratch home
+ *   readProbeTemplate(root), probePrompt({ template, findings, lessons, files, k })   the probe round's prompt (the
+ *                                                 skill's "### The probe prompt"; Propose-Probe-Compose, probe.js)
+ *   proposeProbes({ cfg, tree, findings, lessons, home, baseEnv, k, run })   up to k tagged skill edits, one call
  */
 
 const fs = require('fs');
@@ -91,6 +94,45 @@ function proposerEnv(base, scratch) {
   return env;
 }
 
+/**
+ * The probe round's prompt (Propose-Probe-Compose): the skill's "### The probe prompt" section, with the findings
+ * (findings.js), the lessons record's capped summary (lessons.js), the skills it may edit and k.
+ */
+function readProbeTemplate(root) {
+  const text = fs.readFileSync(path.join(root, SKILL), 'utf8');
+  const m = /### The probe prompt\n[^#]*?```text\n([\s\S]*?)\n```/.exec(text);
+  if (!m) throw new Error(`${SKILL}: no "### The probe prompt" section with a text block`);
+  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) if (!m[1].includes(k)) throw new Error(`${SKILL}: the probe prompt has no ${k}`);
+  return m[1];
+}
+
+function probePrompt({ template, findings, lessons, files, k }) {
+  const { findingLine } = require('./findings');
+  const { KINDS } = require('./probe-edit');
+  return `${MARKER}\n${template
+    .replace('{{FINDINGS}}', findings.map(findingLine).join('\n'))
+    .replace('{{LESSONS}}', lessons || 'none yet')
+    .replace('{{FILES}}', files.join('\n'))
+    .replace('{{CATEGORIES}}', FAILURES.join(', '))
+    .replace('{{KINDS}}', KINDS.join(', '))
+    .replace('{{K}}', String(k))}`;
+}
+
+/**
+ * Up to k tagged skill edits (probe-edit.js): { proposals: [{ proposal, tag } | { error, line }], output, code, prompt }.
+ * One model call. The proposer proposes; the probe screen (screen.js) and the keep rule judge.
+ */
+async function proposeProbes({ cfg, tree, findings, lessons, home, baseEnv = process.env, k = 4, run = runHarness }) {
+  const { splitTagged } = require('./probe-edit');
+  const prompt = probePrompt({ template: readProbeTemplate(tree), findings, lessons, files: editableFiles(tree).filter(f => f.startsWith('skills/')), k });
+  const env = proposerEnv(baseEnv, home);
+  const argv = buildCommand(cfg, prompt, tree, env);
+  const res = await run(argv, { cwd: tree, env, timeoutMs: (cfg.cycleTimeoutMinutes || 10) * 60000 });
+  fs.writeFileSync(path.join(home, 'output.txt'), String(res.output || ''));
+  const found = parseProposals(res.output).filter(x => !prompt.includes(x.raw)).slice(0, k);
+  return { proposals: found.map(x => (x.error ? x : splitTagged(x.proposal))), output: String(res.output || ''), code: res.code, prompt };
+}
+
 async function propose({ cfg, tree, flagged, home, baseEnv = process.env, maxProposals = 2, run = runHarness }) {
   const prompt = selfReviewPrompt({ template: readTemplate(tree), flagged, files: editableFiles(tree), maxProposals });
   const env = proposerEnv(baseEnv, home);
@@ -102,4 +144,4 @@ async function propose({ cfg, tree, flagged, home, baseEnv = process.env, maxPro
   return { proposals: parseProposals(res.output).filter(x => !prompt.includes(x.raw)).slice(0, maxProposals), output: String(res.output || ''), code: res.code, prompt };
 }
 
-module.exports = { MARKER, SKILL, readTemplate, selfReviewPrompt, editableFiles, proposerEnv, propose, flaggedLine };
+module.exports = { MARKER, SKILL, readTemplate, selfReviewPrompt, editableFiles, proposerEnv, propose, flaggedLine, readProbeTemplate, probePrompt, proposeProbes };

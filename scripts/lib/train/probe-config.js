@@ -1,0 +1,85 @@
+'use strict';
+
+/**
+ * The training loop's `probe` setting (Propose-Probe-Compose, docs/TRAINING.md): with it, each iteration's proposals
+ * come from the probe round (train/probe.js) instead of one proposer reply judged edit by edit.
+ *
+ *   probe {
+ *     replay     a stage-1 replay config (an object or a path, as the loop's `replay`): a curated practice list and
+ *                its practice settings; the probes' runs, the champion's and each edit's, use it with the loop's seed.
+ *                Its `autotrader` is the loop's (left out: the loop's is used), so the probes and the keep rule run the
+ *                same model and runner config
+ *     windows    [{ from, to }] session dates, each inside practice-train: the curated moments the probes replay
+ *                (split by session date into a probe half and a confirm half: screen.js halfOf)
+ *     k          edits the proposer writes per round (1-8, default 4)
+ *     parallel   probes replayed at once (1-4, default 1: one after another). More than 1 only with
+ *                `replay.latency: false`: a replay that charges each cycle's real time would charge probes queued at
+ *                the model server more than the champion, whose probe run runs alone; with no latency charged, both
+ *                are charged alike (none)
+ *   }
+ *
+ * It needs `modelScore`: the combined change goes through the full keep rule (train/model-verifier.js), never the
+ * screen alone.
+ *
+ *   PROBE_KEYS, PROBE_LIMITS
+ *   resolveProbe(raw, { read, modelScore, autotrader })   the resolved setting, or null without one; throws with every
+ *                                             error. autotrader: the loop's replay's, resolved
+ */
+
+const { rolesBetween } = require('../learning/splits');
+const { tradingDayStart } = require('../trading/clock');
+
+const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel']);
+const PROBE_LIMITS = Object.freeze({ k: [4, 1, 8], parallel: [1, 1, 4] });
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const sessionStart = d => tradingDayStart(new Date(`${d}T12:00:00Z`));
+/** JSON with its object keys sorted: two configs equal whatever their key order. */
+const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v));
+
+function resolveProbe(raw, { read, modelScore = null, autotrader = null } = {}) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
+  const errors = [];
+  for (const k of Object.keys(raw)) if (!PROBE_KEYS.includes(k)) errors.push(`probe.${k}: not a setting (${PROBE_KEYS.join(', ')})`);
+  if (!modelScore) errors.push('probe: the combined change goes through the full keep rule: set modelScore');
+  const windows = raw.windows;
+  if (!Array.isArray(windows) || !windows.length) errors.push('probe.windows: one or more { from, to } session-date windows in practice-train');
+  else {
+    windows.forEach((w, i) => {
+      if (!(w && DATE.test(w.from) && DATE.test(w.to) && w.from < w.to && Object.keys(w).length === 2)) { errors.push(`probe.windows[${i}]: { from, to }, YYYY-MM-DD, from before to`); return; }
+      let roles;
+      try { roles = rolesBetween(sessionStart(w.from), sessionStart(w.to)); } catch (err) { roles = [err.message]; }
+      if (!(roles.length === 1 && roles[0] === 'practice-train')) errors.push(`probe.windows ${w.from}..${w.to}: probes run on practice-train only (this touches ${roles.join(' + ')})`);
+    });
+  }
+  let replay = null;
+  try { replay = read(raw.replay); } catch (err) { errors.push(`probe.replay: ${err.message}`); }
+  if (replay) {
+    if (replay.stage !== 1) errors.push('probe.replay.stage: 1 (learn to trade): the probe screen reads stage-1 decisions');
+    if (!replay.curatedList || typeof replay.curatedList !== 'object') errors.push('probe.replay.curatedList: the curated practice list the probes replay');
+    if (!replay.practice || typeof replay.practice !== 'object') errors.push('probe.replay.practice: a curated run runs through setup-focused practice');
+    if (replay.learning === false) errors.push('probe.replay.learning: a probe is a practice-train learning run');
+  }
+  const int = (k) => {
+    const [def, min, max] = PROBE_LIMITS[k];
+    const v = raw[k];
+    if (v === undefined) return def;
+    if (!Number.isInteger(v) || v < min || v > max) errors.push(`probe.${k}: a whole number from ${min} to ${max}`);
+    return v;
+  };
+  const k = int('k');
+  const parallel = int('parallel');
+  if (replay && parallel > 1 && replay.latency !== false) errors.push('probe.parallel: more than 1 only with probe.replay.latency false (charged latency would differ from the champion\'s, whose probe run runs alone)');
+  // The same model and runner config as the keep rule's runs: the loop's own autotrader.
+  if (replay && replay.autotrader !== undefined) {
+    let own = replay.autotrader;
+    try { if (typeof own === 'string') own = read(own); } catch (err) { errors.push(`probe.replay.autotrader: ${err.message}`); own = null; }
+    if (own && canonical(own) !== canonical(autotrader)) errors.push('probe.replay.autotrader: the loop\'s replay.autotrader (the probes and the keep rule run the same model and runner config); leave it out to use the loop\'s');
+    else if (own) replay = { ...replay, autotrader: own };
+  } else if (replay) replay = { ...replay, autotrader };
+  if (errors.length) throw new Error(errors.join('\n- '));
+  return { replay, windows, k, parallel };
+}
+
+module.exports = { PROBE_KEYS, PROBE_LIMITS, resolveProbe };
