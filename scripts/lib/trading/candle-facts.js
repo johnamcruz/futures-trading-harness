@@ -91,13 +91,14 @@ const { pivots } = require('./structure-events');
 const { momentumRead } = require('./momentum');
 const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const TIMEFRAMES = [3, 5, 15, 60, 240];
+const CAN = require('../tunables').analysis().candles; // config/analysis.json candles: the pattern definitions and the reads' lengths
+const TIMEFRAMES = CAN.timeframes;
 const ATR_LEN = ATR_PERIOD;
-const VOL_LEN = 20;
-const VOL_MIN = 5;
-const SWING_K = 2;
-const MAX_ACTIVE = 50;
-const DEF = { dojiBody: 0.1, wickBody: 2, wickRange: 0.6, otherWick: 0.15, dispBody: 0.7, dispAtr: 1.5 };
+const VOL_LEN = CAN.volLen;
+const VOL_MIN = CAN.volMin;
+const SWING_K = require('../tunables').analysis().indicators.swingK;
+const MAX_ACTIVE = CAN.maxActive;
+const DEF = { dojiBody: CAN.dojiBody, wickBody: CAN.wickBody, wickRange: CAN.wickRange, otherWick: CAN.otherWick, dispBody: CAN.dispBody, dispAtr: CAN.dispAtr };
 const LABELS = ['bullish engulfing', 'bearish engulfing', 'displacement', 'hammer', 'shooting star', 'outside', 'inside', 'doji'];
 
 const r2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
@@ -363,7 +364,7 @@ function swingTargetSeries(bars, minutes, base) {
 }
 
 // The briefing's cap on level relations per candle, strongest first: the relation, then the level (LEVEL_ORDER).
-const MAX_LEVELS = 4;
+const MAX_LEVELS = CAN.maxLevels;
 const REL_RANK = { rejected: 0, broke: 1, touched: 2 };
 const LEVEL_ORDER = [/^prior RTH/, /^overnight/, /^IB/, /^opening range/, /^VWAP/, /^prior (VAH|VAL|POC)/, /^session (VAH|VAL|POC)/,
   /^1h swing/, /^15m swing/, /^CRT/, /^previous/, /^round number/];
@@ -546,7 +547,7 @@ function briefingTargets({ bars, minutes, price, oneR, tick = 0.25, frames = [mi
 }
 
 // The frames whose last completed candle's range (high, mid, low) is a target (briefingRangeTargets): 1h and 4h.
-const RANGE_FRAMES = [60, 240];
+const RANGE_FRAMES = CAN.rangeFrames;
 
 /**
  * A target level against price: its side, and its distance in whole ticks, points and R (oneR: 1R in points) to the

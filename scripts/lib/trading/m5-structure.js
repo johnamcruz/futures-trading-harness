@@ -24,7 +24,7 @@ const { lastBreaks, pivots } = require('./structure-events');
 
 const MINUTES = 5;
 // A break is news for this many 5m candles after it (the summary line's window); the JSON holds it longer.
-const RECENT = 3;
+const RECENT = require('../tunables').analysis().structure.m5Recent; // config/analysis.json
 
 function structure5m({ bars, base, fine = null, at = bars.length - 1 }) {
   const c = completedCandlesAt({ bars, base, fine, minutes: MINUTES, at });

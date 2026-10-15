@@ -80,8 +80,9 @@ function trueRange(bars) {
  * snapshot's atrStop and stop distance, the market features' atr20, the replay labels' stop multiples, the stop floor).
  * The live briefing reads both; a change to either changes what the model is shown.
  */
-const ATR_PERIOD = 14;
-const STOP_ATR_PERIOD = 20;
+const IND = require('../tunables').analysis().indicators; // config/analysis.json indicators
+const ATR_PERIOD = IND.atrPeriod;
+const STOP_ATR_PERIOD = IND.stopAtrPeriod;
 
 /** Wilder ATR (compute_atr): first value at index period-1, including the first bar's range. */
 function atr(bars, period = ATR_PERIOD) {
@@ -93,7 +94,7 @@ function atr(bars, period = ATR_PERIOD) {
  * bars; DX is 0 where the smoothed ranges aren't defined yet or are flat, so
  * the first ADX value lands at index period-1.
  */
-function adx(bars, period = 14) {
+function adx(bars, period = IND.adxPeriod) {
   const n = bars.length;
   if (n < 2 * period) return new Array(n).fill(NaN);
   const plusDm = new Array(n).fill(0);
@@ -124,7 +125,7 @@ function adx(bars, period = 14) {
  * long when a close is above the final upper band while short.
  * Returns { line, direction } with direction +1 bull / -1 bear.
  */
-function supertrend(bars, period = 10, mult = 3) {
+function supertrend(bars, period = IND.supertrendPeriod, mult = IND.supertrendMult) {
   const a = atr(bars, period);
   const n = bars.length;
   const upper = bars.map((b, i) => (b.h + b.l) / 2 + mult * a[i]);
@@ -148,7 +149,7 @@ function supertrend(bars, period = 10, mult = 3) {
   return { line, direction };
 }
 
-function keltner(bars, emaLen = 20, mult = 1.5, atrPeriod = 20) {
+function keltner(bars, emaLen = IND.keltnerLen, mult = IND.keltnerMult, atrPeriod = IND.keltnerAtr) {
   const mid = ema(bars.map(b => b.c), emaLen);
   const a = atr(bars, atrPeriod);
   return {
@@ -159,7 +160,7 @@ function keltner(bars, emaLen = 20, mult = 1.5, atrPeriod = 20) {
 }
 
 /** Most recent confirmed fractal swing high/low at each bar (confirmed k bars after the pivot). */
-function swings(bars, k = 2) {
+function swings(bars, k = IND.swingK) {
   const n = bars.length;
   const high = new Array(n).fill(NaN);
   const low = new Array(n).fill(NaN);
@@ -204,7 +205,7 @@ function etInfo(t) {
  * otherwise. The trading day starts at the 18:00 ET open, so the evening
  * session has no range until the new one closes (never the closed day's).
  */
-function openingRange(bars, minutes = 15, openMin = RTH_OPEN_MIN) {
+function openingRange(bars, minutes = IND.openingRangeMinutes, openMin = RTH_OPEN_MIN) {
   const n = bars.length;
   const high = new Array(n).fill(NaN);
   const low = new Array(n).fill(NaN);

@@ -56,7 +56,7 @@ const MAX_ROWS = 2000;
  *   vpTroughPct  a low volume node is under this % of the rows on each side
  *   vpThreshold  nodes ignore rows under this % of the POC's volume
  */
-const PARAM_DEFAULTS = { vpRows: 100, vpRowSize: 0, vpValueArea: 70, vpNodePct: 9, vpTroughPct: 7, vpThreshold: 1 };
+const PARAM_DEFAULTS = { ...require('../tunables').analysis().volumeProfile }; // config/analysis.json volumeProfile
 
 /** buildProfile's options from params (percent -> fractions); a missing param takes its default. */
 function optionsFromParams(params = {}) {
