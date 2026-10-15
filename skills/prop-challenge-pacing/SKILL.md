@@ -74,7 +74,7 @@ it:
   off, not that a winner is due. Stand down before it does: after a loss,
   only the highest-confluence setups; one loss short of it, near
   `daily_loss_soft`, or on a thin cushion, pass on anything marginal.
-- **Pacing** (`sizing.clock_k`, tuned by the phase-2 search; `off` today)
+- **Pacing** (`sizing.clock_k`, tuned by the phase-2 search, or `off`)
   caps a trade at what the pass still needs per session left. Never size up
   to catch up.
 - **Before the first live entry** (the user's steps, not an agent's): the

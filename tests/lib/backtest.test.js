@@ -774,6 +774,25 @@ test('a policy\'s exit mode: target trades each setup on its strategy\'s own exi
   assert.ok(structure.length && !structure.some(t => t.reason === 'target'));
 });
 
+test('a prop run\'s loss streak counts each trade\'s P&L before fees: a scratch (gross 0, net the fees) neither ends nor extends it', () => {
+  // 3-minute bars from 09:30 ET: 30 flat bars (no signal), then a loss, a scratch, a loss, and a fourth setup.
+  const t0 = Date.parse('2026-01-08T14:30:00Z');
+  const bars = [];
+  const bar = (o, h, l, c) => bars.push({ t: new Date(t0 + bars.length * 180000).toISOString(), o, h, l, c, v: 100 });
+  for (let k = 0; k < 30; k += 1) bar(100, 100.5, 99.5, 100);
+  // Each setup: a bar closing up (long at its close, 101), then the trade's one bar (max_bars 1): out at its close.
+  for (const out of [100, 101, 100, 101]) { bar(100, 101.25, 99.75, 101); bar(101, 101.25, 99.75, out); }
+  for (let k = 0; k < 5; k += 1) bar(100, 100.5, 99.5, 100);
+  const rules = { long: ['close > open'] };
+  const s = propStrategy({ rules, mtf: 'reversal', compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:5', min_rr: 2 }, exit: { target_r: 20, max_bars: 1 } });
+  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 20, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: { cushion_frac: 0.2 } }).trades;
+  const all = run(0);
+  assert.deepStrictEqual(all.map(t => Math.sign(t.pnl)), [-1, 0, -1, 0], 'a loss, a scratch, a loss, a scratch (off: every setup)');
+  assert.ok(all[1].net < 0, 'the scratch lost its fees');
+  // Stop 2: loss (1), scratch (still 1), loss (2): the fourth setup is refused. Counting the net, the scratch would be the second loss.
+  assert.deepStrictEqual(run(2).map(t => Math.sign(t.pnl)), [-1, 0, -1]);
+});
+
 test('a prop run stops the session after the account\'s loss_streak_stop losing trades in a row, as the gate does', () => {
   const bars = propSeries(30);
   const opts = { ...propEngine, sizing: { cushion_frac: 0.2 }, start: Date.parse('2026-01-08T00:00:00Z') };

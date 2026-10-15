@@ -66,8 +66,10 @@ in a session, no new entries until the next session: the verdict skips, the
 gate refuses (combine.entryBlock), and the backtester and the attempt
 simulator skip as well. A loss is a trade closed below its entry before fees
 (live: the broker's closing fills, one trade per round trip), a win ends the
-streak, and a scratch (closed at its entry) neither ends nor extends it, as
-the gate's own loss-streak cooldown counts. Exits and protective orders always
+streak, and a scratch (closed at its entry) neither ends nor extends it. It
+counts round trips (each trade's closing fills together), where the gate's
+timed loss-streak cooldown counts closing fills one by one; the loss, win and
+scratch rule is the same. Exits and protective orders always
 go. Two losses in a row is the point where the day is more likely tilted
 than unlucky: standing down keeps the soft daily stop and the floor out of
 reach.
