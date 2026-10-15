@@ -163,15 +163,25 @@ const readLines = file => {
   try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch (_err) { return []; }
 };
 
-/** An attempt's state as it ended (its record now): { balance, floor, profit, dayPnl, status, block, outcome }. */
+/**
+ * An attempt's state as its last day ended: { balance, floor, profit, dayPnl, status, block, outcome }. Once the day's
+ * close is recorded (end of day: recordEndOfDay) the record's state starts a new day (its P&L 0, no daily stop), so the
+ * day is read at its close instead: the attempt before that close, at the closing balance, with the day's loss streak.
+ * A day stopped by the daily loss limit, the soft stop or the loss streak stop is then `stopped`, not `open`.
+ */
 function attemptEnd(home, account) {
   const r = readAttempt(home, account.name);
   if (!r) return null;
+  const day = r.snapshot && r.snapshot.day;
+  const last = r.days.length ? r.days[r.days.length - 1] : null;
+  const closed = Boolean(day && last && last.day === day);
   const cs = stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
-  const block = combine.entryBlock(cs);
+  // The day at its close: the days before it, the closing balance (its P&L the day's), the session's streak.
+  const atClose = closed ? stateFrom(account, { ...r, days: r.days.slice(0, -1) }, last.balance) : cs;
+  const block = cs.status === 'active' ? combine.entryBlock(atClose) : combine.entryBlock(cs);
   const outcome = cs.status === 'blown' ? 'blown' : cs.status === 'passed' || combine.profit(cs) >= cs.target ? 'target'
     : block && /daily loss limit|soft daily limit|loss streak stop/.test(block) ? 'stopped' : 'open';
-  return { balance: cs.balance, floor: cs.floor, profit: Math.round(combine.profit(cs) * 100) / 100, dayPnl: cs.dayPnl, status: cs.status, block, outcome };
+  return { balance: cs.balance, floor: cs.floor, profit: Math.round(combine.profit(cs) * 100) / 100, dayPnl: atClose.dayPnl, status: cs.status, block, outcome };
 }
 
 /** The last attempt's end, once (before the next day's draw, and when the run finishes). */
@@ -302,7 +312,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
+    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
+      // The exit its composed trades are managed by, recorded at seed time: its experience lines are tagged by it,
+      // never by the repository's exit when they are written (learning/run-experience.js manifestExit).
+      exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)) },
   });
   // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
   // other time from the first window on (later days included) is stepped only while a position or working order is
@@ -549,4 +562,4 @@ function finished(paths, manifest, cycles, points) {
   return { cycles, stopped: null, done: true };
 }
 
-module.exports = { seedRunHome, runReplay, defaultDeps, withEntry, seedDay, endEpisode, EOD_RETRIES };
+module.exports = { seedRunHome, runReplay, defaultDeps, withEntry, seedDay, endEpisode, attemptEnd, EOD_RETRIES };

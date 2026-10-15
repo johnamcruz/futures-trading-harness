@@ -100,7 +100,8 @@ function replayRun(start, end, flags = [], over = {}, user = tmp()) {
   const bars = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10));
   fs.writeFileSync(config, JSON.stringify({
     runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
-    autotrader: PF.AUTOTRADER, ...(start < '2024-07-01' ? { practice: PF.PRACTICE } : {}), ...over,
+    // noWeb: the fixture's custom command attested off the web (a learning run's no-web-in-replay check).
+    autotrader: PF.AUTOTRADER, noWeb: true, ...(start < '2024-07-01' ? { practice: PF.PRACTICE } : {}), ...over,
   }));
   flags = [...flags, '--bars', `MNQ=${bars}`];
   const live = path.join(user, 'live');

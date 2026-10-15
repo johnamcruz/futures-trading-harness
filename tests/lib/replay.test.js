@@ -271,6 +271,17 @@ test('driver: one step per decision time at its time, a line each, end of day re
   // The manifest says where its decisions came from and which version of the agent made them (R33's fingerprints today).
   const man = store.readRun(w.run.paths.runDir).manifest;
   assert.strictEqual(man.source, 'replay');
+  // The exit its composed trades are managed by, recorded at seed time (its experience lines are tagged by it).
+  const XL = require('../../scripts/lib/learning/experience-log');
+  assert.deepStrictEqual(man.exit, XL.exitRecord(require('../../scripts/lib/learning/run-experience').runExit(ROOT, w.env)));
+  assert.strictEqual(man.exit.hash, XL.exitHash(man.exit));
+  // plannedExit: the run's manifest once started (a resume), whatever the repository's exit is now.
+  const RX = require('../../scripts/lib/learning/run-experience');
+  const saved = fs.readFileSync(w.run.paths.manifest, 'utf8');
+  fs.writeFileSync(w.run.paths.manifest, JSON.stringify({ ...man, exit: XL.exitRecord(XL.BRACKETS) }));
+  assert.strictEqual(RX.plannedExit(w.run, { root: ROOT }).mode, 'brackets');
+  fs.writeFileSync(w.run.paths.manifest, saved);
+  assert.deepStrictEqual(RX.plannedExit({ paths: { manifest: path.join(w.run.paths.runDir, 'none.json') } }, { root: ROOT }), man.exit, 'a fresh run: what its seed records');
   // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist: none on this one), as live records its broker's.
   assert.deepStrictEqual(man.fingerprints, require('../../scripts/lib/session/record').fingerprints(ROOT, { broker: { name: 'sim', settings: {}, refused: [] } }));
   assert.deepStrictEqual(man.versions.map(v => [v.since, v.hash]), [[lines[0].t, man.hash]], 'one version: the agent didn\'t change across the resume');

@@ -194,7 +194,7 @@ test('curatedForRun: the list\'s windows inside the run, the document\'s use the
   assert.strictEqual(C.curatedForRun({ ...at, ...MARKET, symbols: ['MES', 'mnq'] }).market.minutes, 3);
 });
 
-test('curatedPoints: from the first window on, the windows\' trade times and their days\' premarket and end of day; every other time a management time', () => {
+test('curatedPoints: from the first window on, the windows\' trade times and their days\' premarket (the first day\'s included) and end of day; every other time a management time', () => {
   const { validateConfig } = require('../../scripts/lib/autotrader');
   const { decisionPoints } = require('../../scripts/lib/replay/schedule');
   const cfg = validateConfig({ harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, premarketAt: '09:00@America/New_York', eodAt: '15:50@America/New_York', sessions: ['09:30-15:50@America/New_York'] });
@@ -204,7 +204,8 @@ test('curatedPoints: from the first window on, the windows\' trade times and the
   const kept = C.curatedPoints(all, { windows }, delay);
   const trade = kept.filter(p => p.kind === 'trade' && !p.manage).map(p => p.t.toISOString().slice(5, 16));
   assert.deepStrictEqual(trade, ['03-01T15:03', '03-01T15:06', '03-01T15:09', '03-01T15:12', '03-01T15:15', '03-01T15:18', '03-01T15:21', '03-01T15:24', '03-01T15:27', '03-01T15:30', '03-03T18:03', '03-03T18:06', '03-03T18:09', '03-03T18:12']);
-  assert.deepStrictEqual(kept.filter(p => p.kind !== 'trade' && !p.manage).map(p => `${p.kind}@${p.day}`), ['eod@2022-03-01', 'premarket@2022-03-03', 'eod@2022-03-03']);
+  // The first window day's premarket too (before its window opens), as every window day's.
+  assert.deepStrictEqual(kept.filter(p => p.kind !== 'trade' && !p.manage).map(p => `${p.kind}@${p.day}`), ['premarket@2022-03-01', 'eod@2022-03-01', 'premarket@2022-03-03', 'eod@2022-03-03']);
   // Every other time from the first window's opening on is a management time: the rest of a window's day, the time
   // before a later window, and the days without one (their premarket and end of day too).
   const manage = kept.filter(p => p.manage);
@@ -213,8 +214,9 @@ test('curatedPoints: from the first window on, the windows\' trade times and the
   assert.ok(manage.some(p => p.day === '2022-03-01' && p.t.toISOString().slice(11, 16) === '20:48'), 'to end of day');
   assert.deepStrictEqual([...new Set(manage.filter(p => p.kind !== 'trade').map(p => `${p.kind}@${p.day}`))], ['premarket@2022-03-02', 'eod@2022-03-02', 'premarket@2022-03-04', 'eod@2022-03-04']);
   assert.ok(manage.some(p => p.day === '2022-03-03' && p.t.getTime() - delay <= windows[1].from), 'before a later window too (a carried position)');
-  assert.ok(!kept.some(p => p.t.getTime() <= windows[0].from), 'nothing before the first window');
-  assert.strictEqual(kept.length, all.filter(p => p.t.getTime() > windows[0].from).length, 'every later time, stepped or managed');
+  const before = kept.filter(p => p.t.getTime() <= windows[0].from);
+  assert.deepStrictEqual(before.map(p => `${p.kind}@${p.day}${p.manage ? ' manage' : ''}`), ['premarket@2022-03-01'], 'before the first window only its day\'s premarket: no trade time, no earlier day');
+  assert.strictEqual(kept.length, all.filter(p => p.t.getTime() > windows[0].from).length + 1, 'every later time, stepped or managed, and that premarket');
   assert.deepStrictEqual(C.curatedPoints(all, { windows: [] }), []);
   assert.deepStrictEqual(C.emptyWindows(all, { windows: [...windows, { from: Date.parse('2022-03-02T23:00:00Z'), to: Date.parse('2022-03-02T23:30:00Z') }] }, delay).length, 1, 'a window outside the sessions holds no time');
   assert.deepStrictEqual(C.dayChunks('2022-03-01', '2022-03-08', 3), [['2022-03-01', '2022-03-04'], ['2022-03-04', '2022-03-07'], ['2022-03-07', '2022-03-08']]);
