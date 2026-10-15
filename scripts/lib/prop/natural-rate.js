@@ -20,6 +20,10 @@
  *             had it; 0.2: a fifth as often). A trade without a weight is refused.
  * A decision's list: listOf(decision), by default its `list`; with a single list in `rates`, every composed decision
  * without one is that list's.
+ * A run whose days started from drawn account states (prop/account-states.js) gives stateWeightOf(decision): its day's
+ * sampling weight (the natural share of its state's bucket over its share of the run's days). A list's candidates are
+ * then counted weighted (each decision stands for stateWeightOf of them), so the model's take rate is the one it would
+ * have at the natural mix of account states, not the oversampled one; without it every decision weighs 1.
  *
  * From a curated lists document (learning/curated-lists.js, the curated scan's own counts): curatedRates(doc, { list,
  * scanDays }) gives each list's candidatesPerDay as its scan candidates (coverage[list].candidates) over the trading
@@ -57,17 +61,24 @@ function validateRates(rates) {
   return out;
 }
 
-function naturalRates(stream, decisions, { rates = null, weights = null, listOf = d => d.list ?? null } = {}) {
+function naturalRates(stream, decisions, { rates = null, weights = null, listOf = d => d.list ?? null, stateWeightOf = null } = {}) {
+  const sw = d => {
+    if (!stateWeightOf) return 1;
+    const w = Number(stateWeightOf(d));
+    if (!(Number.isFinite(w) && w >= 0)) throw new Error(`natural rates: decision ${d && d.id} has no account-state weight (its day was given no drawn state)`);
+    return w;
+  };
   if (Boolean(rates) === Boolean(weights)) throw new Error('natural rates: give rates ({ <list>: { candidatesPerDay } }) or weights ({ <decision id>: w }), one of them');
   const days = stream.days.length;
   if (!days) throw new Error('natural rates: the run has no days');
   const perTrade = new Map();
+  const byIdAll = new Map((decisions || []).filter(Boolean).map(d => [d.id, d]));
   if (weights) {
     if (!isMap(weights)) throw new Error('weights: { <decision id>: w }');
     for (const t of stream.trades) {
       const w = weights[t.id];
       if (!(typeof w === 'number' && Number.isFinite(w) && w >= 0)) throw new Error(`weights: trade ${t.id} has no weight (a number, 0 or more)`);
-      perTrade.set(t.id, w / days);
+      perTrade.set(t.id, (w * (stateWeightOf ? sw(byIdAll.get(t.id) || { id: t.id }) : 1)) / days);
     }
     return { perTrade, tradesPerDay: [...perTrade.values()].reduce((a, x) => a + x, 0), lists: null, unsampled: [] };
   }
@@ -80,21 +91,24 @@ function naturalRates(stream, decisions, { rates = null, weights = null, listOf 
   const unknown = [...new Set(composed.map(listOfD).filter(l => !Object.hasOwn(rates, l)))];
   if (unknown.length) throw new Error(`natural rates: no rate for ${unknown.map(String).join(', ')} (every list the run's decisions name needs its candidatesPerDay)`);
   const lists = {};
+  const sum = xs => xs.reduce((a, d) => a + sw(d), 0);
   for (const L of names) {
     const cands = composed.filter(d => listOfD(d) === L);
-    lists[L] = { candidatesPerDay: rates[L].candidatesPerDay, candidates: cands.length, entered: cands.filter(d => d.decision === 'entered').length };
+    // Weighted by the account state each decision met (1 each without states): the counts at the natural mix.
+    lists[L] = { candidatesPerDay: rates[L].candidatesPerDay, candidates: sum(cands), entered: sum(cands.filter(d => d.decision === 'entered')) };
   }
   const byId = new Map(composed.map(d => [d.id, d]));
   for (const t of stream.trades) {
     const d = byId.get(t.id);
     if (!d) throw new Error(`natural rates: trade ${t.id} has no decision in the run`);
     const L = listOfD(d);
-    perTrade.set(t.id, lists[L].candidatesPerDay / lists[L].candidates);
+    perTrade.set(t.id, lists[L].candidates > 0 ? (lists[L].candidatesPerDay * sw(d)) / lists[L].candidates : 0);
   }
   for (const v of Object.values(lists)) v.tradesPerDay = v.candidates ? Math.round((v.candidatesPerDay * v.entered / v.candidates) * 1e6) / 1e6 : 0;
   return {
     perTrade, tradesPerDay: [...perTrade.values()].reduce((a, x) => a + x, 0), lists,
     unsampled: names.filter(L => lists[L].candidates === 0 && lists[L].candidatesPerDay > 0),
+    stateWeighted: Boolean(stateWeightOf),
   };
 }
 
@@ -112,10 +126,10 @@ function poisson(rand, mean) {
   return n;
 }
 
-function reweightStream(stream, decisions, { rates = null, weights = null, listOf, days = 252, seed = 1 } = {}) {
+function reweightStream(stream, decisions, { rates = null, weights = null, listOf, stateWeightOf = null, days = 252, seed = 1 } = {}) {
   if (!(Number.isInteger(days) && days >= 1)) throw new Error('days: a whole number of rebuilt days, 1 or more');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
-  const nat = naturalRates(stream, decisions, { rates, weights, ...(listOf ? { listOf } : {}) });
+  const nat = naturalRates(stream, decisions, { rates, weights, stateWeightOf, ...(listOf ? { listOf } : {}) });
   const pool = stream.trades.filter(t => nat.perTrade.get(t.id) > 0);
   const cum = [];
   let total = 0;
@@ -139,7 +153,7 @@ function reweightStream(stream, decisions, { rates = null, weights = null, listO
   }
   return {
     ...stream, days: out, trades: out.flatMap(d => d.trades),
-    reweighted: { days, seed, tradesPerDay: Math.round(total * 1e6) / 1e6, lists: nat.lists, unsampled: nat.unsampled, by: rates ? 'rates' : 'weights', runTrades: stream.trades.length, runDays: stream.days.length },
+    reweighted: { days, seed, tradesPerDay: Math.round(total * 1e6) / 1e6, lists: nat.lists, unsampled: nat.unsampled, by: rates ? 'rates' : 'weights', ...(nat.stateWeighted ? { accountStates: true } : {}), runTrades: stream.trades.length, runDays: stream.days.length },
   };
 }
 

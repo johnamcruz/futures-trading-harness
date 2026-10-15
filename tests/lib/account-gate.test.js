@@ -57,6 +57,26 @@ test('loss streak and daily losses come from real closing fills', () => {
   assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(20, -5, { voided: true })], now: NOW, config }), []);
 });
 
+test('the gateway counts the losses an attempt carried into the day (a seeded practice state) on top of the fills; exits never read them', () => {
+  const carried = { losses: 2, streak: 1, lastLossMs: Date.parse(minutesAgo(50)) };
+  // Two carried and one losing close today: the daily count (3).
+  assert.deepStrictEqual(fillLossState([fill(30, null), fill(20, -5)], carried), { streak: 2, losses: 3, lastLossTs: Date.parse(minutesAgo(20)) });
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [fill(30, null), fill(20, -5)], now: NOW, config, carried })), ['loss-streak', 'daily-loss-count']);
+  // A win today ends the carried streak; the count still holds the carried losses.
+  assert.deepStrictEqual(fillLossState([fill(30, 8)], carried), { streak: 0, losses: 2, lastLossTs: carried.lastLossMs });
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(30, 8)], now: NOW, config, carried }), []);
+  // The carried streak's cooldown runs from its last loss: 2 in a row 10 minutes ago, 20 minutes more.
+  const cooling = evaluateAccount({ input: order(), trades: [], now: NOW, config, carried: { losses: 2, streak: 2, lastLossMs: Date.parse(minutesAgo(10)) } });
+  assert.deepStrictEqual(checks(cooling), ['loss-streak']);
+  assert.match(cooling[0].message, /20 min more/);
+  // Three carried: done for the day with no fill at all.
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [], now: NOW, config, carried: { losses: 3, streak: 0, lastLossMs: null } })), ['daily-loss-count']);
+  // An exit never reads them.
+  assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] x' }), positions: long1, now: NOW, config, carried: { losses: 9, streak: 9, lastLossMs: NOW.getTime() } }), []);
+  // Malformed carried counts add nothing (never fewer than the fills).
+  assert.deepStrictEqual(fillLossState([fill(20, -5)], { losses: -4, streak: 'x', lastLossMs: NaN }), { streak: 1, losses: 1, lastLossTs: Date.parse(minutesAgo(20)) });
+});
+
 test('missing account data blocks instead of reading as flat; unknown position types throw', () => {
   assert.throws(() => rawEvaluate({ input: order(), positions: null, orders: [], trades: [], config }), /positions from the server is not a list/);
   assert.throws(() => netPosition([{ contractId: CONTRACT, type: 9, size: 1 }], CONTRACT), /unknown type/);

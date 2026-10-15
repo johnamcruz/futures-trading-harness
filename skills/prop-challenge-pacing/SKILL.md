@@ -41,11 +41,17 @@ it:
   any entry block) and the live verdicts, from the runner's latest snapshot.
   Its facts (attempt day, profit needed, room to the daily limit and
   `daily_loss_soft`, today's trades and losses, the session's losing streak,
-  consistency headroom)
-  let you stand down before the gate refuses: a stop taking most of the room,
-  losses one short of the gate's limits, or headroom spent ends the day; a
-  thin cushion takes only the clearest setup; little profit left, protect
-  it. Headroom is a cap, not a target.
+  consistency headroom) count every trade of the day, including any closed
+  before your first cycle, as the gate counts them.
+- **Read the attempt line before the setup:**
+  - Near the floor: clearest setup only, at or under the verdict's size, or
+    pass (a pass costs a day, a blow the attempt).
+  - After a loss today: the bar rises; never trade to win it back.
+  - One loss short of `loss_streak_stop` or the gate's daily loss count: the
+    next entry is the day's last.
+  - A stop would take most of the day's room, or headroom is spent: done for
+    the day. Headroom is a cap, not a target.
+  - Near the target: smaller or none; never risk the day the pass depends on.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;
@@ -78,9 +84,8 @@ it:
 - **Loss streak stop.** After `loss_streak_stop` losses in a row in a
   session (a win ends the streak, a scratch neither), the gate refuses
   entries until the next session: losses in a row mean the day's read is
-  off, not that a winner is due. Stand down before it does: after a loss,
-  only the highest-confluence setups; one loss short of it, near
-  `daily_loss_soft`, or on a thin cushion, pass on anything marginal.
+  off, not that a winner is due. Stand down before it does (the attempt
+  line, above).
 - **Pacing** (`sizing.clock_k`, tuned by the phase-2 search, or `off`)
   caps a trade at what the pass still needs per session left. Never size up
   to catch up.

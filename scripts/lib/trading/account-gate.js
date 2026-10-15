@@ -115,10 +115,15 @@ function closingFills(trades) {
     .sort((a, b) => a.ts - b.ts);
 }
 
-function fillLossState(trades) {
-  let streak = 0;
-  let losses = 0;
-  let lastLossTs = null;
+/**
+ * The day's losing closes and losing streak from its fills, on top of `carried` (prop-state.js carriedLossState: what a
+ * running attempt carried into the day from before its first snapshot; null: none). Carried counts only ever add.
+ */
+function fillLossState(trades, carried = null) {
+  const n = x => (Number.isInteger(x) && x > 0 ? x : 0);
+  let streak = carried ? n(carried.streak) : 0;
+  let losses = carried ? n(carried.losses) : 0;
+  let lastLossTs = carried && Number.isFinite(carried.lastLossMs) ? carried.lastLossMs : null;
   for (const f of closingFills(trades)) {
     if (f.pnl < 0) {
       streak += 1;
@@ -143,7 +148,7 @@ function restingSize(orders, contractId, sideSign, types) {
  * Returns violations [{check, message}] for a place_order given live facts
  * { positions, orders, trades } from the broker MCP server.
  */
-function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null }) {
+function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null, carried = null }) {
   const ledger = ledgerNamed(input, given);
   // Missing or malformed account data must block, never read as "flat". The fills count losses for entries only:
   // an [exit] / [protect] never reads them (accountFacts doesn't fetch them), so a fault there never holds one.
@@ -248,7 +253,8 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       + 'Cancel leftovers (stops or targets of a closed trade) or let a pending entry work; one entry at a time.'
     : null);
 
-  const { streak, losses, lastLossTs } = fillLossState(trades);
+  // `carried`: the losses a running attempt carried into the day (prop-state.js carriedLossState); they only add.
+  const { streak, losses, lastLossTs } = fillLossState(trades, carried);
   if (streak >= config.maxConsecutiveLosses && lastLossTs !== null) {
     const remaining = lastLossTs + config.lossCooldownMin * 60000 - now.getTime();
     add('loss-streak', remaining > 0

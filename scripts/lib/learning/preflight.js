@@ -15,9 +15,10 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
  * adapters-in-sync, facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-facts, monte-carlo. A check of a feature on another branch
- * (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones (#188-#191) are judged, and a
- * run or prompt without them FAILs. Stage 2's own requirements are N/A until phase 2 (stage).
+ * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. A check of a feature
+ * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
+ * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): the account states on a
+ * practice-train run, the prop risk rules and the Monte Carlo.
  *
  *   CHECKS                                  [check function], in report order
  *   runChecks(ctx)                          { ok, results }; a check that throws is a FAIL with its message
@@ -50,9 +51,8 @@ const na = (check, needs) => r(check, NA, `not available (needs ${needs})`);
 const NEEDS = Object.freeze({
   scorecardComposed: 'fix/scorecard-composed: the scorecard knows composed setups, exporting SCORES_COMPOSED',
   propMissing: 'feat/prop-portfolio-missing: loss_streak_stop and the exit mode',
-  accountFacts: 'phase 2: the account facts shown',
-  accountStates: 'phase 2, feat/prop-mc-model: the account states (a curated run refuses prop, so they come from it, not from a prop attempt)',
-  monteCarlo: 'phase 2, feat/prop-mc-model: the 30-day Monte Carlo',
+  accountFacts: 'the attempt line\'s facts (combine.attemptFacts, shown by the runner\'s account text)',
+  monteCarlo: 'the 30-day Monte Carlo (prop/model-score.js)',
 });
 
 const LIFECYCLE = 'trade_lifecycle';
@@ -347,11 +347,18 @@ function stage(ctx) {
   if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'off') bad.push('the risk record stays hidden (riskRecordDisplay off)');
   if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'comparison-arm' && ctx.run.comparisonArm !== true) bad.push('the risk record is shown only on a run declared a comparison arm (comparisonArm)');
   if (req.prop === 'none' && ctx.run.prop) bad.push('no prop attempt in stage 1 (account states are stage 2\'s)');
+  if (req.accountStates === 'none' && ctx.run.accountStates) bad.push('no account states in stage 1 (they are stage 2\'s)');
+  // Stage 2's own: a practice run's days start from drawn account states (a curated run refuses prop, so they are its
+  // account), and the prop risk rules and the Monte Carlo are there to judge it.
+  if (req.accountStates === role && !ctx.run.accountStates) bad.push(`a stage ${st} practice run starts its days from drawn account states (accountStates: scripts/account-states.js draw)`);
+  if (st === 2) {
+    const f = ctx.read.features();
+    if (!f.lossStreakStop || !f.exitMode) bad.push(`the prop risk rules are needed (${NEEDS.propMissing})`);
+    if (!f.monteCarlo) bad.push(`the Monte Carlo is needed (${NEEDS.monteCarlo})`);
+  }
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
-  // Stage 2's own requirements (the account states, the prop risk rules, the Monte Carlo) are phase 2's: a curated run
-  // refuses prop (curated-lists), so its account states come from feat/prop-mc-model, not a prop attempt.
-  if (req.phase2) return r('stage', NA, `stage ${st} on ${role}: its stage-1 part holds; its own requirements are not available (needs ${NEEDS.accountStates}; ${NEEDS.propMissing}; ${NEEDS.monteCarlo})`);
-  return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden, no prop`);
+  const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ', no prop';
+  return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden${own}`);
 }
 
 function scorecardComposed(ctx) {
@@ -405,20 +412,77 @@ function rulebookMissing(ctx) {
   return r('rulebook-missing', PASS, `loss_streak_stop and exit mode ${entry.exit.mode}`);
 }
 
+/**
+ * The run's account states (replay/config.js accountStates, prop/account-states.js): the document still the one the
+ * config resolved, drawn on the account the policy strategy trades (the runner's attempt is that account's), from
+ * practice-train runs only, under the order gate's loss limits now, and every bucket the paths have given a day (else
+ * the reweighting can't restore the natural rates). N/A for a run without them.
+ */
+function accountStates(ctx) {
+  const st = ctx.run.accountStates;
+  if (!st) return r('account-states', NA, 'the run\'s days start from no drawn account states');
+  let doc;
+  try { doc = ctx.read.statesDoc(st.file); } catch (e) { return r('account-states', FAIL, errText(e)); }
+  const bad = [];
+  if (doc.hash !== st.hash) bad.push(`its hash ${doc.hash.slice(0, 12)} is not the config's ${st.hash.slice(0, 12)}`);
+  const p = policyOf(ctx);
+  if (!p || p.account !== doc.account) bad.push(`drawn on ${doc.account}, but ${POLICY} trades ${p ? p.account : 'no account'}`);
+  const roles = [...new Set((doc.source || []).map(x => x.role))];
+  if (!roles.length || roles.some(x => x !== 'practice-train')) bad.push(`drawn from ${roles.length ? roles.join(', ') : 'no named'} runs, not practice-train only`);
+  const gate = ctx.read.gateLimits();
+  if (JSON.stringify(doc.gate) !== JSON.stringify(gate)) bad.push(`drawn under the gate's loss limits ${JSON.stringify(doc.gate)}, not today's ${JSON.stringify(gate)}`);
+  const un = st.assignment.unsampled;
+  if (un.length) bad.push(`no day of the run starts in ${un.join(', ')}: the reweighting can't restore the natural rates (draw more, or run more days)`);
+  if (bad.length) return r('account-states', FAIL, `${doc.hash.slice(0, 12)}: ${bad.join('; ')}`);
+  const days = st.assignment.days.length;
+  const by = Object.entries(st.assignment.sampledDays).filter(([, n]) => n).map(([b, n]) => `${b} ${n} (weight ${st.assignment.weights[b]})`).join(', ');
+  return r('account-states', PASS, `${doc.hash.slice(0, 12)} on ${doc.account}: ${days} day(s): ${by}`);
+}
+
+/** Words that would tell the model its account state was drawn: never in the attempt line. */
+const DRAWN = /\b(drawn|draws?|sampl\w*|bucket\w*|weight\w*|seed\w*|oversampl\w*)\b/i;
+
+/**
+ * The attempt line the model is shown (the runner's account text, from a real attempt record and snapshot: the live
+ * path) carries its facts: balance, floor, cushion, profit against the target, the day of the attempt, the profit still
+ * needed, the room to the daily limit and the soft stop (where the account has them), today's trades and losses and the
+ * losing streak; and nothing that says it was drawn. On the run's account states (an after-losses draw when there is
+ * one), else a fresh attempt on the policy's account.
+ */
 function accountFacts(ctx) {
   if (!ctx.read.features().accountFacts) return na('account-facts', NEEDS.accountFacts);
-  return r('account-facts', PASS, 'the account facts are shown');
+  const st = ctx.run.accountStates;
+  const doc = st ? ctx.read.statesDoc(st.file) : null;
+  const p = policyOf(ctx);
+  const account = doc ? doc.account : p && p.account;
+  const draw = doc ? doc.draws.find(d => d.bucket === 'after-losses') || doc.draws[0] : null;
+  if (!account) return r('account-facts', FAIL, `no account to show: ${POLICY} names none and the run has no account states`);
+  const line = ctx.read.attemptLine(account, draw ? draw.state : null, ctx.run.start);
+  const a = ctx.read.accountProfile(account);
+  const want = [/balance \$/, /floor \$/, /cushion \$/, /profit [+-]?\$[\d,.]+ of \$/, /\bday \d+\b/, /needs \$/, /today \d+ trades?, \d+ loss(es)?/, /losing streak \d+/];
+  if (a && a.daily_loss_limit > 0) want.push(/daily room \$/);
+  if (a && a.daily_loss_soft > 0) want.push(/soft stop \$/);
+  const missing = want.filter(re => !re.test(line)).map(re => re.source);
+  if (missing.length) return r('account-facts', FAIL, `the attempt line misses ${missing.join(', ')}: ${line.trim().slice(0, 300)}`);
+  if (DRAWN.test(line)) return r('account-facts', FAIL, `the attempt line says the state was drawn ("${line.match(DRAWN)[0]}")`);
+  if (draw) {
+    const s = draw.state;
+    const shows = [`today ${s.tradesToday} trade`, `${s.lossesToday} loss`, `losing streak ${s.lossStreak}`, `day ${s.sessionsDone + 1}`];
+    const off = shows.filter(x => !line.includes(x));
+    if (off.length) return r('account-facts', FAIL, `the seeded attempt line doesn't show its state (${off.join(', ')}): ${line.trim().slice(0, 300)}`);
+  }
+  return r('account-facts', PASS, `${account}${draw ? ` from a drawn ${draw.bucket} state` : ', a fresh attempt'}: balance, floor, cushion, day, profit needed, the daily and soft room, today's trades, losses and streak shown; nothing says it was drawn`);
 }
 
 function monteCarlo(ctx) {
   if (!ctx.read.features().monteCarlo) return na('monte-carlo', NEEDS.monteCarlo);
-  return r('monte-carlo', PASS, 'the 30-day Monte Carlo is configured');
+  return r('monte-carlo', PASS, `the 30-day Monte Carlo scores the run at its end (prop/model-score.js)${ctx.run.accountStates ? ', each decision weighted back to the natural mix of account states' : ''}`);
 }
 
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -497,6 +561,36 @@ function sampleBriefing({ barsFiles, env }, { symbol, minutes, start, end, barDe
   return { briefing, now, limitMin, current: current(briefing, now) };
 }
 
+/** Whether the module at scripts/lib/<parts> under root exports the function `name` (never from its text). */
+function exported(root, parts, name) {
+  try { return typeof require(path.join(root, 'scripts', 'lib', ...parts))[name] === 'function'; } catch (_err) { return false; }
+}
+
+/**
+ * The attempt line the runner would show for an attempt on account `name` (from `state`, a drawn account state, or a
+ * fresh attempt) at `at`: the live path, in a scratch home: the attempt record (prop-state seedAttempt or startAttempt),
+ * the runner's first snapshot, its summaries (prop/live-runner.js) and its account text (autotrader.js accountText).
+ */
+function attemptLine(root, env, name, state, at = new Date()) {
+  const os = require('os');
+  const ps = require('../trading/prop-state');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-preflight-'));
+  try {
+    const account = require('../trading/accounts').accountNamed(root, name, env);
+    const now = new Date(at);
+    if (state) ps.seedAttempt(home, account, { day: require('../trading/clock').tradingDayKey(now), at: now.toISOString(), state });
+    else ps.startAttempt(home, account, now);
+    const balance = state ? state.balance : account.starting_balance;
+    ps.snapshot(home, account, balance, now, { open: 0 });
+    const { strategies } = require('../trading/strategies').loadStrategies(root, env);
+    const hooks = require('../prop/live-runner').createPropHooks({ root, env, home, client: null, accountId: null, strategies: () => strategies });
+    const attempts = hooks.summaries(now, balance);
+    return require('../autotrader').accountText({ id: 'account', at: now.toISOString(), balance, positions: [], workingOrders: 0, attempts });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
+
 function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
   const exists = rel => fs.existsSync(path.join(root, rel));
   return {
@@ -530,6 +624,10 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       return dir ? rb.loadRulebookFile(path.join(dir, name, rb.FILE)) : null;
     },
     sizingKeys: () => [...require('../trading/rulebook').SIZING_KEYS],
+    statesDoc: file => require('../prop/account-states').readDocument(file),
+    gateLimits: () => ({ ...require('../prop/attempts').gateLimits(env) }),
+    accountProfile: name => { try { return require('../trading/accounts').accountNamed(root, name, env); } catch (_err) { return null; } },
+    attemptLine: (name, state, at) => attemptLine(root, env, name, state, at),
     features: once(() => {
       const rb = require('../trading/rulebook');
       // The scorecard scores composed setups when its module says so (an exported SCORES_COMPOSED: true, as the rulebook's
@@ -544,8 +642,10 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
         lossStreakStop: Object.hasOwn(rb.ITEMS, 'loss_streak_stop'),
         exitMode: rb.EXIT_KEYS.includes('mode'),
         skillUsage,
-        accountFacts: false,
-        monteCarlo: false,
+        // The attempt line's facts are merged when the runner's account text and the facts function are exported; the
+        // Monte Carlo when the model score is.
+        accountFacts: exported(root, ['autotrader.js'], 'accountText') && exported(root, ['trading', 'combine.js'], 'attemptFacts'),
+        monteCarlo: exported(root, ['prop', 'model-score.js'], 'scoreRun'),
       };
     }),
   };
@@ -579,6 +679,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
-  crosswalkOf, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
+  crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };

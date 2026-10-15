@@ -8,9 +8,12 @@
  *                             charged; the history library hidden (libraryDisplay off); no prop attempt (account states
  *                             are stage 2's); the risk record hidden (riskRecordDisplay off). At its end: the skill-usage report, the scorecard summary and R by setup;
  *                             on a validate run, the stage-1 exit test (EXIT_TEST).
- *   stage 2, pass prop        stage 1's, plus the account states, account facts and prop risk rules (phase 2:
- *                             feat/prop-mc-model, feat/prop-portfolio-missing; not available until merged); the model's
- *                             risk record (riskRecordDisplay) only on a run declared a comparison arm (comparisonArm). At its end:
+ *   stage 2, pass prop        stage 1's, plus the account states (accountStates: each curated practice day starts from a
+ *                             state drawn from the model's own 30-day Monte Carlo paths, prop/account-states.js; required
+ *                             on practice-train), the account facts and the prop risk rules;
+ *                             the model's risk record (riskRecordDisplay) only on a run declared a comparison arm
+ *                             (comparisonArm). At its end: the practice by
+ *                             account state (each attempt's end, raw and reweighted to the natural mix of states) and
  *                             the 30-day Monte Carlo by account state; on a validate run, the promotion gate
  *                             (prop/promotion.js, frozen).
  *
@@ -33,7 +36,7 @@ const STAGES = Object.freeze({
   1: Object.freeze({
     name: 'learn to trade',
     defaults: Object.freeze({ latency: true, libraryDisplay: false, riskRecordDisplay: false }),
-    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true, riskRecordDisplay: true, prop: 'set' }),
+    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true, riskRecordDisplay: true, prop: 'set', accountStates: 'set' }),
   }),
   2: Object.freeze({
     name: 'pass prop',
@@ -76,7 +79,7 @@ function applyStage(raw) {
   const errors = [];
   for (const [k, v] of Object.entries(preset.refused)) {
     if (!has(r, k)) continue;
-    if (v === 'set' || r[k] === v) errors.push(`${k}: ${JSON.stringify(r[k])} contradicts stage ${r.stage} (${preset.name})${k === 'prop' ? ': account states are stage 2\'s' : ''}; remove it or change the stage`);
+    if (v === 'set' || r[k] === v) errors.push(`${k}: ${JSON.stringify(r[k])} contradicts stage ${r.stage} (${preset.name})${['prop', 'accountStates'].includes(k) ? ': account states are stage 2\'s' : ''}; remove it or change the stage`);
   }
   for (const k of preset.comparisonOnly || []) {
     if (r[k] === true && r.comparisonArm !== true) errors.push(`${k}: true in stage ${r.stage} (${preset.name}) only on a run declared a comparison arm (comparisonArm: true); remove it or declare the arm`);
@@ -86,7 +89,8 @@ function applyStage(raw) {
 
 function stageRequirements(stage) {
   if (!STAGES[stage]) return null;
-  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: stage === 1 ? 'off' : 'comparison-arm', prop: stage === 1 ? 'none' : 'allowed', phase2: stage === 2 };
+  // accountStates: where the preset requires the run's days to start from drawn account states ('none': refused).
+  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: stage === 1 ? 'off' : 'comparison-arm', prop: stage === 1 ? 'none' : 'allowed', accountStates: stage === 1 ? 'none' : 'practice-train', phase2: false };
 }
 
 const fmt = x => (x === null || x === undefined || !Number.isFinite(x) ? '-' : x.toFixed(2));
@@ -179,6 +183,20 @@ function skillUsageLines(merged, rd) {
   return require('../learning/learning-report').usageText(u).trimEnd().split('\n');
 }
 
+const pctOf = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1)}%`);
+const rateText = r => `${pctOf(r.raw)} as practised, ${pctOf(r.weighted)} reweighted`;
+
+/** The practice by account state (prop/account-states.js practiceByState): each attempt's end, raw and reweighted. */
+function practiceLines(log, planned = null) {
+  if (!log.some(x => x.kind === 'start')) return ['practice by account state: no day started from a drawn state (accountStates)'];
+  const p = require('../prop/account-states').practiceByState(log);
+  const one = (name, v) => `  ${name}: ${v.attempts} attempt(s); blown ${rateText(v.blown)}; stopped for the day ${rateText(v.stopped)}; at the target ${rateText(v.target)}; mean P&L ${fmt(v.pnl.raw)} as practised, ${fmt(v.pnl.weighted)} reweighted`;
+  return [
+    `practice by account state: ${p.days} day(s) from drawn states, ${p.ended} ended (reweighted: each to its state's natural share of the model's own Monte Carlo paths; weights from the planned assignment; ${p.days} of ${planned === null ? '?' : planned} days run)`,
+    one('all', p.all), ...Object.entries(p.byBucket).map(([b, v]) => one(b, v)),
+  ];
+}
+
 function stageReport(run, opts = {}) {
   if (!run.stage) return [];
   try {
@@ -214,10 +232,11 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
     for (const x of tests) lines.push(`  ${x.status} ${x.test}: ${x.detail}`);
   }
   if (run.stage === 2) {
+    lines.push(...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir), run.accountStates && run.accountStates.assignment ? run.accountStates.assignment.days.length : null));
     lines.push(f.monteCarlo ? '30-day Monte Carlo by account state: see the prop report' : '30-day Monte Carlo by account state: N/A (phase 2, needs feat/prop-mc-model)');
     if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');
   }
   return lines;
 }
 
-module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, rBySetup, stageReport };
+module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, rBySetup, stageReport, practiceLines };

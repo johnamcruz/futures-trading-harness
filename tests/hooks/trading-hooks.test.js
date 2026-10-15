@@ -1506,6 +1506,54 @@ test('order gate: after the rulebook\'s loss_streak_stop losing trades in a row 
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate: an attempt seeded from a drawn practice state carries its losses into the day: the streak stop and the daily loss count trigger from it; an exit still goes', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+  const account = loadAccounts(REPO, {}).accounts.reduce((a, b) => (b.starting_balance < a.starting_balance ? b : a));
+  const n = account.loss_streak_stop;
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const start = account.starting_balance;
+  const run = (carried, input = order) => {
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: HOOK_ACCOUNTS });
+    const state = { days: [100], peak: start + 100, dayPnl: -60, balance: start + 40, ...carried };
+    prop.seedAttempt(env.FTH_HOME, account, { day: tradingDayKey(new Date(TEST_NOW)), at: new Date(Date.parse(TEST_NOW) - 45 * 60000).toISOString(), state });
+    prop.snapshot(env.FTH_HOME, account, state.balance, new Date(Date.parse(TEST_NOW) - 60000));
+    prop.appendVerdict(env.FTH_HOME, {
+      strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, maxSize: 18,
+      bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    return gate(orderPayload(input), env);
+  };
+  const ok = run({ tradesToday: 1, lossesToday: 1, lossStreak: n - 1 });
+  assert.strictEqual(ok.code, 0, ok.stderr);
+  const streak = run({ tradesToday: n, lossesToday: n, lossStreak: n });
+  assert.strictEqual(streak.code, 2);
+  assert.match(streak.stderr, new RegExp(`\\[combine\\] ${account.name}: ${n} losing trades? in a row this session, at the loss streak stop`));
+  // The gate's own count (FTH_MAX_DAILY_LOSSES, 3), no review in the journal: from the carried losses alone.
+  const count = run({ tradesToday: 3, lossesToday: 3, lossStreak: 0 });
+  assert.strictEqual(count.code, 2);
+  assert.match(count.stderr, /\[daily-loss-count\] 3 losing trades this trading day/);
+  const exit = run({ tradesToday: 3, lossesToday: 3, lossStreak: n }, { ...EXIT_BASE, contractId: order.contractId, size: 1, side: 'sell', rationale: '[exit] flatten' });
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('MCP gateway wiring: an attempt seeded with losses carried into the day refuses an entry on the fills\' count; an exit is forwarded', { timeout: 60000 }, async () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+  const account = loadAccounts(REPO, {}).accounts.reduce((a, b) => (b.starting_balance < a.starting_balance ? b : a));
+  const home = tmpDir();
+  const start = account.starting_balance;
+  prop.seedAttempt(home, account, { day: tradingDayKey(new Date(TEST_NOW)), at: new Date(Date.parse(TEST_NOW) - 45 * 60000).toISOString(), state: { days: [100], peak: start + 100, dayPnl: -60, balance: start + 40, tradesToday: 3, lossesToday: 3, lossStreak: 0 } });
+  const text = r => r.result.content[0].text;
+  const entry = await gatewayRun({ FTH_HOME: home, FTH_ACCOUNTS_DIRS: HOOK_ACCOUNTS }, [call(1, 'place_order', ORDER)]);
+  assert.ok(entry.byId[1].result.isError, text(entry.byId[1]));
+  assert.match(text(entry.byId[1]), /3 losing closes this trading day \(from fills; limit 3\)/);
+  const exit = await gatewayRun({ FTH_HOME: home, FTH_ACCOUNTS_DIRS: HOOK_ACCOUNTS, FAKE_POSITIONS: LONG1 }, [call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' })]);
+  assert.strictEqual(text(exit.byId[2]), 'forwarded:tools/call:place_order');
+});
+
 test('order gate: a live attempt past its sessions still trades (sessions bound training, not the firm)', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');
