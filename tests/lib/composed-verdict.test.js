@@ -16,6 +16,8 @@ test('the verdict on a compose record: decideSetup on its side and stop, at its 
   const v = composedVerdict(args(home, rec));
   // $400 budget, 112 x $0.50 + $0.74 = $56.74 a micro: 7.
   assert.deepStrictEqual([v.action, v.maxSize, v.contract, v.stopTicks, v.direction, v.bar, v.record, v.strategy, v.component], ['full', 7, 'MNQ', 111, 'long', LC.BAR, rec.id, 'prop_portfolio', 'trade_lifecycle']);
+  // It lasts as long as the record it sized (two base bars after the bar's close), not decideSetup's one bar.
+  assert.strictEqual(v.expiresAt, LC.EXPIRES);
   assert.deepStrictEqual(composedVerdict(args(home, rec)), v, 'the recorded one again');
   assert.strictEqual(readVerdicts(home).length, 1, 'recorded once');
   // Another record on the bar: its own verdict.
@@ -35,6 +37,10 @@ test('the verdict skips (fails closed) with no attempt, no snapshot or no bar; a
   const thin = P.propHome({ balance: 48050 });
   const v = composedVerdict(args(thin.home, thin.rec));
   assert.strictEqual(v.action, 'skip');
+  // A skip stays expired at once (never stretched to the record's expiry).
+  assert.notStrictEqual(v.expiresAt, LC.EXPIRES);
+  const p2 = P.propHome();
+  assert.strictEqual(composedVerdict(args(p2.home, { ...p2.rec, expiresAt: null })).expiresAt, '2026-10-07T14:03:00.000Z', 'no readable record expiry: decideSetup\'s own');
 });
 
 test('pacing on a composed trade: the policy\'s clock_k caps the verdict at k x what the pass still needs per session left; off leaves the budget', () => {

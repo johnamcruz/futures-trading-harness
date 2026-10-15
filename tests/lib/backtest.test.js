@@ -8,12 +8,12 @@ const { loadBars, aggregate, barMinutes, epochMs, parseCsv } = require('../../sc
 const { excelSerialToMs } = require('../../scripts/lib/backtest/xlsx');
 const { trailStep, snapStop } = require('../../scripts/lib/trading/trail');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
-const { runBacktest, validateBacktestConfig } = require('../../scripts/lib/backtest/run');
+const { runBacktest, validateBacktestConfig, policyStrategy } = require('../../scripts/lib/backtest/run');
 const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN, FLOW_POLICY } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
 
 /** The fixture rules strategies fx_break and fx_cross (tests/fixtures/strategies-fx), loaded beside the shipped ones. */
 const FX = { FTH_STRATEGIES_DIRS: FX_STRATEGIES };
@@ -315,57 +315,46 @@ function tinyAccount(accounts) {
   return path.join(accounts, 'tiny');
 }
 
-test('prop challenge mode: a policy strategy\'s attempts from each start, reported by month', () => {
-  const dir = tmpDir();
-  const accounts = path.join(dir, 'accounts');
-  listPolicies(tinyAccount(accounts), ['prop_fx']);
-  const strategiesDir = path.join(dir, 'strategies');
-  fs.mkdirSync(path.join(strategiesDir, 'prop_fx'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'prop_fx', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-    .replace('name: prop_portfolio', 'name: prop_fx').replace(/^strategies: .*$/m, 'strategies: [fx_break]').replace(/^account: .*$/m, 'account: tiny'));
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_fx' };
-  const { report, runDir } = runBacktest(base, { root: ROOT, outRoot: dir, env });
-  assert.strictEqual(report.prop, 'prop_fx');
-  assert.deepStrictEqual(report.strategies, ['fx_break']);
-  assert.strictEqual(report.contracts, 'auto');
-  assert.ok(report.baseline.attempts > 0);
-  assert.strictEqual(report.baseline.passed + report.baseline.blown + report.baseline.timeout + report.baseline.unfinished, report.baseline.attempts);
-  assert.ok(fs.existsSync(path.join(runDir, 'combine.md')));
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, account: 'tiny' }, ROOT), /comes from a policy strategy/);
-  // Trained policy bundles are retired: a config naming one is refused, never run as if it weren't there.
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: trained policy bundles are retired/);
-  assert.throws(() => runBacktest({ ...base, prop: 'fx_break' }, { root: ROOT, outRoot: dir, env }), /a prop run needs a policy strategy \(signal: policy\)/);
-  assert.throws(() => runBacktest({ ...base, prop: 'nope' }, { root: ROOT, outRoot: dir, env }), /prop: nope is not a strategy/);
-  assert.strictEqual(report.withPolicy, undefined);
-  assert.strictEqual(report.policy, undefined);
-  assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
+test('the backtester has no prop runs: a config naming prop, every, account, sizing or a bundle is refused', () => {
+  // The mechanical prop runs retired (docs/research/mechanical-prop-backtester.md); the policy's parts are elsewhere.
+  for (const [k, v, msg] of [['prop', 'prop_portfolio', /prop: the backtester's prop runs are retired/], ['every', 5, /every: the backtester's prop runs are retired/],
+    ['account', 'tiny', /comes from a policy strategy/], ['sizing', {}, /comes from a policy strategy/], ['bundle', 'p', /bundle: trained policy bundles are retired/]]) {
+    assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, [k]: v }, ROOT), msg, k);
+  }
 });
 
-test('prop challenge mode sizes from the account\'s rulebook and folds its multiplier items in, as the live verdict does', () => {
-  // A fixture account with a rulebook listing the policy: its sizing and exit come from there. An enforced
-  // multiplier item whose fact the backtester doesn't have (none today, as the runner) skips every setup.
+test('policyStrategy trades what live trades: an active policy leaves out a paper component (still counted as disagreement); a paper policy keeps it', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
   const tiny = tinyAccount(accounts);
-  const bookFile = path.join(tiny, 'RULEBOOK.md');
-  const fresh = fs.readFileSync(bookFile, 'utf8');
-  const shipped = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
-  const book = multipliers => { fs.writeFileSync(bookFile, fresh); listPolicies(tiny, ['prop_fx'], { multipliers }); };
   const strategiesDir = path.join(dir, 'strategies');
-  fs.mkdirSync(path.join(strategiesDir, 'prop_fx'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'prop_fx', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-    .replace('name: prop_portfolio', 'name: prop_fx').replace(/^strategies: .*$/m, 'strategies: [fx_break]').replace(/^account: .*$/m, 'account: tiny'));
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_fx' };
-  book(null);
-  const plain = runBacktest(base, { root: ROOT, outRoot: dir, env }).report;
-  assert.deepStrictEqual(plain.sizing, { ...require('../../scripts/lib/trading/combine').DEFAULT_SIZING, ...shipped.sizing });
-  assert.ok(plain.baseline.trades > 0);
-  book(['      - item: multipliers', '        fact: probe', '        values:', '          ok: 1']);
-  const gated = runBacktest(base, { root: ROOT, outRoot: dir, env }).report;
-  assert.strictEqual(gated.baseline.attempts, plain.baseline.attempts);
-  assert.strictEqual(gated.baseline.trades, 0, 'a multiplier item without its fact skips every setup (fails closed)');
+  const policy = (name, list, status = 'active') => {
+    listPolicies(tiny, [name]);
+    fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });
+    fs.writeFileSync(path.join(strategiesDir, name, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+      .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace(/^account: .*$/m, 'account: tiny')
+      .replace(/^status: active\b/m, `status: ${status}`));
+  };
+  // va_paper: a paper copy of the fixture fx_value_area; the fixture fx_break is active.
+  fs.mkdirSync(path.join(strategiesDir, 'va_paper'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(FX_GOLDEN, 'fx_value_area', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: fx_value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  policy('prop_mixed', ['va_paper', 'fx_break']);
+  policy('prop_mixed_paper', ['va_paper', 'fx_break'], 'paper');
+  policy('prop_all_paper', ['va_paper']);
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES},${FX_GOLDEN}` };
+  const names = xs => xs.map(s => s.name);
+  const mixed = policyStrategy(ROOT, 'prop_mixed', env);
+  assert.deepStrictEqual(names(mixed.components), ['fx_break']);
+  assert.deepStrictEqual(mixed.leftOut.map(x => x.name), ['va_paper']);
+  assert.match(mixed.leftOut[0].why, /va_paper has status "paper": prop_mixed trades only its active strategies live/);
+  // ... but it still fires in the scan: it counts toward conflict, as live.
+  assert.deepStrictEqual(names(mixed.counted), ['va_paper', 'fx_break']);
+  const paper = policyStrategy(ROOT, 'prop_mixed_paper', env);
+  assert.deepStrictEqual([names(paper.components), paper.leftOut], [['va_paper', 'fx_break'], []]);
+  assert.throws(() => policyStrategy(ROOT, 'prop_all_paper', env), /prop: prop_all_paper trades none of its strategies/);
+  assert.throws(() => policyStrategy(ROOT, 'fx_break', env), /a prop run needs a policy strategy \(signal: policy\)/);
+  assert.throws(() => policyStrategy(ROOT, 'nope', env), /prop: nope is not a strategy/);
 });
 
 test('a plain backtest on a CSV says, in its log, report.json and report.md, that fx_value_area reads a bar field the data lacks; a market it doesn\'t list is not named', () => {
@@ -398,68 +387,6 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   assert.strictEqual(gc.report.fieldCoverage, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
   assert.ok(!gcLogs.some(l => /reads field\(/.test(l)));
-});
-
-test('prop challenge mode trades what live trades: an active policy leaves out a paper component (still counted as disagreement); a paper policy (a paper run) keeps it', () => {
-  const dir = tmpDir();
-  const accounts = path.join(dir, 'accounts');
-  const tiny = tinyAccount(accounts);
-  const strategiesDir = path.join(dir, 'strategies');
-  // The R trail exit (exit mode trail), as these policies were measured with: the paper and live runs' trades differ by it.
-  const policy = (name, list, status = 'active') => {
-    listPolicies(tiny, [name], { exit: FLOW_POLICY.exit });
-    fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });
-    fs.writeFileSync(path.join(strategiesDir, name, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-      .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
-      .replace(/^status: active\b/m, `status: ${status}`));
-  };
-  // va_paper: a paper copy of the fixture fx_value_area (which is active, as value_area was when retired); the fixture fx_break is active.
-  fs.mkdirSync(path.join(strategiesDir, 'va_paper'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(FX_GOLDEN, 'fx_value_area', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: fx_value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
-  policy('prop_mixed', ['va_paper', 'fx_break']);
-  policy('prop_mixed_paper', ['va_paper', 'fx_break'], 'paper');
-  policy('prop_all_paper', ['va_paper']);
-  // fx_value_area is active: an active policy trades it, as a live policy would.
-  assert.strictEqual(loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area').status, 'active');
-  policy('prop_va', ['fx_value_area', 'fx_break']);
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES},${FX_GOLDEN}` };
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
-  const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
-  const logs = [];
-  const mixed = run('prop_mixed', logs);
-  assert.deepStrictEqual(mixed.strategies, ['fx_break']);
-  assert.deepStrictEqual(mixed.leftOut, ['va_paper']);
-  assert.ok(logs.some(l => /^prop_mixed: leaves out va_paper: va_paper has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
-  // ... but it still fires in the scan: it counts toward conflict, as live (the engine test above).
-  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; fx_break \(counting va_paper toward conflict only\); contracts/.test(l)), logs.join('\n'));
-  const paper = run('prop_mixed_paper');
-  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['va_paper', 'fx_break'], []]);
-  const vaLogs = [];
-  const va = run('prop_va', vaLogs);
-  assert.deepStrictEqual([va.strategies, va.leftOut], [['fx_value_area', 'fx_break'], []], 'fx_value_area is active: traded, not left out');
-  // The CSV carries no broker bar fields: the run says fx_value_area's field() conditions are false here, in its log and report.
-  const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area'));
-  assert.ok(flowPath, 'fx_value_area reads a broker bar field');
-  assert.deepStrictEqual(va.missingFields.map(x => [x.strategy, x.path, x.symbols, x.coverage.MNQ.carried]), [['fx_value_area', flowPath, ['MNQ'], 0]]);
-  assert.deepStrictEqual(va.fieldCoverage, va.missingFields);
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'prop_va', 'combine.json'), 'utf8')).fieldCoverage, va.fieldCoverage);
-  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar field coverage\n[^]*\| fx_value_area \| `[^`]+` \| MNQ \| 0% \|/);
-  assert.ok(vaLogs.some(l => l.startsWith(`warning: fx_value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
-  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- fx_value_area reads field/);
-  assert.strictEqual(mixed.missingFields, undefined, 'fx_break reads no bar field');
-  // A paper component that fires on this data (fx_cross on paper, first in the list): never picked by the active policy.
-  fs.mkdirSync(path.join(strategiesDir, 'ema_paper'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'ema_paper', 'STRATEGY.md'), fs.readFileSync(path.join(FX_STRATEGIES, 'fx_cross', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: fx_cross$/m, 'name: ema_paper').replace(/^status: active\b/m, 'status: paper'));
-  policy('prop_ema_live', ['ema_paper', 'fx_break']);
-  policy('prop_ema_paper', ['ema_paper', 'fx_break'], 'paper');
-  const emaLive = run('prop_ema_live');
-  const emaPaper = run('prop_ema_paper');
-  assert.deepStrictEqual([emaLive.strategies, emaPaper.strategies], [['fx_break'], ['ema_paper', 'fx_break']]);
-  // The paper run's attempts take ema_paper's setups; the live policy's never do, so they differ.
-  assert.notDeepStrictEqual(emaLive.baseline, emaPaper.baseline);
-  assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(va_paper has status "paper"/);
 });
 
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {
@@ -702,6 +629,34 @@ test('a run with an account is a prop challenge: sized from the cushion, ends on
   assert.strictEqual(tiny.combine.status, 'blown');
   assert.strictEqual(tiny.trades[tiny.trades.length - 1].reason, 'blow');
   assert.ok(tiny.combine.balance <= tiny.combine.floor + 1e-9);
+});
+
+test('a prop run sizes with the policy strategy\'s own stop_slippage_ticks, as live', () => {
+  // The first trade of an attempt: $200 budget (0.2 x $1,000 cushion), a 14-tick stop. The default tick:
+  // 15 x $0.50 = $7.50 + $0.74 = $8.24 a micro, 24 MNQ ($197.76); stop_slippage_ticks 3: 17 x $0.50 + $0.74 = $9.24, 21 ($194.04).
+  // (Moved from the retired prop/challenge.js tests: the engine's account mode is layer 2's reference.)
+  const bars = propSeries(40);
+  const { tradingDays } = require('../../scripts/lib/prop/trade-stream');
+  const start = tradingDays([{ bars: bars.map(b => ({ ms: Date.parse(b.t) })) }]).find(d => d >= Date.parse('2026-01-08T00:00:00Z'));
+  const acct = propAccount({ max_contracts: { MNQ: 100 } });
+  const first = sizing => {
+    const t = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: acct, sizing, start }).trades[0];
+    return [t.size, Math.round(t.risk / 0.25)];
+  };
+  assert.deepStrictEqual(first(null), [24, 14]);
+  assert.deepStrictEqual(first({ stop_slippage_ticks: 3 }), [21, 14]);
+});
+
+test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {
+  // (Moved from the retired backtester prop-run test: the engine computes no facts, so an enforced item fails closed.)
+  const bars = propSeries(30);
+  const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
+  const exit = { trail_activate_r: 2, trail_giveback_r: 0.5 };
+  const prop = multipliers => ({ strategy: { exit, ...(multipliers ? { multipliers } : {}) }, components: ['trendy'], contracts: 'micro' });
+  const plain = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop: prop(null) });
+  assert.ok(plain.trades.length > 0);
+  const gated = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop: prop([{ item: 'multipliers', fact: 'probe', values: { ok: 1 } }]) });
+  assert.deepStrictEqual(gated.trades, [], 'a multiplier item without its fact skips every setup (fails closed)');
 });
 
 test('a policy run picks only from the strategies it trades, but a left-out paper one still counts as disagreement, as in the live scan', () => {

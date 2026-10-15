@@ -33,7 +33,6 @@
  */
 
 const { runEngine, prepare, DEFAULTS } = require('../backtest/engine');
-const { tradingDays } = require('./challenge');
 const { tradingDayStart, tradingDayKey, sessionMinute, sessionMinuteOf } = require('../trading/clock');
 const { fieldPaths } = require('../backtest/bar-fields');
 const { scan } = require('../trading/strategies');
@@ -44,6 +43,19 @@ const { SWING_TFS, swingSeries } = require('../trading/exit-trail');
 const { roundHalfEven } = require('../backtest/engine');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
+
+/** The trading-day starts with a bar in any of the books (markets), in order: every market's days, not the first's. */
+function tradingDays(books) {
+  const set = new Set();
+  for (const book of books) {
+    let last = null;
+    for (const b of book.bars) {
+      const d = tradingDayStart(new Date(b.ms + 1)).getTime();
+      if (d !== last) { set.add(d); last = d; }
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
 
 /** A conservative cycle delay from measured cycle times (ms): the given percentile (0.9 by default), or 0 with none. */
 function delayFromCycles(durationsMs, percentile = 0.9) {
@@ -239,4 +251,4 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
   };
 }
 
-module.exports = { tradeStream, delayFromCycles, dayRegimes, noStopPath, pricePath, swingPath, ownExit, factsAt };
+module.exports = { tradeStream, tradingDays, delayFromCycles, dayRegimes, noStopPath, pricePath, swingPath, ownExit, factsAt };

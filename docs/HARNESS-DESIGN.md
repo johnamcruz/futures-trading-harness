@@ -133,9 +133,10 @@ the workspace guard fingerprints `.opencode/` whole (absent).
 The head trader (`scripts/lib/head-prompt.js`). In index mode its entry in
 `workspace/opencode.json` carries a prompt of its own, in place of opencode's
 default one: the skills it reads every cycle (`CORE`: the order gate's
-`REQUIRED_FOR_ENTRY` and `REQUIRED_AT_ENTRY`, then `autonomous-trading`,
+`REQUIRED_FOR_COMPOSED` and `REQUIRED_AT_ENTRY`, then `autonomous-trading`,
 `trader-process`, `htf-to-ltf`, `bar-briefing`, `role-round` and
-`day-context`) embedded whole, the same text a load returns, so they are part
+`day-context`, and last the composed bar's reads the gate requires,
+`confluence-counting`, `invalidation`, `rejection` and `breakout`) embedded whole, the same text a load returns, so they are part
 of its fixed prefix that a prompt cache reuses across cycles instead of about a
 dozen skill-load turns after each cycle's prompt. Any other skill
 (`manage-position`, `leftover-orders`, `lean-cycle`, `entry-outcome`, ...) it
@@ -330,7 +331,15 @@ process: a fresh harness run (or `autotrader.js --once`) per cycle, with the
 time set by the replay driver. Within one process the replayed time stands
 still (the gateway's 30 s ledger and its 2-minute grace for orders of unknown
 outcome don't elapse), so don't hold a long interactive session on one
-`FTH_REPLAY_NOW`. Replay runs in a harness home of its own (`FTH_HOME`), never
+`FTH_REPLAY_NOW`. The exception is a replay that charges its latency (the
+replay config's `latency`, on by default for a learning run;
+`scripts/lib/replay/latency.js`): the driver sets `FTH_REPLAY_WALL_START`, the
+wall time the step began, and the replayed time then runs with the wall clock
+from `FTH_REPLAY_NOW` in every process of the step, while the driver moves the
+replay broker's clock file with it (the server re-reads it on every call). An
+order goes, fills and expires at the bar plus the cycle's own time, as live;
+the clock never goes back, so a decision time the step ran past runs at the
+clock (a trade time whose next time was passed too runs no step). Replay runs in a harness home of its own (`FTH_HOME`), never
 the live one: the scripts write records, blackouts and attempts there at the
 replayed time. The runner's long-running loop refuses to start
 with `FTH_REPLAY_NOW` set, and never takes the test suite's `FTH_TEST_NOW`.

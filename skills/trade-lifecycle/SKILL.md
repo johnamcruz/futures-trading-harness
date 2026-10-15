@@ -15,7 +15,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 1. **Compose.** Reason through `trader-process`, each step with the skill
    that fits, and call `compose_check` with one read per step at least and
    your size. Pass unless every read is true now and agrees with your side.
-   The record is for this bar and side; it expires at the next bar close.
+   The record is for this bar and side; it expires `valid_bars` base bars
+   after its bar's close (two: 6 minutes on the 3m).
 
    | Step | Read forms | The skill for the fact |
    | --- | --- | --- |
@@ -30,6 +31,9 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    The setup is the reaction on a closed candle (often 15m); an entry read
    your way must be on a candle that closed after it (often the next 3m).
+   A CISD setup is timed from its confirming candle
+   (`m3.cisd.<tf>.confirmedClose`): the entry read closes after it; a CISD
+   with no close time is refused.
    Each needs a true read your way; `at`, `touched`, `swept`, volume,
    participation and a setup `in ote` only support it.
 
@@ -37,12 +41,13 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
    $600 on that risk); beyond 3:1 only when that is the real level.
 
-2. **Then read** with `skill_lookup`: `confluence-counting` and
-   `invalidation` whenever you composed on the bar; `rejection` when a read
-   says a candle rejected a level; `breakout` when one says it broke one.
-   The gate requires them, the journal plan (`[plan-required]`),
-   `setup-judgment` and `trade-plan` (`[skills-at-entry]`) and the role
-   round (`[roles-ran]`).
+2. **Then read** `confluence-counting` and `invalidation` whenever you
+   composed on the bar, `rejection` when a read says a candle rejected a
+   level, `breakout` when one says it broke one: in your prompt when it
+   embeds them (don't look them up); else load each (no skill tool:
+   `skill_lookup`; in index mode the gate requires them). The gate requires
+   the journal plan (`[plan-required]`), `setup-judgment` and `trade-plan`
+   (`[skills-at-entry]`) and the role round (`[roles-ran]`).
 3. **Send it as the record says**: `place_order` `limit` at the record's
    entry (or better), with its `stopLossBracket.ticks`,
    `takeProfitBracket.ticks`, size and contract, rationale
@@ -63,7 +68,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |
 | `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED and with or against your side, then the plan in code; recorded for this bar, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
-| `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then the code-measured history library apart (not yours); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
+| `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 ## Examples
 

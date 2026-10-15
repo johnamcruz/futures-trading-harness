@@ -494,12 +494,17 @@ const lcTamper = (ctx, tamper) => {
   TL.appendRecord(ctx.env.FTH_HOME, { ...rec, ...tamper(rec) });
 };
 const lcOrder = (o = {}) => ({ accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 27427.5, size: o.size || 1, stopLossBracket: { ticks: 92, type: 'stop' }, takeProfitBracket: { ticks: 338, type: 'limit' }, rationale: 'setup:trade_lifecycle long, 4h up, value above, stop 27404.50, target 27512.00', ...(o.order || {}) });
-/** The head trader's composed cycle: the round, its lookups (trade-lifecycle and the composed ones), the record, the plan, phase 2, the executor. */
+/**
+ * The head trader's composed cycle: the round, the record, the plan, phase 2, the executor. Its prompt embeds the
+ * composed bar's reads (confluence-counting, invalidation, rejection, breakout: head-prompt.js CORE), so it looks none
+ * up; `lookups` adds lookups, `pre` a step before anything else.
+ */
 function composedCycle(w, o = {}) {
   return [
+    ...(o.pre ? [{ act: o.pre }] : []),
     ...D.roundSteps(w),
     ...D.entryLoads(w).map(s => ({ load: s })),
-    ...['confluence-counting', 'invalidation', 'rejection'].filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
+    ...(o.lookups || []).map(s => ({ lookup: s })),
     { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: o.reads || LC_READS, size: o.size || 1 } },
     ...(o.tamper ? [{ act: ctx => lcTamper(ctx, o.tamper) }] : []),
     ...(o.before ? [{ act: o.before }] : []),
@@ -546,7 +551,7 @@ for (const [name, o, message] of LC_REFUSALS) {
   });
 }
 
-test('decision path, trade_lifecycle refused: a stated size over the dollar cap ([max-risk]), and a required lookup not made ([skills-loaded])', async () => {
+test('decision path, trade_lifecycle refused: a stated size over the dollar cap ([max-risk]), and a head prompt that doesn\'t embed the composed reads with no lookup of them ([skills-loaded])', async () => {
   // 7 x 92 ticks x $0.50 = $322 over max_risk_usd $300: compose_check says NOT OK, and sent anyway, the plan check and
   // the cap both refuse it.
   let w = D.world();
@@ -554,12 +559,30 @@ test('decision path, trade_lifecycle refused: a stated size over the dollar cap 
   assert.match(r3.ctx.results.compose_check, /NOT OK/);
   let e = lastEntry(w);
   assert.ok(e.decision === 'blocked' && e.checks.includes('composed-reads') && e.checks.includes('max-risk'), JSON.stringify(e));
+  // A head prompt without the composed reads (the run's opencode.json with their blocks cut, attested as it is): the
+  // composed bar's reads are not embedded, so with no lookup of them the entry is refused for them alone.
+  const H = require('../../scripts/lib/head-prompt');
+  const unembedded = ctx => {
+    const file = path.join(ctx.env.FTH_HOME, 'workspace', 'opencode.json');
+    const json = JSON.parse(require('../../scripts/lib/harness-sync').expectedFiles(path.resolve(__dirname, '..', '..'))['workspace/opencode.json']);
+    const head = json.agent[H.HEAD_AGENT];
+    for (const s of H.COMPOSED_READS) head.prompt = head.prompt.replace(new RegExp(`<skill name="${s}">\\n[^]*?\\n</skill>\\n\\n?`), '');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(json));
+    const att = H.attestation(file, path.resolve(__dirname, '..', '..'));
+    assert.ok(H.COMPOSED_READS.every(s => !att.skills.includes(s)) && att.skills.includes('trade-lifecycle'));
+    ctx.env.FTH_HEAD_PROMPT = JSON.stringify(att);
+  };
   w = D.world();
-  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { skip: ['invalidation'], result: BLOCKED }));
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { pre: unembedded, result: BLOCKED }));
   e = lastEntry(w);
   assert.deepStrictEqual([e.decision, e.checks], ['blocked', ['skills-loaded']], e.messages);
-  assert.match(e.messages, /not loaded in this session: invalidation\./);
+  assert.match(e.messages, /not loaded in this session: confluence-counting, invalidation, rejection\./);
   assert.deepStrictEqual(D.placedAtBroker(w), []);
+  // ... and with them looked up, as before, it goes.
+  w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { pre: unembedded, lookups: ['confluence-counting', 'invalidation', 'rejection'] }));
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
 });
 
 test('decision path, trade_lifecycle: with the position open, the stop moves and the exit go with no record, briefing or transcript', async () => {
@@ -587,7 +610,7 @@ test('decision path, trade_lifecycle: with the position open, the stop moves and
   assert.strictEqual(D.position(w), null, 'flat');
 });
 
-test('decision path, trade_lifecycle, the runner: the history and the cycle log keep the record; a resting limit is cancelled at its expiry, the next bar', async () => {
+test('decision path, trade_lifecycle, the runner: the history and the cycle log keep the record; a resting limit rests through the next bar and is cancelled at its expiry, two bars on', async () => {
   const w = D.world();
   // A limit below the bar's close (better for a long): it rests unfilled. Its rationale states no prices (the brackets
   // are ticks from the fill; prices from the reference would disagree with the lower limit: [order-consistency]).
@@ -601,7 +624,7 @@ test('decision path, trade_lifecycle, the runner: the history and the cycle log 
   const rec = TL.readRecords(w.home, 'MNQ').at(-1);
   assert.deepStrictEqual([h.action, h.setup, h.side, h.composed.id, h.composed.signature, h.composed.size, h.composeCalls], [D.RESULT_ACTION.executed, 'trade_lifecycle', 'long', rec.id, rec.signature, 1, 1]);
   assert.ok(h.composed.reads.every(x => x.check === true && x.agrees === true), JSON.stringify(h.composed.reads));
-  // The gateway stamped the entry with its record and that record's expiry (the next bar's close) at placement.
+  // The gateway stamped the entry with its record and that record's expiry (valid_bars, 2, bars after the bar's close) at placement.
   const stamped = JSON.parse(fs.readFileSync(path.join(w.home, 'entry-orders.json'), 'utf8')).find(e => String(e.orderId) === String(resting[0].id));
   // The stamp is the gate's own: the record it judged, the expiry it computed, the entry price and the side.
   assert.deepStrictEqual(stamped.composed, { record: rec.id, expiresAt: rec.expiresAt, entry: 27427.5, side: 'long' });
@@ -610,10 +633,15 @@ test('decision path, trade_lifecycle, the runner: the history and the cycle log 
   const line = D.cycleLines(w).at(-1);
   assert.deepStrictEqual(line.composed, { calls: 1, ok: 1, signatures: [rec.signature] });
   assert.strictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).composed[0].id, rec.id);
-  // The next bar: the runner cancels it before the cycle (its record expired at that bar's open).
+  assert.strictEqual(Date.parse(rec.expiresAt), Date.parse(NEXT_BAR) + 2 * D.STEP, 'two base bars after the bar\'s close');
+  // The next bar: still within its record's two bars, it keeps resting.
   const next = await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'nothing new'));
+  assert.strictEqual(D.working(w).filter(o => o.type === 1).length, 1);
+  assert.ok(!next.events.some(e => e.kind === 'composed_expired'), JSON.stringify(next.events.map(e => e.kind)));
+  // The bar after: the runner cancels it before the cycle (its record expired at that bar's open).
+  const after = await D.pass(w, decisionAt(new Date(Date.parse(NEXT_BAR) + D.STEP).toISOString()), D.passCycle(w, 'nothing new'));
   assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
-  assert.ok(next.events.some(e => e.kind === 'composed_expired' && String(e.orderId) === String(resting[0].id)), JSON.stringify(next.events.map(e => e.kind)));
+  assert.ok(after.events.some(e => e.kind === 'composed_expired' && String(e.orderId) === String(resting[0].id)), JSON.stringify(after.events.map(e => e.kind)));
 });
 
 test('decision path, trade_lifecycle, a restart: a working composed entry with no readable expiry is cancelled at the first housekeeping', async () => {

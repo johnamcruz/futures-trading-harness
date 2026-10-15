@@ -74,7 +74,6 @@ at its timeframe:
 # value_area (3 minutes, also inside prop_portfolio) and ofi (1 minute)
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 3 --out data/MNQ-3m.jsonl
 node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --timeframe 3 --strategy value_area
-node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --prop prop_portfolio
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 1 --out data/MNQ-1m.jsonl
 node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
 ```
@@ -104,23 +103,17 @@ strategy in the run (one that trades the market) reads any, the backtest
 refuses, saying to fetch bars at the run's timeframe instead; when none of
 them reads one, it builds the bars without the fields and says so in its log.
 A CSV carries no such fields either, so a strategy that reads them never
-fires on one: `value_area`'s order-flow branch on CSV bars. The same holds
-inside a policy: a `prop_portfolio` run (`--prop`) on CSV or built bars leaves
-out `value_area`'s flow branch (only its range expansion confirms), so it can
-pick a different setup, or none, where live and replay would pick
-`value_area`.
+fires on one: `value_area`'s order-flow branch on CSV bars.
 
 The backtester reports **field coverage**: for each `field(...)` path a traded
 strategy reads, the share of the bars in range (from `start`) of each market
 it trades that carry a value there (a number or a boolean, as the rules read
 it; a null, as a broker serves past the data it has for a field, counts as
 missing). It always logs each one, and warns for each one under 100%, naming
-the strategy, the path, the markets and their shares. A plain or `--prop` run
-puts it in the report too: `fieldCoverage` (every path) and `missingFields`
-(those under 100%) in `report.json` or `combine.json`, and a coverage table
-and a warnings section in `report.md` or `combine.md`; a walk-forward run only
-logs it. In a `--prop` run only the strategies it trades are checked: a paper
-strategy the policy leaves out, which still counts toward conflict, is not.
+the strategy, the path, the markets and their shares. A plain run puts it in
+the report too: `fieldCoverage` (every path) and `missingFields` (those under
+100%) in `report.json`, and a coverage table and a warnings section in
+`report.md`; a walk-forward run only logs it.
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.
@@ -251,52 +244,29 @@ strategy is backtested on its own for it (in a joint run they compete for one
 position). The autonomous runner shows the record, with the journal's
 reviewed live trades, next to every strategy that fires, so the model weighs
 the signal by evidence. Re-record after changing a strategy or adding data;
-plain runs only (not with `--prop` or `--walk-forward`).
+plain runs only (not with `--walk-forward`).
 
 ```bash
 node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy orb,value_area --record
 ```
 
-### Prop challenges
+### Prop challenges (retired)
 
-With `--prop <policy strategy>` (config `prop`), the run is a set of
-prop-challenge attempts of that policy strategy instead of one long backtest:
-its strategies' setups, on its account, sized by its `sizing` (from the
-account's rulebook, `accounts/<account>/RULEBOOK.md`, with the verdict's
-multiplier items folded in as live) in micros or minis (`contracts`). As live, an active policy takes setups only from its
-`active` strategies: a `paper` one stays paper inside it and is left out
-(logged, and listed in `combine.json`'s `leftOut`). A left-out strategy still
-fires in the scan, as live, so it still counts as agreement or disagreement:
-its signal against a traded setup voids that setup under `conflict`, and one
-with it adds to the setup's confluence; it is only never the setup taken. A
-policy that isn't active trades only in a paper run, so its run takes setups
-from every non-disabled strategy. An attempt starts every `--every N` trading days (config
-`every`, default 1), runs for the account's `sessions`, and ends on pass,
-blow, or timeout. A stop that would reach the floor or the daily limit is
-sized down, each contract's risk counting the stop's expected slippage
-(`sizing.stop_slippage_ticks`, a tick by default, as live) and fees both
-ways; the fills still slip by `slippageTicks` (the same tick by default), so
-a larger `--slippage` tests the live sizing under worse fills. Equity at the
-floor inside a bar is a blow, liquidated there.
-Every setup the budget can fund is taken at its full size, and every trade
-exits by the policy strategy's exit, as live: in exit mode `target` at its
-own strategy's stop and target (a trail on top only when the rulebook sets
-one); in `target_then_trail` its stop holds to that target, and from there
-the stop locks near it and trails behind the last confirmed swing of the
-rulebook's timeframe, or by R (`scripts/lib/trading/exit-trail.js`); in mode
-`trail` by the R trail. The account's `loss_streak_stop` ends a
-session's entries after that many losses in a row, as the gate does. The run writes `combine.json`
-and `combine.md`: pass, blow, and timeout rates, win rate, median days to
-pass, and pass and blow rates by the month an attempt starts in. (The
-retired PPO policy's `--bundle` option is gone; a config naming `bundle` is
-refused.)
+The backtester's prop runs (`--prop`, `--every`: combine attempts of a policy
+strategy's mechanical setups, `combine.json` and `combine.md`) are retired;
+a config naming `prop` or `every` is refused. What they were, what they
+found, and what a model-trade Monte Carlo keeps from them:
+`docs/research/mechanical-prop-backtester.md`.
 
 ### The two-layer evaluator
 
 `node scripts/evaluate.js` scores a policy strategy for the learned rulebook
 (`docs/LEARNED-RULEBOOK.md` R6-R9): the learning loop's scoring function.
 Its logic is in `scripts/lib/prop/` (`trade-stream.js`, `attempts.js`,
-`evaluator.js`, `stats.js`, `evaluate-run.js`).
+`evaluator.js`, `stats.js`, `evaluate-run.js`). Layer 1 takes only setups
+with a mechanical stop distance, so it finds none in `trade_lifecycle`, the
+one strategy `prop_portfolio` lists today
+(`docs/research/mechanical-prop-backtester.md`).
 
 ```bash
 node scripts/evaluate.js --prop prop_portfolio --data MNQ=data/MNQ-3m.jsonl \
@@ -306,7 +276,9 @@ node scripts/evaluate.js --prop prop_portfolio --data MNQ=data/MNQ-3m.jsonl \
 
 - **Layer 1, trade generation.** The backtest engine runs the policy's
   strategies over the bars once, with no account, one position at a time
-  across its markets. Every setup it takes becomes a trade in ticks and R,
+  across its markets. As live, an active policy takes setups only from its
+  `active` strategies; a `paper` one it leaves out still fires in the scan,
+  so it still counts toward confluence and conflict. Every setup it takes becomes a trade in ticks and R,
   with its adverse path, its stop overshoot, and its path to the end of the
   day with no stop. Its facts come from the live scan and briefing: the
   trend rule, the multi-timeframe read, the room to the first level in its

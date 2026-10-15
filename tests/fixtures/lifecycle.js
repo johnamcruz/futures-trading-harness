@@ -8,10 +8,12 @@
  * $0.50 a tick): the stop one tick beyond the level is 21512.50, 111 ticks ($55.50 a contract); the target 231 ticks,
  * 2.08R; the minimum stop the larger of 8 ticks and 0.25 x ATR(20) (oneR 12 points: ATR(20) 24, 6 points, 24 ticks).
  *
- *   BAR, CLOSE, EXPIRES        the cycle bar's open, its close (NOW) and the record's expiry (the next close)
+ *   BAR, CLOSE, NEXT_CLOSE     the cycle bar's open, its close (NOW) and the next bar's close (m3.validUntil)
+ *   EXPIRES                    the record's expiry: the shipped valid_bars (2) base bars after the bar's close
  *   briefing(over)             the briefing (deep-merged over m3 data with `over.m3`)
  *   READS                      the six reads, one per step, each true on it for a long
- *   writeScenario(home, o)     writes the briefing and the compose record compose_check would ({ reads, side, size, at, b }) to home;
+ *   writeScenario(home, o)     writes the briefing and the compose record compose_check would ({ reads, side, size, at, b,
+ *                              validBars: the strategy's valid_bars, 2 as shipped }) to home;
  *                              returns the record
  *   order(over)                the place_order the record gives: a limit buy 1 at 21540.25, 111 / 231 ticks
  *   config(home, over)         an order-gate config on that home, in a cycle on BAR (FTH_CYCLE_BARS)
@@ -23,14 +25,15 @@ const { checkReads } = require('../../scripts/lib/trading/composed-reads');
 
 const BAR = '2026-10-07T13:57:00.000Z';
 const CLOSE = '2026-10-07T14:00:00.000Z';
-const EXPIRES = '2026-10-07T14:03:00.000Z';
+const NEXT_CLOSE = '2026-10-07T14:03:00.000Z';
+const EXPIRES = '2026-10-07T14:06:00.000Z';
 
 function briefing(over = {}) {
   return {
     symbol: 'MNQ', minutes: 3, asOf: BAR,
     sections: {
       m3: {
-        version: 'v-scenario-1', validUntil: EXPIRES,
+        version: 'v-scenario-1', validUntil: NEXT_CLOSE,
         data: {
           price: 21540.25, bar: { t: BAR, o: 21530, h: 21541, l: 21529, c: 21540.25, v: 500 }, oneR: { points: 12, basis: '0.5 x 3m ATR(20) 24' }, referenceStop: { distance: 12, long: 21528.25, short: 21552.25 },
           trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short.',
@@ -42,8 +45,8 @@ function briefing(over = {}) {
           ...(over.m3 || {}),
         },
       },
-      m15: { validUntil: EXPIRES, data: { frame: { trend: 'up' }, alignment: { long: 'aligned', short: 'counter' } } },
-      h1: { validUntil: EXPIRES, data: { h1: { trend: 'up' }, h4: { trend: 'up' } } },
+      m15: { validUntil: NEXT_CLOSE, data: { frame: { trend: 'up' }, alignment: { long: 'aligned', short: 'counter' } } },
+      h1: { validUntil: NEXT_CLOSE, data: { h1: { trend: 'up' }, h4: { trend: 'up' } } },
     },
   };
 }
@@ -58,10 +61,10 @@ const READS = [
 ];
 
 /** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps). */
-function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300 } = {}) {
+function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2 } = {}) {
   const checked = checkReads({ reads, side, briefing: b, tick: 0.25 });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd }) : null;
-  return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned });
+  return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned, validBars });
 }
 
 function writeScenario(home, o = {}) {
@@ -77,4 +80,4 @@ const order = (over = {}) => ({
   rationale: 'setup:trade_lifecycle long, the 15m rejection with the 1h trend, stop 21512.50, target 21598.00', ...over,
 });
 
-module.exports = { BAR, CLOSE, EXPIRES, briefing, READS, composeRecord, writeScenario, order };
+module.exports = { BAR, CLOSE, NEXT_CLOSE, EXPIRES, briefing, READS, composeRecord, writeScenario, order };

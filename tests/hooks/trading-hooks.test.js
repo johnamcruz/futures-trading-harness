@@ -466,6 +466,26 @@ test('order gate: a trade-lifecycle entry (signal: composed) outside a runner cy
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard alone; that shard unreadable refuses it (fails closed); its exit goes', () => {
+  const LC = require('../fixtures/lifecycle');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  LC.writeScenario(env.FTH_HOME);
+  // Every other day's shard unreadable: never opened, so the record stands.
+  for (const day of ['2026-10-05', '2026-10-06', '2026-10-08']) fs.mkdirSync(TL.recordFile(env.FTH_HOME, 'MNQ', day));
+  const ok = gate(orderPayload(LC.order()), env);
+  assert.doesNotMatch(ok.stderr, /\[composed-reads\]/);
+  // The bar's own day unreadable: refused, named.
+  fs.renameSync(TL.recordFile(env.FTH_HOME, 'MNQ', '2026-10-07'), path.join(env.FTH_HOME, 'moved.jsonl'));
+  fs.mkdirSync(TL.recordFile(env.FTH_HOME, 'MNQ', '2026-10-07'));
+  const entry = gate(orderPayload(LC.order()), env);
+  assert.strictEqual(entry.code, 2);
+  assert.match(entry.stderr, /\[composed-reads\] setup:trade_lifecycle: the check failed \(the compose record \S+2026-10-07\.jsonl can't be read \(EISDIR\)\): no entry \(fails closed\)/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
   const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);
@@ -2751,6 +2771,57 @@ test('order gate (hook): a trade_lifecycle entry is judged on its compose record
   }
 });
 
+test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = trendHome();
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, LC.briefing());
+  LC.writeScenario(home, { write: false, reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
+  const dir = tmpDir();
+  const generated = require('../../scripts/lib/harness-sync').expectedFiles(REPO)['workspace/opencode.json'];
+  const attest = (name, prompt = p => p) => {
+    const file = path.join(dir, name, 'opencode.json');
+    const json = JSON.parse(generated);
+    json.agent[H.HEAD_AGENT].prompt = prompt(json.agent[H.HEAD_AGENT].prompt);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(json));
+    return JSON.stringify(H.attestation(file, REPO));
+  };
+  // The runner's opencode cycle transcript: no skill loaded, nothing looked up.
+  const cycle = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(cycle, JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }));
+  const lc = (extra, input = LC.order()) => gate(orderPayload(input), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'index', FTH_CYCLE_TRANSCRIPT: cycle, ...extra }).env);
+  // The shipped head prompt embeds them: no [skills-loaded], no [skills-at-entry].
+  const embedded = lc({ FTH_HEAD_PROMPT: attest('index') });
+  assert.doesNotMatch(embedded.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+  // A head prompt without their blocks (attested as it is): refused for exactly them.
+  const cut = attest('cut', p => H.COMPOSED_READS.reduce((t, s) => t.replace(new RegExp(`<skill name="${s}">\n[^]*?\n</skill>\n\n?`), ''), p));
+  const refused = lc({ FTH_HEAD_PROMPT: cut });
+  assert.strictEqual(refused.code, 2);
+  assert.match(refused.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection\./);
+  // No attestation: the transcript alone decides, and they are among the missing.
+  assert.match(lc({ FTH_HEAD_PROMPT: '' }).stderr, /\[skills-loaded\][^\n]*trade-session[^\n]*confluence-counting, invalidation, rejection/);
+  // An exit goes either way.
+  assert.doesNotMatch(lc({ FTH_HEAD_PROMPT: cut }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }).stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+});
+
+test('order gate (hook and gate log): a trade_lifecycle record holds valid_bars (2) base bars: an entry after the next close goes; at the second close it is refused, logged expired; an exit goes', () => {
+  const home = trendHome();
+  LC.writeScenario(home);
+  const logFile = path.join(tmpDir(), 'gate.jsonl');
+  const lc = (at, input = LC.order(), entries = [lcPlan]) => gate(orderPayload(input), setup(entries, { FTH_HOME: home, FTH_TEST_NOW: at, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_GATE_LOG: logFile }).env);
+  // 14:04:30: past the next close (14:03), inside the second bar: the record's own bar still decides.
+  const late = lc('2026-10-07T14:04:30.000Z');
+  assert.strictEqual(late.code, 0, late.stderr);
+  // 14:06: the record's two bars are over.
+  const gone = lc(LC.EXPIRES);
+  assert.strictEqual(gone.code, 2);
+  assert.match(gone.stderr, /\[composed-reads\] setup:trade_lifecycle: the compose record expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  const logged = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision === 'blocked');
+  assert.deepStrictEqual(logged.at(-1).violations.filter(v => v.check === 'composed-reads').map(v => v.expired), [true]);
+  // An exit after it goes.
+  assert.strictEqual(lc('2026-10-07T14:08:00.000Z', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }, []).code, 0);
+});
+
 test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
@@ -2839,6 +2910,19 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   // An exit with no record and no briefing goes.
   const exit = await run(() => {}, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });
   assert.strictEqual(exit.sent.length, 1, exit.texts[1]);
+  // Latency charged (the replay step's wall start, FTH_REPLAY_WALL_START): the gateway's replay clock runs from the bar's
+  // decision time with the wall clock, as the replay broker's does. Four minutes into the cycle the record (two 3m bars
+  // after its 14:00 close) still stands; seven minutes in it has expired and the entry never reaches the broker.
+  const late = minutes => ({ FTH_REPLAY_WALL_START: String(Date.now() - minutes * 60000),
+    FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: new Date(Date.parse(LC_AT) + minutes * 60000).toISOString(), replay: true }) });
+  const four = await run(home => LC.writeScenario(home), msgs(LC.order()), late(4));
+  assert.strictEqual(four.sent.length, 1, four.texts[1]);
+  const seven = await run(home => LC.writeScenario(home), msgs(LC.order()), late(7));
+  assert.deepStrictEqual(seven.sent, []);
+  assert.match(seven.texts[1], /\[composed-reads\] setup:trade_lifecycle: the compose record expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  // The same seven minutes with the clock pinned (no wall start): the bar's own moment, the entry goes (what replay hid).
+  const pinned = await run(home => LC.writeScenario(home), msgs(LC.order()));
+  assert.strictEqual(pinned.sent.length, 1, pinned.texts[1]);
 });
 
 test('order gate (hook): modify_order may not reprice a working trade_lifecycle entry worse than its record\'s entry; a better price and a stop move go', () => {

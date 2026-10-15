@@ -28,11 +28,13 @@ The system is judged by:
 
 ## The combine Monte Carlo is the score
 
-The backtester's prop runs are the combine Monte Carlo
-(`scripts/lib/prop/challenge.js`): each attempt starts on a trading day and
-runs through the backtester (the same evaluator, fills, trailing exits, fees
-and session as live) until it passes, blows, or times out. Passes and blows
-are counted month by month.
+The backtester's prop runs were the combine Monte Carlo
+(`scripts/lib/prop/challenge.js`, retired 2026-10-14: each attempt started on
+a trading day and ran the rules strategies' setups through the backtester
+until it passed, blew, or timed out; what they found is in
+`docs/research/mechanical-prop-backtester.md`). The combine is now scored by
+attempts over a trade stream (`scripts/lib/prop/attempts.js`, scored by
+`evaluator.js`), counted month by month.
 
 What the combine needs decided is the size at each setup (today the
 policy strategy's sizing verdict: full or skip; the priority order may halve

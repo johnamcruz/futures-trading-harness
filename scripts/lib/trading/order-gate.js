@@ -331,7 +331,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     const doc = strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
-    if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message });
+    // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
+    if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
     else if (named && named.signal === 'policy') {
       const v = latestVerdict(config.home, named.name, contractRoot(input.contractId));

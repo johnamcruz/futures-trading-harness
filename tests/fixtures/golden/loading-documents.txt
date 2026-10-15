@@ -712,7 +712,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "2832 chars sha256:5e5a94b37a74c49e",
+  "body": "3010 chars sha256:a4c46e87b67854eb",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -736,6 +736,7 @@ strategy trade_lifecycle: {
   "status": "active",
   "timeframe": "3m",
   "valid": true,
+  "valid_bars": 2,
   "version": 1
 }
 accounts (5): test_100k, test_50k, <name-43f416>, <name-aa1519>, <name-45bd4d>
