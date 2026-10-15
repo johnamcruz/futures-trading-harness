@@ -746,6 +746,55 @@ The promotion gate's thresholds stay frozen in code
 (`scripts/lib/prop/promotion.js`). Only when its windows fall comes from
 the schedule.
 
+### Config files
+
+Every tunable the code uses lives in a config file under `config/`, read
+through `scripts/lib/tunables.js` (the schedule through
+`scripts/lib/schedule.js`). The code states no value of its own.
+
+| File | What it holds | Tighten-only keys |
+| --- | --- | --- |
+| `config/schedule.json` | The learning split, the prop schedule, look budgets, recorded looks, data dates (above) | look budgets, validate cap (down); reserve months (up); final needs a test pass |
+| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
+| `config/replay.json` | Latency, the stage presets, curated lists and moments, setup moments, the account-state draw, driver retries, decision labels, the scorecard's give-back rule, the backtester's plain-run defaults | the stage presets (pinned) |
+| `config/runner.json` | The order gate's limits and timing, the trade lifecycle's stop floor and size cap, the account snapshot, the replay clock, cycles, bars, prompt sizes, the live session, alerts, read caps and page sizes, the Monte Carlo's size | the gate's timing (pinned), its loss, entry, age and confluence limits, the bracket tolerances, the facts check, the stop floor and size cap, the snapshot and clock tolerances, the kill switch's error count, bar staleness, the close settle time, the Monte Carlo maximum |
+| `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window | none |
+
+What stays out of these files:
+
+- **A value with a document home.** A rulebook's sizing and stops
+  (`RULEBOOK.md`), an account's limits and fees (`ACCOUNT.md`) and a
+  strategy's numbers (`STRATEGY.md`) are read from their documents.
+- **The promotion gate.** Its thresholds stay frozen in code.
+- **Mechanics.** Units, format versions, ids, parse and input limits,
+  exchange hours and similar. `tests/plugin/no-tunable-literals.test.js`
+  lists each with why it is no setting, and refuses a new literal.
+
+A strategy's `params` still override `config/analysis.json` for that
+strategy (`scripts/lib/trading/market-snapshot.js` `PARAMS` are the defaults
+it overrides).
+
+To change a value:
+
+1. Edit the key in its file. The schema in `scripts/lib/tunables.js`
+   refuses a missing or unknown key, or a value of the wrong type or range.
+2. A tighten-only key may only move the stricter way, and a pinned key may
+   not move at all: `tests/lib/tunables.test.js` holds each pin. Loosening
+   one needs the owner's yes and a new pin.
+3. Update `tests/fixtures/config/pre-move.json` too (it holds every value
+   as it was when it moved, checked by `tests/lib/config-golden.test.js`),
+   and say why in the pull request.
+
+How it's enforced:
+
+- **Fail closed.** A missing, unreadable or refused file throws when a
+  module that needs it loads, naming the file. The gate, the runner, a
+  replay or a run that needs it refuses to start. Nothing falls back to a
+  default.
+- **Fingerprints.** Every ledger entry, `learning-run.json` and replay
+  manifest records each config file's version and hash (`configFiles`),
+  beside the schedule's.
+
 ## Tuning plan (stages 1 and 2)
 
 Stage 1 tunes setup decisions. Stage 2 tunes risk decisions by account

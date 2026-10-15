@@ -86,6 +86,9 @@ test('one ledger: the run keeps its ledger\'s path, and the ledger is the defaul
   const fp = require('../../scripts/lib/schedule').fingerprint();
   assert.deepStrictEqual(G.readLearningRun(runDir).schedule, fp);
   assert.deepStrictEqual(require('../../scripts/lib/prop/ledger-file').readLedger(G.readLearningRun(runDir).ledger).map(e => e.schedule), [fp]);
+  const cfp = require('../../scripts/lib/tunables').fingerprints();
+  assert.deepStrictEqual(G.readLearningRun(runDir).configFiles, cfp, 'the config files the run started under');
+  assert.deepStrictEqual(require('../../scripts/lib/prop/ledger-file').readLedger(G.readLearningRun(runDir).ledger).map(e => e.configFiles), [cfp]);
   // Another FTH_HOME, the same home folder: the same ledger, so the resume runs (no fresh budget).
   assert.strictEqual(G.startLearningRun(home, { ...sealed, env: { ...env, FTH_HOME: tmp() } }).taken.repeat, true);
   assert.throws(() => G.startLearningRun(home, { ...sealed, env: { HOME: tmp(), FTH_HOME: env.FTH_HOME } }), /one ledger \(the same home\)/);

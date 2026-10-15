@@ -84,6 +84,11 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   (loaded by `scripts/lib/config-files.js`: one file per area, fail closed, hashed into every run
   and ledger entry). Its sealed windows never change after a look, and a changed file needs a new
   `version` (docs/TRAINING.md, "The schedule is config").
+- Tunables are config: `config/training.json`, `replay.json`, `runner.json` and `analysis.json`,
+  read only through `scripts/lib/tunables.js` (the same loader; tighten-only keys pinned in
+  `tests/lib/tunables.test.js`). Code states no tunable: a value with a document home is read
+  from it, the promotion gate stays frozen, and `tests/plugin/no-tunable-literals.test.js`
+  refuses a new literal (docs/TRAINING.md, "Config files").
 - `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
   (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`, with the rulebook's multiplier), combine attempts on
   a trade stream (`attempts.js`, scored by `evaluator.js`), the split windows (`splits.js`), and the promotion gate (0 blows every

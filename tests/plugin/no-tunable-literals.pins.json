@@ -1,0 +1,416 @@
+{
+ "constants": {
+  "scripts/hooks/hook-input.js": {
+   "DEFAULT_MAX_STDIN": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/autotrader.js": {
+   "PLAN_TEXT": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/backtest/data.js": {
+   "MINUTE": "a unit (milliseconds in a minute, an hour, a day; bar units)",
+   "MAX_DEPTH": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_COLUMNS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/backtest/decode-budget.js": {
+   "MAX_DECOMPRESSED_BYTES": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/backtest/engine.js": {
+   "DEFAULTS": "off/one defaults (0 = none, 1 contract)"
+  },
+  "scripts/lib/backtest/parquet.js": {
+   "TYPE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "ENC": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "PAGE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/backtest/xlsx.js": {
+   "MAX_COLUMN": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/bars-fetch.js": {
+   "MAX_COUNT": "the broker MCP interface's get_bars maximum (an interface fact)"
+  },
+  "scripts/lib/broker/adapter.js": {
+   "BAR_LIMIT": "the broker MCP interface's get_bars maximum (an interface fact)",
+   "UNITS": "a unit (milliseconds in a minute, an hour, a day; bar units)",
+   "MAX_BAR_MS": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/broker/config.js": {
+   "SALT_RETRIES": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/broker/interface.js": {
+   "OUTCOMES": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "ENUMS": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/compare-bars.js": {
+   "MAX_DEPTH": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_FIELDS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_SHIFT": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/field-confluence.js": {
+   "E": "a local of a function body (a computation, not a setting)",
+   "W": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/field-study.js": {
+   "MINUTE": "a unit (milliseconds in a minute, an hour, a day; bar units)",
+   "P": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/harness-tools/blackouts.js": {
+   "DAY_MS": "a unit (milliseconds in a minute, an hour, a day; bar units)",
+   "MAX_WINDOW_MS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/harness-tools/protocol.js": {
+   "MAX_LINE_BYTES": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_OUTPUT_BYTES": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_ERRORS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/harness-tools/reasons.js": {
+   "MAX_REASONS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/harness-tools/registry.js": {
+   "BARS": "a schema or validator (allowed ranges of a setting or field)",
+   "ISO": "a schema or validator (allowed ranges of a setting or field)",
+   "TOOLS": "a schema or validator (allowed ranges of a setting or field)"
+  },
+  "scripts/lib/harness-tools/repair.js": {
+   "MAX_DEPTH": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/harness-tools/skills.js": {
+   "MAX_QUERY": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/harness-tools/validate.js": {
+   "MAX_DEPTH": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/lanes.js": {
+   "DATA_MINUTES": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/learning/adapter.js": {
+   "VALIDATIONS": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/learning/curated-lists.js": {
+   "VERSION": "a file format version",
+   "DAY": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/learning/curated-moments.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/learning/decision-dataset.js": {
+   "FORMAT_VERSION": "a file format version"
+  },
+  "scripts/lib/learning/decision-sampler.js": {
+   "SETTINGS": "a schema or validator (allowed ranges of a setting or field)"
+  },
+  "scripts/lib/learning/experience-index.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/learning/experience-log.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/learning/experience-lookups.js": {
+   "LOCK_WAIT_MS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/learning/preflight.js": {
+   "MINUTE": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/learning/risk-record-index.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/learning/setup-library.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/learning/skill-usage.js": {
+   "TF_MIN": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/learning/splits.js": {
+   "DAY": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/opencode.js": {
+   "EXTRA_ARGS": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/prop/account-states.js": {
+   "VERSION": "a file format version",
+   "N": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/prop/promotion.js": {
+   "PROMOTION_GATE": "frozen by design: the promotion gate (prop/promotion.js; its numbers only rise)"
+  },
+  "scripts/lib/prop/splits.js": {
+   "DAY": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/replay/driver.js": {
+   "CLOSE_SESSION_MIN": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)"
+  },
+  "scripts/lib/replay/failures.js": {
+   "SEVERITY": "a schema or validator (allowed ranges of a setting or field)",
+   "AT": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/replay/labels.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/replay/schedule.js": {
+   "HOUR": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/replay/scorecard.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/replay/store.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/runner.js": {
+   "STOP_ORDER_TYPES": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/account-gate.js": {
+   "POSITION_SIGN": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "STOP_TYPES": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "LIMIT_TYPES": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "ORDER_TYPE_IDS": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "SIDE_SIGN": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/briefing.js": {
+   "WINDOWS": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "EVENT_FRAMES": "a timeframe label or frame table (minutes by name)",
+   "GAP_REL_RANK": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "GAP_TF_RANK": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "SHARED_CLOCK": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/trading/broker-specs.js": {
+   "TICK_SIZE_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "TICK_VALUE_MIN": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "TICK_VALUE_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/trading/candle-facts.js": {
+   "REL_RANK": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "J": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/trading/cisd.js": {
+   "UPPER_THIRD": "a definition the skills teach (Fibonacci levels, the upper third of a range)",
+   "SNAPSHOT_PARAMS": "off/one defaults (0 = none, 1 contract)"
+  },
+  "scripts/lib/trading/clock.js": {
+   "TRADING_DAY_START_HOUR": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "PARTS_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MARKET_OPEN_MIN": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "MARKET_CLOSE_MIN": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "RTH_OPEN_MIN": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "EARLY_CLOSE_MIN": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)"
+  },
+  "scripts/lib/trading/combine.js": {
+   "MIN_STOP_SLIPPAGE_TICKS": "a code ceiling or floor on a document's value (STRATEGY.md valid_bars, RULEBOOK.md stop_slippage_ticks)"
+  },
+  "scripts/lib/trading/composed-reads.js": {
+   "MAX_READS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "READ_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "WHY_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "D2_TIERS": "a timeframe label or frame table (minutes by name)",
+   "TF_MIN": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/trading/contracts.js": {
+   "CONTRACT_SPECS": "contract facts (tick size and value per root)"
+  },
+  "scripts/lib/trading/decision-history.js": {
+   "OPEN_SIDE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "CLOSE_SIDE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/exit-trail.js": {
+   "SWING_TFS": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/trading/fact-claims.js": {
+   "WINDOW_NAMES": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)",
+   "RTH": "exchange hours and named session windows (trading/clock.js is the session boundaries' one home)"
+  },
+  "scripts/lib/trading/fib.js": {
+   "LEVELS": "a definition the skills teach (Fibonacci levels, the upper third of a range)",
+   "OTE": "a definition the skills teach (Fibonacci levels, the upper third of a range)"
+  },
+  "scripts/lib/trading/lifecycle-gate.js": {
+   "EPS": "a floating-point tolerance"
+  },
+  "scripts/lib/trading/lifecycle-runner.js": {
+   "LIMIT": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/m5-structure.js": {
+   "MINUTES": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/trading/mtf.js": {
+   "LABEL": "a timeframe label or frame table (minutes by name)"
+  },
+  "scripts/lib/trading/open-trades.js": {
+   "STOP_TYPES": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "LIMIT_TYPE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "R": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/trading/order-limits.js": {
+   "EPS": "a floating-point tolerance"
+  },
+  "scripts/lib/trading/order-markers.js": {
+   "DEAD": "a protocol id, enum or rank (order types, sides, parquet types, ranks)",
+   "RESTING_TYPE": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/order-plan.js": {
+   "EPS": "a floating-point tolerance"
+  },
+  "scripts/lib/trading/positions.js": {
+   "SIGN": "a protocol id, enum or rank (order types, sides, parquet types, ranks)"
+  },
+  "scripts/lib/trading/prop-state.js": {
+   "DAY_MS": "a unit (milliseconds in a minute, an hour, a day; bar units)"
+  },
+  "scripts/lib/trading/round-numbers.js": {
+   "MAX_STEP_TICKS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/trading/rulebook.js": {
+   "ITEMS": "a schema or validator (allowed ranges of a setting or field)",
+   "EXIT_RULE": "a schema or validator (allowed ranges of a setting or field)",
+   "STREAK_RULE": "a schema or validator (allowed ranges of a setting or field)"
+  },
+  "scripts/lib/trading/rules.js": {
+   "MAX_RULES_PER_SIDE": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_GROUP_ITEMS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_GROUP_DEPTH": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_CONDITIONS_PER_SIDE": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "MAX_FIELD_SEGMENTS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
+   "H": "a local of a function body (a computation, not a setting)"
+  },
+  "scripts/lib/trading/skills-loaded.js": {
+   "TRIGGERS": "a schema or validator (allowed ranges of a setting or field)"
+  },
+  "scripts/lib/trading/strategies.js": {
+   "FILTERS": "a schema or validator (allowed ranges of a setting or field)",
+   "MAX_VALID_BARS": "a code ceiling or floor on a document's value (STRATEGY.md valid_bars, RULEBOOK.md stop_slippage_ticks)",
+   "MAX_FILE_BYTES": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/trading/trade-lifecycle.js": {
+   "SCHEMA": "a file format version"
+  },
+  "scripts/lib/trading/volume-profile.js": {
+   "MAX_ROWS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  },
+  "scripts/lib/train/archive.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/train/rulebook-guard.js": {
+   "EPS": "a floating-point tolerance"
+  },
+  "scripts/lib/train/state.js": {
+   "VERSION": "a file format version"
+  },
+  "scripts/lib/tunables.js": {
+   "TRAINING": "a schema or validator (allowed ranges of a setting or field)",
+   "REPLAY": "a schema or validator (allowed ranges of a setting or field)",
+   "RUNNER": "a schema or validator (allowed ranges of a setting or field)",
+   "ANALYSIS": "a schema or validator (allowed ranges of a setting or field)"
+  },
+  "scripts/mcp-gateway.js": {
+   "LANE_TIMEOUT_MS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"
+  }
+ },
+ "literals": {
+  "scripts/ab-compare.js": 1,
+  "scripts/adapter.js": 1,
+  "scripts/autotrader.js": 1,
+  "scripts/harness-tools-mcp.js": 1,
+  "scripts/lib/account-lock.js": 3,
+  "scripts/lib/alerts.js": 2,
+  "scripts/lib/autotrader.js": 9,
+  "scripts/lib/backtest/data.js": 22,
+  "scripts/lib/backtest/decode-budget.js": 1,
+  "scripts/lib/backtest/engine.js": 2,
+  "scripts/lib/backtest/parquet.js": 39,
+  "scripts/lib/backtest/report.js": 3,
+  "scripts/lib/backtest/run.js": 5,
+  "scripts/lib/backtest/walk-forward.js": 2,
+  "scripts/lib/backtest/xlsx.js": 2,
+  "scripts/lib/bars-fetch.js": 4,
+  "scripts/lib/broker/config.js": 2,
+  "scripts/lib/broker/translator.js": 2,
+  "scripts/lib/compare-bars.js": 5,
+  "scripts/lib/cycle-log.js": 1,
+  "scripts/lib/env-file.js": 1,
+  "scripts/lib/field-confluence.js": 5,
+  "scripts/lib/field-study.js": 8,
+  "scripts/lib/frontmatter.js": 2,
+  "scripts/lib/harness-tools/compact.js": 1,
+  "scripts/lib/harness-tools/experience.js": 2,
+  "scripts/lib/harness-tools/lessons.js": 1,
+  "scripts/lib/harness-tools/preflight.js": 1,
+  "scripts/lib/harness-tools/protocol.js": 1,
+  "scripts/lib/harness-tools/reconcile.js": 1,
+  "scripts/lib/harness-tools/strategies.js": 1,
+  "scripts/lib/harness-tools/validate.js": 1,
+  "scripts/lib/head-prompt.js": 1,
+  "scripts/lib/headless-check.js": 1,
+  "scripts/lib/lane-cycle.js": 1,
+  "scripts/lib/lanes.js": 3,
+  "scripts/lib/learning/adapter-validation.js": 1,
+  "scripts/lib/learning/adapter.js": 12,
+  "scripts/lib/learning/curated-lists.js": 1,
+  "scripts/lib/learning/curated-moments.js": 4,
+  "scripts/lib/learning/decision-dataset.js": 6,
+  "scripts/lib/learning/decision-examples.js": 1,
+  "scripts/lib/learning/decision-label.js": 2,
+  "scripts/lib/learning/decision-sampler.js": 2,
+  "scripts/lib/learning/experience-log.js": 1,
+  "scripts/lib/learning/preflight.js": 5,
+  "scripts/lib/learning/setup-library.js": 4,
+  "scripts/lib/learning/setup-moments.js": 1,
+  "scripts/lib/learning/skill-usage.js": 3,
+  "scripts/lib/opencode.js": 1,
+  "scripts/lib/prop/evaluator.js": 7,
+  "scripts/lib/prop/model-stream.js": 2,
+  "scripts/lib/prop/natural-rate.js": 1,
+  "scripts/lib/prop/splits.js": 2,
+  "scripts/lib/prop/stats.js": 7,
+  "scripts/lib/prop/trade-stream.js": 3,
+  "scripts/lib/replay/counterfactual.js": 1,
+  "scripts/lib/replay/driver.js": 2,
+  "scripts/lib/replay/labels.js": 1,
+  "scripts/lib/replay/report.js": 1,
+  "scripts/lib/replay/scorecard.js": 2,
+  "scripts/lib/replay/stage.js": 1,
+  "scripts/lib/runner-wiring.js": 1,
+  "scripts/lib/runner.js": 15,
+  "scripts/lib/schedule.js": 1,
+  "scripts/lib/secret-scan.js": 1,
+  "scripts/lib/session/bars-archive.js": 1,
+  "scripts/lib/session/record.js": 1,
+  "scripts/lib/trading/accounts.js": 2,
+  "scripts/lib/trading/briefing.js": 10,
+  "scripts/lib/trading/broker-specs.js": 1,
+  "scripts/lib/trading/candle-facts.js": 11,
+  "scripts/lib/trading/cisd.js": 3,
+  "scripts/lib/trading/clock.js": 5,
+  "scripts/lib/trading/combine.js": 1,
+  "scripts/lib/trading/composed-reads.js": 31,
+  "scripts/lib/trading/contracts.js": 1,
+  "scripts/lib/trading/day-context.js": 14,
+  "scripts/lib/trading/exchange-calendar.js": 6,
+  "scripts/lib/trading/exit-trail.js": 1,
+  "scripts/lib/trading/fact-claims.js": 4,
+  "scripts/lib/trading/fvg-frames.js": 1,
+  "scripts/lib/trading/indicators.js": 3,
+  "scripts/lib/trading/instincts.js": 10,
+  "scripts/lib/trading/market-snapshot.js": 5,
+  "scripts/lib/trading/mtf.js": 10,
+  "scripts/lib/trading/open-trades.js": 1,
+  "scripts/lib/trading/order-gate.js": 1,
+  "scripts/lib/trading/order-markers.js": 1,
+  "scripts/lib/trading/prop-state.js": 3,
+  "scripts/lib/trading/reasons.js": 3,
+  "scripts/lib/trading/regime.js": 1,
+  "scripts/lib/trading/report-cache.js": 2,
+  "scripts/lib/trading/round-numbers.js": 1,
+  "scripts/lib/trading/rulebook.js": 2,
+  "scripts/lib/trading/rules.js": 4,
+  "scripts/lib/trading/skill-lookups.js": 2,
+  "scripts/lib/trading/strategies.js": 14,
+  "scripts/lib/train/ab-compare.js": 3,
+  "scripts/lib/train/config.js": 1,
+  "scripts/lib/train/decision-points.js": 3,
+  "scripts/lib/train/findings.js": 1,
+  "scripts/lib/train/lessons.js": 1,
+  "scripts/lib/train/model-verifier.js": 3,
+  "scripts/lib/train/probe-config.js": 1,
+  "scripts/lib/train/proposal.js": 1,
+  "scripts/lib/train/proposer.js": 2,
+  "scripts/lib/train/state.js": 2,
+  "scripts/lib/train/tree.js": 1
+ }
+}
