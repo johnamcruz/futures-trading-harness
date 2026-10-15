@@ -124,7 +124,7 @@ async function pass(w, at, script, o = {}) {
   // the cycle's timing reads with it once the run returned): what the cycle log's timing sees of a cycle that overran.
   const slow = o.lateBy ? lateModel(model, o.lateBy) : null;
   const logs = [];
-  const events = [];
+  const events = o.events || []; // `o.events`: the caller's array, to watch the runner's events while the cycle runs
   const ran = [];
   const client = openAdapter({ root: ROOT, env, timeoutMs: 30000 });
   try {
