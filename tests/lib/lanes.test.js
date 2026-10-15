@@ -97,7 +97,7 @@ test('lanes are checked: timeframe 1 to 60 and once each, known keys, trigger ba
   assert.match(lanes([3]).errors.join('\n'), /lanes\[0\]: an object/);
   for (const tf of [0, 61, 1.5, '3', '3m', null, undefined]) assert.match(lanes([{ timeframe: tf }]).errors.join('\n'), /lanes\[0\]\.timeframe: minutes per bar, 1 to 60/, String(tf));
   assert.deepStrictEqual(lanes([{ timeframe: 60 }]).errors, []);
-  assert.match(lanes([{ timeframe: 3, trigger: 'tick' }]).errors.join('\n'), /lanes\[0\]\.trigger: "bar" or "signal"/);
+  assert.match(lanes([{ timeframe: 3, trigger: 'tick' }]).errors.join('\n'), /lanes\[0\]\.trigger: "bar", "signal" or "data"/);
   assert.match(lanes([{ timeframe: 3, timefrme: 1 }]).errors.join('\n'), /lanes\[0\]: unknown key "timefrme"/);
   for (const bad of [[], 'a3', ['A3'], ['a3', 'a3'], [3]]) {
     assert.match(lanes([{ timeframe: 3, strategies: bad }]).errors.join('\n'), /lanes\[0\]\.strategies: a non-empty list/, JSON.stringify(bad));

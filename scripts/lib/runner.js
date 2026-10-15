@@ -38,7 +38,14 @@
  *      several lanes, entry verdicts of two policies in one cycle are settled
  *      by priority (the other's skipped and recorded so for the gate), the
  *      cycle's budget is the fastest closed lane's, and each lane's last bar
- *      is kept in the state (a replay pass is a new process).
+ *      is kept in the state (a replay pass is a new process; saved at the end
+ *      of a pass in which no cycle failed, so a retry finds its bars new). A data lane
+ *      (trigger "data") only brings its 1m bars to the first lane's briefing:
+ *      polled, its clock kept and coalesced like any lane, but it scans
+ *      nothing, starts no cycle, writes no bars file, gets no housekeeping and
+ *      no session-record point, and never sets a cycle's budget; its bars count
+ *      even when they closed a while ago (closed bars only); with one trading lane the
+ *      cycles, prompts and history are the one-lane runner's.
  */
 
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
@@ -63,7 +70,7 @@ const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKE
 const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(now, w));
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
-const { lanesOf, tfLabel, retiredLaneText } = require('./lanes');
+const { lanesOf, tfLabel, retiredLaneText, isDataLane } = require('./lanes');
 const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory, laneBarsOf } = require('./lane-cycle');
 
 const IDLE_MS = 5000;
@@ -167,13 +174,16 @@ function createRunner(deps) {
   let eodRunDay = null; // the trading day whose end-of-day agents' run already happened
   // A bar clock per symbol and lane (lanes.js): the first lane's in the symbols' order, then each further lane's.
   const lanes = lanesOf(cfg);
-  const multi = lanes.length > 1;
+  // `polled`: several bar clocks (a data lane's too): each lane's clock kept in the state, a shared close coalesced.
+  // `multi`: several trading lanes (a data lane never cycles): lane-tagged cycles, prompts, history and budgets.
+  const polled = lanes.length > 1;
+  const multi = lanes.filter(l => !isDataLane(l)).length > 1;
   const laneKey = s => `${s.symbol}|${s.minutes}m`;
   // Several lanes: each lane's last bar, kept in the state (a replay pass is a new process: without it a 3m lane
   // would take its last bar for a new one at every 1m close).
   // { lastBarT, contractId } per lane: a clock is restored only for the contract it was kept on (a roll since starts over).
   const restored = (symbol, minutes) => {
-    const r = multi && state && state.laneClocks ? state.laneClocks[`${symbol}|${minutes}m`] : null;
+    const r = polled && state && state.laneClocks ? state.laneClocks[`${symbol}|${minutes}m`] : null;
     const ok = r && typeof r.lastBarT === 'string' && Number.isFinite(Date.parse(r.lastBarT)) && typeof r.contractId === 'string';
     return ok ? { restoredFor: r.contractId, clock: { lastBarT: r.lastBarT, expectedCloseAt: Date.parse(r.lastBarT) + 2 * minutes * 60000, pollingSince: null } } : { restoredFor: null, clock: null };
   };
@@ -321,6 +331,9 @@ function createRunner(deps) {
       // A stale bar (closed while a cycle ran) starts no cycle, but its prices
       // still feed the trailing stop and the leftover-order check.
       const stale = step.event === 'stale' && !recover;
+      // A data lane's bars (lanes.js) only go to the briefing (recordFineBars): no bars file, no trend or day read, and
+      // a bar that closed a while ago (after a long cycle) still counts: its window is closed bars, never later ones.
+      if (isDataLane(lanes[sym.lane])) return { symbol: sym.symbol, lane: sym.lane, minutes, contractId: sym.contractId, tickSize: sym.tickSize, bars: step.bars, stale: false, data: true, bar: { t: step.bar.t, c: step.bar.c, contractId: sym.contractId } };
       if (stale) log(`${sym.symbol}: bar ${step.bar.t} closed too long ago to start a cycle; housekeeping only`);
       const bars = step.bars;
       let file = null;
@@ -1268,26 +1281,31 @@ function createRunner(deps) {
       const item = await pollSymbol(i, now);
       if (item) ready.push(item);
     }
-    if (multi) {
-      saveLaneClocks();
+    // Several lane clocks: saved at the end of the pass, and only when no cycle of it failed, so a
+    // replay's retry of a failed cycle (a new process) and a live restart find the bars still new, as with one lane.
+    let cycleFailed = false;
+    if (polled) {
       // A lane of a symbol whose bar closed, due at that same close but not published yet: the cycle waits for it
       // (a few seconds at most), so one close is one cycle.
       const wait = coalesceWait(ready, clock.now());
       if (wait !== null) { held = ready; return wait; }
     }
-    if (ready.length) {
-      // A 1m lane's bars that closed this pass, before any briefing: a 5m candle ending at this close is complete only
-      // with its last 1m bar, so the 1m bars of the same close count (replay and live: the same pass, the same order).
-      for (const x of ready) {
-        if (!x.stale && x.minutes === 1) { try { recordFineBars(x); } catch (_err) { /* recording never stops the pass */ } }
-      }
+    // A 1m lane's bars that closed this pass (a data lane's too), before any briefing: a 5m candle ending at this close
+    // is complete only with its last 1m bar, so the 1m bars of the same close count (replay and live: the same pass,
+    // the same order).
+    for (const x of ready) {
+      if ((!x.stale || x.data) && x.minutes === 1) { try { recordFineBars(x); } catch (_err) { /* recording never stops the pass */ } }
+    }
+    // A data lane's bars end there (lanes.js): no housekeeping, no session-record point, no scan, no cycle.
+    const traded = ready.filter(x => !x.data);
+    if (traded.length) {
       // Trailing stops and leftover orders first: they only ever reduce risk. Once per symbol (its first lane's bar
       // when that closed: the trail counts the first lane's bars), never twice on one account read's orders.
       const noCycles = d.action === 'housekeep';
-      const keep = ready.filter(x => !ready.some(y => y !== x && y.symbol === x.symbol && (y.lane < x.lane || (y.lane === x.lane && ready.indexOf(y) < ready.indexOf(x)))));
+      const keep = traded.filter(x => !traded.some(y => y !== x && y.symbol === x.symbol && (y.lane < x.lane || (y.lane === x.lane && traded.indexOf(y) < traded.indexOf(x)))));
       for (const item of keep) await housekeeping(item, { noCycles, trail: item.lane === 0 });
       // Then the session record hears each closed bar (its values taken, its bars archived): after the risk work.
-      for (const x of ready) {
+      for (const x of traded) {
         try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars, ...(multi ? { minutes: x.minutes } : {}) }); } catch (_err) { /* recording never stops the pass */ }
       }
       if (state.trails) saveState(state);
@@ -1308,7 +1326,7 @@ function createRunner(deps) {
       if (again.action === 'trade' || again.action === 'manage') {
         let manageOnly = again.action === 'manage';
         const run = [];
-        const due = ready.filter(x => !x.stale);
+        const due = traded.filter(x => !x.stale);
         // The first lane's bars are decided (and briefed) first: a lane's briefing takes its session levels from the
         // runner's briefing of the bar holding at its close, which a carried lane item listed first would miss.
         const decided = new Map();
@@ -1517,9 +1535,11 @@ function createRunner(deps) {
           state = { ...state, history: multi ? boundHistory(history, firstLane) : history.slice(-10) };
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
+          if (!r || !r.ok || r.timedOut) cycleFailed = true;
         }
       }
     }
+    if (polled && !cycleFailed) saveLaneClocks();
     // A premarket still missing is tried again when its pause is up: after this pass's cycle, never alongside one,
     // never under the kill switch, and never at or past end of day.
     // (A pass reaches here only on a trade, manage or housekeeping action: never at or after end of day.)

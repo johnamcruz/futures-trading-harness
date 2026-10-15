@@ -56,7 +56,8 @@ function laneBudgetMin(cfg, lane) {
 
 /** The budget of a cycle covering the `closed` lanes: the fastest one's; with none, the runner's. */
 function cycleTimeoutMin(cfg, closed = []) {
-  const budgets = closed.filter(Boolean).map(l => laneBudgetMin(cfg, l));
+  // A data lane (lanes.js) never cycles, so it never sets a budget.
+  const budgets = closed.filter(l => l && l.trigger !== 'data').map(l => laneBudgetMin(cfg, l));
   return budgets.length ? Math.min(...budgets) : cfg.cycleTimeoutMinutes;
 }
 
