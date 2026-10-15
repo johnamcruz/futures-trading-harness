@@ -306,10 +306,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // streak stop, the exit modes and pacing in prop-challenge-pacing, position-sizing and gate-refusals-limits: +1526 bytes each
 // mode; strategy-researcher +141, strategy-authoring's policy exit modes); then +433 bytes each mode for the risk manager
 // on merging feat/prop-mc-model (#196, owner-approved) with it: prop-challenge-pacing's reading of the attempt line's facts
-// to stand down before the gate refuses (the session's losing streak among them), both sides' text kept.
+// to stand down before the gate refuses (the session's losing streak among them), both sides' text kept; then +577 bytes
+// each mode for the risk manager (feat/practice-account-states, owner-approved): prop-challenge-pacing's counts carried
+// from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90279, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
-  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 75799, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
+  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90856, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
+  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 76376, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

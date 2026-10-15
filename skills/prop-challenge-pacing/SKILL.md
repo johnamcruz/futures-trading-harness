@@ -41,11 +41,20 @@ it:
   any entry block) and the live verdicts, from the runner's latest snapshot.
   Its facts (attempt day, profit needed, room to the daily limit and
   `daily_loss_soft`, today's trades and losses, the session's losing streak,
-  consistency headroom)
-  let you stand down before the gate refuses: a stop taking most of the room,
-  losses one short of the gate's limits, or headroom spent ends the day; a
-  thin cushion takes only the clearest setup; little profit left, protect
-  it. Headroom is a cap, not a target.
+  consistency headroom) let you stand down before the gate refuses. Today's
+  trades, losses and streak count every trade of the trading day, including
+  any closed before your first cycle (for example, an attempt picked up part
+  way through a day): read them as the gate counts them, from your first
+  decision. A stop taking most of the room, or headroom spent, ends the day.
+  Headroom is a cap, not a target.
+- **Read the attempt line before the setup.** Near the floor, the next
+  stop-out must not be able to end the attempt: take only the clearest
+  setup, at the verdict's size or under, or pass; a pass costs a day, a blow
+  costs the attempt. After a loss today the bar for the next entry rises,
+  never falls: no trade to win the loss back, and one loss short of
+  `loss_streak_stop` or the gate's daily loss count makes the next entry the
+  last of the day. Near the target, protect it: smaller or none, and never a
+  trade whose loss would undo the day the pass depends on.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;
@@ -78,9 +87,8 @@ it:
 - **Loss streak stop.** After `loss_streak_stop` losses in a row in a
   session (a win ends the streak, a scratch neither), the gate refuses
   entries until the next session: losses in a row mean the day's read is
-  off, not that a winner is due. Stand down before it does: after a loss,
-  only the highest-confluence setups; one loss short of it, near
-  `daily_loss_soft`, or on a thin cushion, pass on anything marginal.
+  off, not that a winner is due. Stand down before it does (the attempt
+  line, above).
 - **Pacing** (`sizing.clock_k`, tuned by the phase-2 search, or `off`)
   caps a trade at what the pass still needs per session left. Never size up
   to catch up.
