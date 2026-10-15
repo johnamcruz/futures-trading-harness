@@ -31,8 +31,7 @@ Strategies are Markdown documents, not code. Each lives at
 
 ### The priority order: the rule for every setup
 
-The rule for every setup (a rules strategy's candidate or a policy
-verdict). A verdict is a ceiling on size, never an order. Contradicting
+The rule for every setup. A verdict is a ceiling on size, never an order. Contradicting
 facts mean no trade; confluence means trade. Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
@@ -47,7 +46,8 @@ stated size stands under the code's caps.
 2. **The trend rule**: a trend strategy against the prevailing trend → no
    trade. A reversal strategy may
    fade it only at a higher-timeframe level, at half size and the nearest
-   target; a composed one needs a CHoCH its way at or above the trend's frame.
+   target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a
+   15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.
 3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
    before the room it needs (`needR`) → no trade. A composed trade's
    room: its R:R to the first real level (at least `risk.min_rr`).
@@ -59,7 +59,7 @@ stated size stands under the code's caps.
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
 6. **Confluence**: another strategy firing the other side → no trade;
-   confluence with it supports the full size; none changes nothing alone.
+   confluence with it supports the full size.
 7. **Secondary context** (the VWAP side, the lunch lull, participation):
    cuts to half, never vetoes alone.
 

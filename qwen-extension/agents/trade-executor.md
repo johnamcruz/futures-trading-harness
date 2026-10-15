@@ -55,8 +55,8 @@ and `broker-refusals` first.
      interactively the head trader asks you to move it after each bar.
    - **Target** (`targetR` set): stop and target at `targetR` × the stop
      distance.
-   - **Composed** (`trade_lifecycle`): a limit at the record's price, its
-     stop and target ticks, as `order_plan` gives them.
+   - **Composed** (`trade_lifecycle`), and any other exit: as `order_plan`
+     gives it; a time stop is the runner's.
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
    target) in ticks from the fill: every entry carries its stop as its
    bracket, `stopLossBracket {ticks, type: "stop"}` (the gate refuses an

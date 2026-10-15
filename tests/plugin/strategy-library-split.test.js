@@ -95,6 +95,15 @@ const LATE = [
   { from: "trade_lifecycle long, read long mixed → its stated size.",
     to: null,
     reason: "review of #169: the intro and step 4 say it; the example made room for step 3 and 4's composed clauses without growing a prompt" },
+  { from: "The rule for every setup (a rules strategy's candidate or a policy verdict).",
+    to: "The rule for every setup.",
+    reason: "re-review of #169: room for step 2's D2 tiers (the gate's D2_TIERS) without growing a prompt; every setup includes a composed one, so the list of kinds goes" },
+  { from: "**Confluence**: another strategy firing the other side → no trade; confluence with it supports the full size; none changes nothing alone.",
+    to: "**Confluence**: another strategy firing the other side → no trade; confluence with it supports the full size.",
+    reason: "re-review of #169: room for step 2's D2 tiers (the gate's D2_TIERS) without growing a prompt; \"none changes nothing alone\" said nothing" },
+  { from: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs a CHoCH its way at or above the trend's frame.",
+    to: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a 15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.",
+    reason: "re-review of #169: room for step 2's D2 tiers (the gate's D2_TIERS) without growing a prompt: the gate's tiers, which the risk manager reads here (it doesn't load trade-lifecycle)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -180,7 +189,7 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
   const lib = homes[at('strategy-library')];
   const ROOM = /3\. \*\*Room\*\*[^]*?`risk\.min_rr`\)\.\n/.exec(lib)[0];
-  const TREND = /2\. \*\*The trend rule\*\*[^]*?trend's frame\.\n/.exec(lib)[0];
+  const TREND = /2\. \*\*The trend rule\*\*[^]*?4h rejection\.\n/.exec(lib)[0];
   const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
   assert.notStrictEqual(swapped, lib);
   assert.deepStrictEqual(differences(old, swap('strategy-library', swapped)), [], 'a swap loses nothing');
