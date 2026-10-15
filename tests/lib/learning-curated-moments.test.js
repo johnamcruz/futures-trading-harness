@@ -19,7 +19,7 @@ const shifted = weeks => G.load(G.SERIES[0]).map(({ t, o, h, l, c, v }) => ({ t:
 const BARS = shifted(312);
 const CLOCK = L.runnerClock({ from: '2020-04-01', to: '2020-06-01' });
 const WINDOW = 700;
-const OPTS = { root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-05-01', to: '2020-05-02', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession };
+const OPTS = { root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-05-01', to: '2020-05-02', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession, validBars: 2 };
 const scan = (bars = BARS, over = {}) => M.scanMoments({ bars, use: 'practice', windowBars: WINDOW, ...OPTS, ...over });
 const MOMENTS = scan();
 const briefAt = (bars, t) => {
@@ -46,6 +46,9 @@ test('splits: a training scan is practice-train only, a validation scan practice
 test('the library\'s walk: with the library\'s window every moment is its record (the bar, the standard\'s status, plan and R)', () => {
   const lib = L.scanLibrary({ bars: BARS, ...OPTS });
   assert.ok(lib.length > 20, `records: ${lib.length}`);
+  // The standard's limit window is the library's: the strategy's valid_bars, required, kept on each moment.
+  assert.ok(MOMENTS.every(m => m.validBars === 2));
+  assert.throws(() => M.scanMoments({ ...OPTS, bars: BARS, use: 'practice', validBars: undefined }), /validBars: the trade_lifecycle strategy's valid_bars/);
   assert.deepStrictEqual(MOMENTS.map(m => m.id), lib.map(r => r.id));
   for (const [k, r] of lib.entries()) {
     const m = MOMENTS[k];

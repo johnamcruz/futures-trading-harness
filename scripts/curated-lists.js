@@ -92,7 +92,9 @@ async function scan(argv) {
   } else {
     const bars = baseBars(loadBars(path.resolve(file)), minutes);
     const clock = runnerClock({ from, to });
-    moments = M.scanMoments({ bars, root, minutes, tick, from, to, use, setupTf, eodOf: clock.eodOf, inSession: clock.inSession, stats, ...(windowBars ? { windowBars } : {}) });
+    // The standard's limit window: the shipped trade_lifecycle strategy's valid_bars (setup-library.js, as the library).
+    const validBars = require('./lib/learning/setup-library').strategyValidBars(path.resolve(__dirname, '..'), process.env);
+    moments = M.scanMoments({ bars, root, minutes, tick, from, to, use, setupTf, eodOf: clock.eodOf, inSession: clock.inSession, stats, validBars, ...(windowBars ? { windowBars } : {}) });
     fs.writeFileSync(path.resolve(out), moments.map(m => JSON.stringify(m)).join('\n') + (moments.length ? '\n' : ''));
   }
   const secs = (Date.now() - started) / 1000;

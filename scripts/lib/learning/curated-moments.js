@@ -9,7 +9,8 @@
  * Scanned on practice-train (use 'practice') for the training lists, or on practice-validate (use 'validate') for the
  * validation list, never test or final (learning/splits.js assertUse). The scan is the library's own walk
  * (setup-library.js scanLibrary: the reaction bar, then each confirming close until one composes, composeAt, the
- * experience log's limitOutcome), here with the use named and the briefing window a parameter: the default is the
+ * experience log's limitOutcome over the strategy's valid_bars, validBars, required), here with the use named and the
+ * briefing window a parameter: the default is the
  * live runner's history (mtf.js HISTORY_HOURS), so the 1h and 4h trend facts are the ones live reads. With the
  * library's window (700 bars) it gives the library's records (a test pins that parity).
  *
@@ -75,12 +76,14 @@ const { buildRecord, writeRecord } = require('../trading/mtf-state');
 const { trendRule, RULE_FRAMES, HISTORY_HOURS } = require('../trading/mtf');
 const { reversalAllowed } = require('../trading/lifecycle-gate');
 const { limitOutcome } = require('./experience-log');
+const { expiryOf } = require('../trading/trade-lifecycle');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
 const { composeAt, entryRead, setupKeyOf } = require('./setup-library');
 const { assertUse, sessionDate } = require('./splits');
 const { LISTS } = require('./curated-lists');
 
-const VERSION = 1;
+// 2: the standard's limit window is the trade_lifecycle strategy's valid_bars (1 held it one bar), as the library's.
+const VERSION = 2;
 const USES = Object.freeze(['practice', 'validate']);
 const LEAD_SETUP = 2;
 /** The history library's skill labels that differ from the crosswalk's (setup-library.js labels its bias reads so). */
@@ -263,7 +266,8 @@ const idOf = (...parts) => require('crypto').createHash('sha256').update(parts.j
  * Every reaction moment of the bars in [from, to) (practice-train for use 'practice', practice-validate for
  * 'validate'), with its trend, list, true reads, the standard's outcome, the gate's view and the window: [moment].
  */
-function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true, windowBars = Math.ceil((HISTORY_HOURS * 60) / minutes), stats = null }) {
+function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true, windowBars = Math.ceil((HISTORY_HOURS * 60) / minutes), stats = null, validBars }) {
+  if (!(Number.isInteger(validBars) && validBars >= 1)) throw new Error('validBars: the trade_lifecycle strategy\'s valid_bars, a whole number of bars from 1 (the standard\'s limit window, as the gate allows it)');
   if (!USES.includes(use)) throw new Error(`curated moments: use ${String(use)} refused; a list is scanned for ${USES.join(' or ')} only (test and final are sealed)`);
   assertUse(use, from, to);
   if (!(Number.isInteger(windowBars) && windowBars > FIRST_BAR)) throw new Error(`windowBars: a whole number above ${FIRST_BAR}`);
@@ -318,7 +322,7 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
       let outcome = null;
       if (at.standard) {
         const p = at.standard.plan;
-        outcome = limitOutcome({ bars: list, tfMs, side, entry: p.entry.price, stop: p.stop.price, target: p.target.price, fromMs: decisionClose, expiresMs: new Date(at.b.sections.m3.validUntil).getTime(), eodMs: eodOf(decisionClose), tick });
+        outcome = limitOutcome({ bars: list, tfMs, side, entry: p.entry.price, stop: p.stop.price, target: p.target.price, fromMs: decisionClose, expiresMs: expiryOf(at.b, validBars), eodMs: eodOf(decisionClose), tick });
       }
       const cls = classify(b);
       const listName = listOf(cls.state, cls.trend, side, reaction);
@@ -329,7 +333,7 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
       const skills = [...new Set([...reads.map(r => r.skill), ...(shape ? [SHAPE_SKILL] : [])])].sort();
       const aligned = [...new Set([...reads.filter(r => r.agrees).map(r => r.skill), ...(shape ? [SHAPE_SKILL] : [])])].sort();
       out.push({
-        v: VERSION, use, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), root, day, year: day.slice(0, 4), reactionAt: m.candle.closedAt,
+        v: VERSION, validBars, use, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), root, day, year: day.slice(0, 4), reactionAt: m.candle.closedAt,
         minutes, setupTf, bar: list[recordBar].t, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price },
         reactionKind: reactionKindOf(reaction), side, list: listName, trend: { state: cls.state, dir: cls.trend, ...cls.facts }, regime,
         reads, shape, skills, aligned,
