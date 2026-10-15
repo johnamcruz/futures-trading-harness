@@ -13,6 +13,8 @@
  * ticks, store.js) when there is one. A trade wins when its net is above zero.
  * Stand-aside: trade cycles whose CYCLE RESULT is no-trade. Refusals by
  * replay-clock are the replay's own plumbing, counted apart from the trader's.
+ * A setup-focused practice run (learning/setup-moments.js): its moments, cycles, skipped bars and the time saved
+ * (practice-report.js), and that it isn't comparable bar for bar with a full-day run.
  * Setup timing (cycle-timing.js timingReport, from each cycle's `timing`): bar close to decision and to order (median,
  * p90), overruns (decided after the next bar closed), setups decided in time, entered in time or missed, each role's
  * median time; all bar cycles, setup bars and quiet bars. Shown when a cycle carries timing. In a replay the latency is
@@ -24,6 +26,7 @@
  */
 
 const { timingReport } = require('../cycle-timing');
+const { practiceSummary, practiceMarkdown, practiceText } = require('./practice-report');
 
 const mean = xs => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -110,7 +113,8 @@ function summarize(days) {
       }
     }
   }
-  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran) };
+  const practice = practiceSummary(days);
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}) };
 }
 
 const pct = x => (x === null ? '-' : `${(x * 100).toFixed(1)}%`);
@@ -157,11 +161,12 @@ function toMarkdown(summary, manifest = {}) {
     `| ${HEAD.join(' | ')} |`, `| ${HEAD.map(() => '---').join(' | ')} |`, ...rows, '',
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
     ...timingMarkdown(summary),
+    ...practiceMarkdown(summary.practice || null),
   ].join('\n');
 }
 
 function toText(summary) {
-  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String)));
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null);
   if (!hasTiming(summary)) return main;
   const projected = summary.timing.all.replay ? ' (replay: projected live latency)' : '';
   return `${main}\nsetup timing${projected}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;

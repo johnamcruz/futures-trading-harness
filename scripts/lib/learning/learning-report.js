@@ -30,8 +30,12 @@
  *   frames           the owner's frame (a 1h bias, 15m reaction and 3m confirmation read) against the others, overall
  *                    and by each context key's value: decisions, mean R (passes at their counterfactual), taken, their mean R and win rate
  *
- *   learningMeasures({ decisions, records, lookups, index })   the measures
- *   readLearning(home)                { decisions, records, lookups, index } from a run home (null without a log)
+ *   practice         the run's setup-focused practice (learning/setup-moments.js, kept in learning-run.json), or null: a
+ *                    setup-focused run ran cycles only at selected bars, so its measures are said to be from one (a
+ *                    later full-day evaluation is the comparable one)
+ *
+ *   learningMeasures({ decisions, records, lookups, index, practice })   the measures
+ *   readLearning(home)                { decisions, records, lookups, index, practice } from a run home (null without a log)
  *   learningMarkdown(m), learningText(m)
  */
 
@@ -40,6 +44,8 @@ const path = require('path');
 const { readDecisions, logFile, frameOf } = require('./experience-log');
 const { readRecords, STEPS, CONTEXT_KEYS } = require('./lifecycle-record');
 const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
+const { readLearningRun } = require('./run-gate');
+const { practiceLine } = require('./setup-moments');
 
 const ROLLING_DAYS = 5;
 const COLLAPSE_SHARE = 0.8;
@@ -73,7 +79,7 @@ function follows(list, index) {
   return out;
 }
 
-function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null } = {}) {
+function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null } = {}) {
   const composed = decisions.filter(d => d.decision !== 'none');
   const entered = composed.filter(d => d.decision === 'entered');
   const stepsOf = d => new Set((d.reads || []).map(r => r.step).filter(s => STEPS.includes(s))).size;
@@ -89,6 +95,7 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
   const withLookup = composed.filter(d => looked.has(`${d.root}|${d.bar}`));
   const topShare = top ? rate(top[1], composed.length) : null;
   return {
+    practice: practice || null,
     decisions: { total: decisions.length, composed: composed.length, entered: entered.length, passed: composed.filter(d => d.decision === 'passed').length, refused: composed.filter(d => d.decision === 'refused').length, none: decisions.length - composed.length },
     steps: { mean: r4(mean(composed.map(stepsOf))), allSix: composed.filter(d => stepsOf(d) === STEPS.length).length },
     skillsPerTrade: r4(mean(entered.map(d => new Set((d.reads || []).map(r => r.skill)).size))),
@@ -175,14 +182,15 @@ function readLearning(home) {
   let index = null;
   let indexError = null;
   try { index = loadPinned(home); } catch (err) { indexError = err.message; }
-  return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError };
+  const run = readLearningRun(home);
+  return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError, practice: (run && run.practice) || null };
 }
 
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
 function learningText(m) {
   const d = m.decisions;
-  return `learning: ${d.composed} composed (${d.entered} entered, ${d.passed} passed, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
+  return `learning${m.practice ? ' (setup-focused practice)' : ''}: ${d.composed} composed (${d.entered} entered, ${d.passed} passed, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
     + `reads verified ${f2(m.reads.rate)} of ${m.reads.reads}; ${m.diversity.signatures} combinations, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed)' : ''}; `
     + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}\n`;
 }
@@ -192,6 +200,7 @@ function learningMarkdown(m) {
   const rows = m.curve.map(c => `| ${c.day} | ${c.role || '-'} | ${c.decisions} | ${c.taken} | ${f2(c.meanR)} | ${f2(c.winRate)} | ${f2(c.rollingMeanR)} | ${f2(c.rollingWinRate)} | ${f2(c.passQuality)} | ${c.lookups} | ${c.followed} / ${c.against} |`);
   return [
     '## Learning', '',
+    ...(m.practice ? [`- This run was ${practiceLine(m.practice)}.`] : []),
     `- Decisions: ${d.total} (${d.composed} composed: ${d.entered} entered, ${d.passed} passed, ${d.refused} refused; ${d.none} plain passes)`,
     `- Steps covered per composed decision: ${f2(m.steps.mean)} (${m.steps.allSix} cover all six); distinct skills per trade: ${f2(m.skillsPerTrade)}`,
     `- Reads verified: ${m.reads.verified} of ${m.reads.reads} (${f2(m.reads.rate)}); records ok: ${m.reads.recordsOk} of ${m.reads.records}`,

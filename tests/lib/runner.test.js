@@ -1681,3 +1681,74 @@ test('a running cycle reads the account for composed expiry only while a compose
   assert.deepStrictEqual(none.asked[0], [['MNQ'], et(10, 0, 2)], 'asked for the cycle\'s symbols since its start');
   assert.ok((await run(true)).reads > 0, 'one may be working: the account is read');
 });
+
+// Setup-focused practice (runner.js practiced, learning/setup-moments.js): the selector decides which bars run a cycle.
+function practiceMarket({ openFrom = null, openTo = null, leftoverAt = null } = {}) {
+  const market = fakeMarket({ minutes: 3 });
+  const cancelled = [];
+  const reads = [];
+  return {
+    cancelled, reads,
+    client: clockRef => ({
+      ...market.client(clockRef),
+      async accountState() {
+        reads.push(clockRef.t);
+        const open = openFrom !== null && clockRef.t >= openFrom && clockRef.t < openTo;
+        const leftover = leftoverAt !== null && clockRef.t >= leftoverAt && !cancelled.length;
+        return { positions: open ? [{ contractId: 'MNQ', type: 1, size: 1 }] : [], orders: leftover ? [{ id: 99, contractId: 'MNQ', type: 4, side: 1, size: 1 }] : [] };
+      },
+      async accountBalance() { return 100000; },
+      async cancelOrder(_acct, id) { cancelled.push({ id, t: clockRef.t }); },
+    }),
+  };
+}
+
+test('practice: only the bars the selector picks run a cycle; every bar is still scanned and logged with its decision', async () => {
+  const pm = practiceMarket();
+  const logged = [];
+  const picked = item => Date.parse(item.bar.t) % (15 * 60000) === 12 * 60000; // the 3m bar that completes each 15m candle
+  const { cycles } = await simulate({
+    cfg: { timeframe: 3, account: '7', sessions: ['09:30-15:00@America/New_York'] }, from: et(9, 59), to: et(11, 0), market: pm,
+    deps: { practiceSelect: (item, open) => (picked(item) ? { run: true, why: 'moment', reason: 'practice: setup moment' } : { run: false, why: 'none', reason: `practice: no setup moment (open ${open})` }), scanLog: r => logged.push(r) },
+  });
+  const trade = cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 3 && trade.length <= 4, `cycles: ${trade.length}`);
+  for (const c of trade) assert.strictEqual(Date.parse(barOpens(c)[0].split('@')[1]) % (15 * 60000), 12 * 60000);
+  assert.ok(logged.length >= 19, `every bar logged: ${logged.length}`);
+  assert.deepStrictEqual([...new Set(logged.filter(r => !r.decision.run).map(r => r.decision.reason))], ['practice: no setup moment (open false)']);
+  assert.ok(logged.filter(r => r.decision.run).every(r => /bar closed; practice: setup moment/.test(r.decision.reason)));
+});
+
+test('practice: a held position is managed every bar; the risk work (a leftover order cancelled) runs on skipped bars too', async () => {
+  const pm = practiceMarket({ openFrom: et(10, 10), openTo: et(10, 31), leftoverAt: et(10, 40) });
+  const seen = [];
+  const { cycles } = await simulate({
+    cfg: { timeframe: 3, account: '7', sessions: ['09:30-15:00@America/New_York'] }, from: et(9, 59), to: et(11, 0), market: pm,
+    deps: { practiceSelect: (item, open) => { seen.push(open); return open ? { run: true, why: 'manage', reason: 'practice: managing' } : { run: false, why: 'none', reason: 'practice: none' }; } },
+  });
+  const trade = cycles.filter(c => c.action === 'trade');
+  // Bars closing 10:12 .. 10:30 while the position is open: every one ran its cycle, no other did.
+  const bars = trade.map(c => Date.parse(barOpens(c)[0].split('@')[1]) + 180000);
+  assert.ok(bars.length >= 6 && bars.length <= 7, `managed bars: ${bars.length}`);
+  for (let i = 1; i < bars.length; i += 1) assert.strictEqual(bars[i] - bars[i - 1], 180000, 'every bar while open');
+  assert.ok(bars.every(t => t > et(10, 10) && t <= et(10, 31)));
+  // The leftover stop on a flat contract was cancelled on a bar that ran no cycle (housekeeping, before the selector).
+  assert.strictEqual(pm.cancelled.length, 1);
+  assert.ok(!bars.some(t => Math.abs(t - pm.cancelled[0].t) < 10000), 'on a skipped bar');
+  assert.ok(seen.includes(true) && seen.includes(false));
+});
+
+test('practice: a failed selector or an unreadable account runs the bar (never hides one)', async () => {
+  const pm = practiceMarket();
+  const { cycles } = await simulate({
+    cfg: { timeframe: 3, account: '7', sessions: ['09:30-15:00@America/New_York'] }, from: et(9, 59), to: et(10, 30), market: pm,
+    deps: { practiceSelect: () => { throw new Error('no briefing'); } },
+  });
+  assert.ok(cycles.filter(c => c.action === 'trade').length >= 9);
+  const broken = { client: clockRef => ({ ...pm.client(clockRef), async accountState() { throw new Error('down'); } }) };
+  const r = await simulate({
+    cfg: { timeframe: 3, account: '7', sessions: ['09:30-15:00@America/New_York'] }, from: et(9, 59), to: et(10, 30), market: broken,
+    deps: { practiceSelect: () => ({ run: false, why: 'none', reason: 'none' }) },
+  });
+  assert.ok(r.cycles.filter(c => c.action === 'trade').length >= 9);
+});

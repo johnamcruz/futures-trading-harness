@@ -17,6 +17,11 @@
  * around their look
  * (a replay outside the split, after 2026, declares itself not learning).
  *
+ * Setup-focused practice (`practice`, learning/setup-moments.js: cycles only at selected bars) is for practice: refused on
+ * a run declared not learning and on test and final (sealed evaluations run every bar, as live), allowed on
+ * practice-train and practice-validate; it is kept with the run's decision (a resume keeps it), so the learning report
+ * says the run was setup-focused.
+ *
  * One ledger: every look goes to the canonical ledger (looks.js ledgerPath, the default home's, whatever FTH_HOME), never one named
  * per run, so no run starts a budget of its own; the run keeps the ledger's path and a resume under another is
  * refused. What was decided is kept with the run's own record (<run dir>/learning-run.json, with a copy in the run
@@ -40,6 +45,7 @@ const { recordLook, checkLook, ledgerPath } = require('./looks');
 const { readLedger } = require('../prop/ledger-file');
 
 const FILE = 'learning-run.json';
+const PRACTICE_ROLES = Object.freeze(['practice-train', 'practice-validate']);
 
 function readLearningRun(dir) {
   try {
@@ -51,7 +57,15 @@ function readLearningRun(dir) {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-function decide({ from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix }) {
+function decide({ from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix, practice }) {
+  const d = decideRole({ from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix });
+  if (practice && !(d.learning && PRACTICE_ROLES.includes(d.role))) {
+    throw new Error(`learning run refused: setup-focused practice runs only on ${PRACTICE_ROLES.join(' or ')} (this run: ${d.learning ? d.role : 'not a learning run'}); test and final are judged on every bar, as live`);
+  }
+  return practice ? { ...d, practice } : d;
+}
+
+function decideRole({ from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix }) {
   if (learning === false) {
     if (candidate || evaluation || validate || reasoningFix) throw new Error('a run declared "learning": false takes no candidate, evaluation, validate or reasoning-fix flag');
     if (touchesHeldBack(from, to)) throw new Error('learning run refused: "learning": false on a practice-validate, test or final day; the held-back windows are seen only through their look (--validate, or --candidate and --evaluation)');
@@ -83,7 +97,7 @@ function decide({ from, to, runId, learning, endOfDay, candidate, evaluation, va
   return { learning: true, role, look: { evaluation, candidate, purpose: reasoningFix ? 'reasoning-fix' : 'judging' }, hideOutcomes: Boolean(reasoningFix) };
 }
 
-const OPTS = o => ({ from: o.from, to: o.to, runId: o.runId, learning: o.learning !== false, endOfDay: o.endOfDay, candidate: o.candidate || null, evaluation: o.evaluation || null, validate: o.validate === true, reasoningFix: o.reasoningFix === true });
+const OPTS = o => ({ from: o.from, to: o.to, runId: o.runId, learning: o.learning !== false, endOfDay: o.endOfDay, candidate: o.candidate || null, evaluation: o.evaluation || null, validate: o.validate === true, reasoningFix: o.reasoningFix === true, practice: o.practice || null });
 
 function checkLearningRun(opts = {}) {
   const d = decide(OPTS(opts));
@@ -101,9 +115,10 @@ function startLearningRun(runHome, opts = {}) {
   const d = decide(OPTS(opts));
   const homes = [runDir, runHome].filter(Boolean);
   const before = homes.map(readLearningRun).find(Boolean) || null;
-  const kept = { learning: d.learning, role: d.role, look: d.look, hideOutcomes: d.hideOutcomes };
-  if (before && !same({ learning: before.learning, role: before.role, look: before.look, hideOutcomes: before.hideOutcomes }, kept)) {
-    throw new Error(`learning run refused: this run started as ${JSON.stringify({ learning: before.learning, role: before.role, look: before.look })}; a resume keeps it (start another runId to change it)`);
+  const kept = { learning: d.learning, role: d.role, look: d.look, hideOutcomes: d.hideOutcomes, ...(d.practice ? { practice: d.practice } : {}) };
+  const norm = x => ({ learning: x.learning, role: x.role, look: x.look, hideOutcomes: x.hideOutcomes, practice: x.practice || null });
+  if (before && !same(norm(before), norm(kept))) {
+    throw new Error(`learning run refused: this run started as ${JSON.stringify({ learning: before.learning, role: before.role, look: before.look, practice: before.practice || null })}; a resume keeps it (start another runId to change it)`);
   }
   let ledger = null;
   let taken = null;
@@ -116,4 +131,4 @@ function startLearningRun(runHome, opts = {}) {
   return { ...kept, taken };
 }
 
-module.exports = { checkLearningRun, startLearningRun, readLearningRun, FILE, SEALED };
+module.exports = { checkLearningRun, startLearningRun, readLearningRun, FILE, SEALED, PRACTICE_ROLES };
