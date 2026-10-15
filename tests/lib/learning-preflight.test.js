@@ -224,8 +224,10 @@ test('feature detection reads an exported symbol, never the source text: a comme
   const usage = () => P.defaultReaders(path.resolve(su, '..', '..', '..'), {}).features().skillUsage;
   fs.writeFileSync(path.join(su, 'skill-usage.js'), "// readSkillUsage\nmodule.exports = { other: 1 };\n");
   assert.strictEqual(usage(), false, 'a file without the export');
-  fs.writeFileSync(path.join(su, 'skill-usage.js'), 'module.exports = { readSkillUsage() {} };\n');
-  assert.strictEqual(usage(), true, 'the exported function');
+  const merged = path.join(tmp(), 'scripts', 'lib', 'learning');
+  fs.mkdirSync(merged, { recursive: true });
+  fs.writeFileSync(path.join(merged, 'skill-usage.js'), 'module.exports = { readSkillUsage() {} };\n');
+  assert.strictEqual(P.defaultReaders(path.resolve(merged, '..', '..', '..'), {}).features().skillUsage, true, 'the exported function');
   assert.strictEqual(P.defaultReaders(ROOT, {}).features().skillUsage, true, 'this repository');
 });
 

@@ -261,9 +261,9 @@ test('skill usage: in the learning report (Markdown and text), and as the CLI pr
   assert.deepStrictEqual([refused.status, /held-back/.test(refused.stderr)], [1, true]);
 });
 
-test('skill usage: never shown to the model: only the replay report and its own CLI reach it, no harness tool, prompt or runner code', () => {
+test('skill usage: never shown to the model: only the replay report (and the stage report it ends a run with) and its own CLI reach it, no harness tool, prompt or runner code', () => {
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
   const users = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /(learning-report|skill-usage)'\)/.test(fs.readFileSync(f, 'utf8')))
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
-  assert.deepStrictEqual(users, ['scripts/lib/learning/learning-report.js', 'scripts/replay.js', 'scripts/skill-usage.js']);
+  assert.deepStrictEqual(users, ['scripts/lib/learning/learning-report.js', 'scripts/lib/replay/stage.js', 'scripts/replay.js', 'scripts/skill-usage.js']);
 });

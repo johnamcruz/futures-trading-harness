@@ -170,8 +170,7 @@ function skillUsageLines(merged, rd) {
   let u = null;
   try { u = rd.skillUsage ? rd.skillUsage() : null; } catch (e) { u = { error: String(e.message).split('\n')[0] }; }
   if (!u) return ['skill usage: no compose records in the run'];
-  if (u.error) return [`skill usage: not read (${u.error})`];
-  return require('../learning/skill-usage').skillUsageText(u).trimEnd().split('\n');
+  return require('../learning/learning-report').usageText(u).trimEnd().split('\n');
 }
 
 function stageReport(run, opts = {}) {
