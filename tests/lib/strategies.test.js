@@ -552,3 +552,22 @@ test('snapshot context: the numbers the skip rules talk about', () => {
   assert.ok(Number.isInteger(c.emaCrossesLast30) && c.session.high >= c.session.low);
   assert.ok(!('flow' in c), 'the harness computes no order flow: a broker puts it on its bars');
 });
+
+test('composedExit: a composed strategy trades the exit of the policy that lists it, with or without an attempt; else its brackets', () => {
+  const { composedExit, exitPlan, tradeExitPlan } = require('../../scripts/lib/trading/strategies');
+  const lifecycle = { name: 'life', valid: true, signal: 'composed', risk: { stop: 'structure', min_rr: 2 } };
+  const exit = { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 };
+  const policy = { name: 'pol', valid: true, signal: 'policy', strategies: ['life'], risk: { min_rr: 2 }, exit };
+  const got = composedExit(lifecycle, [lifecycle, policy]);
+  assert.deepStrictEqual(got, { plan: tradeExitPlan(policy, null), mode: 'target_then_trail' });
+  assert.deepStrictEqual(got.plan.afterTarget, { lockGivebackR: 0.5, trailBy: 'r', trailR: 1, swingMinutes: null });
+  const brackets = { plan: exitPlan(lifecycle), mode: 'brackets' };
+  // No policy lists it, an invalid one, or two that disagree: its own brackets.
+  assert.deepStrictEqual(composedExit(lifecycle, [lifecycle]), brackets);
+  assert.deepStrictEqual(composedExit(lifecycle, [lifecycle, { ...policy, valid: false }]), brackets);
+  assert.deepStrictEqual(composedExit(lifecycle, [lifecycle, policy, { ...policy, name: 'p2', exit: { ...exit, trail_r: 2 } }]), brackets);
+  // Two that agree: theirs. A rules strategy keeps its own plan whatever lists it.
+  assert.deepStrictEqual(composedExit(lifecycle, [lifecycle, policy, { ...policy, name: 'p2' }]), got);
+  const rules = { name: 'life', valid: true, signal: 'rules', risk: { min_rr: 2 }, exit: { target_r: 3 } };
+  assert.deepStrictEqual(composedExit(rules, [rules, policy]), { plan: exitPlan(rules), mode: 'brackets' });
+});

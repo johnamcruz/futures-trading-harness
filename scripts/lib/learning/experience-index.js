@@ -29,7 +29,9 @@
  * exit's session) practice-train too. Rows are dated by the later of the two (knownDay). A decision counts once (by
  * its id); the same log given twice (its sha256) is refused.
  *
- *   buildIndex(decisions, { runs, seed, reps, shuffle, now })   the index document, with its hash
+ *   buildIndex(decisions, { runs, seed, reps, shuffle, now })   the index document, with its hash, its `exit` and
+ *                                       `exitPlan` (the one exit plan its decisions were scored under, its mode and
+ *                                       hash; decisions under two plans are refused)
  *   cellStats(rows, { before, seed, reps, key })   the statistics of a cell's rows before a day (null: every row)
  *   cellAt(index, key, before)          cellStats of an index's cell, or null when the cell has no rows
  *   examplesBefore(index, skillSig, before)   the examples before a day, latest first
@@ -201,6 +203,31 @@ function indexHash(doc) {
 }
 
 /**
+ * The one exit plan the decisions were scored under (experience-log.js: each line's `exitPlan`, the hash of the run's
+ * exit as its manifest recorded it at seed time, and its mode `exit`; a line without a plan hash, written before the
+ * record, is untagged). Outcomes under two plans (two modes, or one mode with other parameters) measure two trade
+ * streams: an index of both is refused. { mode, plan } (the hash), nulls for none.
+ */
+function exitOf(decisions) {
+  const planOf = d => (typeof d.exitPlan === 'string' && d.exitPlan ? d.exitPlan : null);
+  const plans = [...new Set(decisions.map(planOf))];
+  const name = p => {
+    const d = decisions.find(x => planOf(x) === p);
+    return p ? `${(d && d.exit) || 'unknown'} ${p.slice(0, 12)}` : 'untagged (written before the exit plan was recorded)';
+  };
+  if (plans.length > 1) {
+    const n = p => decisions.filter(d => planOf(d) === p).length;
+    throw new Error(`index refused: its decisions were scored under different exit plans (${plans.map(p => `${name(p)}: ${n(p)}`).join(', ')}); build it from runs under one exit plan`);
+  }
+  const plan = plans.length ? plans[0] : null;
+  // Untagged lines (a run started before the record): no plan to name, whatever mode a line says.
+  if (plan === null) return { mode: null, plan: null };
+  const modes = [...new Set(decisions.filter(d => planOf(d) === plan).map(d => (typeof d.exit === 'string' && d.exit ? d.exit : null)))];
+  if (modes.length > 1) throw new Error(`index refused: one exit plan under two modes (${modes.join(', ')}): its lines were edited`);
+  return { mode: modes.length ? modes[0] : null, plan };
+}
+
+/**
  * The index of these decisions (lines of experience logs). `runs`: [{ runId, file, sha256 }] the logs read, for the
  * manifest. Plain passes (no signature) count in `plainPasses` only. `shuffle`: a seed for the shuffled arm.
  */
@@ -213,6 +240,7 @@ function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = nul
   const ids = new Set();
   decisions = decisions.filter(d => !d || !d.id || (ids.has(d.id) ? false : (ids.add(d.id), true)));
   assertPracticeTrain(decisions.filter(Boolean));
+  const { mode: exit, plan: exitPlan } = exitOf(decisions.filter(Boolean));
   const scored = decisions.filter(d => d && d.signatures && d.signatures.skill && d.decision !== 'none' && !d.hidden);
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
@@ -239,7 +267,7 @@ function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = nul
   } else cells = Object.fromEntries(keys.map(k => [k, cells[k]]));
   const days = [...new Set(scored.map(knownDay))].sort();
   const doc = {
-    v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true,
+    v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true, exit, exitPlan,
     runs: runs.map(r => ({ runId: r.runId || null, file: r.file ? path.basename(r.file) : null, sha256: r.sha256 || null })),
     roles: ['practice-train'], months: { from: days[0] || null, to: days[days.length - 1] || null },
     decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, cells, examples,
@@ -309,5 +337,5 @@ function loadPinned(home) {
 
 module.exports = {
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
-  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain,
+  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf,
 };

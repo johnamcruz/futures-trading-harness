@@ -42,10 +42,11 @@ function tmpHome(prefix = 'fth-learn-') {
  * A finished replay run under <home>/replay/<runId>: one day, trade cycles at `times`, fills in the first line,
  * the records in their day shards under <home>/trade-lifecycle/MNQ/ and bars in <home>/bars/MNQ-3m.json.
  */
-function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], refusals = {}, records = [], barRows = [], barsStart = null, runId = 'run1', gate = undefined } = {}) {
+function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], refusals = {}, records = [], barRows = [], barsStart = null, runId = 'run1', gate = undefined, exit = undefined } = {}) {
   const dir = path.join(home, 'replay', runId);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId, finished: true, daysDone: [day], broker: 'replay' }));
+  // `exit`: the exit plan the driver records at seed time (experience-log.js exitRecord); none: a run started before it.
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId, finished: true, daysDone: [day], broker: 'replay', ...(exit === undefined ? {} : { exit }) }));
   // The learning gate's decision (learning/run-gate.js): a learning run in its day's window by default; null: none.
   const g = gate === undefined ? { learning: true, role: require('../../scripts/lib/learning/splits').roleOf(day), look: null, hideOutcomes: false } : gate;
   // Kept with the run record (its run dir), with the run home's copy (run-gate.js).

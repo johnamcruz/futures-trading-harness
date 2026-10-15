@@ -121,6 +121,13 @@ The checks:
 - the skills crosswalk
 - the head prompt and its four composed reads (opencode, index mode)
 - generated adapters in sync
+- no web in the replay (`no-web-in-replay`): the replay step's permissions let
+  no agent search or fetch the web, and the news analyst is not launched (a
+  replayed date's news is on the web). It reads the user's own config each
+  CLI inherits too: a shell or fetch-like MCP tool it allows, or an MCP server
+  other than `broker` and `harness`, FAILs (Claude Code loads only those two in
+  a replay; Codex runs with its network off and web search disabled). A custom
+  command FAILs a learning run unless the replay config attests `noWeb: true`
 - the facts (a sample briefing on the bars you give: 1h, 4h, 15m, 3m and 5m,
   VWAP, FVGs, briefing age)
 - the curated list (its fingerprint, market, use and lists), and its source
@@ -129,7 +136,8 @@ The checks:
 - latency (charged on every learning run)
 - practice mode
 - the library display (shown only on an evaluation's arm, `--evaluation`)
-- the experience index
+- the experience index, its exit plan the run's (its decisions scored under
+  the exit the run's composed trades are managed by)
 - the risk record (N/A when `riskRecordDisplay` is off)
 - the ledger look
 - the stage (stage 2's own requirements: the account states on a

@@ -348,7 +348,7 @@ test('scripts/replay.js run records the setup at the run\'s start, the one its l
   const run = (start, end, flags = []) => {
     fs.writeFileSync(path.join(user, 'replay.json'), JSON.stringify({
       runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
-      autotrader: PF.AUTOTRADER,
+      autotrader: PF.AUTOTRADER, noWeb: true,
     }));
     // The training preflight runs first: the run's 1m bars (--bars) and a 1m data lane (tests/fixtures/preflight.js).
     flags = [...flags, '--bars', `MNQ=${PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10))}`];

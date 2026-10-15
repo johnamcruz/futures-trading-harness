@@ -185,8 +185,25 @@ test('writeRunExperience: only a learning run that passed the gate; a reasoning-
   const fix = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true } });
   const r = writeRunExperience(fix.dir);
   assert.deepStrictEqual([r.hidden, r.decisions[0].decision, r.decisions[0].outcome, r.decisions[0].grade, r.decisions[0].hidden], [true, 'passed', null, null, true]);
-  const shown = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false } });
-  assert.strictEqual(writeRunExperience(shown.dir).decisions[0].outcome.R, 2);
+  // Held under the exit the run's manifest recorded at seed time (the policy's, as the runner manages composed trades).
+  const { runExit } = require('../../scripts/lib/learning/run-experience');
+  const exit = E.exitRecord(runExit(null));
+  const shownGate = { learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false };
+  const shown = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit });
+  const d0 = writeRunExperience(shown.dir).decisions[0];
+  const want = E.limitOutcome({ bars: bars(t0, rows), tfMs: M3, side: 'long', entry: 100, stop: 98, target: 104, fromMs: ms(t0), expiresMs: Date.parse(d0.plan.expiresAt), eodMs: Infinity, tick: 0.25, plan: exit.plan });
+  assert.deepStrictEqual([d0.exit, d0.exitPlan, d0.outcome.R], [exit.mode, exit.hash, want.R]);
+  assert.notStrictEqual(exit.mode, 'brackets', 'the harness\'s composed exit is a policy\'s');
+  // The manifest decides, not the repository when the log is written: a run recorded under its brackets keeps them.
+  const brackets = E.exitRecord(E.BRACKETS);
+  const kept0 = writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit: brackets }).dir).decisions[0];
+  assert.deepStrictEqual([kept0.exit, kept0.exitPlan, kept0.outcome.R], ['brackets', brackets.hash, 2]);
+  // A run started before the record: its brackets, untagged (no plan hash).
+  const legacy = writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate }).dir).decisions[0];
+  assert.deepStrictEqual([legacy.exit, legacy.exitPlan, legacy.outcome.R], ['brackets', null, 2]);
+  // A recorded plan that doesn't match its hash: refused.
+  assert.throws(() => writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit: { ...exit, mode: 'brackets' } }).dir), /exit plan doesn't match its hash/);
+  assert.strictEqual(E.limitOutcome({ bars: bars(t0, rows), tfMs: M3, side: 'long', entry: 100, stop: 98, target: 104, fromMs: ms(t0), expiresMs: Date.parse(d0.plan.expiresAt), tick: 0.25 }).R, 2, 'the brackets alone: 2R');
   // The run record decides, not the run home's copy (the layout of folders never decides what is hidden).
   const kept = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true } });
   fs.writeFileSync(path.join(kept.home, 'learning-run.json'), JSON.stringify({ learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false }));
@@ -284,3 +301,48 @@ test('writeRunExperience: the run home\'s entry-orders.json stamps credit the ju
   assert.deepStrictEqual(r.decisions.map(d => [d.decision, d.signatures.skill.slice(0, 15), d.outcome.R]), [['entered', 'bias:bos-vs-cho', -0.75]]);
 });
 
+
+test('limitOutcome under the run\'s exit (target_then_trail): past the target trailed, not closed; a trailed stop out with slippage', () => {
+  const after = { afterTarget: { lockGivebackR: 0.5, trailBy: 'r', trailR: 1, swingMinutes: null } };
+  // Entry 100, stop 98 (1R = 2), target 104 (2R). The target bar holds above the lock (103); the next runs to 106 (3R).
+  const rows = [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 103.5, 104.25], [104.25, 106, 104.5, 105.5], [105.5, 105.75, 103, 103.5]];
+  const brackets = E.limitOutcome(plan({ rows }));
+  assert.deepStrictEqual([brackets.exitReason, brackets.R], ['target', 2], 'the brackets: out at the target');
+  const trailed = E.limitOutcome({ ...plan({ rows }), plan: after });
+  // Locked at 103 on the target bar, 1R behind 106 (104) on the next, through it on the last: 104 less a tick, 103.75.
+  assert.deepStrictEqual([trailed.exitReason, trailed.exitPrice, trailed.R], ['trail', 103.75, 1.875]);
+  // A bar whose low is already through the new stop: out at its close (the runner's rule).
+  const thru = E.limitOutcome({ ...plan({ rows: [rows[0], [100.25, 104.5, 103.5, 104.25], [104.25, 106, 103.75, 105.75]] }), plan: after });
+  assert.deepStrictEqual([thru.exitReason, thru.exitPrice], ['trail', 105.75]);
+  // Under the target nothing moves: the original stop.
+  const stop = E.limitOutcome({ ...plan({ rows: [rows[0], [100.25, 103.5, 100, 103], [103, 103.25, 97.5, 98]] }), plan: after });
+  assert.deepStrictEqual([stop.exitReason, stop.exitPrice], ['stop', 97.75]);
+  // An R trail (mode trail): from 1R up, 0.5R behind the best; the target bracket still rests.
+  // 1.5R on this bar: the stop to 102 (1R), the bar's low (101.5) already through it: out at its close.
+  const r = E.limitOutcome({ ...plan({ rows: [rows[0], [100.25, 103, 101.5, 102.75], [102.75, 103, 101.5, 102]] }), plan: { trailActivateR: 1, trailGivebackR: 0.5 } });
+  assert.deepStrictEqual([r.exitReason, r.exitPrice], ['trail', 102.75]);
+});
+
+test('buildDecisions: every line tagged with the run\'s exit mode; its passes held under that exit', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  const rows = [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 103.5, 104.25], [104.25, 106, 104.5, 105.5], [105.5, 105.75, 103, 103.5]];
+  const args = { cycles: [{ at: t(0), roots: ['MNQ'] }, { at: t(3), roots: ['MNQ'] }], records: [record({ at: t(0) })].map(fromLifecycleRecord), barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'x' };
+  const plain = E.buildDecisions(args);
+  assert.deepStrictEqual(plain.map(d => d.exit), ['brackets', 'brackets']);
+  assert.deepStrictEqual([plain[0].decision, plain[0].outcome.exitReason, plain[0].outcome.R], ['passed', 'target', 2]);
+  const exit = { plan: { afterTarget: { lockGivebackR: 0.5, trailBy: 'r', trailR: 1, swingMinutes: null } }, mode: 'target_then_trail' };
+  const held = E.buildDecisions({ ...args, exit });
+  assert.deepStrictEqual(held.map(d => d.exit), ['target_then_trail', 'target_then_trail'], 'a plain pass too');
+  assert.deepStrictEqual([held[0].outcome.exitReason, held[0].outcome.R], ['trail', 1.875]);
+});
+
+test('limitOutcome under a structure trail: the stop behind the last confirmed 15m swing low once one is confirmed (the R trail before)', () => {
+  // Armed at 104 (2R); five 15m candles then make a swing low at 105, confirmed when the fifth closes; the fall exits.
+  const rows = [[100.5, 100.75, 99.75, 100.25], [100.25, 102, 100.25, 101.75], [101.75, 103, 101.5, 102.75], [102.75, 104.5, 102.5, 104.25], [104.25, 105, 104, 104.75]];
+  for (const x of [106, 105.5, 105, 106, 107]) for (let k = 0; k < 5; k += 1) rows.push([x + 0.5, x + 1.5, x, x + 1]);
+  rows.push([107.5, 107.5, 103, 103.5], [103.5, 103.5, 101, 101.5]);
+  const exit = trailBy => E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: { lockGivebackR: 1.5, trailBy, trailR: 3, swingMinutes: 15 } } });
+  // Structure: one tick under the swing (104.75), out a tick worse (104.5); the loose 3R trail only at 102.5 (102.25).
+  assert.deepStrictEqual([exit('structure').exitReason, exit('structure').exitPrice, exit('structure').R], ['trail', 104.5, 2.25]);
+  assert.deepStrictEqual([exit('r').exitPrice, exit('r').R], [102.25, 1.125]);
+});

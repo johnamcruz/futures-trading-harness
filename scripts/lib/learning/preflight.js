@@ -13,7 +13,7 @@
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
- * adapters-in-sync, facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
+ * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
@@ -174,6 +174,25 @@ function adaptersInSync(ctx) {
   return r('adapters-in-sync', PASS, 'the generated adapters match their sources');
 }
 
+/**
+ * No web in a replay: the replay step's effective permissions (replay/web-access.js) let no agent search or fetch the
+ * web, nor the head trader launch a role whose tools reach it: on a replayed date the web holds what came next.
+ */
+function noWebInReplay(ctx) {
+  // A custom command is the user's own argv: no permission of the harness's to read. A learning run needs the replay
+  // config's attestation (noWeb: true) that it is kept off the web; any other run is warned.
+  if ((ctx.run.cfg || {}).harness === 'custom') {
+    if (ctx.run.noWeb === true) return r('no-web-in-replay', PASS, 'a custom command, attested off the web by the replay config (noWeb: true)');
+    const learning = ctx.run.learning === true || (ctx.gate || {}).learning === true;
+    const why = 'a custom command: its web access is its own, not the harness\'s to read; keep it off the web (it runs with the replay clock, FTH_REPLAY_NOW)';
+    return learning ? r('no-web-in-replay', FAIL, `${why}, and attest it in the replay config (noWeb: true)`) : r('no-web-in-replay', WARN, why);
+  }
+  const step = ctx.read.replayStep(ctx.run);
+  const found = require('../replay/web-access').webFindings(step);
+  if (found.length) return r('no-web-in-replay', FAIL, `the replay could reach the web: ${found.slice(0, 4).join('; ')}${found.length > 4 ? `; and ${found.length - 4} more` : ''}`);
+  return r('no-web-in-replay', PASS, `${step.harness}: no agent may search or fetch the web${step.webRoles.length ? `, and ${step.webRoles.join(', ')} is not launched` : ''}`);
+}
+
 /** The run's 1m bars reach its briefing only through a 1m lane (lanes.js DATA_MINUTES), as the runner builds it. */
 const hasMinuteLane = cfg => Array.isArray(cfg.lanes) && cfg.lanes.slice(1).some(l => Number(l.timeframe) === 1);
 
@@ -324,8 +343,13 @@ function experienceIndex(ctx) {
     if (!months[k]) continue;
     try { assertUse('index', months[k], new Date(Date.parse(`${months[k]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)); } catch (e) { bad.push(errText(e)); }
   }
+  // Its decisions' outcomes were scored under one exit plan (experience-index.js exitOf): the run's own, or the record
+  // it shows measures another trade stream than the one the run trades.
+  const exit = ctx.read.runExit(ctx.run);
+  if (!doc.exitPlan) bad.push(`built from decisions with no recorded exit plan; the run trades ${exit.mode} (${String(exit.hash).slice(0, 12)}): rebuild it from runs under that plan`);
+  else if (doc.exitPlan !== exit.hash) bad.push(`its exit plan (${doc.exit} ${doc.exitPlan.slice(0, 12)}) differs from the run's (${exit.mode} ${String(exit.hash).slice(0, 12)})`);
   if (bad.length) return r('experience-index', FAIL, `${doc.hash.slice(0, 12)}: ${bad.join('; ')}`);
-  return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built; pinned at the run's start`);
+  return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built, under the run's exit plan (${exit.mode}); pinned at the run's start`);
 }
 
 /** The model's risk record (learning/risk-record-index.js): shown only from a pinned, practice-train-built record, on practice-train or practice-validate. */
@@ -508,7 +532,7 @@ function monteCarlo(ctx) {
 }
 
 const CHECKS = Object.freeze([
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
 ]);
@@ -636,12 +660,14 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
         expectedSha256: hp.sha256(hp.headPrompt(hp.headPlan(root, 'index'))),
       };
     }),
+    replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),
     sampleBriefing: opts => sampleBriefing({ barsFiles, env }, opts),
     barCloses: (symbol, minutes) => barCloses({ barsFiles }, symbol, minutes),
     tickOf: symbol => { const s = require('../trading/contracts').specFor(symbol); return s ? s.tickSize : null; },
     curatedDoc: file => require('./curated-lists').readLists(file),
     index: file => require('./experience-index').readIndex(file),
+    runExit: run => require('./run-experience').plannedExit(run, { root, env }),
     riskRecord: file => require('./risk-record-index').readRiskIndex(file),
     riskPin: home => require('./risk-record-index').riskPin(home),
     learningGate: gate => require('./run-gate').checkLearningRun({ ...gate, env }),
@@ -717,6 +743,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };
