@@ -22,6 +22,8 @@
  *                   loop's look's. A replay config with "learning": false declares runs that never teach
  *   evaluator       the mechanical verifier (train/evaluator.js): { prop, data: { SYMBOL: bar file }, ...settings };
  *                   none: a strategy or rulebook change stays blocked
+ *   probe           Propose-Probe-Compose (train/probe-config.js, train/probe.js): { replay (a stage-1 curated practice
+ *                   config), windows (practice-train), k, parallel }; needs modelScore (the combined change's keep rule)
  *   modelScore      the model-scoring verifier (train/model-verifier.js): { account, paths, reps, faults }: the challenger's
  *                   own replays of every window, judged against the champion's by the keep rule (the paired 30-day Monte
  *                   Carlo and the paired decision measures). With it, tuningWindows lie in practice-train and heldOutWindows
@@ -41,6 +43,7 @@ const { tradingDayStart } = require('../trading/clock');
 const { ruleFrom } = require('./paired');
 const { resolveEvaluator } = require('./evaluator');
 const MV = require('./model-verifier');
+const { resolveProbe } = require('./probe-config');
 
 const LOOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -105,6 +108,8 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   let rule = null;
   try { rule = ruleFrom(r.decision); } catch (err) { errors.push(err.message); }
   const learning = learningErrors(r.learning, errors);
+  let probe = null;
+  try { probe = resolveProbe(r.probe, { read: spec => readSpec(spec, baseDir, 'probe.replay'), modelScore: r.modelScore }); } catch (err) { errors.push(err.message); }
   let modelScore = null;
   try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
   if (modelScore) {
@@ -121,6 +126,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     // Only when set: a loop without it keeps its hash (a resumed loop is the same loop).
     ...(learning ? { learning } : {}),
     ...(modelScore ? { modelScore } : {}),
+    ...(probe ? { probe } : {}),
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
   };
   const { limits: _l, ...identity } = loop;

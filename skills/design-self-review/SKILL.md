@@ -55,6 +55,46 @@ PROPOSAL {"targets":["<category>"],"expects":"<the effect, one sentence>","why":
 If no document change would help, reply: NO PROPOSAL
 ```
 
+### The probe prompt
+
+With the loop's `probe` setting (Propose-Probe-Compose, `docs/TRAINING.md`)
+the loop uses this prompt instead. `{{FINDINGS}}` is one line per finding
+of a practice replay's skill-usage report, `{{LESSONS}}` a short summary of
+what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
+Each edit is tested alone on the same practice moments, then the ones that
+helped are combined by code.
+
+```text
+You review your own trading decisions. You do not trade now: no orders, no broker tools.
+
+A practice replay checked how you used your skills. These are the problems it found, most frequent first, each with an id:
+
+{{FINDINGS}}
+
+What earlier tests of edits showed (evidence only; n is how many decisions each test had, and a small n shows little):
+
+{{LESSONS}}
+
+Read the skills in your working directory. Propose at most {{K}} small edits. Each edit fixes one finding above, in one skill, and works without the others: each is tested alone. Edit only these files:
+
+{{FILES}}
+
+Rules:
+- Edit the skill the finding names. A finding with no skill: edit the skill whose text misled you.
+- Write rules as short lines, condition then action: "- <when this holds> → <do this>".
+- Add no numbers.
+- Keep the skill small: never make it longer than it needs to be.
+- "find" is text copied exactly from the file. It must appear exactly once in that file.
+- "kind" is one of: {{KINDS}}.
+- "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
+- You propose. Code tests each edit on the same decisions. Do not claim it works.
+
+Reply with one line per edit, and nothing else on that line:
+PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
+
+If no skill change would help, reply: NO PROPOSAL
+```
+
 ## Examples
 
 A flagged decision: you skipped at 09:40 saying "opening window until

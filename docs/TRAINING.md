@@ -240,6 +240,94 @@ better.
 
 **A skill edit needs the owner's OK** before it is made or kept.
 
+### Propose–Probe–Compose
+
+Stage-1 tuning, inside the training loop (section 6): find good skill
+edits faster without loosening the bar for keeping one. A cheap screen
+first, then the strict test. The LLM proposes; code judges every step.
+It is on when the loop config has a `probe` block
+(`scripts/lib/train/probe-config.js`), and it needs `modelScore`:
+
+```json
+"probe": {
+  "replay": "s1-practice.json",
+  "windows": [{ "from": "2022-03-01", "to": "2022-04-01" }],
+  "k": 4,
+  "parallel": 1
+}
+```
+
+`replay` is a stage-1 practice config with a curated practice list (as in
+"A practice run" above), and `windows` lie in practice-train. Each
+iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
+
+1. **Findings.** The champion replays the windows' curated moments. Its
+   skill-usage report and scorecard give the skills with the most
+   misreads, misses and wrong-reason refusals
+   (`scripts/lib/train/findings.js`). A refusal is credited to the skills
+   whose reads the model composed at that bar.
+2. **Propose.** One proposer call (the `design-self-review` skill's probe
+   prompt) writes up to `k` small, independent skill edits. Each targets
+   one finding and carries a tag: the skill, the finding and the edit's
+   kind (rewording, example, rule or removal). Code checks every edit
+   (`scripts/lib/train/probe-edit.js`): one skill's file, no new numbers,
+   short condition → action lines, a removal that removes, and the
+   skill's byte cap. An edit probed before is not run again.
+3. **Probe.** Each edit's tree replays the same curated moments with the
+   same replay config and seed as the champion. Code pairs the two runs
+   decision by decision (`scripts/lib/train/screen.js`): the correct-read
+   rate per decision, process adherence, R per decision, and the target
+   (the targeted skill's reads right, or, for a wrong-reason refusal, the
+   refusals fixed). The targeted skill's used, correct and missed counts
+   are shown beside them. The verdict is `helped`, `no effect` or `hurt`.
+   Probing uses practice-train only and spends no looks.
+4. **Compose.** Code combines every edit that helped into one change
+   (`scripts/lib/train/compose.js`). Two edits that touch the same lines:
+   the larger paired gain stays and the conflict is reported. An edit that
+   would break the proposal's limits (3 edits, the diff size, a byte cap)
+   is left out, with the reason. The combined change is probed once more
+   on the same moments: no measure may be worse and every part's target
+   must still gain, so its parts can't cancel.
+5. **Keep.** The combined change is the iteration's one proposal and goes
+   through the full keep rule (section 6), unchanged: the challenger's
+   full-day tuning windows, zero blows, the pooled interval, then held-out
+   judging as its own step. A kept change is a local branch and a PR body
+   that lists its parts. Nothing merges, and no skill is edited on main:
+   edits exist only in the probe trees and the PR.
+
+**The screen's thresholds** are `SCREEN` in `scripts/lib/train/screen.js`,
+the one place:
+
+| Setting | Value | Meaning |
+| --- | --- | --- |
+| `gainAlpha` | 0.2 | a gain on the target: one-sided McNemar p at most this |
+| `harmAlpha` | 0.2 | a harm on any measure: p at most this (quick to call a harm) |
+| `minDiscordant` | 3 | the discordant decisions a gain or a harm needs |
+| `minPairs` | 10 | the paired decisions R per decision needs before it can show a harm |
+
+The screen is permissive: it only filters noise. Passing it keeps nothing.
+The keep rule stays strict and unchanged.
+
+**The lessons record** (`<loop dir>/lessons.jsonl`,
+`scripts/lib/train/lessons.js`) is append-only and written by code. Each
+probed edit (and each combined change) gets one line: the skill, the
+edit's kind, the finding, the paired measures, the verdict and n. The
+proposer reads a short, capped summary of it in the next round, for
+example "a, rewording (misread): helped 3 of 4, no effect 1, hurt 0 (n per
+probe: 12, 9, 15, 20)". It is evidence only, labelled with its sample
+sizes. It holds practice-train probes only: a line on any other window is
+refused, and no validate, test or final outcome is ever in it.
+
+**Cost.** K probes multiply model time. The champion replays the probe
+windows once per loop. Each round then replays them k + 1 times: each of
+the k edits and the combined change. That is about k + 1 times the model
+time of one practice run a round, on top of the keep rule's runs. Probes
+run one after another by default (`parallel: 1`). Raise `parallel` only
+when your local model server serves that many prompts at once (its own
+concurrency setting, in your local config). The replay charges each
+cycle's real time, so probes that queue at the server run slower than the
+champion did.
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:

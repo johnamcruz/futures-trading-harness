@@ -66,6 +66,17 @@ change is (CLAUDE.md, "Before a pull request").
 7. **Status:** `node scripts/train-loop.js status --config loop.json`:
    iterations, verdicts, leaders per category.
 
+**Propose-Probe-Compose.** With a `probe` block in the config (a stage-1
+curated practice config, practice-train windows, `k`, `parallel`; it
+needs `modelScore`), each iteration's proposal comes from a probe round:
+`k` tagged skill edits from one proposer call, each replayed alone on the
+same curated moments and seed as the champion and screened by code, the
+ones that helped combined by code and probed once more, then the full keep
+rule. The iteration's `probe-report.json` and the loop's `lessons.jsonl`
+say what each probe showed (`docs/TRAINING.md`, "Propose–Probe–Compose").
+Keep `parallel` at 1 unless your local model server serves that many
+prompts at once.
+
 **The tiers.** (1) the scorecard's deterministic checks flag failures;
 (2) the local model reviews its own flagged decisions and proposes; (3) a
 paired re-run on the same tuning windows judges. An external model is a

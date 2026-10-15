@@ -73,6 +73,7 @@ function plan(loop) {
   say(`per iteration: up to ${loop.maxFlagged} flagged + ${loop.controlPoints} control decisions, ${loop.repeats} repeat(s), up to ${loop.maxProposals} proposal(s), seed ${loop.seed}`);
   say(`evaluator: ${loop.evaluator ? `${loop.evaluator.prop} on ${Object.keys(loop.evaluator.data).join(', ')}, champion and candidate on one seed` : 'none (a strategy or rulebook change stays blocked)'}`);
   say(`model scoring: ${loop.modelScore ? `on (account ${loop.modelScore.account}): the challenger replays every window, judged by the keep rule (train/model-verifier.js); a kept change is a PR, never promoted` : 'off (the paired panel test and the evaluator only)'}`);
+  say(`probe: ${loop.probe ? `on: ${loop.probe.k} edit(s) a round, each replayed alone on ${loop.probe.windows.map(w => `${w.from}..${w.to}`).join(', ')} (practice-train, no budget), ${loop.probe.parallel} at once; the passing ones composed, then the keep rule` : 'off'}`);
   say(`proposer: harness ${loop.proposer.harness}${loop.proposer.model ? ` (${loop.proposer.model})` : ''}; limits ${JSON.stringify(loop.limits)}; decision rule ${JSON.stringify(loop.rule)}`);
   return 0;
 }
