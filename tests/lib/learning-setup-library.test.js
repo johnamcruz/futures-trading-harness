@@ -216,6 +216,29 @@ test('experience_lookup: the history library in a section of its own, after the 
   assert.match(R.learningMarkdown(m), /History library [0-9a-f]{16} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record/);
 });
 
+test('one briefing, one context key: the library\'s cells and experience_lookup\'s candidate key the same context, and the lookup shows a this-context cell', () => {
+  // A traded scan record whose raw context (compose_check's: trendSide, raw case) differs from the record's view.
+  const r = RECORDS.find(x => x.status === 'traded' && x.context && x.context.trendSide);
+  assert.ok(r, 'the fixture has a traded record with a trend side');
+  const ch = checkReads({ reads: r.reads, side: r.side, briefing: briefAt(r.bar), tick: 0.25 });
+  assert.deepStrictEqual(ch.context, r.context, 'the scan keeps the checker\'s context');
+  // The trade_lifecycle record compose_check writes on that briefing: its context the checker's, as the library's.
+  const AT = '2023-03-15T14:00:00.000Z';
+  const raw = { ...record({ at: AT, side: r.side }), reads: r.reads.map(x => ({ ...x, check: 'true' })), signature: r.signature, context: ch.context };
+  const cand = fromLifecycleRecord(raw);
+  const days = Array.from({ length: 12 }, (_, i) => `2022-03-${String(i + 1).padStart(2, '0')}`);
+  const lib = Array.from({ length: 24 }, (_, i) => ({ ...r, id: `k${i}`, day: days[i % 12], bar: `${days[i % 12]}T15:00:00.000Z`, outcome: { filled: true, R: i % 3 ? 2 : -1, exitTime: `${days[i % 12]}T16:00:00.000Z` } }));
+  const doc = L.buildLibraryIndex(lib, { reps: 200 });
+  const key = X.cellKey('read', r.signature, X.contextKey(cand.context));
+  assert.ok(doc.cells[key], `the library keys the candidate's context: ${key}`);
+  const home = tmpHome();
+  fs.mkdirSync(path.join(home, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(home, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(raw)}\n`);
+  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), doc));
+  const text = H.experienceLookup({ symbol: 'MNQ' }, { env: { FTH_HOME: home }, now: () => new Date('2023-03-15T14:01:00.000Z') }).text;
+  assert.match(text, /- read signature, this context: n 24 \(12 days/);
+});
+
 test('the cap drops the library\'s lines before the model\'s cells', () => {
   const line = (k, n) => `- ${k} ${n} ${'x'.repeat(90)}`;
   const cells = Array.from({ length: 33 }, (_, i) => line('cell', i));
