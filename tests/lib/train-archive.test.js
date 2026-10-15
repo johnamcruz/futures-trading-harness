@@ -50,3 +50,16 @@ test('prBody: what changed, the paired result, what was not run, and the checks 
   assert.match(body, /- \[ \] The owner approves/);
   assert.doesNotMatch(body, /\n{3,}/);
 });
+
+test('prBody with the keep rule: the pooled primary measure, the real attempts per window, the resampled figures labelled conditional', () => {
+  const ivl = (diff, lo, hi) => ({ diff, lo, hi });
+  const model = {
+    verdict: 'kept', reasons: ['gain'], pairing: 'different sizing (the same exit)', pooled: ivl(-0.2, -0.3, -0.1),
+    windows: [{ label: 'w0', attempts: 65, blows: { b: 0 }, diff: { passRate: ivl(-0.2, -0.35, -0.05), blowRate: ivl(0, 0, 0), medianDaysToPass: ivl(2, -1, 5) }, resampled: { passRate: ivl(-0.21, -0.22, -0.2), blowRate: ivl(0, 0, 0) }, adherence: { c: 1, b: 2 }, reads: { c: 0, b: 1 } }],
+  };
+  const body = A.prBody(entry({ model }), { loopId: 'l1' });
+  assert.match(body, /Pairing: different sizing \(the same exit\)\. Pooled pass rate on the real attempts \(the primary measure\): -0\.2 \[-0\.3, -0\.1\]/);
+  assert.match(body, /\| w0 \| 65 \| 0 \| -0\.2 \[-0\.35, -0\.05\] \| 0 \[0, 0\] \| 2 \[-1, 5\] \| -0\.21 \[-0\.22, -0\.2\] \/ 0 \[0, 0\] \| 1\/2 \| 0\/1 \|/);
+  assert.match(body, /resampled figures .* conditional on those days .* only rules \(a\) and \(b\) read them/);
+  assert.doesNotMatch(body, /\n{3,}/);
+});

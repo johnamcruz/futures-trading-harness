@@ -620,3 +620,28 @@ test('model scoring held out: the challenger\'s held-out run takes its own learn
   const held = readArchive(w.paths.archive).find(e => e.phase === 'held-out');
   assert.deepStrictEqual([held.verdict, held.model.verdict], ['kept', 'kept']);
 });
+
+test('model scoring held out: a judging that would need more looks than a sealed window has left is refused before any look', async () => {
+  // Two test windows: four looks (the champion's run and the challenger's, each window) against a budget of 3.
+  const H = [{ from: '2025-03-03', to: '2025-03-04' }, { from: '2025-03-10', to: '2025-03-11' }];
+  const w = world({ proposals: [fix], loop: { modelScore: MODEL, heldOutWindows: H, learning: { evaluation: 'ev1' } } });
+  w.steps.modelVerifier = verdictStub([]);
+  await run(w, { dryRun: true });
+  const [kept] = readArchive(w.paths.archive);
+  const replays = w.calls.replay;
+  await assert.rejects(L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /held-out judging refused: test: judging these windows takes 4 look\(s\).*refused before any look is spent/);
+  const ledger = path.join(w.env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl');
+  assert.ok(!fs.existsSync(ledger) || fs.readFileSync(ledger, 'utf8').trim() === '', 'no learning look taken');
+  assert.strictEqual(w.calls.replay, replays, 'nothing replayed');
+  assert.ok(!readArchive(w.paths.archive).some(e => e.phase === 'held-out'));
+  // One test window with two judging evaluations already spent: one look left, two needed.
+  const one = world({ proposals: [fix], loop: { modelScore: MODEL, heldOutWindows: [H[0]], learning: { evaluation: 'ev1' } } });
+  one.steps.modelVerifier = verdictStub([]);
+  await run(one, { dryRun: true });
+  const [k1] = readArchive(one.paths.archive);
+  const file = path.join(one.env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const line = i => JSON.stringify({ kind: 'look', evaluation: `old${i}`, candidate: 'c', purpose: 'judging', runId: `r${i}`, arm: 'without', config: 'x', from: '2025-05-05', to: '2025-05-06', role: 'test', at: '2026-01-01T00:00:00.000Z' });
+  fs.writeFileSync(file, `${line(0)}\n${line(1)}\n`);
+  await assert.rejects(L.judgeHeldOut({ loop: one.loop, env: one.env, root: ROOT, steps: one.steps, proposalId: k1.proposalId, heldOutLook: true }), /test: .* 2 look\(s\).* 1 of its 3 are left/);
+});

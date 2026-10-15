@@ -173,7 +173,7 @@ test('acceptance: the paired comparison tells the more selective rule near the m
   assert.ok(d.passRate.lo > 0, `more passes within 30 days, the paired interval above 0 (${JSON.stringify(d.passRate)})`);
   assert.ok(d.blowRate.hi < 0, `fewer blows, the paired interval below 0 (${JSON.stringify(d.blowRate)})`);
   assert.ok(res.a.resampled.passRate > res.b.resampled.passRate && res.a.resampled.blowRate < res.b.resampled.blowRate);
-  assert.deepStrictEqual(res.paired, { sameDays: true, sameBlocks: true, sameFaults: true });
+  assert.deepStrictEqual(res.paired, { sameDays: true, sameBlocks: true, sameFaults: true, oneRulebook: true });
   assert.ok(Number.isFinite(d.medianDaysToPass.diff));
   // The same run against itself: exactly no difference (the same paths, blocks and faults).
   const same = scorePaired(A, A, { ...opts, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) });
@@ -185,6 +185,38 @@ test('acceptance: the paired comparison tells the more selective rule near the m
   assert.throws(() => scorePaired(A, A, { ...opts, passA: p, passB: p }), /one pass per run/);
   const short = modelStreamOf(A.days.slice(1).map(x => x.day), () => []);
   assert.throws(() => scorePaired(A, short, { ...opts, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r3' }) }) }), /same days/);
+});
+
+test('scorePaired with a rulebook per side: B sized under its own (a candidate\'s pass), A unchanged; the same draws; the raw start days', () => {
+  const { A, opts } = acceptance();
+  const one = scorePaired(A, A, { ...opts, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) });
+  const tight = { sizing: { cushion_frac: 0.1 }, candidate: true };
+  const two = scorePaired(A, A, { ...opts, rulebookB: tight, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }), candidateRulebook: true }) });
+  assert.deepStrictEqual(two.a, { ...one.a }, 'side A is scored as before');
+  assert.notDeepStrictEqual(two.b.resampled, two.a.resampled, 'side B is sized under its own rulebook');
+  assert.strictEqual(two.paired.oneRulebook, false);
+  assert.strictEqual(one.paired.oneRulebook, true);
+  // The raw start days the keep rule pools: one per real attempt, each side's status as its real rates count them.
+  assert.strictEqual(two.starts.length, A.days.length - ACCOUNT.sessions);
+  assert.strictEqual(two.starts[0].start, A.days[0].day);
+  const rate = side => Math.round((two.starts.filter(x => x[side] === 'passed').length / two.starts.length) * 10000) / 10000;
+  assert.deepStrictEqual([rate('a'), rate('b')], [two.a.real.passRate, two.b.real.passRate]);
+  // A candidate rulebook only on a candidate's pass (refused on test and final by checkModelWindow), and one attempt length.
+  assert.throws(() => scorePaired(A, A, { ...opts, rulebookB: tight, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) }), /candidate rulebook is scored only on a pass checked for one/);
+  assert.throws(() => scorePaired(A, A, { ...opts, accountB: { ...ACCOUNT, sessions: 20 }, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) }), /same sessions/);
+});
+
+test('policyRulebook: a policy\'s whole entry as the Monte Carlo applies it; its multipliers on the trade\'s facts fail closed', () => {
+  const { policyRulebook } = require('../../scripts/lib/prop/model-score');
+  const t = modelTrade('t1', 60, { volatility: 'high' });
+  const items = [{ item: 'x', fact: 'volatility', values: { normal: 1, high: 0.5 } }];
+  const rb = policyRulebook({ sizing: { cap_usd: 500 }, exit: { mode: 'target' }, multipliers: items }, { candidate: true });
+  assert.deepStrictEqual([rb.sizing, rb.exit, rb.candidate], [{ cap_usd: 500 }, { mode: 'target' }, true]);
+  assert.strictEqual(rb.multiplier(t), 0.5);
+  assert.strictEqual(rb.multiplier(modelTrade('t2', 60, { volatility: null })), 0, 'a missing fact skips the trade');
+  assert.strictEqual(policyRulebook({ sizing: null, multipliers: [] }).multiplier(t), 1);
+  assert.strictEqual(policyRulebook(null).candidate, undefined);
+  assert.strictEqual(policyRulebook({ sizing: {} }).exit, undefined);
 });
 
 test('risk attribution: by account state, with the decisions that cost attempts flagged; the risk record under 4 KB with its sample sizes', () => {
@@ -329,6 +361,10 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
   assert.deepStrictEqual(res.runs, { a: 'run1', b: 'run1' });
   assert.ok(res.diff.resampled.passRate.diff >= 0, JSON.stringify(res.diff.resampled.passRate));
   assert.ok(res.a.resampled.passRate >= res.b.resampled.passRate);
+  // policyB: each side under its own policy; candidateB: B's a candidate rulebook, its pass checked for one.
+  const cand = pairRuns(good.dir, good.dir, { account: ACCOUNT, policy: { sizing: { cushion_frac: 0.3 } }, policyB: { sizing: { cushion_frac: 0.1 } }, candidateB: true, paths: 50, reps: 50 });
+  assert.strictEqual(cand.paired.oneRulebook, false);
+  assert.strictEqual(pairRuns(good.dir, good.dir, { account: ACCOUNT, paths: 50, reps: 50 }).paired.oneRulebook, true);
   // rootB: run B's records read with its own tree (the training loop's challenger), run A's with root.
   assert.throws(() => pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 10, reps: 10, rootB: path.resolve(bad.dir, '..', '..', '..') }), new RegExp(`${path.resolve(bad.dir, '..', '..').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is inside the repository`));
   // No bars after a fill: no no-stop path, so a stop fault rate is refused for a real score.

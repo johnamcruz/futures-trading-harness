@@ -63,11 +63,15 @@ const fence = s => String(s).replace(/```/g, "'''");
 function modelLines(m) {
   if (!m) return [];
   const iv = i => (i && i.lo !== null && i.lo !== undefined ? `${i.diff} [${i.lo}, ${i.hi}]` : '-');
+  const rs = w => (w.resampled ? `${iv(w.resampled.passRate)} / ${iv(w.resampled.blowRate)}` : '-');
   return [
     '', '### The keep rule on the model\'s own trades (paired 30-day Monte Carlo, champion minus challenger)', '',
     `Verdict: **${m.verdict}**${m.diagnostic ? ' (a diagnostic score: never a promotion)' : ''}: ${(m.reasons || []).join('; ')}`, '',
-    '| window | challenger blows | pass rate | blow rate | median days | adherence broken/fixed | reads broken/fixed |', '| --- | ---: | --- | --- | --- | --- | --- |',
-    ...(m.windows || []).map(w => `| ${w.label} | ${w.blows ? w.blows.b : '-'} | ${iv(w.diff && w.diff.passRate)} | ${iv(w.diff && w.diff.blowRate)} | ${iv(w.diff && w.diff.medianDaysToPass)} | ${w.adherence ? `${w.adherence.c}/${w.adherence.b}` : '-'} | ${w.reads ? `${w.reads.c}/${w.reads.b}` : '-'} |`),
+    `Pairing: ${m.pairing || 'one rulebook'}. Pooled pass rate on the real attempts (the primary measure): ${iv(m.pooled)}.`, '',
+    '| window | real attempts | challenger blows | pass rate (real) | blow rate (real) | median days (real, secondary) | pass / blow rate (resampled, conditional) | adherence broken/fixed | reads broken/fixed |',
+    '| --- | ---: | ---: | --- | --- | --- | --- | --- | --- |',
+    ...(m.windows || []).map(w => `| ${w.label} | ${w.attempts === undefined ? '-' : w.attempts} | ${w.blows ? w.blows.b : '-'} | ${iv(w.diff && w.diff.passRate)} | ${iv(w.diff && w.diff.blowRate)} | ${iv(w.diff && w.diff.medianDaysToPass)} | ${rs(w)} | ${w.adherence ? `${w.adherence.c}/${w.adherence.b}` : '-'} | ${w.reads ? `${w.reads.c}/${w.reads.b}` : '-'} |`),
+    '', 'The resampled figures redraw each window\'s own days: they are conditional on those days (Monte Carlo precision, not evidence) and only rules (a) and (b) read them.',
     '', 'The promotion gate (prop/promotion.js, frozen) is still the final gate: this change is kept for review, not promoted.',
   ];
 }

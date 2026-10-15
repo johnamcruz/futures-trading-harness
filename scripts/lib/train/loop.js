@@ -60,6 +60,8 @@ const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
 const { rolesBetween } = require('../learning/splits');
+const { ledgerPath: learningLedgerPath } = require('../learning/looks');
+const { readLedger: readLedgerFile } = require('../prop/ledger-file');
 
 class Stop extends Error {}
 
@@ -510,6 +512,14 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     if (!entry) throw new Error(`${proposalId}: no change kept on tuning in this loop's archive`);
     if (archive.some(e => e.proposalId === proposalId && e.phase === 'held-out')) throw new Error(`${proposalId} was judged on held-out months already: each held-out month judges once`);
     const tag = `h-${proposalId}-`;
+    // Model-scored judging takes two learning looks per sealed window (the champion's run and the challenger's): refused
+    // up front when the budget left can't hold them, so a judging never spends looks and then blocks. A resume took
+    // its looks already.
+    if (loop.modelScore && !ctx.state.done[`judging:${tag}`]) {
+      const ledgerFile = learningLedgerPath(env);
+      const refused = MV.lookErrors(loop.heldOutWindows, fs.existsSync(ledgerFile) ? readLedgerFile(ledgerFile) : [], { perWindow: 2 });
+      if (refused.length) throw new Error(`held-out judging refused: ${refused.join('; ')}`);
+    }
     const champion = await championTree(ctx);
     // The ledger as it was before this judging's one look: the evaluator checks the same look on copies of it, so a
     // judging spends one look, however many windows and scorings it holds.
