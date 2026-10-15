@@ -331,7 +331,15 @@ process: a fresh harness run (or `autotrader.js --once`) per cycle, with the
 time set by the replay driver. Within one process the replayed time stands
 still (the gateway's 30 s ledger and its 2-minute grace for orders of unknown
 outcome don't elapse), so don't hold a long interactive session on one
-`FTH_REPLAY_NOW`. Replay runs in a harness home of its own (`FTH_HOME`), never
+`FTH_REPLAY_NOW`. The exception is a replay that charges its latency (the
+replay config's `latency`, on by default for a learning run;
+`scripts/lib/replay/latency.js`): the driver sets `FTH_REPLAY_WALL_START`, the
+wall time the step began, and the replayed time then runs with the wall clock
+from `FTH_REPLAY_NOW` in every process of the step, while the driver moves the
+replay broker's clock file with it (the server re-reads it on every call). An
+order goes, fills and expires at the bar plus the cycle's own time, as live;
+the clock never goes back, so a decision time the step ran past runs at the
+clock (a trade time whose next time was passed too runs no step). Replay runs in a harness home of its own (`FTH_HOME`), never
 the live one: the scripts write records, blackouts and attempts there at the
 replayed time. The runner's long-running loop refuses to start
 with `FTH_REPLAY_NOW` set, and never takes the test suite's `FTH_TEST_NOW`.

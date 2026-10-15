@@ -203,17 +203,22 @@ function gateOrders(env, fromMs, toMs) {
  * autotrader.js childEnv) as the order gate reads them there: the replay clock's time when one is in force
  * (FTH_REPLAY_NOW, trading/harness-now.js; unset or refused: `at`, the wall clock), and the lanes whose bar closed
  * (FTH_CYCLE_LANE_BARS, trading/config.js; set but unreadable: null, so every situational lookup is required, as the
- * gate). No env (a caller that gives none): `at` and one lane, as before. `replay`: the replay clock was in force.
+ * gate). No env (a caller that gives none): `at` and one lane, as before. `replay`: the replay clock was in force;
+ * `charged`: it ran with the wall clock (the replay driver's latency setting), so the cycle's time was charged; the
+ * cycle's time is then the replay time at its wall start `wallMs` (default: `at`, the wall time the runner gives).
  */
-function cycleClock(env, at) {
-  if (!env) return { cycleAt: at, laneBars: {}, replay: false };
+function cycleClock(env, at, wallMs = at.getTime()) {
+  if (!env) return { cycleAt: at, laneBars: {}, replay: false, charged: false };
   let cycleAt = at;
   let replay = false;
+  let charged = false;
   try {
     const c = resolveClock(env, { testClock: false });
-    if (c.replay) [cycleAt, replay] = [c.now(), true];
+    // The replay time at the cycle's wall start `at`: the pinned time, or with a running replay clock
+    // (FTH_REPLAY_WALL_START: latency charged) the time it had reached then, never the time this is written at.
+    if (c.replay) [cycleAt, replay, charged] = [c.atWall(wallMs), true, c.running];
   } catch (_err) { /* the wall clock */ }
-  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS), replay };
+  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS), replay, charged };
 }
 
 /**

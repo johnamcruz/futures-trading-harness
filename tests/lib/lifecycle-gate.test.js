@@ -62,7 +62,15 @@ test('composed-reads: the record must be this bar\'s, this side\'s, unexpired an
   let { home } = world();
   assert.match(judge(home, { cycleBars: {} }).message, /no cycle bar for MNQ/);
   assert.match(judge(home, { cycleBars: { MNQ: '2026-10-07T14:00:00.000Z' } }).message, /briefing can't be read .*not the cycle's/);
-  assert.match(judge(home, { now: new Date(F.EXPIRES) }).message, /expired at 2026-10-07T14:03:00.000Z/);
+  assert.match(judge(home, { now: new Date(F.EXPIRES) }).message, /expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  // The next close is no longer the end: the record holds through the second bar (the shipped valid_bars, 2).
+  assert.strictEqual(judge(home, { now: new Date(F.NEXT_CLOSE) }).message, null);
+  // A record or a bar with no readable expiry: refused (fails closed), never read as no limit.
+  const blank = world();
+  appendRecord(blank.home, { ...blank.rec, expiresAt: null });
+  assert.match(judge(blank.home).message, /the compose record or its bar has no readable expiry/);
+  // No readable strategy: one bar, the next close (fails closed: the shorter).
+  assert.match(judge(home, { now: new Date(F.NEXT_CLOSE), strategy: null }).message, /expired at 2026-10-07T14:03:00.000Z \(1 base bar after/);
   const used = { ts: '2026-10-07T14:00:01Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } };
   assert.match(judge(home, { entries: [used] }).message, /already placed since this bar opened/);
   // Any long entry since the bar opened counts, whichever record (13:59, before this record's at), and one whose side
@@ -123,7 +131,7 @@ test('composed-reads: a record composed at 17:59 ET on the 17:57 bar is found by
   const BAR = '2026-10-07T21:57:00.000Z';
   const CLOSE = '2026-10-07T22:00:00.000Z';
   const b = F.briefing();
-  const shift = x => JSON.parse(JSON.stringify(x).split(F.BAR).join(BAR).split(F.EXPIRES).join('2026-10-07T22:03:00.000Z').split(F.CLOSE).join(CLOSE)
+  const shift = x => JSON.parse(JSON.stringify(x).split(F.BAR).join(BAR).split(F.EXPIRES).join('2026-10-07T22:06:00.000Z').split(F.NEXT_CLOSE).join('2026-10-07T22:03:00.000Z').split(F.CLOSE).join(CLOSE)
     .split('2026-10-07T13:30:00.000Z').join('2026-10-07T21:30:00.000Z').split('2026-10-07T13:45:00.000Z').join('2026-10-07T21:45:00.000Z'));
   const home = tmpDir();
   const rec = F.writeScenario(home, { b: shift(b), at: '2026-10-07T21:59:30.000Z' });
@@ -131,6 +139,10 @@ test('composed-reads: a record composed at 17:59 ET on the 17:57 bar is found by
   assert.ok(require('fs').existsSync(recordsFile(home, 'MNQ', '2026-10-07')));
   const at18 = judge(home, { now: new Date('2026-10-07T22:00:02Z'), cycleBars: { MNQ: BAR } });
   assert.strictEqual(at18.message, null, 'found across the rollover');
+  // Its valid_bars (2) window runs past the rollover into the next session: at 18:05 ET, inside the second bar, the
+  // check still reads the bar's day shard and finds it; at 18:06 ET it has expired.
+  assert.strictEqual(judge(home, { now: new Date('2026-10-07T22:05:30Z'), cycleBars: { MNQ: BAR } }).message, null, 'the second bar, after the rollover');
+  assert.match(judge(home, { now: new Date('2026-10-07T22:06:00Z'), cycleBars: { MNQ: BAR } }).message, /expired at 2026-10-07T22:06:00.000Z \(2 base bars/);
   // A record written after the rollover on that bar (at 18:00:01 ET) is filed under the bar's day too.
   const late = tmpDir();
   F.writeScenario(late, { b: shift(b), at: '2026-10-07T22:00:01.000Z' });

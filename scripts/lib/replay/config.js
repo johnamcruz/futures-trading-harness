@@ -25,6 +25,9 @@
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
  *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
  *                  experience_lookup's code-measured section (default: none)
+ *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
+ *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
+ *                  on for a learning run, off for one declared not learning)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -54,6 +57,8 @@ const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
+const { latencySetting } = require('./latency');
+const { WALL_START } = require('../trading/harness-now');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -122,6 +127,11 @@ function readAutotrader(spec, baseDir) {
   return { raw: JSON.parse(fs.readFileSync(file, 'utf8')), file };
 }
 
+/** A run whose manifest exists and doesn't say it charges latency (started before the setting, or pinned). */
+function startedPinned(manifestFile) {
+  try { return JSON.parse(fs.readFileSync(manifestFile, 'utf8')).latency !== true; } catch (_err) { return false; }
+}
+
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
   const errors = [];
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -145,6 +155,10 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   }
   const practice = validatePractice(r.practice);
   errors.push(...practice.errors);
+  const latency = latencySetting(r.latency, r.learning !== false);
+  if (latency.error) errors.push(latency.error);
+  // A run started before the setting (its manifest doesn't say latency: true) keeps its pinned clock when the config
+  // doesn't name one, so it resumes under the hash it was started with.
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -187,6 +201,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     prop: r.prop || null,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
+    // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
+    latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
@@ -213,6 +229,8 @@ function replayEnv(base, run, { at }) {
   for (const v of live) env[v] = DISABLED;
   env.FTH_BROKER = run.broker;
   env.FTH_REPLAY_NOW = at.toISOString();
+  // Never inherited: only the driver's charged step sets it (a stale one would run a pinned run's clock).
+  delete env[WALL_START];
   const broker = activeBroker(env);
   const set = (key, value) => {
     if (!key) return;
@@ -272,6 +290,8 @@ function configHash(run, base = process.env) {
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
+    // Named only when charged, so a run with a pinned clock keeps the hash it had before the setting existed.
+    ...(run.latency ? { latency: true } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
@@ -291,6 +311,8 @@ function setupHash(run) {
     // The runner config without the run's own folders (its runId is in their paths).
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
+    // The arms of one evaluation charge the latency alike (named only when charged, as configHash).
+    ...(run.latency ? { latency: true } : {}),
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps

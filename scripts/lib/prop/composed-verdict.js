@@ -6,7 +6,8 @@
  * setup: decideSetup (prop/verdict.js) with the record's side as the direction and its stop (the plan's ticks) as the
  * stop distance, so the budget (a share of the cushion above the floor), the rulebook's multiplier and the
  * one-entry-per-verdict rule apply unchanged. Recorded once per record, at the record's bar, with `record: <id>`, so
- * the gate ties the entry to it. The verdict is the ceiling: the model's stated size goes at or below it.
+ * the gate ties the entry to it. The verdict is the ceiling: the model's stated size goes at or below it. A sized
+ * verdict expires with its record (record.expiresAt).
  *
  *   composedVerdict({ home, policy, component, account, record, plan, briefing, root, contractId, spec, specOf, now })
  *       the verdict (the one already recorded for this record when there is one), appended to the verdicts file
@@ -31,7 +32,10 @@ function composedVerdict({ home, policy, component, account, record, plan, brief
       scan: { direction: record.side, stopDistance: plan.stop.ticks * spec.tickSize }, now, specOf, selected: [root],
     });
   }
-  const out = { ...verdict, record: record.id };
+  // A sized verdict lasts as long as the record it sized (the strategy's valid_bars, not decideSetup's one bar): the
+  // entry the record allows is never refused for a verdict that ran out first. A skip stays expired at once.
+  const until = Date.parse(record.expiresAt);
+  const out = { ...verdict, record: record.id, ...(verdict.action !== 'skip' && Number.isFinite(until) ? { expiresAt: new Date(until).toISOString() } : {}) };
   state.appendVerdict(home, out);
   return out;
 }

@@ -2769,6 +2769,24 @@ test('order gate (hook): a composed entry on the runner\'s cycle (opencode, inde
   assert.doesNotMatch(lc({ FTH_HEAD_PROMPT: cut }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }).stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
 });
 
+test('order gate (hook and gate log): a trade_lifecycle record holds valid_bars (2) base bars: an entry after the next close goes; at the second close it is refused, logged expired; an exit goes', () => {
+  const home = trendHome();
+  LC.writeScenario(home);
+  const logFile = path.join(tmpDir(), 'gate.jsonl');
+  const lc = (at, input = LC.order(), entries = [lcPlan]) => gate(orderPayload(input), setup(entries, { FTH_HOME: home, FTH_TEST_NOW: at, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_GATE_LOG: logFile }).env);
+  // 14:04:30: past the next close (14:03), inside the second bar: the record's own bar still decides.
+  const late = lc('2026-10-07T14:04:30.000Z');
+  assert.strictEqual(late.code, 0, late.stderr);
+  // 14:06: the record's two bars are over.
+  const gone = lc(LC.EXPIRES);
+  assert.strictEqual(gone.code, 2);
+  assert.match(gone.stderr, /\[composed-reads\] setup:trade_lifecycle: the compose record expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  const logged = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision === 'blocked');
+  assert.deepStrictEqual(logged.at(-1).violations.filter(v => v.check === 'composed-reads').map(v => v.expired), [true]);
+  // An exit after it goes.
+  assert.strictEqual(lc('2026-10-07T14:08:00.000Z', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }, []).code, 0);
+});
+
 test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
@@ -2857,6 +2875,19 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   // An exit with no record and no briefing goes.
   const exit = await run(() => {}, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });
   assert.strictEqual(exit.sent.length, 1, exit.texts[1]);
+  // Latency charged (the replay step's wall start, FTH_REPLAY_WALL_START): the gateway's replay clock runs from the bar's
+  // decision time with the wall clock, as the replay broker's does. Four minutes into the cycle the record (two 3m bars
+  // after its 14:00 close) still stands; seven minutes in it has expired and the entry never reaches the broker.
+  const late = minutes => ({ FTH_REPLAY_WALL_START: String(Date.now() - minutes * 60000),
+    FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: new Date(Date.parse(LC_AT) + minutes * 60000).toISOString(), replay: true }) });
+  const four = await run(home => LC.writeScenario(home), msgs(LC.order()), late(4));
+  assert.strictEqual(four.sent.length, 1, four.texts[1]);
+  const seven = await run(home => LC.writeScenario(home), msgs(LC.order()), late(7));
+  assert.deepStrictEqual(seven.sent, []);
+  assert.match(seven.texts[1], /\[composed-reads\] setup:trade_lifecycle: the compose record expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  // The same seven minutes with the clock pinned (no wall start): the bar's own moment, the entry goes (what replay hid).
+  const pinned = await run(home => LC.writeScenario(home), msgs(LC.order()));
+  assert.strictEqual(pinned.sent.length, 1, pinned.texts[1]);
 });
 
 test('order gate (hook): modify_order may not reprice a working trade_lifecycle entry worse than its record\'s entry; a better price and a stop move go', () => {

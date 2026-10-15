@@ -36,7 +36,8 @@ test('compose_check: scenario 1 is OK, the plan in code, one record appended per
   const [rec] = readRecords(home, 'MNQ');
   assert.strictEqual(rec.ok, true);
   assert.strictEqual(rec.bar, BAR);
-  assert.strictEqual(rec.expiresAt, '2026-04-23T15:03:00.000Z');
+  // The shipped valid_bars (2): two 3m bars after the bar's 15:00 close, not the next close (15:03).
+  assert.strictEqual(rec.expiresAt, '2026-04-23T15:06:00.000Z');
   assert.strictEqual(rec.at, '2026-04-23T15:00:05.000Z');
   assert.strictEqual(rec.plan.size, 1);
   assert.strictEqual(rec.plan.maxSize, 5, 'the shipped strategy\'s $300 cap over $55.50 a contract');
@@ -104,8 +105,16 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   assert.strictEqual(s.signal, 'composed');
   assert.strictEqual(s.status, 'active');
   const body = '## When to Use\n## How It Works\n## Examples\n';
-  const base = { name: 'x', description: 'a composed strategy for the schema test, forty chars', status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'composed', risk: { stop: 'structure', min_rr: 2, max_risk_usd: 100 } };
+  const base = { name: 'x', description: 'a composed strategy for the schema test, forty chars', status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'composed', risk: { stop: 'structure', min_rr: 2, max_risk_usd: 100 }, valid_bars: 2 };
   assert.deepStrictEqual(validateStrategy(base, body, 'x'), []);
+  assert.strictEqual(s.valid_bars, 2, 'the shipped plan validity: two base bars');
+  // valid_bars: required for composed, a whole number from 1 to 3 (the default briefing age refuses past it anyway); no other signal has it.
+  for (const bad of [undefined, 0, 4, 1.5, '2']) {
+    const { valid_bars: _drop, ...rest } = base;
+    assert.ok(validateStrategy(bad === undefined ? rest : { ...base, valid_bars: bad }, body, 'x').some(e => /valid_bars: required for signal: composed/.test(e)), String(bad));
+  }
+  for (const ok of [1, 3]) assert.deepStrictEqual(validateStrategy({ ...base, valid_bars: ok }, body, 'x'), [], String(ok));
+  assert.ok(validateStrategy({ ...base, signal: 'manual', valid_bars: 2, risk: { stop: 'atr:0.5', min_rr: 2 } }, body, 'x').some(e => /valid_bars: only for signal: composed/.test(e)));
   assert.ok(validateStrategy({ ...base, risk: { stop: 'structure', min_rr: 2 } }, body, 'x').some(e => /max_risk_usd: required for signal: composed/.test(e)));
   assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:0.5', min_rr: 2, max_risk_usd: 100 } }, body, 'x').some(e => /risk.stop: structure/.test(e)));
   assert.ok(validateStrategy({ ...base, exit: { target_r: 2 } }, body, 'x').some(e => /exit: not for signal: composed/.test(e)));

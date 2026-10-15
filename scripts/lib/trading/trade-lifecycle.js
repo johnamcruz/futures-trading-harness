@@ -17,7 +17,7 @@
  *
  * The plan, in code, never the model's arithmetic:
  *   entry    a limit at the reference price (the briefing's last close), valid until the record expires (expiresAt:
- *            the next base-bar close, the briefing's m3.validUntil)
+ *            `validBars` base bars after its bar's close, the strategy's valid_bars: expiryOf)
  *   stop     the verified invalidation level with D3's buffer: one tick beyond it, on the tick (a long's below, a
  *            short's above). Stop ticks = ceil(|entry - stop| / tick). D13's floor: at least max(8 ticks, 0.25 x
  *            ATR(20) of the base bars, half the briefing's 0.5 x ATR(20) reference stop); a closer stop is refused,
@@ -35,6 +35,9 @@
  *                                                live at that time can be in)
  *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd })   { plan, problems }
  *   stopFloorTicks(briefing, tick)               D13's floor in ticks, or null when ATR(20) is unknown
+ *   expiryOf(briefing, validBars)                when a record on the briefing's bar expires (ms): `validBars` base bars
+ *                                                after its close (m3.validUntil, the next close, plus validBars - 1 bars);
+ *                                                the next close when the bar's minutes can't be read; NaN without one
  *   buildRecord({ ... })                         the record (schema: RECORD_KEYS)
  *   appendRecord(home, record)                   to the record's day shard
  *   readRecords(home, root, { days })            the records of a root's family (every family: root null), oldest
@@ -110,6 +113,15 @@ function stopFloorTicks(b, tick) {
   return Math.max(FLOOR_TICKS, Math.ceil((FLOOR_ATR * 2 * half) / tick - 1e-9));
 }
 
+/** When a record on this bar expires (ms): `validBars` (a whole number, 1 or more; else 1) base bars after its close. */
+function expiryOf(b, validBars = 1) {
+  const m3 = isObj(b) && isObj(b.sections) && isObj(b.sections.m3) ? b.sections.m3 : null;
+  const next = m3 ? Date.parse(m3.validUntil) : NaN;
+  const n = Number.isInteger(validBars) && validBars >= 1 ? validBars : 1;
+  const step = Number.isInteger(b && b.minutes) && b.minutes > 0 ? b.minutes * 60000 : null;
+  return step === null ? next : next + (n - 1) * step;
+}
+
 /** The plan from the checked reads: { plan, problems } (plan null when it can't be worked out). */
 function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, maxRiskUsd = null }) {
   const problems = [];
@@ -155,8 +167,9 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
 }
 
 /** The record (RECORD_KEYS): the checked reads and the plan, ok only when both stand. */
-function buildRecord({ at, root, symbol, side, briefing = null, checked = null, planned = null, problems = [], cycleId = null }) {
+function buildRecord({ at, root, symbol, side, briefing = null, checked = null, planned = null, problems = [], cycleId = null, validBars = 1 }) {
   const m3 = briefing && isObj(briefing.sections) && isObj(briefing.sections.m3) ? briefing.sections.m3 : null;
+  const expiry = m3 ? expiryOf(briefing, validBars) : NaN;
   const all = [...problems, ...(checked ? checked.problems : []), ...(planned ? planned.problems : [])];
   const reads = checked ? checked.reads.map(r => ({
     step: r.step, skill: r.skill, read: r.read, why: r.why, kind: r.kind, form: r.form, field: r.field, value: r.value, check: r.check, fact: r.fact, agrees: r.agrees, ...(r.reversal ? { reversal: true } : {}),
@@ -165,7 +178,7 @@ function buildRecord({ at, root, symbol, side, briefing = null, checked = null, 
   const body = {
     schema: SCHEMA, at, strategy: STRATEGY, root: familyRoot(root), symbol, contract: briefing ? briefing.contractId || null : null,
     lane: briefing && Number.isInteger(briefing.minutes) ? `${briefing.minutes}m` : null, side, bar: briefing ? briefing.asOf : null,
-    expiresAt: m3 ? m3.validUntil : null, cycleId, exploratory: false,
+    expiresAt: Number.isFinite(expiry) ? new Date(expiry).toISOString() : null, cycleId, exploratory: false,
     ok, problems: all, reads, signature: checked ? checked.signature : null, skillSignature: checked ? checked.skillSignature : null,
     context: checked ? checked.context : null, plan: planned ? planned.plan : null,
   };
@@ -249,4 +262,4 @@ function renderRecord(r, checked = null) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, STOP_BUFFER_TICKS, FLOOR_TICKS, FLOOR_ATR, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopFloorTicks, planOf, buildRecord, appendRecord, readRecords, renderRecord };
+module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, STOP_BUFFER_TICKS, FLOOR_TICKS, FLOOR_ATR, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };
