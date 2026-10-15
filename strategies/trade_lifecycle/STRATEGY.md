@@ -2,15 +2,15 @@
 name: trade_lifecycle
 description: The trade lifecycle - each bar the model puts together its bias, location, setup, entry, stop, target and size from its skills, or passes; code verifies every read against the bar briefing and records the decision, so it learns from scored outcomes which combinations work. No combination is hard-coded.
 version: 1
-status: active                # the owner's call; the order gate refuses its entries until its reads check is wired in the gate
+status: active                # the owner's call; the order gate enters it only on its compose record, every read re-checked (composed-reads)
 instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rules strategy
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it
-mtf: trend                    # the gate's trend rule applies as to any trend strategy (D2's verified reversal is a reads rule, never this one)
+mtf: trend                    # the gate's trend rule, unless the record holds a verified 15m or 1h CHoCH the trade's way (D2)
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
   min_rr: 2                   # compose_check refuses a plan under it
-  max_risk_usd: 100           # required for signal: composed: the gate's risk cap per trade
+  max_risk_usd: 300           # the hard cap per trade, inside and outside an attempt (the owner's: a normal trade risks about $200-300)
 source: the owner's trade-lifecycle design (the model learns which skills to combine from the market)
 ---
 
@@ -28,6 +28,7 @@ context, so the outcomes teach which combinations work in which market.
 - Every bar of a runner cycle: the model composes a candidate from its
   skills, or passes (a pass is a good decision and is scored as one).
 - Only with a `compose_check` record that is `OK` for this bar and side.
+- Read `trade-lifecycle` before an entry: how to compose, send and read a refusal.
 
 ## How It Works
 
@@ -47,11 +48,28 @@ stop one tick beyond the named level (at least the larger of 8 ticks and
 level, R:R at least `risk.min_rr`, and the stated size within
 `risk.max_risk_usd`. The record expires at the next base-bar close.
 
+### Risk and target
+
+A normal trade risks about $200-300, sized by the model from its sizing
+skills: smaller, or a pass, is always allowed; never above $300, the hard
+cap. In a prop attempt the ceiling is the lower of $300 and the account's
+verdict. The ideal trade aims for about $600: a target at a real level at
+2:1 to 3:1 reward:risk. Prefer the first real level in that band; a level
+beyond 3:1 is allowed when it is the real one. The target is always a level
+the model reads, never a dollar amount; `min_rr` 2 is the code's floor.
+
+### Against the trend
+
+Only with a verified 15m or 1h CHoCH the trade's way among its reads (D2);
+otherwise the trend rule refuses it.
+
 ## Examples
 
 - Long MNQ at 21540.25: `1h bos up`, `above prior RTH range`, `at prior VAH`,
   `15m rejected prior VAH up`, `3m close top`, `3m momentum up`,
   `stop 15m low 21512.75`, `target 1h swing 21598.00`. The stop goes to
   21512.50 (one tick below): 111 ticks, $55.50 a contract; the target is 231
-  ticks, 2.08R.
+  ticks, 2.08R. 5 MNQ risk $277.50 for a $577.50 target (about the $600
+  aim); 4 MNQ risk $222.00. 6 MNQ ($333.00) or 1 NQ ($555.00 at $5.00 a
+  tick) is over the $300 cap: refused.
 - The same reads for a short: refused (every directional read is against it).

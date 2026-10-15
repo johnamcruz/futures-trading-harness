@@ -186,7 +186,7 @@ test('strategy-library split: each skill answers one question in a short index l
   assert.match(read('skills/strategy-scan/SKILL.md'), /### Read the library\n\nWith the harness tools \(`strategy-tools`\):\n\n```text\nstrategies_list/);
 });
 
-test('strategy-library split: the head trader still loads all of the old skill (the gate requires the pieces; the prompt and trade-session name them)', () => {
+test('strategy-library split: a rules entry still needs all of the old skill (the gate requires the pieces; trade-session names them); the prompt names the composed entry\'s list', () => {
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   // Every unit of the old skill is in a skill the main session must load before an entry, except harness-root's:
   // finding <root> is interactive use, and the autonomous prompt states the root itself ("Harness root (FTH_ROOT)").
@@ -205,5 +205,9 @@ test('strategy-library split: the head trader still loads all of the old skill (
   // gate refuses an entry without them); also load d before deciding".
   const sentence = /load ([^.(]*?)(?: \(the order gate refuses an entry without them\))?(?:; also load [^.()]*?)? before deciding/.exec(prompt)[1];
   assert.match(prompt, /\(the order gate refuses an entry without them\)/);
-  for (const s of REQUIRED_FOR_ENTRY) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
+  // trade_lifecycle is the one entry strategy (the owner's): the prompt names its list, trade-lifecycle in place of the
+  // strategy skills, which a rules entry (a user's or a fixture's) reads with skill_lookup.
+  const { REQUIRED_FOR_COMPOSED } = require('../../scripts/lib/trading/skills-loaded');
+  for (const s of REQUIRED_FOR_COMPOSED) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
+  for (const s of HOMES.filter(x => x !== 'harness-root')) assert.ok(!sentence.includes(s), `the prompt no longer loads ${s}`);
 });

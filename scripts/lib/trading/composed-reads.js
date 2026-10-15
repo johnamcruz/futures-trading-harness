@@ -52,8 +52,9 @@
  * level it doesn't name): never true unless the briefing says so. Side agreement (D12): a read with a direction must
  * be the order's side; a stop or target must be on its side of the reference price (m3.price). The one exception is
  * D2's verified reversal: when the combination also has a true 15m or 1h CHoCH the side's way, a trend or break read
- * against the side stands on a timeframe at or below that CHoCH's (never the gate's trend rule, which the gate checks on
- * its own). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
+ * against the side stands on a timeframe at or below that CHoCH's. The gate's trend rule is its own (lifecycle-gate.js
+ * reversalAllowed, the owner's "CHoCH at or above the trend": a 15m trend faded on a 15m or 1h CHoCH, a 1h trend on a
+ * 1h CHoCH, a 4h trend on a 1h CHoCH plus a 4h candle that rejected a level the trade's way). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
  * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
  * entry close and momentum), and no read is stated twice. The combination is ok when every read is true and agrees,
  * every step is stated, and there is exactly one stop and one target read.
@@ -505,8 +506,8 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   });
   // Side agreement (D12), with D2's verified reversal: a true 15m or 1h CHoCH the side's way lets a trend or break read
   // against the side stand on a timeframe at or below the CHoCH's (a 15m CHoCH never excuses a 1h or 4h trend; a 3m
-  // CHoCH excuses nothing). This is the reads' agreement only: an ok combination never satisfies the gate's trend rule,
-  // which the gate checks on its own.
+  // CHoCH excuses nothing). This is the reads' agreement only: the gate judges its trend rule on its own tiers
+  // (lifecycle-gate.js reversalAllowed).
   const rank = tf => TF_ORDER.indexOf(tf);
   const choch = Math.max(-1, ...checked.filter(r => r.kind === 'break' && r.check === true && r.dir === side && r.form
     && r.form.split(' ')[1] === 'choch' && ['15m', '1h'].includes(r.form.split(' ')[0])).map(r => rank(r.form.split(' ')[0])));

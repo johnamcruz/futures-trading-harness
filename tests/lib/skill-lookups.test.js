@@ -467,3 +467,45 @@ test('cycleFacts / factsKey with the cycle\'s bar: the briefing on that bar hold
   assert.strictEqual(L.briefingFactsKey(home, 'MNQ', later, {}, BAR), `m3@${BAR}`);
   assert.strictEqual(L.briefingFacts(home, 'MNQ', later, null, BAR), null, 'unreadable lanes: none');
 });
+
+test('composed triggers: the head trader\'s compose records on the bar (cycleFacts m3.composed), keyed into factsKey; taught in trade-lifecycle, never a role\'s or the head prompt\'s', () => {
+  const F = require('../fixtures/lifecycle');
+  const { appendRecord } = require('../../scripts/lib/trading/trade-lifecycle');
+  const t = SL.parseTrigger;
+  const withRel = rel => ({ composed: [{ id: 'a', side: 'long', kinds: ['relation'], relations: [rel] }] });
+  assert.ok(SL.fires(t('composed'), withRel('rejected')));
+  assert.ok(!SL.fires(t('composed'), { composed: [] }) && !SL.fires(t('composed'), {}) && !SL.fires(t('composed'), null));
+  assert.ok(SL.fires(t('composed.relation=rejected'), withRel('rejected')) && !SL.fires(t('composed.relation=broke'), withRel('rejected')));
+  assert.throws(() => t('composed.relation=swept'), /needs a valid value/);
+  // The records on the briefing's bar, parsed again (a record's own fields about itself are never read).
+  const home = tmpDir();
+  const now = new Date('2026-10-07T14:00:02Z');
+  writeBriefing(home, F.briefing());
+  assert.deepStrictEqual([L.composedAt(home, 'MNQ', F.BAR), L.briefingFacts(home, 'MNQ', now, {}).composed], [[], undefined]);
+  const keyBefore = L.briefingFactsKey(home, 'MNQ', now, {});
+  const rec = F.writeScenario(home, { write: false, reads: F.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m broke prior vah up' } : x)) });
+  appendRecord(home, { ...rec, id: 'liar', bar: F.BAR, kinds: ['relation'], relations: ['rejected'] });
+  const facts = L.briefingFacts(home, 'MNQ', now, {});
+  assert.deepStrictEqual(facts.composed.map(c => c.relations), [['broke'], ['broke']]);
+  assert.deepStrictEqual(SL.situationalSkills(facts).sort(), ['breakout', 'confluence-counting', 'invalidation']);
+  // Another record on the bar, another key: lookups made under the old one are not credited under the new.
+  const keyAfter = L.briefingFactsKey(home, 'MNQ', now, {});
+  assert.strictEqual(keyBefore, 'v-scenario-1');
+  assert.strictEqual(keyAfter, `v-scenario-1|c:${rec.id}|c:liar`);
+  assert.strictEqual(L.factsKey(F.briefing(), now, [], null, [{ id: 'b' }, { id: 'a' }]), 'v-scenario-1|c:a|c:b');
+  // A record on another bar is not this bar's.
+  appendRecord(tmpDir(), rec);
+  assert.deepStrictEqual(L.composedAt(home, 'MNQ', '2026-10-07T13:54:00.000Z'), []);
+  // No role's index requires a taught entry; the head prompt doesn't list one; trade-lifecycle names each.
+  const roleSkills = require('../../scripts/lib/role-skills');
+  const required = roleSkills.requiredByRole(path.resolve(__dirname, '..', '..'), 'index');
+  for (const [role, list] of required) for (const r of list) assert.ok(!r.when.some(w => w.key.startsWith('composed')), `${role}: ${r.skill}`);
+  const { headPrompt } = require('../../scripts/lib/head-prompt');
+  assert.doesNotMatch(headPrompt({ docs: [] }), /compose/);
+  const taught = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'trade-lifecycle', 'SKILL.md'), 'utf8');
+  for (const e of SL.SITUATIONAL.filter(x => x.taughtIn)) {
+    assert.strictEqual(e.taughtIn, 'trade-lifecycle');
+    assert.strictEqual(e.head, true);
+    assert.ok(taught.includes(`\`${e.skill}\``), `trade-lifecycle teaches ${e.skill}`);
+  }
+});

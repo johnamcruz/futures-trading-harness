@@ -93,6 +93,7 @@ function coverage() {
     for (const s of r.index) add(s, `${r.name} role-index`);
   }
   for (const s of REQUIRED_FOR_ENTRY) add(s, 'REQUIRED_FOR_ENTRY');
+  for (const s of require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED) add(s, 'REQUIRED_FOR_COMPOSED');
   for (const s of REQUIRED_AT_ENTRY) add(s, 'REQUIRED_AT_ENTRY');
   const ts = fs.readFileSync(path.join(ROOT, 'skills', 'trade-session', 'SKILL.md'), 'utf8');
   const step0 = ts.split(/^### 0\. /m)[1];

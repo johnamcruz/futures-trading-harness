@@ -191,7 +191,7 @@ function pickStrategies(all, cfg) {
       return s;
     });
   }
-  return all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual');
+  return all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual' && s.signal !== 'composed');
 }
 
 /**

@@ -36,7 +36,7 @@
 const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
-const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
+const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
 const { cycleFactChecks } = require('./trading/fact-claims');
 const { resolveClock } = require('./trading/harness-now');
 const { cycleLaneBarsOf } = require('./trading/config');
@@ -143,12 +143,16 @@ function summarize(output, embedded = [], gate = []) {
     commands,
     orders,
     // An entry sent without the skills a trade decision needs (a Claude transcript lists every Skill load): the
-    // per-cycle ones (REQUIRED_FOR_ENTRY), then the ones read before an entry (REQUIRED_AT_ENTRY).
+    // per-cycle ones (REQUIRED_FOR_ENTRY; a trade_lifecycle entry's: REQUIRED_FOR_COMPOSED, as the gate requires them),
+    // then the ones read before an entry (REQUIRED_AT_ENTRY).
     // Skills the runner attested embedded in opencode's head-trader prompt (head-prompt.js) are not missing.
-    missingSkills: entries.length && calls.length ? [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s) && !embedded.includes(s)) : [],
+    missingSkills: entries.length && calls.length ? [...(entries.every(o => COMPOSED_TAG.test(o.rationale)) ? REQUIRED_FOR_COMPOSED : REQUIRED_FOR_ENTRY), ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s) && !embedded.includes(s)) : [],
     ...(embedded.length ? { embeddedSkills: embedded } : {}),
   };
 }
+
+// A trade_lifecycle entry: tagged with it, or with a policy and naming it (setup:prop_portfolio long trade_lifecycle ...).
+const COMPOSED_TAG = /^\s*setup:(?:trade_lifecycle\b|[a-z0-9_-]+\s+(?:long|short)\s+trade_lifecycle\b)/i;
 
 // The gate log's tail read for a cycle's orders (it grows for the life of the home; a cycle's records are its last).
 const GATE_TAIL_BYTES = 4 * 1024 * 1024;

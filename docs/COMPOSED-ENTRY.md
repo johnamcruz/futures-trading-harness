@@ -240,7 +240,8 @@ reversal of owner decision D2: a trend or break read against the side is
 allowed when the combination also has a true 15m or 1h CHoCH the order's way,
 on a timeframe at or below that CHoCH's (a 15m CHoCH never excuses the 1h or
 4h trend; a 3m CHoCH excuses nothing). It is the reads' agreement only: the
-gate's trend rule is checked on its own.
+gate's trend rule has its own tiers (D2): the prevailing frame (the
+multi-timeframe record) is faded only on a CHoCH at or above it.
 
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend
@@ -354,7 +355,7 @@ the tag (`order-gate.js:49`), so a signature, if written, comes after it.
 | `phase2-facts` | Unchanged forms and minimum; `factsOrder` (`order-gate.js:64-72`) gives the composed record, so a room fact is checked against the record's first level in the way instead of `m3.candidates` |
 | `review-before-next-entry` | Unchanged (`order-gate.js:373`): a composed entry on a root whose earlier entry has no review is refused; the review tags `setup:trade_lifecycle` |
 | `max-risk`, `contract-specs`, `max-order-size`, `stop-defined`, `order-consistency`, `plan-required`, `market-hours`, `time-window`, `blackout`, loss and entry limits, every gateway-only check | Unchanged |
-| `paper-mode` and the `strategy` status | A `paper` composed entry may enter only when the broker and the run config are both replay, as the account lock exempts a replay run (`account-lock.js:199-203`, `lockExemption`); anywhere else a `paper` status refuses as today (`strategies.js:568`) (D10) |
+| `paper-mode` and the `strategy` status | Unchanged: `trade_lifecycle` is `active` (the owner's decision, D10), so the status check passes it; a `paper` status refuses as for any strategy, with no replay exemption |
 | `combine`, `policy` | Section 3.7 |
 
 It fails closed: a missing, unreadable, expired, used or not-`ok` record, a
@@ -363,13 +364,13 @@ cycle bar's, or a check that throws, refuses the entry. Exits and protective
 orders return before every entry check (`order-gate.js:247`), so nothing
 here can hold one.
 
-**Paper in replay.** Without the D10 exemption a `paper` composed entry gets
-no fill in replay: replay runs with `FTH_PAPER=0` (`replay/config.js:67`), so
-the status check refuses it, and paper mode would refuse it too
-(`order-gate.js:262`), whose refusal says to journal the plan instead.
-The learning loop needs real replay fills, so the exemption is what lets
-practice score outcomes while `trade_lifecycle` is still `paper`; only the owner
-promotes it to `active`.
+**Replay, not paper.** The owner's decision (D10): `trade_lifecycle` and
+`prop_portfolio` stay `active`, and there is no live trading until the owner
+says `trade_lifecycle` is correct. Practice gets real fills because the
+runner uses the replay broker (`FTH_PAPER=0` in replay,
+`replay/config.js:67`): an entry there reaches the replay broker's simulated
+fills, never a live account. No status or replay exemption exists in the
+gate; going live is the owner's step, not a code path.
 
 **The runner.** On the composed lane the runner cycles every bar (trigger
 `bar`, D11), since nothing fires for it: in trigger `signal` it would never
@@ -616,12 +617,12 @@ A read-only harness tool, modelled on `skill_lookup`
 
 ### 4.5 Practice and exploration
 
-**Practice runs.** A run is practice when the broker and the run config are
-both replay (D10) **and** every day of the run falls in teaching months
+**Practice runs.** A run is practice when it runs on the replay broker
+**and** every day of the run falls in teaching months
 (D23), by the split role of each date (`prop/splits.js:190`, `roleOf`), as
-the run's manifest records it. The composed document trades in `paper`
-under the replay exemption, the runner cycling every bar on the composed
-lane (D11). At each bar the model composes or passes; the gate checks every
+the run's manifest records it. `trade_lifecycle` is `active` (D10); the
+replay broker makes it practice, the runner cycling every bar on the
+composed lane (D11). At each bar the model composes or passes; the gate checks every
 read; fills are the replay broker's.
 
 **Exploration.** "No record" is judged on a coarse cell: the skill signature
@@ -693,8 +694,8 @@ shown until an owner-approved rebuild (section 4.7).
   paired replay (section 4.8) and the frozen promotion gate. A practice
   index rebuilt between practice sessions is a challenger, never the
   champion.
-- **Paper and replay first.** No live entry until the owner promotes
-  `trade_lifecycle` from `paper` (D9).
+- **Replay first.** No live trading until the owner says `trade_lifecycle`
+  is correct (D9); practice runs on the replay broker (D10).
 
 ### 4.8 How we know it learned
 
@@ -1010,7 +1011,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
   and target rules, the minimum stop; `strategies/trade_lifecycle`
   (`signal: composed`, `status: active` with its entries refused until PR 12, `risk.max_risk_usd` required).
 - **PR 12.** **Gate.** `composed-reads` (re-runs the checker, keyed on the tag,
-  requires the limit entry), side agreement, the replay exemption (D10),
+  requires the limit entry), side agreement,
   `factsOrder` for room facts, `SITUATIONAL` rekeyed on the record; gate and wiring
   tests (`tests/lib/order-gate.test.js`,
   `tests/hooks/trading-hooks.test.js`).
@@ -1022,7 +1023,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
   composed-entry, synced.
 - **PR 16.** **Records:** section 5.
 - **PR 17.** **Scenario 1 and 2 end to end:** e2e tests on real bars, the model's
-  reads, the record, the gate allowing a paper entry in replay and
+  reads, the record, the gate allowing the entry in replay and
   refusing a false or disagreeing read.
 
 **Phase D: the learning loop.**
@@ -1068,9 +1069,13 @@ Each has a proposed default; the owner may change any of them.
 
 - **D1.** Approve the design: one `signal: composed` strategy document plus
   `compose_check` and the learning loop. *Proposed default: yes.*
-- **D2.** Trend rule. *Proposed default: follow today's trend rule;
-  against the trend only with a code-verified reversal (a higher-timeframe
-  CHoCH the order's way).*
+- **D2.** Trend rule. *Decided (owner, "CHoCH at or above the trend"):
+  follow today's trend rule; a trade_lifecycle entry against the prevailing
+  trend stands only on true, agreeing reads in its record: against a 15m
+  trend a 15m or 1h CHoCH the trade's way; against a 1h trend a 1h CHoCH;
+  against a 4h trend a 1h CHoCH plus a 4h candle that rejected a level the
+  trade's way (e.g. `4h rejected previous 4h low up`). Otherwise
+  `[mtf-trend]` refuses it (lifecycle-gate.js `reversalAllowed`).*
 - **D3.** Stop buffer beyond the invalidation level. *Proposed default:
   1 tick.*
 - **D4.** The momentum read. *Proposed default: a bar read only: the bar's
@@ -1091,12 +1096,14 @@ Each has a proposed default; the owner may change any of them.
 - **D8.** Scenario 2's facts. *Proposed default: 4h candle facts and 4h
   swing targets first, then FVGs per timeframe, then 5m structure from 1m
   bars (no 5m lane).*
-- **D9.** What moves `trade_lifecycle` from `paper` to `active`. *Proposed default:
-  the frozen promotion gate (`prop/promotion.js:12`) on the paired replay,
-  then the owner's approval.*
-- **D10.** How a `paper` composed entry trades in replay. *Proposed default:
-  only when the broker and the run config are both replay, as
-  `lockExemption` (`account-lock.js:199-203`); refused everywhere else.*
+- **D9.** What lets `trade_lifecycle` trade live. *Decided (owner):
+  `trade_lifecycle` and `prop_portfolio` stay `active`; no live trading until
+  the owner says `trade_lifecycle` is correct (the frozen promotion gate,
+  `prop/promotion.js:12`, on the paired replay informs that call).*
+- **D10.** How a composed entry trades in replay. *Decided (owner): as an
+  `active` strategy on the replay broker (the runner uses it in replay), so
+  practice gets real simulated fills; no `paper` status and no replay
+  exemption in the gate.*
 - **D11.** The runner's trigger for composed. *Proposed default: every bar
   (trigger `bar`) on the composed lane in replay practice; trigger `signal`
   is removed with the strategies.*

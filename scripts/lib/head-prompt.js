@@ -7,7 +7,7 @@
  * Without a prompt the head trader (opencode.js HEAD_AGENT) reads opencode's default prompt, the workspace
  * instructions (AGENTS.md) and, while it may use the skill tool, opencode's listing of every skill, then loads its
  * per-cycle skills one tool turn each, after the cycle's prompt, where no prompt cache reaches. In index mode its
- * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_ENTRY and REQUIRED_AT_ENTRY, and the others it reads
+ * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_COMPOSED and REQUIRED_AT_ENTRY, and the others it reads
  * every cycle), the same text a load returns, as part of its fixed prefix; any other skill it reads whole with the
  * harness tool skill_lookup (the Skills list of AGENTS.md is its index), and opencode's skill tool is denied it
  * (opencode.js sessionPermission). Full mode, and every other harness, stay as before: the skills are loaded.
@@ -33,7 +33,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('./frontmatter');
 const { isOpencodeEvent } = require('./transcript');
-const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, describeTrigger } = require('./trading/skills-loaded');
+const { REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, describeTrigger } = require('./trading/skills-loaded');
 
 const HEAD_AGENT = 'fth-head-trader';
 const ATTEST_ENV = 'FTH_HEAD_PROMPT';
@@ -43,8 +43,11 @@ const HEAD_MARK = 'You are the head trader of the futures trading harness.';
  * The skills the head trader reads every cycle (trade-session step 0, the runner's load list) and before a decision or
  * an entry (steps 2 to 4): the gate's lists come first, so none can be left out.
  */
+// trade_lifecycle is the one entry strategy: the composed entry's list (REQUIRED_FOR_COMPOSED: trade-lifecycle in place
+// of strategy-library, strategy-scan and strategy-gate-checks). A rules strategy's entry (a user's or a fixture's) still
+// needs those three, read with skill_lookup (the gate requires them for it).
 const CORE = [...new Set([
-  ...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY,
+  ...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY,
   'autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context',
 ])];
 const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
@@ -66,8 +69,10 @@ function headPlan(root, mode) {
 }
 
 /** The situational skills the head trader must read when the bar shows them (SITUATIONAL entries marked head). */
-const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))]
-  .map(skill => ({ skill, when: table.filter(e => e.head === true && e.skill === skill).map(e => parseTrigger(e.when)) }));
+// An entry taught in a skill (`taughtIn`: trade-lifecycle) is listed there, not here: the prompt doesn't grow for it.
+const listed = e => e.head === true && !e.taughtIn;
+const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(listed).map(e => e.skill))]
+  .map(skill => ({ skill, when: table.filter(e => listed(e) && e.skill === skill).map(e => parseTrigger(e.when)) }));
 
 function headPrompt(plan, table = SITUATIONAL) {
   const names = plan.docs.map(d => d.name);

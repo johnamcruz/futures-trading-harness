@@ -68,8 +68,13 @@ const ALLOWED = [
   // opencode's head trader in index mode has these skills in its prompt and no skill tool (head-prompt.js): step 0 and
   // the round say so, so it never reloads them or calls a tool it doesn't have (review). No path grows.
   { old: 'The order gate refuses an entry from a session whose transcript doesn\'t show each one loaded (a load that returned an error, such as a skill not found, doesn\'t count: load it again by the name the error lists).',
-    now: 'The order gate refuses an entry until each is loaded (an errored load doesn\'t count: load it again by the name the error lists); one already in your prompt counts: don\'t reload it (no skill tool: skill_lookup).',
-    reason: 'a skill embedded in the head trader\'s prompt is loaded (the gate counts it on the runner\'s attestation); without a skill tool, skill_lookup' },
+    now: 'The order gate refuses an entry until each is loaded (an errored load doesn\'t count); one already in your prompt counts: don\'t reload it (no skill tool: skill_lookup).',
+    reason: 'a skill embedded in the head trader\'s prompt is loaded (the gate counts it on the runner\'s attestation); without a skill tool, skill_lookup; shortened so step 0 does not grow' },
+  // trade_lifecycle is the one entry strategy (the owner's, E12/S1): step 0 loads its list; a rules entry names the
+  // strategy skills too.
+  { old: 'Before any decision, load `trade-session` (this skill), `multi-timeframe-analysis`, `strategy-library`, `strategy-scan`, and `strategy-gate-checks` with the skill tool.',
+    now: 'Before any decision, load `trade-session` (this skill), `multi-timeframe-analysis` and `trade-lifecycle` with the skill tool (a rules entry: `strategy-library`, `strategy-scan`, `strategy-gate-checks` too).',
+    reason: 'the composed entry\'s list (trade-lifecycle in place of the strategy skills, which a rules entry still reads)' },
   { old: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool, or without one read their `SKILL.md`).',
     now: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool; none: skill_lookup or `SKILL.md`).',
     reason: 'the head trader without a skill tool (opencode, index mode) reads a skill with skill_lookup, which the gate counts' },
@@ -113,7 +118,9 @@ test('trade-session split: the core keeps its numbered steps, step 0 as it was, 
   for (let n = 0; n <= 7; n += 1) assert.match(ts, new RegExp(`^### ${n}\\. `, 'm'), `step ${n}`);
   // Step 0 names the same skills as before: a new name there would read as a per-cycle load.
   const step0 = t => [...t.slice(t.indexOf('### 0.'), t.indexOf('### 1.')).matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]);
-  assert.deepStrictEqual(step0(ts), step0(read(BEFORE)));
+  // trade-lifecycle joins after multi-timeframe-analysis (the composed entry's list; the strategy skills a rules entry's).
+  const before0 = step0(read(BEFORE));
+  assert.deepStrictEqual(step0(ts), [...before0.slice(0, 2), 'trade-lifecycle', ...before0.slice(2)]);
   const f = flat(ts);
   for (const s of PIECES) assert.match(f, new RegExp(`\`${s}\``), `trade-session points to ${s}`);
   // The head trader is told to read the two the gate requires before an entry (REQUIRED_AT_ENTRY), in step 3.

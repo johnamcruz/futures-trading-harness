@@ -744,11 +744,12 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
   const ts = read('skills/trade-session/SKILL.md');
   const step0 = flat(ts.slice(ts.indexOf('### 0. Load the skills'), ts.indexOf('### 1.')));
   assert.ok(!step0.includes('top-down-entry'));
-  // What the head trader loads every cycle (trade-session step 0: the gated three, trader-process, htf-to-ltf), in
+  // What the head trader loads every cycle (trade-session step 0: the gated three, trader-process, htf-to-ltf; the
+  // strategy skills only for a rules entry, so not per cycle since trade_lifecycle is the entry strategy), in
   // bytes, is no more than at the split's merge (foundation batch B, on main at 507adfbd, whose same load without htf-to-ltf
   // was 58878): 55733.
-  const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x));
-  assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'strategy-gate-checks', 'strategy-library', 'strategy-scan', 'trade-session', 'trader-process']);
+  const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x) && !/^strategy-/.test(x));
+  assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'trade-lifecycle', 'trade-session', 'trader-process']);
   const bytes = loads.reduce((a, x) => a + Buffer.byteLength(read(file(x))), 0);
   assert.ok(bytes <= 55733, `the head trader's per-cycle load: ${bytes} bytes`);
 });

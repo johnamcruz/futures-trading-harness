@@ -180,7 +180,7 @@ test('multi-timeframe-analysis split: each skill has a short "Use when" index li
 function headTraderLoads(tradeSession) {
   const step0 = tradeSession.slice(tradeSession.indexOf('### 0. Load the skills'), tradeSession.indexOf('### 1.')).replace(/\s+/g, ' ');
   const out = [];
-  const gated = /Before any decision, load ([^.]*?) with the skill tool\./.exec(step0);
+  const gated = /Before any decision, load ([^.]*?) with the skill tool(?: \([^)]*\))?\./.exec(step0);
   if (gated) out.push(...[...gated[1].matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]));
   for (const m of step0.matchAll(/Load `([a-z][a-z-]+)` (?:too|every cycle)\b/g)) out.push(m[1]);
   return [...new Set(out)];
@@ -189,7 +189,7 @@ function headTraderLoads(tradeSession) {
 test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cycle, so it still reads the alignment rule', () => {
   const ts = read('skills/trade-session/SKILL.md');
   const loads = headTraderLoads(ts);
-  for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_ENTRY, 'trader-process', 'htf-to-ltf']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
+  for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED, 'trader-process', 'htf-to-ltf']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
   // Every unit of the old alignment section (the table, the policy ceiling), its reversal paragraph, and the rule that
   // a plan's alignment is the briefing's (never the daily) is in a skill the head trader loads every cycle.
   const old = units(read(BEFORE));

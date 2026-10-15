@@ -30,7 +30,9 @@ const headPrompt = require('./head-prompt');
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
 const { sideValuesText } = require('./trading/rules');
-const { REQUIRED_FOR_ENTRY } = require('./trading/skills-loaded');
+// The head trader's load list: the composed entry's (trade_lifecycle, the one entry strategy). A rules strategy's entry
+// (a user's or a fixture's) also needs the strategy skills, read with skill_lookup (the gate requires them for it).
+const { REQUIRED_FOR_COMPOSED: REQUIRED_FOR_ENTRY } = require('./trading/skills-loaded');
 
 const DEFAULTS = {
   harness: 'qwen',

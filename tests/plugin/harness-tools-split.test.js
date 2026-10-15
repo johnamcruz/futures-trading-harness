@@ -231,17 +231,13 @@ const ROW_HOME = {
   blackouts_list: 'bar-briefing', blackouts_add: 'news-blackouts', order_plan: 'order-plan', reason_check: 'reason-check',
   combine_status: 'prop-challenge-pacing', strategies_list: 'strategy-tools', strategies_show: 'strategy-tools',
   strategies_validate: 'strategy-tools', strategies_scan: 'strategy-tools', strategies_recent: 'strategy-tools',
-  skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands',
+  skill_lookup: 'tool-arguments', lessons: 'user-commands', reconcile: 'user-commands', compose_check: 'trade-lifecycle',
 };
 
-// Reasoned exceptions: a tool no skill teaches yet. compose_check (the trade lifecycle) gets its row with the skills
-// that teach the trade lifecycle; until then the skills stay as they are (the owner's call) and its MCP schema carries
-// its arguments. Drop the exception when its row is written.
-const NO_ROW_YET = ['compose_check'];
 
 test('every harness tool has its row in exactly one skill, its home', () => {
-  assert.deepStrictEqual([...Object.keys(ROW_HOME), ...NO_ROW_YET].sort(), TOOLS.map(t => t.name).sort(), 'every tool has a home');
-  for (const t of TOOLS) assert.deepStrictEqual(homeOf(t.name), NO_ROW_YET.includes(t.name) ? [] : [ROW_HOME[t.name]], `${t.name}: its row's skill`);
+  assert.deepStrictEqual(Object.keys(ROW_HOME).sort(), TOOLS.map(t => t.name).sort(), 'every tool has a home');
+  for (const t of TOOLS) assert.deepStrictEqual(homeOf(t.name), [ROW_HOME[t.name]], `${t.name}: its row's skill`);
 });
 
 test('every role has the row of every harness tool it holds in its core, or a reasoned reference', () => {

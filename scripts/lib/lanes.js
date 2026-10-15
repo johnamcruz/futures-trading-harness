@@ -152,7 +152,7 @@ function laneStrategyErrors(lanes, strategies) {
 /** A trigger "signal" lane needs a mechanical strategy that isn't disabled: otherwise only open positions start its cycles. */
 function signalLaneErrors(lanes, strategies) {
   return lanes.filter(l => l.trigger === 'signal' && !l.retired)
-    .filter(l => !laneStrategies(strategies, l).some(s => s.valid && s.status !== 'disabled' && s.signal !== 'manual'))
+    .filter(l => !laneStrategies(strategies, l).some(s => s.valid && s.status !== 'disabled' && s.signal !== 'manual' && s.signal !== 'composed'))
     .map(l => `trigger "signal" with timeframe ${l.timeframe}: no active mechanical strategy uses ${tfOf(l)}, so only open positions would ever start a cycle. Use trigger "bar" or a matching timeframe.`);
 }
 
