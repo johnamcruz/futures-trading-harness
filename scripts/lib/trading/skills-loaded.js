@@ -76,8 +76,9 @@ const REQUIRED_AT_ENTRY = ['setup-judgment', 'trade-plan'];
  *   composed.relation=<rel>        a composed read of a candle's relation to a level (rejected | broke | touched)
  *
  * An entry with `taughtIn: <skill>` is the head trader's alone and is taught in that skill (which it reads before a
- * composed entry): no role's index requires it (role-skills.js requiredOf) and the head prompt doesn't list it
- * (head-prompt.js), so the requirement adds nothing to a prompt.
+ * composed entry): no role's index requires it (role-skills.js requiredOf), and the head prompt doesn't list it as a
+ * lookup: it embeds it whole (head-prompt.js CORE, COMPOSED_READS), so on the runner's attestation it counts as loaded
+ * with no lookup; without that (full mode, another harness, no or a failed attestation) the transcript decides.
  */
 const SITUATIONAL = [
   // A setup fired: what counts as confluence (trader-process step 5) and what proves it wrong (steps 7 and 9).

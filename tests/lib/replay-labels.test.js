@@ -48,10 +48,10 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
     const t = s.t || at(s.k);
     const barT = iso(t - 2000 - (s.tf || 3) * 60000);
     const wall = WALL0 + i * 60000;
-    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: symbols.map(symbol => ({ symbol, lastBarT: barT })), trades: s.trades || [], since: iso(t - 180000) };
+    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: symbols.map(symbol => ({ symbol, lastBarT: barT })), trades: s.trades || [], since: iso(t - 180000), ...(s.endedAt ? { endedAt: iso(t + s.endedAt) } : {}) };
     for (const j of s.journal || []) journal.push({ ts: iso(t), accountId: 7, contractId: 'BT.MNQ', ...j });
     if (s.interrupted) Object.assign(rec, { interrupted: true, trades: null, bars: undefined });
-    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, ...(s.scanDecision ? { decision: s.scanDecision } : {}), candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, ...(x.status ? { status: x.status } : {}), stopDistance: x.stopDistance === undefined ? 10 : x.stopDistance })) });
+    if (s.scan) scans.push({ at: iso(t + (s.scanLag || 0)), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, ...(s.scanDecision ? { decision: s.scanDecision } : {}), candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, ...(x.status ? { status: x.status } : {}), stopDistance: x.stopDistance === undefined ? 10 : x.stopDistance })) });
     if (s.cycle) {
       const c = s.cycle;
       const file = path.join(home, 'logs', 'cycles', '2026-10-10', `${String(i).padStart(6, '0')}-trade.json`);
@@ -222,6 +222,19 @@ test('labels: a prop attempt alone sets no budget (its sizing needs state the ru
   assert.deepStrictEqual([over.ratio, over.step, over.overBudget], [2, 1, true]);
   const under = labelRun(runDir, { budgetUsd: 80 }).labels[0].teacher.size;
   assert.deepStrictEqual([under.ratio, under.step, under.overBudget], [0.25, 0.25, false]);
+});
+
+test('labels, latency charged: a line\'s own scan, stamped on the running clock after its time, is read up to where its step ended (endedAt), never past it', () => {
+  const steps = lag => [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], scanLag: lag, endedAt: 240000, cycle: {} }, { k: 1, cycle: {} }, { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' }];
+  // The runner's scan 5 s after the line's time (its pass on the running clock), the step ended 4 min after it.
+  const lagged = labelRun(makeRun({ steps: steps(5000) }).runDir, { budgetUsd: 40 }).labels;
+  assert.deepStrictEqual([lagged[0].candidates, lagged[0].decision, lagged[0].endedAt], [[{ name: 'orb', direction: 'long' }], 'flat', iso(at(0) + 240000)]);
+  // A scan after the step ended is not the line's.
+  assert.deepStrictEqual(labelRun(makeRun({ steps: steps(241000) }).runDir, { budgetUsd: 40 }).labels[0].candidates, []);
+  // A pinned line (no endedAt) reads up to its time only, as before.
+  const pinned = steps(5000).map(x => { const { endedAt: _e, ...rest } = x; return rest; });
+  const p = labelRun(makeRun({ steps: pinned }).runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([p.candidates, 'endedAt' in p], [[], false]);
 });
 
 test('labels: no lookahead - bars and scans after t never change an earlier label', () => {

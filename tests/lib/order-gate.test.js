@@ -2752,6 +2752,32 @@ test('trade_lifecycle: the stated size goes only within the ceilings: $300 the h
   assert.ok(checks(lcEval(lcHome({ size: 1 }), LC.order({ size: 2 }))).includes('composed-reads'));
 });
 
+test('trade_lifecycle: a long run\'s record: the gate reads the cycle bar\'s day shard alone; that shard unreadable refuses the entry, never an exit', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const home = lcHome();
+  // A year of other days' shards, each over the size cap: any read of one would throw.
+  const start = Date.parse('2025-10-06T14:00:00.000Z');
+  for (let d = 0; d < 365; d += 1) {
+    const day = TL.dayOf(start + d * 86400000);
+    if (day === '2026-10-07') continue;
+    const file = TL.recordFile(home, 'MNQ', day);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '');
+    fs.truncateSync(file, TL.MAX_BYTES + 1);
+  }
+  assert.deepStrictEqual(lcEval(home).violations, []);
+  // The bar's own day unreadable: refused with what failed, and exits and protective stops still go.
+  fs.rmSync(TL.recordFile(home, 'MNQ', '2026-10-07'));
+  fs.mkdirSync(TL.recordFile(home, 'MNQ', '2026-10-07'));
+  const r = lcEval(home);
+  assert.deepStrictEqual(checks(r), ['composed-reads']);
+  assert.match(r.violations[0].message, /can't be read \(EISDIR\)\): no entry \(fails closed\)\. Exits, protective stops and stop moves still go\./);
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
+});
+
 test('trade_lifecycle: exits, protective stops and stop moves go with no record, no briefing and no cycle bar', () => {
   const home = trendHome();
   for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
@@ -2798,6 +2824,55 @@ test('trade_lifecycle, index mode: the head trader\'s compose records trigger it
   // Unreadable lanes: every head entry, the composed ones only for a composed entry.
   assert.match(loaded(LC.order(), { ...auto, cycleLaneBars: null })[0], /breakout/);
   assert.deepStrictEqual(loaded(entryOrder(), { ...auto, cycleLaneBars: null }), []);
+});
+
+test('trade_lifecycle, index mode: the head prompt embeds the composed bar\'s reads, so on the attestation a composed entry with no lookup goes; a prompt or attestation without them is refused for them', () => {
+  const { H, root, dir, configFile, generated, att } = headRun();
+  assert.deepStrictEqual(H.COMPOSED_READS, ['confluence-counting', 'invalidation', 'rejection', 'breakout']);
+  for (const s of H.COMPOSED_READS) assert.ok(H.CORE.includes(s) && att.skills.includes(s), `embedded and attested: ${s}`);
+  // The runner's opencode cycle transcript: no skill loaded and no skill_lookup at all.
+  const transcript = path.join(dir, 'logs', 'bare-transcript.jsonl');
+  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
+  const skillMsgs = r => r.violations.filter(v => v.check.startsWith('skills-')).map(v => `${v.check}: ${v.message.replace(/ Load each with the skill tool [^]*$/, '')}`);
+  for (const [relation, read, skills] of [['rejected', '15m rejected prior vah up', ['confluence-counting', 'invalidation', 'rejection']], ['broke', '15m broke prior vah up', ['confluence-counting', 'invalidation', 'breakout']]]) {
+    const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
+    const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
+    const run = (c, input = LC.order()) => lcEval(home, input, { config: { ...cfg, ...c } });
+    // The bar's facts trigger the composed reads (the gate requires them)...
+    const { briefingFacts } = require('../../scripts/lib/trading/skill-lookups');
+    const { situationalSkills } = require('../../scripts/lib/trading/skills-loaded');
+    assert.deepStrictEqual(situationalSkills(briefingFacts(home, 'MNQ', LC_NOW, {})).sort(), [...skills].sort(), relation);
+    // ... and the attested prompt embeds them: no lookup needed, nothing refused for a skill.
+    assert.deepStrictEqual(skillMsgs(run({})), [], relation);
+    // No attestation (the transcript alone decides): refused, naming them among the rest.
+    const none = skillMsgs(run({ headPromptAttestation: null })).join('\n');
+    for (const s of skills) assert.match(none, new RegExp(`skills-loaded: [^\n]*\\b${s}\\b`), `${relation}, no attestation: ${s}`);
+    // An attestation that leaves them out (a role or prompt that doesn't embed them): refused for exactly them.
+    const partial = { ...att, skills: att.skills.filter(s => !H.COMPOSED_READS.includes(s)) };
+    assert.deepStrictEqual(skillMsgs(run({ headPromptAttestation: JSON.stringify(partial) })), [`skills-loaded: Load the trading skills before an entry; not loaded in this session: ${skills.join(', ')}.`], relation);
+    // An exit is never held by it.
+    assert.deepStrictEqual(skillMsgs(run({ headPromptAttestation: JSON.stringify(partial) }, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }))), [], `${relation}: exit`);
+  }
+  // A prompt that doesn't embed them (their blocks cut from the run's opencode.json), attested as it is: its attestation
+  // names none of them, and the composed entry with no lookup is refused for them; looked up, it goes.
+  const json = JSON.parse(generated);
+  for (const s of H.COMPOSED_READS) json.agent[H.HEAD_AGENT].prompt = json.agent[H.HEAD_AGENT].prompt.replace(new RegExp(`<skill name="${s}">\n[^]*?\n</skill>\n\n?`), '');
+  fs.writeFileSync(configFile, JSON.stringify(json));
+  const cut = H.attestation(configFile, root);
+  assert.deepStrictEqual(cut.skills, H.CORE.filter(s => !H.COMPOSED_READS.includes(s)));
+  const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
+  const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(cut) };
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  // A forged attestation naming them for that prompt: the prompt doesn't embed them, so they still don't count.
+  assert.match(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify(att) } })).join('\n'), /skills-loaded/, 'the uncut hash no longer matches');
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify({ ...cut, skills: att.skills }) } })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  // Full mode never requires the situational reads (the head trader loads trade-lifecycle, which names them).
+  const fullMode = skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, roleSkills: 'full' } })).join('\n');
+  assert.match(fullMode, /skills-loaded: [^\n]*trade-session/);
+  assert.doesNotMatch(fullMode, /confluence-counting|invalidation|rejection/);
+  fs.appendFileSync(transcript, `\n${['confluence-counting', 'invalidation', 'rejection'].map(skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`)).join('\n')}`);
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), [], 'looked up: counted, as before');
+  fs.writeFileSync(configFile, generated);
 });
 
 test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the first level ahead in its R), never a scan candidate', () => {
@@ -2941,21 +3016,64 @@ test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-ch
   assert.strictEqual(reversalAllowed({ home: trendHome(require('../helpers').tmpDir(), { biases: UP15 }), root: 'MNQ', side: 'short', check: { ok: false, reads: [read('break', '15m choch down')] } }).ok, false);
 });
 
-test('trade_lifecycle: the order is on the record\'s own contract; the briefing\'s validUntil earlier than the record\'s expiresAt decides', () => {
+test('trade_lifecycle: the order is on the record\'s own contract; the bar\'s own expiry (its validUntil plus valid_bars - 1 bars) earlier than the record\'s expiresAt decides', () => {
   const home = lcHome();
   const TL = require('../../scripts/lib/trading/trade-lifecycle');
   const rec = TL.readRecords(home, 'MNQ').at(-1);
   // A record for NQ: an MNQ order is refused (its size is a number of NQ).
   TL.appendRecord(home, { ...rec, symbol: 'NQ', contract: 'NQ' });
   assert.match(lcEval(home).violations.find(v => v.check === 'composed-reads').message, /the compose record is for NQ, not MNQ/);
-  // The briefing expires before the record says: refused at the briefing's.
+  // The bar's own expiry comes before the record says (its validUntil 14:01, plus one more 3m bar: 14:04): refused then.
   const h2 = trendHome();
   const b = LC.briefing();
   b.sections.m3.validUntil = '2026-10-07T14:01:00.000Z';
   LC.writeScenario(h2, { b });
-  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: LC.EXPIRES });
+  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: '2026-10-07T14:30:00.000Z' });
   assert.deepStrictEqual(lcEval(h2).violations, [], 'before both');
-  assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:01:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:01:00.000Z/);
+  assert.deepStrictEqual(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:03:59Z') }).violations, [], 'the second bar');
+  assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:04:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:04:00.000Z \(2 base bars after its bar's close\)/);
+});
+
+test('trade_lifecycle: a record stays valid valid_bars (2) base bars after its bar\'s close: an entry after the next close goes on the record\'s own bar; at the expiry it is refused (expired), an exit never', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const only = r => r.violations.filter(v => v.check === 'composed-reads');
+  const at = iso => ({ now: new Date(iso) });
+  // After the next close (14:03), before the second (14:06): the cycle still on its bar (the runner awaits it), the
+  // reads re-checked against that bar's briefing. The gateway's stamp carries the two-bar expiry (the runner's watch).
+  const home = lcHome();
+  const late = lcEval(home, LC.order(), at('2026-10-07T14:05:59Z'));
+  assert.deepStrictEqual(late.violations, []);
+  assert.strictEqual(late.composed.expiresAt, LC.EXPIRES);
+  // At the second close: refused, flagged expired (the cycle-timing count of entries lost to expiry).
+  const gone = only(lcEval(home, LC.order(), at(LC.EXPIRES)));
+  assert.strictEqual(gone.length, 1);
+  assert.match(gone[0].message, /expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\): compose again/);
+  assert.strictEqual(gone[0].expired, true);
+  // Another refusal is never flagged expired.
+  assert.ok(!('expired' in only(lcEval(lcHome({ side: 'short' }), LC.order(), at('2026-10-07T14:04:00Z')))[0]));
+  // A record stamped longer than the strategy allows: the bar's own two bars decide.
+  const h2 = lcHome();
+  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: '2026-10-07T14:30:00.000Z' });
+  assert.match(only(lcEval(h2, LC.order(), at(LC.EXPIRES)))[0].message, /expired at 2026-10-07T14:06:00.000Z/);
+  // A record stamped shorter (one bar, written under valid_bars 1): its own stamp decides.
+  const h3 = lcHome({ validBars: 1 });
+  assert.match(only(lcEval(h3, LC.order(), at(LC.NEXT_CLOSE)))[0].message, /expired at 2026-10-07T14:03:00.000Z/);
+  // A strategy document that says one bar: one bar, whatever the record says.
+  const one = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, valid_bars: 1 } : s));
+  assert.match(only(lcEval(lcHome(), LC.order(), { ...at(LC.NEXT_CLOSE), strategies: one }))[0].message, /expired at 2026-10-07T14:03:00.000Z \(1 base bar after its bar's close\)/);
+  // The facts stay the record's bar's: once the briefing on disk is the next bar's, the record's reads aren't checked
+  // against it (a later cycle composes on its own bar).
+  const h4 = lcHome();
+  require('../../scripts/lib/trading/briefing').writeBriefing(h4, { ...LC.briefing(), asOf: LC.CLOSE });
+  assert.match(only(lcEval(h4, LC.order(), at('2026-10-07T14:04:00Z')))[0].message, /briefing can't be read .*not the cycle's/);
+  // One entry per bar and side across the two bars: an entry placed on this record after the next close counts.
+  const placed = { ts: '2026-10-07T14:03:30Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true }, request: { side: 'buy' } } };
+  assert.match(only(lcEval(lcHome(), LC.order(), { ...at('2026-10-07T14:04:30Z'), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' }), placed] }))[0].message, /already placed since this bar opened/);
+  // Past the expiry, an exit and a protective stop still go.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const r = lcEval(lcHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale }, { ...at('2026-10-07T14:10:00Z'), entries: [] });
+    assert.deepStrictEqual([r.intent, r.violations], ['risk-reducing', []], rationale);
+  }
 });
 
 test('trade_lifecycle, D2: a reversal never stands on a stale, future-dated or partly read multi-timeframe record ([mtf-trend])', () => {

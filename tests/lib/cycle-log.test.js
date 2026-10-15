@@ -144,7 +144,16 @@ test('writeCycleLog: a replayed cycle is filed and judged at the replay clock\'s
   assert.deepStrictEqual(cycleClock({}, wall).laneBars, {});
   assert.deepStrictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"2026-04-28T04:11:00Z"}}' }, wall).laneBars, { MNQ: { 1: '2026-04-28T04:11:00Z' } });
   assert.strictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{bad' }, wall).laneBars, null);
-  assert.deepStrictEqual(cycleClock(null, wall), { cycleAt: wall, laneBars: {}, replay: false });
+  assert.deepStrictEqual(cycleClock(null, wall), { cycleAt: wall, laneBars: {}, replay: false, charged: false });
+  // The replay broker again, the replay clock running from the step's wall start (the latency charged): the cycle's
+  // time is the replay time at its own wall start, never the time the record is written at.
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'rp', brokers: { rp: { command: ['node', path.join(home, 'replay-server.js')], replay: true } } }));
+  const startMs = Date.now() - 600000;
+  const running = { ...env, FTH_REPLAY_WALL_START: String(startMs) };
+  const c = cycleClock(running, new Date(startMs + 90000));
+  assert.deepStrictEqual([c.cycleAt.toISOString(), c.replay, c.charged], ['2026-04-28T04:13:32.000Z', true, true]);
+  assert.strictEqual(cycleClock(running, new Date(0), startMs + 30000).cycleAt.toISOString(), '2026-04-28T04:12:32.000Z', 'the wall start given');
+  assert.deepStrictEqual([cycleClock(env, new Date(startMs + 90000)).cycleAt.toISOString(), cycleClock(env, wall).charged], ['2026-04-28T04:12:02.000Z', false], 'pinned: the decision time');
 });
 
 test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unreadable lanes: every situational lookup required)', () => {
