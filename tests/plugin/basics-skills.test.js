@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { RETIRED } = require('../../scripts/lib/trading/strategies');
+const { skillByteCap, SETUP_SKILLS } = require('../../scripts/lib/skill-caps');
 
 /**
  * A strategy a skill names: active, or one of those retired on 2026-10-14. The skills were written when those
@@ -32,7 +33,7 @@ const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
   'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement', 'fair-value-gaps'];
-const SETUPS = ['rejection', 'breakout'];
+const SETUPS = [...SETUP_SKILLS];
 const file = s => `skills/${s}/SKILL.md`;
 
 // Who carries which (each role only what it uses, and the homes of the retired skills it loaded: skill-retire.test.js;
@@ -257,8 +258,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
     assert.ok(words >= 250 && words <= 650, `${s}: ${words} words`);
-    // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room.
-    const max = SETUPS.includes(s) ? 4000 : 3400;
+    // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
+    // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
+    const max = skillByteCap(s);
     assert.ok(Buffer.byteLength(body) <= max, `${s}: ${Buffer.byteLength(body)} bytes, embedded in its roles' prompts`);
   }
 });
@@ -721,7 +723,7 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
     const { data, body } = parseFrontmatter(text);
     assert.match(data.description, /^Use when /, s);
     assert.ok(data.description.length <= 160, `${s}: description ${data.description.length}`);
-    assert.ok(Buffer.byteLength(body) <= 3400, `${s}: ${Buffer.byteLength(body)} bytes`);
+    assert.ok(Buffer.byteLength(body) <= skillByteCap(s), `${s}: ${Buffer.byteLength(body)} bytes`);
     // Every skill it names in backticks exists.
     for (const m of text.matchAll(/`([a-z]+(?:-[a-z0-9]+)+)`/g)) {
       if (/^(?:open|trend)-/.test(m[1])) continue; // values (an open type, a regime), not skills

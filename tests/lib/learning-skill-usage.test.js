@@ -269,6 +269,10 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     'scripts/lib/learning/learning-report.js',
     'scripts/lib/replay/stage.js', // the stage report a finished replay run prints to the operator
     'scripts/lib/train/ab-compare.js', // the operator A/B comparison of two finished runs (its CLI scripts/ab-compare.js requires only it): a report, never a prompt or tool
+    // Propose-Probe-Compose: the probe round's findings (a skill's wrong and missed read counts and their forms, no
+    // outcome) go to the design-time proposer, never to a trading cycle; probe.js reads each probe run's report for the code screen.
+    'scripts/lib/train/findings.js',
+    'scripts/lib/train/probe.js',
     'scripts/replay.js',
     'scripts/skill-usage.js',
   ]);
@@ -277,7 +281,10 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
   // And by the training loop's model-scoring verifier, for decisionsByKey alone (the correct-read keying): a code judge
   // whose verdicts go to the archive and the owner's PR body, never to the proposer's prompt (train/loop.js proposalsFor).
-  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js']);
+  // And by the probe screen (train/screen.js), for decisionsByKey and the paired interval: a code judge as well.
+  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js', 'scripts/lib/train/screen.js']);
+  // The findings the proposer reads carry no outcome: findings.js never reads the report's outcome section.
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'findings.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''), /outcome|bySkill|byCombo|meanR|winRate/);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'model-verifier.js'), 'utf8'), /skillRows|skill-usage|learning-report/);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'proposer.js'), 'utf8'), /model-verifier|ab-compare/);
   const pinUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /run-pins'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));

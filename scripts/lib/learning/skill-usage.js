@@ -45,10 +45,12 @@
  * with records on a held-back day (practice-validate, test or final) and no learning decision is refused, since a
  * held-back window is seen only through its look.
  *
- *   skillUsage({ records, briefingAt, decisions, cycles, hideOutcomes, tick })   the report
+ *   skillUsage({ records, briefingAt, decisions, cycles, hideOutcomes, tick, keep, perPoint })   the report; keep(root,
+ *                                       bar) the points counted; perPoint adds each point's { root, bar, side, claimed,
+ *                                       relevant, missed } (relevant: a TRUE read of the skill pointing the side's way)
  *   readComposeRecords(home)            every compose record under a home, oldest first, once each (by id)
  *   availableAt(briefing, side, { tick })   Map skill -> { reads: the TRUE ones, agreeing: those pointing the side's way }
- *   readSkillUsage(runDir, { barsFiles })   the report of a replay run (its run dir, as `replay.js report` takes it)
+ *   readSkillUsage(runDir, { barsFiles, keep, perPoint })   the report of a replay run (its run dir, as `replay.js report` takes it)
  *   skillUsageMarkdown(u), skillUsageText(u)
  */
 
@@ -161,12 +163,18 @@ function pointsOf(records) {
   return [...points.values()];
 }
 
-/** The usage per skill (see the head); briefingAt(root, bar) -> the briefing at the bar, or null. */
-function usageOf(points, briefingAt, tick) {
+/**
+ * The usage per skill (see the head); briefingAt(root, bar) -> the briefing at the bar, or null. keep(root, bar): the
+ * points counted (none: all); each point's own relevance (`perPoint`) is listed whether counted or not.
+ */
+function usageOf(points, briefingAt, tick, { keep = null } = {}) {
   const stats = new Map();
-  const at = skill => { if (!stats.has(skill)) stats.set(skill, blank(skill)); return stats.get(skill); };
+  const counted = skill => { if (!stats.has(skill)) stats.set(skill, blank(skill)); return stats.get(skill); };
   let withBriefing = 0;
+  const perPoint = [];
   for (const p of points) {
+    // A point outside `keep` is still read for its own relevance, never counted.
+    const at = !keep || keep(p.root, p.bar) ? counted : blank;
     const claimed = new Set();
     for (const r of p.reads.values()) {
       const own = skillOfRead(r.step, r.read);
@@ -187,8 +195,10 @@ function usageOf(points, briefingAt, tick) {
     let b;
     try { b = briefingAt ? briefingAt(p.root, p.bar) : null; } catch (_err) { b = null; }
     if (!b) continue;
-    withBriefing += 1;
+    if (at === counted) withBriefing += 1;
     const avail = availableAt(b, p.side, { tick });
+    const relevant = [...avail].filter(([, a]) => a.agreeing.length).map(([skill]) => skill).sort();
+    perPoint.push({ root: p.root, bar: p.bar, side: p.side, claimed: [...claimed].sort(), relevant, missed: relevant.filter(x => !claimed.has(x)) });
     for (const [skill, a] of avail) {
       const s = at(skill);
       if (a.reads.length) { s.available += 1; if (claimed.has(skill)) s.used += 1; }
@@ -205,7 +215,7 @@ function usageOf(points, briefingAt, tick) {
     reads: s.reads, correct: s.correct, wrong: s.wrong, correctRate: s.reads ? r4(s.correct / s.reads) : null, topRefusals: top(s.reasons),
     relevant: s.relevant, missed: s.missed, topMissed: top(s.missedReads), mislabeled: s.mislabeled,
   }));
-  return { withBriefing, skills };
+  return { withBriefing, skills, perPoint };
 }
 
 /** n, days, raw mean R and win rate, and the experience index's label (its interval when it has enough). */
@@ -250,14 +260,18 @@ function cyclesOf(lines) {
   return { trade: trade.length, composed: trade.filter(l => isObj(l.composed) && l.composed.calls > 0).length, calls: trade.reduce((n, l) => n + (isObj(l.composed) ? Number(l.composed.calls) || 0 : 0), 0) };
 }
 
-function skillUsage({ records = [], briefingAt = null, decisions = null, cycles = null, hideOutcomes = false, tick = 0.25 } = {}) {
-  const points = pointsOf(records);
-  const u = usageOf(points, briefingAt, tick);
+function skillUsage({ records = [], briefingAt = null, decisions = null, cycles = null, hideOutcomes = false, tick = 0.25, keep = null, perPoint = false } = {}) {
+  const all = pointsOf(records);
+  const u = usageOf(all, briefingAt, tick, { keep });
+  const kept = keep ? all.filter(p => keep(p.root, p.bar)) : all;
+  const keptRecords = keep ? records.filter(r => isObj(r) && keep(r.root, r.bar)) : records;
   return {
-    records: records.length, recordsOk: records.filter(r => isObj(r) && r.ok === true).length, points: points.length, briefings: u.withBriefing,
+    records: keptRecords.length, recordsOk: keptRecords.filter(r => isObj(r) && r.ok === true).length, points: kept.length, briefings: u.withBriefing,
     cycles: cycles ? cyclesOf(cycles) : null, skills: u.skills,
     noRead: Object.entries(NO_READ_SKILLS).map(([step, skills]) => ({ step, skills: [...skills] })),
     outcome: hideOutcomes ? { hidden: true } : decisions ? outcomeOf(decisions) : null,
+    // Each point's relevance (the skills with a TRUE read pointing its side's way), claimed and missed, for a code judge.
+    ...(perPoint ? { perPoint: u.perPoint } : {}),
   };
 }
 
@@ -298,8 +312,11 @@ function checkLedger(records, gate) {
   if (held.length) throw new Error(`skill usage refused: this run has records on held-back days (${held[0]}${held.length > 1 ? ` and ${held.length - 1} more` : ''}) and no learning decision (learning-run.json): a held-back window is seen only through its look (learning/run-gate.js)`);
 }
 
-/** The report of a replay run: its run dir (<run home>/replay/<id>); barsFiles { SYMBOL: file } the data it replayed. */
-function readSkillUsage(runDir, { barsFiles = {} } = {}) {
+/**
+ * The report of a replay run: its run dir (<run home>/replay/<id>); barsFiles { SYMBOL: file } the data it replayed;
+ * keep(root, bar) the points counted (skillUsage); perPoint: list each point's relevance (all points).
+ */
+function readSkillUsage(runDir, { barsFiles = {}, keep = null, perPoint = false } = {}) {
   const labels = require('../replay/labels');
   const { readLearningRun } = require('./run-gate');
   const { historyBars } = require('../autotrader');
@@ -328,7 +345,7 @@ function readSkillUsage(runDir, { barsFiles = {} } = {}) {
   } : null;
   const hideOutcomes = Boolean(gate && gate.hideOutcomes);
   const decisions = !hideOutcomes && fs.existsSync(logFile(home)) ? readDecisions(logFile(home)) : null;
-  return skillUsage({ records, briefingAt, decisions, cycles: readCycleLines(home), hideOutcomes });
+  return skillUsage({ records, briefingAt, decisions, cycles: readCycleLines(home), hideOutcomes, keep, perPoint });
 }
 
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
