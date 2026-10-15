@@ -101,7 +101,7 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
     const v = keeps.get(`${c.iteration}|${c.proposalId}`);
     if (v) for (const id of c.partIds) if (!keeps.has(`${c.iteration}|part:${id}`)) keeps.set(`${c.iteration}|part:${id}`, v);
   }
-  const usable = list.filter(e => typeof e.keep !== 'string' && VERDICTS.includes(e.verdict) && Number.isInteger(e.n));
+  const usable = list.filter(e => typeof e.keep !== 'string' && VERDICTS.includes(e.verdict) && Number.isInteger(e.n) && e.n > 0);
   if (!usable.length) return 'none yet';
   const groups = new Map();
   usable.forEach((e, i) => {

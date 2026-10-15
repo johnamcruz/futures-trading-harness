@@ -131,6 +131,19 @@ async function probeRound(ctx, { n, champion, api }) {
   const base = await sideData('pc', champion.dir, 1, 'probe', true);
   const days = which => [...new Set(SC.half(base.side, which, seed).decisions.map(d => d.day))].sort();
   report.split = { seed, by: 'session date', probe: days('probe'), confirm: days('confirm') };
+  if (!report.split.probe.length || !report.split.confirm.length) {
+    // One half holds no session dates: nothing could be screened on one and judged on the other, so never a pass.
+    const pairs = which => SC.half(base.side, which, seed).decisions.length;
+    report.split.pairs = { probe: pairs('probe'), confirm: pairs('confirm') };
+    report.why = 'inconclusive: a half has no session dates';
+    const id = `iteration-${n}-split`;
+    if (!LS.readLessons(lessonsFile).some(e => e.iteration === n && e.proposalId === id)) {
+      LS.appendLesson(lessonsFile, { proposalId: id, iteration: n, composed: true, verdict: 'no effect', n: 0, half: 'none', windows: cfg.windows, seed, why: report.why, pairs: report.split.pairs });
+    }
+    writeReport();
+    ctx.log(`iteration ${n}: ${report.why} (decisions: probe ${report.split.pairs.probe}, confirm ${report.split.pairs.confirm})`);
+    return { proposals: [], report };
+  }
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.findingsFrom({
     skills: base.skills, refusals: base.refusals, max: cfg.k * 2, exists: s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md')),
   }));

@@ -30,6 +30,8 @@ const TEXT = '---\nname: a\ndescription: a test skill\n---\n\n# A\n\n- line one\
 // Ten session dates, four decisions each: the overfit guard splits them by date into a probe and a confirm half.
 const DAYS = ['2022-03-07', '2022-03-08', '2022-03-09', '2022-03-10', '2022-03-11', '2022-03-14', '2022-03-15', '2022-03-16', '2022-03-17', '2022-03-18'];
 const TIMES = Array.from({ length: 40 }, (_, i) => new Date(Date.parse(`${DAYS[Math.floor(i / 4)]}T14:33:02.000Z`) + (i % 4) * 180000).toISOString());
+/** Time i of an unbounded series: TIMES, then the same times 100 days later each, and so on. */
+const timeAt = i => (i < TIMES.length ? TIMES[i] : new Date(Date.parse(TIMES[i % TIMES.length]) + Math.floor(i / TIMES.length) * 100 * 86400000).toISOString());
 const dayOfT = t => t.slice(0, 10);
 const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
 
@@ -40,13 +42,13 @@ function side({ n = 20, state = () => 'right', category = () => 'right', R = () 
   const decisions = [];
   const scorecard = [];
   // The skill-usage report's per-point relevance: skill a had a TRUE read pointing the side's way at the bar.
-  const points = Array.from({ length: n }, (_, i) => ({ root: 'MNQ', bar: TIMES[i], relevant: relevant(i) ? ['a'] : [] }));
+  const points = Array.from({ length: n }, (_, i) => ({ root: 'MNQ', bar: timeAt(i), relevant: relevant(i) ? ['a'] : [] }));
   for (let i = 0; i < n; i += 1) {
     const s = state(i);
     const reads = [{ step: 'zone', skill: 'b', read: 'x', check: other(i), agrees: true }];
     if (s !== 'missed') reads.push({ step: 'zone', skill: 'a', read: 'y', check: s === 'right', agrees: true });
-    decisions.push({ root: 'MNQ', bar: TIMES[i], decision: R(i) === 0 ? 'passed' : 'entered', reads, outcome: { R: R(i) } });
-    scorecard.push({ key: `${TIMES[i]}|MNQ`, category: category(i), blow: blow(i) });
+    decisions.push({ root: 'MNQ', bar: timeAt(i), decision: R(i) === 0 ? 'passed' : 'entered', reads, outcome: { R: R(i) } });
+    scorecard.push({ key: `${timeAt(i)}|MNQ`, category: category(i), blow: blow(i) });
   }
   return SC.sideOf({ decisions, scorecard, usage: [{ skill: 'a', used: 1, available: 2, reads: 3, correct: 1, missed: 1, relevant: 2 }], points });
 }
@@ -120,14 +122,14 @@ test('the screen pairs only runs under one exit plan (the run\'s manifest record
   assert.throws(() => SC.measure(planned('h1'), planned('h2'), { skill: 'a', kind: 'misread' }), /exit plan .* is not the champion's/);
 });
 
-test('the screen\'s minimum effect: 3 fixed, 0 broken is a gain on 20 paired decisions, not on 30', () => {
-  assert.strictEqual(SC.SCREEN.minEffect, 0.15);
-  const of = n => SC.measure(side({ n, state: i => (i < 3 ? 'misread' : 'right') }), side({ n }), { skill: 'a', kind: 'misread' });
-  const thirty = of(30);
-  assert.deepStrictEqual([thirty.target.b, thirty.target.c, thirty.target.pairs], [3, 0, 30]);
-  assert.ok(thirty.target.pBetter <= SC.SCREEN.gainAlpha, 'significant by McNemar alone');
-  assert.strictEqual(SC.screen(thirty).verdict, 'no effect');
-  assert.strictEqual(SC.screen(of(20)).verdict, 'helped');
+test('the screen needs a practical size and significance: each case of fixed/broken on n paired decisions', () => {
+  assert.deepStrictEqual([SC.SCREEN.minEffect, SC.SCREEN.gainAlpha, SC.SCREEN.minDiscordant, SC.SCREEN.harmAlpha, SC.SCREEN.minPairs], [0.1, 0.1, 4, 0.2, 10]);
+  // The champion misreads the first b decisions; the challenger newly misreads the last c.
+  const cases = [[20, 3, 0, 'no effect'], [30, 4, 0, 'helped'], [80, 8, 0, 'helped'], [40, 5, 1, 'no effect'], [30, 3, 0, 'no effect']];
+  for (const [n, b, c, verdict] of cases) {
+    const m = SC.measure(side({ n, state: i => (i < b ? 'misread' : 'right') }), side({ n, state: i => (i >= n - c ? 'misread' : 'right') }), { skill: 'a', kind: 'misread' });
+    assert.deepStrictEqual([m.target.pairs, m.target.b, m.target.c, SC.screen(m).verdict], [n, b, c, verdict], `${b}/${c} on ${n}`);
+  }
 });
 
 test('the overfit guard: the moments split by session date, by a seeded hash, into a probe half and a confirm half', () => {
@@ -519,6 +521,22 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   await run(w);
   assert.strictEqual(w.calls.runs.length, runs);
   assert.strictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).length, 6);
+});
+
+test('a half with no session dates is inconclusive, never a pass: the report and a lessons line say so, no edit is proposed', async () => {
+  const seed = 348;
+  assert.strictEqual(new Set(DAYS.map(d => SC.halfOf(d, seed))).size, 1, 'this seed puts every session date in one half');
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')], loop: { seed } });
+  await run(w, { dryRun: false });
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.strictEqual(report.why, 'inconclusive: a half has no session dates');
+  assert.strictEqual(w.calls.proposeProbes.length, 0, 'nothing is proposed or probed');
+  assert.strictEqual(w.calls.branches.length, 0);
+  assert.strictEqual(readArchive(w.paths.archive).length, 0, 'never a kept change');
+  assert.deepStrictEqual(Object.values(report.split.pairs).sort(), [0, 40]);
+  const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+  assert.deepStrictEqual(lessons.map(l => [l.why, l.n, l.pairs]), [[report.why, 0, report.split.pairs]]);
+  assert.match(LS.summarize(lessons), /none yet/, 'it is no evidence for the proposer');
 });
 
 test('the combined change still needs the full keep rule: a screen pass with a rejected or inconclusive keep rule is never kept', async () => {

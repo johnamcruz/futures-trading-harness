@@ -351,16 +351,20 @@ the one place:
 
 | Setting | Value | Meaning |
 | --- | --- | --- |
-| `gainAlpha` | 0.2 | a gain on the target: one-sided McNemar p at most this |
+| `gainAlpha` | 0.1 | a gain on the target: one-sided McNemar p at most this |
 | `harmAlpha` | 0.2 | a harm on any measure: p at most this (quick to call a harm) |
-| `minDiscordant` | 3 | the discordant decisions a gain or a harm needs |
+| `minDiscordant` | 4 | the discordant decisions a gain or a harm needs |
 | `minPairs` | 10 | the paired decisions R per decision needs before it can show a harm |
-| `minEffect` | 0.15 | a gain's size: fixed minus broken, as a share of the target's paired decisions |
+| `minEffect` | 0.10 | a gain's size: fixed minus broken, as a share of the target's paired decisions |
 
-`minEffect` is why 3 fixed and 0 broken (p 0.125) passes on 20 paired
-decisions but not on 30 (0.1 of them): an effect that small can't be told
-from noise in the keep rule's pooled full-day windows, so probing it
-further only spends model time.
+A gain needs a practical size (`minEffect`: at least a tenth of the target's
+paired decisions improved, net) and significance (`gainAlpha`, with at
+least `minDiscordant` changed decisions). Noise at small n is the test's to
+catch: 3 fixed and 0 broken never passes (under `minDiscordant`), 4 and 0
+on 30 pairs does (p 0.0625, effect 0.13), 8 and 0 on 80 does (p about
+0.004), and 5 fixed and 1 broken on 40 has the size (0.10) but not the
+significance (p about 0.22). The screen requires both a practical size and
+significance, and the strict keep rule is the real gate.
 
 The screen is permissive: it only filters noise. Passing it keeps nothing.
 The keep rule stays strict and unchanged.

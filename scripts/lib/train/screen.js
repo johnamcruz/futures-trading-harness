@@ -53,12 +53,13 @@ const { familyRoot } = require('../trading/contracts');
 const { tradingDayKey } = require('../trading/clock');
 
 /**
- * minEffect 0.15: a gain must fix, net, at least about one in seven of the target's paired decisions. McNemar alone
- * passes 3 fixed / 0 broken (p 0.125) whatever the pairs; on 30 pairs that is 0.1 of them, an effect the keep rule's
- * pooled full-day windows (where the target skill is one read among many) cannot tell from noise, so probing it
- * further only spends model time. 3 of up to 20 pairs, or 5 of 30, still passes.
+ * A gain needs both a practical size and significance. minEffect 0.10: net, at least a tenth of the target's paired
+ * decisions fixed (8 fixed / 0 broken on 80 pairs is real, p about 0.004). gainAlpha 0.10 and minDiscordant 4: a
+ * one-sided McNemar test on at least 4 changed decisions (4/0 on 30 passes, p 0.0625; 3/0 never does), so noise at
+ * small n is the test's to catch, not the effect size's. 5 fixed / 1 broken on 40 has the size (0.10) but not the
+ * significance (p about 0.22). The screen only filters; the keep rule is the real gate.
  */
-const SCREEN = Object.freeze({ gainAlpha: 0.2, harmAlpha: 0.2, minDiscordant: 3, minPairs: 10, minEffect: 0.15 });
+const SCREEN = Object.freeze({ gainAlpha: 0.1, harmAlpha: 0.2, minDiscordant: 4, minPairs: 10, minEffect: 0.1 });
 const VERDICTS = Object.freeze(['helped', 'no effect', 'hurt']);
 const HALVES = Object.freeze(['probe', 'confirm']);
 
