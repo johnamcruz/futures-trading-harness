@@ -3,8 +3,8 @@
 How to train the model with the replay: what to run, in what order, and how
 to read what comes out. The replay is the live harness on replayed data
 (README, "Replay"); training adds presets, a preflight and reports on top of
-it. Where a feature is on a branch that hasn't been merged yet, this guide
-says "(phase 2, not merged yet)" or names the branch.
+it. Where a feature is phase 2's (not merged yet), this guide says so and
+names its branch.
 
 ## 1. Overview
 
@@ -37,13 +37,13 @@ Set up the harness, the replay broker and the model server as the README
 describes ("Setup", "Replay") and `docs/BACKTESTING.md` (the bar data). Your
 model and machine settings stay in your own local config, never in the repo.
 
-**Curated lists** (`feat/curated-lists`, #191). Code scans history for setup
-moments, then picks seeded, year-balanced lists:
+**Curated lists.** Code scans history for setup moments, then picks seeded,
+year-balanced lists:
 
 ```bash
-node scripts/curated-lists.js scan --bars <MNQ 1m bars> --root MNQ --from 2020-01-01 --to 2024-07-01 \
+node scripts/curated-lists.js scan --bars <NQ 3m series> --root MNQ --from 2021-04-01 --to 2024-07-01 \
   --use practice --out moments-practice.jsonl --jobs 10
-node scripts/curated-lists.js scan --bars <MNQ 1m bars> --root MNQ --from 2024-07-01 --to 2025-01-01 \
+node scripts/curated-lists.js scan --bars <NQ 3m series> --root MNQ --from 2024-07-01 --to 2025-01-01 \
   --use validate --out moments-validate.jsonl --jobs 10
 node scripts/curated-lists.js build moments-practice.jsonl --use practice --seed 1
 node scripts/curated-lists.js build moments-validate.jsonl --use validate --seed 1
@@ -58,6 +58,21 @@ setup changes (`scripts/lib/learning/curated-moments.js`,
 `curated-lists.js`). Re-running
 for any other reason gives you a different list, and your runs stop being
 comparable.
+
+- **Same bars as the replay.** Scan the lists from the same bars the replay
+  broker serves the model. Today that is the replay server's CSV series:
+  back-adjusted 1-minute files per root, with the 3-minute files derived from
+  them. Scan the NQ 3-minute series as root MNQ: MNQ trades at NQ's prices.
+- **Regenerate if the source changes.** If the replay is switched to the
+  raw-price derived store, regenerate the lists from that source, so the two
+  always match. The preflight can't yet tell which bars a list came from: keep
+  them in step yourself.
+- **History coverage.** The history starts 2021-04, so practice-train
+  effectively covers 2021-04 to 2024-07.
+
+The standard trade each moment measures is a limit held the strategy's
+`valid_bars` base bars after its bar's close, the plan the gate allows (the
+history library measures it the same way).
 
 **The experience index.** This is the record of the model's own past
 decisions. It is built only from practice-train runs' experience logs, and
@@ -88,28 +103,32 @@ Each check prints one line:
 - **FAIL**: the check doesn't hold. The run is refused, and the line says why.
 - **WARN**: something to look at (a skill under its minimum in the curated
   list). Never refuses.
-- **N/A**: the feature isn't merged yet ("not available (needs <branch>)"),
-  or the check doesn't apply to this run (the head prompt on a harness other
-  than opencode). Never refuses.
+- **N/A**: the feature is phase 2's, or on a branch not merged yet ("not
+  available (needs <branch>)": the composed scorecard, the rulebook's
+  `loss_streak_stop` and exit mode, the account facts, the Monte Carlo), or
+  the check doesn't apply to this run (the head prompt on a harness other than
+  opencode, or full role-skills mode; stage 2's own requirements). Never
+  refuses. Every other feature is merged and judged: a run without it FAILs.
 
 The checks:
 
-- strategy, valid_bars
+- strategy, and its `valid_bars` (1 to 3)
 - the skills crosswalk
-- the head prompt and its four composed reads
+- the head prompt and its four composed reads (opencode, index mode)
 - generated adapters in sync
 - the facts (a sample briefing on the bars you give: 1h, 4h, 15m, 3m and 5m,
   VWAP, FVGs, briefing age)
-- the curated list
+- the curated list (its fingerprint, market, use and lists)
 - the split window
-- latency
+- latency (charged on every learning run)
 - practice mode
-- the library display
+- the library display (shown only on an evaluation's arm, `--evaluation`)
 - the experience index
 - the ledger look
-- the stage
-- the composed scorecard
-- `prop_portfolio` and its rulebook
+- the stage (stage 2's own requirements: N/A until phase 2)
+- the composed scorecard (N/A until `fix/scorecard-composed`)
+- `prop_portfolio` and its rulebook; the rulebook's missing keys, the account
+  facts and the Monte Carlo (N/A until phase 2)
 
 The 5m facts need a 1m data lane in the runner config
 (`{ "timeframe": 1, "trigger": "data" }`) and one-minute bars in `--bars`, as
@@ -203,14 +222,16 @@ better.
 
 The `stage: 2` preset is stage 1 plus:
 
-- account states (phase 2, not merged yet);
+- account states (phase 2, `feat/prop-mc-model`, not merged yet);
 - account facts (phase 2, not merged yet);
-- the prop risk rules: `loss_streak_stop` and the exit mode (phase 2, not
-  merged yet).
+- the prop risk rules: `loss_streak_stop` and the exit mode (phase 2,
+  `feat/prop-portfolio-missing`, not merged yet).
 
-`prop` is allowed in stage 2. A curated list can't be combined with `prop`
-(the curated-lists branch refuses it), so a curated stage-2 run gets its
-account from the account states (phase 2, not merged yet).
+`prop` is allowed in stage 2, but a curated list can't be combined with
+`prop` (the replay config refuses it), so a curated stage-2 run gets its
+account from the account states (phase 2). Until they are merged, the
+preflight's stage check reports stage 2's own requirements as N/A with that
+reason (its stage-1 part is still judged).
 
 **Practice with account states:** the stage-1 practice config with
 `"stage": 2`. The account-state settings come with `feat/prop-mc-model`
@@ -261,10 +282,11 @@ reweighted, not a calendar of whole days.
 - **No outcomes shown to the model.** It sees only its own record (the
   walk-forward experience index), never a run's results or labels.
 - **Latency charged.** Each cycle's real time runs on the replay clock, as
-  live (`feat/plan-validity-latency`, #190).
-- **Library hidden.** The history library is hidden unless the run is
-  declared a library comparison arm (`libraryDisplay` on an evaluation's arm;
-  `feat/learning-defaults`, #189).
+  live: orders go, fill and expire at the bar plus the cycle's time, and a
+  compose record holds `valid_bars` base bars.
+- **Library hidden.** The history library is hidden unless the run is a
+  library comparison arm: `libraryDisplay` on an evaluation's arm (a run naming
+  `--evaluation`; a practice-train run names none, so it never shows it).
 - **Walk-forward index.** It is built from practice-train only.
 - **Resumes can't change settings.** A resume keeps the run's role, look, arm,
   pins and list. Start another runId to change them.

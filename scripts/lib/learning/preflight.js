@@ -15,14 +15,16 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
  * adapters-in-sync, facts, curated-list, split-window, latency, practice-mode, library-display, experience-index,
  * ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-facts, monte-carlo. A check of a feature on another branch says "not available (needs <branch>)" until
- * that branch is merged, then checks it (FEATURES: how each is seen).
+ * prop-portfolio, rulebook-values, rulebook-missing, account-facts, monte-carlo. A check of a feature on another branch
+ * (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones (#188-#191) are judged, and a
+ * run or prompt without them FAILs. Stage 2's own requirements are N/A until phase 2 (stage).
  *
  *   CHECKS                                  [check function], in report order
  *   runChecks(ctx)                          { ok, results }; a check that throws is a FAIL with its message
  *   formatReport({ ok, results })           one line per check: PASS, FAIL, WARN or N/A, the check and its reason
  *   defaultReaders(root, env, { barsFiles })   the readers on the repository, the bar files given and the ledger
- *   gateOptions(run, flags)                 the learning gate's options from a run and the replay CLI's flags
+ *   gateOptions(run, flags)                 the learning gate's options from a run and the replay CLI's flags (scripts/replay.js
+ *                                           run builds its gate with it: lookArm, setupHash, setupBase, setupFixed)
  *   preflightForRun(run, gate, { root, env, barsFiles, log, read })   null for a run declared not learning; else runs
  *                                           every check, logs each line, throws on any FAIL, and returns
  *                                           { ok, results, record(runHome) } (record appends the result to
@@ -41,15 +43,13 @@ const r = (check, status, detail) => ({ check, status, detail });
 const na = (check, needs) => r(check, NA, `not available (needs ${needs})`);
 
 // The branches whose features some checks wait for.
+// (valid_bars and latency, #190; libraryDisplay, #189; curatedList, #191; the head prompt's composed reads, #188 are
+// merged: their checks judge them, and a run or prompt without them FAILs.)
 const NEEDS = Object.freeze({
-  validBars: 'feat/plan-validity-latency, #190: valid_bars',
-  latency: 'feat/plan-validity-latency, #190: latency',
-  libraryDisplay: 'feat/learning-defaults, #189: libraryDisplay',
-  curatedList: 'feat/curated-lists, #191: curatedList',
-  composedReads: 'perf/head-core-composed-skills, #188: the composed reads in the head prompt',
   scorecardComposed: 'fix/scorecard-composed: the scorecard knows composed setups',
   propMissing: 'feat/prop-portfolio-missing: loss_streak_stop and the exit mode',
   accountFacts: 'phase 2: the account facts shown',
+  accountStates: 'phase 2, feat/prop-mc-model: the account states (a curated run refuses prop, so they come from it, not from a prop attempt)',
   monteCarlo: 'phase 2, feat/prop-mc-model: the 30-day Monte Carlo',
 });
 
@@ -102,7 +102,6 @@ function strategy(ctx) {
 }
 
 function strategyValidBars(ctx) {
-  if (!ctx.read.features().validBars) return na('strategy-valid-bars', NEEDS.validBars);
   const s = lifecycleOf(ctx);
   const v = s ? s.valid_bars : undefined;
   if (!(Number.isInteger(v) && v >= 1 && v <= MAX_VALID_BARS)) return r('strategy-valid-bars', FAIL, `${LIFECYCLE} valid_bars ${JSON.stringify(v)}: a whole number of base bars from 1 to ${MAX_VALID_BARS}`);
@@ -156,9 +155,9 @@ function headPromptCheck(ctx) {
 
 function headComposedReads(ctx) {
   const h = ctx.read.head();
-  if (!h.composedReads) return na('head-composed-reads', NEEDS.composedReads);
   const why = headNotApplicable(ctx);
   if (why) return r('head-composed-reads', NA, why);
+  if (!Array.isArray(h.composedReads)) return r('head-composed-reads', FAIL, 'head-prompt.js lists no composed reads (COMPOSED_READS)');
   const notCore = h.composedReads.filter(s => !h.core.includes(s));
   const notIn = h.composedReads.filter(s => !h.embedded.includes(s));
   if (h.composedReads.length < 4 || notCore.length || notIn.length) {
@@ -201,7 +200,7 @@ function facts(ctx) {
 }
 
 function curatedList(ctx) {
-  if (ctx.run.curated === undefined) return na('curated-list', NEEDS.curatedList);
+  if (ctx.run.curated === undefined) return r('curated-list', FAIL, 'the resolved run has no curated list setting (replay/config.js curatedList)');
   const c = ctx.run.curated;
   if (!c) return r('curated-list', PASS, 'none pinned');
   let doc;
@@ -233,7 +232,7 @@ function splitWindow(ctx) {
 }
 
 function latency(ctx) {
-  if (ctx.run.latency === undefined) return na('latency', NEEDS.latency);
+  if (ctx.run.latency === undefined) return r('latency', FAIL, 'the resolved run has no latency setting (replay/config.js latency)');
   if (ctx.run.latency !== true) return r('latency', FAIL, 'a learning run charges each cycle\'s real time (latency: true), as live');
   return r('latency', PASS, 'charged');
 }
@@ -246,7 +245,7 @@ function practiceMode(ctx) {
 }
 
 function libraryDisplay(ctx) {
-  if (ctx.run.libraryDisplay === undefined) return na('library-display', NEEDS.libraryDisplay);
+  if (ctx.run.libraryDisplay === undefined) return r('library-display', FAIL, 'the resolved run has no libraryDisplay setting (replay/config.js)');
   if (ctx.run.libraryDisplay !== true) return r('library-display', PASS, 'off');
   // A library comparison arm is an arm of an evaluation (learning/looks.js): its look names the evaluation.
   if (!ctx.gate.evaluation) return r('library-display', FAIL, 'libraryDisplay is on, but the run is no library comparison arm (an evaluation\'s arm: --evaluation)');
@@ -286,18 +285,16 @@ function stage(ctx) {
   if (!req) return r('stage', FAIL, `stage ${st}: 1 or 2`);
   const role = roleOf(ctx);
   const bad = [];
-  const pending = [];
   if (!req.roles.includes(role)) bad.push(`a stage ${st} run is practice or validate (${req.roles.join(' or ')}), not ${role || 'no role'}`);
-  if (ctx.run.curated === undefined) pending.push(NEEDS.curatedList);
-  else if (role === req.curatedOn && !ctx.run.curated) bad.push('a stage practice run replays a curated list (curatedList)');
-  if (ctx.run.latency === undefined) pending.push(NEEDS.latency);
-  else if (ctx.run.latency !== req.latency) bad.push('latency is charged');
-  if (ctx.run.libraryDisplay === undefined) pending.push(NEEDS.libraryDisplay);
-  else if (ctx.run.libraryDisplay !== req.libraryDisplay) bad.push('the history library stays hidden (libraryDisplay off)');
+  if (role === req.curatedOn && !ctx.run.curated) bad.push('a stage practice run replays a curated list (curatedList)');
+  if (ctx.run.latency !== req.latency) bad.push('latency is charged');
+  if (ctx.run.libraryDisplay !== req.libraryDisplay) bad.push('the history library stays hidden (libraryDisplay off)');
   if (req.prop === 'none' && ctx.run.prop) bad.push('no prop attempt in stage 1 (account states are stage 2\'s)');
-  if (req.phase2) pending.push(NEEDS.monteCarlo, NEEDS.propMissing);
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
-  return r('stage', PASS, `stage ${st} on ${role}${pending.length ? `; not available yet: ${pending.join('; ')}` : ''}`);
+  // Stage 2's own requirements (the account states, the prop risk rules, the Monte Carlo) are phase 2's: a curated run
+  // refuses prop (curated-lists), so its account states come from feat/prop-mc-model, not a prop attempt.
+  if (req.phase2) return r('stage', NA, `stage ${st} on ${role}: its stage-1 part holds; its own requirements are not available (needs ${NEEDS.accountStates}; ${NEEDS.propMissing}; ${NEEDS.monteCarlo})`);
+  return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden, no prop`);
 }
 
 function scorecardComposed(ctx) {
@@ -462,7 +459,6 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       let scorecard = '';
       try { scorecard = fs.readFileSync(path.join(root, 'scripts', 'lib', 'replay', 'scorecard.js'), 'utf8'); } catch (_err) { /* none */ }
       return {
-        validBars: exists(path.join('scripts', 'lib', 'replay', 'latency.js')),
         scorecardComposed: /\bcomposed\b/.test(scorecard),
         lossStreakStop: Object.hasOwn(rb.ITEMS, 'loss_streak_stop'),
         exitMode: rb.EXIT_KEYS.includes('mode'),
@@ -476,9 +472,10 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
 
 /** The learning gate's options from a resolved run and the replay CLI's flags, as scripts/replay.js run builds them. */
 function gateOptions(run, { candidate = null, evaluation = null, validate = false, reasoningFix = false } = {}) {
-  const { armOf } = require('./experience-index');
-  const { setupHash } = require('../replay/config');
-  return { from: run.start, to: run.end, runId: run.runId, learning: run.learning, candidate, evaluation, validate, reasoningFix, endOfDay: run.endOfDay, practice: run.practice, runDir: run.paths.runDir, arm: armOf(run.experienceIndex), config: setupHash(run) };
+  const { setupHash, setupBase, setupFixed, lookArm } = require('../replay/config');
+  // The arm its look names (with the library's when shown), the setup, its base without the display, and the setup
+  // without its code digest (what a resumed look keeps: learning/looks.js).
+  return { from: run.start, to: run.end, runId: run.runId, learning: run.learning, candidate, evaluation, validate, reasoningFix, endOfDay: run.endOfDay, practice: run.practice, runDir: run.paths.runDir, arm: lookArm(run), config: setupHash(run), base: setupBase(run), setup: setupFixed(run) };
 }
 
 const RECORD = 'preflight.jsonl';

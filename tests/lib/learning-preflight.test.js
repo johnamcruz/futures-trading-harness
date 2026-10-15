@@ -51,7 +51,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       learningGate: () => ({ learning: true, role: 'practice-train', look: null }),
       rulebook: name => (name === 'acct' ? rulebook : null),
       sizingKeys: () => ['cushion_frac', 'cap_usd'],
-      features: () => ({ validBars: true, scorecardComposed: true, lossStreakStop: true, exitMode: true, skillUsage: true, accountFacts: true, monteCarlo: true }),
+      features: () => ({ scorecardComposed: true, lossStreakStop: true, exitMode: true, skillUsage: true, accountFacts: true, monteCarlo: true }),
       ...read,
     },
   };
@@ -84,6 +84,8 @@ test('each check fails on a broken fixture', () => {
     [P.headPromptCheck, { read: { head: () => ({ ...ctx().read.head(), prompt: null }) } }, /no head prompt/],
     [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), embedded: CORE }) } }, /rejection not embedded/],
     [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), composedReads: READS.slice(1), core: CORE.concat(READS.slice(1)) }) } }, /fewer than 4/],
+    // Merged (#188): a head-prompt module without the composed reads is a FAIL, not "not available".
+    [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), composedReads: null }) } }, /lists no composed reads/],
     [P.adaptersInSync, { read: { syncStale: () => ['workspace/AGENTS.md'] } }, /stale generated files: workspace\/AGENTS.md/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, lanes: undefined } } }, /5m candle .*5m structure/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, symbols: ['MES'] } } }, /no bar data for MES/],
@@ -98,6 +100,15 @@ test('each check fails on a broken fixture', () => {
     [P.curatedList, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), market: { roots: ['MES'], minutes: 3, setupTf: 15 } }) } }, /its market MES/],
     [P.curatedList, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), market: { roots: ['MNQ'], minutes: 5, setupTf: 15 } }) } }, /5m bars are not the run's 3m/],
     [P.curatedList, { read: { curatedDoc: () => { throw new Error('c.json: its content doesn\'t match its fingerprint'); } } }, /doesn't match its fingerprint/],
+    // Merged (#191, #190, #189): a resolved run without the setting is a FAIL, not "not available".
+    [P.curatedList, { run: { curated: undefined } }, /no curated list setting/],
+    [P.latency, { run: { latency: undefined } }, /no latency setting/],
+    [P.libraryDisplay, { run: { libraryDisplay: undefined } }, /no libraryDisplay setting/],
+    [P.stage, { run: { curated: undefined } }, /replays a curated list/],
+    [P.stage, { run: { latency: undefined } }, /latency is charged/],
+    [P.stage, { run: { libraryDisplay: undefined } }, /history library stays hidden/],
+    // Stage 2's stage-1 part is still judged.
+    [P.stage, { run: { stage: 2, latency: false } }, /stage 2: latency is charged/],
     [P.splitWindow, { gate: { from: D('2024-06-28T00:00:00Z'), to: D('2024-07-03T00:00:00Z') } }, /spans practice-train \+ practice-validate/],
     [P.splitWindow, { gate: { from: D('2019-03-04T00:00:00Z'), to: D('2019-03-05T00:00:00Z') } }, /no learning role/],
     [P.latency, { run: { latency: false } }, /latency: true/],
@@ -136,7 +147,13 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   assert.strictEqual(P.practiceMode(ctx({ gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') }, run: { practice: null } })).status, P.PASS);
   assert.strictEqual(P.curatedList(ctx({ run: { curated: null } })).status, P.PASS);
   assert.strictEqual(P.experienceIndex(ctx({ run: { experienceIndex: null } })).status, P.PASS);
-  assert.strictEqual(P.stage(ctx({ run: { stage: 2, prop: 'acct' } })).status, P.PASS);
+  // Stage 2's own requirements are phase 2's: N/A with the reason (a curated run refuses prop: the account states come
+  // from feat/prop-mc-model), never a FAIL.
+  const two = P.stage(ctx({ run: { stage: 2 } }));
+  assert.strictEqual(two.status, P.NA);
+  assert.match(two.detail, /stage 2 on practice-train: its stage-1 part holds; .*feat\/prop-mc-model: the account states \(a curated run refuses prop/);
+  assert.strictEqual(P.runChecks(ctx({ run: { stage: 2 } })).ok, true, 'N/A never fails');
+  assert.strictEqual(P.stage(ctx({ run: { stage: 2, prop: 'acct', curated: null }, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } })).status, P.NA);
   assert.strictEqual(P.stage(ctx({ run: { stage: null, curated: null, prop: 'acct' } })).status, P.PASS);
   const validate = ctx({ read: { learningGate: () => ({ learning: true, role: 'practice-validate', look: { purpose: 'validate', evaluation: 'r' } }) } });
   assert.strictEqual(P.ledgerLook(validate).status, P.PASS);
@@ -151,15 +168,17 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   assert.strictEqual(P.headPromptCheck(ctx({ read: { roleSkillsMode: () => 'full', head: () => ({ prompt: null }) } })).status, P.NA);
 });
 
-test('N/A never fails: a feature not merged reports "not available (needs <branch>)"', () => {
-  const none = { validBars: false, scorecardComposed: false, lossStreakStop: false, exitMode: false, skillUsage: false, accountFacts: false, monteCarlo: false };
-  const c = ctx({ run: { curated: undefined, latency: undefined, libraryDisplay: undefined }, read: { features: () => none, head: () => ({ ...ctx().read.head(), composedReads: null }) }, lifecycle: { valid_bars: undefined } });
+test('N/A never fails: a feature not merged reports "not available (needs <branch>)"; the merged ones (#188-#191) are judged', () => {
+  const none = { scorecardComposed: false, lossStreakStop: false, exitMode: false, skillUsage: false, accountFacts: false, monteCarlo: false };
+  const c = ctx({ read: { features: () => none } });
   const res = P.runChecks(c);
   assert.strictEqual(res.ok, true, P.formatReport(res));
   const na = res.results.filter(x => x.status === P.NA).map(x => x.check);
-  assert.deepStrictEqual(na.sort(), ['account-facts', 'curated-list', 'head-composed-reads', 'latency', 'library-display', 'monte-carlo', 'rulebook-missing', 'scorecard-composed', 'strategy-valid-bars'].sort());
+  assert.deepStrictEqual(na.sort(), ['account-facts', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
   for (const x of res.results.filter(y => y.status === P.NA)) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);
-  assert.match(res.results.find(x => x.check === 'stage').detail, /not available yet: .*curatedList/);
+  // The merged features' checks judge them on the good fixture.
+  for (const name of ['strategy-valid-bars', 'head-composed-reads', 'curated-list', 'latency', 'library-display', 'stage']) assert.strictEqual(res.results.find(x => x.check === name).status, P.PASS, name);
+  assert.ok(!Object.keys(P.NEEDS).some(k => ['validBars', 'latency', 'libraryDisplay', 'curatedList', 'composedReads'].includes(k)), 'no merged feature waits');
 });
 
 test('a check that throws is a FAIL with its message', () => {
@@ -175,13 +194,14 @@ test('the crosswalk: the trade-lifecycle step table, each step\'s skills', () =>
   assert.ok(!t.location.includes('at 15m fvg'.replace(/ /g, '-')), 'the read forms column is not a skill');
 });
 
-test('the repository and the parity bars: the defaults pass (main: the merged features only)', () => {
-  const run = { ...ctx().run, cfg: { ...PF.AUTOTRADER, barDelaySeconds: 2 }, curated: undefined, latency: undefined, libraryDisplay: undefined, experienceIndex: null };
+test('the repository and the parity bars: the defaults pass on the combined code', () => {
+  // As replay/config.js resolves a learning run with no curated list, index or stage: latency charged, library hidden.
+  const run = { ...ctx().run, cfg: { ...PF.AUTOTRADER, barDelaySeconds: 2 }, curated: null, latency: true, libraryDisplay: false, experienceIndex: null, stage: null };
   const gate = { from: run.start, to: run.end, runId: 'r', learning: true, endOfDay: true, practice: run.practice, env: { HOME: tmp() } };
   const read = P.defaultReaders(ROOT, { HOME: gate.env.HOME }, { barsFiles: { MNQ: DAY_BARS } });
   const res = P.runChecks({ run, gate, read });
   assert.strictEqual(res.ok, true, P.formatReport(res));
-  for (const name of ['strategy', 'skills-crosswalk', 'adapters-in-sync', 'facts', 'split-window', 'practice-mode', 'ledger-look', 'prop-portfolio', 'rulebook-values']) {
+  for (const name of ['strategy', 'strategy-valid-bars', 'skills-crosswalk', 'adapters-in-sync', 'facts', 'curated-list', 'split-window', 'latency', 'practice-mode', 'library-display', 'ledger-look', 'prop-portfolio', 'rulebook-values']) {
     assert.strictEqual(res.results.find(x => x.check === name).status, P.PASS, name);
   }
 });
@@ -225,6 +245,13 @@ test('scripts/replay.js run: refuses on a FAIL before anything is seeded; a run 
   assert.match(noBars.stderr, /FAIL facts: no bar data for MNQ/);
   const ok = replayRun('2022-03-07T14:30:00Z');
   assert.match(ok.stdout, /preflight PASS facts/);
+  // The merged features, judged on the resolved config: valid_bars, latency charged, the library hidden, no list.
+  for (const line of [/preflight PASS strategy-valid-bars: trade_lifecycle valid_bars 2/, /preflight PASS latency: charged/, /preflight PASS library-display: off/, /preflight PASS curated-list: none pinned/]) assert.match(ok.stdout, line);
+  // A stage-1 practice run without its curated list: refused, nothing seeded.
+  const staged = replayRun('2022-03-07T14:30:00Z', { stage: 1 });
+  assert.strictEqual(staged.status, 1, staged.stdout);
+  assert.match(staged.stderr, /FAIL stage: stage 1: a stage practice run replays a curated list/);
+  assert.ok(!fs.existsSync(staged.home));
   const recs = fs.readFileSync(path.join(ok.home, P.RECORD), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.strictEqual(recs.length, 1);
   assert.strictEqual(recs[0].ok, true);

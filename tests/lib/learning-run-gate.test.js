@@ -274,16 +274,19 @@ test('library display: off unless the config says true, part of the setup; a pai
   assert.strictEqual(G.startLearningRun(tmp(), { ...gate, runId: 'g-on', arm: lookArm(on), config: setupHash(on), base: setupBase(on) }).taken.ok, true);
   assert.throws(() => G.startLearningRun(tmp(), { ...gate, runId: 'g-nobase', arm: `with:${'b'.repeat(16)}+library:${hashA}`, config: setupHash(on) }), /names its setup without the display/);
   // scripts/replay.js run: the config's flag reaches the run's pin; without it the library is pinned hidden.
-  for (const [display, said] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/]]) {
-    const r = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
+  // (Shown only on an evaluation's arm, the training preflight's rule: a validate run naming its evaluation; hidden on
+  // practice. Mondays, the preflight's bar fixture.)
+  for (const [display, said, start, flags] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/, '2024-08-05', ['--validate', '--evaluation', 'evD']], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/, '2022-03-07', []]]) {
+    const r = replayRun(`${start}T14:30:00Z`, `${start}T15:00:00Z`, flags, { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
     assert.match(r.stdout, said, r.stderr);
     assert.strictEqual(L.libraryShown(path.join(r.user, 'replays', 'r')), display === true);
   }
   // A resume can't pin a library its run started without (its look named no display).
-  const first = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
-  const again = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, libraryDisplay: true }, first.user);
+  const first = replayRun('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate', '--evaluation', 'evR']);
+  const again = replayRun('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate', '--evaluation', 'evR'], { setupLibrary: libA, libraryDisplay: true }, first.user);
   assert.strictEqual(again.status, 1, again.stdout);
-  assert.match(again.stderr, /this run started without a history library; a resume can't pin one/);
+  // Refused by the preflight's ledger-look (the resume names another arm and setup) before its pin could be tried.
+  assert.match(again.stderr, /a resume keeps its arm|this run started without a history library; a resume can't pin one/);
   assert.strictEqual(L.libraryShown(path.join(first.user, 'replays', 'r')), false);
 });
 
