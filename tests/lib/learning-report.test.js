@@ -83,6 +83,25 @@ test('following the record: both the context cell and the any-context cell, befo
   assert.deepStrictEqual([m.record.all.followed, m.record.all.against, m.record.withLookup.followed, m.record.withLookup.against], [1, 1, 1, 0]);
 });
 
+test('frame: the owner\'s default frame against the others, overall and by context, in the report', () => {
+  const other = { ...base.context, regime: 'range' };
+  const oth = base.reads.map(r => (r.step === 'bias' ? { ...r, read: '4h up' } : r));
+  const decisions = [
+    d('2022-03-01', 'entered', 2), d('2022-03-01', 'passed', -1, { i: 1 }),
+    { ...d('2022-03-01', 'entered', -1, { i: 2, reads: oth }), context: other },
+    { ...d('2022-03-01', 'passed', 1, { i: 3, reads: oth }), frame: 'other' },
+    d('2022-03-01', 'none', null),
+  ];
+  const m = M.learningMeasures({ decisions });
+  const all = m.frames.find(r => r.context === 'all');
+  assert.deepStrictEqual(all.default, { decisions: 2, meanR: 0.5, taken: 1, takenMeanR: 2, takenWinRate: 1 });
+  assert.deepStrictEqual(all.other, { decisions: 2, meanR: 0, taken: 1, takenMeanR: -1, takenWinRate: 0 });
+  const range = m.frames.find(r => r.context === 'regime=range');
+  assert.deepStrictEqual([range.default.decisions, range.other.decisions, range.other.takenMeanR], [0, 1, -1]);
+  assert.ok(m.frames.some(r => r.context === 'biasSide=with'));
+  assert.match(M.learningMarkdown(m), /\| all \| 2, 0\.50, 1, 2\.00, 1\.00 \| 2, 0\.00, 1, -1\.00, 0\.00 \|/);
+});
+
 test('the gate\'s refusals are counted apart from the model\'s passes', () => {
   const m = M.learningMeasures({ decisions: [d('2022-03-01', 'passed', -1), d('2022-03-01', 'refused', -1, { i: 1 }), d('2022-03-01', 'refused', 2, { i: 2 }), d('2022-03-01', 'refused', null, { i: 3 })] });
   assert.deepStrictEqual(m.passes, { good: 1, missed: 0, neutral: 0, goodRate: 1 });

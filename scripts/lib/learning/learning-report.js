@@ -27,6 +27,8 @@
  *   curve            per practice day: decisions, taken, their mean R and win rate, the same over the last
  *                    ROLLING_DAYS days, pass quality (good of the model's graded passes), lookups, followed and against
  *   index            the pinned index's hash, or why it couldn't be read (indexError)
+ *   frames           the owner's frame (a 1h bias, 15m reaction and 3m confirmation read) against the others, overall
+ *                    and by each context key's value: decisions, mean R (passes at their counterfactual), taken, their mean R and win rate
  *
  *   learningMeasures({ decisions, records, lookups, index })   the measures
  *   readLearning(home)                { decisions, records, lookups, index } from a run home (null without a log)
@@ -35,8 +37,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { readDecisions, logFile } = require('./experience-log');
-const { readRecords, STEPS } = require('./lifecycle-record');
+const { readDecisions, logFile, frameOf } = require('./experience-log');
+const { readRecords, STEPS, CONTEXT_KEYS } = require('./lifecycle-record');
 const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
 
 const ROLLING_DAYS = 5;
@@ -97,8 +99,38 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
     lookups: { calls: lookups.length, decisions: withLookup.length, rate: rate(withLookup.length, composed.length) },
     record: { index: index ? index.hash.slice(0, 16) : null, indexError, all: follows(composed, index), withLookup: follows(withLookup, index) },
     curve: curve(decisions, lookups, index),
+    frames: framesOf(composed),
   };
 }
+
+/** One frame's decisions: how many, the mean R of those with one (passes at their counterfactual), and the taken trades'. */
+function frameStats(list) {
+  const withR = list.filter(hasR);
+  const taken = withR.filter(d => d.decision === 'entered');
+  return {
+    decisions: list.length, meanR: r4(mean(withR.map(d => d.outcome.R))), taken: taken.length,
+    takenMeanR: r4(mean(taken.map(d => d.outcome.R))), takenWinRate: rate(taken.filter(d => d.outcome.R > 0).length, taken.length),
+  };
+}
+
+/**
+ * The owner's frame (experience-log.js frameOf) against the others, overall and by each context key's value:
+ * [{ context, default, other }]. A line from before the tag: its frame worked out from its reads.
+ */
+const ctxv = (d, k) => (d.context && d.context[k] !== null && d.context[k] !== undefined ? String(d.context[k]) : '-');
+
+function framesOf(composed) {
+  const frame = d => d.frame || frameOf(d.reads);
+  const row = (context, list) => ({ context, default: frameStats(list.filter(d => frame(d) === 'default')), other: frameStats(list.filter(d => frame(d) !== 'default')) });
+  const out = [row('all', composed)];
+  for (const k of CONTEXT_KEYS) {
+    const values = [...new Set(composed.map(d => ctxv(d, k)))].sort();
+    for (const v of values) out.push(row(`${k}=${v}`, composed.filter(d => ctxv(d, k) === v)));
+  }
+  return out;
+}
+
+const frameCell = s => `${s.decisions}, ${f2(s.meanR)}, ${s.taken}, ${f2(s.takenMeanR)}, ${f2(s.takenWinRate)}`;
 
 function curve(decisions, lookups, index) {
   const days = [...new Set(decisions.map(d => d.day))].sort();
@@ -167,6 +199,10 @@ function learningMarkdown(m) {
     `- Passes (the model's): ${m.passes.good} good, ${m.passes.missed} missed wins, ${m.passes.neutral} neutral (good rate ${f2(m.passes.goodRate)}); the gate's refusals apart: ${m.refusals.wouldLose} would have lost, ${m.refusals.wouldWin} would have won, ${m.refusals.neutral} neutral`,
     `- experience_lookup: ${m.lookups.calls} calls, ${m.lookups.decisions} composed decisions looked up (${f2(m.lookups.rate)})`,
     `- Against the record (index ${m.record.index || (m.record.indexError ? `unreadable: ${m.record.indexError}` : 'none pinned')}, before each decision's day): followed ${m.record.all.followed}, against ${m.record.all.against}, neutral ${m.record.all.neutral}, no evidence ${m.record.all['no-evidence']}; after a lookup: followed ${m.record.withLookup.followed}, against ${m.record.withLookup.against}`,
+    '', 'Frame (default: a 1h bias, 15m reaction and 3m confirmation read; other: any other), by context:', '',
+    '| Context | Default: decisions, mean R, taken, taken mean R, win | Other: decisions, mean R, taken, taken mean R, win |',
+    '|---|---|---|',
+    ...m.frames.map(r => `| ${r.context} | ${frameCell(r.default)} | ${frameCell(r.other)} |`),
     '', `Per day (rolling over ${ROLLING_DAYS} days):`, '',
     '| Day | Role | Decisions | Taken | Mean R | Win rate | Rolling mean R | Rolling win rate | Pass quality | Lookups | Followed / against |',
     '|---|---|---|---|---|---|---|---|---|---|---|',
