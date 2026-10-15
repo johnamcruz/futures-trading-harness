@@ -83,8 +83,26 @@ const isReplay = env => Boolean(env && String(env.FTH_REPLAY_NOW || '').trim());
 /** The roles whose tools reach the web (their agent documents' WebSearch, WebFetch): a replay never launches them. */
 const webRoleNames = () => opencode.webRoles(require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..')));
 
-/** Claude's deny rules for a replay: web search, web fetch, and each role that reaches the web. */
-const replayWebDenied = () => ['WebSearch', 'WebFetch', ...webRoleNames().map(r => `Agent(${r})`)];
+/** The plugin's name (its manifest): Claude Code names a plugin's roles `<plugin>:<role>`. */
+const pluginName = () => JSON.parse(require('fs').readFileSync(path.resolve(__dirname, '..', '..', '.claude-plugin', 'plugin.json'), 'utf8')).name;
+
+/**
+ * Claude's deny rules for a replay: web search, web fetch, and each role that reaches the web, by its plain name and
+ * by the plugin-scoped name Claude Code gives a plugin's roles (`Agent(<plugin>:<role>)`).
+ */
+const replayWebDenied = () => ['WebSearch', 'WebFetch', ...webRoleNames().flatMap(r => [`Agent(${r})`, `Agent(${pluginName()}:${r})`])];
+
+/**
+ * A replay's MCP servers for Claude (--strict-mcp-config --mcp-config): the broker gateway and the harness tools, as
+ * install.js registers them, and no other (a user's own server could reach the web).
+ */
+function replayMcpConfig(root) {
+  const { gatewayArgs, harnessToolsArgs } = require('./install');
+  return { mcpServers: { [SERVER_NAME]: { command: 'node', args: gatewayArgs(root) }, [HARNESS_SERVER]: { command: 'node', args: harnessToolsArgs(root) } } };
+}
+
+/** Codex's overrides for a replay: the sandbox's network off, web search disabled (`web_search`, and `tools.web_search`). */
+const CODEX_REPLAY_NO_WEB = Object.freeze(['sandbox_workspace_write.network_access=false', 'web_search="disabled"', 'tools.web_search=false']);
 
 /** Where the runner writes closed bars (runner-owned; agents read it). */
 function resolveDataDir(cfg, home = os.homedir(), env = process.env) {
@@ -694,13 +712,16 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
         '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay: isReplay(env) }).join(','),
         '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay: isReplay(env) }).join(','),
+        // A replay: only the harness's own MCP servers load (no user server reaches the web).
+        ...(isReplay(env) ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
-      // A replay: no network from the sandbox (its default, stated so no user config turns it on).
+      // A replay: no network from the sandbox (its default, stated so no user config turns it on), and no web search
+      // (CODEX_REPLAY_NO_WEB: the `web_search` mode off, and the older `tools.web_search` toggle).
       return ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
         '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
-        ...(isReplay(env) ? ['-c', 'sandbox_workspace_write.network_access=false'] : []),
+        ...(isReplay(env) ? CODEX_REPLAY_NO_WEB.flatMap(o => ['-c', o]) : []),
         ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
       // Default approval mode: only tools allowed in workspace/.qwen/settings.json
@@ -1014,6 +1035,9 @@ module.exports = {
   claudeTools,
   isReplay,
   replayWebDenied,
+  replayMcpConfig,
+  pluginName,
+  CODEX_REPLAY_NO_WEB,
   claudeDenied,
   claudeOrderToolConflicts,
   resolveDataDir,

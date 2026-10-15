@@ -20,7 +20,10 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
   const d1 = '2023-03-15T14:00:00.000Z';
   const d2 = '2023-03-16T14:00:00.000Z';
   const d3 = '2023-03-17T14:00:00.000Z';
+  // The run's exit as the driver records it at seed time: the policy's (run-experience.js runExit).
+  const exit = require('../../scripts/lib/learning/experience-log').exitRecord(require('../../scripts/lib/learning/run-experience').runExit(null));
   const { home, dir } = multiDayRun({
+    exit,
     days: [
       { // 1 contract under a ceiling of 4, closed at 101 well before the 98 stop and the 104 target.
         day: '2023-03-15', times: [d1, at(d1, 3)], records: [record({ at: d1 })],
@@ -46,7 +49,7 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
   assert.deepStrictEqual([a.hold.r, a.hold.reason, a.hold.moveTicks], [-1.125, 'hold (stop)', -9]);
   assert.deepStrictEqual([b.actions, b.sizeFraction, b.hold], [[], null, null], 'a stop exit is no early exit; no verdict, no size action');
   const passed = stream.days.flatMap(d => d.passed);
-  // Held under the run's exit (the policy's target_then_trail, run-experience.js runExit): past the 104 target the stop
+  // Held under the run's recorded exit (the policy's target_then_trail): past the 104 target the stop
   // locks at 103, and the bar's low (99.5, 100) already went through it: out at its close, 104.25: +2.125R.
   assert.deepStrictEqual(passed.map(p => [p.day, p.actions[0], p.counterfactual, p.r]), [['2023-03-16', 'day-stop', true, 2.125], ['2023-03-17', 'pass', true, 2.125]]);
   assert.ok(stream.trades.every(t => !t.counterfactual), 'a pass is never a trade of the score');

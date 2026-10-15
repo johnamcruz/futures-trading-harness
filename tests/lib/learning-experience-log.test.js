@@ -185,13 +185,24 @@ test('writeRunExperience: only a learning run that passed the gate; a reasoning-
   const fix = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true } });
   const r = writeRunExperience(fix.dir);
   assert.deepStrictEqual([r.hidden, r.decisions[0].decision, r.decisions[0].outcome, r.decisions[0].grade, r.decisions[0].hidden], [true, 'passed', null, null, true]);
-  const shown = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false } });
-  // Held under the harness's exit for composed trades (run-experience.js runExit: the policy's, as the runner manages them).
+  // Held under the exit the run's manifest recorded at seed time (the policy's, as the runner manages composed trades).
   const { runExit } = require('../../scripts/lib/learning/run-experience');
-  const exit = runExit(null);
+  const exit = E.exitRecord(runExit(null));
+  const shownGate = { learning: true, role: 'test', look: { purpose: 'judging' }, hideOutcomes: false };
+  const shown = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit });
   const d0 = writeRunExperience(shown.dir).decisions[0];
   const want = E.limitOutcome({ bars: bars(t0, rows), tfMs: M3, side: 'long', entry: 100, stop: 98, target: 104, fromMs: ms(t0), expiresMs: Date.parse(d0.plan.expiresAt), eodMs: Infinity, tick: 0.25, plan: exit.plan });
-  assert.deepStrictEqual([d0.exit, d0.outcome.R], [exit.mode, want.R]);
+  assert.deepStrictEqual([d0.exit, d0.exitPlan, d0.outcome.R], [exit.mode, exit.hash, want.R]);
+  assert.notStrictEqual(exit.mode, 'brackets', 'the harness\'s composed exit is a policy\'s');
+  // The manifest decides, not the repository when the log is written: a run recorded under its brackets keeps them.
+  const brackets = E.exitRecord(E.BRACKETS);
+  const kept0 = writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit: brackets }).dir).decisions[0];
+  assert.deepStrictEqual([kept0.exit, kept0.exitPlan, kept0.outcome.R], ['brackets', brackets.hash, 2]);
+  // A run started before the record: its brackets, untagged (no plan hash).
+  const legacy = writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate }).dir).decisions[0];
+  assert.deepStrictEqual([legacy.exit, legacy.exitPlan, legacy.outcome.R], ['brackets', null, 2]);
+  // A recorded plan that doesn't match its hash: refused.
+  assert.throws(() => writeRunExperience(runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: shownGate, exit: { ...exit, mode: 'brackets' } }).dir), /exit plan doesn't match its hash/);
   assert.strictEqual(E.limitOutcome({ bars: bars(t0, rows), tfMs: M3, side: 'long', entry: 100, stop: 98, target: 104, fromMs: ms(t0), expiresMs: Date.parse(d0.plan.expiresAt), tick: 0.25 }).R, 2, 'the brackets alone: 2R');
   // The run record decides, not the run home's copy (the layout of folders never decides what is hidden).
   const kept = runDir({ day: '2025-03-14', times: [t0], records: [record({ at: t0 })], barRows: rows, gate: { learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true } });

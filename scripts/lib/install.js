@@ -373,6 +373,7 @@ module.exports = {
   codexDefines,
   forwardedEnv,
   harnessToolsArgs,
+  gatewayArgs,
   harnessToolsEnv,
   planBrokerEntry,
   mergeQwenSettings,

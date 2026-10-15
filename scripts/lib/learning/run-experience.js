@@ -12,8 +12,15 @@
  * refused, so it never teaches. A run on a reasoning-fix look keeps its decisions with their outcomes hidden.
  *
  *   runDecisions(runDir, { root, barsFiles, now })        the run's decisions and what they were read from, nothing written;
- *                                                          each tagged with the run's exit (runExit), its passes'
- *                                                          counterfactuals held under it
+ *                                                          each tagged with the run's exit as its manifest recorded
+ *                                                          it at seed time (manifestExit), its passes' counterfactuals
+ *                                                          held under it: never the repository's exit when it is read
+ *   runExit(root, env)                                     the exit the harness manages composed trades by now (the
+ *                                                          driver records it in a new run's manifest)
+ *   manifestExit(manifest)                                 a run's recorded exit ({ mode, plan, hash }); a run started
+ *                                                          before the record: its brackets, hash null (untagged)
+ *   plannedExit(run, { root, env })                        the exit a replay run trades: its manifest's once started,
+ *                                                          else the one its seed will record (the preflight's)
  *   writeRunExperience(runDir, { root, barsFiles, now })   { file, added, kept, decisions, role, hidden }
  *   experienceLine(result)                                 the CLI's one line
  */
@@ -24,7 +31,7 @@ const { entryOrders } = require('../harness-run');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
-const { buildDecisions, appendDecisions, logFile, legsOf, BRACKETS } = require('./experience-log');
+const { buildDecisions, appendDecisions, logFile, legsOf, BRACKETS, exitHash, exitRecord } = require('./experience-log');
 const { roleOf } = require('./splits');
 const { readLearningRun } = require('./run-gate');
 
@@ -48,7 +55,28 @@ function runExit(root, env = process.env) {
   return composed ? composedExit(composed, strategies) : BRACKETS;
 }
 
-function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date(), env = process.env } = {}) {
+/**
+ * The run's exit as its manifest recorded it at seed time ({ mode, plan, hash }), its hash checked. A run started
+ * before the record: its brackets (the experience log's counterfactual then), with no hash: its lines are untagged.
+ */
+function manifestExit(manifest) {
+  const e = manifest && manifest.exit;
+  if (e === undefined || e === null) return { ...BRACKETS, hash: null };
+  if (!e || typeof e !== 'object' || typeof e.mode !== 'string' || e.hash !== exitHash(e)) {
+    throw new Error(`run ${manifest.runId}: its manifest's exit plan doesn't match its hash: the run's exit can't be told`);
+  }
+  return { mode: e.mode, plan: e.plan || null, hash: e.hash };
+}
+
+/** The exit a replay run trades: its manifest's once the run has started (a resume), else what its seed will record. */
+function plannedExit(run, { root = null, env = process.env } = {}) {
+  const file = run && run.paths && run.paths.manifest;
+  let manifest;
+  try { manifest = file ? JSON.parse(require('fs').readFileSync(file, 'utf8')) : null; } catch (_err) { manifest = null; }
+  return manifest ? manifestExit(manifest) : exitRecord(runExit(root, env));
+}
+
+function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
   if (root && labels.inside(home, root)) throw new Error(`${home} is inside the repository (${root}): a run's records live in its run home`);
@@ -81,7 +109,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date(), e
   };
   const decisions = buildDecisions({
     cycles, records: readRecords(home, { runId: manifest.runId }), trips, stamps, gateRefusals, barsFor, tfMs,
-    tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now, exit: runExit(root, env),
+    tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now, exit: manifestExit(manifest),
   });
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor, trips };
 }
@@ -102,4 +130,4 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
 
 const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
 
-module.exports = { runDecisions, writeRunExperience, experienceLine, runExit };
+module.exports = { runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };

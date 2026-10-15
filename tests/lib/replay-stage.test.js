@@ -215,7 +215,7 @@ test('scripts/replay.js run: a finished stage-1 validate run prints its stage re
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
     runId: 's1', workDir: path.join(user, 'replays'), broker: 'replaymock', stage: 1, start: '2024-08-05T13:31:00Z', end: '2024-08-05T13:37:00Z', premarket: false,
-    autotrader: { ...PF.AUTOTRADER, command: [process.execPath, '-e', "process.stdout.write('CYCLE RESULT: no-trade - quiet\\n')", '{prompt}'], sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
+    autotrader: { ...PF.AUTOTRADER, command: [process.execPath, '-e', "process.stdout.write('CYCLE RESULT: no-trade - quiet\\n')", '{prompt}'], sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' }, noWeb: true,
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
   }));
   // The state goes by file: it is over 500 KB, and one env string past ~128 KB fails to spawn on Linux (E2BIG, status null).

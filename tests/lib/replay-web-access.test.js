@@ -67,12 +67,16 @@ test('opencode: read with opencode\'s rule order: a later allow (a pattern, a wi
 
 test('claude: a replay\'s allowlist holds no web tool and its deny rules hold the web and each web role; live as before', () => {
   const argv = env => at.buildCommand(at.validateConfig({ harness: 'claude' }), 'p', ROOT, env);
-  assert.deepStrictEqual(W.webFindings({ harness: 'claude', argv: argv(REPLAY), webRoles: WEB }), []);
-  const live = W.webFindings({ harness: 'claude', argv: argv({ FTH_HOME: '/srv/fth' }), webRoles: WEB });
+  assert.deepStrictEqual(W.webFindings({ harness: 'claude', argv: argv(REPLAY), webRoles: WEB, root: ROOT }), []);
+  const live = W.webFindings({ harness: 'claude', argv: argv({ FTH_HOME: '/srv/fth' }), webRoles: WEB, root: ROOT });
   assert.ok(live.includes('claude: the allowlist holds WebSearch') && live.includes('claude: WebFetch is not denied'), live.join('\n'));
   assert.deepStrictEqual(at.claudeTools(ROOT, { replay: false }).filter(t => /^Web/.test(t)).length, 1 + at.NEWS_DOMAINS.length, 'live: search and the calendar sites');
   assert.deepStrictEqual(at.claudeTools(ROOT, { replay: true }).filter(t => /^Web/.test(t)), []);
-  assert.deepStrictEqual(at.claudeDenied(ROOT, { replay: true }).filter(t => /^Web|^Agent/.test(t)), ['WebSearch', 'WebFetch', ...WEB.map(r => `Agent(${r})`)]);
+  // A role by its plain name and by the plugin-scoped name Claude Code gives a plugin's roles (<plugin>:<role>).
+  const plugin = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).name;
+  assert.deepStrictEqual(at.claudeDenied(ROOT, { replay: true }).filter(t => /^Web|^Agent/.test(t)), ['WebSearch', 'WebFetch', ...WEB.flatMap(r => [`Agent(${r})`, `Agent(${plugin}:${r})`])]);
+  const scoped = argv(REPLAY).map(a => a.replace(`,Agent(${plugin}:${WEB[0]})`, ''));
+  assert.deepStrictEqual(W.webFindings({ harness: 'claude', argv: scoped, webRoles: WEB, root: ROOT }), [`claude: Agent(${plugin}:${WEB[0]}) is not denied`]);
   assert.deepStrictEqual(at.claudeDenied(ROOT, {}).filter(t => /^Web|^Agent/.test(t)), []);
 });
 
@@ -84,10 +88,16 @@ test('qwen: a replay\'s workspace settings allow no web and no web role, and den
   assert.ok(live.permissions.allow.includes('web_search') && live.permissions.allow.includes(`Agent(${WEB[0]})`));
   assert.ok(W.webFindings({ harness: 'qwen', qwenSettings: live, webRoles: WEB }).includes('qwen: the allowlist holds web_search'));
   const codex = env => at.buildCommand(at.validateConfig({ harness: 'codex' }), 'p', ROOT, env);
-  assert.ok(codex(REPLAY).includes('sandbox_workspace_write.network_access=false'));
-  assert.ok(!codex({ FTH_HOME: '/srv/fth' }).includes('sandbox_workspace_write.network_access=false'));
+  // Codex: the sandbox's network off and web search disabled (its `web_search` mode, and the older tools toggle).
+  for (const o of ['sandbox_workspace_write.network_access=false', 'web_search="disabled"', 'tools.web_search=false']) {
+    assert.ok(codex(REPLAY).includes(o), o);
+    assert.ok(!codex({ FTH_HOME: '/srv/fth' }).includes(o), `live: ${o}`);
+  }
+  assert.deepStrictEqual(W.webFindings({ harness: 'codex', argv: codex(REPLAY) }), []);
+  assert.deepStrictEqual(W.webFindings({ harness: 'codex', argv: codex({ FTH_HOME: '/srv/fth' }) }).length, 3);
+  const noSearch = codex(REPLAY).map(a => (a === 'web_search="disabled"' ? 'web_search="live"' : a));
+  assert.deepStrictEqual(W.webFindings({ harness: 'codex', argv: noSearch }), ['codex: the run doesn\'t set web_search="disabled"']);
   // A harness whose permissions can't be read back here: never shown off.
-  assert.match(W.webFindings({ harness: 'codex' })[0], /can't be read back/);
   assert.match(W.webFindings({ harness: 'custom' })[0], /can't be read back/);
 });
 
@@ -116,8 +126,81 @@ test('replayStep: a resolved replay\'s first step as the driver runs it (opencod
   const bad = P.noWebInReplay({ run, read: { replayStep: () => liveStep } });
   assert.strictEqual(bad.status, P.FAIL);
   assert.match(bad.detail, /the replay could reach the web: opencode: the session may use websearch/);
-  // Codex: its web search can't be shown off from here: refused. A custom command (the user's own argv): a warning.
-  assert.strictEqual(P.noWebInReplay({ run, read: { replayStep: () => ({ harness: 'codex', webRoles: WEB }) } }).status, P.FAIL);
-  const custom = P.noWebInReplay({ run: { ...run, cfg: { ...run.cfg, harness: 'custom' } }, read: { replayStep: () => ({ harness: 'opencode', env: {}, webRoles: WEB }) } });
-  assert.deepStrictEqual([custom.status, /its web access is its own/.test(custom.detail)], [P.WARN, true]);
+  // Codex without its no-web overrides: refused.
+  assert.strictEqual(P.noWebInReplay({ run, read: { replayStep: () => ({ harness: 'codex', argv: [], webRoles: WEB }) } }).status, P.FAIL);
+});
+
+/** A resolved replay of `harness` in a fresh home (`files`: the user's config files under it, by path). */
+function userRun(harness, files = {}, extraEnv = {}) {
+  const { resolveReplay } = require('../../scripts/lib/replay/config');
+  const dir = fs.realpathSync(tmp());
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live);
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true } } }));
+  for (const [rel, content] of Object.entries(files)) {
+    const f = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, typeof content === 'string' ? content : JSON.stringify(content));
+  }
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json'), ...Object.fromEntries(Object.entries(extraEnv).map(([k, v]) => [k, v.replace('<home>', dir)])) };
+  const raw = { runId: 'u1', workDir: path.join(dir, 'replays'), broker: 'sim', start: '2022-03-01T00:00:00Z', end: '2022-03-02T00:00:00Z', learning: false,
+    autotrader: { harness, symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' } };
+  const run = resolveReplay(raw, { baseDir: dir, env, home: dir, root: ROOT });
+  return W.webFindings(W.replayStep(run, { root: ROOT, env, home: dir }));
+}
+
+test('claude: the user\'s settings and MCP servers are read: a shell or fetch-like MCP allow, a foreign server, an extra --mcp-config', () => {
+  assert.deepStrictEqual(userRun('claude'), []);
+  // Only the harness's own MCP servers load in a replay (--strict-mcp-config): a user server is not loaded, not a finding.
+  const servers = { '.claude.json': { mcpServers: { fetch: { command: 'x' }, broker: { command: 'node' } } } };
+  assert.deepStrictEqual(userRun('claude', servers), []);
+  const at2 = require('../../scripts/lib/autotrader');
+  const argv = at2.buildCommand(at2.validateConfig({ harness: 'claude' }), 'p', ROOT, REPLAY);
+  const i = argv.indexOf('--mcp-config');
+  assert.deepStrictEqual(JSON.parse(argv[i + 1]).mcpServers ? Object.keys(JSON.parse(argv[i + 1]).mcpServers) : null, ['broker', 'harness']);
+  assert.ok(argv.includes('--strict-mcp-config'));
+  assert.ok(!at2.buildCommand(at2.validateConfig({ harness: 'claude' }), 'p', ROOT, { FTH_HOME: '/srv/fth' }).includes('--strict-mcp-config'), 'live: unchanged');
+  // Without --strict-mcp-config: every user server is a finding.
+  const loose = argv.filter(a => a !== '--strict-mcp-config');
+  const user = { claudeMcp: [{ source: '~/.claude.json', servers: ['fetch', 'broker'] }] };
+  assert.deepStrictEqual(W.webFindings({ harness: 'claude', argv: loose, webRoles: WEB, root: ROOT, user }), ['claude: the run loads the user\'s MCP servers (no --strict-mcp-config)', 'claude: ~/.claude.json configures the MCP server fetch']);
+  // An extra --mcp-config (extraArgs) adding a server: found.
+  const extra = [...argv, '--mcp-config', JSON.stringify({ mcpServers: { browser: {} } })];
+  assert.deepStrictEqual(W.webFindings({ harness: 'claude', argv: extra, webRoles: WEB, root: ROOT }), ['claude: --mcp-config adds the MCP server browser']);
+  // The user's settings: a shell (any form), a fetch-like or whole foreign MCP server allowed; the harness's own aren't.
+  const settings = { '.claude/settings.json': { permissions: { allow: ['Bash(curl *)', 'mcp__fetch__fetch', 'mcp__notes', 'mcp__notes__read', 'mcp__broker__get_bars', 'Read'] } } };
+  assert.deepStrictEqual(userRun('claude', settings).map(f => f.replace(/^claude: .*?settings\.json allows /, '')), ['Bash(curl *)', 'mcp__fetch__fetch', 'mcp__notes']);
+  // A settings file that can't be parsed: its rules can't be read back.
+  assert.match(userRun('claude', { '.claude/settings.json': '{not json' })[0], /settings\.json can't be parsed/);
+});
+
+test('opencode: the global config is merged first: a foreign MCP server, a fetch-like tool key or a shell it allows are found', () => {
+  assert.deepStrictEqual(userRun('opencode'), []);
+  const g = '.config/opencode/opencode.json';
+  const found = userRun('opencode', { [g]: { mcp: { fetch: { type: 'local', command: ['x'] }, off: { enabled: false } } } });
+  assert.strictEqual(found.length, 1);
+  assert.match(found[0], /opencode\.json configures the MCP server fetch/);
+  // A per-tool key placed after the user's own "*" (its place kept when the project's "*" merges over it): allowed, found.
+  const keyed = userRun('opencode', { '.config/opencode/opencode.jsonc': '{\n // mine\n "permission": { "*": "allow", "fetch_fetch": "allow", "bash": "allow", },\n}' });
+  assert.ok(keyed.includes('opencode: the session may use fetch_fetch'), keyed.join('\n'));
+  assert.ok(!keyed.some(f => /may use bash/.test(f)), 'bash: denied by name in the project and run configs');
+  // A role's own key: before the run's "*" (appended after it), denied; after the user's own "*", allowed and found.
+  assert.deepStrictEqual(userRun('opencode', { [g]: { agent: { 'risk-manager': { permission: { bash: 'allow', http_get: 'allow' } } } } }), []);
+  const role = userRun('opencode', { [g]: { agent: { 'risk-manager': { permission: { '*': 'allow', http_get: 'allow' } } } } });
+  assert.deepStrictEqual(role, ['opencode: risk-manager may use http_get']);
+  // OPENCODE_CONFIG's file is read too; an unparseable one is a finding.
+  assert.match(userRun('opencode', { [g]: '{oops' })[0], /can't be parsed/);
+  assert.match(userRun('opencode', { 'mine.json': { mcp: { browse: {} } } }, { OPENCODE_CONFIG: '<home>/mine.json' })[0], /mine\.json configures the MCP server browse/);
+  assert.deepStrictEqual(W.parseJsonc('{"a": "//x", /* c */ "b": [1,],}'), { a: '//x', b: [1] });
+});
+
+test('qwen and codex: the user\'s settings and config: a shell or fetch-like allow, a foreign MCP server', () => {
+  assert.deepStrictEqual(userRun('qwen'), []);
+  const q = userRun('qwen', { '.qwen/settings.json': { mcpServers: { broker: {}, harness: {}, fetch: {} }, permissions: { allow: ['run_shell_command(curl *)', 'Shell', 'mcp__fetch__fetch', 'mcp__harness__bars'] } } });
+  assert.deepStrictEqual(q.map(f => f.replace(/^qwen: .*?settings\.json /, '')), ['allows run_shell_command(curl *)', 'allows Shell', 'allows mcp__fetch__fetch', 'configures the MCP server fetch']);
+  assert.deepStrictEqual(userRun('codex'), []);
+  const toml = '[mcp_servers.broker]\ncommand = "node"\n[mcp_servers."web-fetch"]\ncommand = "x"\n[mcp_servers]\nsearch = { command = "y" }\nmcp_servers.dotted.command = "z"\n';
+  assert.deepStrictEqual(W.codexServers(toml).sort(), ['broker', 'dotted', 'search', 'web-fetch']);
+  const c = userRun('codex', { '.codex/config.toml': toml });
+  assert.deepStrictEqual(c.map(f => f.replace(/^codex: .*?config\.toml /, '')), ['configures the MCP server web-fetch', 'configures the MCP server search', 'configures the MCP server dotted']);
 });

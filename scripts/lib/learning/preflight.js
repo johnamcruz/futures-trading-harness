@@ -179,8 +179,14 @@ function adaptersInSync(ctx) {
  * web, nor the head trader launch a role whose tools reach it: on a replayed date the web holds what came next.
  */
 function noWebInReplay(ctx) {
-  // A custom command is the user's own argv: no permission of the harness's to read; said, never passed.
-  if ((ctx.run.cfg || {}).harness === 'custom') return r('no-web-in-replay', WARN, 'a custom command: its web access is its own, not the harness\'s to read; keep it off the web (it runs with the replay clock, FTH_REPLAY_NOW)');
+  // A custom command is the user's own argv: no permission of the harness's to read. A learning run needs the replay
+  // config's attestation (noWeb: true) that it is kept off the web; any other run is warned.
+  if ((ctx.run.cfg || {}).harness === 'custom') {
+    if (ctx.run.noWeb === true) return r('no-web-in-replay', PASS, 'a custom command, attested off the web by the replay config (noWeb: true)');
+    const learning = ctx.run.learning === true || (ctx.gate || {}).learning === true;
+    const why = 'a custom command: its web access is its own, not the harness\'s to read; keep it off the web (it runs with the replay clock, FTH_REPLAY_NOW)';
+    return learning ? r('no-web-in-replay', FAIL, `${why}, and attest it in the replay config (noWeb: true)`) : r('no-web-in-replay', WARN, why);
+  }
   const step = ctx.read.replayStep(ctx.run);
   const found = require('../replay/web-access').webFindings(step);
   if (found.length) return r('no-web-in-replay', FAIL, `the replay could reach the web: ${found.slice(0, 4).join('; ')}${found.length > 4 ? `; and ${found.length - 4} more` : ''}`);
@@ -309,8 +315,13 @@ function experienceIndex(ctx) {
     if (!months[k]) continue;
     try { assertUse('index', months[k], new Date(Date.parse(`${months[k]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)); } catch (e) { bad.push(errText(e)); }
   }
+  // Its decisions' outcomes were scored under one exit plan (experience-index.js exitOf): the run's own, or the record
+  // it shows measures another trade stream than the one the run trades.
+  const exit = ctx.read.runExit(ctx.run);
+  if (!doc.exitPlan) bad.push(`built from decisions with no recorded exit plan; the run trades ${exit.mode} (${String(exit.hash).slice(0, 12)}): rebuild it from runs under that plan`);
+  else if (doc.exitPlan !== exit.hash) bad.push(`its exit plan (${doc.exit} ${doc.exitPlan.slice(0, 12)}) differs from the run's (${exit.mode} ${String(exit.hash).slice(0, 12)})`);
   if (bad.length) return r('experience-index', FAIL, `${doc.hash.slice(0, 12)}: ${bad.join('; ')}`);
-  return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built; pinned at the run's start`);
+  return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built, under the run's exit plan (${exit.mode}); pinned at the run's start`);
 }
 
 /** The model's risk record (learning/risk-record-index.js): shown only from a pinned, practice-train-built record, on practice-train or practice-validate. */
@@ -628,6 +639,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     tickOf: symbol => { const s = require('../trading/contracts').specFor(symbol); return s ? s.tickSize : null; },
     curatedDoc: file => require('./curated-lists').readLists(file),
     index: file => require('./experience-index').readIndex(file),
+    runExit: run => require('./run-experience').plannedExit(run, { root, env }),
     riskRecord: file => require('./risk-record-index').readRiskIndex(file),
     riskPin: home => require('./risk-record-index').riskPin(home),
     learningGate: gate => require('./run-gate').checkLearningRun({ ...gate, env }),

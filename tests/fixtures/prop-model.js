@@ -20,10 +20,11 @@ const ACCOUNT = Object.freeze({
  * fills on its last line, every record in <home>/trade-lifecycle/MNQ.jsonl and every day's bars in one bars file.
  * gate: the learning-run.json decision (default: a learning run in the first day's role); null: none written.
  */
-function multiDayRun({ home = tmpHome('fth-pmc-'), runId = 'run1', days = [], gate = undefined, autotrader = { timeframe: 3, symbols: ['MNQ'] } } = {}) {
+function multiDayRun({ home = tmpHome('fth-pmc-'), runId = 'run1', days = [], gate = undefined, autotrader = { timeframe: 3, symbols: ['MNQ'] }, exit = undefined } = {}) {
   const dir = path.join(home, 'replay', runId);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId, finished: true, daysDone: days.map(d => d.day), broker: 'replay' }));
+  // `exit`: the exit plan the driver records at seed time (experience-log.js exitRecord); none: a run started before it.
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId, finished: true, daysDone: days.map(d => d.day), broker: 'replay', ...(exit === undefined ? {} : { exit }) }));
   const g = gate === undefined ? { learning: true, role: roleOf(days[0].day), look: null, hideOutcomes: false } : gate;
   if (g) for (const d of [dir, home]) fs.writeFileSync(path.join(d, 'learning-run.json'), JSON.stringify(g));
   fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify(autotrader));

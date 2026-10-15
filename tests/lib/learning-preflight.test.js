@@ -55,7 +55,8 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       barCloses: real.barCloses,
       tickOf: () => 0.25,
       curatedDoc: () => ({ fingerprint: 'f1', use: 'practice', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, lists: { 'trend-up': [MOMENT], 'trend-down': [{}] }, coverage: { mix: { under: [] } } }),
-      index: () => ({ hash: 'b'.repeat(64), walkForward: true, roles: ['practice-train'], months: { from: '2020-01-06', to: '2024-06-28' } }),
+      index: () => ({ hash: 'b'.repeat(64), walkForward: true, roles: ['practice-train'], months: { from: '2020-01-06', to: '2024-06-28' }, exit: 'target_then_trail', exitPlan: 'e'.repeat(64) }),
+      runExit: () => ({ mode: 'target_then_trail', plan: {}, hash: 'e'.repeat(64) }),
       learningGate: () => ({ learning: true, role: 'practice-train', look: null }),
       riskRecord: () => ({ hash: 'c'.repeat(64), walkForward: true, roles: ['practice-train'], days: 3, entries: [{ day: '2022-03-01', role: 'practice-train', cells: {} }] }),
       riskPin: () => null,
@@ -159,6 +160,9 @@ test('each check fails on a broken fixture', () => {
     [P.experienceIndex, { read: { index: () => ({ ...ctx().read.index(), walkForward: false }) } }, /not walk-forward/],
     [P.experienceIndex, { read: { index: () => ({ ...ctx().read.index(), months: { from: '2020-01-06', to: '2024-08-01' } }) } }, /index refused/],
     [P.experienceIndex, { read: { index: () => { throw new Error('i.json: its content doesn\'t match its hash'); } } }, /doesn't match its hash/],
+    [P.experienceIndex, { read: { runExit: () => ({ mode: 'brackets', plan: null, hash: 'f'.repeat(64) }) } }, /its exit plan \(target_then_trail eeeeeeeeeeee\) differs from the run's \(brackets ffffffffffff\)/],
+    [P.experienceIndex, { read: { index: () => ({ ...ctx().read.index(), exitPlan: null }) } }, /no recorded exit plan; the run trades target_then_trail/],
+    [P.noWebInReplay, { run: { cfg: { ...ctx().run.cfg, harness: 'custom' } } }, /a custom command: .*attest it in the replay config \(noWeb: true\)/],
     [P.ledgerLook, { read: { learningGate: () => { throw new Error('learning run refused: test is sealed: name the candidate'); } } }, /test is sealed/],
     [P.ledgerLook, { read: { learningGate: () => ({ learning: true, role: 'test', look: null }) } }, /held out: a run on it takes a look/],
     [P.stage, { gate: { from: D('2025-03-03T14:30:00Z'), to: D('2025-03-03T15:00:00Z') } }, /stage 1 run is practice or validate .* not test/],
@@ -318,7 +322,8 @@ test('the crosswalk: the trade-lifecycle step table, each step\'s skills', () =>
 
 test('the repository and the parity bars: the defaults pass on the combined code', () => {
   // As replay/config.js resolves a learning run with no curated list, index or stage: latency charged, library hidden.
-  const run = { ...ctx().run, cfg: { ...PF.AUTOTRADER, barDelaySeconds: 2 }, curated: null, latency: true, libraryDisplay: false, experienceIndex: null, stage: null };
+  // The fixture's custom command (PF.AUTOTRADER) attested off the web, as a learning run's must be.
+  const run = { ...ctx().run, cfg: { ...PF.AUTOTRADER, barDelaySeconds: 2 }, curated: null, latency: true, libraryDisplay: false, experienceIndex: null, stage: null, noWeb: true };
   const gate = { from: run.start, to: run.end, runId: 'r', learning: true, endOfDay: true, practice: run.practice, env: { HOME: tmp() } };
   const read = P.defaultReaders(ROOT, { HOME: gate.env.HOME }, { barsFiles: { MNQ: DAY_BARS } });
   const res = P.runChecks({ run, gate, read });
@@ -348,7 +353,7 @@ function replayRun(start, over = {}, flags = []) {
   const config = path.join(user, 'replay.json');
   const bars = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10));
   const end = new Date(Date.parse(start) + 30 * 60000).toISOString().replace('.000Z', 'Z');
-  fs.writeFileSync(config, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, ...over }));
+  fs.writeFileSync(config, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, noWeb: true, ...over }));
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
@@ -389,7 +394,7 @@ test('scripts/training-preflight.js: 0 on a pass, 1 on a FAIL, 2 on a usage erro
   const bars = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), '2022-03-07');
   const write = over => {
     const f = path.join(user, `replay-${Math.random().toString(36).slice(2)}.json`);
-    fs.writeFileSync(f, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2022-03-07T14:30:00Z', end: '2022-03-07T15:00:00Z', premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, ...over }));
+    fs.writeFileSync(f, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2022-03-07T14:30:00Z', end: '2022-03-07T15:00:00Z', premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, noWeb: true, ...over }));
     return f;
   };
   fs.mkdirSync(path.join(user, 'live'));
@@ -452,4 +457,15 @@ test('stage: stage 1 keeps the risk record hidden; stage 2 shows it only on a de
   assert.deepStrictEqual([two.status, /shown only on a run declared a comparison arm \(comparisonArm\)/.test(two.detail)], [P.FAIL, true]);
   assert.strictEqual(P.stage(ctx({ run: { ...on, stage: 2, comparisonArm: true, accountStates: STATES_RUN } })).status, P.PASS, 'stage 2 on a comparison arm, from account states: holds');
   assert.strictEqual(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN } })).status, P.PASS, 'off: nothing to declare');
+});
+
+test('no-web-in-replay, a custom command: a learning run needs the replay config\'s attestation (noWeb: true); any other run is warned', () => {
+  const custom = { cfg: { ...ctx().run.cfg, harness: 'custom' } };
+  assert.strictEqual(P.noWebInReplay(ctx({ run: custom })).status, P.FAIL);
+  assert.strictEqual(P.noWebInReplay(ctx({ run: { ...custom, noWeb: true } })).status, P.PASS);
+  const off = P.noWebInReplay(ctx({ run: { ...custom, learning: false }, gate: { learning: false } }));
+  assert.deepStrictEqual([off.status, /its web access is its own/.test(off.detail)], [P.WARN, true]);
+  // The replay config takes the attestation as a boolean only.
+  const { resolveReplay } = require('../../scripts/lib/replay/config');
+  assert.throws(() => resolveReplay({ noWeb: 'yes' }, { root: ROOT }), /noWeb: true or false/);
 });

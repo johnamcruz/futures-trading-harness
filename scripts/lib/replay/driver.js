@@ -312,7 +312,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
+    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
+      // The exit its composed trades are managed by, recorded at seed time: its experience lines are tagged by it,
+      // never by the repository's exit when they are written (learning/run-experience.js manifestExit).
+      exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)) },
   });
   // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
   // other time from the first window on (later days included) is stepped only while a position or working order is
