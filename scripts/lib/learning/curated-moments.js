@@ -22,12 +22,15 @@
  *   chop           neither, and the regime is range or the 1h or 4h trend is range.
  *   mixed          anything else (no list).
  * The list (listOf):
- *   trend-up       a clear uptrend and a pullback with it: the setup candle REJECTED a key level up (a long).
- *   trend-down     the same in a clear downtrend (rejected down, a short).
+ *   trend-up       a clear uptrend and a reaction with it at a key level (a long): a pullback's rejection, or a
+ *                  breakout (a candle that broke a level up; a bearish gap's failure through its far edge is one).
+ *   trend-down     the same in a clear downtrend (rejected or broke down, a short).
  *   counter-trend  a clear trend and the reaction against it (either kind).
  *   trend-end      a trend-end moment, either side.
  *   chop           a chop moment, either side.
- *   (none)         a clear trend's breakout with it (not a pullback), or a mixed trend.
+ *   (none)         a mixed trend.
+ * Each moment's reaction kind (reactionKindOf): rejection or breakout, at a level or a gap's edge (fvg rejection, fvg
+ * breakout); the coverage splits by it.
  *
  * The reads (readsAt): every read of compose_check's vocabulary (composed-reads.js) the briefing at the decision bar
  * can state for the side (the trends, breaks, regime, day type, prior RTH range, trend rule and alignment; the reaction
@@ -35,7 +38,11 @@
  * momentum, volume, participation, patterns and absorption; the standard's stop and target when it traded), run
  * through checkReads one step at a time, kept when TRUE ({ step, skill, read, agrees }). The skill of each read is
  * the trade-lifecycle crosswalk's (skills/trade-lifecycle/SKILL.md, its step table), one per read kind (READ_SKILL;
- * a test holds every one to its step's row).
+ * a test holds every one to its step's row). The library's own labels are normalised to the crosswalk's (SKILL_ALIAS:
+ * its bias label mtf-bias-filter counts as multi-timeframe-analysis). pullback-vs-reversal has no read of its own: it is
+ * counted when the reads show one exactly (shapeOf): a pullback is a true trend read the side's way, the side's
+ * timeframe alignment read as pullback (m15.alignment: the higher frames with the side, the lowest against it, the
+ * counter-move) and a rejection the side's way; a reversal is a true CHoCH the side's way.
  *
  * The outcome: the library's standard (status traded, no-room, not-composable, stop-under-floor, no-confirmation,
  * no-entry-window), with its R when traded and filled (result win, loss, scratch or unfilled). The gate's view: the
@@ -48,11 +55,13 @@
  * standard's exit when filled, else the end of the reaction's confirmation window, never past end of day.
  *
  *   USES                                    the uses a scan takes: practice (practice-train), validate (practice-validate)
- *   scanMoments({ bars, root, minutes, tick, from, to, use, setupTf, eodOf, inSession, windowBars })   [moment]
+ *   scanMoments({ bars, root, minutes, tick, from, to, use, setupTf, eodOf, inSession, windowBars, stats })   [moment]
+ *                                           (stats, when given, counts the briefings built)
  *   classify(briefing)                      { trend: 'up' | 'down' | null, state: clear | trend-end | chop | mixed, facts }
  *   listOf(state, trendDir, side, reaction) the list name, or null
  *   readsAt(briefing, { side, reaction, setupTf, standard, tick })   [{ step, skill, read, agrees }] (true reads)
- *   READ_SKILL, skillOfRead(step, read)      the crosswalk's skill for a read
+ *   READ_SKILL, skillOfRead(step, read)      the crosswalk's skill for a read; normalSkill(label) the library's labels
+ *   shapeOf(reads, side), reactionKindOf(reaction)
  */
 
 const fs = require('fs');
@@ -72,6 +81,9 @@ const { LISTS } = require('./curated-lists');
 const VERSION = 1;
 const USES = Object.freeze(['practice', 'validate']);
 const LEAD_SETUP = 2;
+/** The history library's skill labels that differ from the crosswalk's (setup-library.js labels its bias reads so). */
+const SKILL_ALIAS = Object.freeze({ 'mtf-bias-filter': 'multi-timeframe-analysis' });
+const SHAPE_SKILL = 'pullback-vs-reversal';
 const FIRST_BAR = 300;
 
 /** The trade-lifecycle crosswalk's skill for each kind of read, per step (its table, skills/trade-lifecycle/SKILL.md). */
@@ -126,7 +138,24 @@ function listOf(state, trend, side, reaction) {
   if (state === 'chop') return 'chop';
   if (state !== 'clear') return null;
   if (dirOf(side) !== trend) return 'counter-trend';
-  return reaction && reaction.rel === 'rejected' ? `trend-${trend}` : null;
+  return reaction && ['rejected', 'broke'].includes(reaction.rel) ? `trend-${trend}` : null;
+}
+
+/** A reaction's kind for the coverage: rejection or breakout, at a level or a gap's edge. */
+const reactionKindOf = r => `${r && r.kind === 'fvg' ? 'fvg ' : ''}${r && r.rel === 'broke' ? 'breakout' : 'rejection'}`;
+
+/** The crosswalk's name for a skill label (SKILL_ALIAS), so the library's labels count where the crosswalk's do. */
+const normalSkill = skill => SKILL_ALIAS[skill] || skill;
+
+/** pullback or reversal when the reads show one exactly (see the header), else null. */
+function shapeOf(reads, side) {
+  const d = dirOf(side);
+  const ok = r => r.agrees && parseRead(r.read);
+  if (reads.some(r => ok(r) && ok(r).kind === 'break' && ok(r).breakKind === 'choch' && ok(r).value === d)) return 'reversal';
+  const trend = reads.some(r => ok(r) && ok(r).kind === 'trend' && ok(r).value === d);
+  const pullback = reads.some(r => ok(r) && ok(r).kind === 'alignment' && ok(r).side === side && ok(r).value === 'pullback');
+  const rejection = reads.some(r => r.step === 'setup' && ok(r) && ok(r).kind === 'relation' && ok(r).rel === 'rejected' && ok(r).value === d);
+  return trend && pullback && rejection ? 'pullback' : null;
 }
 
 /** The reads the briefing can state for the side, by step (candidates; readsAt keeps the true ones). */
@@ -208,7 +237,7 @@ function gateView({ home, root, bars, side, b, standard, nowMs, tick }) {
   const rejections = (isObj(c4) && Array.isArray(c4.relations) ? c4.relations : []).filter(r => isObj(r) && r.rel === 'rejected' && r.dir === d).map(r => ({ step: 'setup', read: `4h rejected ${levelName(r.name)} ${d}` }));
   const wanted = [{ step: 'bias', read: `15m choch ${d}` }, { step: 'bias', read: `1h choch ${d}` }, ...rejections].map(r => ({ ...r, skill: skillOfRead(r.step, r.read) }));
   const extra = checkReads({ reads: wanted, side, briefing: b, tick }).reads.filter(r => r.check === true && r.agrees === true);
-  const combo = [...standard.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read })), ...extra.map(r => ({ step: r.step, skill: r.skill, read: r.read }))];
+  const combo = [...standard.reads.map(r => ({ step: r.step, skill: normalSkill(r.skill), read: r.read })), ...extra.map(r => ({ step: r.step, skill: r.skill, read: r.read }))];
   const check = checkReads({ reads: combo, side, briefing: b, tick });
   writeRecord(home, rec);
   const r = reversalAllowed({ home, root, side, check, now: new Date(nowMs) });
@@ -233,7 +262,7 @@ const idOf = (...parts) => require('crypto').createHash('sha256').update(parts.j
  * Every reaction moment of the bars in [from, to) (practice-train for use 'practice', practice-validate for
  * 'validate'), with its trend, list, true reads, the standard's outcome, the gate's view and the window: [moment].
  */
-function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true, windowBars = Math.ceil((HISTORY_HOURS * 60) / minutes) }) {
+function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true, windowBars = Math.ceil((HISTORY_HOURS * 60) / minutes), stats = null }) {
   if (!USES.includes(use)) throw new Error(`curated moments: use ${String(use)} refused; a list is scanned for ${USES.join(' or ')} only (test and final are sealed)`);
   assertUse(use, from, to);
   if (!(Number.isInteger(windowBars) && windowBars > FIRST_BAR)) throw new Error(`windowBars: a whole number above ${FIRST_BAR}`);
@@ -242,7 +271,9 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
   const stepMs = setupTf * 60000;
   const span = Math.round(setupTf / minutes);
   const window = i => list.slice(Math.max(0, i - windowBars + 1), i + 1).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
-  const brief = i => buildBriefing({ symbol: root, bars: window(i), minutes, now: new Date(list[i].ms + tfMs) });
+  const st = stats || {};
+  st.briefings = st.briefings || 0;
+  const brief = i => (st.briefings += 1, buildBriefing({ symbol: root, bars: window(i), minutes, now: new Date(list[i].ms + tfMs) }));
   const first = sessionDate(from);
   const last = sessionDate(to);
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-curated-'));
@@ -278,7 +309,10 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
         at = { i: j, b: bj, status: r.status, why: r.why || null, standard: r.status === 'traded' ? r : null };
         if (r.status === 'traded') break;
       }
-      const decision = at.status === 'no-entry-window' && !tried ? { i: at.skipped, b } : tried || { i, b };
+      // The decision bar: the close tried last (its briefing), else the reaction bar; a no-entry-window moment is
+      // recorded at its skipped close (the library's bar) but read and judged on the reaction bar's briefing.
+      const decision = tried || { i, b };
+      const recordBar = at.status === 'no-entry-window' && !tried ? at.skipped : decision.i;
       const decisionClose = list[decision.i].ms + tfMs;
       let outcome = null;
       if (at.standard) {
@@ -290,15 +324,18 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
       const reads = readsAt(decision.b, { side, reaction, setupTf, standard: at.standard, tick });
       const gate = gateView({ home, root, bars: window(decision.i), side, b: decision.b, standard: at.standard, nowMs: decisionClose, tick });
       const regime = cls.facts.regime;
+      const shape = shapeOf(reads, side);
+      const skills = [...new Set([...reads.map(r => r.skill), ...(shape ? [SHAPE_SKILL] : [])])].sort();
+      const aligned = [...new Set([...reads.filter(r => r.agrees).map(r => r.skill), ...(shape ? [SHAPE_SKILL] : [])])].sort();
       out.push({
         v: VERSION, use, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), root, day, year: day.slice(0, 4), reactionAt: m.candle.closedAt,
-        bar: list[decision.i].t, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price }, side,
-        list: listName, trend: { state: cls.state, dir: cls.trend, ...cls.facts }, regime,
-        reads, skills: [...new Set(reads.map(r => r.skill))].sort(), aligned: [...new Set(reads.filter(r => r.agrees).map(r => r.skill))].sort(),
+        minutes, setupTf, bar: list[recordBar].t, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price },
+        reactionKind: reactionKindOf(reaction), side, list: listName, trend: { state: cls.state, dir: cls.trend, ...cls.facts }, regime,
+        reads, shape, skills, aligned,
         standard: { status: at.status, why: at.why, setupKey: at.standard ? setupKeyOf(at.standard.reads) : null, plan: at.standard ? { entry: at.standard.plan.entry.price, stop: at.standard.plan.stop.price, target: at.standard.plan.target.price, rr: at.standard.plan.rr } : null },
         outcome: at.status === 'traded' ? { result: resultOf(outcome), R: outcome && outcome.filled ? outcome.R : null, exitReason: outcome ? outcome.exitReason : null } : { result: at.status, R: null, exitReason: null },
         gate, expected: at.status === 'traded' && (gate.trendAllowed || (gate.d2 && gate.d2.allowed)) ? 'take' : 'pass',
-        window: windowOf({ reactionAt: m.candle.closedAt, setupTf, outcome, eodMs: eodOf(decisionClose), decisionClose }),
+        window: windowOf({ reactionAt: m.candle.closedAt, setupTf, outcome, eodMs: eodOf(decisionClose), decisionClose: Math.max(decisionClose, list[recordBar].ms + tfMs) }),
       });
     }
   } finally {
@@ -307,4 +344,4 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
   return out;
 }
 
-module.exports = { VERSION, USES, LISTS, LEAD_SETUP, READ_SKILL, skillOfRead, classify, listOf, readsAt, windowOf, scanMoments };
+module.exports = { VERSION, USES, LISTS, LEAD_SETUP, READ_SKILL, SKILL_ALIAS, SHAPE_SKILL, skillOfRead, normalSkill, shapeOf, reactionKindOf, classify, listOf, readsAt, windowOf, scanMoments };

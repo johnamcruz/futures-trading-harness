@@ -2,17 +2,18 @@
 
 /**
  * The curated training lists (the owner's practice set for a model that can't afford weeks of full-day replays): a
- * seeded, date-mixed selection of setup moments (curated-moments.js) into named lists, a run mix over them, and
- * their coverage, under one content fingerprint; a practice replay pins one (the mix or a list) and runs only its
+ * seeded selection of setup moments (curated-moments.js), balanced across years, into named lists, a run mix over them,
+ * and their coverage, under one content fingerprint; a practice replay pins one (the mix or a list) and runs only its
  * windows (setup-focused practice, learning/setup-moments.js, inside them; the run gate, learning/run-gate.js, as
- * for any practice run).
+ * for any practice run), managing anything still open after a window bar by bar until it is flat.
  *
- * Lists (curated-moments.js listOf): trend-up and trend-down (pullbacks at a key level in a clear 1h/4h trend),
- * trend-end (a CHoCH against the trend: mostly passes or D2 reversals), chop (mostly passes) and counter-trend (mostly
- * passes, plus the few D2 allows). A training document is built from practice-train moments only (use 'practice'), a
- * validation document from practice-validate moments only (use 'validate'): never mixed, and a validation document
- * never runs on practice-train (curatedForRun). Neither feeds the experience index (it is built from practice-train
- * runs' experience logs, learning/experience-index.js).
+ * Lists (curated-moments.js listOf): trend-up and trend-down (a rejection or a breakout at a key level with a clear
+ * 1h/4h trend), trend-end (a CHoCH against the trend: mostly passes or D2 reversals), chop (mostly passes) and
+ * counter-trend (mostly passes, plus the few D2 allows). A training document is built from practice-train moments only
+ * (use 'practice'), a validation document from practice-validate moments only (use 'validate'): never mixed, and a
+ * validation document never runs on practice-train (curatedForRun). Neither feeds the experience index (it is built
+ * from practice-train runs' experience logs, learning/experience-index.js). A document is one market's: its root(s),
+ * bar and setup timeframes (`market`), and a run on another is refused.
  *
  * Selection (selectList), per list, of its share of `total` (mix), one moment at a time, the best candidate by, in order:
  *   - the skills it exercises that are still under minSkill (where the data has them), the scarcest weighing most
@@ -22,20 +23,26 @@
  *     of the years that have candidates (the list is short rather than one year filling it);
  *   - winners and losers of the standard's trades kept level;
  *   - the skills that line up (agreeing reads);
- *   - then a seeded hash;
- *   - the mix is every list's moments, shuffled across dates (seeded).
- * The replay plays the windows in time order (its clock moves forward only, and the experience index is walk-forward).
+ *   - then a seeded hash.
+ * The mix is every list's moments in time order: a replay plays its windows in time order (its clock moves forward only,
+ * and the experience index is walk-forward by day, so another order would leak); the selection balances it across years.
  *
  *   DEFAULTS                                  { total, mix, minSkill, passShare, seed, manageTailMin }
  *   buildLists(moments, { use, seed, total, mix, minSkill, passShare, sources })   the document, fingerprinted
  *   selectList(candidates, { name, size, seed, minSkill, passShare })   [moment]
- *   coverageOf(selected, candidates, { minSkill })   per skill (count, available, combinations, under), outcomes, years
+ *   coverageOf(selected, candidates, { minSkill })   per skill (count, available, combinations, under), outcomes, years,
+ *                                            and per reaction kind (rejection, breakout, at a level or a gap's edge)
  *   coverageText(doc)                        the coverage report, as text
  *   fingerprintOf(doc), writeLists(dir, doc), readLists(file)
  *   validateCuratedConfig(raw)               a replay config's `curatedList`: { file, list, manageTailMin }
- *   curatedForRun({ file, list, start, end, manageTailMin })   { file, list, fingerprint, use, windows, manageTailMin }
- *   curatedPoints(points, curated, delayMs)  the decision times a curated run steps (its windows and their days)
- *   pinCurated(runHome, curated), loadPinnedCurated(home)
+ *   curatedForRun({ file, list, start, end, manageTailMin, symbols, timeframe, setupTf })
+ *                                            { file, list, fingerprint, use, role, market, windows, manageTailMin }
+ *   curatedPoints(points, curated, delayMs)  the decision times a curated run steps: its windows' (and their tails'),
+ *                                            the rest of those days' trade times marked `manage` (stepped only while
+ *                                            something is open: replay/driver.js), and those days' premarket and end of day
+ *   emptyWindows(points, curated, delayMs)   the windows no decision time falls in (the run's sessions miss them)
+ *   pinCurated(runHome, curated), loadPinnedCurated(home)   the run's copy: its windows only, never the outcomes
+ *   dayChunks(from, to, n)                   [from, to) split into n runs of whole session dates (a parallel scan)
  *   curatedSelect({ windows, barClose, open, select })   the practice selector inside the list's windows
  */
 
@@ -57,10 +64,10 @@ const DEFAULTS = Object.freeze({
   minSkill: 3,
   passShare: Object.freeze({ 'trend-end': 0.6, chop: 0.7, 'counter-trend': 0.7 }),
   seed: 1,
-  manageTailMin: 60,
+  manageTailMin: 0,
 });
 /** Every skill a read maps to (curated-moments.js READ_SKILL, the crosswalk's). */
-const skillsOf = () => [...new Set(Object.values(momentsLib().READ_SKILL).flatMap(Object.values))].sort();
+const skillsOf = () => [...new Set([...Object.values(momentsLib().READ_SKILL).flatMap(Object.values), momentsLib().SHAPE_SKILL])].sort();
 /** A year holds at most this many times its even share of a list (the years that have candidates). */
 const YEAR_CAP = 1.5;
 const OUTCOMES = ['win', 'loss', 'scratch', 'unfilled', 'no-room', 'not-composable', 'stop-under-floor', 'no-confirmation', 'no-entry-window'];
@@ -143,6 +150,10 @@ function coverageOf(selected, candidates, { minSkill = DEFAULTS.minSkill } = {})
     outcomes: tally(selected, m => m.outcome.result), expected: tally(selected, m => m.expected), years: tally(selected, m => m.year),
     d2Allowed: selected.filter(m => m.gate && m.gate.d2 && m.gate.d2.allowed).length,
     under: SKILLS.filter(s => skills[s].under),
+    reactions: Object.fromEntries(Object.keys(tally(selected, m => m.reactionKind)).map(k => {
+      const of = selected.filter(m => m.reactionKind === k);
+      return [k, { n: of.length, outcomes: tally(of, m => m.outcome.result), expected: tally(of, m => m.expected), skills: tally(of.flatMap(m => m.skills), x => x) }];
+    })),
   };
 }
 
@@ -166,6 +177,11 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
     seen.add(m.id);
     all.push(m);
   }
+  // One market: the moments' bar and setup timeframes agree (a run checks its own against them).
+  const market = { roots: [...new Set(all.map(m => m.root))].sort(), minutes: [...new Set(all.map(m => m.minutes))], setupTf: [...new Set(all.map(m => m.setupTf))] };
+  if (market.minutes.length > 1 || market.setupTf.length > 1) throw new Error(`curated lists refused: the moments mix bar timeframes ${market.minutes.join(', ')} or setup timeframes ${market.setupTf.join(', ')}; one document is one market's`);
+  market.minutes = market.minutes[0] ?? null;
+  market.setupTf = market.setupTf[0] ?? null;
   const lists = {};
   const coverage = {};
   const short = {};
@@ -177,12 +193,12 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
     if (lists[name].length < size) short[name] = size - lists[name].length;
   }
   const chosen = LISTS.flatMap(n => lists[n]);
-  const order = chosen.map(m => m.id).sort((a, b) => (hashOf(seed, 'mix', a) < hashOf(seed, 'mix', b) ? -1 : 1));
+  const order = [...chosen].sort((a, b) => Date.parse(a.reactionAt) - Date.parse(b.reactionAt) || (a.id < b.id ? -1 : 1)).map(m => m.id);
   coverage.mix = coverageOf(chosen, all, { minSkill });
   const hashes = sources.map(s => s.sha256).filter(Boolean);
   if (new Set(hashes).size !== hashes.length) throw new Error('curated lists refused: the same moments file given twice (its sha256 repeats)');
   const doc = {
-    v: VERSION, kind: KIND, builtAt: now.toISOString(), use, role: ROLE[use], seed, options: { total, mix, minSkill, passShare },
+    v: VERSION, kind: KIND, builtAt: now.toISOString(), use, role: ROLE[use], market, seed, options: { total, mix, minSkill, passShare },
     sources: sources.map(s => ({ file: s.file ? path.basename(s.file) : null, sha256: s.sha256 || null })),
     lists, mix: order, short, coverage,
   };
@@ -192,10 +208,11 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '-');
 
 function coverageText(doc) {
-  const lines = [`curated ${doc.use} lists ${doc.fingerprint.slice(0, 16)} (${doc.role}, seed ${doc.seed}): mix ${doc.mix.length} moment(s)${Object.keys(doc.short).length ? `; short: ${Object.entries(doc.short).map(([k, n]) => `${k} ${n}`).join(', ')}` : ''}`];
+  const lines = [`curated ${doc.use} lists ${doc.fingerprint.slice(0, 16)} (${doc.role}, ${doc.market.roots.join(',') || '-'} ${doc.market.minutes}m bars, ${doc.market.setupTf}m setups, seed ${doc.seed}): mix ${doc.mix.length} moment(s)${Object.keys(doc.short).length ? `; short: ${Object.entries(doc.short).map(([k, n]) => `${k} ${n}`).join(', ')}` : ''}`];
   for (const name of [...LISTS, 'mix']) {
     const c = doc.coverage[name];
     lines.push('', `${name}: ${c.n} of ${c.candidates} candidate(s); outcomes ${JSON.stringify(c.outcomes)}; expected ${JSON.stringify(c.expected)} (pass ${pct(c.expected.pass || 0, c.n)}); D2 allowed ${c.d2Allowed}; years ${JSON.stringify(c.years)}`);
+    for (const [k, r] of Object.entries(c.reactions)) lines.push(`  by reaction: ${k} ${r.n}; outcomes ${JSON.stringify(r.outcomes)}; expected ${JSON.stringify(r.expected)}`);
     for (const s of Object.keys(c.skills)) {
       const k = c.skills[s];
       const top = Object.entries(k.combinations).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([x, n]) => `${n}x ${x}`).join('; ');
@@ -226,7 +243,7 @@ function readLists(file) {
 function validateCuratedConfig(raw) {
   if (raw === undefined || raw === null) return { curated: null, errors: [] };
   const errors = [];
-  if (!isObj(raw)) return { curated: null, errors: ['curatedList: { "file": "<curated lists>", "list": "mix", "manageTailMin": 60 }'] };
+  if (!isObj(raw)) return { curated: null, errors: ['curatedList: { "file": "<curated lists>", "list": "mix", "manageTailMin": 0 }'] };
   for (const k of Object.keys(raw)) if (!['file', 'list', 'manageTailMin'].includes(k)) errors.push(`curatedList.${k}: unknown (file, list, manageTailMin)`);
   if (!(typeof raw.file === 'string' && raw.file.trim())) errors.push('curatedList.file: a curated lists document (scripts/curated-lists.js build)');
   const list = raw.list === undefined ? 'mix' : raw.list;
@@ -251,8 +268,14 @@ function windowsOf(doc, list) {
 }
 
 /** A replay's curated list, checked against its window: the document's use must be the run's (assertUse). */
-function curatedForRun({ file, list = 'mix', start, end, manageTailMin = DEFAULTS.manageTailMin }) {
+function curatedForRun({ file, list = 'mix', start, end, manageTailMin = DEFAULTS.manageTailMin, symbols = null, timeframe = null, setupTf = null }) {
   const doc = readLists(file);
+  // The run's market is the list's: its root among the run's symbols, the same bar and setup timeframes.
+  const mk = doc.market || {};
+  const roots = (symbols || []).map(x => String(x).toUpperCase());
+  if (!mk.roots || !mk.roots.length || !mk.roots.every(r => roots.includes(r))) throw new Error(`curatedList: its moments are ${(mk.roots || []).join(', ') || 'of no root'}; the run trades ${roots.join(', ') || 'nothing'}`);
+  if (mk.minutes !== timeframe) throw new Error(`curatedList: its moments are on ${mk.minutes}m bars, the run's on ${timeframe}m`);
+  if (mk.setupTf !== setupTf) throw new Error(`curatedList: its moments are ${mk.setupTf}m setups, the run's practice.setupTf is ${setupTf}`);
   if (list !== 'mix' && !doc.lists[list]) throw new Error(`curatedList.list: ${list} is not in ${path.basename(file)}`);
   const windows = windowsOf(doc, list);
   if (!windows.length) throw new Error(`curatedList: ${list} of ${path.basename(file)} has no moments`);
@@ -260,50 +283,82 @@ function curatedForRun({ file, list = 'mix', start, end, manageTailMin = DEFAULT
   const e = end.getTime();
   assertUse(doc.use, s, e);
   if (windows[0].from < s || windows[windows.length - 1].to > e) throw new Error(`curatedList: its windows (${new Date(windows[0].from).toISOString()} to ${new Date(windows[windows.length - 1].to).toISOString()}) lie outside the run's ${start.toISOString()} to ${end.toISOString()}`);
-  return { file, list, fingerprint: doc.fingerprint, use: doc.use, role: doc.role, manageTailMin, windows };
+  return { file, list, fingerprint: doc.fingerprint, use: doc.use, role: doc.role, market: mk, manageTailMin, windows };
 }
 
 const inside = (windows, ms, tailMs = 0) => windows.some(w => ms > w.from && ms <= w.to + tailMs);
 
 /**
- * The decision times a curated run steps: trade times whose bar closed in a window (or its management tail; a time is
- * its close plus the runner's poll delay, delayMs), and those days' premarket and end of day.
+ * The decision times a curated run steps (a time is its bar's close plus the runner's poll delay, delayMs): the trade
+ * times whose bar closed in a window or its management tail; the rest of those days' trade times after the day's first
+ * window, marked `manage` (the driver steps one only while a position or working order is open, as practice manages
+ * every bar with something open); and those days' premarket and end of day.
  */
 function curatedPoints(points, curated, delayMs = 0) {
   const tail = curated.manageTailMin * 60000;
-  const kept = p => p.kind === 'trade' && inside(curated.windows, p.t.getTime() - delayMs, tail);
-  const days = new Set(points.filter(kept).map(p => p.day));
-  return points.filter(p => (p.kind === 'trade' ? kept(p) : days.has(p.day)));
+  const close = p => p.t.getTime() - delayMs;
+  const kept = p => p.kind === 'trade' && inside(curated.windows, close(p), tail);
+  const firstOfDay = new Map();
+  for (const p of points) if (kept(p) && !firstOfDay.has(p.day)) firstOfDay.set(p.day, close(p));
+  return points.flatMap(p => {
+    if (!firstOfDay.has(p.day)) return [];
+    if (p.kind !== 'trade' || kept(p)) return [p];
+    return close(p) > firstOfDay.get(p.day) ? [{ ...p, manage: true }] : [];
+  });
+}
+
+/** The windows no trade decision time falls in (the run's sessions or end of day miss them). */
+function emptyWindows(points, curated, delayMs = 0) {
+  const closes = points.filter(p => p.kind === 'trade').map(p => p.t.getTime() - delayMs);
+  return curated.windows.filter(w => !closes.some(c => c > w.from && c <= w.to));
+}
+
+/** [from, to) (session dates) as up to n runs of whole dates, in order: [[from, to]]. */
+function dayChunks(from, to, n) {
+  const days = [];
+  for (let d = sessionDate(from); d < sessionDate(to); d = nextDay(d)) days.push(d);
+  const k = Math.max(1, Math.min(Math.floor(n) || 1, days.length));
+  const size = Math.ceil(days.length / k);
+  const out = [];
+  for (let i = 0; i < days.length; i += size) out.push([days[i], i + size < days.length ? days[i + size] : sessionDate(to)]);
+  return out;
 }
 
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return null; } };
 
-/** Pin the run's curated list (its own copy, by fingerprint); refused unless the run is a learning run of the document's role. */
+const pinHash = pin => hashOf(JSON.stringify({ fingerprint: pin.fingerprint, list: pin.list, manageTailMin: pin.manageTailMin, windows: pin.windows }));
+
+/**
+ * Pin the run's curated list: the list the config resolved (its fingerprint, the file read again must be it), as the
+ * run's own copy of its windows only (the moments' outcomes never sit in the run home); refused unless the run is a
+ * learning practice run of the document's role. A run keeps the list it pinned.
+ */
 function pinCurated(runHome, curated) {
   const doc = readLists(curated.file);
+  if (doc.fingerprint !== curated.fingerprint) throw new Error(`${path.basename(curated.file)} changed since the run's config read it (${String(curated.fingerprint).slice(0, 16)}, now ${doc.fingerprint.slice(0, 16)}): start the run again`);
   const run = readJson(path.join(runHome, 'learning-run.json'));
   if (!run || run.learning !== true) throw new Error('a curated list is for a learning practice run (no learning-run.json, or the run is declared not learning)');
   if (run.role !== doc.role) throw new Error(`a ${doc.use} curated list runs on ${doc.role}, not on this ${run.role} run`);
   if (!run.practice) throw new Error('a curated list runs through setup-focused practice (the replay config\'s practice)');
   const dir = path.join(runHome, 'experience');
-  const pinned = readJson(path.join(dir, PINNED));
+  const file = path.join(dir, PINNED);
+  const pinned = readJson(file);
   const mine = { fingerprint: doc.fingerprint, list: curated.list, manageTailMin: curated.manageTailMin };
   if (pinned && JSON.stringify({ fingerprint: pinned.fingerprint, list: pinned.list, manageTailMin: pinned.manageTailMin }) !== JSON.stringify(mine)) {
     throw new Error(`this run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}); a run keeps its list (start another runId)`);
   }
-  const copy = writeLists(dir, doc);
-  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), ...mine })}\n`);
-  return { file: copy, fingerprint: doc.fingerprint, list: curated.list };
+  const pin = { kind: 'curated-pin', ...mine, windows: windowsOf(doc, curated.list) };
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify({ ...pin, hash: pinHash(pin) })}\n`);
+  return { file, fingerprint: doc.fingerprint, list: curated.list, windows: pin.windows.length };
 }
 
-/** The run's pinned curated list ({ fingerprint, list, windows, manageTailMin }), or null when none is pinned. */
+/** The run's pinned curated windows ({ fingerprint, list, windows, manageTailMin }), or null when none is pinned. */
 function loadPinnedCurated(home) {
   const pin = readJson(path.join(home, 'experience', PINNED));
   if (!pin) return null;
-  if (!/^curated-(practice|validate)-[0-9a-f]{16}\.json$/.test(String(pin.file))) throw new Error('the pinned curated list is not a curated lists file');
-  const doc = readLists(path.join(home, 'experience', pin.file));
-  if (doc.fingerprint !== pin.fingerprint) throw new Error(`the pinned curated list's fingerprint ${String(pin.fingerprint).slice(0, 16)} is not its file's ${doc.fingerprint.slice(0, 16)}`);
-  return { fingerprint: doc.fingerprint, list: pin.list, manageTailMin: pin.manageTailMin, windows: windowsOf(doc, pin.list) };
+  if (pin.kind !== 'curated-pin' || !Array.isArray(pin.windows) || pinHash(pin) !== pin.hash) throw new Error('the pinned curated list doesn\'t match its hash (changed after it was pinned)');
+  return { fingerprint: pin.fingerprint, list: pin.list, manageTailMin: pin.manageTailMin, windows: pin.windows };
 }
 
 /** Setup-focused practice inside the list's windows: a bar outside them runs only to manage what is open. */
@@ -315,5 +370,5 @@ function curatedSelect({ windows, barClose, open, select }) {
 module.exports = {
   VERSION, KIND, DEFAULTS, LISTS, OUTCOMES, ROLE, YEAR_CAP, skillsOf,
   buildLists, selectList, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
-  validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, pinCurated, loadPinnedCurated, curatedSelect,
+  validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, emptyWindows, dayChunks, pinCurated, loadPinnedCurated, curatedSelect,
 };

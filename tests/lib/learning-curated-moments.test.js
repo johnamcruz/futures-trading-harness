@@ -75,8 +75,10 @@ test('reads: every read is true by compose_check\'s checker at the moment\'s bar
       n += reads.length;
     }
     for (const r of m.reads) assert.strictEqual(r.skill, M.skillOfRead(r.step, r.read));
-    assert.deepStrictEqual(m.skills, [...new Set(m.reads.map(r => r.skill))].sort());
-    assert.deepStrictEqual(m.aligned, [...new Set(m.reads.filter(r => r.agrees).map(r => r.skill))].sort());
+    const shape = m.shape ? ['pullback-vs-reversal'] : [];
+    assert.deepStrictEqual(m.skills, [...new Set([...m.reads.map(r => r.skill), ...shape])].sort());
+    assert.deepStrictEqual(m.aligned, [...new Set([...m.reads.filter(r => r.agrees).map(r => r.skill), ...shape])].sort());
+    assert.deepStrictEqual([m.minutes, m.setupTf], [3, 15]);
     // The reaction itself is always among the reads, and a traded moment carries the standard's stop and target.
     assert.ok(m.reads.some(r => r.step === 'setup' && parseRead(r.read).kind === 'relation' && r.agrees), m.id);
     if (m.standard.status === 'traded') assert.ok(['stop', 'target'].every(s => m.reads.some(r => r.step === s)), m.id);
@@ -100,6 +102,14 @@ test('the crosswalk: every skill a read maps to is in its step\'s row of the tra
   assert.strictEqual(M.skillOfRead('setup', '15m broke ib high up'), 'breakout');
   assert.strictEqual(M.skillOfRead('setup', '15m touched ib high'), null, 'a touch maps to no skill and is not stated');
   assert.strictEqual(M.skillOfRead('entry', '3m pattern hammer'), 'candle-reading');
+  // The library's bias label is the crosswalk's multi-timeframe-analysis; no moment carries the library's own label.
+  assert.strictEqual(M.normalSkill('mtf-bias-filter'), 'multi-timeframe-analysis');
+  assert.strictEqual(M.normalSkill('rejection'), 'rejection');
+  assert.ok(MOMENTS.every(m => !m.skills.includes('mtf-bias-filter')));
+  assert.ok(MOMENTS.filter(m => m.standard.status === 'traded').every(m => m.reads.some(r => r.step === 'bias' && r.skill === 'multi-timeframe-analysis')), 'the standard\'s bias read counts as multi-timeframe-analysis');
+  // pullback-vs-reversal: in the setup row, counted from the reads when they show one exactly.
+  const row = md.split('\n').find(l => /^\s*\| setup \|/.test(l));
+  assert.ok(row.includes('`pullback-vs-reversal`'));
 });
 
 const B = ({ h1 = 'up', h4 = 'up', b1 = ['BOS', 'up'], b15 = ['BOS', 'up'], regime = 'trend-up' } = {}) => ({
@@ -108,6 +118,25 @@ const B = ({ h1 = 'up', h4 = 'up', b1 = ['BOS', 'up'], b15 = ['BOS', 'up'], regi
     m15: { data: { lastBreak: { last: b15 ? { kind: b15[0], direction: b15[1] } : null } } },
     m3: { data: { regime: { primary: regime } } },
   },
+});
+
+test('pullback-vs-reversal: a reversal is a true CHoCH the side\'s way; a pullback a trend read, the pullback alignment and a rejection, all the side\'s way', () => {
+  const r = (step, read, agrees = true) => ({ step, skill: 'x', read, agrees });
+  const pull = [r('bias', '1h up'), r('bias', 'read long pullback'), r('setup', '15m rejected prior vah up')];
+  assert.strictEqual(M.shapeOf(pull, 'long'), 'pullback');
+  assert.strictEqual(M.shapeOf(pull.slice(1), 'long'), null, 'no trend read');
+  assert.strictEqual(M.shapeOf([pull[0], pull[2]], 'long'), null, 'no counter-move (the pullback alignment)');
+  assert.strictEqual(M.shapeOf([pull[0], pull[1], r('setup', '15m broke prior vah up')], 'long'), null, 'a breakout is no pullback');
+  assert.strictEqual(M.shapeOf([r('bias', '1h up', false), pull[1], pull[2]], 'long'), null, 'a trend read against the side');
+  assert.strictEqual(M.shapeOf([r('bias', '15m choch down')], 'short'), 'reversal');
+  assert.strictEqual(M.shapeOf([r('bias', '15m choch down', false)], 'long'), null);
+  assert.strictEqual(M.shapeOf([r('bias', '15m bos down')], 'short'), null);
+  assert.strictEqual(M.shapeOf([r('bias', '15m choch up')], 'short'), null, 'a CHoCH the other way (excused by D2 in the checker) is no reversal of this side');
+  for (const m of MOMENTS) {
+    assert.strictEqual(m.shape, M.shapeOf(m.reads, m.side), m.id);
+    assert.strictEqual(m.skills.includes('pullback-vs-reversal'), Boolean(m.shape), m.id);
+  }
+  assert.ok(MOMENTS.some(m => m.shape === 'reversal'), 'the fixture day has a reversal');
 });
 
 test('classify: a clear trend needs the 1h and 4h with it, the 1h structure holding, no 15m CHoCH against, not a range regime', () => {
@@ -130,11 +159,15 @@ test('classify: a clear trend needs the 1h and 4h with it, the 1h structure hold
   assert.strictEqual(M.classify({}).state, 'mixed', 'nothing known: no list');
 });
 
-test('lists: a pullback (rejected) with a clear trend, counter-trend against it, trend-end and chop either side; a breakout with the trend none', () => {
+test('lists: a rejection or a breakout with a clear trend, counter-trend against it, trend-end and chop either side', () => {
   const rej = d => ({ rel: 'rejected', dir: d });
   assert.strictEqual(M.listOf('clear', 'up', 'long', rej('up')), 'trend-up');
   assert.strictEqual(M.listOf('clear', 'down', 'short', rej('down')), 'trend-down');
-  assert.strictEqual(M.listOf('clear', 'up', 'long', { rel: 'broke', dir: 'up' }), null);
+  // A breakout with the trend is the owner's other entry (a gap's failure through its far edge is one).
+  assert.strictEqual(M.listOf('clear', 'up', 'long', { rel: 'broke', dir: 'up' }), 'trend-up');
+  assert.strictEqual(M.listOf('clear', 'down', 'short', { kind: 'fvg', rel: 'broke', dir: 'down' }), 'trend-down');
+  assert.deepStrictEqual([{ rel: 'rejected' }, { rel: 'broke' }, { kind: 'fvg', rel: 'rejected' }, { kind: 'fvg', rel: 'broke' }].map(M.reactionKindOf), ['rejection', 'breakout', 'fvg rejection', 'fvg breakout']);
+  for (const m of MOMENTS) assert.strictEqual(m.reactionKind, M.reactionKindOf(m.reaction), m.id);
   assert.strictEqual(M.listOf('clear', 'up', 'short', rej('down')), 'counter-trend');
   assert.strictEqual(M.listOf('clear', 'down', 'long', { rel: 'broke', dir: 'up' }), 'counter-trend');
   assert.strictEqual(M.listOf('trend-end', 'up', 'short', rej('down')), 'trend-end');
@@ -196,8 +229,21 @@ test('CLI: scan (practice-train only), build and show on fixture bars; the list 
   let r = cli('scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-05-01', '--to', '2020-05-02', '--use', 'practice', '--window-bars', String(WINDOW), '--out', out);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /moment\(s\) of MNQ 2020-05-01\.\.2020-05-02 \(practice\)/);
+  assert.match(r.stdout, /\d+ briefing\(s\), \d+ ms each/);
   const lines = fs.readFileSync(out, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.deepStrictEqual(lines, MOMENTS);
+  // In processes of whole session dates: the same moments as one scan, in order.
+  const jobs = path.join(dir, 'jobs.jsonl');
+  r = cli('scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-04-30', '--to', '2020-05-02', '--use', 'practice', '--window-bars', String(WINDOW), '--out', jobs, '--jobs', '2');
+  assert.strictEqual(r.status, 0, r.stderr);
+  const both = fs.readFileSync(jobs, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(both, scan(BARS, { from: '2020-04-30', to: '2020-05-02' }));
+  assert.deepStrictEqual(both.filter(m => m.day === '2020-05-01'), MOMENTS);
+  assert.ok(both.some(m => m.day === '2020-04-30'));
+  assert.deepStrictEqual(fs.readdirSync(dir).filter(f => /\.part\d+$/.test(f)), [], 'its parts removed');
+  r = cli('scan', '--bars', bars, '--root', 'MNQ', '--from', '2024-06-28', '--to', '2024-07-03', '--use', 'practice', '--out', jobs, '--jobs', '2');
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /practice refused/, 'a part refused is the scan refused');
   for (const [args, why] of [[['--use', 'validate'], /validate refused/], [['--use', 'test'], /use test refused/], [['--from', '2025-01-02', '--to', '2025-01-03'], /practice refused/]]) {
     const base = ['scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-05-01', '--to', '2020-05-02', '--use', 'practice', '--out', path.join(dir, 'x.jsonl')];
     for (let k = 0; k < args.length; k += 2) base[base.indexOf(args[k]) + 1] = args[k + 1];

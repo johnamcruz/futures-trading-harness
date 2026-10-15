@@ -26,8 +26,10 @@
  *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
  *                  experience_lookup's code-measured section (default: none)
  *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list>,
- *                  manageTailMin: 60 }; with `practice` only: the run steps only the list's windows (and their days'
- *                  premarket and end of day), pinned at its start (learning/curated-lists.js) (default: none)
+ *                  manageTailMin: 0 }, the run's market (symbol, bar and setup timeframes) the list's, every bar (no
+ *                  everyNthBar), each window holding a decision time; with `practice` only: the run steps the list's
+ *                  windows, manages what is open after one bar by bar until flat, and runs those days' premarket
+ *                  and end of day; pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -57,7 +59,8 @@ const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
-const { validateCuratedConfig, curatedForRun } = require('../learning/curated-lists');
+const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
+const { decisionPoints } = require('./schedule');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -152,6 +155,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const curatedCfg = validateCuratedConfig(r.curatedList);
   errors.push(...curatedCfg.errors);
   if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
+  if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -170,15 +174,6 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
   };
-  // The curated list, its windows inside the run's and its use the run's window (a validation list never on practice-train).
-  let curated = null;
-  if (curatedCfg.curated) {
-    try {
-      curated = curatedForRun({ ...curatedCfg.curated, file: path.resolve(baseDir, expandHome(curatedCfg.curated.file, home)), start, end });
-    } catch (err) {
-      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
-    }
-  }
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
   if (base.practice !== undefined || overrides.practice !== undefined) throw new Error('invalid replay config:\n- practice: set in the replay config (its own field), never in the runner config or overrides');
   const holidays = holidayDates(start, end);
@@ -192,6 +187,18 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     ...(practice.practice ? { practice: practice.practice } : {}),
   };
   const cfg = validateConfig(derived);
+  // The curated list: its windows inside the run's, its use the run's window (a validation list never on practice-train),
+  // its market the run's, and every window holding a decision time of the run's sessions.
+  let curated = null;
+  if (curatedCfg.curated) {
+    try {
+      curated = curatedForRun({ ...curatedCfg.curated, file: path.resolve(baseDir, expandHome(curatedCfg.curated.file, home)), start, end, symbols: cfg.symbols, timeframe: cfg.timeframe, setupTf: practice.practice.setupTf });
+      const missed = emptyWindows(decisionPoints(cfg, { start, end }), curated, (cfg.barDelaySeconds || 0) * 1000);
+      if (missed.length) throw new Error(`curatedList: ${missed.length} window(s) hold no decision time of the run's sessions, the first ${new Date(missed[0].from).toISOString()}`);
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
