@@ -32,6 +32,12 @@ never by outcome (`scripts/lib/learning/decision-label.js`):
 - **A risk action** in a trade is correct when it fits the rules for that
   account state.
 
+The definitions are the measurement's: a decision's reads are correct only
+when every one is verified true (the exit test's correct-read rate, per
+decision); a size under the ceiling is the model's own share, and only one over
+it is wrong; an exit the runner made (its trail or time stop) is the policy's,
+never the model's decision.
+
 A losing trade made by the process is correct. A winning trade made against
 it is not. Everything else is `incorrect` or `unverifiable`, each with its
 reason, and neither is ever trained on.
@@ -72,6 +78,13 @@ reason, and neither is ever trained on.
 
      A transcript the reader doesn't recognize gives no example.
    - **Duplicates** are dropped.
+   - **The digest.** Each example records the skills and prompt digest its
+     run was made under. Only examples under the harness's digest now (the
+     one an adapter's manifest records) are kept: the others are dropped and
+     counted (`show` prints how many), since decisions made under old wording
+     teach rules that no longer exist. `--include-digest any` or
+     `--include-digest <hex prefix>` keeps others by name, each marked
+     `"current": false` in `meta.jsonl`.
    - **Balance.** The train decisions are balanced by `spec.json`: by skill,
      by take against pass, by account state (near the max loss limit well
      represented) and by year. A balance that can't be met refuses the build.

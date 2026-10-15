@@ -85,3 +85,19 @@ test('runDecisions: a stage-1 run carries no account state', () => {
   const [d] = E.runDecisions(runDir, { score });
   assert.deepStrictEqual([d.stage, d.accountState, d.account], [1, null, null]);
 });
+
+test('runDecisions: an exit the runner made (its trail or time stop) is marked the policy\'s, by the measurement\'s runnerExit', () => {
+  const home = tmpDir();
+  const { runDir, score } = F.writeRun(home, {
+    start: '2022-03-07T14:00:00Z', end: '2022-03-08T00:00:00Z',
+    decisions: [
+      { t: '2022-03-07T14:30:00.000Z', kind: 'risk', action: 'hold', prompt: 'p0', headText: ['hold'] },
+      { t: '2022-03-07T14:33:00.000Z', kind: 'risk', action: 'exit', prompt: 'p1', headText: ['out'] },
+      { t: '2022-03-07T15:33:00.000Z', kind: 'risk', action: 'exit', prompt: 'p2', headText: ['out'] },
+    ],
+  });
+  fs.mkdirSync(path.join(home, 'logs'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'logs', 'events-2022-03-07.jsonl'), `${JSON.stringify({ kind: 'position_closed', at: '2022-03-07T14:32:10.000Z', symbol: 'MNQ', contractId: 'X' })}\n`);
+  const ds = E.runDecisions(runDir, { score });
+  assert.deepStrictEqual(ds.map(d => d.policyExit), [null, 'runner-close', null]);
+});

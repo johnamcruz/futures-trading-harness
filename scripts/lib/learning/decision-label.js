@@ -15,6 +15,8 @@
  *   record      the cycle's compose record the decision is on (an entry: its side's latest OK record; a pass: the latest
  *               OK record), { ok, reads: [{ check }], entry, stop, target, rr, size }, or null
  *   attempts    how many compose records the cycle wrote for the symbol (OK or not)
+ *   policyExit  risk: 'runner-close' | 'runner-trail' when the runner closed the position (prop/model-stream.js
+ *               runnerExit), else null
  *   riskUsd     the record's risk in dollars (|entry - stop| in ticks x tick value x size), or null
  *   account     stage 2: the account call (accountCall), or null in stage 1 (no account state)
  * The rules: { minRR, maxRiskUsd } (trade_lifecycle's risk.min_rr and risk.max_risk_usd).
@@ -24,7 +26,11 @@
  * call for standing down. A pass is correct when no valid setup existed (compose_check refused every plan the cycle
  * tried, or a hard stop said no trade) or when the account state or the rules call for standing down. A risk action is
  * correct when it fits the rules for that account state (an exit the account calls for; a hold the scorecard grades
- * right). Everything else is `incorrect` (a rule broken, with the reason) or `unverifiable` (nothing verifies it either
+ * right; the runner's own trail or time-stop exit is the policy's, never the model's, so it is no model decision).
+ * The definitions are the measurement's (#208): a decision's reads count as correct only when every one is verified true
+ * (replay/stage.js exitTest's correct-read rate, per decision); a size under the ceiling is the model's own share
+ * (prop/evaluator.js ownShare), never wrong, and only a size over it is (the scorecard's bad size).
+ * Everything else is `incorrect` (a rule broken, with the reason) or `unverifiable` (nothing verifies it either
  * way, with the reason): neither is ever trained on.
  *
  *   LABELS                         ['correct', 'incorrect', 'unverifiable']
@@ -39,6 +45,7 @@ const OUTCOME_KEYS = Object.freeze(['outcome', 'grade', 'trade', 'counterfactual
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+// A read verified true: the stage-1 exit test's correct-read rule (replay/stage.js exitTest), per decision: every read.
 const isTrue = c => c === true || c === 'true';
 const isFalse = c => c === false || c === 'false';
 
@@ -135,6 +142,7 @@ function labelRisk(d) {
   const sc = d.scorecard;
   if (sc && sc.category !== 'right' && sc.category !== 'unchecked') return out('incorrect', [`the scorecard grades it ${sc.category}`]);
   if (d.action === 'exit') {
+    if (d.policyExit) return out('unverifiable', [`the runner's own exit (${d.policyExit}: its trail or time stop, prop/model-stream.js runnerExit): the policy's, never the model's`]);
     if (d.account && d.account.exitRequired === true) return out('correct', [`the account state calls for the exit (${d.account.why})`]);
     return out('unverifiable', ['an exit the rules don\'t call for: the plan\'s management, which no rule verifies']);
   }

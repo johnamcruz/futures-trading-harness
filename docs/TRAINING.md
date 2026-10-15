@@ -599,7 +599,10 @@ and use an adapter. In short:
    decisions as model-agnostic chat JSONL:
    - the exact prompts each role saw, then its response;
    - balanced by `adapters/spec.json`;
-   - deduplicated and fingerprinted, with its source runs.
+   - deduplicated and fingerprinted, with its source runs;
+   - only examples made under the harness's skills and prompt digest now
+     (the stale ones dropped and counted; `--include-digest` keeps others by
+     name, marked).
 
    Train comes from practice-train only and validate from practice-validate
    only; test and final are refused. Each example is tagged stage 1 (no

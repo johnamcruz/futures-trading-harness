@@ -7,9 +7,12 @@
  *       a curated practice-train replay (run, or resumed, with checkpoints), then each curated moment re-run K times
  *       with sampling on, seeded per moment and repeat -> <workDir>/<runId>.samples/samples.jsonl
  *   node scripts/decision-dataset.js build --train <run dir | samples.jsonl> ... [--validate <run dir> ...] --out <new dir> [--spec file]
+ *       [--include-digest any|<hex prefix> ...]
  *       the correct decisions (labelled by process) as chat JSONL: step1/, step2/, meta.jsonl and dataset.json (its
  *       fingerprint and source runs); train from practice-train only, validate from practice-validate only; test and
- *       final refused
+ *       final refused; only decisions made under the harness's skills and prompt digest now (the one an adapter's
+ *       manifest records), the others dropped and counted, unless --include-digest names them (any, or a digest prefix):
+ *       kept and marked in meta.jsonl
  *   node scripts/decision-dataset.js show <dataset dir>
  *       its fingerprint (checked against its files), counts, labels and balance
  *
@@ -29,7 +32,7 @@ const SM = require('./lib/learning/decision-sampler');
 const { validateSpec, SPEC_FILE } = require('./lib/learning/adapter');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: decision-dataset.js sample --config <replay.json> --k K --sampling <file> [--seed N] [--bars SYM=file ...] | build --train <run dir | samples.jsonl> ... [--validate <run dir> ...] --out <dir> [--spec file] | show <dataset dir>';
+const USAGE = 'usage: decision-dataset.js sample --config <replay.json> --k K --sampling <file> [--seed N] [--bars SYM=file ...] | build --train <run dir | samples.jsonl> ... [--validate <run dir> ...] --out <dir> [--spec file] [--include-digest any|<hex prefix> ...] | show <dataset dir>';
 const say = msg => process.stdout.write(`[decision-dataset] ${msg}\n`);
 
 /** Flags: each value flag once, except the repeatable ones (a list). */
@@ -92,7 +95,7 @@ async function sample(argv) {
 }
 
 function build(argv) {
-  const o = parse(argv, { single: ['out', 'spec'], repeat: ['train', 'validate'] });
+  const o = parse(argv, { single: ['out', 'spec'], repeat: ['train', 'validate', 'include-digest'] });
   if (!o.train || !o.out || o._.length) throw new Error(USAGE);
   const spec = readJson(o.spec || path.join(ROOT, SPEC_FILE));
   const errs = validateSpec(spec);
@@ -102,7 +105,8 @@ function build(argv) {
   const rules = { minRR: lifecycle.risk.min_rr, maxRiskUsd: lifecycle.risk.max_risk_usd };
   const score = DS.scorer({ root: ROOT, env: process.env });
   const source = p => (p.endsWith('.jsonl') ? DS.sourceFromSamples(path.resolve(expandHome(p)), { score }) : DS.sourceFromRun(path.resolve(expandHome(p)), { score }));
-  const built = DS.buildDataset({ train: o.train.map(source), validate: (o.validate || []).map(source), spec, rules });
+  const current = require('./lib/learning/adapter').currentDigests(ROOT);
+  const built = DS.buildDataset({ train: o.train.map(source), validate: (o.validate || []).map(source), spec, rules, current, include: o['include-digest'] || [] });
   const file = DS.writeDataset(path.resolve(expandHome(o.out)), built);
   if (spec.dataset.fingerprint && spec.dataset.fingerprint !== built.dataset.fingerprint) say(`note: the spec expects dataset ${spec.dataset.fingerprint.slice(0, 12)}, this is ${built.dataset.fingerprint.slice(0, 12)}`);
   show([null, path.dirname(file)]);
@@ -116,6 +120,8 @@ function show(argv) {
   say(`dataset ${d.fingerprint} (spec ${d.spec}, seed ${d.seed}; harness skills ${String(d.harness.skills).slice(0, 12)}, prompt ${String(d.harness.harness).slice(0, 12)})`);
   say(`step 1: ${d.counts.step1.train} train, ${d.counts.step1.valid} valid; step 2: ${d.counts.step2.train} train (${d.counts.step2.stage2} stage 2, ${d.counts.step2.stage1Mix} stage 1 mixed back in), ${d.counts.step2.valid} valid`);
   for (const set of ['train', 'validate']) say(`${set} labels: ${Object.entries(d.labels[set]).map(([k, n]) => `${n} ${k}`).join(', ')}; ${d.duplicates[set]} duplicate example(s) dropped`);
+  const g = d.digests || { stale: {}, included: {}, include: [] };
+  say(`digest: kept the harness's (skills ${String(d.harness.skills).slice(0, 12)}); dropped for a stale digest: ${g.stale.train || 0} train, ${g.stale.validate || 0} validate example(s)${g.include.length ? `; included under other digests (${g.include.join(', ')}): ${g.included.train || 0} train, ${g.included.validate || 0} validate, marked in meta.jsonl` : ''}`);
   for (const [st, b] of Object.entries(d.balance)) if (b) say(`${st} balance: ${b.before.n} -> ${b.after.n} decisions; kinds ${JSON.stringify(b.after.kind)}; years ${JSON.stringify(b.after.year)}${b.after.accountState ? `; states ${JSON.stringify(b.after.accountState)}` : ''}`);
   say(`sources: ${d.sources.map(s => `${s.set} ${s.runId}${s.samples ? ` (${s.samples} samples)` : ''}`).join(', ')}`);
   return 0;

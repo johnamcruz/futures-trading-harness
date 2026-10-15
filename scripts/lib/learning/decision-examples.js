@@ -113,9 +113,16 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
   const stage = (setup && setup.pinned && setup.pinned.stage === 2) || states ? 2 : 1;
   const systemPrompts = systemPromptsOf(home);
   const at = times ? new Set(times.map(t => new Date(t).toISOString())) : null;
+  // A position the runner closed (its trail or time stop) is the policy's exit, never the model's (prop/model-stream.js
+  // runnerExit, the same rule the risk actions and the Monte Carlo read).
+  const MS = require('../prop/model-stream');
+  const policyExitOf = MS.runnerExit(MS.readEvents(home), MS.readRunnerExits(home));
+  const lastT = new Map();
   const out = [];
   for (const r of score(runDir)) {
     const kind = kindOf(r);
+    const prev = lastT.get(r.symbol);
+    lastT.set(r.symbol, r.t);
     if (!kind || (at && !at.has(new Date(r.t).toISOString()))) continue;
     const cycleFile = r.provenance && r.provenance.cycleFile;
     const doc = cycleFile && cycleFile.startsWith('logs/cycles/') ? readJson(path.join(home, cycleFile), null) : null;
@@ -126,12 +133,16 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
     const riskUsd = riskUsdOf(record, r.symbol);
     const attempt = r.facts && r.facts.attempt;
     const state = states ? states.get(r.day) : null;
+    // An exit in a trade: the runner's own close from the cycle before it to this one (plus the runner's tolerance)?
+    const policyExit = kind === 'risk' && action === 'exit'
+      ? policyExitOf({ root: familyRoot(String(r.symbol).split(':')[0].toUpperCase()), contract: r.symbol }, { entryTime: prev || new Date(Date.parse(r.t) - 3600000).toISOString(), exitTime: new Date(Date.parse(r.t) + MS.RUNNER_CLOSE_TOLERANCE_MS).toISOString(), exitPrice: NaN, tick: 0 })
+      : null;
     const setupRead = record && Array.isArray(record.reads) ? record.reads.find(x => x && x.step === 'setup') : null;
     out.push({
       key: `${new Date(r.t).toISOString()}|${r.symbol}`, runId: manifest.runId, t: new Date(r.t).toISOString(), day: r.day, symbol: r.symbol, kind, action,
       scorecard: { category: r.category, agrees: r.agrees }, expected: r.expected ? { decision: r.expected.decision, decidedBy: r.expected.decidedBy } : null,
       gate: { refused: Boolean(r.actual && r.actual.gate && r.actual.gate.decision === 'refused'), checks: (r.actual && r.actual.gate && r.actual.gate.checks) || [] },
-      record, attempts: recs.length, riskUsd,
+      record, attempts: recs.length, riskUsd, policyExit,
       account: attempt ? accountCall(attempt, riskUsd) : null,
       stage, accountState: state ? state.bucket : null, skill: (setupRead && setupRead.skill) || 'none', year: String(r.day || '').slice(0, 4),
       sample, cycle: cycleFile || null, turns: roleTurns(doc, { systemPrompts }),

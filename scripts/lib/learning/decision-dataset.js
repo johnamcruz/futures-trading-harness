@@ -8,8 +8,11 @@
  * Sources: replay runs (or a sampler's point runs, learning/decision-sampler.js), each read through
  * learning/decision-examples.js runDecisions. The train set takes practice-train runs only, the validate set
  * practice-validate runs only; a run touching test or final (sealed) is refused, as is a decision whose day is outside
- * its set's window, and train sources from two harness versions (their documents digests differ: one prompt set per
- * dataset).
+ * its set's window. Each decision records the skills and prompt digest its run was made under (its setup record's
+ * documents); by default only those made under the harness's digest now (`current`, the one an adapter's manifest
+ * records) are kept, the others dropped and counted (dataset.json `digests.stale`): decisions made under old wording
+ * teach rules that no longer exist. `include` keeps others by name ('any', or a digest prefix), each marked in meta.jsonl
+ * (`digest.current: false`).
  *
  * Built (buildDataset), deterministic for the same sources, spec and seed:
  *   1. label every decision; keep the correct ones (stage 1: no account state; stage 2: account state plus risk action)
@@ -31,7 +34,8 @@
  *   examplesOf(decision)                      [{ id, role, messages }] of its faithful turns
  *   dedupe(examples)                          { kept, dropped }
  *   balance(decisions, rules, { stage, seed }) { kept, dropped, report } (throws when a constraint can't be met)
- *   buildDataset({ train, validate, spec, rules })   { files: { name: text }, dataset }
+ *   buildDataset({ train, validate, spec, rules, current, include })   { files: { name: text }, dataset }
+ *   digestStatus(digest, current, include)   'current' | 'included' | 'stale'
  *   fingerprintOf(files)                      sha256 hex over the data files
  *   writeDataset(dir, built), readDataset(dir)
  *   scorer({ root, env })                     runDir -> its scorecard records: its scorecard.jsonl when written after the
@@ -53,6 +57,7 @@ const { shuffled } = require('../train/decision-points');
 const REFUSED_ROLES = Object.freeze(['test', 'final']);
 const USE = Object.freeze({ train: 'practice', validate: 'validate' });
 const DATA_FILES = Object.freeze(['step1/train.jsonl', 'step1/valid.jsonl', 'step2/train.jsonl', 'step2/valid.jsonl', 'meta.jsonl']);
+const HEX64 = /^[0-9a-f]{64}$/;
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -144,9 +149,10 @@ function balance(decisions, rules, { stage = 1, seed = rules.seed } = {}) {
 }
 
 /** The correct decisions of one set's sources, with their examples (duplicates dropped across the set). */
-function correctOf(sources, set, rules) {
+function correctOf(sources, set, rules, { current, include = [] }) {
   const out = [];
   const labels = { correct: 0, incorrect: 0, unverifiable: 0 };
+  const stale = { examples: 0, decisions: 0, included: 0 };
   for (const s of sources) {
     checkSource(s, set);
     const labelled = s.decisions.map(d => {
@@ -158,14 +164,32 @@ function correctOf(sources, set, rules) {
     const mixed = new Set(labelled.filter(([d, l]) => l.label !== 'correct' && cycleOf(d)).map(([d]) => cycleOf(d)));
     for (const [d, l] of labelled) {
       labels[l.label] += 1;
-      if (l.label === 'correct' && !mixed.has(cycleOf(d))) out.push({ ...d, uid: `${s.runId}|${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.key}`, source: s.runId, label: l });
+      if (l.label !== 'correct' || mixed.has(cycleOf(d))) continue;
+      // The skills and prompt digest the decision was made under: only the harness's now, unless included by name.
+      const status = digestStatus(d.digest, current, include);
+      if (status === 'stale') { stale.decisions += 1; stale.examples += examplesOf(d).length; continue; }
+      if (status === 'included') stale.included += examplesOf(d).length;
+      out.push({ ...d, digestStatus: status, uid: `${s.runId}|${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.key}`, source: s.runId, label: l });
     }
   }
   const all = out.flatMap(d => examplesOf(d).map(x => ({ ...x, decision: d })));
   const { kept, dropped } = dedupe(all);
   const byDecision = new Map();
   for (const x of kept) byDecision.set(x.decision, [...(byDecision.get(x.decision) || []), x]);
-  return { decisions: [...byDecision.keys()].map(d => ({ ...d, examples: byDecision.get(d) })), labels, duplicates: dropped.length };
+  return { decisions: [...byDecision.keys()].map(d => ({ ...d, examples: byDecision.get(d) })), labels, duplicates: dropped.length, stale };
+}
+
+const HEXISH = /^[0-9a-f]{8,64}$/;
+/**
+ * A decision's digest against the harness's now: 'current' (its skills and prompt digests both the harness's), 'included'
+ * (another, named by the operator: 'any', or a hex prefix of 8 or more of its skills or prompt digest), else 'stale'. A
+ * decision with no digest (a run without its setup record) is stale unless 'any' includes it.
+ */
+function digestStatus(digest, current, include = []) {
+  if (digest && digest.skills === current.skills && digest.prompt === current.prompt) return 'current';
+  if (include.includes('any')) return 'included';
+  if (digest && include.some(p => HEXISH.test(p) && (String(digest.skills).startsWith(p) || String(digest.prompt).startsWith(p)))) return 'included';
+  return 'stale';
 }
 
 const line = x => `${JSON.stringify({ messages: x.messages })}\n`;
@@ -173,6 +197,8 @@ const metaOf = (x, file, stage) => ({
   id: x.id, file, stage, role: x.role, source: x.decision.source, sample: x.decision.sample || null,
   decision: { key: x.decision.key, kind: x.decision.kind, action: x.decision.action, skill: x.decision.skill, accountState: x.decision.accountState, year: x.decision.year },
   label: x.decision.label.reasons,
+  // The skills and prompt digest it was made under; `current: false` marks one included under another digest by name.
+  digest: { skills: x.decision.digest ? x.decision.digest.skills : null, prompt: x.decision.digest ? x.decision.digest.prompt : null, current: x.decision.digestStatus === 'current' },
 });
 
 function fingerprintOf(files) {
@@ -181,15 +207,17 @@ function fingerprintOf(files) {
   return h.digest('hex');
 }
 
-function buildDataset({ train = [], validate = [], spec, rules }) {
+function buildDataset({ train = [], validate = [], spec, rules, current, include = [] }) {
   const errs = validateSpec(spec);
   if (errs.length) throw new Error(`the training spec is invalid: ${errs.join('; ')}`);
   if (!train.length) throw new Error('no train sources (practice-train runs or samples)');
-  const docs = [...new Set(train.map(s => JSON.stringify(s.documents || null)))];
-  if (docs.length !== 1 || docs[0] === 'null') throw new Error(`the train sources come from ${docs.includes('null') ? 'a run without its setup record (setup.json)' : `${docs.length} harness versions`}: one prompt set per dataset`);
+  if (!(current && HEX64.test(String(current.skills)) && HEX64.test(String(current.prompt)))) throw new Error('current: the harness\'s skills and prompt digests now (learning/adapter.js currentDigests)');
+  const bad = include.filter(p => p !== 'any' && !HEXISH.test(p));
+  if (bad.length) throw new Error(`include: 'any' or a hex digest prefix of 8 or more (${bad.join(', ')})`);
   const b = spec.balance;
-  const tr = correctOf(train, 'train', rules);
-  const va = correctOf(validate, 'validate', rules);
+  const tr = correctOf(train, 'train', rules, { current, include });
+  const va = correctOf(validate, 'validate', rules, { current, include });
+  if (!tr.decisions.length && tr.stale.decisions) throw new Error(`every correct train decision was made under another skills or prompt digest than the harness's now (${tr.stale.examples} example(s) dropped): rerun the moments on this harness, or include those digests by name`);
   const stageOf = (xs, n) => xs.filter(d => d.stage === n);
   const bal1 = stageOf(tr.decisions, 1).length ? balance(stageOf(tr.decisions, 1), b, { stage: 1 }) : null;
   const bal2 = stageOf(tr.decisions, 2).length ? balance(stageOf(tr.decisions, 2), b, { stage: 2 }) : null;
@@ -211,7 +239,9 @@ function buildDataset({ train = [], validate = [], spec, rules }) {
   files['meta.jsonl'] = meta.map(m => `${JSON.stringify(m)}\n`).join('');
   const fingerprint = fingerprintOf(files);
   const dataset = {
-    v: 1, fingerprint, format: 'chat-jsonl', spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed, harness: JSON.parse(docs[0]),
+    v: 1, fingerprint, format: 'chat-jsonl', spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed, harness: { skills: current.skills, harness: current.prompt },
+    // Examples dropped for a stale digest (made under other skills or prompts), and those included under another by name.
+    digests: { include, stale: { train: tr.stale.examples, validate: va.stale.examples }, included: { train: tr.stale.included, validate: va.stale.included } },
     sources: [...train.map(s => ({ set: 'train', runId: s.runId, configHash: s.configHash || null, window: [s.start, s.end], samples: s.samples || null })),
       ...validate.map(s => ({ set: 'validate', runId: s.runId, configHash: s.configHash || null, window: [s.start, s.end], samples: s.samples || null }))],
     labels: { train: tr.labels, validate: va.labels }, duplicates: { train: tr.duplicates, validate: va.duplicates },
@@ -262,9 +292,12 @@ function sourceFromRun(runDir, { score, times = null, sample = null }) {
   if (!manifest) throw new Error(`${runDir}: not a replay run dir (no manifest.json)`);
   const setup = readJsonOr(path.join(runDir, 'setup.json'), null);
   const { runDecisions } = require('./decision-examples');
+  const documents = setup && setup.documents ? setup.documents : null;
+  // Each decision records the skills and prompt digest its run was made under (its setup record's documents).
+  const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null } : null;
   return {
     runId: manifest.runId, start: manifest.start, end: manifest.end, configHash: manifest.hash || null,
-    documents: setup && setup.documents ? setup.documents : null, decisions: runDecisions(runDir, { score, times, sample }),
+    documents, decisions: runDecisions(runDir, { score, times, sample }).map(d => ({ ...d, digest })),
   };
 }
 
@@ -273,11 +306,9 @@ function sourceFromSamples(file, { score }) {
   const recs = readSamples(file).filter(r => !r.error && Array.isArray(r.times) && r.times.length);
   if (!recs.length) throw new Error(`${file}: no sample that ran`);
   const parts = recs.map(r => sourceFromRun(r.runDir, { score, times: r.times, sample: { t: r.t, repeat: r.repeat, seed: r.seed, sampling: r.sampling } }));
-  const docs = [...new Set(parts.map(p => JSON.stringify(p.documents)))];
-  if (docs.length !== 1) throw new Error(`${file}: its samples ran on ${docs.length} harness versions`);
   const [first] = parts;
   if (parts.some(p => p.runId !== first.runId)) throw new Error(`${file}: samples of more than one base run`);
   return { ...first, decisions: parts.flatMap(p => p.decisions), samples: recs.length };
 }
 
-module.exports = { scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };
+module.exports = { digestStatus, scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };

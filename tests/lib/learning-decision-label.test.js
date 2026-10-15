@@ -101,6 +101,10 @@ test('a risk action is correct when it fits the rules for the account state', ()
   assert.strictEqual(L.labelDecision(risk({ action: 'hold', scorecard: { category: 'right' }, account: { exitRequired: true, why: 'x' } }), RULES).label, 'incorrect');
   assert.strictEqual(L.labelDecision(risk({ action: 'hold', scorecard: null }), RULES).label, 'unverifiable');
   assert.strictEqual(L.labelDecision({ kind: 'what' }, RULES).label, 'unverifiable');
+  // The runner's own trail or time-stop exit is the policy's (prop/model-stream.js runnerExit): never the model's decision.
+  const runner = L.labelDecision(risk({ policyExit: 'runner-close', account: { exitRequired: true, why: 'x' } }), RULES);
+  assert.strictEqual(runner.label, 'unverifiable');
+  assert.match(runner.reasons[0], /the runner's own exit \(runner-close/);
   assert.throws(() => L.labelDecision(null, RULES), /a decision object/);
 });
 
@@ -122,4 +126,15 @@ test('rrOf: the plan\'s own R:R, else from its prices', () => {
   assert.strictEqual(L.rrOf({ entry: 21000, stop: 20990, target: 21025 }), 2.5);
   assert.strictEqual(L.rrOf({ entry: 21000, stop: 21000, target: 21025 }), null);
   assert.strictEqual(L.rrOf(null), null);
+});
+
+test('the correct-read rule is the exit test\'s, per decision: correct only when every read is verified true', () => {
+  const { exitTest } = require('../../scripts/lib/replay/stage');
+  const sets = [[true, true], [true, 'true'], [true, false], [true, 'unchecked'], ['true'], [true, null]];
+  // 20 copies of each, so the exit test's count is over its minimum sample.
+  const decisions = sets.flatMap(checks => Array.from({ length: 20 }, () => ({ decision: 'entered', reads: checks.map(check => ({ check })) })));
+  const line = exitTest({ decisions, adherence: null }).find(x => x.test === 'correct-reads');
+  const theirs = Number(/^([\d.]+) of/.exec(line.detail)[1]);
+  const ours = decisions.filter(d => L.labelDecision(take({ record: { ...RECORD, reads: d.reads } }), RULES).label === 'correct').length / decisions.length;
+  assert.strictEqual(Math.round(ours * 100) / 100, theirs);
 });

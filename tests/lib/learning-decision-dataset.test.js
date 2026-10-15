@@ -17,6 +17,8 @@ const REPO_SPEC = JSON.parse(fs.readFileSync(path.join(ROOT, 'adapters', 'spec.j
 // The build tests' spec: the repository's, its balance loose enough for a small fixture (balance() is tested apart).
 const SPEC = { ...REPO_SPEC, balance: { ...REPO_SPEC.balance, takeShare: [0.1, 0.9], maxSkillShare: 0.9, maxYearShare: 0.95, minYears: 1, minNearMllShare: 0.25 } };
 const RULES = { minRR: 2, maxRiskUsd: 300 };
+// The harness's digests now, as the fixture runs record theirs (F.DOCS: harness is the prompt digest).
+const CURRENT = { skills: F.DOCS.skills, prompt: F.DOCS.harness };
 const rec = skill => ({ ok: true, side: 'long', entry: 21000, stop: 20990, target: 21025, size: 5, tick: 0.25, tickValue: 0.5, reads: [{ step: 'setup', skill, check: true }] });
 const ROOM = { status: 'active', cushion: 2500, dailyHeadroom: 600, softHeadroom: 400 };
 
@@ -65,7 +67,7 @@ function buildAll(over = {}) {
   const t1 = trainRun(path.join(home, 'a'), over);
   const t2 = stage2Run(path.join(home, 'b'));
   const v = validateRun(path.join(home, 'c'));
-  return DS.buildDataset({ train: [sourceOf(t1), sourceOf(t2)], validate: [sourceOf(v)], spec: SPEC, rules: RULES });
+  return DS.buildDataset({ train: [sourceOf(t1), sourceOf(t2)], validate: [sourceOf(v)], spec: SPEC, rules: RULES, current: CURRENT });
 }
 
 test('only correct decisions are written, as the exact prompts and responses (byte-faithful), tagged by stage', () => {
@@ -115,7 +117,7 @@ test('splits: train only from practice-train, validate only from practice-valida
   const home = tmpDir();
   const t = sourceOf(trainRun(path.join(home, 'a')));
   const v = sourceOf(validateRun(path.join(home, 'c')));
-  const build = (train, validate = []) => DS.buildDataset({ train, validate, spec: SPEC, rules: RULES });
+  const build = (train, validate = []) => DS.buildDataset({ train, validate, spec: SPEC, rules: RULES, current: CURRENT });
   assert.throws(() => build([v]), /run val1 refused for the train set: practice refused: .*practice-validate/);
   assert.throws(() => build([t], [t]), /run train1 refused for the validate set/);
   const sealed = (start, end) => ({ ...t, start, end });
@@ -128,13 +130,33 @@ test('splits: train only from practice-train, validate only from practice-valida
   assert.throws(() => build([]), /no train sources/);
 });
 
-test('one prompt set per dataset: train sources from two harness versions, or without a setup record, are refused', () => {
+test('the digest: only examples made under the harness\'s skills and prompt digest now; the stale dropped and counted; others only by name, marked', () => {
   const home = tmpDir();
   const a = sourceOf(trainRun(path.join(home, 'a')));
-  const b = sourceOf(trainRun(path.join(home, 'b'), { runId: 'train9', documents: { ...F.DOCS, skills: 'c'.repeat(64) } }));
-  assert.throws(() => DS.buildDataset({ train: [a, b], spec: SPEC, rules: RULES }), /2 harness versions/);
-  assert.throws(() => DS.buildDataset({ train: [{ ...a, documents: null }], spec: SPEC, rules: RULES }), /without its setup record/);
-  assert.throws(() => DS.buildDataset({ train: [a], spec: { ...SPEC, steps: [] }, rules: RULES }), /spec is invalid/);
+  const OLD = { ...F.DOCS, skills: 'c'.repeat(64) };
+  const b = sourceOf(trainRun(path.join(home, 'b'), { runId: 'train9', prompt: 'OLD-WORDING', documents: OLD }));
+  assert.ok(a.decisions.every(d => d.digest.skills === CURRENT.skills && d.digest.prompt === CURRENT.prompt), 'each decision records its digest');
+  const kept = DS.buildDataset({ train: [a, b], spec: SPEC, rules: RULES, current: CURRENT });
+  assert.ok(!JSON.stringify(kept.files).includes('OLD-WORDING'), 'made under old skills: dropped');
+  assert.ok(kept.dataset.digests.stale.train > 0, 'and counted');
+  assert.strictEqual(kept.dataset.digests.stale.train, DS.buildDataset({ train: [b, a], spec: SPEC, rules: RULES, current: CURRENT }).dataset.digests.stale.train);
+  assert.deepStrictEqual(kept.dataset.harness, F.DOCS);
+  assert.ok(lines(kept.files['meta.jsonl']).every(m => m.digest.current === true && m.digest.skills === CURRENT.skills));
+  // Included by name ('any' or a prefix): kept, and marked as another digest's.
+  for (const include of [['any'], ['cccccccc']]) {
+    const inc = DS.buildDataset({ train: [a, b], spec: SPEC, rules: RULES, current: CURRENT, include });
+    const meta = lines(inc.files['meta.jsonl']);
+    assert.ok(JSON.stringify(inc.files).includes('OLD-WORDING'), include.join());
+    assert.ok(meta.some(m => m.digest.current === false && m.digest.skills === OLD.skills));
+    assert.ok(inc.dataset.digests.included.train > 0);
+    assert.strictEqual(inc.dataset.digests.stale.train, 0);
+  }
+  assert.strictEqual(DS.digestStatus(null, CURRENT, ['cccccccc']), 'stale', 'no digest: only \'any\' includes it');
+  assert.strictEqual(DS.digestStatus(null, CURRENT, ['any']), 'included');
+  assert.throws(() => DS.buildDataset({ train: [a], spec: SPEC, rules: RULES, current: CURRENT, include: ['abc'] }), /hex digest prefix of 8/);
+  assert.throws(() => DS.buildDataset({ train: [b], spec: SPEC, rules: RULES, current: CURRENT }), /every correct train decision was made under another skills or prompt digest/);
+  assert.throws(() => DS.buildDataset({ train: [a], spec: SPEC, rules: RULES }), /current: the harness's skills and prompt digests/);
+  assert.throws(() => DS.buildDataset({ train: [a], spec: { ...SPEC, steps: [] }, rules: RULES, current: CURRENT }), /spec is invalid/);
 });
 
 test('a cycle that decided wrongly on one symbol gives no example for its other symbol (one prompt speaks for both)', () => {
@@ -144,7 +166,7 @@ test('a cycle that decided wrongly on one symbol gives no example for its other 
   assert.ok(first.cycle && wrong.cycle, 'decisions name their cycle');
   // The wrong-winner's decision recorded in the first decision's cycle, as another symbol of it.
   const shared = { ...src, decisions: src.decisions.map(d => (d === wrong ? { ...d, key: `${first.t}|MES`, cycle: first.cycle } : d)) };
-  const built = DS.buildDataset({ train: [shared], spec: SPEC, rules: RULES });
+  const built = DS.buildDataset({ train: [shared], spec: SPEC, rules: RULES, current: CURRENT });
   const text = JSON.stringify(built.files);
   assert.ok(!text.includes('RM-A'), 'the shared cycle\'s turns are out');
   assert.ok(text.includes('TAKE-LOSER'), 'other cycles are not');
@@ -153,7 +175,7 @@ test('a cycle that decided wrongly on one symbol gives no example for its other 
 test('only correct decisions, even without a cycle to group them by', () => {
   const src = sourceOf(trainRun(path.join(tmpDir(), 'a')));
   const loose = { ...src, decisions: src.decisions.map(d => ({ ...d, cycle: null })) };
-  const text = JSON.stringify(DS.buildDataset({ train: [loose], spec: SPEC, rules: RULES }).files);
+  const text = JSON.stringify(DS.buildDataset({ train: [loose], spec: SPEC, rules: RULES, current: CURRENT }).files);
   for (const gone of ['TAKE-WRONG', 'PASS-UNKNOWN']) assert.ok(!text.includes(gone), gone);
   assert.ok(text.includes('TAKE-LOSER'));
 });
@@ -218,7 +240,7 @@ test('the repository\'s spec builds on a fixture that meets it', () => {
     for (let i = 0; i < 2; i += 1) decisions.push({ t: `${day}${7 + i}T15:33:00.000Z`, kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [{ step: 'setup', skill: skills[i], check: false }] }], prompt: `P-${y}-${i}`, headText: [`pass ${y} ${i}`] });
   }
   const r = F.writeRun(home, { start: '2021-06-01T00:00:00Z', end: '2023-07-01T00:00:00Z', stage: 1, decisions });
-  const built = DS.buildDataset({ train: [sourceOf(r)], spec: REPO_SPEC, rules: RULES });
+  const built = DS.buildDataset({ train: [sourceOf(r)], spec: REPO_SPEC, rules: RULES, current: CURRENT });
   assert.ok(built.dataset.counts.step1.train > 0);
   assert.strictEqual(built.dataset.counts.step2.train, 0, 'no stage-2 data: step 2 waits for it');
 });

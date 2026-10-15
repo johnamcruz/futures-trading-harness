@@ -16,12 +16,13 @@ const run = (script, args, env = {}) => spawnSync(process.execPath, [path.join(R
 const rec = skill => ({ ok: true, side: 'long', entry: 21000, stop: 20990, target: 21025, size: 5, tick: 0.25, tickValue: 0.5, reads: [{ step: 'setup', skill, check: true }] });
 
 /** A practice-train run with its scorecard written (scorecard.jsonl, after its last step). */
-function scoredRun(home) {
+const NOW = require('../../scripts/lib/learning/adapter').currentDigests(ROOT);
+function scoredRun(home, { documents = { harness: NOW.prompt, skills: NOW.skills }, runId = 'r1', tag = 'CLI' } = {}) {
   const r = F.writeRun(home, {
-    start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
+    runId, documents, start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
     decisions: [
-      { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt: 'CLI-TAKE', headText: ['take'] },
-      { t: '2022-03-08T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: 'CLI-PASS', headText: ['pass'] },
+      { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt: `${tag}-TAKE`, headText: ['take'] },
+      { t: '2022-03-08T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: `${tag}-PASS`, headText: ['pass'] },
     ],
   });
   const past = new Date(Date.now() - 60000);
@@ -43,6 +44,15 @@ test('decision-dataset.js build and show; adapter.js init, check and validated',
   assert.match(b.stdout, /train labels: 2 correct, 0 incorrect, 0 unverifiable/);
   assert.ok(fs.readFileSync(path.join(out, 'step1', 'train.jsonl'), 'utf8').includes('CLI-TAKE'));
   assert.strictEqual(run('decision-dataset.js', ['show', out]).status, 0);
+  // A run made under other skills: its examples dropped and counted; included only by name, marked.
+  const old = scoredRun(path.join(dir, 'old'), { documents: { harness: NOW.prompt, skills: '0'.repeat(64) }, runId: 'r0', tag: 'OLD' });
+  const both = run('decision-dataset.js', ['build', '--train', r.runDir, '--train', old.runDir, '--out', path.join(dir, 'ds2'), '--spec', specFile]);
+  assert.strictEqual(both.status, 0, both.stderr);
+  assert.match(both.stdout, /dropped for a stale digest: [1-9]\d* train, 0 validate example/);
+  assert.ok(!fs.readFileSync(path.join(dir, 'ds2', 'step1', 'train.jsonl'), 'utf8').includes('OLD-TAKE'));
+  const inc = run('decision-dataset.js', ['build', '--train', r.runDir, '--train', old.runDir, '--out', path.join(dir, 'ds3'), '--spec', specFile, '--include-digest', '00000000']);
+  assert.match(inc.stdout, /included under other digests \(00000000\): [1-9]/);
+  assert.ok(fs.readFileSync(path.join(dir, 'ds3', 'meta.jsonl'), 'utf8').includes('"current":false'));
   assert.match(run('decision-dataset.js', ['build', '--train', r.runDir, '--out', out, '--spec', specFile]).stderr, /already holds a dataset/);
   assert.match(run('decision-dataset.js', ['build', '--validate', r.runDir, '--out', path.join(dir, 'x')]).stderr, /usage/);
   assert.match(run('decision-dataset.js', ['build', '--train', r.runDir, '--bogus', 'x']).stderr, /unknown flag --bogus/);
