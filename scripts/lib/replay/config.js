@@ -23,6 +23,8 @@
  *   practice       setup-focused practice (learning/setup-moments.js): { mode: 'setup-focus', setupTf, quietSample, seed };
  *                  cycles only at the selected bars, the clock advancing between them; a practice-train or
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
+ *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
+ *                  experience_lookup's code-measured section (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -134,6 +136,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
   for (const k of ['premarket', 'endOfDay', 'learning']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
   if (r.experienceIndex !== undefined && !(typeof r.experienceIndex === 'string' && r.experienceIndex.trim())) errors.push('experienceIndex: an experience index file (scripts/experience-index.js build)');
+  if (r.setupLibrary !== undefined && !(typeof r.setupLibrary === 'string' && r.setupLibrary.trim())) errors.push('setupLibrary: a history library index file (scripts/setup-library.js index)');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -179,6 +182,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     learning: r.learning !== false,
     // The experience index the run pins at its start (learning/experience-index.js pinIndex), or null.
     experienceIndex: r.experienceIndex ? path.resolve(baseDir, expandHome(r.experienceIndex, home)) : null,
+    // The history library index the run pins at its start (learning/setup-library.js pinLibrary), or null.
+    setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
     prop: r.prop || null,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
