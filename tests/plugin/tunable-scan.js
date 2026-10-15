@@ -4,8 +4,12 @@
  * The tunable-literal scan behind tests/plugin/no-tunable-literals.test.js: what in scripts/ looks like a tunable
  * stated in code instead of read from config/ (scripts/lib/tunables.js).
  *
- *   constantsIn(text)    [{ name, line }]: UPPER_CASE constants whose value states a numeric literal
- *   literalCount(text)   the number of numeric literals (other than 0 and 1) in a comparison or a default value
+ *   constantsIn(text)    [{ name, line }]: UPPER_CASE constants whose value states a numeric literal, and lower-case
+ *                        ones stated as numbers (other than 0 and 1) or arithmetic of numbers
+ *   literalCount(text)   the number of numeric literals (other than 0 and 1) in a comparison, a default value, an
+ *                        object literal's value, Math.max / Math.min arguments or a fractional factor (x * 0.35),
+ *                        outside a named constant's own statement (the constant is listed with its reason);
+ *                        { mechanics }: regular expressions (sources) of listed mechanical forms, not counted
  *   scriptFiles(repo)    every .js under scripts/lib, scripts/hooks and scripts/*.js, repo-relative with '/'
  *
  * A literal inside a string, a template's text, a regular expression or a comment is not counted.
@@ -19,6 +23,12 @@ const HAS_NUM = new RegExp(String.raw`(?<![\w$.])${NUM}(?![\w$])`);
 const MECHANICAL = new Set(['0', '1', '0.0', '1.0']);
 const COMPARE = new RegExp(String.raw`(?:[<>]=?|[!=]==?)\s*-?(${NUM})(?![\w$.])|(?<![\w$.])(${NUM})\s*(?:[<>]=?|[!=]==?)`, 'g');
 const DEFAULT = new RegExp(String.raw`[({,]\s*[A-Za-z_$][\w$]*\s*=\s*-?(${NUM})(?![\w$.])`, 'g');
+// An object literal's numeric value ({ minN: 20 }, a key quoted or not), and a fractional factor (x * 0.35, 0.5 * y).
+const OBJECT = new RegExp(String.raw`[{,]\s*(?:[A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*-?(${NUM})(?![\w$.])`, 'g');
+const FRACTION = new RegExp(String.raw`(?<!\*)\*\s*-?(\d*\.\d+(?:e[-+]?\d+)?)(?![\w$.])|(?<![\w$.])(\d*\.\d+(?:e[-+]?\d+)?)\s*\*(?!\*)`, 'g');
+const ANY_NUM = new RegExp(String.raw`(?<![\w$.])(${NUM})(?![\w$.])`, 'g');
+// A lower-case constant stated as a number or arithmetic of numbers (const half = 0.5; let tries = 3 * 2;).
+const LOWER = new RegExp(String.raw`^\s*(?:const|let|var)\s+([a-z][\w$]*)\s*=\s*([-+*/().\s\d_e]+);`);
 
 /** The code of a file with strings, template text, regular expressions and comments blanked (lines kept). */
 function codeOnly(text) {
@@ -90,25 +100,71 @@ function statementAt(lines, i) {
   return s;
 }
 
-function constantsIn(text) {
-  const lines = codeOnly(text).split('\n');
+/** The numbers in a string of code other than 0 and 1. */
+const tunableNumbers = s => [...s.matchAll(ANY_NUM)].map(m => m[1]).filter(x => !MECHANICAL.has(x));
+
+/** [{ name, line, lines }]: each constant that states a number, with how many lines its statement spans. */
+function constantStatements(lines) {
   const out = [];
   lines.forEach((l, i) => {
     const m = /^\s*(?:const|let|var)\s+([A-Z][A-Z0-9_]*)\s*=(.*)$/.exec(l);
-    if (!m) return;
-    const rhs = statementAt([m[2], ...lines.slice(i + 1)], 0);
-    if (HAS_NUM.test(rhs)) out.push({ name: m[1], line: i + 1 });
+    if (m) {
+      const rhs = statementAt([m[2], ...lines.slice(i + 1)], 0);
+      if (HAS_NUM.test(rhs)) out.push({ name: m[1], line: i + 1, lines: rhs.split('\n').length - 1 });
+      return;
+    }
+    // A lower-case name hides a tunable as well as an UPPER_CASE one: one stated as numbers, other than 0 and 1.
+    const low = LOWER.exec(l);
+    if (low && tunableNumbers(low[2]).length) out.push({ name: low[1], line: i + 1, lines: 1 });
   });
   return out;
 }
 
-function literalCount(text) {
+function constantsIn(text) {
+  return constantStatements(codeOnly(text).split('\n')).map(({ name, line }) => ({ name, line }));
+}
+
+/** The args of each Math.max( / Math.min( call on a line (to its closing paren; the rest of the line if it has none). */
+function mathArgs(line) {
+  const out = [];
+  const re = /\bMath\.(?:max|min)\(/g;
+  let m;
+  while ((m = re.exec(line))) {
+    let depth = 1;
+    let j = m.index + m[0].length;
+    const from = j;
+    while (j < line.length && depth) { if (line[j] === '(') depth += 1; else if (line[j] === ')') depth -= 1; j += 1; }
+    out.push({ from, text: line.slice(from, depth ? j : j - 1) });
+  }
+  return out;
+}
+
+/**
+ * The numeric literals (other than 0 and 1) that look like a threshold: in a comparison, a default value, an object
+ * literal's value, a Math.max / Math.min call's arguments, or a fractional factor. A literal two of these see counts once.
+ * A named constant's own statement is not counted: the constant itself must be listed, with its reason.
+ */
+function literalCount(text, { mechanics = [] } = {}) {
   let n = 0;
-  for (const l of codeOnly(text).split('\n')) {
-    for (const re of [COMPARE, DEFAULT]) {
+  const lines = codeOnly(text).split('\n');
+  const named = new Set(constantStatements(lines).flatMap(c => Array.from({ length: c.lines }, (_, k) => c.line - 1 + k)));
+  const allowed = mechanics.map(p => new RegExp(p, 'g'));
+  for (const [i, raw] of lines.entries()) {
+    if (named.has(i)) continue;
+    // A listed mechanical form (a protocol's code, with its reason in the pins) is blanked before counting.
+    const l = allowed.reduce((s, re) => s.replace(re, x => ' '.repeat(x.length)), raw);
+    const seen = new Set();
+    const count = (at, x) => { if (!MECHANICAL.has(x) && !seen.has(at)) { seen.add(at); n += 1; } };
+    for (const re of [COMPARE, DEFAULT, OBJECT, FRACTION]) {
       re.lastIndex = 0;
       let m;
-      while ((m = re.exec(l))) if (!MECHANICAL.has(m[1] || m[2])) n += 1;
+      while ((m = re.exec(l))) {
+        const x = m[1] || m[2];
+        count(m.index + m[0].lastIndexOf(x), x);
+      }
+    }
+    for (const { from, text: args } of mathArgs(l)) {
+      for (const m of args.matchAll(ANY_NUM)) count(from + m.index, m[1]);
     }
   }
   return n;

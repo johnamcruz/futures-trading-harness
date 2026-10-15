@@ -102,7 +102,7 @@ const COALESCE_HOLD_MS = TUN.cycle.coalesceHoldMs;
 
 function createRunner(deps) {
   const {
-    cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
+    cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch, exitsOnly = false,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null, exitStrategy = null, exitPlanOf = exitPlan,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
@@ -1181,7 +1181,7 @@ function createRunner(deps) {
       const gap = coverageError(now, { closed: cfg.closedDates, early: cfg.earlyCloseDates });
       if (gap) { log(gap, 'error'); emit('calendar_ending', { message: gap }); }
     }
-    let d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+    let d = decide(cfg, state, now, { killSwitch: isKillSwitchOn(), exitsOnly });
     state = d.state;
     // A premarket that failed: tried again after its pause, until a session window opens; then the day trades
     // without a plan (premarketUnavailable: the prompt, the event log and the session record say so).
@@ -1194,12 +1194,12 @@ function createRunner(deps) {
         log(`premarket: no plan after ${state.premarketTries} failed run(s) and the session is open (or opens before another try could end); trading without a premarket plan until a retry succeeds`, 'error');
         emit('premarket_unavailable', { day: state.day, tries: state.premarketTries });
         saveState(state);
-        d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+        d = decide(cfg, state, now, { killSwitch: isKillSwitchOn(), exitsOnly });
         state = d.state;
       } else if (Date.parse(state.premarketRetryAt) > now.getTime()) {
         // Waiting for its retry never holds up risk-reducing work: the pass goes on as if premarket were done
         // (trailing, leftover orders, housekeeping), and still starts no cycle (it isn't done: below, decide says so).
-        const waiting = decide(cfg, { ...state, premarketDone: true }, now, { killSwitch: isKillSwitchOn() });
+        const waiting = decide(cfg, { ...state, premarketDone: true }, now, { killSwitch: isKillSwitchOn(), exitsOnly });
         d = { ...waiting, state: { ...waiting.state, premarketDone: false } };
         state = d.state;
       }
@@ -1223,7 +1223,7 @@ function createRunner(deps) {
       for (const job of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
-        if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
+        if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn(), exitsOnly }).action === 'eod') break;
         if (limitFor(d.action, at) < 30000) { noTime(); continue; }
         const acct = await accountSnapshot(at);
         // The time limit counts from after the account read.
@@ -1301,7 +1301,7 @@ function createRunner(deps) {
     const ready = carried.filter(x => now.getTime() <= Date.parse(x.bar.t) + x.minutes * 60000 + delayMs + coalesceHoldMs + MAX_POLL_MS);
     for (let i = 0; i < syms.length; i += 1) {
       // A slow API can make a pass long: if end of day came due meanwhile, run it first.
-      if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() }).action === 'eod') return 0;
+      if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn(), exitsOnly }).action === 'eod') return 0;
       const item = await pollSymbol(i, now);
       if (item) ready.push(item);
     }
@@ -1345,7 +1345,7 @@ function createRunner(deps) {
         }
       }
       // Re-check: a symbol's poll may have taken a while, the kill switch may be on now.
-      const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() });
+      const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn(), exitsOnly });
       state = again.state;
       if (again.action === 'trade' || again.action === 'manage') {
         let manageOnly = again.action === 'manage';

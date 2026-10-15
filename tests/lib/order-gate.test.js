@@ -2837,7 +2837,7 @@ test('trade_lifecycle: composed-reads runs keyed on the tag even with no strateg
   const home = lcHome();
   const none = lcEval(home, LC.order(), { strategies: null });
   assert.deepStrictEqual(checks(none), ['composed-reads']);
-  assert.match(none.violations[0].message, /states no risk.max_risk_usd/);
+  assert.match(none.violations[0].message, /states no whole stop rule \(risk\.stop_buffer_ticks, risk\.stop_floor_ticks, risk\.stop_floor_atr\)/);
   const invalid = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, valid: false, errors: ['broken'] } : s));
   assert.ok(checks(lcEval(home, LC.order(), { strategies: invalid })).includes('composed-reads'));
   const skipping = lcEval(lcHome({ side: 'short' }), LC.order(), { config: { skipChecks: new Set(['composed-reads', 'strategy', 'trigger-fired']) } });
@@ -3279,4 +3279,13 @@ test('trade_lifecycle: modify_order never reprices a working composed entry wors
   assert.deepStrictEqual(mod({ orderId: 99, limitPrice: 99999 }), []);
   assert.deepStrictEqual(mod({ orderId: 11, stopPrice: 21500 }), []);
   assert.match(evaluateModify({ input: { orderId: 11, limitPrice: 21541 }, config: cfg }).violations[0].message, /worse for it/);
+});
+
+test('gate config: the loss streak\'s env override only tightens; the committed config files are no critical error', () => {
+  const pinned = require('../../scripts/lib/tunables').runner().gate.maxConsecutiveLosses;
+  assert.strictEqual(loadConfig({}).maxConsecutiveLosses, pinned);
+  assert.strictEqual(loadConfig({ FTH_MAX_CONSECUTIVE_LOSSES: '1' }).maxConsecutiveLosses, 1, 'lower: tighter, taken');
+  for (const looser of [String(pinned + 1), '99']) assert.strictEqual(loadConfig({ FTH_MAX_CONSECUTIVE_LOSSES: looser }).maxConsecutiveLosses, pinned, `${looser}: held at the config's`);
+  assert.strictEqual(loadConfig({ FTH_MAX_CONSECUTIVE_LOSSES: '0' }).maxConsecutiveLosses, pinned, 'invalid: the config\'s');
+  assert.strictEqual(loadConfig({}).configCritical, null);
 });

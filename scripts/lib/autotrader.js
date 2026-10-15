@@ -769,7 +769,7 @@ function freshDay(key) {
  * bar clock decides when each one starts. `killSwitch` true suppresses
  * premarket and trade cycles; end of day still runs because it only reduces risk.
  */
-function decide(cfg, state, now, { killSwitch = false } = {}) {
+function decide(cfg, state, now, { killSwitch = false, exitsOnly = false } = {}) {
   const key = dayKey(now);
   // A previous trading day that traded, or whose end of day was tried, but
   // never finished end of day (runner down, crash, not verified flat):
@@ -795,7 +795,8 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   // After the day has traded and until end of day, keep the runner's
   // housekeeping (trailing stops, leftover orders) going even when no cycle
   // may run: outside the sessions or with the kill switch on.
-  const idle = { action: cfg.account && !cfg.paper && s.cycles > 0 ? 'housekeep' : null, state: s };
+  // Exits-only (a refused config file, runner-wiring.js exitsOnly): from the start of the day, a leftover position may need it.
+  const idle = { action: cfg.account && !cfg.paper && (s.cycles > 0 || exitsOnly) ? 'housekeep' : null, state: s };
   if (killSwitch) return idle;
 
   const pre = parseAt(cfg.premarketAt);

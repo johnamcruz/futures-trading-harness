@@ -279,6 +279,9 @@ async function main(rawArgv) {
       : `runner NOT ok:\n${st.problems.map(p => `- ${p}`).join('\n')}\n`);
     return st.ok ? 0 : 1;
   }
+  // A refused config file (CRITICAL): a manual or replayed pass is refused with it, end of day still runs, and the live
+  // loop starts exits-only (runner-wiring.js exitsOnly).
+  if (arg(argv, '--once') && arg(argv, '--once') !== 'eod') require('./lib/tunables').assertUsable();
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run]');
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));

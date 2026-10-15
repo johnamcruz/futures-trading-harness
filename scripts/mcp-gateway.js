@@ -86,6 +86,10 @@ function main(argv) {
     }
   }
 
+  // A refused config file: the gateway still starts (exits are never held), says it (stderr, by tunables.js) and logs it.
+  const critical = require('./lib/tunables').critical();
+  if (critical) logDecision({ source: 'gateway', decision: 'config-critical', message: critical.message }, process.env);
+
   const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'inherit'], env: process.env });
   // EPIPE after the server exits must not crash the gateway; 'close' handles the exit.
   child.stdin.on('error', err => process.stderr.write(`[mcp-gateway] server stdin: ${err.message}\n`));
@@ -120,6 +124,7 @@ function main(argv) {
   const check = async (sentArgs, tool, id) => {
     const args = canon(sentArgs); // one name per contract for the gate and its ledger
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, tool, clock: await clock.ready() });
+    if (tool === 'place_order' && base.violations.some(v => v.check === 'config-critical')) return base; // a refused config: no entry
     const now = base.now;
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     if (tool !== 'place_order') {

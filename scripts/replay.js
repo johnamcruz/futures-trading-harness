@@ -183,6 +183,7 @@ async function run(argv) {
 }
 
 async function main(argv) {
+  require('./lib/tunables').assertUsable(); // a refused config file: no replay (the CRITICAL error)
   const cmd = argv[0];
   if (cmd === 'run') return run(argv);
   if (cmd === 'points') return points(load(argv));

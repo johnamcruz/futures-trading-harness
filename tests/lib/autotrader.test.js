@@ -123,6 +123,15 @@ test('kill switch stops new cycles but not end of day; weekends and caps are res
   assert.strictEqual(decide(cfg, yesterday, et(9, 1)).action, 'premarket'); // new day resets state
 });
 
+test('exits-only (a refused config file): housekeeping from the start of the day, with no cycle; end of day as usual', () => {
+  const acct = { ...cfg, account: '7', paper: false };
+  const s = recordRun(decide(acct, null, et(9, 1)).state, 'premarket', et(9, 1));
+  assert.strictEqual(decide(acct, s, et(10, 0), { killSwitch: true }).action, null, 'the kill switch alone: nothing before the day traded');
+  assert.strictEqual(decide(acct, s, et(10, 0), { killSwitch: true, exitsOnly: true }).action, 'housekeep');
+  assert.strictEqual(decide(acct, s, et(15, 55), { killSwitch: true, exitsOnly: true }).action, 'eod');
+  assert.strictEqual(decide({ ...acct, paper: true }, s, et(10, 0), { killSwitch: true, exitsOnly: true }).action, null, 'paper: no account to keep');
+});
+
 test('a previous day that never finished end of day is flattened first', () => {
   const thursday = { day: '2026-10-08', premarketDone: true, eodDone: false, cycles: 12, lastCycleAt: null };
   const sat = new Date(Date.UTC(2026, 9, 10, 4, 30)); // 00:30 ET Saturday

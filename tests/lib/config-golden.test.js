@@ -20,6 +20,25 @@ test('config golden: every moved value equals the constant the code held before 
   }
 });
 
+// Values whose one home became a document instead of a config file: still the number the code held before the move.
+const IN_DOCUMENTS = [
+  { file: 'strategies/trade_lifecycle/STRATEGY.md', key: 'risk.stop_buffer_ticks', value: 1, from: 'trading/trade-lifecycle.js STOP_BUFFER_TICKS' },
+  { file: 'strategies/trade_lifecycle/STRATEGY.md', key: 'risk.stop_floor_ticks', value: 8, from: 'trading/trade-lifecycle.js FLOOR_TICKS' },
+  { file: 'strategies/trade_lifecycle/STRATEGY.md', key: 'risk.stop_floor_atr', value: 0.25, from: 'trading/trade-lifecycle.js FLOOR_ATR' },
+];
+
+test('config golden: a value moved to its document keeps the constant the code held before the move', () => {
+  const path = require('path');
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const REPO = path.resolve(__dirname, '..', '..');
+  for (const { file, key, value, from } of IN_DOCUMENTS) {
+    const doc = loadStrategies(REPO, {}).strategies.find(s => path.relative(REPO, s.file || '') === file || `strategies/${s.name}/STRATEGY.md` === file);
+    assert.ok(doc && doc.valid, file);
+    assert.strictEqual(valueAt(doc, key), value, `${file} ${key} (was ${from})`);
+  }
+  for (const k of ['lifecycle.stopBufferTicks', 'lifecycle.floorTicks', 'lifecycle.floorAtr']) assert.strictEqual(valueAt(T.runner(), k), undefined, `${k}: one home (the strategy's), not config/runner.json too`);
+});
+
 test('config golden: every config value is one the golden covers (nothing added without its pre-move value)', () => {
   for (const file of T.NAMES) {
     const covered = Object.keys(GOLDEN[file]);
@@ -37,7 +56,7 @@ test('config golden: the modules read the config (their exported values are the 
   assert.strictEqual(cfg.noEntryWindows, R.gate.noEntryWindows.join(','));
   assert.strictEqual(cfg.signalMaxAgeCeilingMin, R.gate.signalMaxAgeCeilingMin);
   const lc = require('../../scripts/lib/trading/trade-lifecycle');
-  assert.deepStrictEqual([lc.STOP_BUFFER_TICKS, lc.FLOOR_TICKS, lc.FLOOR_ATR, lc.MAX_SIZE, lc.MAX_BYTES], [R.lifecycle.stopBufferTicks, R.lifecycle.floorTicks, R.lifecycle.floorAtr, R.lifecycle.maxSize, R.limits.lifecycleBytes]);
+  assert.deepStrictEqual([lc.MAX_SIZE, lc.MAX_BYTES], [R.lifecycle.maxSize, R.limits.lifecycleBytes]);
   const ps = require('../../scripts/lib/trading/prop-state');
   assert.deepStrictEqual([ps.SNAPSHOT_MAX_AGE_MS, ps.BALANCE_TOLERANCE], [R.account.snapshotMaxAgeMs, R.account.balanceToleranceUsd]);
   assert.deepStrictEqual(require('../../scripts/lib/prop/mc-size').MC_SIZE, { paths: R.monteCarlo.paths, reps: R.monteCarlo.reps });

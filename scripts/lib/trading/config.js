@@ -130,7 +130,8 @@ const MAX_CONSECUTIVE_LOSSES = G.maxConsecutiveLosses;
 function loadConfig(env = process.env) {
   return {
     planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', G.planMaxAgeMin, { min: 1 }),
-    maxConsecutiveLosses: intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', MAX_CONSECUTIVE_LOSSES, { min: 1 }),
+    // Tighten-only here too: the env may lower the streak, never raise it past the config's (pinned) value.
+    maxConsecutiveLosses: Math.min(intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', MAX_CONSECUTIVE_LOSSES, { min: 1 }), MAX_CONSECUTIVE_LOSSES),
     lossCooldownMin: intEnv(env, 'FTH_LOSS_COOLDOWN_MIN', G.lossCooldownMin),
     maxDailyLosses: intEnv(env, 'FTH_MAX_DAILY_LOSSES', G.maxDailyLosses, { min: 1 }),
     maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', G.maxEntriesPerDay), // 0 = off
@@ -212,6 +213,9 @@ function loadConfig(env = process.env) {
     // The bar briefing's round-number steps per contract family (round-numbers.js): config/round-numbers.json
     // under <FTH_HOME>/round-numbers.json; { steps, errors }, a refused entry's family off.
     roundSteps: loadRoundSteps(env),
+    // A refused config file (tunables.js critical()): its CRITICAL error text, or null. Every new entry is refused with
+    // it (check-order.js, account-gate.js); exits, protective stops, cancels and closes still go. Never skippable.
+    configCritical: (c => (c ? c.message : null))(require('../tunables').critical()),
   };
 }
 

@@ -99,7 +99,9 @@ const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const { SIZING_KEYS } = require('./combine'); // the sizing keys' one home (a policy's values: its account's rulebook)
-const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
+// A composed strategy's stop rule (signal: composed only): its buffer beyond the named level and its floor.
+const COMPOSED_RISK_KEYS = ['stop_buffer_ticks', 'stop_floor_ticks', 'stop_floor_atr'];
+const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', ...COMPOSED_RISK_KEYS];
 // A composed record's validity in base bars after its bar's close: at most the gate's default briefing age (3 bars,
 // FTH_SIGNAL_MAX_AGE_BARS), which refuses an entry past it anyway.
 const MAX_VALID_BARS = 3;
@@ -206,9 +208,15 @@ function validateStrategy(data, body, folderName) {
     req(data.risk && data.risk.stop === 'structure', 'risk.stop: structure (signal: composed: the stop is the verified level the model names)');
     req(data.risk && typeof data.risk.max_risk_usd === 'number' && data.risk.max_risk_usd > 0, 'risk.max_risk_usd: required for signal: composed (the per-trade dollar cap)');
     req(data.exit === undefined, 'exit: not for signal: composed (its target is the verified level the model names)');
+    // Its stop rule, the one home of the numbers (trade-lifecycle.js stopRuleOf reads them): how far beyond the named
+    // level the stop goes, and the closest it may be (the larger of the ticks and the multiple of ATR(20)).
+    req(data.risk && Number.isInteger(data.risk.stop_buffer_ticks) && data.risk.stop_buffer_ticks >= 0, 'risk.stop_buffer_ticks: required for signal: composed, a whole number of ticks from 0 (the stop goes that far beyond the named level)');
+    req(data.risk && Number.isInteger(data.risk.stop_floor_ticks) && data.risk.stop_floor_ticks >= 1, 'risk.stop_floor_ticks: required for signal: composed, a whole number of ticks from 1 (the closest stop)');
+    req(data.risk && typeof data.risk.stop_floor_atr === 'number' && Number.isFinite(data.risk.stop_floor_atr) && data.risk.stop_floor_atr >= 0, 'risk.stop_floor_atr: required for signal: composed, a multiple of ATR(20) from 0 (the closest stop, with stop_floor_ticks)');
     req(Number.isInteger(data.valid_bars) && data.valid_bars >= 1 && data.valid_bars <= MAX_VALID_BARS, `valid_bars: required for signal: composed, a whole number of base bars from 1 to ${MAX_VALID_BARS} (how long after its bar's close a compose record, and its resting limit, stays valid)`);
-  } else if (data.valid_bars !== undefined) {
-    errors.push('valid_bars: only for signal: composed');
+  } else {
+    if (data.valid_bars !== undefined) errors.push('valid_bars: only for signal: composed');
+    for (const k of COMPOSED_RISK_KEYS) if (data.risk && data.risk[k] !== undefined) errors.push(`risk.${k}: only for signal: composed`);
   }
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);

@@ -641,18 +641,6 @@
    "value": 2,
    "from": "trading/order-gate.js bracket span tolerance (ticks)"
   },
-  "lifecycle.stopBufferTicks": {
-   "value": 1,
-   "from": "trading/trade-lifecycle.js STOP_BUFFER_TICKS"
-  },
-  "lifecycle.floorTicks": {
-   "value": 8,
-   "from": "trading/trade-lifecycle.js FLOOR_TICKS"
-  },
-  "lifecycle.floorAtr": {
-   "value": 0.25,
-   "from": "trading/trade-lifecycle.js FLOOR_ATR"
-  },
   "lifecycle.maxSize": {
    "value": 100,
    "from": "trading/trade-lifecycle.js MAX_SIZE"

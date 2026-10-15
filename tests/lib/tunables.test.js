@@ -30,41 +30,9 @@ const dropAt = (obj, dotted) => {
   return obj;
 };
 
-/**
- * The loosest value each tighten-only key has ever been committed at ('exact': the one value it may hold). A change
- * may only tighten a value here (and in the file), never loosen it; a key leaves the list only with the owner's yes.
- */
-const PINS = {
-  training: {
-    'exitTest.avgWinnerR': 1.8, 'exitTest.expectancyR': 0.3, 'exitTest.expectancyLoAbove': 0, 'exitTest.correctReadRate': 0.8, 'exitTest.processAdherence': 0.8,
-    'experienceIndex.minN': 20, 'experienceIndex.minDays': 10, 'experienceIndex.level': 0.9, 'experienceLookups.maxPerBar': 2, 'riskRecord.minN': 10,
-    'keepRule.maxChallengerBlows': 0, 'keepRule.level': 0.9, 'keepRule.primary': 'passRate', 'keepRule.minBlocks': 2, 'keepRule.minOverlap': 0.5,
-    'decisionRule.alpha': 0.05, 'decisionRule.minPairs': 20, 'decisionRule.minDiscordant': 6, 'decisionRule.minEffect': 0.1, 'decisionRule.harmTolerance': 0.02, 'decisionRule.maxExcluded': 0.1,
-    'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1,
-    'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
-    'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3400, 'skillCaps.setupSkillBytes': 4000,
-  },
-  replay: {
-    stages: {
-      1: { name: 'learn to trade', defaults: { latency: true, libraryDisplay: false, riskRecordDisplay: false }, refused: { learning: false, latency: false, libraryDisplay: true, riskRecordDisplay: true, prop: 'set', accountStates: 'set' }, comparisonOnly: [] },
-      2: { name: 'pass prop', defaults: { latency: true, libraryDisplay: false, riskRecordDisplay: false }, refused: { learning: false, latency: false, libraryDisplay: true }, comparisonOnly: ['riskRecordDisplay'] },
-    },
-  },
-  runner: {
-    'gate.pendingOrderTtlMs': 30000, 'gate.orderGraceMs': 120000, 'gate.callTimeoutMs': 15000, 'gate.laneTimeoutMs': 30000, 'gate.lookupExtraMs': 5000, 'gate.markerLookbackMs': 60000,
-    'gate.planMaxAgeMin': 120, 'gate.maxConsecutiveLosses': 2, 'gate.lossCooldownMin': 30, 'gate.maxDailyLosses': 3, 'gate.maxEntriesPerDay': 6, 'gate.mtfMaxAgeMin': 15,
-    'gate.signalMaxAgeBars': 3, 'gate.signalMaxAgeCeilingMin': 45, 'gate.futureToleranceMin': 1, 'gate.minConfluence': 1, 'gate.maxCorrelatedPositions': 1,
-    'gate.noEntryWindows': ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], 'gate.bracketToleranceTicks': 1, 'gate.bracketSpanToleranceTicks': 2,
-    'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20,
-    'lifecycle.stopBufferTicks': 1, 'lifecycle.floorTicks': 8, 'lifecycle.floorAtr': 0.25, 'lifecycle.maxSize': 100,
-    'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
-    'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,
-    'cycle.maxConsecutiveErrors': 3, 'bars.staleAfterBars': 0.5, 'runner.closeSettleMs': 10000, 'runner.fillGraceMs': 30000, 'runner.minManagedRiskTicks': 4,
-    'monteCarlo.max': 20000,
-  },
-  analysis: {},
-};
+// The pins live in the lib (scripts/lib/tunables.js PINS: the loader refuses a file past one); a change there is a
+// review finding by default (CLAUDE.md).
+const { PINS } = T;
 
 test('tunables: every committed config file loads under its schema, frozen, versioned', () => {
   assert.deepStrictEqual([...T.NAMES], ['training', 'replay', 'runner', 'analysis']);
@@ -111,10 +79,10 @@ test('tunables: a missing, unreadable, non-JSON, incomplete, unknown-keyed or mi
   refused('runner', dropAt(clone(committed('runner')), 'gate.maxConsecutiveLosses'), /gate\.maxConsecutiveLosses: missing/);
   refused('runner', writeAt(clone(committed('runner')), 'gate.extra', 1), /gate\.extra: not a known key/);
   refused('runner', writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', '2'), /gate\.maxConsecutiveLosses: a whole number/);
-  refused('runner', writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 0), /gate\.maxConsecutiveLosses: from 1 to Infinity/);
+  refused('runner', writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 0), /gate\.maxConsecutiveLosses: a whole number from 1 to Infinity, not 0/);
   refused('runner', writeAt(clone(committed('runner')), 'gate.noEntryWindows', 'x'), /gate\.noEntryWindows: a list/);
   refused('training', writeAt(clone(committed('training')), 'keepRule.primary', 'meanR'), /keepRule\.primary: one of passRate/);
-  refused('training', writeAt(clone(committed('training')), 'exitTest.correctReadRate', 1.2), /exitTest\.correctReadRate: from 0 to 1/);
+  refused('training', writeAt(clone(committed('training')), 'exitTest.correctReadRate', 1.2), /exitTest\.correctReadRate: a number from 0 to 1, not 1\.2/);
   refused('replay', writeAt(clone(committed('replay')), 'stages.1.refused.prop', 'maybe'), /stages\.1\.refused\.prop: true, false or 'set'/);
   refused('replay', writeAt(clone(committed('replay')), 'labels.stopAtrRange', [1]), /labels\.stopAtrRange: a list of 2 to 2/);
   refused('analysis', writeAt(clone(committed('analysis')), 'regime.highVol', null), /regime\.highVol: a number/);
@@ -128,28 +96,125 @@ test('tunables: fingerprints name each file\'s version and canonical hash (what 
   for (const n of T.NAMES) assert.deepStrictEqual(fp[n], { version: committed(n).version, hash: C.hashOf(committed(n)) });
 });
 
-test('tunables: a refused config file refuses the gate, the runner and the reads that need it (fail closed, no default)', () => {
-  const root = tmp();
-  fs.cpSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'), { recursive: true });
-  fs.cpSync(path.join(REPO, 'config'), path.join(root, 'config'), { recursive: true });
-  for (const d of ['strategies', 'accounts', 'skills', 'agents']) fs.symlinkSync(path.join(REPO, d), path.join(root, d));
-  const load = mod => spawnSync(process.execPath, ['-e', `require(${JSON.stringify(path.join(root, 'scripts', 'lib', ...mod.split('/')))})`], { encoding: 'utf8' });
-  for (const mod of ['trading/order-gate', 'trading/gate-timing', 'runner', 'trading/briefing']) assert.strictEqual(load(mod).status, 0, `${mod} loads with the committed files`);
-  // The runner config missing: the gate's modules don't load.
-  fs.renameSync(path.join(root, 'config', 'runner.json'), path.join(root, 'config', 'runner.away'));
-  for (const mod of ['trading/order-gate', 'trading/gate-timing', 'trading/config', 'runner']) {
-    const r = load(mod);
-    assert.notStrictEqual(r.status, 0, mod);
-    assert.match(r.stderr, /the runner config \(.*runner\.json\) is refused: it can't be read \(ENOENT\)/, mod);
+test('tunables: the built-in values equal the shipped runner and analysis files (never looser), deep-frozen; only those two', () => {
+  assert.deepStrictEqual(Object.keys(T.BUILT_IN).sort(), ['analysis', 'runner']);
+  for (const n of ['runner', 'analysis']) {
+    assert.deepStrictEqual(clone(T.BUILT_IN[n]), committed(n), `${n}: BUILT_IN is the committed file`);
+    assert.deepStrictEqual(C.loosened(T.SPECS[n], PINS[n], T.BUILT_IN[n]), [], `${n}: BUILT_IN holds every pin`);
+    const frozen = v => !v || typeof v !== 'object' || (Object.isFrozen(v) && Object.values(v).every(frozen));
+    assert.ok(frozen(T.BUILT_IN[n]), `${n}: deep-frozen`);
   }
-  // Malformed: a gate value that isn't a number, or a key the schema doesn't know.
-  const good = committed('runner');
-  fs.writeFileSync(path.join(root, 'config', 'runner.json'), JSON.stringify(writeAt(clone(good), 'gate.maxConsecutiveLosses', 'two')));
-  assert.match(load('trading/order-gate').stderr, /gate\.maxConsecutiveLosses: a whole number/);
-  fs.writeFileSync(path.join(root, 'config', 'runner.json'), JSON.stringify(writeAt(clone(good), 'gate.maxLosses', 9)));
-  assert.match(load('trading/order-gate').stderr, /gate\.maxLosses: not a known key/);
-  // The reads refuse a missing analysis file.
-  fs.writeFileSync(path.join(root, 'config', 'runner.json'), JSON.stringify(good));
-  fs.rmSync(path.join(root, 'config', 'analysis.json'));
-  assert.match(load('trading/briefing').stderr, /the analysis config .* is refused/);
+  assert.ok(Object.isFrozen(PINS) && Object.isFrozen(PINS.runner) && Object.isFrozen(PINS.runner['gate.noEntryWindows']));
+  // The kill graces and the gate slack are pinned exactly.
+  for (const k of ['runner.killGraceMs', 'runner.exitKillGraceMs', 'session.gateSlackMs']) {
+    assert.strictEqual(T.SPECS.runner.tightenOnly[k], 'exact', k);
+    assert.strictEqual(PINS.runner[k], C.valueAt(committed('runner'), k), k);
+  }
 });
+
+test('tunables: the loader refuses a value past its pin (the pin is enforced at load, not only in tests), with the shape problems, all at once', () => {
+  const dir = tmp();
+  const f = path.join(dir, 'runner.json');
+  fs.writeFileSync(f, JSON.stringify(writeAt(writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 5), 'runner.killGraceMs', 9000)));
+  assert.throws(() => T.load('runner', f), e => e instanceof C.CriticalConfigError
+    && /gate\.maxConsecutiveLosses is 5, above its pinned 2; it may only go down/.test(e.message)
+    && /runner\.killGraceMs is 9000, not its pinned 10000; it is pinned exactly/.test(e.message));
+  // A shape problem and a loosened key in one file: both listed; a key the shape refused is said once.
+  fs.writeFileSync(f, JSON.stringify(dropAt(writeAt(writeAt(clone(committed('runner')), 'gate.maxDailyLosses', 9), 'gate.lossCooldownMin', 'x'), 'alerts.staleMinutes')));
+  let err;
+  try { T.load('runner', f); } catch (e) { err = e; }
+  assert.deepStrictEqual(err.refusals[0].problems, [
+    'gate.lossCooldownMin: a whole number from 0 to Infinity, not "x"',
+    'alerts.staleMinutes: missing (expected a number above 0)',
+    'gate.maxDailyLosses is 9, above its pinned 3; it may only go down (tighten)',
+  ]);
+  // Tighter is fine.
+  fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 1)));
+  assert.strictEqual(T.load('runner', f).gate.maxConsecutiveLosses, 1);
+});
+
+// A plugin root of its own: a copy of scripts/ and config/ (to break a config file), the rest linked to the repository's.
+let copied = null;
+function copiedRoot() {
+  if (!copied) {
+    copied = tmp();
+    fs.cpSync(path.join(REPO, 'scripts'), path.join(copied, 'scripts'), { recursive: true });
+    for (const d of ['strategies', 'accounts', 'skills', 'agents', 'commands', 'rules', 'mcp-configs', 'package.json']) if (fs.existsSync(path.join(REPO, d))) fs.symlinkSync(path.join(REPO, d), path.join(copied, d));
+  }
+  fs.rmSync(path.join(copied, 'config'), { recursive: true, force: true });
+  fs.cpSync(path.join(REPO, 'config'), path.join(copied, 'config'), { recursive: true });
+  return copied;
+}
+const home = tmp();
+const ENV = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, NODE_ENV: 'test' };
+const node = (root, code) => spawnSync(process.execPath, ['-e', code], { encoding: 'utf8', cwd: root, env: ENV });
+const lib = (root, mod) => JSON.stringify(path.join(root, 'scripts', 'lib', ...mod.split('/')));
+
+test('tunables: a refused runner or analysis file stands in its built-in values (the exits\' modules load) and is a critical error naming every problem', () => {
+  const root = copiedRoot();
+  const probe = `const T = require(${lib(root, 'tunables')}); const c = T.critical();
+    process.stdout.write(JSON.stringify({ critical: c && c.message, files: c && c.refusals.map(r => r.name), losses: T.runner().gate.maxConsecutiveLosses, atr: T.analysis().indicators.atrPeriod }));`;
+  // The positive control: the committed files load, no critical error.
+  let r = node(root, probe);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).critical, null);
+  assert.strictEqual(r.stderr, '');
+  // runner.json broken two ways and analysis.json missing: every problem listed, the built-ins stand in.
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), JSON.stringify(writeAt(writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 'two'), 'gate.extra', 1)));
+  fs.rmSync(path.join(root, 'config', 'analysis.json'));
+  r = node(root, probe);
+  assert.strictEqual(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.deepStrictEqual(out.files, ['runner', 'analysis']);
+  assert.deepStrictEqual([out.losses, out.atr], [T.BUILT_IN.runner.gate.maxConsecutiveLosses, T.BUILT_IN.analysis.indicators.atrPeriod]);
+  assert.match(out.critical, /^CRITICAL config error \(3 problems in 2 files\):/);
+  assert.match(out.critical, /the runner config \(.*config[\\/]runner\.json\) is refused: gate\.maxConsecutiveLosses: a whole number from 1 to Infinity, not "two"; gate\.extra: not a known key/);
+  assert.match(out.critical, /the analysis config \(.*config[\\/]analysis\.json\) is refused: it can't be read \(ENOENT\)/);
+  assert.match(out.critical, /no run, replay, training run, preflight or new entry starts until it is fixed/);
+  assert.match(out.critical, /Exits, protective stops \(\[protect\]\), close_position, partial_close_position, cancel_order and the runner's reconcile and end-of-day flatten keep working on the built-in values/);
+  // Said on stderr, once per file.
+  assert.strictEqual((r.stderr.match(/\[fth\] CRITICAL config error/g) || []).length, 2, r.stderr);
+  // The modules the exits need load (the gate hook's, the gateway's, the runner's); the run's entry points refuse.
+  for (const mod of ['trading/order-gate', 'trading/gate-timing', 'trading/config', 'trading/check-order', 'trading/account-gate', 'trading/mcp-gateway', 'trading/trade-lifecycle', 'runner', 'runner-wiring', 'trading/briefing']) {
+    const m = node(root, `require(${lib(root, mod)})`);
+    assert.strictEqual(m.status, 0, `${mod}: ${m.stderr.slice(0, 300)}`);
+  }
+  const usable = node(root, `require(${lib(root, 'tunables')}).assertUsable()`);
+  assert.notStrictEqual(usable.status, 0);
+  assert.match(usable.stderr, /CRITICAL config error \(3 problems in 2 files\)/);
+  const fp = node(root, `require(${lib(root, 'tunables')}).fingerprints()`);
+  assert.match(fp.stderr, /CRITICAL config error/, 'no fingerprint of a built-in value is recorded');
+});
+
+test('tunables: a refused training or replay file throws the critical error where it is read (no built-in), naming every refused file', () => {
+  const root = copiedRoot();
+  fs.writeFileSync(path.join(root, 'config', 'training.json'), JSON.stringify(writeAt(clone(committed('training')), 'keepRule.level', 0.8)));
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), '{ "version": ');
+  const r = node(root, `require(${lib(root, 'train/model-verifier')})`);
+  assert.notStrictEqual(r.status, 0);
+  assert.match(r.stderr, /CRITICAL config error \(2 problems in 2 files\)/);
+  assert.match(r.stderr, /the training config .* is refused: keepRule\.level is 0\.8, under its pinned 0\.9/);
+  assert.match(r.stderr, /the runner config .* is refused: not JSON/);
+  // The gate's modules still load (they read no training value).
+  assert.strictEqual(node(root, `require(${lib(root, 'trading/order-gate')}); require(${lib(root, 'runner')})`).status, 0);
+});
+
+test('tunables: a run, replay, training run, preflight or backtest refuses to start on a refused config file, with the critical error', () => {
+  const root = copiedRoot();
+  const cli = (name, ...args) => spawnSync(process.execPath, [path.join(root, 'scripts', name), ...args], { encoding: 'utf8', cwd: root, env: ENV });
+  const CLIS = [['replay.js'], ['train-loop.js'], ['training-preflight.js'], ['preflight.js'], ['backtest.js'], ['autotrader.js', '--once', 'trade', '--config', 'none.json']];
+  // The positive control: with the committed files each stops for its own reason (usage, a missing file), not the config.
+  for (const [name, ...args] of CLIS) {
+    const r = cli(name, ...args);
+    assert.doesNotMatch(r.stderr + r.stdout, /CRITICAL config error/, name);
+  }
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), JSON.stringify(writeAt(clone(committed('runner')), 'gate.minConfluence', 0)));
+  for (const [name, ...args] of CLIS) {
+    const r = cli(name, ...args);
+    assert.notStrictEqual(r.status, 0, name);
+    assert.match(r.stderr, /CRITICAL config error.*\n?.*the runner config \(.*runner\.json\) is refused: gate\.minConfluence: a whole number from 1 to Infinity, not 0/, `${name}: ${r.stderr.slice(0, 300)}`);
+  }
+  // End of day is not refused (it flattens): it goes on to its own checks.
+  assert.doesNotMatch(cli('autotrader.js', '--once', 'eod', '--config', 'none.json').stderr.replace(/\[fth\][^\n]*\n/g, ''), /CRITICAL config error/);
+});
+

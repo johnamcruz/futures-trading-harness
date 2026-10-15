@@ -67,7 +67,7 @@ const fs = require('fs');
 const path = require('path');
 const { buildBriefing, sessionWindow } = require('../trading/briefing');
 const { checkReads, parseRead } = require('../trading/composed-reads');
-const { STRATEGY: LIFECYCLE, planOf, expiryOf } = require('../trading/trade-lifecycle');
+const { STRATEGY: LIFECYCLE, planOf, stopRuleOf, expiryOf } = require('../trading/trade-lifecycle');
 const { limitOutcome } = require('./experience-log');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
 const { assertUse, sessionDate } = require('./splits');
@@ -130,7 +130,7 @@ function targetCandidates(m3, side, ref) {
  * The standard's reads and plan at one confirmation bar: { status, reads, checked, plan, why }. status: traded
  * (a plan), not-composable, stop-under-floor, no-room.
  */
-function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf }) {
+function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRule = strategyStopRule() }) {
   const m3 = m3Of(b);
   const base = tfLabel(b.minutes);
   const stf = tfLabel(setupTf);
@@ -170,7 +170,7 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf }) {
     const list = reads(pair[0], pair[1], t.read);
     const checked = checkReads({ reads: list, side, briefing: b, tick });
     if (!checked.ok) { refused = refused || `the checker refused ${t.read}: ${checked.problems[0] || (checked.reads.find(r => r.check !== true) || {}).fact || 'a read is not true'}`; continue; }
-    const planned = planOf({ checked, briefing: b, side, size: 1, tick, tickValue: 1, minRR: MIN_RR, maxRiskUsd: Number.MAX_SAFE_INTEGER });
+    const planned = planOf({ checked, briefing: b, side, size: 1, tick, tickValue: 1, minRR: MIN_RR, maxRiskUsd: Number.MAX_SAFE_INTEGER, stopRule });
     if (!planned.plan) { refused = refused || `the plan refused ${t.read}: ${planned.problems[0]}`; continue; }
     const floor = planned.problems.find(p => /under the minimum/.test(p));
     if (floor) { floorRefused = floor; break; }
@@ -182,6 +182,20 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf }) {
   if (floorRefused) return { status: 'stop-under-floor', why: floorRefused };
   if (short) return { status: 'no-room', why: `no level at ${MIN_RR}:1 or more (${short})` };
   return { status: 'not-composable', why: refused || 'no target the checker verifies' };
+}
+
+let shippedStopRule = null;
+/**
+ * The shipped trade_lifecycle strategy's stop rule (its STRATEGY.md risk.stop_buffer_ticks, stop_floor_ticks and
+ * stop_floor_atr: trade-lifecycle.js stopRuleOf), read once: the library plans a stop as compose_check does.
+ */
+function strategyStopRule() {
+  if (shippedStopRule) return shippedStopRule;
+  const doc = require('../trading/strategies').loadStrategies(PLUGIN_ROOT, {}).strategies.find(x => x.name === LIFECYCLE);
+  const rule = doc && doc.valid ? stopRuleOf(doc.risk) : null;
+  if (!rule) throw new Error(`strategies/${LIFECYCLE}/STRATEGY.md is ${doc ? 'invalid or states no whole stop rule' : 'missing'}: the library's stop comes from it`);
+  shippedStopRule = rule;
+  return rule;
 }
 
 /** The shipped trade_lifecycle strategy's valid_bars: the window the library's limit is measured over. */

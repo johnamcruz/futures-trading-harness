@@ -55,6 +55,15 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
   }
   if (!now) now = c.now();
   const config = loadConfig(env);
+  // A refused config file (CRITICAL, tunables.js): logged to the gate log on every check, and no new entry. Exits,
+  // protective stops, cancels, stop moves and closes still go, judged as usual on the built-in values.
+  if (config.configCritical) {
+    logDecision({ source: 'gate', decision: 'config-critical', call: tool, message: config.configCritical }, env); // no `tool`: never read as an order
+    if (tool === 'place_order' && !isRiskReducing((input || {}).rationale)) {
+      const violations = [{ check: 'config-critical', message: `${config.configCritical} Exits, protective stops, cancels and close_position still go.` }];
+      return { allowed: false, intent: 'entry', violations, message: formatBlock(violations), now };
+    }
+  }
   // cancel_order and partial_close_position need live account data; only the gateway checks them (account-gate.js).
   if (tool === 'cancel_order' || tool === 'partial_close_position') return { allowed: true, intent: tool === 'cancel_order' ? 'cancel' : 'risk-reducing', violations: [], message: '', now };
   if (tool === 'modify_order') {

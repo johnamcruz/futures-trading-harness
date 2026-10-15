@@ -41,6 +41,7 @@ function version(cmd) {
 }
 
 async function main(argv, { env = process.env, out = s => process.stdout.write(s), deps = {} } = {}) {
+  require('./lib/tunables').assertUsable(); // a refused config file: no preflight passes (the CRITICAL error)
   const file = arg(argv, '--config');
   if (!file) {
     out('usage: preflight.js --config <autotrader.json> [--no-version] [--json]\n');

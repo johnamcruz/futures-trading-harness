@@ -172,6 +172,10 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   const size = Number(input.size);
   const root = contractRoot(input.contractId);
   const resting = new Set((orders || []).map(o => String(o.id)));
+  // A refused config file (config.configCritical, tunables.js): no new entry, never skippable; exits are judged below.
+  if (config && config.configCritical && !isRiskReducing(input.rationale)) {
+    violations.push({ check: 'config-critical', message: `${config.configCritical} Exits, protective stops, cancels and close_position still go.` });
+  }
 
   if (isRiskReducing(input.rationale)) {
     // Bracket legs on an exit or a stop would rest on a flat account and

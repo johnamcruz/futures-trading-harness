@@ -105,7 +105,8 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   assert.strictEqual(s.signal, 'composed');
   assert.strictEqual(s.status, 'active');
   const body = '## When to Use\n## How It Works\n## Examples\n';
-  const base = { name: 'x', description: 'a composed strategy for the schema test, forty chars', status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'composed', risk: { stop: 'structure', min_rr: 2, max_risk_usd: 100 }, valid_bars: 2 };
+  const RULE = { stop_buffer_ticks: 1, stop_floor_ticks: 8, stop_floor_atr: 0.25 };
+  const base = { name: 'x', description: 'a composed strategy for the schema test, forty chars', status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'composed', risk: { stop: 'structure', min_rr: 2, max_risk_usd: 100, ...RULE }, valid_bars: 2 };
   assert.deepStrictEqual(validateStrategy(base, body, 'x'), []);
   assert.strictEqual(s.valid_bars, 2, 'the shipped plan validity: two base bars');
   // valid_bars: required for composed, a whole number from 1 to 3 (the default briefing age refuses past it anyway); no other signal has it.
@@ -115,9 +116,17 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   }
   for (const ok of [1, 3]) assert.deepStrictEqual(validateStrategy({ ...base, valid_bars: ok }, body, 'x'), [], String(ok));
   assert.ok(validateStrategy({ ...base, signal: 'manual', valid_bars: 2, risk: { stop: 'atr:0.5', min_rr: 2 } }, body, 'x').some(e => /valid_bars: only for signal: composed/.test(e)));
-  assert.ok(validateStrategy({ ...base, risk: { stop: 'structure', min_rr: 2 } }, body, 'x').some(e => /max_risk_usd: required for signal: composed/.test(e)));
-  assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:0.5', min_rr: 2, max_risk_usd: 100 } }, body, 'x').some(e => /risk.stop: structure/.test(e)));
+  assert.ok(validateStrategy({ ...base, risk: { stop: 'structure', min_rr: 2, ...RULE } }, body, 'x').some(e => /max_risk_usd: required for signal: composed/.test(e)));
+  assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:0.5', min_rr: 2, max_risk_usd: 100, ...RULE } }, body, 'x').some(e => /risk.stop: structure/.test(e)));
   assert.ok(validateStrategy({ ...base, exit: { target_r: 2 } }, body, 'x').some(e => /exit: not for signal: composed/.test(e)));
+  // The stop rule (the numbers' one home): each key required for composed, in its range; no other signal has one.
+  for (const [k, bad] of [['stop_buffer_ticks', -1], ['stop_buffer_ticks', 0.5], ['stop_floor_ticks', 0], ['stop_floor_ticks', '8'], ['stop_floor_atr', -0.1], ['stop_floor_atr', null]]) {
+    assert.ok(validateStrategy({ ...base, risk: { ...base.risk, [k]: bad } }, body, 'x').some(e => new RegExp(`risk\\.${k}: required for signal: composed`).test(e)), `${k} ${bad}`);
+    const { [k]: _gone, ...without } = base.risk;
+    assert.ok(validateStrategy({ ...base, risk: without }, body, 'x').some(e => new RegExp(`risk\\.${k}: required for signal: composed`).test(e)), `${k} missing`);
+    assert.ok(validateStrategy({ ...base, signal: 'manual', valid_bars: undefined, risk: { stop: 'atr:0.5', min_rr: 2, [k]: RULE[k] } }, body, 'x').some(e => new RegExp(`risk\\.${k}: only for signal: composed`).test(e)), `${k} on manual`);
+  }
+  assert.deepStrictEqual({ buffer: s.risk.stop_buffer_ticks, ticks: s.risk.stop_floor_ticks, atr: s.risk.stop_floor_atr }, { buffer: 1, ticks: 8, atr: 0.25 }, 'the shipped stop rule');
   // The strategy check passes it; composed-reads (lifecycle-gate.js) judges the entry on its record.
   assert.strictEqual(checkStrategyForOrder([s], 'trade_lifecycle', 'MNQ', new Date('2026-04-23T15:00:05Z'), 'buy'), null);
 });

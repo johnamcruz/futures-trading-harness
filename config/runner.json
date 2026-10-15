@@ -24,7 +24,7 @@
     "factsMinChecked": 2,
     "factsMaxItems": 20
   },
-  "lifecycle": { "stopBufferTicks": 1, "floorTicks": 8, "floorAtr": 0.25, "maxSize": 100 },
+  "lifecycle": { "maxSize": 100 },
   "account": {
     "snapshotMaxAgeMs": 600000,
     "balanceToleranceUsd": 0.01,

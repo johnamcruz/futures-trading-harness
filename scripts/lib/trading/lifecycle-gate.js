@@ -56,7 +56,7 @@ const { briefingFor } = require('./fact-claims');
 const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
 const { RULE_FRAMES, trendRule } = require('./mtf');
 const { checkReads, D2_TIERS, d2TierMet } = require('./composed-reads');
-const { STRATEGY, readRecords, planOf, dayOf, expiryOf } = require('./trade-lifecycle');
+const { STRATEGY, readRecords, planOf, stopRuleOf, dayOf, expiryOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const SIGNAL = 'composed';
@@ -187,7 +187,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const stated = held && Number.isInteger(held.size) && held.size >= 1 ? held.size : null;
     if (stated === null) return say('the compose record states no size (a whole number of contracts, 1 or more)', check);
     const risk = strategy && strategy.risk ? strategy.risk : {};
-    const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null });
+    const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null, stopRule: stopRuleOf(risk) });
     if (!planned.plan || planned.problems.length) return say(`the plan doesn't stand: ${planned.problems.join('; ') || 'it can\'t be worked out'}`, check);
     const p = planned.plan;
     const same = held && isObj(held.entry) && isObj(held.stop) && isObj(held.target) && held.entry.price === p.entry.price && held.stop.ticks === p.stop.ticks && held.target.ticks === p.target.ticks;

@@ -22,6 +22,7 @@
 const { writeBriefing } = require('../../scripts/lib/trading/briefing');
 const { buildRecord, appendRecord, planOf } = require('../../scripts/lib/trading/trade-lifecycle');
 const { checkReads } = require('../../scripts/lib/trading/composed-reads');
+const { lifecycleStopRule } = require('../helpers');
 
 const BAR = '2026-10-07T13:57:00.000Z';
 const CLOSE = '2026-10-07T14:00:00.000Z';
@@ -63,7 +64,7 @@ const READS = [
 /** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps). */
 function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2 } = {}) {
   const checked = checkReads({ reads, side, briefing: b, tick: 0.25 });
-  const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd }) : null;
+  const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd, stopRule: lifecycleStopRule() }) : null;
   return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned, validBars });
 }
 

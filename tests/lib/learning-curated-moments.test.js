@@ -234,7 +234,7 @@ test('CLI: scan (practice-train only), build and show on fixture bars; the list 
   const early = path.join(dir, 'schedule-early.json');
   fs.writeFileSync(early, JSON.stringify(sched));
   const useFile = path.join(__dirname, '..', 'fixtures', 'schedule', 'use-file.js');
-  const cli = (...args) => spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir, NODE_OPTIONS: `--require ${useFile}`, FTH_TEST_SCHEDULE_SOURCE: early } });
+  const cli = (...args) => spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir, NODE_OPTIONS: `--require "${useFile}"`, FTH_TEST_SCHEDULE_SOURCE: early } });
   const plain = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), 'scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-05-01', '--to', '2020-05-02', '--use', 'practice', '--out', path.join(dir, 'x.jsonl')], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir } });
   assert.notStrictEqual(plain.status, 0);
   assert.match(plain.stderr, /before the data's start 2021-04-01/);

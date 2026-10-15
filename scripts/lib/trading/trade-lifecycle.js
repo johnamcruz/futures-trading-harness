@@ -18,10 +18,11 @@
  * The plan, in code, never the model's arithmetic:
  *   entry    a limit at the reference price (the briefing's last close), valid until the record expires (expiresAt:
  *            `validBars` base bars after its bar's close, the strategy's valid_bars: expiryOf)
- *   stop     the verified invalidation level with D3's buffer: one tick beyond it, on the tick (a long's below, a
- *            short's above). Stop ticks = ceil(|entry - stop| / tick). D13's floor: at least max(8 ticks, 0.25 x
- *            ATR(20) of the base bars, half the briefing's 0.5 x ATR(20) reference stop); a closer stop is refused,
- *            never widened (a wider stop would not be the level the model named)
+ *   stop     the verified invalidation level with D3's buffer: the strategy's risk.stop_buffer_ticks beyond it, on the
+ *            tick (a long's below, a short's above). Stop ticks = ceil(|entry - stop| / tick). D13's floor: at least
+ *            max(risk.stop_floor_ticks, risk.stop_floor_atr x ATR(20) of the base bars, half the briefing's 0.5 x
+ *            ATR(20) reference stop); a closer stop is refused, never widened (a wider stop would not be the level the
+ *            model named). The three numbers' one home is the strategy's STRATEGY.md (stopRuleOf); none: no plan
  *   target   the verified level, floored toward the entry on the tick
  *   R:R      target ticks over stop ticks, at least the strategy's risk.min_rr
  *   size     the model's stated size (contracts, from the sizing skills); its dollar risk at most the strategy's
@@ -33,8 +34,9 @@
  *   shardDay(record), dayOf(time)                the trading day a record's shard is, of a time; null when undated
  *   daysNear(time)                               the trading days before, of and after a time (the shards a record
  *                                                live at that time can be in)
- *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd })   { plan, problems }
- *   stopFloorTicks(briefing, tick)               D13's floor in ticks, or null when ATR(20) is unknown
+ *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd, stopRule })   { plan, problems }
+ *   stopRuleOf(risk)                             { bufferTicks, floorTicks, floorAtr } from a strategy's risk, or null
+ *   stopFloorTicks(briefing, tick, stopRule)     D13's floor in ticks, or null when ATR(20) is unknown
  *   expiryOf(briefing, validBars)                when a record on the briefing's bar expires (ms): `validBars` base bars
  *                                                after its close (m3.validUntil, the next close, plus validBars - 1 bars);
  *                                                the next close when the bar's minutes can't be read; NaN without one
@@ -55,12 +57,9 @@ const { renderCheck } = require('./composed-reads');
 
 const STRATEGY = 'trade_lifecycle';
 const SCHEMA = 1;
-// config/runner.json `lifecycle` (the stop's buffer pinned, the floor only rises, the size cap only falls).
-const LC = require('../tunables').runner().lifecycle;
-const STOP_BUFFER_TICKS = LC.stopBufferTicks; // D3
-const FLOOR_TICKS = LC.floorTicks; // D13
-const FLOOR_ATR = LC.floorAtr; // D13: FLOOR_ATR x ATR(20)
-const MAX_SIZE = LC.maxSize;
+// config/runner.json `lifecycle` (the size cap only falls). The stop's buffer (D3) and floor (D13) are the strategy's
+// own: its STRATEGY.md risk (stopRuleOf).
+const MAX_SIZE = require('../tunables').runner().lifecycle.maxSize;
 const DIR = 'trade-lifecycle';
 // A file (a day's shard, or an older home's single file) larger than this throws.
 const MAX_BYTES = require('../tunables').runner().limits.lifecycleBytes;
@@ -108,12 +107,26 @@ function ticker(tick) {
   return { at, down: x => at(Math.floor(x / tick + 1e-9)), up: x => at(Math.ceil(x / tick - 1e-9)) };
 }
 
-/** D13's floor in ticks: max(8, 0.25 x ATR(20)) (ATR(20) = twice the briefing's reference stop); null when unknown. */
-function stopFloorTicks(b, tick) {
+/**
+ * A strategy's stop rule from its STRATEGY.md risk (the numbers' one home; strategies.js requires them for signal:
+ * composed): { bufferTicks (D3), floorTicks, floorAtr (D13) }, or null when one is missing or malformed.
+ */
+function stopRuleOf(risk) {
+  const r = isObj(risk) ? risk : {};
+  const ok = Number.isInteger(r.stop_buffer_ticks) && r.stop_buffer_ticks >= 0 && Number.isInteger(r.stop_floor_ticks) && r.stop_floor_ticks >= 1
+    && num(r.stop_floor_atr) !== null && r.stop_floor_atr >= 0;
+  return ok ? Object.freeze({ bufferTicks: r.stop_buffer_ticks, floorTicks: r.stop_floor_ticks, floorAtr: r.stop_floor_atr }) : null;
+}
+
+/**
+ * D13's floor in ticks: max(floorTicks, floorAtr x ATR(20)) (ATR(20) = twice the briefing's reference stop); null when
+ * ATR(20) or the stop rule is unknown.
+ */
+function stopFloorTicks(b, tick, rule) {
   const m3 = isObj(b) && isObj(b.sections) && isObj(b.sections.m3) ? b.sections.m3.data : null;
   const half = m3 && isObj(m3.referenceStop) ? num(m3.referenceStop.distance) : null;
-  if (!(half > 0) || !(tick > 0)) return null;
-  return Math.max(FLOOR_TICKS, Math.ceil((FLOOR_ATR * 2 * half) / tick - 1e-9));
+  if (!(half > 0) || !(tick > 0) || !isObj(rule)) return null;
+  return Math.max(rule.floorTicks, Math.ceil((rule.floorAtr * 2 * half) / tick - 1e-9));
 }
 
 /** When a record on this bar expires (ms): `validBars` (a whole number, 1 or more; else 1) base bars after its close. */
@@ -126,23 +139,26 @@ function expiryOf(b, validBars = 1) {
 }
 
 /** The plan from the checked reads: { plan, problems } (plan null when it can't be worked out). */
-function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, maxRiskUsd = null }) {
+function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, maxRiskUsd = null, stopRule = null }) {
   const problems = [];
   if (!(tick > 0) || !(tickValue > 0)) return { plan: null, problems: ['the contract\'s tick size and value are unknown'] };
+  const rule = isObj(stopRule) ? stopRule : null;
+  if (!rule) return { plan: null, problems: [`the ${STRATEGY} strategy states no whole stop rule (risk.stop_buffer_ticks, risk.stop_floor_ticks, risk.stop_floor_atr)`] };
+  const buffer = rule.bufferTicks;
   const ref = checked ? num(checked.reference) : null;
   if (ref === null) return { plan: null, problems: ['no reference price (no bar briefing)'] };
   if (!checked.stop || !checked.target) return { plan: null, problems: ['no verified stop and target read'] };
   const t = ticker(tick);
   const long = side === 'long';
-  const stopPrice = long ? t.at(Math.floor(checked.stop.level / tick + 1e-9) - STOP_BUFFER_TICKS) : t.at(Math.ceil(checked.stop.level / tick - 1e-9) + STOP_BUFFER_TICKS);
+  const stopPrice = long ? t.at(Math.floor(checked.stop.level / tick + 1e-9) - buffer) : t.at(Math.ceil(checked.stop.level / tick - 1e-9) + buffer);
   const stopTicks = Math.ceil(Math.abs(ref - stopPrice) / tick - 1e-9);
   const targetPrice = long ? t.down(checked.target.level) : t.up(checked.target.level);
   const targetTicks = Math.round(Math.abs(targetPrice - ref) / tick);
   if ((long ? stopPrice >= ref : stopPrice <= ref)) problems.push(`the stop ${stopPrice} is not on the losing side of the entry ${ref}`);
   if (!(targetTicks > 0) || (long ? targetPrice <= ref : targetPrice >= ref)) problems.push(`the target ${targetPrice} is not on the winning side of the entry ${ref}`);
-  const floor = stopFloorTicks(briefing, tick);
+  const floor = stopFloorTicks(briefing, tick, rule);
   if (floor === null) problems.push('ATR(20) is unknown, so the minimum stop (D13) can\'t be checked');
-  else if (stopTicks < floor) problems.push(`the stop is ${stopTicks} ticks, under the minimum ${floor} (max of ${FLOOR_TICKS} ticks and ${FLOOR_ATR} x ATR(20)): refused, never widened; name a level further away, or pass`);
+  else if (stopTicks < floor) problems.push(`the stop is ${stopTicks} ticks, under the minimum ${floor} (max of ${rule.floorTicks} ticks and ${rule.floorAtr} x ATR(20)): refused, never widened; name a level further away, or pass`);
   // Compared unrounded (2.996 is under a min of 3); rounded only for display.
   const rawRR = stopTicks > 0 ? targetTicks / stopTicks : null;
   const rr = rawRR === null ? null : round2(rawRR);
@@ -160,7 +176,7 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
     problems,
     plan: {
       entry: { type: 'limit', price: ref },
-      stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: STOP_BUFFER_TICKS, floorTicks: floor },
+      stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: buffer, floorTicks: floor },
       target: { source: checked.target.source, level: checked.target.level, price: targetPrice, ticks: targetTicks },
       rr, inTheWay: way ? { name: way.name, price: way.price, R: round2(Math.abs(way.price - ref) / (stopTicks * tick)) } : null,
       size: Number.isInteger(size) ? size : null, riskUsd, perContractUsd: perContract,
@@ -265,4 +281,4 @@ function renderRecord(r, checked = null) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, STOP_BUFFER_TICKS, FLOOR_TICKS, FLOOR_ATR, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };
+module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopRuleOf, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };
