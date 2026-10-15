@@ -447,3 +447,19 @@ test('a round trip between two flat snapshots at the same balance is read anyway
   await broken.snapshot(t('13:45:00'));
   assert.strictEqual(calls, before + 1);
 });
+
+test('the attempt line\'s losing streak: the session loss streak the gate counts (prop-state sessionLossStreak) when the harness has it', async () => {
+  const { hooks } = setup();
+  const now = new Date('2026-10-07T14:30:00Z');
+  await hooks.snapshot(now);
+  const had = Object.hasOwn(prop, 'sessionLossStreak') ? prop.sessionLossStreak : undefined;
+  try {
+    prop.sessionLossStreak = () => ({ count: 4, stop: 3 });
+    assert.strictEqual(hooks.summaries(now)[0].facts.lossStreak, 4);
+    prop.sessionLossStreak = () => null;
+    assert.strictEqual(hooks.summaries(now)[0].facts.lossStreak, null, 'unknown, never the stand-in');
+  } finally {
+    if (had === undefined) delete prop.sessionLossStreak; else prop.sessionLossStreak = had;
+  }
+  if (had === undefined) assert.strictEqual(hooks.summaries(now)[0].facts.lossStreak, 0, 'without it, the counts prop-state records');
+});

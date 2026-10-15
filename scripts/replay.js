@@ -63,7 +63,7 @@ const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] [--natural-rates file] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -101,11 +101,12 @@ function report(argv) {
   // The 30-day Monte Carlo of the model's trades (prop/model-score.js): the account named, else the run's attempt, ...
   const prop = propScoreSection(dir, { root: ROOT, override: arg(argv, '--account'), ratesFile: arg(argv, '--natural-rates') || null, curated: cfg && cfg.curated, barsFiles: barsArgs(argv) });
   const file = path.join(path.resolve(dir), 'report.md');
-  // The learning measures, when the run has an experience log (learning/learning-report.js), the prop score beside them.
+  // The learning measures, when the run has an experience log, its skill usage (learning/learning-report.js), the prop score beside them.
   const learned = learning.readLearning(path.resolve(dir, '..', '..'));
-  const measures = learned ? learning.learningMeasures({ ...learned, prop: prop.summary }) : null;
-  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${prop.markdown}${measures ? `\n${learning.learningMarkdown(measures)}` : ''}`);
-  process.stdout.write(toText(summary) + prop.text + (measures ? learning.learningText(measures) : ''));
+  const usage = learning.skillUsageFor(dir, { barsFiles: barsArgs(argv) });
+  const measures = learned ? learning.learningMeasures({ ...learned, skillUsage: usage, prop: prop.summary }) : null;
+  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${prop.markdown}${measures ? `\n${learning.learningMarkdown(measures)}` : usage ? `\n${learning.usageMarkdown(usage)}` : ''}`);
+  process.stdout.write(toText(summary) + prop.text + (measures ? learning.learningText(measures) : learning.usageText(usage)));
   say(`wrote ${file}`);
   return 0;
 }

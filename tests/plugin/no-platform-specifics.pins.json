@@ -190,9 +190,6 @@
   "tests/lib/autotrader.test.js|firm-time": [
     "1021d34dddb684c8"
   ],
-  "tests/lib/backtest.test.js|account": [
-    "75cdb5d64d7947ab"
-  ],
   "tests/lib/clock.test.js|firm-time": [
     "188313c390374da4",
     "1b038e51b5bf70eb",
