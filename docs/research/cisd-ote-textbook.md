@@ -76,7 +76,8 @@ window, as N1.
 - **Survives** when its BH-adjusted p <= 0.05 **and** its interval's lower
   bound is above 0.
 - **Prop simulation.** N1 and OLD, and any N variant that survives: the
-  combine simulator (`backtest.js --prop`) with a `paper` copy of
+  combine simulator (`backtest.js --prop`, retired on 2026-10-14:
+  `docs/research/mechanical-prop-backtester.md`) with a `paper` copy of
   `prop_portfolio` listing only that variant, on the 100K account profile
   with `prop_portfolio`'s rulebook sizing and trail (a policy's trades exit
   by its trail, not the variant's 2R bracket), attempts every 5 trading

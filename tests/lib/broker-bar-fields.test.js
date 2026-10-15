@@ -131,7 +131,11 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
   assert.strictEqual(run('without', absorbed(false)).summary.trades, 0);
 });
 
-test('a prop run on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
+test('a policy on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
+  // As prop/evaluate-run.js builds its bars: the readers are the policy's traded components only.
+  const { policyStrategy, barsAt } = require('../../scripts/lib/backtest/run');
+  const { fieldPaths } = require('../../scripts/lib/backtest/bar-fields');
+  const { tradesRoot } = require('../../scripts/lib/trading/strategies');
   const dir = tmpDir();
   // va_paper: a paper copy of fx_value_area (it reads the broker's flow), listed by an active policy with fx_orb.
   const strategies = path.join(dir, 'strategies');
@@ -145,14 +149,15 @@ test('a prop run on finer bars with broker fields: a paper strategy the policy l
   const env = { ...process.env, FTH_STRATEGIES_DIRS: `${strategies},${FX_GOLDEN}` };
   // prop_mixed is listed in its account's rulebook (a plugin root with the accounts copied).
   const root = rootWithPolicies({ prop_mixed: fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').match(/^account: (\S+)/m)[1] });
-  const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root, outRoot: dir, env, log: m => logs.push(m) });
+  const p = policyStrategy(root, 'prop_mixed', env);
+  assert.deepStrictEqual(p.leftOut.map(x => x.name), ['va_paper']);
+  assert.ok(fieldPaths(p.counted.find(s => s.name === 'va_paper')).length, 'va_paper reads a broker field');
+  const readers = p.components.filter(s => fieldPaths(s).length && tradesRoot(s, 'MNQ', ['MNQ'])).map(s => s.name);
+  assert.deepStrictEqual(readers, []);
   const logs = [];
-  try {
-    run('prop_mixed', logs);
-  } catch (err) {
-    // The run may find no attempt in so short a span; it must not be the bar-fields refusal.
-    assert.doesNotMatch(err.message, /carry the broker's own fields/);
-  }
-  assert.ok(logs.some(l => /^prop_mixed: leaves out va_paper/.test(l)), logs.join('\n'));
+  const built = barsAt(file, 3, null, { readers, log: m => logs.push(m) });
+  assert.ok(built.length > 0 && built.every(b => !('flow' in b)));
   assert.ok(logs.some(l => /building 3-minute bars from 1-minute ones drops the broker's own fields \(flow\): no strategy here reads them/.test(l)), logs.join('\n'));
+  // A traded reader is refused instead.
+  assert.throws(() => barsAt(file, 3, null, { readers: ['va_paper'] }), /carry the broker's own fields/);
 });

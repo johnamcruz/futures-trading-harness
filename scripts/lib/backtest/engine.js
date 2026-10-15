@@ -31,8 +31,9 @@
  * while another's trade is open, so a stopped trade never reaches the floor or
  * the daily limit. A policy strategy's run (`prop`) takes every setup the
  * account's budget can size, in its contract mode, and exits every trade by
- * the policy strategy's own exit block, as the live runner does. The prop
- * challenge simulator (prop/challenge.js) runs attempts on exactly this loop.
+ * the policy strategy's own exit block, as the live runner does. This account
+ * mode is the reference layer 2 (prop/attempts.js) is tested against, attempt
+ * by attempt (tests/lib/prop-evaluator.test.js).
  *
  * Fills are the simulated broker's (sim-broker.js, one per market): by default
  * (`fill: 'next-open'`) a market entry fills at the next bar's open plus

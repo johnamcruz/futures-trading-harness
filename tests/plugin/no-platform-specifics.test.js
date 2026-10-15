@@ -77,7 +77,6 @@ const SHRINK_ONLY = [
   ['tests/hooks/trading-hooks.test.js', 'account'],
   ['tests/lib/account-gate.test.js', 'account'],
   ['tests/lib/autotrader.test.js', 'account firm-time'],
-  ['tests/lib/backtest.test.js', 'account'],
   ['tests/lib/clock.test.js', 'firm-time'],
   ['tests/lib/combine.test.js', 'account'],
   ['tests/lib/harness-tools-order-plan.test.js', 'account'],

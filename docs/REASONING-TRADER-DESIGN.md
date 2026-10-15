@@ -24,9 +24,10 @@ Nothing measured or trained on that judgment:
 - The backtester (`scripts/lib/backtest/engine.js`) runs only rules
   strategies; it skips any `signal: manual` strategy ("manual strategies need
   the LLM").
-- The prop backtests (`scripts/lib/prop/challenge.js`) run the rules'
-  setups through the combine. They never see the reasoning model, so they
-  can't say how it trades. (The trained PPO policy that once sized those
+- The prop backtests (`scripts/lib/prop/challenge.js`, retired 2026-10-14:
+  `docs/research/mechanical-prop-backtester.md`) ran the rules' setups
+  through the combine. They never saw the reasoning model, so they
+  couldn't say how it trades. (The trained PPO policy that once sized those
   setups learned only from them too; it is retired.)
 
 ## The idea

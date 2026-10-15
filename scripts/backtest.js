@@ -10,7 +10,6 @@
  *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,cisd_ote]
  *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--fill next-open|close] [--out dir]
  *       [--min-confluence 2] [--conflict reversal|skip|priority]   require agreeing strategies / skip disagreement
- *       [--prop <policy strategy> [--every 5]]   prop challenge attempts
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
  *   node scripts/backtest.js fetch --contract MNQ --from 2025-03-03 --to 2025-03-15 [--timeframe 3] --out data/MNQ-3m.jsonl
  *
@@ -76,8 +75,6 @@ function configFrom(argv) {
   if (num('--min-confluence') !== undefined) cfg.minConfluence = num('--min-confluence');
   if (arg(argv, '--conflict')) cfg.conflict = arg(argv, '--conflict');
   if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
-  if (arg(argv, '--prop')) cfg.prop = arg(argv, '--prop');
-  if (num('--every') !== undefined) cfg.every = num('--every');
   if (arg(argv, '--debug')) cfg.debug = arg(argv, '--debug');
   // Record each strategy's track record from this run for the cycle prompt (trading/track-record.js).
   if (argv.includes('--record')) cfg.record = true;
@@ -99,7 +96,7 @@ function configFrom(argv) {
 }
 
 // Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
-const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--min-confluence', '--conflict', '--out', '--prop', '--every', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
+const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--min-confluence', '--conflict', '--out', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
 const BOOL_FLAGS = ['--no-gate', '--walk-forward', '--record'];
 
 function unknownFlags(argv) {
@@ -128,13 +125,6 @@ async function main(argv) {
     log(`out of sample, tuned: ${o.trades} trades | mean ${o.meanR ?? '-'}R | sum ${o.sumR}R | net $${o.netPnL} | edge ${o.edge}`);
     log(`out of sample, defaults: ${b.trades} trades | mean ${b.meanR ?? '-'}R | sum ${b.sumR}R | net $${b.netPnL}`);
     log(`retention ${report.retention ?? '-'} | folds positive ${report.positiveFolds} | report: ${path.join(runDir, 'walk-forward.md')}`);
-    return 0;
-  }
-  if (report.baseline) {
-    const pct = x => (x === null ? '-' : `${Math.round(x * 100)}%`);
-    const line = (label, x) => log(`${label}: ${x.attempts} attempts | pass ${pct(x.passRate)} | win rate ${pct(x.winRate)} | blow ${pct(x.blowRate)} | timeout ${x.timeout} | median days to pass ${x.medianDaysToPass ?? '-'} | avg profit $${x.avgProfit}`);
-    line(`${report.prop} on ${report.account}`, report.baseline);
-    log(`report: ${path.join(runDir, 'combine.md')}`);
     return 0;
   }
   const s = report.summary;

@@ -15,9 +15,6 @@
  *   gate, sessions, eodAt, size, riskPerTrade, maxContracts, slippageTicks,
  *   feesPerSide, maxDailyLoss, window: see engine.js DEFAULTS
  *   outDir       where results go (default <FTH_HOME>/backtests/<run id>)
- *   prop         a policy strategy (signal: policy): its strategies, account,
- *                sizing, contracts and exit; runs combine attempts
- *   every        with prop: attempts start every N trading days (default 1)
  *   walkForward  { grid: { "<param>": [values] }, trainMonths, testMonths,
  *                minTrades }: walk-forward test of the one strategy named in
  *                `strategies` (walk-forward.js); writes walk-forward.md/json
@@ -27,6 +24,10 @@
  *
  * Every run writes trades.jsonl next to trades.csv: each trade with the setup
  * behind it (stop and target distances, detector state on the signal bar).
+ *
+ * The prop runs (`prop`, `every`: combine attempts of a policy strategy) are retired
+ * (docs/research/mechanical-prop-backtester.md). policyStrategy, barsAt and
+ * validateBacktestConfig stay: the two-layer evaluator (prop/evaluate-run.js) uses them.
  */
 
 const fs = require('fs');
@@ -42,9 +43,6 @@ const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
 const { CONTRACT_SPECS, parseSelection } = require('../trading/contracts');
-const { accountNamed } = require('../trading/accounts');
-const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
-const { createEnv, evaluate } = require('../prop/challenge');
 const { marketHoursErrors } = require('../autotrader');
 const walkForward = require('./walk-forward');
 const { fieldPaths, fieldCoverage, describeMissing, describeCoverage } = require('./bar-fields');
@@ -92,11 +90,14 @@ function writeDecisions(file, markets, s, cfg) {
 function validateBacktestConfig(raw, baseDir) {
   for (const k of ['account', 'policy', 'sizing']) {
     if (raw && raw[k] !== undefined && raw[k] !== null) {
-      throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy now; name it with "prop": "<policy strategy>" (signal: policy)`);
+      throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy (signal: policy); the backtester's prop runs are retired`);
     }
   }
-  if (raw && raw.bundle !== undefined) throw new Error('invalid backtest config:\n- bundle: trained policy bundles are retired; a prop run sizes every setup from the policy strategy\'s budget');
-  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, debug: null, walkForward: null, record: false, ...(raw || {}) };
+  if (raw && raw.bundle !== undefined) throw new Error('invalid backtest config:\n- bundle: trained policy bundles are retired');
+  for (const k of ['prop', 'every']) {
+    if (raw && raw[k] !== undefined && raw[k] !== null) throw new Error(`invalid backtest config:\n- ${k}: the backtester's prop runs are retired (docs/research/mechanical-prop-backtester.md)`);
+  }
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, debug: null, walkForward: null, record: false, ...(raw || {}) };
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
@@ -123,15 +124,12 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
   if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');
   if (cfg.outDir !== null && typeof cfg.outDir !== 'string') errors.push('outDir: a directory');
-  if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio"');
-  if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
   if (typeof cfg.record !== 'boolean') errors.push('record: true or false (record each strategy\'s track record for the cycle prompt)');
-  if (cfg.record === true && (cfg.prop !== null || cfg.walkForward)) errors.push('record: plain runs only (not with prop or walkForward)');
+  if (cfg.record === true && cfg.walkForward) errors.push('record: plain runs only (not with walkForward)');
   if (cfg.debug !== null && !(typeof cfg.debug === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.debug))) errors.push('debug: a strategy name, to log its verdict on every bar');
   if (cfg.walkForward !== null) {
     const w = cfg.walkForward;
     if (!w || typeof w !== 'object' || Array.isArray(w)) errors.push('walkForward: { grid, trainMonths, testMonths, minTrades }');
-    else if (cfg.prop !== null) errors.push('walkForward: tests one rules strategy; a prop run is scored by its combine attempts');
     else if (!(Array.isArray(cfg.strategies) && cfg.strategies.length === 1)) errors.push('walkForward: name exactly one strategy in "strategies"');
   }
   let start = null;
@@ -246,32 +244,13 @@ function runWalk(cfg, strategy, markets, { baseDir, outRoot, env, runId, log }) 
 /** Run a backtest. Returns { report, runDir }. */
 function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = process.env, runId = null, log = () => {} }) {
   const cfg = validateBacktestConfig(raw, baseDir);
-  let strategies;
-  let prop = null;
-  let traded = null; // a prop run: the strategies its setups are picked from
-  if (cfg.prop) {
-    // A policy strategy: its strategies, account, sizing, contracts, and exit come from its STRATEGY.md.
-    const p = policyStrategy(root, cfg.prop, env);
-    if (Number.parseInt(p.strategy.timeframe, 10) !== cfg.timeframe) throw new Error(`timeframe: ${cfg.prop} trades ${p.strategy.timeframe} bars, not ${cfg.timeframe}m`);
-    prop = p.strategy;
-    // Every strategy that fires in the live scan (confluence, conflict); the setup is picked only from the traded ones.
-    strategies = p.counted;
-    traded = p.components.map(c => c.name);
-    for (const x of p.leftOut) log(`${cfg.prop}: leaves out ${x.name}: ${x.why}`);
-    const { familyRoot } = require('../trading/contracts');
-    for (const sym of cfg.symbols) {
-      if (!prop.instruments.some(r => familyRoot(r) === familyRoot(sym))) throw new Error(`symbols: ${cfg.prop} trades ${prop.instruments.join(', ')}, not ${sym}`);
-    }
-  } else {
-    strategies = pickStrategies(loadStrategies(root, env).strategies, cfg);
-  }
+  const strategies = pickStrategies(loadStrategies(root, env).strategies, cfg);
   if (!strategies.length) throw new Error(`no mechanical strategy trades ${cfg.timeframe}m bars`);
   // Keep the window plus a warm-up before `start`, and nothing after `end`:
   // indicators settle well within that, and a long file stays fast.
   const markets = cfg.markets.map(m => {
     log(`loading ${m.symbol} from ${m.file}`);
-    // The traded strategies only (a paper one a policy leaves out never picks a setup), as the coverage counts them.
-    const readers = (traded ? strategies.filter(s => traded.includes(s.name)) : strategies).filter(s => fieldPaths(s).length && tradesRoot(s, m.symbol, [m.symbol])).map(s => s.name);
+    const readers = strategies.filter(s => fieldPaths(s).length && tradesRoot(s, m.symbol, [m.symbol])).map(s => s.name);
     let bars = barsAt(m.file, cfg.timeframe, m.sheet, { readers, log });
     const ms = b => Date.parse(b.t);
     const first = cfg.start === null ? 0 : bars.findIndex(b => ms(b) >= cfg.start);
@@ -293,12 +272,11 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   }
   // Broker bar fields a traded strategy reads: the share of the bars in range that carry each, and a warning
   // for each one some market carries on under 100% of them; said in the log and the report.
-  const fieldsCovered = fieldCoverage(traded ? strategies.filter(s => traded.includes(s.name)) : strategies, markets, (s, sym) => tradesRoot(s, sym, [sym]), { from: cfg.start });
+  const fieldsCovered = fieldCoverage(strategies, markets, (s, sym) => tradesRoot(s, sym, [sym]), { from: cfg.start });
   const missingFields = fieldsCovered.filter(x => x.symbols.length);
   for (const x of fieldsCovered) log(`field coverage: ${describeCoverage(x)}`);
   for (const x of missingFields) log(`warning: ${describeMissing(x)}`);
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
-  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields, fieldsCovered });
   if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
   const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
@@ -367,34 +345,6 @@ function policyStrategy(root, name, env = process.env) {
   return { strategy: s, components, counted, leftOut: left };
 }
 
-/** Prop challenge attempts: every setup the account's budget sizes, exited by the policy strategy's exit. */
-function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields = [], fieldsCovered = [] }) {
-  const account = accountNamed(root, prop.account, env);
-  const contracts = prop.contracts || 'auto';
-  const e = createEnv({
-    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: traded, contracts },
-    engine: { ...cfg, account: null, prop: null, gateConfig: loadConfig(env) },
-  });
-  const from = cfg.start ?? e.days[0];
-  const to = cfg.end ?? Infinity;
-  const starts = e.starts(from, to, { every: cfg.every });
-  if (!starts.length) throw new Error(`no ${account.sessions}-session attempt fits in the data${cfg.start !== null || cfg.end !== null ? ' between start and end' : ''}`);
-  log(`${prop.name}: ${starts.length} ${account.name} attempts (${account.sessions} sessions each), every ${cfg.every} trading day(s); ${traded.join(', ')}${strategies.length > traded.length ? ` (counting ${strategies.filter(x => !traded.includes(x.name)).map(x => x.name).join(', ')} toward conflict only)` : ''}; contracts ${contracts}`);
-  const baseline = evaluate(e, starts, to);
-  const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
-  const report = {
-    runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: traded,
-    leftOut: prop.strategies.filter(n => !traded.includes(n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
-    ...(fieldsCovered.length ? { fieldCoverage: fieldsCovered } : {}),
-    ...(missingFields.length ? { missingFields } : {}),
-  };
-  const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
-  fs.mkdirSync(runDir, { recursive: true });
-  writeJsonAtomic(path.join(runDir, 'combine.json'), report);
-  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report) + fieldsMarkdown(fieldsCovered, missingFields));
-  return { report, runDir };
-}
-
 /** The report's sections on the broker bar fields its strategies read: coverage, and the ones not on every bar ('' with none). */
 function fieldsMarkdown(covered, missing) {
   if (!covered.length) return '';
@@ -402,21 +352,6 @@ function fieldsMarkdown(covered, missing) {
   const rows = covered.flatMap(c => Object.entries(c.coverage).map(([sym, x]) => `| ${c.strategy} | \`${c.path}\` | ${sym} | ${pct(x)} | ${x.carried} / ${x.bars} |`));
   const table = `\n## Bar field coverage\n\nThe share of the bars in range that carry each broker field a traded strategy reads.\n\n| Strategy | Field | Market | Coverage | Bars |\n|---|---|---|---|---|\n${rows.join('\n')}\n`;
   return table + (missing.length ? `\n## Bar fields missing from this data\n\n${missing.map(x => `- ${describeMissing(x)}.`).join('\n')}\n` : '');
-}
-
-function combineMarkdown(r) {
-  const pct = x => (x === null || x === undefined ? '-' : `${Math.round(x * 1000) / 10}%`);
-  const row = (label, x) => `| ${label} | ${x.attempts} | ${pct(x.passRate)} | ${pct(x.winRate)} | ${pct(x.blowRate)} | ${pct(x.attempts ? x.timeout / x.attempts : null)} | ${x.medianDaysToPass ?? '-'} | ${x.avgProfit} | ${x.tradesPerAttempt} |`;
-  const lines = [
-    `# Prop challenge backtest ${r.runId}`, '',
-    `${r.prop} on account ${r.account}: ${r.strategies.join(', ')} on ${r.symbols.join(', ')} ${r.timeframe}m; harness rules ${r.gate ? 'on' : 'off'}; sizing ${JSON.stringify(r.sizing)}; contracts ${r.contracts}.`, '',
-    '| | Attempts | Pass | Win rate | Blow | Timeout | Median days to pass | Avg profit $ | Trades/attempt |', '|---|---|---|---|---|---|---|---|---|',
-    row('All attempts', r.baseline), '',
-    '## By month (attempt start)', '', '| Month | Pass | Blow |',
-    '|---|---|---|',
-    ...Object.entries(r.baseline.months).map(([m, x]) => `| ${m} | ${pct(x.passRate)} | ${pct(x.blowRate)} |`),
-  ];
-  return `${lines.join('\n')}\n`;
 }
 
 module.exports = { CONTRACT_SPECS, WARMUP_BARS, validateBacktestConfig, barsAt, pickStrategies, policyStrategy, runBacktest };

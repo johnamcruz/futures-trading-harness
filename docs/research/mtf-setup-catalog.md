@@ -61,7 +61,8 @@ a 15-minute trend with a 5-minute pullback and a 1-minute entry.
   R12 asks: whether the mean has the same sign in every year.
 - **Prop simulation** for the top 3 variants by the interval's lower bound
   (whether or not they survive): the existing combine simulator
-  (`scripts/lib/prop/challenge.js`, through `backtest.js --prop`) with a
+  (`scripts/lib/prop/challenge.js`, through `backtest.js --prop`; both
+  retired on 2026-10-14, `docs/research/mechanical-prop-backtester.md`) with a
   `paper` policy strategy listing only that variant, on the bundled 100K
   account profile, with `prop_portfolio`'s sizing and trail (its account's rulebook)
   (a policy's trades exit by its trail; this is the simulator as it
