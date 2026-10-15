@@ -310,8 +310,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // each mode for the risk manager (feat/practice-account-states, owner-approved): prop-challenge-pacing's counts carried
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90856, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
-  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 76376, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
+  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90547, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
+  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 76067, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
