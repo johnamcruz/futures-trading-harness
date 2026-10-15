@@ -53,12 +53,15 @@ const { pairUp, judge } = require('./paired');
 const A = require('./archive');
 const proposer = require('./proposer');
 const E = require('./evaluator');
+const MV = require('./model-verifier');
 const { replayFor } = require('./config');
 const { preflightForRun } = require('../learning/preflight');
 const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
 const { rolesBetween } = require('../learning/splits');
+const { ledgerPath: learningLedgerPath } = require('../learning/looks');
+const { readLedger: readLedgerFile } = require('../prop/ledger-file');
 
 class Stop extends Error {}
 
@@ -117,6 +120,8 @@ function defaultSteps({ root, env = process.env }) {
     scorecard: ({ runDir, tree, look }) => scorecardDecisions(scoreRun(runDir, { strategies: loadStrategies(tree, env).strategies, accounts: loadAccounts(tree, env).accounts, unfinished: true, look: look || {} }).records),
     // Step 9's two-layer evaluator (train/evaluator.js): { available, blows, failures, windows }.
     evaluator: opts => E.evaluate({ ...opts, env }),
+    // The model-scoring verifier (train/model-verifier.js): the paired Monte Carlo and decision measures of two runs per window.
+    modelVerifier: opts => MV.verify({ ...opts, env }),
     propose: opts => proposer.propose(opts),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };
@@ -206,16 +211,21 @@ function learningGate(ctx, run, look, label) {
   };
 }
 
-/** The champion's continuous runs of a set of windows, with checkpoints; then their decisions. */
-async function championRuns(ctx, { tag, windows, tree, look }) {
-  if (!ctx.state.done[`look:${tag}`]) {
+/**
+ * One side's continuous runs of a set of windows, then their decisions. The champion's (side 'champion') log their
+ * look first and keep checkpoints for the point runs; a challenger's (the model-scoring verifier's) run under the look
+ * its iteration or judging already took, with the same replay config and seed.
+ */
+async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) {
+  const champion = side === 'champion';
+  if (champion && !ctx.state.done[`look:${tag}`]) {
     S.logLook(ctx.paths.ledger, look);
     ctx.state.done[`look:${tag}`] = true;
     ctx.save();
   }
   const runs = [];
   for (const [i, window] of windows.entries()) {
-    const label = `champion-${tag}${i}`;
+    const label = `${side}-${tag}${i}`;
     const run = resolveReplay(replayFor(ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
     const checkpoints = path.join(W(ctx), 'checkpoints', label);
     runs.push({ label, window, runDir: run.paths.runDir, checkpoints, run });
@@ -236,8 +246,8 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);
     ctx.check();
     const left = ctx.loop.limits.maxModelCalls - ctx.state.modelCalls;
-    const deps = D.checkpointDeps(ctx.steps.stepDeps(run, tree), { run, dir: checkpoints });
-    ctx.log(`${label}: the champion's replay of ${window.from}..${window.to}, with checkpoints`);
+    const deps = champion ? D.checkpointDeps(ctx.steps.stepDeps(run, tree), { run, dir: checkpoints }) : ctx.steps.stepDeps(run, tree);
+    ctx.log(`${label}: ${champion ? 'the champion\'s' : 'the challenger\'s'} replay of ${window.from}..${window.to}${champion ? ', with checkpoints' : ''}`);
     const res = await ctx.steps.runReplay({ run, baseEnv: ctx.env, root: tree, deps, maxCycles: left, log: ctx.log });
     S.spend(ctx.state, res.cycles || 0);
     ctx.save();
@@ -246,7 +256,7 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     ctx.state.done[`run:${label}`] = true;
     ctx.save();
   }
-  const decisions = await phase(ctx, `scorecard:${tag}`, path.join(ctx.paths.dir, `champion-${tag}-decisions.json`), async () => {
+  const decisions = await phase(ctx, champion ? `scorecard:${tag}` : `scorecard:${side}-${tag}`, path.join(ctx.paths.dir, `${side}-${tag}-decisions.json`), async () => {
     const out = [];
     for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor() })).map(d => ({ ...d, run: r.label })));
     return out;
@@ -286,6 +296,33 @@ async function sideRuns(ctx, { side, dir, tree, panel, runs, baselineSide = null
 function withRuns(panel, decisions) {
   const runOf = new Map(decisions.map(d => [d.t, d.run]));
   return { ...panel, points: panel.points.map(p => ({ ...p, run: runOf.get(p.t) })) };
+}
+
+/**
+ * The model-scoring verifier's verdict on a challenger (the loop config's `modelScore`): the challenger's tree replays
+ * every window the champion replayed (the same replay config and seed), its runs are scored, and the verifier pairs
+ * them window by window with the champion's (train/model-verifier.js). Null without `modelScore`.
+ */
+async function modelVerdict(ctx, { id, tree, championDir, champ, windows, tag, look, heldOut = false }) {
+  if (!ctx.loop.modelScore) return null;
+  const side = await windowRuns(ctx, { side: `c-${id}`, tag, windows, tree, look });
+  const of = (decisions, label) => decisions.filter(d => d.run === label);
+  const pairs = champ.runs.map((c, i) => ({
+    label: `${windows[i].from}..${windows[i].to}`,
+    champion: { runDir: c.runDir, decisions: of(champ.decisions, c.label) },
+    candidate: { runDir: side.runs[i].runDir, decisions: of(side.decisions, side.runs[i].label) },
+  }));
+  return ctx.steps.modelVerifier({ cfg: ctx.loop.modelScore, pairs, seed: ctx.loop.seed, root: championDir, candidateRoot: tree, heldOut, rule: ctx.loop.rule });
+}
+
+/** The verdict: the paired test alone, or with `modelScore` the keep rule, which every other verifier can only reject. */
+function verdictOf(ctx, { proposal, baseline, decisions, evaluator, model }) {
+  const evaluated = withUncovered(evaluator, proposal);
+  // With the model-scoring verifier the challenger's own trades screen a strategy or rulebook change: no longer blocked.
+  const panel = judge({ pairs: pairUp(baseline, decisions), targets: proposal.targets, failures: P.FAILURES, rule: ctx.loop.rule, mechanical: P.isMechanical(proposal) && !model, evaluator: evaluated });
+  if (!model) return panel;
+  const v = MV.combine({ panel, model, evaluator: evaluated, rule: ctx.loop.rule });
+  return { ...v, tests: panel.tests, panel: { verdict: panel.verdict, reasons: panel.reasons }, model };
 }
 
 async function candidateTree(ctx, { dir, id, proposal, champion }) {
@@ -382,7 +419,9 @@ async function iteration(ctx, n, { champion, champ }) {
     const v = await phase(ctx, `${n}:verdict:${x.id}`, path.join(dir, `verdict-${x.id}.json`), async () => {
       // Paired: the champion's tree and the candidate's, the same windows, bar files and seed.
       const evaluator = await ctx.steps.evaluator({ cfg: ctx.loop.evaluator, champion: champion.dir, candidate: cand.tree, proposal: x.proposal, windows: ctx.loop.tuningWindows, seed: ctx.loop.seed, look: { candidate: `${ctx.loop.loopId}/iter-${n}/${x.id}`, purpose: 'tuning' }, ledger: ctx.paths.ledger, log: ctx.log });
-      return { ...judge({ pairs: pairUp(baseline, cand.decisions), targets: x.proposal.targets, failures: P.FAILURES, rule: ctx.loop.rule, mechanical: P.isMechanical(x.proposal), evaluator: withUncovered(evaluator, x.proposal) }), evaluator };
+      // Tuning only: the loop's tuning windows (practice-train, config.js), under this iteration's tuning look.
+      const model = await modelVerdict(ctx, { id: x.id, tree: cand.tree, championDir: champion.dir, champ, windows: ctx.loop.tuningWindows, tag: 't', look: { candidate: `${ctx.loop.loopId}/iter-${n}/${x.id}`, purpose: 'tuning' } });
+      return { ...verdictOf(ctx, { proposal: x.proposal, baseline, decisions: cand.decisions, evaluator, model }), evaluator };
     });
     verdicts.push({ x, cand, v });
   }
@@ -395,7 +434,7 @@ async function iteration(ctx, n, { champion, champ }) {
     }
     for (const { x, cand, v } of verdicts) {
       if (already.has(x.id)) continue;
-      const entry = { ...common, proposalId: x.id, source: x.source, proposal: x.proposal, files: cand.files, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator: v.evaluator };
+      const entry = { ...common, proposalId: x.id, source: x.source, proposal: x.proposal, files: cand.files, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator: v.evaluator, ...(v.model ? { model: v.model, panelVerdict: v.panel } : {}) };
       if (v.verdict === 'kept') entry.promotion = promote(ctx, { entry, n, tree: cand.tree, dir });
       A.appendEntry(ctx.paths.archive, entry);
       ctx.log(`iteration ${n}: ${x.id} ${v.verdict}: ${v.reasons.join('; ')}`);
@@ -431,7 +470,7 @@ async function runLoop({ loop, env = process.env, root, steps, dryRun = false, l
     const v = checkLook({ candidate: `${loop.loopId}/plan`, purpose: 'tuning', ranges: loop.tuningWindows }, S.readLedger(ctx.paths.ledger));
     if (!v.ok) throw new Error(`look refused:\n- ${v.refusals.join('\n- ')}`);
     const champion = await championTree(ctx);
-    const champ = await championRuns(ctx, { tag: 't', windows: loop.tuningWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/champion`, purpose: 'tuning', ranges: loop.tuningWindows, what: 'training loop: the champion\'s tuning replays' } });
+    const champ = await windowRuns(ctx, { tag: 't', windows: loop.tuningWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/champion`, purpose: 'tuning', ranges: loop.tuningWindows, what: 'training loop: the champion\'s tuning replays' } });
     for (;;) {
       const open1 = ctx.state.iterations.find(x => !x.done);
       if (!open1) {
@@ -473,6 +512,16 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     if (!entry) throw new Error(`${proposalId}: no change kept on tuning in this loop's archive`);
     if (archive.some(e => e.proposalId === proposalId && e.phase === 'held-out')) throw new Error(`${proposalId} was judged on held-out months already: each held-out month judges once`);
     const tag = `h-${proposalId}-`;
+    // Model-scored judging takes two learning looks per sealed window (the champion's run and the challenger's): refused
+    // up front when the budget left can't hold them, so a judging never spends looks and then blocks. A resume took
+    // its looks already.
+    if (loop.modelScore && !ctx.state.done[`judging:${tag}`]) {
+      const candidate = MV.candidateErrors(loop.heldOutWindows, entry.proposal);
+      if (candidate.length) throw new Error(`held-out judging refused: ${candidate.join('; ')}`);
+      const ledgerFile = learningLedgerPath(env);
+      const refused = MV.lookErrors(loop.heldOutWindows, fs.existsSync(ledgerFile) ? readLedgerFile(ledgerFile) : [], { perWindow: 2 });
+      if (refused.length) throw new Error(`held-out judging refused: ${refused.join('; ')}`);
+    }
     const champion = await championTree(ctx);
     // The ledger as it was before this judging's one look: the evaluator checks the same look on copies of it, so a
     // judging spends one look, however many windows and scorings it holds.
@@ -498,7 +547,7 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
       ctx.state.done[`look:${tag}`] = true;
       ctx.save();
     } else if (!fs.existsSync(before)) throw missing();
-    const champ = await championRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
+    const champ = await windowRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
     const dir = path.join(ctx.paths.dir, `held-out-${proposalId}`);
     const work = path.join(W(ctx), `held-out-${proposalId}`);
     const all = P.FAILURES.concat(['right']);
@@ -513,8 +562,13 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
       cfg: loop.evaluator, champion: null, candidate: cand.tree, proposal: entry.proposal, windows: loop.heldOutWindows, seed: loop.seed,
       look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging' }, ledger: before, scratchLedger: { file: path.join(dir, 'ledger-scratch.jsonl') }, log: ctx.log,
     }));
-    const v = judge({ pairs: pairUp(baseline, cand.decisions), targets: entry.proposal.targets, failures: P.FAILURES, rule: loop.rule, mechanical: P.isMechanical(entry.proposal), evaluator: withUncovered(evaluator, entry.proposal) });
-    A.appendEntry(ctx.paths.archive, { phase: 'held-out', iteration: entry.iteration, proposalId, windows: loop.heldOutWindows, seed: loop.seed, repeats: loop.repeats, baseCommit: champion.baseCommit, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator });
+    // The challenger's own runs of the held-out windows, each through its learning look (run-gate.js), scored by the keep
+    // rule: a diagnostic score never judges here, and the frozen promotion gate's verdict is reported, never replaced.
+    const model = await phase(ctx, `${tag}model`, path.join(dir, 'model.json'), () => modelVerdict(ctx, {
+      id: proposalId, tree: cand.tree, championDir: champion.dir, champ, windows: loop.heldOutWindows, tag: 'h', heldOut: true, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging' },
+    }));
+    const v = verdictOf(ctx, { proposal: entry.proposal, baseline, decisions: cand.decisions, evaluator, model });
+    A.appendEntry(ctx.paths.archive, { phase: 'held-out', iteration: entry.iteration, proposalId, windows: loop.heldOutWindows, seed: loop.seed, repeats: loop.repeats, baseCommit: champion.baseCommit, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator, ...(model ? { model, panelVerdict: v.panel } : {}) });
     return v;
   } catch (err) {
     if (err instanceof Stop) return { verdict: 'stopped', reasons: [err.message] };

@@ -275,7 +275,11 @@ test('skill usage: never shown to the model: only the replay report (and the sta
   // The comparison is required only by its CLI and by run-pins.js (the replay driver's setup record, scripts/replay.js alone requires it): no tool, prompt, runner or skill_lookup path.
   const abUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /train\/ab-compare'\)|\.\/ab-compare'\)/.test(fs.readFileSync(f, 'utf8')))
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
-  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/run-pins.js']);
+  // And by the training loop's model-scoring verifier, for decisionsByKey alone (the correct-read keying): a code judge
+  // whose verdicts go to the archive and the owner's PR body, never to the proposer's prompt (train/loop.js proposalsFor).
+  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js']);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'model-verifier.js'), 'utf8'), /skillRows|skill-usage|learning-report/);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'proposer.js'), 'utf8'), /model-verifier|ab-compare/);
   const pinUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /run-pins'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));
   assert.deepStrictEqual(pinUsers, ['scripts/replay.js']);
 });

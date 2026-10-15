@@ -500,11 +500,16 @@ function medianDiff(pairs, { reps, level, rand }) {
  * a skill change: nothing is kept on opinion.
  *
  * opts: { passA, passB (checkModelWindow, one per run: each run's score is logged beside its own look), account,
- * rulebook, size, contracts, maxDailyLoss, seed, paths, meanBlock, reps, level, every, faults }. The runs must hold
- * the same days; reweighted (curated) streams are refused (their days are each run's own draw, not shared).
+ * rulebook, size, contracts, maxDailyLoss, seed, paths, meanBlock, reps, level, every, faults, and side B's own
+ * accountB, rulebookB, contractsB (default: side A's) }. With a rulebook of its own, side B is sized, exited and
+ * multiplied by it (daysFor(streamB, passB, rulebookB): its pass a candidate's when rulebookB.candidate) in a context
+ * of its own; the two sides still share the seed, the start days, the resampled blocks and one overshoot pool, and
+ * their accounts the same sessions. The runs must hold the same days; reweighted (curated) streams are refused
+ * (their days are each run's own draw, not shared).
  *
  * Returns { a, b (each: pass, blow and timeout rates, median and p90 days to pass, on the real and the resampled
- * paths), diff: { real, resampled } (each: passRate, blowRate, timeoutRate and medianDaysToPass, A minus B, with a
+ * paths), starts (each real start day: { start, a, b } statuses, aDays, bDays: the raw pairs a pooled test stacks),
+ * diff: { real, resampled } (each: passRate, blowRate, timeoutRate and medianDaysToPass, A minus B, with a
  * paired interval: a block bootstrap over start days, blocks of `sessions`, or over paths), verdict (on the resampled
  * paths), verdict: zero blows first (a run with no blow, real or resampled, beats one with any, whatever its pass
  * rate); else, on the resampled paths, 'A better' when A passes more (interval above 0) without blowing more, or blows
@@ -514,7 +519,7 @@ function medianDiff(pairs, { reps, level, rand }) {
 function scorePaired(streamA, streamB, opts) {
   const {
     passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000,
-    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {},
+    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {}, accountB = account, rulebookB = rulebook, contractsB = contracts,
   } = opts || {};
   if (givenA === givenB) throw new Error('scorePaired: one pass per run (passA, passB)');
   const passA = takePass(givenA);
@@ -522,15 +527,18 @@ function scorePaired(streamA, streamB, opts) {
   if (!passA.model || !passB.model) throw new Error('scorePaired compares two model runs (checkModelWindow passes)');
   if (passA.synthetic || passB.synthetic) throw new Error('scorePaired: a reweighted (curated) stream draws its own days; compare full-day or setup-focused runs of the same days');
   const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
+  if (!accountB || accountB.sessions !== account.sessions) throw new Error('scorePaired: the two sides\' accounts must have the same sessions (one attempt length, the same start days)');
   const daysA = daysFor(streamA, passA, rulebook);
-  const daysB = daysFor(streamB, passB, rulebook);
+  const daysB = daysFor(streamB, passB, rulebookB);
   if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
   const S = account.sessions;
-  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate });
-  const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades)) });
+  // One context per side (its own sizing, exit, multiplier and contracts); one overshoot pool and the same seeded draws.
+  const pools = at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades));
+  const runA = pairedRunner({ ctx: contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }), rates, seed, pools });
+  const runB = pairedRunner({ ctx: contextFor({ account: accountB, rulebook: rulebookB, size, contracts: contractsB, maxDailyLoss, gate }), rates, seed, pools });
   const startIdx = [];
   for (let i = 0; i < daysA.length - S; i += 1) if (i % every === 0) startIdx.push(i);
-  const real = startIdx.map(i => ({ a: runWith(daysA.slice(i), `real${i}`), b: runWith(daysB.slice(i), `real${i}`) }));
+  const real = startIdx.map(i => ({ a: runA(daysA.slice(i), `real${i}`), b: runB(daysB.slice(i), `real${i}`) }));
   const regimes = daysA.map(d => d.regime || 'normal');
   const byRegime = stats.groupBy(regimes);
   const prand = stats.streamFor(seed, 'paths:paired');
@@ -538,7 +546,7 @@ function scorePaired(streamA, streamB, opts) {
   if (daysA.length) {
     for (let p = 0; p < paths; p += 1) {
       const idx = stats.stationaryPath(daysA.length, S, { meanBlock, rand: prand, regimes, byRegime });
-      resampled.push({ a: runWith(idx.map(k => daysA[k]), p), b: runWith(idx.map(k => daysB[k]), p) });
+      resampled.push({ a: runA(idx.map(k => daysA[k]), p), b: runB(idx.map(k => daysB[k]), p) });
     }
   }
   const side = (pairs, k) => finish(pairs.map(x => x[k]).reduce(add, blank()));
@@ -559,8 +567,9 @@ function scorePaired(streamA, streamB, opts) {
   return {
     a: { real: side(real, 'a'), resampled: side(resampled, 'a'), score: passA.diagnostic ? `diagnostic (${passA.diagnostic})` : 'real', look: passA.look },
     b: { real: side(real, 'b'), resampled: side(resampled, 'b'), score: passB.diagnostic ? `diagnostic (${passB.diagnostic})` : 'real', look: passB.look },
-    diff, verdict, blows: { a: ba, b: bb }, paired: { sameDays: true, sameBlocks: true, sameFaults: true },
-    inputs: { sessions: S, seed, paths, reps, level, every, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, days: daysA.length },
+    starts: real.map((x, k) => ({ start: daysA[startIdx[k]].day, a: x.a.status, b: x.b.status, aDays: x.a.sessions, bDays: x.b.sessions })),
+    diff, verdict, blows: { a: ba, b: bb }, paired: { sameDays: true, sameBlocks: true, sameFaults: true, oneRulebook: rulebookB === rulebook && accountB === account && contractsB === contracts },
+    inputs: { sessions: S, seed, paths, reps, level, every, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, contractsB, days: daysA.length },
   };
 }
 

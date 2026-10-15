@@ -22,6 +22,10 @@
  *                   loop's look's. A replay config with "learning": false declares runs that never teach
  *   evaluator       the mechanical verifier (train/evaluator.js): { prop, data: { SYMBOL: bar file }, ...settings };
  *                   none: a strategy or rulebook change stays blocked
+ *   modelScore      the model-scoring verifier (train/model-verifier.js): { account, paths, reps, faults }: the challenger's
+ *                   own replays of every window, judged against the champion's by the keep rule (the paired 30-day Monte
+ *                   Carlo and the paired decision measures). With it, tuningWindows lie in practice-train and heldOutWindows
+ *                   each in one held-back learning window (practice-validate, test, final), read through learning looks
  *
  *   resolveLoop(raw, { baseDir, env, root })   the resolved config, with `hash` (limits left out: they may be raised on resume)
  *   windowRange(w)                             { start, end } Dates: session `from`'s start to session `to`'s start
@@ -36,6 +40,7 @@ const { validateConfig } = require('../autotrader');
 const { tradingDayStart } = require('../trading/clock');
 const { ruleFrom } = require('./paired');
 const { resolveEvaluator } = require('./evaluator');
+const MV = require('./model-verifier');
 
 const LOOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -100,6 +105,13 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   let rule = null;
   try { rule = ruleFrom(r.decision); } catch (err) { errors.push(err.message); }
   const learning = learningErrors(r.learning, errors);
+  let modelScore = null;
+  try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
+  if (modelScore) {
+    errors.push(...MV.windowErrors(Array.isArray(r.tuningWindows) ? r.tuningWindows : [], Array.isArray(r.heldOutWindows) ? r.heldOutWindows : []));
+    // Held-out runs take learning looks (learning/run-gate.js), which need the evaluation id their arms share.
+    if (r.heldOutWindows && !(learning && learning.evaluation)) errors.push('learning.evaluation: the model-scored loop judges held out through learning looks, which need an evaluation id');
+  }
   if (errors.length) throw new Error(`invalid training-loop config:\n- ${errors.join('\n- ')}`);
   // A replay config's autotrader given as a path resolves against this file's folder.
   if (typeof replay.autotrader === 'string') replay = { ...replay, autotrader: readSpec(replay.autotrader, baseDir, 'replay.autotrader') };
@@ -108,6 +120,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     repeats, seed, maxFlagged, controlPoints, maxProposals, limits, rule, evaluator,
     // Only when set: a loop without it keeps its hash (a resumed loop is the same loop).
     ...(learning ? { learning } : {}),
+    ...(modelScore ? { modelScore } : {}),
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
   };
   const { limits: _l, ...identity } = loop;

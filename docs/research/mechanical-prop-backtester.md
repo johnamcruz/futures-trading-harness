@@ -103,5 +103,8 @@ reads. The CLI is a thin wrapper over it.
 | Net R in the trade statistics | Not kept: `attempts.js` settles net dollars, but its `expectancyR` (the cuts' base) is gross, move over stop |
 | Parity proof of layer 2 | `tests/lib/prop-evaluator.test.js` against the engine's account mode, kept |
 
-The training loop's verifier still runs layer 1. Today it scores no trades,
-so it can't show a strategy or rulebook change better than the champion.
+The training loop's mechanical verifier still runs layer 1. Today it scores
+no trades, so it can't show a strategy or rulebook change better than the
+champion. The loop's model scoring (`train/model-verifier.js`,
+`docs/TRAINING.md` section 6) judges a change on the model's own trades
+instead: both trees replay the same windows, scored by `pairRuns`.

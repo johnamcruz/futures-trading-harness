@@ -28,9 +28,11 @@
  *
  *   resolveAccount({ override, attempts, runnerAccount, strategies, accounts })   { name, why } (name null: none)
  *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, barsFiles, seed, paths, reps, faults, attribution, now })
- *   pairRuns(runDirA, runDirB, { root, env, account, policy, barsFiles, seed, paths, reps, faults, now })   two runs of the
- *       same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired), each run's score
- *       logged beside its own look: the judge a skill change is kept by
+ *   pairRuns(runDirA, runDirB, { root, rootB, env, account, policy, accountB, policyB, candidateB, barsFiles, seed, paths, reps, faults, now })
+ *       two runs of the same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired),
+ *       each run's score logged beside its own look: the judge a skill change is kept by. With accountB or policyB,
+ *       each side is scored under its own policy's whole entry (policyRulebook); candidateB: B's is a candidate rulebook
+ *   policyRulebook(policy, { candidate })   { sizing, exit, multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
  *   parseFaults(text)   the fault rates of `--faults stop=<rate>,outage=<rate>` ({} without it: faults not measured)
  *   scoreText(result), scoreMarkdown(result), scoreSummary(result)
@@ -44,6 +46,7 @@ const { scoreRiskActions } = require('./risk-actions');
 const { checkModelWindow, scoreStream, scorePaired } = require('./evaluator');
 const { recordScore, ledgerPath } = require('../learning/looks');
 const { gateLimits } = require('./attempts');
+const { ceiling } = require('../trading/rulebook');
 
 
 function resolveAccount({ override = null, attempts = [], runnerAccount = null, strategies = [], accounts = [] }) {
@@ -63,7 +66,7 @@ function policyFor(strategies, accountName) {
 }
 
 /** A run's stream and its checked pass: a real score refuses an unsettled entry, or a fault rate its trades can't take. */
-function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now }) {
+function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now, candidateRulebook = false }) {
   const { stream, run } = readModelStream(runDir, { root, barsFiles });
   const diagnostic = rates || weights ? 'reweighted' : run.practice ? 'setup-focused' : null;
   if (!diagnostic && stream.excluded.length) {
@@ -76,7 +79,7 @@ function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, n
     throw new Error(`${stream.noStop.missing} trade(s) without a no-stop path (no bars after the fill): an injected stop fault would silently drop out of them; give the run's bars (--bars)`);
   }
   const ledger = run.ledger || ledgerPath(env);
-  const pass = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(ledger, entry), now });
+  const pass = checkModelWindow({ run, diagnostic, candidateRulebook, logScore: entry => recordScore(ledger, entry), now });
   return { stream, run, diagnostic, pass };
 }
 
@@ -111,12 +114,35 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   };
 }
 
-function pairRuns(runDirA, runDirB, { root = null, account, policy = null, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
+/**
+ * A policy's whole rulebook entry as the Monte Carlo applies it: its sizing, its exit (each trade re-exited from its
+ * recorded path, attempts.js exitAs) and its verdict multipliers on each trade's recorded facts (trading/rulebook.js
+ * ceiling, as the live verdict; a missing fact skips the trade: fails closed). candidate: a rulebook not the account's.
+ */
+function policyRulebook(policy, { candidate = false } = {}) {
+  const items = policy && Array.isArray(policy.multipliers) ? policy.multipliers : [];
+  const multiplier = t => {
+    if (!items.length) return 1;
+    const t0 = t.entryTime || (Number.isFinite(t.entryMs) ? new Date(t.entryMs).toISOString() : new Date(0).toISOString());
+    const facts = Object.fromEntries(Object.entries(t.facts || {}).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, { value: v, at: t0 }]));
+    return ceiling(items, facts, new Date(t0)).multiplier;
+  };
+  return { sizing: policy ? policy.sizing || null : null, ...(policy && policy.exit ? { exit: policy.exit } : {}), multiplier, ...(candidate ? { candidate: true } : {}) };
+}
+
+function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, accountB, policyB, candidateB = false, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
   if (!account) throw new Error('an account profile to score against');
+  // Two rulebooks (accountB or policyB given: the training loop's verifier): each side its own policy's whole entry,
+  // B's a candidate's when it differs (its pass refused on test and final). Else one rulebook's sizing for both, as before.
+  const two = accountB !== undefined || policyB !== undefined;
   const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
-  const b = streamAndPass(runDirB, { root, barsFiles, faults, env, now });
+  // rootB: the tree run B ran on, when it is another (the training loop's challenger); its records are read with its documents.
+  const b = streamAndPass(runDirB, { root: rootB || root, barsFiles, faults, env, now, candidateRulebook: two && candidateB });
+  const rulebook = two ? policyRulebook(policy) : { sizing: policy ? policy.sizing || null : null };
+  const pB = policyB === undefined ? policy : policyB;
   const res = scorePaired(a.stream, b.stream, {
-    passA: a.pass, passB: b.pass, account, rulebook: { sizing: policy ? policy.sizing || null : null }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults,
+    passA: a.pass, passB: b.pass, account, rulebook, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults,
+    ...(two ? { accountB: accountB || account, rulebookB: policyRulebook(pB, { candidate: candidateB }), contractsB: (pB && pB.contracts) || 'auto' } : {}),
   });
   return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
 }
@@ -256,4 +282,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { ratesFor, resolveAccount, policyFor, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { ratesFor, resolveAccount, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

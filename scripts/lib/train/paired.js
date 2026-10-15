@@ -25,6 +25,7 @@
  *   mcnemar(b, c)                         exact one-sided p: P(X >= b | n = b + c, 1/2)
  *   pairUp(baseline, candidate)          [{ key, base, cand }]: one pair per decision, its repeats collapsed to the
  *                                        majority category (collapse); a missing candidate repeat is a failure
+ *   harmReasons(tests, rule)             judge's harm checks on its tests (a category broken past the tolerance, or worse)
  *   judge({ pairs, targets, failures, rule, mechanical, evaluator })   { verdict, reasons, tests }
  */
 
@@ -120,6 +121,19 @@ function tally(pairs, fails) {
 }
 
 /**
+ * The harms of judge's tests: each failure category broken beyond the tolerance, or significantly worse (the rule's
+ * minDiscordant and alpha). The model-scoring verifier (model-verifier.js combine) rejects on them as judge does.
+ */
+function harmReasons(tests, rule = DECISION_RULE) {
+  const out = [];
+  for (const [k, t] of Object.entries((tests && tests.harm) || {})) {
+    if (t.c - t.b > tests.harmTolerance) out.push(`${k}: ${t.c} decision(s) broken against ${t.b} fixed, worse by more than the tolerance (${tests.harmTolerance})`);
+    else if (t.n >= rule.minDiscordant && t.pWorse <= rule.alpha) out.push(`${k}: significantly worse (p ${t.pWorse})`);
+  }
+  return out;
+}
+
+/**
  * The verdict: kept, rejected, blocked (a verifier that applies isn't available) or inconclusive (too few pairs
  * or discordant pairs to decide). `failures`: the failure categories (the scorecard's, without right/unchecked).
  * `mechanical`: the change touches a strategy or the rulebook. `evaluator`: { available, blows, failures } or null.
@@ -157,10 +171,7 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   const blows = pairs.filter(p => p.cand.blow === true).length;
   const tests = { pairs: n0, onlyCandidate: judged.length - n0, excluded, excludedShare: explicit ? round(excluded / explicit) : 0, target, harm, harmTolerance: tol, blows, rule };
   if (blows) reasons.push(`${blows} blow(s) on the candidate's side: zero blows, no exception`);
-  for (const [k, t] of Object.entries(harm)) {
-    if (t.c - t.b > tol) reasons.push(`${k}: ${t.c} decision(s) broken against ${t.b} fixed, worse by more than the tolerance (${tol})`);
-    else if (t.n >= rule.minDiscordant && t.pWorse <= rule.alpha) reasons.push(`${k}: significantly worse (p ${t.pWorse})`);
-  }
+  reasons.push(...harmReasons(tests, rule));
   if (reasons.length) return { verdict: 'rejected', reasons, tests };
   if (explicit && excluded / explicit > rule.maxExcluded) {
     return { verdict: 'inconclusive', reasons: [`insufficient evidence: ${excluded} of ${explicit} decisions (${tests.excludedShare}) were unchecked on the champion's side; at most ${rule.maxExcluded}`], tests };
@@ -181,4 +192,4 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   return { verdict: 'kept', reasons: [`fixed ${target.b}, broke ${target.c} of ${n0} pairs (effect ${target.effect}, p ${target.pBetter})`], tests };
 }
 
-module.exports = { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, collapse, pairUp, tally, judge };
+module.exports = { DECISION_RULE, NO_DECISION, ruleFrom, mcnemar, collapse, pairUp, tally, harmReasons, judge };

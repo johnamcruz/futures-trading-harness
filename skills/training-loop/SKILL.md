@@ -48,6 +48,8 @@ change is (CLAUDE.md, "Before a pull request").
    `training/looks.jsonl`, whatever `FTH_HOME` says.
 4. **The verdict** on each edit, and the evaluator and scorecard that feed
    it: the `training-verdict` skill.
+   With `modelScore`, the keep rule decides; the panel and the evaluator
+   can only reject.
 5. **Kept:** the archive entry, `pr-body.md` and the proposal in the
    iteration's `promotion/` folder, and a local branch
    `train/<loopId>-i<n>-<id>` on the champion's commit. Review it, run
@@ -58,6 +60,9 @@ change is (CLAUDE.md, "Before a pull request").
    --held-out-look`. Each held-out month judges once, across every change
    and loop: a month an earlier judging look (or a recorded look) used is
    refused.
+   With `modelScore`, each sealed window takes two looks: judging is
+   refused up front when the budget can't hold them. Judge on
+   practice-validate first; final can't be judged this way.
 7. **Status:** `node scripts/train-loop.js status --config loop.json`:
    iterations, verdicts, leaders per category.
 

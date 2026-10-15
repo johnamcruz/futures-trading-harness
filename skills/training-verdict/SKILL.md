@@ -33,13 +33,25 @@ edit. Code decides; the model never does.
    multiplier raised, including a value no entry lists, which is 0; no exit
    changed, no key removed).
 
-**The evaluator** today scores no trades: the mechanical engine skips
-`trade_lifecycle`'s structural stop. A skill or rulebook change is judged by
-`pairRuns` (`scripts/lib/prop/model-score.js`): two replay runs of the same
-days through the same Monte Carlo paths. Zero blows comes first; then the
-paired difference in the pass rate within `sessions` trading days, the blow
-rate and the median days to pass, each with its interval. Until the loop
-calls it, a strategy or rulebook change stays `blocked`.
+**With `modelScore`** (`scripts/lib/train/model-verifier.js`):
+
+- **What runs:** the challenger replays the champion's windows with the
+  same seed; judged on the paired 30-day Monte Carlo.
+- **Kept only if:**
+  - 0 challenger blows: hard.
+  - One pooled interval over the real attempts favours the challenger on
+    the pass rate.
+  - No window significantly worse on pass, blow or median days.
+  - Reads and adherence not significantly worse.
+- **Inconclusive, never kept:** a window shorter than about 3×
+  `sessions`; too few paired decisions; decisions that don't pair.
+- **Resampled paths** are conditional on the window's days: never
+  evidence of a gain.
+- **A rulebook change:** scored under its own rulebook, on practice-train
+  and practice-validate only; the account must be unchanged (else
+  `blocked`); a loosening is rejected unscored.
+- **Without `modelScore`:** a strategy or rulebook change stays
+  `blocked`.
 
 **The scorecard** is section 10 step 2's (`replay/scorecard.js`, read
 through an adapter in `scripts/lib/train/loop.js`), under the look's rules:
@@ -57,3 +69,5 @@ refused: restore the file, or judge again under a new `loopId`.
   kept.
 - A candidate that turns a judged decision `unchecked` counts that
   decision as broken.
+- A challenger that wins on resampled paths but not on the real start
+  days is not kept.

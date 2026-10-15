@@ -1247,6 +1247,19 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     it); on held-out windows the
     candidate alone, each scoring a judging look; with no `evaluator` in
     the loop config a strategy or rulebook change stays `blocked`.
+    The model-scoring verifier (`scripts/lib/train/model-verifier.js`,
+    `modelScore` in the loop config; `docs/TRAINING.md` section 6) judges
+    a change on the model's own trades: the challenger's tree replays the
+    champion's windows with the same seed, and the keep rule reads the
+    paired 30-day Monte Carlo (`pairRuns`) and the paired adherence and
+    correct-read measures: zero challenger blows, no significantly worse
+    blow rate, one pooled interval over every window's real start days
+    showing a better pass rate (the primary measure; median days to pass
+    is only reported), no window significantly worse on its real
+    attempts, and adherence and reads not significantly worse on enough
+    paired decisions. Tuning is on practice-train only, held-out judging
+    goes through learning looks, and the promotion gate stays the final
+    gate.
     Not yet: Optuna over the agent's design (R30's categorical search; the
     loop judges each proposal on its own), and the LLM-level estimate (R20)
     as a verifier. The scorecard (step 2) is read through an adapter, under
