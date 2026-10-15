@@ -59,6 +59,7 @@ const { preflightForRun } = require('../learning/preflight');
 const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
+const { learningLook } = require('../learning/scorecard-look');
 const { rolesBetween } = require('../learning/splits');
 const { ledgerPath: learningLedgerPath } = require('../learning/looks');
 const { readLedger: readLedgerFile } = require('../prop/ledger-file');
@@ -75,7 +76,9 @@ function checkedScorecard(scorecard) {
     if (!opts || !opts.look || typeof opts.look.purpose !== 'string' || !Array.isArray(opts.look.ledger)) {
       throw new Error('a scorecard reads a run only under a look (purpose and ledger): refused');
     }
-    lookAt(readRun(opts.runDir), opts.look);
+    // A learning run (learning-run.json) follows the learning split and ledger; any other, the prop schedule.
+    const run = readRun(opts.runDir);
+    learningLook(opts.runDir, run, { ...opts.look, env: opts.env || process.env }) || lookAt(run, opts.look);
     return scorecard(opts);
   };
 }
@@ -258,7 +261,7 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) 
   }
   const decisions = await phase(ctx, champion ? `scorecard:${tag}` : `scorecard:${side}-${tag}`, path.join(ctx.paths.dir, `${side}-${tag}-decisions.json`), async () => {
     const out = [];
-    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor() })).map(d => ({ ...d, run: r.label })));
+    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor(), env: ctx.env })).map(d => ({ ...d, run: r.label })));
     return out;
   });
   return { runs, decisions };
@@ -282,7 +285,7 @@ async function sideRuns(ctx, { side, dir, tree, panel, runs, baselineSide = null
           run: r.run, checkpoint: D.checkpointOf(r.checkpoints, point.t), home, tree, point, followers, mustRun: champ ? champ.times : [], repeat: k, seed, baseEnv: ctx.env,
           stepDeps: ctx.steps.stepDeps, onCall: ctx.call,
         });
-        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor() });
+        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor(), env: ctx.env });
         result.decisions = decisions.filter(d => result.times.includes(d.t)).map(d => ({ key: `${point.t}|${d.key}`, repeat: k, category: d.category, blow: d.blow === true }));
         writeJsonAtomic(resultFile, result);
       }
