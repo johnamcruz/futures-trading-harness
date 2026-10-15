@@ -21,7 +21,7 @@
  * their experience index only (the same config) or in the library's display only (below).
  *
  * A resumed run's look (the same evaluation, run id and purpose) is free, and it is the look it took: a resume naming
- * another arm, config or base than its ledger line is refused.
+ * another arm than its ledger line is refused (its config and base digest the code, so a code fix doesn't strand it).
  *
  * The history library's display (replay/config.js libraryDisplay) is an arm dimension of its own: an arm shown the
  * library ends in `+library:<library hash>` (e.g. `without+library:<hash>`), and its config hash (which names the
@@ -102,14 +102,13 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   const atRole = looksOf(ledger).filter(e => roleOfLook(e) === role);
   const prior = atRole.find(e => e.evaluation === l.evaluation && e.runId === l.runId && e.purpose === l.purpose);
   const repeat = Boolean(prior);
-  // A resume is the look it took: the same arm, config and base as its line (fields the line has; an old line without them keeps none).
-  if (prior) {
-    const differs = [
-      prior.arm != null && prior.arm !== (l.arm || 'without') ? `arm ${l.arm || 'without'}, not ${prior.arm}` : null,
-      prior.config != null && prior.config !== (l.config || null) ? `config ${String(l.config).slice(0, 12)}, not ${String(prior.config).slice(0, 12)}` : null,
-      prior.config != null && baseOf(prior) !== baseOf(l) ? `base ${String(baseOf(l)).slice(0, 12)}, not ${String(baseOf(prior)).slice(0, 12)}` : null,
-    ].filter(Boolean);
-    if (differs.length) refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} as another arm (${differs.join('; ')}): a resume keeps its arm, config and base (start another runId)`);
+  // A resume is the look it took: the same arm as its line (an old line without one keeps none). The arm names all the
+  // run is shown (its index, and the library with its display); its config and base are not compared, as they digest
+  // the code too (replay/config.js setupHash), so a code fix between a run's start and its resume stays a resume, as
+  // the manifest's configHash allows. The pins themselves can't change on a resume (learning/run-pins.js, pinIndex,
+  // pinLibrary).
+  if (prior && prior.arm != null && prior.arm !== (l.arm || 'without')) {
+    refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} as another arm (${l.arm || 'without'}, not ${prior.arm}): a resume keeps its arm (start another runId)`);
   }
   // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
   const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);

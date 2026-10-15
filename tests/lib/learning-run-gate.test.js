@@ -227,9 +227,11 @@ test('library display: off unless the config says true, part of the setup; a pai
   // A resume is the look it took (the reviewer's case: a hidden arm resumed as the shown one would be a free second arm).
   const resumed = K.checkLook(look('r-hidden', on), ledger);
   assert.strictEqual(resumed.ok, false);
-  assert.match(resumed.refusals.join(), /run r-hidden took its look in evaluation evD as another arm \(arm without\+library:[0-9a-f]{16}, not without; config [0-9a-f]{12}, not [0-9a-f]{12}\): a resume keeps its arm, config and base/);
-  assert.match(K.checkLook(look('r-shown', off), ledger).refusals.join(), /run r-shown took its look .* as another arm \(arm without, not without\+library/);
-  assert.match(K.checkLook(look('r-shown', on, { base: 'e'.repeat(64) }), ledger).refusals.join(), /base eeeeeeeeeeee, not /);
+  assert.match(resumed.refusals.join(), /run r-hidden took its look in evaluation evD as another arm \(without\+library:[0-9a-f]{16}, not without\): a resume keeps its arm/);
+  assert.match(K.checkLook(look('r-shown', off), ledger).refusals.join(), /run r-shown took its look .* as another arm \(without, not without\+library/);
+  // A code fix between start and resume changes the config and base (they digest scripts/), not the arm: still a resume.
+  const fixed = K.checkLook(look('r-shown', on, { config: '1'.repeat(64), base: '2'.repeat(64) }), ledger);
+  assert.deepStrictEqual([fixed.ok, fixed.repeat], [true, true], fixed.refusals.join());
   assert.deepStrictEqual([K.checkLook(look('r-hidden', off), ledger).ok, K.checkLook(look('r-hidden', off), ledger).repeat], [true, true], 'the same arm: a free repeat');
   // An old line without arm or config resumes as it was.
   const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test' }];
