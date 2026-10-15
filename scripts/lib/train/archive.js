@@ -59,6 +59,23 @@ function leaders(entries) {
 
 const fence = s => String(s).replace(/```/g, "'''");
 
+/** The model-scoring verifier's part of the PR body (train/model-verifier.js): the keep rule, window by window. */
+function modelLines(m) {
+  if (!m) return [];
+  const iv = i => (i && i.lo !== null && i.lo !== undefined ? `${i.diff} [${i.lo}, ${i.hi}]` : '-');
+  const rs = w => (w.resampled ? `${iv(w.resampled.passRate)} / ${iv(w.resampled.blowRate)}` : '-');
+  return [
+    '', '### The keep rule on the model\'s own trades (paired 30-day Monte Carlo, champion minus challenger)', '',
+    `Verdict: **${m.verdict}**${m.diagnostic ? ' (a diagnostic score: never a promotion)' : ''}: ${(m.reasons || []).join('; ')}`, '',
+    `Pairing: ${m.pairing || 'one rulebook'}. Pooled pass rate on the real attempts (the primary measure): ${iv(m.pooled)}.`, '',
+    '| window | real attempts | challenger blows | pass rate (real) | blow rate (real) | median days (real, secondary) | pass / blow rate (resampled, conditional) | adherence broken/fixed | reads broken/fixed |',
+    '| --- | ---: | ---: | --- | --- | --- | --- | --- | --- |',
+    ...(m.windows || []).map(w => `| ${w.label} | ${w.attempts === undefined ? '-' : w.attempts} | ${w.blows ? w.blows.b : '-'} | ${iv(w.diff && w.diff.passRate)} | ${iv(w.diff && w.diff.blowRate)} | ${iv(w.diff && w.diff.medianDaysToPass)} | ${rs(w)} | ${w.adherence ? `${w.adherence.c}/${w.adherence.b}` : '-'} | ${w.reads ? `${w.reads.c}/${w.reads.b}` : '-'} |`),
+    '', 'The resampled figures redraw each window\'s own days: they are conditional on those days (Monte Carlo precision, not evidence) and only rules (a) and (b) read them.',
+    '', 'The promotion gate (prop/promotion.js, frozen) is still the final gate: this change is kept for review, not promoted.',
+  ];
+}
+
 function prBody(entry, { loopId }) {
   const p = entry.proposal;
   const t = entry.tests;
@@ -79,6 +96,7 @@ function prBody(entry, { loopId }) {
     '| category | fixed | broken | p (worse) |', '| --- | ---: | ---: | ---: |', ...harm, '',
     `Verdict: **${entry.verdict}**: ${entry.reasons.join('; ')}`, '',
     `Evaluator (step 9): ${entry.evaluator && entry.evaluator.available ? 'run' : `not run (${(entry.evaluator && entry.evaluator.why) || 'unavailable'})`}.`,
+    ...modelLines(entry.model),
     'Held-out judging: not done. It is a separate step that spends the look budget (`train-loop.js judge --held-out-look`).', '',
     '### Before merging', '',
     '- [ ] `npm run verify` passes (run it after the loop and any replay have stopped)',
