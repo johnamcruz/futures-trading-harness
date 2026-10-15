@@ -172,12 +172,24 @@ function scoreSummary(r) {
 function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
   const { loadPinnedCurated, readLists } = require('../learning/curated-lists');
   const pinned = loadPinnedCurated(path.resolve(runDir, '..', '..'));
-  if (ratesFile) return { rates: JSON.parse(fs.readFileSync(ratesFile, 'utf8')), listOf: undefined, from: ratesFile };
+  let runner = {};
+  try { runner = JSON.parse(fs.readFileSync(path.join(runDir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { /* none: no poll delay */ }
+  const delayMs = (Number(runner.barDelaySeconds) || 0) * 1000;
+  const docOf = () => {
+    if (!pinned || !curated || !curated.file) return null;
+    const doc = readLists(curated.file);
+    if (doc.fingerprint !== pinned.fingerprint || (curated.list || 'mix') !== pinned.list) throw new Error(`the run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}), not ${doc.fingerprint.slice(0, 16)} (${curated.list || 'mix'})`);
+    return doc;
+  };
+  // Rates by hand: the decisions' lists still from the run's document when there is one.
+  if (ratesFile) {
+    const doc = docOf();
+    return { rates: JSON.parse(fs.readFileSync(ratesFile, 'utf8')), listOf: doc ? curatedRates(doc, { list: pinned.list, delayMs }).listOf : undefined, from: ratesFile };
+  }
   if (!pinned) return null;
   if (!curated || !curated.file) throw new Error('a curated run is scored at its lists\' natural rates: give its replay config (--config), which names its lists document, or --natural-rates');
-  const doc = readLists(curated.file);
-  if (doc.fingerprint !== pinned.fingerprint || (curated.list || 'mix') !== pinned.list) throw new Error(`the run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}), not ${doc.fingerprint.slice(0, 16)} (${curated.list || 'mix'})`);
-  const c = curatedRates(doc, { list: pinned.list });
+  const doc = docOf();
+  const c = curatedRates(doc, { list: pinned.list, delayMs });
   return { rates: c.rates, listOf: c.listOf, from: `${pinned.list} of ${doc.fingerprint.slice(0, 16)}, ${c.scanDays} scan days (${c.scanDaysFrom})` };
 }
 

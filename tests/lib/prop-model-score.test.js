@@ -384,3 +384,33 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
   assert.match(propScoreSection(dir, { root }).text, /not scored \(a curated run is scored at its lists' natural rates/);
   assert.match(propScoreSection(dir, { root, curated: { file, list: 'trend-up' } }).text, /not scored \(the run pinned curated list/);
 });
+
+test('curatedRates: a decision is placed by its bar close (the poll delay taken off), among the mix\'s own moments; two lists\' windows at once is refused', () => {
+  const { curatedRates } = require('../../scripts/lib/prop/natural-rate');
+  const w = (from, to) => ({ from: `2024-07-15T${from}:00.000Z`, to: `2024-07-15T${to}:00.000Z` });
+  const doc = {
+    lists: { 'trend-up': [{ id: 'a', day: '2024-07-15', window: w('14:00', '14:30') }], chop: [{ id: 'b', day: '2024-07-15', window: w('14:30', '15:00') }, { id: 'x', day: '2024-07-15', window: w('14:00', '14:30') }] },
+    coverage: { 'trend-up': { candidates: 10 }, chop: { candidates: 5 } }, mix: ['a', 'b'],
+  };
+  const c = curatedRates(doc, { scanDays: 10, delayMs: 5000 });
+  // The window's last bar closes at 14:30; its decision runs at 14:30:05: still trend-up's, not chop's next window.
+  assert.strictEqual(c.listOf({ cycleAt: '2024-07-15T14:30:05.000Z' }), 'trend-up');
+  assert.strictEqual(c.listOf({ cycleAt: '2024-07-15T14:33:05.000Z' }), 'chop');
+  // Moment x (chop, not in the mix) overlaps a: the run never stepped it, so it never claims a decision.
+  assert.strictEqual(c.listOf({ cycleAt: '2024-07-15T14:10:05.000Z' }), 'trend-up');
+  const both = curatedRates({ ...doc, mix: ['a', 'b', 'x'] }, { scanDays: 10, delayMs: 5000 });
+  assert.throws(() => both.listOf({ cycleAt: '2024-07-15T14:10:05.000Z' }), /windows of trend-up and chop: its list is ambiguous/);
+});
+
+test('keepOne takes one micro, never a whole mini; the risk record refuses an attribution of a sealed role on its own', () => {
+  const { scoreArms } = require('../../scripts/lib/prop/evaluator');
+  const { riskRecord: rr } = require('../../scripts/lib/prop/risk-attribution');
+  const days = weekdays('2022-01-03', 35);
+  // A ceiling of many micros (auto would trade minis), the model's share 1% of it: rounds to none, so one micro.
+  const stream = modelStreamOf(days, d => [modelTrade(`${d}-0`, 200, {}, { entryTime: `${d}T14:00:00.000Z`, sizeFraction: 0.01 })]);
+  const run = { runId: 'r', from: '2022-01-03', to: '2022-03-01', learning: true, role: 'practice-train' };
+  const r = scoreArms(stream, { account: ACCOUNT, contracts: 'auto', paths: 20, reps: 20, seed: 1, rulebook: { sizing: { cushion_frac: 1 } }, pass: checkModelWindow({ run }), base: () => ({ fraction: 0.01, keepOne: true }) });
+  // One micro: +200 ticks x $0.50 = $100 a day, under the $3,000 target in 30 days: never a pass (one mini would pass in 3).
+  assert.strictEqual(r.base.passRate, 0);
+  assert.throws(() => rr({ states: {}, cells: [], role: 'test' }), /judged, never shown/);
+});

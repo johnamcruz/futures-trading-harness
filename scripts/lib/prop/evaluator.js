@@ -324,7 +324,7 @@ function scoreStream(stream, opts) {
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },
     resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true, faults: faultCount },
     cuts: cutResults,
-    ...(attr ? { attribution: attr.result() } : {}),
+    ...(attr ? { attribution: { ...attr.result(), role: pass.unit.role } } : {}),
     coverage: {
       fieldBranch: branch ? stream.fieldBranch : [], covered: gatePop.length, uncovered: real.length - gatePop.length,
       flowOffMonths: [...new Set(real.filter(o => !o.covered).map(o => o.month))],
@@ -368,7 +368,8 @@ function pairedRunner({ ctx, rates, seed, pools }) {
       size: args => {
         const plan = ctx.size(args);
         if ((plan && plan.size >= 1) || !keep.has(args.trade) || !(args.fraction > 0)) return plan;
-        const full = ctx.size({ ...args, fraction: 1 });
+        // One contract of the smaller leg: a micro unless only minis trade (one mini can be the whole ceiling).
+        const full = ctx.size({ ...args, fraction: 1, mode: args.mode === 'mini' ? 'mini' : 'micro' });
         return full && full.size >= 1 ? { ...full, size: 1 } : plan;
       },
       onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },

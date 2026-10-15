@@ -23,7 +23,9 @@
  *
  * From a curated lists document (learning/curated-lists.js, the curated scan's own counts): curatedRates(doc, { list,
  * scanDays }) gives each list's candidatesPerDay as its scan candidates (coverage[list].candidates) over the trading
- * days the scan covered, and listOf: the list of the moment whose window (from, to] holds the decision's cycle. The
+ * days the scan covered, and listOf: the list of the moment whose window (from, to] holds the decision's bar close (its
+ * cycle less the runner's poll delay, `delayMs`, as curated-lists.js curatedPoints reads it), among the moments the run
+ * stepped (the mix's own ids, or the one list's); a decision two lists' windows both hold is refused. The
  * document doesn't record the scan's span, so scanDays is, unless given, the exchange's sessions from the first to the
  * last selected moment's day (the selection is balanced across the scan's years, so it spans it; an estimate, said
  * so in `scanDaysFrom`). A run of one list (not the mix) puts every decision in that list.
@@ -142,7 +144,7 @@ function reweightStream(stream, decisions, { rates = null, weights = null, listO
 }
 
 /** Natural rates and the decisions' lists from a curated lists document (see the header). */
-function curatedRates(doc, { list = 'mix', scanDays = null } = {}) {
+function curatedRates(doc, { list = 'mix', scanDays = null, delayMs = 0 } = {}) {
   if (!isMap(doc) || !isMap(doc.lists) || !isMap(doc.coverage)) throw new Error('curatedRates: a curated lists document (learning/curated-lists.js)');
   const names = Object.keys(doc.lists);
   const moments = names.flatMap(n => (doc.lists[n] || []).map(m => ({ ...m, list: n })));
@@ -159,12 +161,16 @@ function curatedRates(doc, { list = 'mix', scanDays = null } = {}) {
   const wanted = list === 'mix' ? names : [list];
   if (wanted.some(n => !doc.coverage[n] || !Number.isFinite(doc.coverage[n].candidates))) throw new Error(`curatedRates: no candidate count for ${wanted.filter(n => !doc.coverage[n]).join(', ')}`);
   const rates = Object.fromEntries(wanted.map(n => [n, { candidatesPerDay: doc.coverage[n].candidates / days }]));
-  const windows = moments.filter(m => wanted.includes(m.list) && m.window).map(m => ({ list: m.list, from: Date.parse(m.window.from), to: Date.parse(m.window.to) }));
+  // The windows the run stepped: the mix's own moments (a moment of another list is not the mix's), or the one list's.
+  const inMix = new Set(Array.isArray(doc.mix) ? doc.mix : []);
+  const windows = moments.filter(m => wanted.includes(m.list) && m.window && (list !== 'mix' || inMix.has(m.id)))
+    .map(m => ({ list: m.list, from: Date.parse(m.window.from), to: Date.parse(m.window.to) }));
   const listOf = d => {
     if (list !== 'mix') return list;
-    const at = Date.parse(d.cycleAt);
-    const w = windows.find(x => at > x.from && at <= x.to);
-    return w ? w.list : null;
+    const at = Date.parse(d.cycleAt) - delayMs;
+    const hit = [...new Set(windows.filter(x => at > x.from && at <= x.to).map(x => x.list))];
+    if (hit.length > 1) throw new Error(`natural rates: the decision at ${d.cycleAt} lies in windows of ${hit.join(' and ')}: its list is ambiguous`);
+    return hit[0] || null;
   };
   return { rates, listOf, scanDays: days, scanDaysFrom: from };
 }
