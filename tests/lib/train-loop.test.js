@@ -47,21 +47,22 @@ function world({ proposals = [fix, harm], loop: over = {}, crashAt = null } = {}
     },
     // The driver's loop, reduced: the clock, the (checkpointing) step, the line.
     runReplay: async ({ run, deps, maxCycles }) => {
+      const day = new Date(new Date(run.start).getTime() + 3600000).toISOString().slice(0, 10); // the run's window day, so a learning run's days are its window's
       calls.replay += 1;
       const manifest = store.openRun(run.paths, { runId: run.runId, hash: 'h' });
       const done = store.recordedTimes(run.paths.runDir);
       const todo = TIMES.filter(t => !done.has(t));
       if (todo.length > maxCycles) {
         for (const t of todo.slice(0, maxCycles)) {
-          const res = await deps.step({ t: new Date(t), kind: 'trade', day: '2022-03-09' }, {}, 1000);
-          store.appendRecord(run.paths, manifest, { t, day: '2022-03-09', kind: 'trade', ran: store.parseStep(res.output).ran });
+          const res = await deps.step({ t: new Date(t), kind: 'trade', day }, {}, 1000);
+          store.appendRecord(run.paths, manifest, { t, day, kind: 'trade', ran: store.parseStep(res.output).ran });
         }
         return { cycles: maxCycles, stopped: `stopped after ${maxCycles} decision times (--max-cycles)`, done: false };
       }
       for (const t of todo) {
         fs.writeFileSync(run.paths.clockFile, JSON.stringify({ now: t }));
-        const res = await deps.step({ t: new Date(t), kind: 'trade', day: '2022-03-09' }, {}, 1000);
-        store.appendRecord(run.paths, manifest, { t, day: '2022-03-09', kind: 'trade', ran: store.parseStep(res.output).ran });
+        const res = await deps.step({ t: new Date(t), kind: 'trade', day }, {}, 1000);
+        store.appendRecord(run.paths, manifest, { t, day, kind: 'trade', ran: store.parseStep(res.output).ran });
       }
       return { cycles: todo.length, stopped: null, done: true };
     },
@@ -331,10 +332,10 @@ test('checkedScorecard: any scorecard (a --steps one too) reads a run only after
   w.steps.runReplay = async opts => {
     const res = await replay(opts);
     const m = store.openRun(opts.run.paths, { runId: opts.run.runId, hash: 'h' });
-    store.appendRecord(opts.run.paths, m, { t: '2023-09-13T14:33:02.000Z', day: '2023-09-13', kind: 'trade', ran: [] });
+    store.appendRecord(opts.run.paths, m, { t: '2024-09-10T14:33:02.000Z', day: '2024-09-10', kind: 'trade', ran: [] });
     return res;
   };
-  await assert.rejects(run(w, { dryRun: true }), /scorecard's look at 2022-03-09\.\.2023-09-13 is refused/);
+  await assert.rejects(run(w, { dryRun: true }), /scorecard's look is refused: the run's days 2022-03-09\.\.2024-09-10 are practice-train \+ practice-validate/);
   assert.strictEqual(seen, 0);
 });
 
@@ -666,4 +667,31 @@ test('model scoring held out: a rulebook-editing proposal on a sealed window is 
   assert.ok(!S.readLedger(w.paths.ledger).some(l => l.purpose === 'judging'), 'no judging look taken');
   assert.strictEqual(w.calls.replay, replays, 'nothing replayed');
   assert.ok(!readArchive(w.paths.archive).some(e => e.phase === 'held-out'));
+});
+
+test('checkedScorecard: a learning run follows the learning split (practice-train 2023-08 passes); a sealed test run with no ledger look is refused', async () => {
+  const { startLearningRun } = require('../../scripts/lib/learning/run-gate');
+  const mk = (day, to, extra) => {
+    const base = tmpDir();
+    const env = { HOME: base };
+    const home = path.join(base, 'replays', 'r');
+    const runDir = path.join(home, 'replay', 'r');
+    const paths = { runDir, manifest: path.join(runDir, 'manifest.json') };
+    const manifest = store.openRun(paths, { runId: 'r', hash: 'h' });
+    store.appendRecord(paths, manifest, { t: `${day}T14:33:02.000Z`, day, kind: 'trade', ran: [] });
+    startLearningRun(home, { runDir, runId: 'r', env: { HOME: base }, endOfDay: true, from: day, to, ...extra });
+    return { runDir, env };
+  };
+  {
+    let called = 0;
+    const plugged = L.checkedScorecard(async () => { called += 1; return []; });
+    const look = { purpose: 'tuning', ledger: [] };
+    const free = mk('2023-08-08', '2023-08-09');
+    await plugged({ ...free, look });
+    assert.strictEqual(called, 1);
+    const sealed = mk('2025-03-04', '2025-03-05', { candidate: 'c1', evaluation: 'e1', arm: 'without', config: 'a'.repeat(64) });
+    fs.writeFileSync(require('../../scripts/lib/learning/looks').ledgerPath(sealed.env), `${JSON.stringify({ kind: 'look', evaluation: 'other', candidate: 'c1', purpose: 'judging', runId: 'zz', role: 'test', from: '2025-01-02', to: '2025-01-03' })}\n`);
+    await assert.rejects(plugged({ ...sealed, look }), /no judging look at test in the learning ledger/);
+    assert.strictEqual(called, 1);
+  }
 });

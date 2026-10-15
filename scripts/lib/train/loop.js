@@ -12,7 +12,8 @@
  * then each iteration n:
  *
  *   panel      (c) the flagged decisions not targeted before, plus a seeded control sample of right ones
- *   propose    (d) the proposer (proposer.js), or proposals a person imported (tier 3, manual); each validated
+ *   propose    (d) the proposer (proposer.js), or proposals a person imported (tier 3, manual); each validated. With
+ *              the config's `probe`: the probe round (probe.js), whose one combined change is this iteration's proposal
  *   baseline   (a, e) the champion's tree on the panel's points, from their checkpoints, `repeats` times each
  *   candidate  (e) each valid proposal's tree (applied, synced, validated) on the same points, seeds, repeats
  *   verdict    (f) the paired test (paired.js) and the evaluator (step 9), by code; the LLM never judges
@@ -59,9 +60,13 @@ const { preflightForRun } = require('../learning/preflight');
 const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
+const { learningLook } = require('../learning/scorecard-look');
 const { rolesBetween } = require('../learning/splits');
 const { ledgerPath: learningLedgerPath } = require('../learning/looks');
 const { readLedger: readLedgerFile } = require('../prop/ledger-file');
+const { probeRound } = require('./probe');
+const { compositionLines } = require('./compose');
+const LS = require('./lessons');
 
 class Stop extends Error {}
 
@@ -75,7 +80,9 @@ function checkedScorecard(scorecard) {
     if (!opts || !opts.look || typeof opts.look.purpose !== 'string' || !Array.isArray(opts.look.ledger)) {
       throw new Error('a scorecard reads a run only under a look (purpose and ledger): refused');
     }
-    lookAt(readRun(opts.runDir), opts.look);
+    // A learning run (learning-run.json) follows the learning split and ledger; any other, the prop schedule.
+    const run = readRun(opts.runDir);
+    learningLook(opts.runDir, run, { ...opts.look, env: opts.env || process.env }) || lookAt(run, opts.look);
     return scorecard(opts);
   };
 }
@@ -90,7 +97,7 @@ function withUncovered(evaluator, proposal) {
 /** The scorecard's records as decisions: key, time, category, whether in a trade, and what the proposer reads. */
 function scorecardDecisions(records) {
   return records.map(r => ({
-    key: `${r.t}|${r.symbol}`, t: r.t, day: r.day, symbol: r.symbol, category: r.category, inTrade: r.decision === 'in-trade',
+    key: `${r.t}|${r.symbol}`, t: r.t, day: r.day, symbol: r.symbol, barT: r.barT, category: r.category, inTrade: r.decision === 'in-trade',
     et: r.facts && r.facts.et, expected: { decision: r.expected && r.expected.decision, setup: r.expected && r.expected.setup },
     actual: { action: r.actual && r.actual.action, setup: r.actual && r.actual.setup }, why: r.why || [],
     falseReasons: ((r.reasons && r.reasons.claims) || []).filter(c => c.check === false && !c.incidental).map(c => `"${c.clause}": ${c.why}`),
@@ -123,6 +130,9 @@ function defaultSteps({ root, env = process.env }) {
     // The model-scoring verifier (train/model-verifier.js): the paired Monte Carlo and decision measures of two runs per window.
     modelVerifier: opts => MV.verify({ ...opts, env }),
     propose: opts => proposer.propose(opts),
+    // The probe round (train/probe.js): k tagged skill edits from one model call, and each probe run's data.
+    proposeProbes: opts => proposer.proposeProbes(opts),
+    probeData: opts => require('./probe').probeData(opts),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };
 }
@@ -216,7 +226,7 @@ function learningGate(ctx, run, look, label) {
  * look first and keep checkpoints for the point runs; a challenger's (the model-scoring verifier's) run under the look
  * its iteration or judging already took, with the same replay config and seed.
  */
-async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) {
+async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, replay = null, share = 1 }) {
   const champion = side === 'champion';
   if (champion && !ctx.state.done[`look:${tag}`]) {
     S.logLook(ctx.paths.ledger, look);
@@ -226,7 +236,8 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) 
   const runs = [];
   for (const [i, window] of windows.entries()) {
     const label = `${side}-${tag}${i}`;
-    const run = resolveReplay(replayFor(ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
+    // replay: another replay config for these runs (the probe round's curated practice config), else the loop's.
+    const run = resolveReplay(replayFor(replay ? { ...ctx.loop, replay } : ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
     const checkpoints = path.join(W(ctx), 'checkpoints', label);
     runs.push({ label, window, runDir: run.paths.runDir, checkpoints, run });
     if (ctx.state.done[`run:${label}`]) continue;
@@ -245,7 +256,8 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) 
     // The loop reads every outcome (scorecards, the paired test): a run whose outcomes are hidden never runs in it.
     if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);
     ctx.check();
-    const left = ctx.loop.limits.maxModelCalls - ctx.state.modelCalls;
+    // share: runs replayed at once (the probe round's `parallel`) split the calls left, so together they stay in the limit.
+    const left = Math.floor((ctx.loop.limits.maxModelCalls - ctx.state.modelCalls) / share);
     const deps = champion ? D.checkpointDeps(ctx.steps.stepDeps(run, tree), { run, dir: checkpoints }) : ctx.steps.stepDeps(run, tree);
     ctx.log(`${label}: ${champion ? 'the champion\'s' : 'the challenger\'s'} replay of ${window.from}..${window.to}${champion ? ', with checkpoints' : ''}`);
     const res = await ctx.steps.runReplay({ run, baseEnv: ctx.env, root: tree, deps, maxCycles: left, log: ctx.log });
@@ -258,7 +270,7 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look }) 
   }
   const decisions = await phase(ctx, champion ? `scorecard:${tag}` : `scorecard:${side}-${tag}`, path.join(ctx.paths.dir, `${side}-${tag}-decisions.json`), async () => {
     const out = [];
-    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor() })).map(d => ({ ...d, run: r.label })));
+    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor(), env: ctx.env })).map(d => ({ ...d, run: r.label })));
     return out;
   });
   return { runs, decisions };
@@ -282,7 +294,7 @@ async function sideRuns(ctx, { side, dir, tree, panel, runs, baselineSide = null
           run: r.run, checkpoint: D.checkpointOf(r.checkpoints, point.t), home, tree, point, followers, mustRun: champ ? champ.times : [], repeat: k, seed, baseEnv: ctx.env,
           stepDeps: ctx.steps.stepDeps, onCall: ctx.call,
         });
-        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor() });
+        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor(), env: ctx.env });
         result.decisions = decisions.filter(d => result.times.includes(d.t)).map(d => ({ key: `${point.t}|${d.key}`, repeat: k, category: d.category, blow: d.blow === true }));
         writeJsonAtomic(resultFile, result);
       }
@@ -359,6 +371,8 @@ async function proposalsFor(ctx, { n, flagged, champion }) {
       ? { proposal: x.proposal, source: `manual, approved by ${x.approvedBy}`, imported: x.file }
       : { error: `imported file ${x.file} is unreadable or holds no proposal`, source: 'manual', imported: x.file }));
   }
+  // Propose-Probe-Compose (the loop config's `probe`): the probe round's one combined change, or none.
+  if (ctx.loop.probe) return (await probeRound(ctx, { n, champion, api: { phase, windowRuns, candidateTree, guarded, workDir: W(ctx) } })).proposals;
   ctx.call();
   // The proposer reads its own copy of the champion's documents (its working directory), never the trees the runs use.
   const scratch = path.join(W(ctx), `iter-${n}`, 'proposer');
@@ -401,7 +415,7 @@ async function iteration(ctx, n, { champion, champ }) {
       ids.push(id);
       const errors = P.validateProposal(x.proposal, { root: champion.dir });
       const before = A.judgedBefore(archive, id);
-      return { id, source: x.source, proposal: x.proposal, errors, duplicateOf: before ? before.iteration : null, imported: x.imported };
+      return { id, source: x.source, proposal: x.proposal, errors, duplicateOf: before ? before.iteration : null, imported: x.imported, ...(x.composition ? { composition: x.composition } : {}) };
     }).filter(Boolean);
   });
   for (const x of proposals.filter(y => y.imported)) {
@@ -434,8 +448,11 @@ async function iteration(ctx, n, { champion, champ }) {
     }
     for (const { x, cand, v } of verdicts) {
       if (already.has(x.id)) continue;
-      const entry = { ...common, proposalId: x.id, source: x.source, proposal: x.proposal, files: cand.files, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator: v.evaluator, ...(v.model ? { model: v.model, panelVerdict: v.panel } : {}) };
+      const entry = { ...common, proposalId: x.id, source: x.source, proposal: x.proposal, files: cand.files, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator: v.evaluator, ...(v.model ? { model: v.model, panelVerdict: v.panel } : {}), ...(x.composition ? { composition: x.composition } : {}) };
       if (v.verdict === 'kept') entry.promotion = promote(ctx, { entry, n, tree: cand.tree, dir });
+      // A combined change (Propose-Probe-Compose): the keep rule's verdict goes to the lessons record too (its tuning
+      // windows are practice-train), before the archive line, once, so a resume never loses or repeats it.
+      if (x.composition) keepLesson(ctx, { n, id: x.id, verdict: v.verdict });
       A.appendEntry(ctx.paths.archive, entry);
       ctx.log(`iteration ${n}: ${x.id} ${v.verdict}: ${v.reasons.join('; ')}`);
     }
@@ -445,11 +462,20 @@ async function iteration(ctx, n, { champion, champ }) {
   ctx.save();
 }
 
+/** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
+function keepLesson(ctx, { n, id, verdict }) {
+  const file = path.join(ctx.paths.dir, LS.FILE);
+  if (!LS.practiceOnly(ctx.loop.tuningWindows)) return;
+  if (LS.readLessons(file).some(e => e.iteration === n && e.proposalId === id && typeof e.keep === 'string')) return;
+  LS.appendKeep(file, { proposalId: id, iteration: n, keep: verdict, windows: ctx.loop.tuningWindows });
+}
+
 /** A kept change: the PR body draft and the edits (always); a local branch unless dry-run. Never pushed. */
 function promote(ctx, { entry, n, tree, dir }) {
   const out = path.join(dir, 'promotion', entry.proposalId);
   fs.mkdirSync(out, { recursive: true });
-  const body = A.prBody(entry, { loopId: ctx.loop.loopId });
+  // A combined change (Propose-Probe-Compose) also says what it is made of: its parts, conflicts and the re-probe.
+  const body = [A.prBody(entry, { loopId: ctx.loop.loopId }), ...compositionLines(entry.composition)].join('\n');
   fs.writeFileSync(path.join(out, 'pr-body.md'), body);
   writeJsonAtomic(path.join(out, 'proposal.json'), entry.proposal);
   const branch = `train/${ctx.loop.loopId}-i${n}-${entry.proposalId}`;
