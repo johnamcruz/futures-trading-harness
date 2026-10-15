@@ -5,8 +5,9 @@
  * two replays of the same moments, with the same seed, show it measurably better. The training loop's paired test
  * (train/paired.js pairUp and judge) on two operator runs. A report, never a gate: nothing here refuses a run's start.
  *
- * Setup: every replay run records its setup at its start (`recordSetup`, scripts/replay.js run): <run dir>/setup.json,
- * once, never rewritten by a resume. It holds the setup's hashes (replay/config.js setupHash, setupBase, setupFixed),
+ * Setup: every replay run records its setup at its fresh start (`recordSetup`, through learning/run-pins.js pinForRun):
+ * <run dir>/setup.json, bound to the run by its config hash (the manifest's); a resume only notes its code, and a run
+ * whose code changed mid-run is never compared. It holds the setup's hashes (replay/config.js setupHash, setupBase, setupFixed),
  * its look's arm (lookArm), and the parts compared:
  *   pinned     stage, list (the curated list's fingerprint and list, or the window without one), seed (practice's),
  *              market (symbols and timeframe), data (a digest of the replay broker's entry and settings, never a
@@ -36,7 +37,8 @@
  * An interval verdict needs DECISION_RULE.minPairs pairs and an interval clear of 0. The result: "B worse" when any
  * measure is, "B better" when one is and none is worse, else "no significant difference".
  *
- *   setupRecord(run, { env }), recordSetup(run, { env })   the record (written once to <run dir>/setup.json)
+ *   setupRecord(run, { env }), recordSetup(run, { env, fresh })   the record (written at a fresh start to <run dir>/setup.json;
+ *                                       a resume notes its code); a path-valued setting is kept as its digest
  *   compareSetups(a, b, { field })      { ok, refusals, differs }
  *   readSide(dir, { env })              a run's dir, manifest, setup, look, decisions and scorecard records
  *   checkLooks(a, b, { env })           { refusals, hide, roles }
@@ -47,7 +49,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { setupHash, setupBase, setupFixed, lookArm, runSettings } = require('../replay/config');
+const { setupHash, setupBase, setupFixed, lookArm, runSettings, configHash } = require('../replay/config');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { CATEGORIES } = require('../replay/scorecard');
 const { pairUp, judge, mcnemar, DECISION_RULE } = require('./paired');
@@ -71,7 +73,13 @@ const WORSE = 'B worse';
 const NONE = 'no significant difference';
 
 const sha = x => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
-const flat = (prefix, obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== undefined).map(([k, v]) => [`${prefix}.${k}`, JSON.stringify(v)]));
+/** A value that names a path (a *_DIRS, *_DIR, *_FILE or *_PATH setting, or any absolute or ~/ path in it): kept as its digest, never the path. */
+const PATHY = /(?:_DIRS|_DIR|_FILE|_PATH)$/;
+const valueOf = (k, v) => {
+  const j = JSON.stringify(v);
+  return PATHY.test(k) || /(?:^|["\s,:=])(?:\/|~\/)/.test(j) ? `sha256:${sha(j).slice(0, 16)}` : j;
+};
+const flat = (prefix, obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== undefined).map(([k, v]) => [`${prefix}.${k}`, valueOf(k, v)]));
 
 /** The run's setup record (see the head), from its resolved config (replay/config.js resolveReplay). */
 function setupRecord(run, { env = process.env } = {}) {
@@ -83,7 +91,8 @@ function setupRecord(run, { env = process.env } = {}) {
   const library = run.setupLibrary ? require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16) : null;
   const digest = dirs => (run.root ? treeDigest(run.root, dirs) : null);
   return {
-    v: 1, runId: run.runId, setup: setupHash(run), base: setupBase(run), fixed: setupFixed(run), arm,
+    // configHash: the run's own hash (its manifest's), so the record is bound to the run that wrote it.
+    v: 1, runId: run.runId, configHash: configHash(run, env), setup: setupHash(run), base: setupBase(run), fixed: setupFixed(run), arm,
     pinned: {
       stage: run.stage === undefined ? null : run.stage,
       list: run.curated ? `${run.curated.fingerprint}:${run.curated.list}` : `window ${window}`,
@@ -102,15 +111,39 @@ function setupRecord(run, { env = process.env } = {}) {
   };
 }
 
-/** Written once, at the run's first start: a resume keeps the record its run started with. */
-function recordSetup(run, { env = process.env } = {}) {
-  const file = path.join(run.paths.runDir, SETUP_FILE);
-  if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
-  const rec = setupRecord(run, { env });
-  fs.mkdirSync(run.paths.runDir, { recursive: true });
+function writeRecord(file, rec) {
   fs.writeFileSync(`${file}.${process.pid}.tmp`, `${JSON.stringify(rec, null, 2)}\n`);
   fs.renameSync(`${file}.${process.pid}.tmp`, file);
   return rec;
+}
+
+/**
+ * Written only at a run's fresh start. A resume never writes one (a run started without it stays without it, and is
+ * never compared); it notes the code it resumed on (`resumes`), and a code change since the start marks the run
+ * (`codeChanged`: never compared, its decisions came from two versions of the code).
+ */
+function recordSetup(run, { env = process.env, fresh, now = new Date() } = {}) {
+  if (typeof fresh !== 'boolean') throw new Error('recordSetup: whether the run is fresh (seedRunHome)');
+  const file = path.join(run.paths.runDir, SETUP_FILE);
+  if (fresh) {
+    fs.mkdirSync(run.paths.runDir, { recursive: true });
+    return writeRecord(file, setupRecord(run, { env }));
+  }
+  let rec;
+  try { rec = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return null; }
+  const code = run.root ? treeDigest(run.root, CODE_DIRS) : null;
+  const resumes = [...(Array.isArray(rec.resumes) ? rec.resumes : []), { at: now.toISOString(), code }];
+  return writeRecord(file, { ...rec, resumes, codeChanged: rec.codeChanged === true || code !== rec.code });
+}
+
+/** Refusals when a run's setup record isn't its own (another run's, another config hash than its manifest's) or its code changed mid-run. */
+function boundRefusals(side) {
+  const s = side.setup;
+  const out = [];
+  if (s.runId !== side.runId) out.push(`run ${side.runId}: its setup record is run ${s.runId}'s`);
+  if (!s.configHash || s.configHash !== side.manifest.hash) out.push(`run ${side.runId}: its setup record (config ${short(s.configHash)}) is not the run's own (manifest ${short(side.manifest.hash)})`);
+  if (s.codeChanged === true || (s.resumes || []).some(r => r.code !== s.code)) out.push(`run ${side.runId}: code changed mid-run (a resume ran on other code than its start): its decisions came from two versions`);
+  return out;
 }
 
 const short = x => (x === null || x === undefined ? 'none' : /^[0-9a-f]{40,}$/.test(String(x)) ? String(x).slice(0, 12) : String(x));
@@ -183,7 +216,7 @@ function lookOf(side, env) {
   try { ledger = readLedger(file); } catch (err) { out.push(`run ${side.runId}: its look's ledger can't be read (${err.message})`); }
   const line = ledger.find(e => e && e.kind !== 'result' && e.evaluation === g.look.evaluation && e.runId === side.runId && e.purpose === g.look.purpose);
   if (!out.length && !line) out.push(`run ${side.runId}: its ${g.look.purpose} look (evaluation ${g.look.evaluation}) is not in the ledger: no comparison outside a recorded look`);
-  else if (line && line.config && side.setup && line.config !== side.setup.setup) out.push(`run ${side.runId}: its look names setup ${short(line.config)}, not the one it recorded (${short(side.setup.setup)})`);
+  else if (line && side.setup && ((line.config && line.config !== side.setup.setup) || (line.setup && line.setup !== side.setup.fixed))) out.push(`run ${side.runId}: its look names setup ${short(line.config)}, not the one it recorded (${short(side.setup.setup)})`);
   return { refusals: out, role: g.role, hide: g.hideOutcomes === true, look: g.look };
 }
 
@@ -369,7 +402,8 @@ function compareRuns(dirA, dirB, { metrics = METRICS, field = null, env = proces
   const refusals = [];
   for (const s of [a, b]) {
     if (s.manifest.finished !== true) refusals.push(`run ${s.runId} is not finished: compare finished runs`);
-    if (!s.setup) refusals.push(`run ${s.runId} has no setup record (${SETUP_FILE}: written at a run's start since the A/B comparison); its setup can't be checked`);
+    if (!s.setup) refusals.push(`run ${s.runId} has no setup record (${SETUP_FILE}: written only at a run's fresh start, since the A/B comparison; a run started before it, even if resumed since, has none); its setup can't be checked`);
+    else refusals.push(...boundRefusals(s));
   }
   const setups = a.setup && b.setup ? compareSetups(a.setup, b.setup, { field }) : { refusals: [], differs: [] };
   const looks = checkLooks(a, b, { env });

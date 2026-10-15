@@ -8,7 +8,8 @@
  * its display was recorded, is refused (the model would be shown something its look never named).
  * What is pinned is what the arm names: the index's and a shown library's hash are checked against it, before any pin.
  *
- *   pinForRun(run, { fresh, arm })   [line] said by the driver; throws when a resume would change the run's pins
+ *   pinForRun(run, { fresh, arm, setup })   [line] said by the driver; throws when a resume would change the run's pins;
+ *       with setup ({ env }): then the run's setup record for an A/B comparison (train/ab-compare.js recordSetup)
  */
 
 const fs = require('fs');
@@ -21,7 +22,7 @@ const PINS = [
   { key: 'setupLibrary', file: 'library-pinned.json', what: 'a history library' },
 ];
 
-function pinForRun(run, { fresh, arm }) {
+function pinForRun(run, { fresh, arm, setup = null }) {
   if (typeof arm !== 'string') throw new Error('pinForRun: the arm its look named (replay/config.js lookArm)');
   const dir = path.join(run.paths.runHome, 'experience');
   if (!fresh) {
@@ -46,6 +47,10 @@ function pinForRun(run, { fresh, arm }) {
     const display = run.libraryDisplay === true;
     const h = pinLibrary(run.paths.runHome, run.setupLibrary, { display }).hash.slice(0, 16);
     lines.push(`history library pinned: ${h}${display ? ', shown to the model' : ', not shown to the model (libraryDisplay off)'}`);
+  }
+  if (setup) {
+    const rec = require('../train/ab-compare').recordSetup(run, { env: setup.env, fresh });
+    if (rec && rec.codeChanged) lines.push('setup record: the code changed since this run started; it will not be A/B compared');
   }
   return lines;
 }

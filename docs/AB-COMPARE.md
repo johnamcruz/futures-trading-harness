@@ -11,9 +11,15 @@ node scripts/ab-compare.js <runA home> <runB home> [--metric r-decision,process]
 
 ## What it refuses
 
-Every replay run records its setup when it starts (`<run dir>/setup.json`). A
-resume leaves the record as it was. The comparison refuses, and prints what
-differs, unless both runs:
+Every replay run records its setup when it starts fresh
+(`<run dir>/setup.json`). The record carries the run's config hash, so it is
+tied to that run's manifest. A resume never writes a record. It only notes the
+code it resumed on. The comparison refuses a run with no record, a record
+whose config hash or run id isn't the run's own, and a run whose code changed
+between its start and a resume. A setting whose value is a path (a `*_DIRS`
+variable, for example) is stored and printed only as a digest.
+
+The comparison also refuses, and prints what differs, unless both runs:
 
 - have the same stage;
 - use the same curated list (its fingerprint and list), or the same window

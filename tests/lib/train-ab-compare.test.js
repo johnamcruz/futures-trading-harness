@@ -60,8 +60,9 @@ const card = (bar, category) => ({ t: bar, symbol: 'MNQZ3', category });
 function makeRun(w, runId, { over, root, env, decisions = [], scorecard = null, gate = { learning: true, role: 'practice-train', look: null, hideOutcomes: false }, finished = true, setup = true } = {}) {
   const run = resolve(w, runId, { over, root, env });
   fs.mkdirSync(run.paths.runDir, { recursive: true });
-  fs.writeFileSync(run.paths.manifest, JSON.stringify({ v: 1, runId, start: run.start.toISOString(), end: run.end.toISOString(), finished }));
-  if (setup) AB.recordSetup(run, { env: env || w.env });
+  const rec = setup ? AB.recordSetup(run, { env: env || w.env, fresh: true }) : null;
+  // The manifest's hash is the run's config hash, as the driver writes it.
+  fs.writeFileSync(run.paths.manifest, JSON.stringify({ v: 1, runId, hash: rec ? rec.configHash : 'none', start: run.start.toISOString(), end: run.end.toISOString(), finished }));
   const exp = path.join(run.paths.runHome, 'experience');
   fs.mkdirSync(exp, { recursive: true });
   fs.writeFileSync(path.join(exp, 'decisions.jsonl'), decisions.map(d => `${JSON.stringify({ ...d, runId })}\n`).join(''));
@@ -73,10 +74,14 @@ function makeRun(w, runId, { over, root, env, decisions = [], scorecard = null, 
 const recordOf = run => JSON.parse(fs.readFileSync(path.join(run.paths.runDir, AB.SETUP_FILE), 'utf8'));
 const compare = (a, b, opts = {}) => AB.compareRuns(a.paths.runHome, b.paths.runHome, { env: {}, deps: { skillUsage: null, mc: null }, ...opts });
 
-test('the setup record: written once at a run\'s start, its pinned parts, and never a credential', () => {
+test('the setup record: written at a run\'s fresh start, its pinned parts, and never a credential or a path', () => {
   const w = world();
   const run = resolve(w, 'a');
-  const rec = AB.recordSetup(run, { env: w.env });
+  assert.throws(() => AB.recordSetup(run, { env: w.env }), /whether the run is fresh/);
+  assert.strictEqual(AB.recordSetup(run, { env: w.env, fresh: false }), null, 'a resume never writes a record its start didn\'t');
+  assert.ok(!fs.existsSync(path.join(run.paths.runDir, AB.SETUP_FILE)));
+  const rec = AB.recordSetup(run, { env: w.env, fresh: true });
+  assert.match(rec.configHash, /^[0-9a-f]{64}$/);
   assert.deepStrictEqual(Object.keys(rec.pinned), [...AB.PINNED]);
   assert.strictEqual(rec.pinned.seed, 3);
   assert.match(rec.pinned.list, /^window 2023-03-06T14:00:00.000Z\.\.2023-03-06T20:00:00.000Z$/);
@@ -86,9 +91,40 @@ test('the setup record: written once at a run\'s start, its pinned parts, and ne
   // Another data setting is other data; the credential's value is no part of the setup.
   assert.notStrictEqual(AB.setupRecord(run, { env: { ...w.env, SIM_DATA: '/data/b' } }).pinned.data, rec.pinned.data);
   assert.strictEqual(AB.setupRecord(run, { env: { ...w.env, SIM_API_KEY: 'other' } }).pinned.data, rec.pinned.data);
-  // A resume keeps the record its run started with.
+  // A resume keeps the record its run started with, and notes the code it resumed on.
   fs.writeFileSync(path.join(run.paths.runDir, AB.SETUP_FILE), JSON.stringify({ ...rec, runId: 'kept' }));
-  assert.strictEqual(AB.recordSetup(run, { env: w.env }).runId, 'kept');
+  const resumed = AB.recordSetup(run, { env: w.env, fresh: false });
+  assert.deepStrictEqual([resumed.runId, resumed.setup, resumed.resumes.length, resumed.resumes[0].code, resumed.codeChanged], ['kept', rec.setup, 1, rec.code, false]);
+  const moved = AB.recordSetup({ ...run, root: w.roots.code }, { env: w.env, fresh: false });
+  assert.deepStrictEqual([moved.resumes.length, moved.codeChanged, moved.code], [2, true, rec.code]);
+  assert.strictEqual(AB.recordSetup(run, { env: w.env, fresh: false }).codeChanged, true, 'once changed, always marked');
+  // Path-valued settings (a *_DIRS gate variable, a path in the runner config) are kept as digests, never the path.
+  const dirs = AB.setupRecord(resolve(w, 'p', { over: { autotrader: { ...config(w, 'p').autotrader, command: ['/opt/tool/bin', '{prompt}'] } } }), { env: { ...w.env, FTH_STRATEGIES_DIRS: 'my-strategies' } });
+  assert.match(dirs.config['gate.FTH_STRATEGIES_DIRS'], /^sha256:[0-9a-f]{16}$/);
+  assert.match(dirs.config['cfg.command'], /^sha256:[0-9a-f]{16}$/);
+  assert.ok(!JSON.stringify(dirs).includes('my-strategies') && !JSON.stringify(dirs).includes('/opt/tool'));
+  assert.strictEqual(dirs.config['cfg.account'], '"7"');
+});
+
+test('a setup record bound to another run, another config hash, or a run whose code changed mid-run: refused', () => {
+  const w = world();
+  const a = makeRun(w, 'a', { decisions: [] });
+  const b = makeRun(w, 'b', { root: w.roots.skill, decisions: [] });
+  assert.strictEqual(compare(a, b).refused, false);
+  const file = path.join(b.paths.runDir, AB.SETUP_FILE);
+  const rec = recordOf(b);
+  fs.writeFileSync(file, JSON.stringify({ ...rec, runId: 'x' }));
+  assert.match(compare(a, b).refusals.join('\n'), /run b: its setup record is run x's/);
+  fs.writeFileSync(file, JSON.stringify({ ...rec, configHash: 'f'.repeat(64) }));
+  assert.match(compare(a, b).refusals.join('\n'), /run b: its setup record \(config ffffffffffff\) is not the run's own \(manifest [0-9a-f]{12}\)/);
+  const { configHash: _c, ...older } = rec;
+  fs.writeFileSync(file, JSON.stringify(older));
+  assert.match(compare(a, b).refusals.join('\n'), /run b: its setup record \(config none\) is not the run's own/);
+  fs.writeFileSync(file, JSON.stringify(rec));
+  AB.recordSetup({ ...resolve(w, 'b', { root: w.roots.skill }), root: w.roots.code }, { env: w.env, fresh: false });
+  assert.match(compare(a, b).refusals.join('\n'), /run b: code changed mid-run/);
+  fs.writeFileSync(file, JSON.stringify({ ...rec, resumes: [{ code: 'other' }] }));
+  assert.match(compare(a, b).refusals.join('\n'), /run b: code changed mid-run/, 'a resume on other code, unmarked, is still refused');
 });
 
 test('setups: refused unless they share stage, list or window, seed, market, data, index and code, and differ in one thing', () => {
@@ -215,7 +251,7 @@ test('held-back windows: read only through the runs\' recorded looks; a reasonin
   const bars = BARS.map(b => b.replace('2023-03-06', '2025-03-03'));
   const decs = R => bars.map(bar => decision(bar, { R }));
   const gate = (evaluation, purpose = 'judging') => ({ learning: true, role: 'test', look: { evaluation, candidate: 'c', purpose }, hideOutcomes: purpose === 'reasoning-fix', ledger });
-  const lookLine = (run, evaluation, purpose = 'judging', cfg) => fs.appendFileSync(ledger, `${JSON.stringify({ kind: 'look', evaluation, candidate: 'c', purpose, runId: run.runId, arm: 'without', config: cfg === undefined ? recordOf(run).setup : cfg, from: '2025-03-03', to: '2025-03-04', role: 'test', at: '2026-10-14T00:00:00Z' })}\n`);
+  const lookLine = (run, evaluation, purpose = 'judging', cfg, fixed) => fs.appendFileSync(ledger, `${JSON.stringify({ kind: 'look', evaluation, candidate: 'c', purpose, runId: run.runId, arm: 'without', config: cfg === undefined ? recordOf(run).setup : cfg, ...(fixed ? { setup: fixed } : {}), from: '2025-03-03', to: '2025-03-04', role: 'test', at: '2026-10-14T00:00:00Z' })}\n`);
   // No learning decision on a test day: refused.
   const bare = makeRun(w, 'bare', { over, decisions: decs(1), gate: null });
   const other = makeRun(w, 'other', { over, root: w.roots.skill, decisions: decs(1), gate: gate('e2') });
@@ -232,6 +268,10 @@ test('held-back windows: read only through the runs\' recorded looks; a reasonin
   // Both looks recorded: compared, with the outcomes.
   const b = makeRun(w, 'b', { over, root: w.roots.skill, decisions: decs(2), gate: gate('e3') });
   lookLine(b, 'e3');
+  // Its look names its setup but another setup without the code (setupFixed): refused.
+  const c2 = makeRun(w, 'c2', { over, root: w.roots.skill, decisions: decs(2), gate: gate('e5') });
+  lookLine(c2, 'e5', 'judging', undefined, 'e'.repeat(64));
+  assert.match(compare(a, c2).refusals.join('\n'), /run c2: its look names setup/);
   const ok = compare(a, b);
   assert.strictEqual(ok.refused, false, (ok.refusals || []).join('\n'));
   assert.strictEqual(ok.rows.find(x => x.measure.startsWith('R per decision')).verdict, AB.BETTER);
@@ -319,5 +359,9 @@ test('scripts/replay.js run records the setup at the run\'s start, the one its l
   run('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate']);
   const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
   const [look] = fs.readFileSync(path.join(user, '.futures-trading-harness', 'learning', 'looks.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepStrictEqual([rec.runId, rec.setup, rec.arm, rec.pinned.index], ['r', look.config, look.arm, 'without']);
+  assert.deepStrictEqual([rec.runId, rec.setup, rec.fixed, rec.arm, rec.pinned.index], ['r', look.config, look.setup, look.arm, 'without']);
+  // A resume (the same run again) never rewrites it: it notes the code it resumed on.
+  run('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate']);
+  const again = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual([again.setup, again.resumes.length, again.resumes[0].code === rec.code, again.codeChanged], [rec.setup, 1, true, false]);
 });
