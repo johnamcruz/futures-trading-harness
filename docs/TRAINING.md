@@ -590,9 +590,12 @@ and use an adapter. In short:
    (`scripts/lib/learning/decision-label.js`).
    - **A take** is correct only if every claimed read is verified true, the
      scorecard grades it right, its R:R is at least `min_rr`, its risk is at
-     most `max_risk_usd`, and no gate or risk rule refused it.
-   - **A pass** is correct when no valid setup existed, or when the account
-     state or the rules call for standing down.
+     most `max_risk_usd`, no gate or risk rule refused it, and (stage 2) the
+     account state is known to leave room.
+   - **A pass** is correct when a mechanical rule says no trade (a step of
+     the priority order, or no setup found), or when the account state calls
+     for standing down. compose_check refusing the model's own plans is not
+     enough.
    - **A risk action** is correct when it fits the rules for that account
      state.
 
@@ -605,12 +608,17 @@ and use an adapter. In short:
    The sampling settings come from a local file.
 3. **Build.** `node scripts/decision-dataset.js build` writes the correct
    decisions as model-agnostic chat JSONL:
-   - the exact prompts each role saw, then its response;
+   - the exact prompts the head trader saw, then its whole turn with its
+     tool calls and their results (format version 2); a subagent's turns only
+     when `--roles` names it (its claims are unchecked);
+   - never a failed, timed-out or interrupted cycle;
    - balanced by `adapters/spec.json`;
    - deduplicated and fingerprinted, with its source runs;
-   - only examples made under the harness's skills and prompt digest now
-     (the stale ones dropped and counted; `--include-digest` keeps others by
-     name, marked).
+   - only examples made under the harness's skills, prompt and code digests
+     now (the stale ones dropped and counted; `--include-digest` keeps others
+     by name, marked), under one exit plan;
+   - a warning, and a refusal past half, when the sampled repeats of moments
+     all answered the same.
 
    Train comes from practice-train only and validate from practice-validate
    only; test and final are refused. Each example is tagged stage 1 (no
@@ -630,8 +638,13 @@ and use an adapter. In short:
    adapted. The adapted run's runner config declares the adapter
    (`"adapter": "<manifest>"`). The declared adapter is in both run hashes by
    its manifest's digest, so the pair differs in that one field: compare them
-   with `node scripts/ab-compare.js <base> <adapted> --field adapter`.
-7. **Use it.** The preflight's `adapter` check:
+   with `node scripts/ab-compare.js <base> <adapted> --field adapter`, and
+   record the result with `node scripts/adapter.js validated <manifest>
+   --base <run dir> --adapted <run dir>`, which derives it from that
+   comparison.
+7. **Use it.** The live preflight refuses a declared adapter that is
+   pending, failed, stale or invalid. The training preflight's `adapter`
+   check:
    - is N/A with no adapter selected;
    - FAILs on a missing or invalid manifest;
    - FAILs on a stale adapter (its skills or prompt digest isn't the

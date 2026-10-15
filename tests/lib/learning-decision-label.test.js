@@ -84,6 +84,41 @@ test('a pass is correct when no valid setup existed or the rules or account call
   assert.strictEqual(L.labelDecision(pass({ record: RECORD, attempts: 1, counterfactual: { R: 3 }, grade: 'missed-win' }), RULES).label, 'unverifiable');
 });
 
+test('a pass after compose_check refused the model\'s OWN plans is correct only on a mechanical no-trade', () => {
+  const refused = { attempts: 3, record: { ok: false, reads: [{ check: false }] } };
+  // The scan found a setup the model planned badly: the refusals say its plans were bad, not that no valid setup existed.
+  for (const [over, why] of [
+    [{ scorecard: { category: 'unchecked', agrees: null }, expected: { decision: 'unchecked', decidedBy: 'no matching setup' } }, 'unchecked'],
+    [{ scorecard: { category: 'right', agrees: true }, expected: { decision: 'take', decidedBy: 'take' } }, 'a setup was expected'],
+    [{ scorecard: { category: 'right', agrees: true }, expected: null }, 'no expectation'],
+    [{ scorecard: { category: 'unchecked', agrees: null }, expected: { decision: 'no-trade', decidedBy: 'no setup' } }, 'no setup, but ungraded'],
+  ]) {
+    const l = L.labelDecision(pass({ ...refused, ...over }), RULES);
+    assert.strictEqual(l.label, 'unverifiable', why);
+  }
+  assert.match(L.labelDecision(pass({ ...refused, expected: { decision: 'take', decidedBy: 'take' } }), RULES).reasons[0], /refused the model's own plans \(3\), but no mechanical rule says no trade/);
+  // A mechanical no-trade: the scan found no setup (graded right), or a step of the priority order.
+  assert.strictEqual(L.labelDecision(pass({ ...refused }), RULES).label, 'correct');
+  assert.strictEqual(L.labelDecision(pass({ ...refused, expected: { decision: 'no-trade', decidedBy: 2 } }), RULES).label, 'correct');
+});
+
+test('stage 2: a take is correct only when the account room is known (standDown false); unknown or hidden room is unverifiable', () => {
+  assert.strictEqual(L.labelDecision(take({ stage: 2, account: { standDown: false, why: 'room to trade' } }), RULES).label, 'correct');
+  for (const account of [null, { standDown: null, why: 'the account state gives no room figures' }, { standDown: null, why: 'no account state' }]) {
+    const l = L.labelDecision(take({ stage: 2, account }), RULES);
+    assert.strictEqual(l.label, 'unverifiable', JSON.stringify(account));
+    assert.match(l.reasons.join(), /stage 2: the account room is unknown/);
+  }
+  assert.strictEqual(L.labelDecision(take({ stage: 1, account: null }), RULES).label, 'correct', 'stage 1 has no account state');
+});
+
+test('a decision whose cycle failed, timed out or was interrupted is unverifiable, whatever else holds', () => {
+  for (const d of [take(), pass({ expected: { decision: 'no-trade', decidedBy: 1 } }), { kind: 'risk', action: 'exit', account: { exitRequired: true, why: 'x' } }]) {
+    const l = L.labelDecision({ ...d, cycleFailed: 'a cycle failed or timed out' }, RULES);
+    assert.deepStrictEqual(l, { label: 'unverifiable', reasons: ['the cycle did not finish cleanly (a cycle failed or timed out)'] });
+  }
+});
+
 test('a pass with a false reason or a false read, or flagged by the scorecard, is incorrect', () => {
   assert.strictEqual(L.labelDecision(pass({ scorecard: { category: 'wrong stated reason', agrees: true }, attempts: 2 }), RULES).label, 'incorrect');
   assert.strictEqual(L.labelDecision(pass({ scorecard: { category: 'excessive abstention', agrees: false } }), RULES).label, 'incorrect');

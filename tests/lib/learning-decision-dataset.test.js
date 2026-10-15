@@ -18,7 +18,7 @@ const REPO_SPEC = JSON.parse(fs.readFileSync(path.join(ROOT, 'adapters', 'spec.j
 const SPEC = { ...REPO_SPEC, balance: { ...REPO_SPEC.balance, takeShare: [0.1, 0.9], maxSkillShare: 0.9, maxYearShare: 0.95, minYears: 1, minNearMllShare: 0.25 } };
 const RULES = { minRR: 2, maxRiskUsd: 300 };
 // The harness's digests now, as the fixture runs record theirs (F.DOCS: harness is the prompt digest).
-const CURRENT = { skills: F.DOCS.skills, prompt: F.DOCS.harness };
+const CURRENT = { skills: F.DOCS.skills, prompt: F.DOCS.harness, code: F.CODE };
 const rec = skill => ({ ok: true, side: 'long', entry: 21000, stop: 20990, target: 21025, size: 5, tick: 0.25, tickValue: 0.5, reads: [{ step: 'setup', skill, check: true }] });
 const ROOM = { status: 'active', cushion: 2500, dailyHeadroom: 600, softHeadroom: 400 };
 
@@ -33,12 +33,17 @@ function trainRun(home, { runId = 'train1', prompt = 'PROMPT-A  \r\né', documen
       { t: '2022-03-09T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: 'PROMPT-PASS', headText: ['PASS-NO-SETUP'] },
       { t: '2022-03-09T15:33:00.000Z', kind: 'pass', prompt: 'PROMPT-UNVERIFIED', headText: ['PASS-UNKNOWN'] },
       // The same prompt and response as the first decision's head turn: one example, not two.
-      { t: '2022-03-10T14:33:00.000Z', kind: 'take', record: rec('liquidity-sweeps'), prompt, headText: ['TAKE-A'], tasks: [{ role: 'risk-manager', prompt: 'RM-DUP', reply: 'APPROVED' }] },
+      { t: '2022-03-10T14:33:00.000Z', kind: 'take', record: rec('liquidity-sweeps'), prompt, headText: ['TAKE-A'], tasks: [{ role: 'risk-manager', prompt: 'RM-A', reply: 'APPROVED' }] },
     ],
   });
 }
 
 /** A practice-train stage-2 run: near the max loss limit and mid states. */
+const TRAIN_OPTS = (runId, prompt) => ({
+  runId, start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
+  decisions: [{ t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt, headText: [prompt] }],
+});
+
 function stage2Run(home) {
   return F.writeRun(home, {
     runId: 'train2', start: '2022-04-04T00:00:00Z', end: '2022-04-09T00:00:00Z', stage: 2,
@@ -79,7 +84,13 @@ test('only correct decisions are written, as the exact prompts and responses (by
   for (const gone of ['TAKE-WRONG', 'PASS-UNKNOWN', 'S2-TAKE-BLOCKED']) assert.ok(!all.includes(gone), gone);
   // Byte-faithful: the prompt and the system prompt as recorded.
   const head = step1.find(x => x.messages.some(m => m.content === 'TAKE-A'));
-  assert.deepStrictEqual(head.messages, [{ role: 'system', content: F.SYSTEM['fth-head-trader'] }, { role: 'user', content: 'PROMPT-A  \r\né' }, { role: 'assistant', content: 'TAKE-A' }]);
+  assert.deepStrictEqual(head.messages.slice(0, 2), [{ role: 'system', content: F.SYSTEM['fth-head-trader'] }, { role: 'user', content: 'PROMPT-A  \r\né' }]);
+  assert.deepStrictEqual(head.messages.slice(2).map(m => m.role), ['assistant', 'tool', 'assistant'], 'its risk-manager task call and result, then its text');
+  assert.strictEqual(head.messages[3].content, '<task id="ses_c" state="completed">\n<task_result>\nAPPROVED\n</task_result>\n</task>');
+  assert.deepStrictEqual(head.messages[4], { role: 'assistant', content: 'TAKE-A' });
+  // The head trader's turns only by default: no subagent example (its claims are unchecked).
+  assert.ok(lines(files['meta.jsonl']).every(m => m.role === 'fth-head-trader' && m.subagent === false));
+  assert.ok(!step1.some(x => x.messages[x.messages.length - 1].content === 'APPROVED'));
   assert.ok(step1.every(x => Object.keys(x).length === 1 && Array.isArray(x.messages)), 'model-agnostic chat lines: messages only');
   // Labels counted, nothing correct-by-outcome.
   assert.deepStrictEqual(dataset.labels.train, { correct: 7, incorrect: 2, unverifiable: 1 });
@@ -93,7 +104,8 @@ test('only correct decisions are written, as the exact prompts and responses (by
   assert.deepStrictEqual(dataset.counts.step1, { train: step1.length, valid: 1 });
   assert.ok(lines(files['step1/valid.jsonl'])[0].messages.some(m => m.content === 'VAL-PROMPT'));
   assert.ok(meta.find(m => m.decision.accountState === 'near-mll'));
-  assert.deepStrictEqual(dataset.harness, F.DOCS);
+  assert.deepStrictEqual(dataset.harness, { ...F.DOCS, code: F.CODE });
+  assert.deepStrictEqual([dataset.v, dataset.exitPlan, dataset.roles], [2, F.EXIT.hash, ['fth-head-trader']]);
   assert.deepStrictEqual(dataset.sources.map(s => [s.set, s.runId]), [['train', 'train1'], ['train', 'train2'], ['validate', 'val1']]);
 });
 
@@ -140,7 +152,7 @@ test('the digest: only examples made under the harness\'s skills and prompt dige
   assert.ok(!JSON.stringify(kept.files).includes('OLD-WORDING'), 'made under old skills: dropped');
   assert.ok(kept.dataset.digests.stale.train > 0, 'and counted');
   assert.strictEqual(kept.dataset.digests.stale.train, DS.buildDataset({ train: [b, a], spec: SPEC, rules: RULES, current: CURRENT }).dataset.digests.stale.train);
-  assert.deepStrictEqual(kept.dataset.harness, F.DOCS);
+  assert.deepStrictEqual(kept.dataset.harness, { ...F.DOCS, code: F.CODE });
   assert.ok(lines(kept.files['meta.jsonl']).every(m => m.digest.current === true && m.digest.skills === CURRENT.skills));
   // Included by name ('any' or a prefix): kept, and marked as another digest's.
   for (const include of [['any'], ['cccccccc']]) {
@@ -155,7 +167,7 @@ test('the digest: only examples made under the harness\'s skills and prompt dige
   assert.strictEqual(DS.digestStatus(null, CURRENT, ['any']), 'included');
   assert.throws(() => DS.buildDataset({ train: [a], spec: SPEC, rules: RULES, current: CURRENT, include: ['abc'] }), /hex digest prefix of 8/);
   assert.throws(() => DS.buildDataset({ train: [b], spec: SPEC, rules: RULES, current: CURRENT }), /every correct train decision was made under another skills or prompt digest/);
-  assert.throws(() => DS.buildDataset({ train: [a], spec: SPEC, rules: RULES }), /current: the harness's skills and prompt digests/);
+  assert.throws(() => DS.buildDataset({ train: [a], spec: SPEC, rules: RULES }), /current: the harness's skills, prompt and code digests/);
   assert.throws(() => DS.buildDataset({ train: [a], spec: { ...SPEC, steps: [] }, rules: RULES, current: CURRENT }), /spec is invalid/);
 });
 
@@ -165,7 +177,8 @@ test('a cycle that decided wrongly on one symbol gives no example for its other 
   const [first, , wrong] = src.decisions;
   assert.ok(first.cycle && wrong.cycle, 'decisions name their cycle');
   // The wrong-winner's decision recorded in the first decision's cycle, as another symbol of it.
-  const shared = { ...src, decisions: src.decisions.map(d => (d === wrong ? { ...d, key: `${first.t}|MES`, cycle: first.cycle } : d)) };
+  // (Without the last decision, whose head turn repeats the first's.)
+  const shared = { ...src, decisions: src.decisions.slice(0, -1).map(d => (d === wrong ? { ...d, key: `${first.t}|MES`, cycle: first.cycle } : d)) };
   const built = DS.buildDataset({ train: [shared], spec: SPEC, rules: RULES, current: CURRENT });
   const text = JSON.stringify(built.files);
   assert.ok(!text.includes('RM-A'), 'the shared cycle\'s turns are out');
@@ -182,11 +195,11 @@ test('only correct decisions, even without a cycle to group them by', () => {
 
 test('dedupe: the first of identical examples is kept, by the id of its exact messages', () => {
   const m = [{ role: 'user', content: 'a' }];
-  const ex = DS.examplesOf({ turns: [{ role: 'x', faithful: true, messages: m }, { role: 'x', faithful: false, messages: null }] });
+  const ex = DS.examplesOf({ turns: [{ role: 'fth-head-trader', faithful: true, messages: m }, { role: 'fth-head-trader', faithful: false, messages: null }] });
   assert.strictEqual(ex.length, 1);
   const { kept, dropped } = DS.dedupe([{ id: '1', n: 1 }, { id: '2' }, { id: '1', n: 2 }]);
   assert.deepStrictEqual([kept.map(x => x.n || x.id), dropped.length], [[1, '2'], 1]);
-  assert.strictEqual(DS.examplesOf({ turns: [{ faithful: true, messages: [{ role: 'user', content: 'a ' }] }] })[0].id === ex[0].id, false, 'one trailing space is another example');
+  assert.strictEqual(DS.examplesOf({ turns: [{ role: 'fth-head-trader', faithful: true, messages: [{ role: 'user', content: 'a ' }] }] })[0].id === ex[0].id, false, 'one trailing space is another example');
 });
 
 const D = (n, over) => Array.from({ length: n }, (_, i) => ({ uid: `${over.kind}-${over.skill}-${over.year}-${over.accountState || ''}-${i}`, ...over }));
@@ -243,4 +256,79 @@ test('the repository\'s spec builds on a fixture that meets it', () => {
   const built = DS.buildDataset({ train: [sourceOf(r)], spec: REPO_SPEC, rules: RULES, current: CURRENT });
   assert.ok(built.dataset.counts.step1.train > 0);
   assert.strictEqual(built.dataset.counts.step2.train, 0, 'no stage-2 data: step 2 waits for it');
+});
+
+test('roles: a subagent\'s turns only when named, marked in meta.jsonl; the head trader always', () => {
+  const home = tmpDir();
+  const src = sourceOf(trainRun(path.join(home, 'a')));
+  const named = DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['fth-head-trader', 'risk-manager'] });
+  const meta = lines(named.files['meta.jsonl']);
+  assert.ok(meta.some(m => m.role === 'risk-manager' && m.subagent === true));
+  assert.ok(lines(named.files['step1/train.jsonl']).some(x => x.messages[x.messages.length - 1].content === 'APPROVED'));
+  assert.ok(lines(DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['fth-head-trader', 'all'] }).files['meta.jsonl']).some(m => m.subagent));
+  assert.throws(() => DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['risk-manager'] }), /roles: the head trader/);
+});
+
+test('the code digest and the exit plan: a code change marks examples stale; two exit plans are never mixed; no exit record dropped', () => {
+  const home = tmpDir();
+  const a = sourceOf(trainRun(path.join(home, 'a')));
+  const oldCode = sourceOf(F.writeRun(path.join(home, 'b'), { ...TRAIN_OPTS('train8', 'OLD-CODE'), code: 'e'.repeat(64) }));
+  const built = DS.buildDataset({ train: [a, oldCode], spec: SPEC, rules: RULES, current: CURRENT });
+  assert.ok(!JSON.stringify(built.files).includes('OLD-CODE'), 'made under other code: stale');
+  assert.ok(built.dataset.digests.stale.train > 0);
+  assert.ok(lines(built.files['meta.jsonl']).every(m => m.digest.code === F.CODE && m.digest.exitPlan === F.EXIT.hash));
+  assert.ok(JSON.stringify(DS.buildDataset({ train: [a, oldCode], spec: SPEC, rules: RULES, current: CURRENT, include: ['eeeeeeee'] }).files).includes('OLD-CODE'), 'included by its code digest');
+  // A run whose code changed mid-run holds no code digest: stale.
+  assert.strictEqual(DS.digestStatus({ skills: CURRENT.skills, prompt: CURRENT.prompt, code: null }, CURRENT), 'stale');
+  const { exitRecord } = require('../../scripts/lib/learning/experience-log');
+  const trail = exitRecord({ mode: 'trail', plan: { trailR: 1 } });
+  const other = sourceOf(F.writeRun(path.join(home, 'c'), { ...TRAIN_OPTS('train7', 'TRAIL-EXIT'), exit: trail }));
+  assert.throws(() => DS.buildDataset({ train: [a, other], spec: SPEC, rules: RULES, current: CURRENT }), /made under 2 exit plans/);
+  const none = sourceOf(F.writeRun(path.join(home, 'd'), { ...TRAIN_OPTS('train6', 'NO-EXIT'), exit: null }));
+  const dropped = DS.buildDataset({ train: [a, none], spec: SPEC, rules: RULES, current: CURRENT });
+  assert.ok(!JSON.stringify(dropped.files).includes('NO-EXIT'));
+  assert.ok(dropped.dataset.untaggedExit.train.decisions > 0);
+});
+
+test('validSetups: correct takes against correct passes on valid setups are counted (the labeller\'s lean)', () => {
+  const { dataset } = buildAll();
+  assert.deepStrictEqual(dataset.validSetups.train, { correctTakes: 5, correctPasses: 1 }, 'stage 1 takes and stage 2 takes; the stand-down pass');
+});
+
+test('repeated samples: every repeat of a moment answering the same is counted and warned, refused past half', () => {
+  const home = tmpDir();
+  const src = sourceOf(trainRun(path.join(home, 'a')));
+  const resp = text => [{ role: 'fth-head-trader', faithful: true, messages: [{ role: 'user', content: 'p' }, { role: 'assistant', content: text }] }];
+  const sampled = (t, texts) => texts.map((x, repeat) => ({ ...src.decisions[0], key: `${t}|${repeat}`, sample: { t, repeat }, turns: resp(x) }));
+  const r = DS.repeatedSamples([{ runId: 'r', decisions: [...sampled('m1', ['a', 'a', 'a']), ...sampled('m2', ['a', 'b', 'a']), ...sampled('m3', ['x', 'x'])] }]);
+  assert.deepStrictEqual(r, { moments: 3, identical: 2, times: ['r|m1', 'r|m3'] });
+  const base = { ...src, decisions: [...src.decisions, ...sampled('m1', ['a', 'a']), ...sampled('m2', ['a', 'b'])] };
+  const ok = DS.buildDataset({ train: [base], spec: SPEC, rules: RULES, current: CURRENT });
+  assert.deepStrictEqual(ok.dataset.repeatedSamples, { moments: 2, identical: 1, times: ['train1|m1'] }, 'half: recorded, not refused');
+  const most = { ...src, decisions: [...src.decisions, ...sampled('m1', ['a', 'a']), ...sampled('m2', ['b', 'b']), ...sampled('m3', ['c', 'd'])] };
+  assert.throws(() => DS.buildDataset({ train: [most], spec: SPEC, rules: RULES, current: CURRENT }), /2 of 3 sampled moments answered identically/);
+});
+
+test('the format version: a v1 dataset is refused on read; the spec must name the builder\'s version', () => {
+  const a = buildAll();
+  const dir = path.join(tmpDir(), 'ds');
+  DS.writeDataset(dir, { ...a, dataset: { ...a.dataset, v: 1 } });
+  assert.throws(() => DS.readDataset(dir), /a format v1 dataset/);
+  assert.throws(() => DS.buildDataset({ train: [], spec: { ...SPEC, dataset: { ...SPEC.dataset, version: 1 } }, rules: RULES, current: CURRENT }), /dataset\.version/);
+});
+
+test('examplesOf: the head trader\'s turns by default; the fingerprint names the format; a run whose code changed mid-run has no code digest', () => {
+  const head = { role: 'fth-head-trader', faithful: true, messages: [{ role: 'user', content: 'h' }] };
+  const sub = { role: 'risk-manager', faithful: true, messages: [{ role: 'user', content: 's' }] };
+  assert.deepStrictEqual(DS.examplesOf({ turns: [head, sub] }).map(x => x.role), ['fth-head-trader']);
+  assert.deepStrictEqual(DS.examplesOf({ turns: [head, sub] }, ['fth-head-trader', 'risk-manager']).map(x => [x.role, x.subagent]), [['fth-head-trader', false], ['risk-manager', true]]);
+  // A format-1 fingerprint (the files alone) is never a format-2 one.
+  const files = { 'step1/train.jsonl': 'x\n' };
+  const legacy = require('crypto').createHash('sha256');
+  for (const name of DS.DATA_FILES) legacy.update(`${name}\0${files[name] || ''}\0`);
+  assert.notStrictEqual(DS.fingerprintOf(files), legacy.digest('hex'));
+  const r = trainRun(path.join(tmpDir(), 'a'));
+  const setupFile = path.join(r.runDir, 'setup.json');
+  fs.writeFileSync(setupFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(setupFile, 'utf8')), codeChanged: true }));
+  assert.ok(sourceOf(r).decisions.every(d => d.digest.code === null));
 });

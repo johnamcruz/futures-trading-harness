@@ -19,12 +19,16 @@
  *               runnerExit), else null
  *   riskUsd     the record's risk in dollars (|entry - stop| in ticks x tick value x size), or null
  *   account     stage 2: the account call (accountCall), or null in stage 1 (no account state)
+ *   stage       1 or 2 (a stage-2 take needs a known account room: account.standDown === false)
+ *   cycleFailed why the cycle failed, timed out or was interrupted, or null: such a decision is always unverifiable
  * The rules: { minRR, maxRiskUsd } (trade_lifecycle's risk.min_rr and risk.max_risk_usd).
  *
  * A take is correct only if every claimed read is verified true, the scorecard grades it right, the plan's R:R is at
  * least minRR, its risk at most maxRiskUsd, no gate or risk rule refused it and (stage 2) the account state doesn't
- * call for standing down. A pass is correct when no valid setup existed (compose_check refused every plan the cycle
- * tried, or a hard stop said no trade) or when the account state or the rules call for standing down. A risk action is
+ * call for standing down (stage 2: it is KNOWN to leave room; unknown room is unverifiable). A pass is correct when a
+ * mechanical rule says no trade (a step of the priority order; or the scan found no setup, the scorecard grades the
+ * pass right and compose_check refused every plan the cycle tried: refused plans alone say the model's plans were bad,
+ * not that no valid setup existed) or when the account state calls for standing down. A risk action is
  * correct when it fits the rules for that account state (an exit the account calls for; a hold the scorecard grades
  * right; the runner's own trail or time-stop exit is the policy's, never the model's, so it is no model decision).
  * The definitions are the measurement's (#208): a decision's reads count as correct only when every one is verified true
@@ -114,6 +118,9 @@ function labelTake(d, rules) {
   if (risk === null) open.push('the plan\'s risk in dollars is unknown');
   else if (num(rules.maxRiskUsd) !== null && risk > rules.maxRiskUsd + 1e-9) bad.push(`risk $${risk} over the cap $${rules.maxRiskUsd}`);
   if (d.account && d.account.standDown === true) bad.push(`the account state calls for standing down (${d.account.why})`);
+  // Stage 2: a take is right only where the account state is known to leave room (accountCall standDown false); an
+  // unknown or hidden room verifies nothing.
+  else if (d.stage === 2 && !(d.account && d.account.standDown === false)) open.push(`stage 2: the account room is unknown (${d.account ? d.account.why : 'no account state shown'})`);
   if (bad.length) return out('incorrect', bad);
   if (open.length) return out('unverifiable', open);
   return out('correct', [`reads verified, scored right, R:R ${rr.toFixed(2)}, risk $${risk}`]);
@@ -133,7 +140,13 @@ function labelPass(d) {
   if (ex.decision === 'no-trade' && typeof ex.decidedBy === 'number') return out('correct', [`the rules say no trade (the priority order's step ${ex.decidedBy})`]);
   if (!sc) return out('unverifiable', ['not scored']);
   const valid = isObj(d.record) && d.record.ok === true;
-  if (!valid && Number(d.attempts) > 0) return out('correct', [`no valid setup: compose_check refused every plan the cycle tried (${d.attempts})`]);
+  if (!valid && Number(d.attempts) > 0) {
+    // The checker refusing the model's OWN plans says its plans were bad, not that no valid setup existed: a pass is
+    // correct here only when the scorecard's mechanical expectation is no trade too (a step of the priority order, or
+    // its scan finding no setup) and it grades the pass right.
+    if (sc.category === 'right' && ex.decision === 'no-trade' && ex.decidedBy === 'no setup') return out('correct', [`no valid setup: the scan found none, and compose_check refused every plan the cycle tried (${d.attempts})`]);
+    return out('unverifiable', [`compose_check refused the model's own plans (${d.attempts}), but no mechanical rule says no trade (expected ${ex.decision || 'none'}${ex.decidedBy !== undefined ? `, ${ex.decidedBy}` : ''}): whether a valid setup existed is unverified`]);
+  }
   if (valid) return out('unverifiable', ['a pass on a valid setup with no rule calling for standing down: the model\'s judgment, which no rule verifies']);
   return out('unverifiable', ['no setup was composed or checked: whether a valid one existed is unverified']);
 }
@@ -159,6 +172,8 @@ function labelRisk(d) {
 function labelDecision(decision, rules = {}) {
   if (!isObj(decision)) throw new Error('labelDecision: a decision object');
   const d = Object.fromEntries(Object.entries(decision).filter(([k]) => !OUTCOME_KEYS.includes(k)));
+  // A cycle that failed, timed out or was interrupted (decision-examples.js cycleHealth): its decision is no process.
+  if (d.cycleFailed) return out('unverifiable', [`the cycle did not finish cleanly (${d.cycleFailed})`]);
   if (d.kind === 'take') return labelTake(d, rules);
   if (d.kind === 'pass') return labelPass(d, rules);
   if (d.kind === 'risk') return labelRisk(d, rules);

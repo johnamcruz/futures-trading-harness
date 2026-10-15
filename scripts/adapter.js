@@ -10,8 +10,10 @@
  *       keep rule; both on practice-validate)
  *   node scripts/adapter.js check <manifest>
  *       valid against adapters/spec.json, and current (its skills and prompt digests the harness's now)
- *   node scripts/adapter.js validated <manifest> --status passed|failed --runs <runId,runId> --result <json file>
- *       records the validation result
+ *   node scripts/adapter.js validated <manifest> --base <run dir> --adapted <run dir> [--account <name>]
+ *       derives the validation result from the A/B comparison of the two runs (learning/adapter-validation.js deriveValidation:
+ *       both finished on practice-validate, differing only in the adapter, the adapted one this manifest; step 1 the
+ *       stage-1 exit test, step 2 the prop keep rule) and records it; never a result written by hand
  */
 
 'use strict';
@@ -24,8 +26,8 @@ const A = require('./lib/learning/adapter');
 const { readDataset } = require('./lib/learning/decision-dataset');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: adapter.js init --name N --base-model M --folder F --dataset <dir> --step 1|2 --settings <file> [--seed N] [--parent <manifest>] --out <file> | check <manifest> | validated <manifest> --status passed|failed --runs <a,b> --result <file>';
-const FLAGS = ['name', 'base-model', 'folder', 'dataset', 'step', 'settings', 'seed', 'parent', 'out', 'status', 'runs', 'result'];
+const USAGE = 'usage: adapter.js init --name N --base-model M --folder F --dataset <dir> --step 1|2 --settings <file> [--seed N] [--parent <manifest>] --out <file> | check <manifest> | validated <manifest> --base <run dir> --adapted <run dir> [--account <name>]';
+const FLAGS = ['name', 'base-model', 'folder', 'dataset', 'step', 'settings', 'seed', 'parent', 'out', 'base', 'adapted', 'account'];
 const say = msg => process.stdout.write(`[adapter] ${msg}\n`);
 const abs = p => path.resolve(expandHome(p));
 
@@ -58,7 +60,7 @@ function init(o) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim();
   const digests = A.currentDigests(ROOT);
   const dataset = readDataset(abs(o.dataset));
-  if (JSON.stringify({ skills: dataset.harness.skills, prompt: dataset.harness.harness }) !== JSON.stringify(digests)) say('note: the dataset was built from runs on other skills or prompts than the harness now');
+  if (dataset.harness.skills !== digests.skills || dataset.harness.harness !== digests.prompt || dataset.harness.code !== digests.code) say('note: the dataset was built from runs on other skills, prompts or code than the harness now');
   const training = { step, method: 'lora', seed: o.seed === undefined ? 1 : Number(o.seed), settings: A.readJsonFile(abs(o.settings)) };
   if (step === 2) {
     if (!o.parent) throw new Error('--parent: step 2 starts from a step-1 adapter (its manifest)');
@@ -84,10 +86,15 @@ function check(file) {
 }
 
 function validated(file, o) {
-  if (!['passed', 'failed'].includes(o.status) || !o.runs || !o.result) throw new Error(USAGE);
+  if (!o.base || !o.adapted) throw new Error(USAGE);
   const m = A.readJsonFile(abs(file));
-  m.validation = { ...m.validation, status: o.status, runs: o.runs.split(',').map(s => s.trim()).filter(Boolean), result: A.readJsonFile(abs(o.result)), at: new Date().toISOString() };
+  if (m.validation && m.validation.status !== 'pending') throw new Error(`${m.name}: already ${m.validation.status} (runs ${(m.validation.runs || []).join(', ')})`);
+  // The tag the adapted run declared: this manifest's bytes as they were when it ran (still pending).
+  const tag = A.adapterTag({ adapter: abs(file) });
+  const v = require('./lib/learning/adapter-validation').deriveValidation({ manifest: m, tag, base: abs(o.base), adapted: abs(o.adapted), env: process.env, root: ROOT, account: o.account || null });
+  m.validation = { ...m.validation, status: v.status, runs: v.runs, result: v.result, at: new Date().toISOString() };
   writeManifest(abs(file), m);
+  say(`${m.name}: validation ${v.status} (${v.result.why})`);
   return 0;
 }
 

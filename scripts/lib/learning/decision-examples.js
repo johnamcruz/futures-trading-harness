@@ -14,16 +14,26 @@
  *   turns          the roles' prompts and responses as the cycle recorded them (roleTurns)
  *
  * The roles' turns (roleTurns), byte-faithful where recorded:
- *   the head trader   user: the cycle's prompt, as given to the harness (the cycle file's `prompt`); assistant: its
- *                     text parts in order (an opencode transcript's `text` events), joined by a blank line
- *   each subagent     user: the prompt the head trader gave it (opencode's task call input); assistant: the text it
- *                     returned (the task result inside opencode's <task_result> wrapper)
+ *   the head trader   user: the cycle's prompt, as given to the harness (the cycle file's `prompt`); then its whole turn
+ *                     in order (headMessages), OpenAI-style: each model step an assistant message { content, tool_calls:
+ *                     [{ id, type 'function', function { name, arguments } }] }, each call's result a tool message
+ *                     { tool_call_id, content } (opencode's state.output, or state.error for a failed call; `task` calls
+ *                     too, their content the wrapper the model read), ending in the final assistant text. `arguments`
+ *                     is the call's recorded input as JSON (opencode records it parsed)
+ *   each subagent     (subagent: true) user: the prompt the head trader gave it (opencode's task call input);
+ *                     assistant: the text it returned (the task result inside opencode's <task_result> wrapper). Its
+ *                     claims are unchecked: the dataset trains on them only by name (decision-dataset.js roles)
  *   system            the role's own prompt from the run's workspace/opencode.json (the generated adapter the run
  *                     read), when that file holds one; never rebuilt from today's documents
- * A transcript the reader doesn't recognize gives no head turn (nothing is guessed): `faithful: false`.
+ * A transcript the reader doesn't recognize, or a call it can't read whole, gives no head turn (nothing is guessed):
+ * `faithful: false`. A decision whose cycle failed, timed out or was interrupted (cycleHealth: the run's store line for
+ * its time, and its cycle file) carries `cycleFailed` (why), and none of its turns is faithful.
  *
  *   HEAD_ROLE
  *   taskResult(output)                     the subagent's text inside opencode's task wrapper, or null
+ *   toolCall(part)                         { call, result } of an opencode tool_use part, or null
+ *   headMessages(events)                   the head trader's messages after its prompt, or null (see above)
+ *   cycleHealth(storeLine, cycleDoc)       why the cycle can't be trusted, or null
  *   roleTurns(doc, { systemPrompts })      [{ role, messages, faithful }]
  *   systemPromptsOf(home)                  { role: prompt } from <home>/workspace/opencode.json, {} without one
  *   runDecisions(runDir, { score, times, sample })   the run's decisions (see the head); `score(runDir)` -> scorecard
@@ -59,13 +69,59 @@ function chat(system, user, assistant) {
   return [...(typeof system === 'string' ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }, { role: 'assistant', content: assistant }];
 }
 
+/** A tool call as the model made it (OpenAI-style), and its result as the model read it, byte for byte. */
+function toolCall(p) {
+  const st = p.state;
+  const id = typeof p.callID === 'string' && p.callID ? p.callID : null;
+  if (!id || typeof p.tool !== 'string' || !p.tool || !isObj(st)) return null;
+  const content = st.status === 'completed' ? resultText(st.output) : st.status === 'error' && typeof st.error === 'string' ? st.error : null;
+  if (content === null) return null;
+  return { call: { id, type: 'function', function: { name: p.tool, arguments: JSON.stringify(isObj(st.input) ? st.input : {}) } }, result: { role: 'tool', tool_call_id: id, content } };
+}
+
+/**
+ * The head trader's whole turn, in order: the opencode events walked as they came, each model step's text and tool calls
+ * one assistant message ({ content, tool_calls }), then each call's result as a tool message, then the final assistant
+ * text. A text after a call within one step starts the next assistant message (the order is kept, never merged). Null
+ * when any part can't be read faithfully (a call without its id, name or result) or the turn doesn't end in text.
+ */
+function headMessages(events) {
+  const msgs = [];
+  let cur = null;
+  const flush = () => {
+    if (!cur) return;
+    const m = { role: 'assistant', content: cur.texts.join('\n\n') };
+    if (cur.calls.length) m.tool_calls = cur.calls.map(c => c.call);
+    msgs.push(m, ...cur.calls.map(c => c.result));
+    cur = null;
+  };
+  for (const e of events) {
+    const p = e.part;
+    if (e.type === 'step_start' || e.type === 'step_finish') { flush(); continue; }
+    if (e.type === 'text' && isObj(p) && typeof p.text === 'string') {
+      if (cur && cur.calls.length) flush();
+      cur = cur || { texts: [], calls: [] };
+      cur.texts.push(p.text);
+    } else if (e.type === 'tool_use') {
+      const c = isObj(p) ? toolCall(p) : null;
+      if (!c) return null;
+      cur = cur || { texts: [], calls: [] };
+      cur.calls.push(c);
+    }
+  }
+  flush();
+  const last = msgs[msgs.length - 1];
+  return last && last.role === 'assistant' && !last.tool_calls && last.content ? msgs : null;
+}
+
 function roleTurns(doc, { systemPrompts = {} } = {}) {
   if (!isObj(doc) || typeof doc.prompt !== 'string' || !doc.prompt) return [];
   const events = documents(doc.transcript).filter(isOpencodeEvent);
   const turns = [];
-  const texts = events.filter(e => e.type === 'text' && isObj(e.part) && typeof e.part.text === 'string').map(e => e.part.text);
-  turns.push(texts.length
-    ? { role: HEAD_ROLE, messages: chat(systemPrompts[HEAD_ROLE], doc.prompt, texts.join('\n\n')), faithful: true }
+  const head = headMessages(events);
+  const sys = systemPrompts[HEAD_ROLE];
+  turns.push(head
+    ? { role: HEAD_ROLE, messages: [...(typeof sys === 'string' ? [{ role: 'system', content: sys }] : []), { role: 'user', content: doc.prompt }, ...head], faithful: true }
     : { role: HEAD_ROLE, messages: null, faithful: false });
   for (const e of events) {
     const p = e.part;
@@ -73,10 +129,33 @@ function roleTurns(doc, { systemPrompts = {} } = {}) {
     const input = isObj(p.state.input) ? p.state.input : {};
     const role = typeof input.subagent_type === 'string' ? input.subagent_type : null;
     const reply = taskResult(resultText(p.state.output));
-    if (!role || typeof input.prompt !== 'string' || !input.prompt || reply === null) { turns.push({ role: role || 'unknown', messages: null, faithful: false }); continue; }
-    turns.push({ role, messages: chat(systemPrompts[role], input.prompt, reply), faithful: true });
+    if (!role || typeof input.prompt !== 'string' || !input.prompt || reply === null) { turns.push({ role: role || 'unknown', messages: null, faithful: false, subagent: true }); continue; }
+    turns.push({ role, messages: chat(systemPrompts[role], input.prompt, reply), faithful: true, subagent: true });
   }
   return turns;
+}
+
+/**
+ * Why the decision's cycle can't be trusted, or null: the replay store's line for its time (replay/store.js readRun)
+ * says a cycle failed or timed out, the step timed out or was interrupted, or the cycle file itself says it failed. No
+ * store line for the time: unknown, so failed too (nothing is assumed clean).
+ */
+function cycleHealth(line, doc) {
+  if (!isObj(line)) return 'no replay record of the decision time: whether its cycle ran cleanly is unknown';
+  if (line.interrupted) return 'the step was interrupted';
+  if (isObj(line.step) && line.step.timedOut) return 'the step timed out';
+  const ran = Array.isArray(line.ran) ? line.ran : [];
+  if (ran.some(x => !isObj(x) || x.ok !== true || x.timedOut)) return 'a cycle failed or timed out';
+  if (isObj(doc) && (doc.ok === false || doc.timedOut === true)) return 'the cycle record says it failed or timed out';
+  return null;
+}
+
+/** The run's store lines by decision time (ISO), attempts folded (replay/store.js readRun). */
+function storeLines(runDir) {
+  try {
+    const { days } = require('../replay/store').readRun(runDir);
+    return new Map(Object.values(days).flat().filter(l => isObj(l) && l.t).map(l => [new Date(l.t).toISOString(), l]));
+  } catch (_err) { return new Map(); }
 }
 
 /** The cycle's compose records for a symbol's family, in the order the cycle wrote them. */
@@ -118,6 +197,7 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
   const MS = require('../prop/model-stream');
   const policyExitOf = MS.runnerExit(MS.readEvents(home), MS.readRunnerExits(home));
   const lastT = new Map();
+  const lines = storeLines(runDir);
   const out = [];
   for (const r of score(runDir)) {
     const kind = kindOf(r);
@@ -138,6 +218,9 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
       ? policyExitOf({ root: familyRoot(String(r.symbol).split(':')[0].toUpperCase()), contract: r.symbol }, { entryTime: prev || new Date(Date.parse(r.t) - 3600000).toISOString(), exitTime: new Date(Date.parse(r.t) + MS.RUNNER_CLOSE_TOLERANCE_MS).toISOString(), exitPrice: NaN, tick: 0 })
       : null;
     const setupRead = record && Array.isArray(record.reads) ? record.reads.find(x => x && x.step === 'setup') : null;
+    // A failed, timed-out or interrupted cycle: unverifiable (decision-label.js), and none of its turns faithful.
+    const cycleFailed = cycleHealth(lines.get(new Date(r.t).toISOString()), doc);
+    const turns = roleTurns(doc, { systemPrompts });
     out.push({
       key: `${new Date(r.t).toISOString()}|${r.symbol}`, runId: manifest.runId, t: new Date(r.t).toISOString(), day: r.day, symbol: r.symbol, kind, action,
       scorecard: { category: r.category, agrees: r.agrees }, expected: r.expected ? { decision: r.expected.decision, decidedBy: r.expected.decidedBy } : null,
@@ -145,10 +228,10 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
       record, attempts: recs.length, riskUsd, policyExit,
       account: attempt ? accountCall(attempt, riskUsd) : null,
       stage, accountState: state ? state.bucket : null, skill: (setupRead && setupRead.skill) || 'none', year: String(r.day || '').slice(0, 4),
-      sample, cycle: cycleFile || null, turns: roleTurns(doc, { systemPrompts }),
+      sample, cycle: cycleFile || null, cycleFailed, turns: cycleFailed ? turns.map(t => ({ ...t, faithful: false })) : turns,
     });
   }
   return out;
 }
 
-module.exports = { HEAD_ROLE, taskResult, roleTurns, systemPromptsOf, riskUsdOf, runDecisions };
+module.exports = { HEAD_ROLE, taskResult, toolCall, headMessages, cycleHealth, roleTurns, systemPromptsOf, riskUsdOf, runDecisions };

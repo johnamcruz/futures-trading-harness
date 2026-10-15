@@ -8,11 +8,19 @@
  * Sources: replay runs (or a sampler's point runs, learning/decision-sampler.js), each read through
  * learning/decision-examples.js runDecisions. The train set takes practice-train runs only, the validate set
  * practice-validate runs only; a run touching test or final (sealed) is refused, as is a decision whose day is outside
- * its set's window. Each decision records the skills and prompt digest its run was made under (its setup record's
- * documents); by default only those made under the harness's digest now (`current`, the one an adapter's manifest
- * records) are kept, the others dropped and counted (dataset.json `digests.stale`): decisions made under old wording
- * teach rules that no longer exist. `include` keeps others by name ('any', or a digest prefix), each marked in meta.jsonl
- * (`digest.current: false`).
+ * its set's window. Each decision records the skills, prompt and code digests its run was made under (its setup
+ * record's documents and code: a briefing or prompt-layout change is code) and its run's exit plan (the manifest's exit
+ * record); by default only those made under the harness's digests now (`current`) are kept, the others dropped and
+ * counted (dataset.json `digests.stale`): decisions made under old wording teach rules that no longer exist. `include`
+ * keeps others by name ('any', or a digest prefix), each marked in meta.jsonl (`digest.current: false`). A run without
+ * an exit-plan record is dropped and counted (`untaggedExit`), and decisions made under two exit plans are never mixed
+ * (refused). Only the head trader's turns are examples by default: a subagent's claims are checked by nothing, so its
+ * turns come only when named (`roles`), marked `subagent: true` in meta.jsonl. Sampled moments whose every repeat
+ * answered the same are counted (`repeatedSamples`: sampling probably not applied), and the build refused when they are
+ * more than half. `validSetups` counts correct takes against correct passes on valid setups (the labeller's lean).
+ *
+ * Format v2 (FORMAT_VERSION, the spec's dataset.version): each line { messages } in OpenAI-style chat, the head
+ * trader's tool calls and their results included (decision-examples.js headMessages).
  *
  * Built (buildDataset), deterministic for the same sources, spec and seed:
  *   1. label every decision; keep the correct ones (stage 1: no account state; stage 2: account state plus risk action)
@@ -31,11 +39,12 @@
  *
  *   REFUSED_ROLES
  *   checkSource(source, set)                  throws unless every day of the run is its set's window
- *   examplesOf(decision)                      [{ id, role, messages }] of its faithful turns
+ *   examplesOf(decision, roles)               [{ id, role, subagent, messages }] of its faithful turns of those roles
+ *   repeatedSamples(sources)                  { moments, identical, times }: moments every repeat answered the same
  *   dedupe(examples)                          { kept, dropped }
  *   balance(decisions, rules, { stage, seed }) { kept, dropped, report } (throws when a constraint can't be met)
- *   buildDataset({ train, validate, spec, rules, current, include })   { files: { name: text }, dataset }
- *   digestStatus(digest, current, include)   'current' | 'included' | 'stale'
+ *   buildDataset({ train, validate, spec, rules, current, include, roles })   { files: { name: text }, dataset }
+ *   digestStatus(digest, current, include)   'current' | 'included' | 'stale' (skills, prompt and code digests)
  *   fingerprintOf(files)                      sha256 hex over the data files
  *   writeDataset(dir, built), readDataset(dir)
  *   scorer({ root, env })                     runDir -> its scorecard records: its scorecard.jsonl when written after the
@@ -55,6 +64,10 @@ const { validateSpec } = require('./adapter');
 const { shuffled } = require('../train/decision-points');
 
 const REFUSED_ROLES = Object.freeze(['test', 'final']);
+// The data's format version: 2 holds the head trader's tool calls and their results (decision-examples.js
+// headMessages); the spec names it (adapters/spec.json dataset.version) and the fingerprint covers it.
+const FORMAT_VERSION = 2;
+const { HEAD_ROLE } = require('./decision-examples');
 const USE = Object.freeze({ train: 'practice', validate: 'validate' });
 const DATA_FILES = Object.freeze(['step1/train.jsonl', 'step1/valid.jsonl', 'step2/train.jsonl', 'step2/valid.jsonl', 'meta.jsonl']);
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -71,8 +84,39 @@ function checkSource(source, set) {
   }
 }
 
-function examplesOf(decision) {
-  return (decision.turns || []).filter(t => t && t.faithful && Array.isArray(t.messages)).map(t => ({ id: sha(JSON.stringify(t.messages)), role: t.role, messages: t.messages }));
+/**
+ * A decision's faithful turns as examples, of the roles named: by default the head trader's alone. A subagent's claims
+ * (an analyst's read) are checked by nothing, so its turns are trained on only when named (`roles`), marked in meta.jsonl.
+ */
+function examplesOf(decision, roles = [HEAD_ROLE]) {
+  return (decision.turns || []).filter(t => t && t.faithful && Array.isArray(t.messages) && (roles.includes('all') || roles.includes(t.role)))
+    .map(t => ({ id: sha(JSON.stringify(t.messages)), role: t.role, subagent: t.role !== HEAD_ROLE, messages: t.messages }));
+}
+
+/** The head trader's response at a decision (its messages after the prompt), for the repeated-samples check. */
+function headResponse(d) {
+  const t = (d.turns || []).find(x => x && x.role === HEAD_ROLE && Array.isArray(x.messages));
+  return t ? JSON.stringify(t.messages.slice(t.messages.findIndex(m => m.role === 'user') + 1)) : null;
+}
+
+/**
+ * The sampled moments whose K head responses are all identical (sampling probably not applied): { moments, identical,
+ * times }. A moment is a source's sample time with two or more repeats that answered.
+ */
+function repeatedSamples(sources) {
+  const byMoment = new Map();
+  for (const s of sources) {
+    for (const d of s.decisions) {
+      if (!d.sample || d.sample.t === undefined) continue;
+      const k = `${s.runId}|${d.sample.t}`;
+      const m = byMoment.get(k) || new Map();
+      if (!m.has(d.sample.repeat)) m.set(d.sample.repeat, headResponse(d));
+      byMoment.set(k, m);
+    }
+  }
+  const moments = [...byMoment].filter(([, m]) => m.size >= 2);
+  const identical = moments.filter(([, m]) => new Set(m.values()).size === 1 && ![...m.values()].includes(null)).map(([k]) => k);
+  return { moments: moments.length, identical: identical.length, times: identical.sort() };
 }
 
 function dedupe(examples) {
@@ -149,10 +193,14 @@ function balance(decisions, rules, { stage = 1, seed = rules.seed } = {}) {
 }
 
 /** The correct decisions of one set's sources, with their examples (duplicates dropped across the set). */
-function correctOf(sources, set, rules, { current, include = [] }) {
+function correctOf(sources, set, rules, { current, include = [], roles = [HEAD_ROLE] }) {
   const out = [];
   const labels = { correct: 0, incorrect: 0, unverifiable: 0 };
   const stale = { examples: 0, decisions: 0, included: 0 };
+  // The bias the labeller leaves: on a valid setup a take can be verified correct, a pass almost never (only when the
+  // account or a mechanical step calls for it). Counted so the set's lean is seen, never hidden.
+  const validSetups = { correctTakes: 0, correctPasses: 0 };
+  const untagged = { decisions: 0, examples: 0 };
   for (const s of sources) {
     checkSource(s, set);
     const labelled = s.decisions.map(d => {
@@ -165,58 +213,74 @@ function correctOf(sources, set, rules, { current, include = [] }) {
     for (const [d, l] of labelled) {
       labels[l.label] += 1;
       if (l.label !== 'correct' || mixed.has(cycleOf(d))) continue;
-      // The skills and prompt digest the decision was made under: only the harness's now, unless included by name.
+      if (d.record && d.record.ok === true && d.kind === 'take') validSetups.correctTakes += 1;
+      if (d.record && d.record.ok === true && d.kind === 'pass') validSetups.correctPasses += 1;
+      // A run without its exit-plan record: the exit it was made under can't be told, so it can't be kept apart.
+      if (!(d.digest && d.digest.exitPlan)) { untagged.decisions += 1; untagged.examples += examplesOf(d, roles).length; continue; }
+      // The skills, prompt and code digest the decision was made under: only the harness's now, unless included by name.
       const status = digestStatus(d.digest, current, include);
-      if (status === 'stale') { stale.decisions += 1; stale.examples += examplesOf(d).length; continue; }
-      if (status === 'included') stale.included += examplesOf(d).length;
+      if (status === 'stale') { stale.decisions += 1; stale.examples += examplesOf(d, roles).length; continue; }
+      if (status === 'included') stale.included += examplesOf(d, roles).length;
       out.push({ ...d, digestStatus: status, uid: `${s.runId}|${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.key}`, source: s.runId, label: l });
     }
   }
-  const all = out.flatMap(d => examplesOf(d).map(x => ({ ...x, decision: d })));
+  const all = out.flatMap(d => examplesOf(d, roles).map(x => ({ ...x, decision: d })));
   const { kept, dropped } = dedupe(all);
   const byDecision = new Map();
   for (const x of kept) byDecision.set(x.decision, [...(byDecision.get(x.decision) || []), x]);
-  return { decisions: [...byDecision.keys()].map(d => ({ ...d, examples: byDecision.get(d) })), labels, duplicates: dropped.length, stale };
+  return { decisions: [...byDecision.keys()].map(d => ({ ...d, examples: byDecision.get(d) })), labels, duplicates: dropped.length, stale, validSetups, untagged };
 }
 
 const HEXISH = /^[0-9a-f]{8,64}$/;
 /**
- * A decision's digest against the harness's now: 'current' (its skills and prompt digests both the harness's), 'included'
- * (another, named by the operator: 'any', or a hex prefix of 8 or more of its skills or prompt digest), else 'stale'. A
- * decision with no digest (a run without its setup record) is stale unless 'any' includes it.
+ * A decision's digest against the harness's now: 'current' (its skills, prompt and code digests all the harness's: a
+ * briefing or prompt-layout change is code), 'included' (another, named by the operator: 'any', or a hex prefix of 8 or
+ * more of its skills, prompt or code digest), else 'stale'. A decision with no digest (a run without its setup record)
+ * is stale unless 'any' includes it.
  */
+const DIGEST_KEYS = ['skills', 'prompt', 'code'];
 function digestStatus(digest, current, include = []) {
-  if (digest && digest.skills === current.skills && digest.prompt === current.prompt) return 'current';
+  if (digest && DIGEST_KEYS.every(k => digest[k] && digest[k] === current[k])) return 'current';
   if (include.includes('any')) return 'included';
-  if (digest && include.some(p => HEXISH.test(p) && (String(digest.skills).startsWith(p) || String(digest.prompt).startsWith(p)))) return 'included';
+  if (digest && include.some(p => HEXISH.test(p) && DIGEST_KEYS.some(k => digest[k] && String(digest[k]).startsWith(p)))) return 'included';
   return 'stale';
 }
 
 const line = x => `${JSON.stringify({ messages: x.messages })}\n`;
 const metaOf = (x, file, stage) => ({
-  id: x.id, file, stage, role: x.role, source: x.decision.source, sample: x.decision.sample || null,
+  // subagent: an analyst's or other subagent's turn, its claims checked by nothing (included only by --roles).
+  id: x.id, file, stage, role: x.role, subagent: x.subagent === true, source: x.decision.source, sample: x.decision.sample || null,
   decision: { key: x.decision.key, kind: x.decision.kind, action: x.decision.action, skill: x.decision.skill, accountState: x.decision.accountState, year: x.decision.year },
   label: x.decision.label.reasons,
   // The skills and prompt digest it was made under; `current: false` marks one included under another digest by name.
-  digest: { skills: x.decision.digest ? x.decision.digest.skills : null, prompt: x.decision.digest ? x.decision.digest.prompt : null, current: x.decision.digestStatus === 'current' },
+  digest: { ...Object.fromEntries([...DIGEST_KEYS, 'exitPlan'].map(k => [k, x.decision.digest ? x.decision.digest[k] || null : null])), current: x.decision.digestStatus === 'current' },
 });
 
 function fingerprintOf(files) {
   const h = crypto.createHash('sha256');
+  h.update(`format v${FORMAT_VERSION}\0`);
   for (const name of DATA_FILES) h.update(`${name}\0${files[name] || ''}\0`);
   return h.digest('hex');
 }
 
-function buildDataset({ train = [], validate = [], spec, rules, current, include = [] }) {
+function buildDataset({ train = [], validate = [], spec, rules, current, include = [], roles = [HEAD_ROLE] }) {
   const errs = validateSpec(spec);
   if (errs.length) throw new Error(`the training spec is invalid: ${errs.join('; ')}`);
+  if (spec.dataset.version !== FORMAT_VERSION) throw new Error(`the spec's dataset.version is ${spec.dataset.version}, the builder writes ${FORMAT_VERSION}`);
   if (!train.length) throw new Error('no train sources (practice-train runs or samples)');
-  if (!(current && HEX64.test(String(current.skills)) && HEX64.test(String(current.prompt)))) throw new Error('current: the harness\'s skills and prompt digests now (learning/adapter.js currentDigests)');
+  if (!(current && DIGEST_KEYS.every(k => HEX64.test(String(current[k]))))) throw new Error('current: the harness\'s skills, prompt and code digests now (learning/adapter.js currentDigests)');
   const bad = include.filter(p => p !== 'any' && !HEXISH.test(p));
   if (bad.length) throw new Error(`include: 'any' or a hex digest prefix of 8 or more (${bad.join(', ')})`);
+  if (!(Array.isArray(roles) && roles.length && roles.includes(HEAD_ROLE))) throw new Error(`roles: the head trader (${HEAD_ROLE}) and any subagent named to include ('all' for every one)`);
+  // Sampling probably not applied: every repeat of a moment answered the same. Refused when it is most moments.
+  const repeated = repeatedSamples([...train, ...validate]);
+  if (repeated.moments && repeated.identical * 2 > repeated.moments) throw new Error(`${repeated.identical} of ${repeated.moments} sampled moments answered identically in every repeat: sampling was probably not applied (check the sampling settings reached the model server)`);
   const b = spec.balance;
-  const tr = correctOf(train, 'train', rules, { current, include });
-  const va = correctOf(validate, 'validate', rules, { current, include });
+  const tr = correctOf(train, 'train', rules, { current, include, roles });
+  const va = correctOf(validate, 'validate', rules, { current, include, roles });
+  // One exit plan: examples made under different exits are never mixed (the run's manifest exit record, #207).
+  const plans = [...new Set([...tr.decisions, ...va.decisions].map(d => d.digest.exitPlan))];
+  if (plans.length > 1) throw new Error(`the correct decisions were made under ${plans.length} exit plans (${plans.map(x => x.slice(0, 12)).join(', ')}): build from runs under one exit plan`);
   if (!tr.decisions.length && tr.stale.decisions) throw new Error(`every correct train decision was made under another skills or prompt digest than the harness's now (${tr.stale.examples} example(s) dropped): rerun the moments on this harness, or include those digests by name`);
   const stageOf = (xs, n) => xs.filter(d => d.stage === n);
   const bal1 = stageOf(tr.decisions, 1).length ? balance(stageOf(tr.decisions, 1), b, { stage: 1 }) : null;
@@ -239,7 +303,16 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
   files['meta.jsonl'] = meta.map(m => `${JSON.stringify(m)}\n`).join('');
   const fingerprint = fingerprintOf(files);
   const dataset = {
-    v: 1, fingerprint, format: 'chat-jsonl', spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed, harness: { skills: current.skills, harness: current.prompt },
+    v: FORMAT_VERSION, fingerprint, format: 'chat-jsonl', toolCalls: true, spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed,
+    harness: { skills: current.skills, harness: current.prompt, code: current.code }, exitPlan: plans[0] || null,
+    // The roles trained on (the head trader by default; a subagent only by name, its turns marked in meta.jsonl).
+    roles,
+    // Decisions dropped because their run has no exit-plan record (its exit can't be told).
+    untaggedExit: { train: tr.untagged, validate: va.untagged },
+    // Sampled moments whose every repeat answered the same (sampling probably not applied).
+    repeatedSamples: repeated,
+    // The labeller's lean on valid setups: correct takes against correct passes (a pass is rarely verifiable).
+    validSetups: { train: tr.validSetups, validate: va.validSetups },
     // Examples dropped for a stale digest (made under other skills or prompts), and those included under another by name.
     digests: { include, stale: { train: tr.stale.examples, validate: va.stale.examples }, included: { train: tr.stale.included, validate: va.stale.included } },
     sources: [...train.map(s => ({ set: 'train', runId: s.runId, configHash: s.configHash || null, window: [s.start, s.end], samples: s.samples || null })),
@@ -265,6 +338,7 @@ function writeDataset(dir, built) {
 function readDataset(dir) {
   const dataset = JSON.parse(fs.readFileSync(path.join(dir, 'dataset.json'), 'utf8'));
   const files = Object.fromEntries(DATA_FILES.map(n => [n, fs.existsSync(path.join(dir, n)) ? fs.readFileSync(path.join(dir, n), 'utf8') : '']));
+  if (isObj(dataset) && dataset.v !== FORMAT_VERSION) throw new Error(`${dir}: a format v${dataset.v} dataset; this harness reads v${FORMAT_VERSION} (with tool calls): rebuild it`);
   if (!isObj(dataset) || fingerprintOf(files) !== dataset.fingerprint) throw new Error(`${dir}: its files don't match its fingerprint (changed since the build)`);
   return dataset;
 }
@@ -293,8 +367,12 @@ function sourceFromRun(runDir, { score, times = null, sample = null }) {
   const setup = readJsonOr(path.join(runDir, 'setup.json'), null);
   const { runDecisions } = require('./decision-examples');
   const documents = setup && setup.documents ? setup.documents : null;
-  // Each decision records the skills and prompt digest its run was made under (its setup record's documents).
-  const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null } : null;
+  // Each decision records the skills, prompt and code digests its run was made under (its setup record's; a run whose
+  // code changed mid-run has none that holds) and the run's exit plan (its manifest's exit record).
+  const { manifestExit } = require('./run-experience');
+  const exitPlan = manifestExit(manifest).hash || null;
+  const code = setup && !setup.codeChanged && typeof setup.code === 'string' ? setup.code : null;
+  const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null, code, exitPlan } : { exitPlan };
   return {
     runId: manifest.runId, start: manifest.start, end: manifest.end, configHash: manifest.hash || null,
     documents, decisions: runDecisions(runDir, { score, times, sample }).map(d => ({ ...d, digest })),
@@ -311,4 +389,4 @@ function sourceFromSamples(file, { score }) {
   return { ...first, decisions: parts.flatMap(p => p.decisions), samples: recs.length };
 }
 
-module.exports = { digestStatus, scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };
+module.exports = { FORMAT_VERSION, DIGEST_KEYS, repeatedSamples, digestStatus, scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };

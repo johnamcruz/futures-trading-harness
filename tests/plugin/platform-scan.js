@@ -79,7 +79,9 @@ const offends = line => FORBIDDEN.test(line) || MODEL_SIZE.test(line) || FIRM_TI
  * exception, as accounts/ is the firms') may name. Platform and firm names and a firm's times stay offences there.
  */
 const MODEL_TERMS = /mlx_lm|mlx|qwen[\s-]?\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?b)?(?:-\d+-?bit)?|\b9B\b/gi;
-const stripModel = line => line.replace(new RegExp(MODEL_SIZE.source, 'gi'), '').replace(MODEL_TERMS, '');
+// Only the tokens themselves are stripped (the model terms, then each size token), never the span between a model word
+// and a size: what lies between them (a firm's time, a firm name) is still scanned.
+const stripModel = line => line.replace(MODEL_TERMS, '').replace(new RegExp(SIZE, 'gi'), '');
 const firstOffence = line => (line.match(FORBIDDEN) || line.match(MODEL_SIZE) || line.match(FIRM_TIME))[0];
 const GUARD = { scanner: 'tests/plugin/platform-scan.js', pins: /^tests\/(?:.*\/)?[^/]*\.pins\.json$/ };
 const key = e => `${e.file}|${e.kind}`;

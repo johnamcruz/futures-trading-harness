@@ -186,6 +186,9 @@ test('adapters/ may name a model (its name, size, the MLX tools), never a platfo
   }
   assert.deepStrictEqual(one('adapters/qwen3.5-9b-4bit/train.example.sh', 'ok'), [], 'its path may name the base model');
   assert.strictEqual(one('scripts/qwen3.5-9b-4bit/x.js', 'ok').length, 1, 'no other path may');
+  // The reviewer's probes: a firm's time or a firm's name between a model word and a size is still caught (only the
+  // size and model tokens are stripped, never the span between them).
+  for (const text of ['model flatten 15:10 CT 9B', 'model on Topstep 9B', 'Qwen 9B model at Topstep flatten 15:10 CT 3.5B', 'a 9B model on Topstep']) assert.strictEqual(one('adapters/x/README.md', text).length, 1, `adapters/ still refuses: ${text}`);
   for (const text of ['TopstepX', 'qwen3.5-9b-topstepx', 'PROJECTX_API_KEY', 'mlx on Topstep', 'flatten 15:10 CT', 'Qwen3-9B via DashScope']) assert.strictEqual(one('adapters/x/README.md', text).length, 1, `adapters/ still refuses: ${text}`);
   assert.strictEqual(one('adapters/topstepx/README.md', 'ok').length, 1, 'a platform in an adapters/ path');
   assert.ok(!ALLOWED.some(re => re.test('adapters/README.md')), 'adapters/ is model-only, never allowed whole');

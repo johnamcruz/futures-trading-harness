@@ -4,6 +4,14 @@
 # See adapters/README.md. Copy it to train.sh beside it (gitignored) or outside the repository, fill every
 # <placeholder> with your own local paths, and run it. Never commit a machine path, weights or a dataset.
 #
+# The data (dataset format v2, adapters/spec.json dataset.version) is OpenAI-style chat JSONL, one { "messages": [...] }
+# per line: system, user (the cycle's prompt), then the head trader's whole turn in order: assistant messages with
+# "tool_calls" ({ id, type "function", function { name, arguments } }), each call's result as a "tool" message
+# ({ tool_call_id, content }), and the final assistant text. Check that the base model's chat template renders
+# tool_calls and tool messages (print one rendered example before training); a template that drops them trains on a
+# turn the model never saw. With --mask-prompt only the final assistant message is trained on; the tool calls and
+# results before it are context. Subagent turns are in the data only if the build named them (--roles).
+#
 # Every value below is a starting point, not a tuned setting: record the ones you train with in the adapter's
 # manifest (node scripts/adapter.js init --settings <file>).
 set -eu

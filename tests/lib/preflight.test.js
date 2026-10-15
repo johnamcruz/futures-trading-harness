@@ -27,6 +27,30 @@ test('preflight config: valid, eodAt and sessions, a live run names its account;
   assert.match(P.configChecks({ ...RAW, sessions: ['09:30-16:30@America/New_York'] }).results[0].detail, /sessions/);
 });
 
+test('preflight config: a declared adapter runs live only validated and current; pending, failed, stale or unreadable is refused', () => {
+  const H = { skills: '1'.repeat(64), prompt: '2'.repeat(64) };
+  const manifest = status => ({
+    v: 1, name: 'm1', base: { model: 'the-base', folder: 'base-folder' }, harness: { commit: 'c'.repeat(40), ...H }, dataset: { fingerprint: 'd'.repeat(64) },
+    training: { step: 1, method: 'lora', seed: 1, settings: { iters: 600 } },
+    validation: { kind: 'stage-1-exit-test', window: 'practice-validate', status, ...(status === 'pending' ? {} : { runs: ['a', 'b'], result: { why: 'x' } }) },
+  });
+  const read = (m, now = H) => ({ adapterManifest: () => m, adapterSpec: () => { throw new Error('none'); }, harnessDigests: () => now });
+  const raw = { ...RAW, adapter: '/models/m1/manifest.json' };
+  const one = (m, now) => P.configChecks(raw, { read: read(m, now) }).results.find(x => x.check === 'adapter');
+  assert.strictEqual(one(manifest('passed')).status, 'ok');
+  assert.strictEqual(one(manifest('pending')).status, 'fail', 'pending: only its practice-validate evaluation');
+  assert.match(one(manifest('pending')).detail, /not validated yet/);
+  assert.strictEqual(one(manifest('failed')).status, 'fail');
+  assert.strictEqual(one(manifest('passed'), { ...H, skills: '9'.repeat(64) }).status, 'fail', 'stale');
+  assert.strictEqual(P.configChecks(raw, { read: { adapterManifest: () => { throw new Error('missing'); } } }).results.find(x => x.check === 'adapter').status, 'fail');
+  // The default readers: the manifest from disk.
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'm.json'), JSON.stringify(manifest('pending')));
+  assert.strictEqual(P.configChecks({ ...RAW, paper: true, adapter: path.join(dir, 'm.json') }).results.find(x => x.check === 'adapter').status, 'fail');
+  // None declared: no adapter line.
+  assert.strictEqual(P.configChecks(RAW).results.find(x => x.check === 'adapter'), undefined);
+});
+
 test('preflight allow-list: live needs the account on the list; paper and a replay broker do not', () => {
   const cfg = P.configChecks(RAW).cfg;
   assert.strictEqual(P.allowListChecks(cfg, LIVE, { LIVE_ALLOWED: '7' })[0].status, 'ok');

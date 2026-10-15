@@ -19,7 +19,7 @@ const rec = skill => ({ ok: true, side: 'long', entry: 21000, stop: 20990, targe
 const NOW = require('../../scripts/lib/learning/adapter').currentDigests(ROOT);
 function scoredRun(home, { documents = { harness: NOW.prompt, skills: NOW.skills }, runId = 'r1', tag = 'CLI' } = {}) {
   const r = F.writeRun(home, {
-    runId, documents, start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
+    runId, documents, code: NOW.code, start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
     decisions: [
       { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt: `${tag}-TAKE`, headText: ['take'] },
       { t: '2022-03-08T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: `${tag}-PASS`, headText: ['pass'] },
@@ -65,15 +65,26 @@ test('decision-dataset.js build and show; adapter.js init, check and validated',
   const doc = JSON.parse(fs.readFileSync(m, 'utf8'));
   assert.strictEqual(doc.validation.status, 'pending');
   assert.strictEqual(doc.dataset.fingerprint, JSON.parse(fs.readFileSync(path.join(out, 'dataset.json'), 'utf8')).fingerprint);
-  assert.deepStrictEqual({ skills: doc.harness.skills, prompt: doc.harness.prompt }, require('../../scripts/lib/learning/adapter').currentDigests(ROOT));
+  assert.deepStrictEqual({ skills: doc.harness.skills, prompt: doc.harness.prompt, code: doc.harness.code }, require('../../scripts/lib/learning/adapter').currentDigests(ROOT));
   assert.match(doc.harness.commit, /^[0-9a-f]{40}$/);
   const c = run('adapter.js', ['check', m]);
   assert.strictEqual(c.status, 0, c.stdout + c.stderr);
   assert.match(c.stdout, /m1: step 1 on the-base, .*validation pending; current/);
+  // The validation is derived from the A/B of the named runs, never written by hand: a self-written result is no flag,
+  // and runs that don't exist, or aren't a practice-validate pair, leave it pending.
   const result = path.join(dir, 'result.json');
   fs.writeFileSync(result, JSON.stringify({ exitTest: 'PASS' }));
-  assert.strictEqual(run('adapter.js', ['validated', m, '--status', 'passed', '--runs', 'base1,adapted1', '--result', result]).status, 0);
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(m, 'utf8')).validation.runs, ['base1', 'adapted1']);
+  assert.match(run('adapter.js', ['validated', m, '--status', 'passed', '--runs', 'base1,adapted1', '--result', result]).stderr, /unknown flag --status/);
+  const missing = run('adapter.js', ['validated', m, '--base', path.join(dir, 'nope'), '--adapted', r.runDir]);
+  assert.strictEqual(missing.status, 1);
+  assert.match(missing.stderr, /the base run: .*not a replay run/);
+  const train = run('adapter.js', ['validated', m, '--base', r.runDir, '--adapted', r.runDir]);
+  assert.match(train.stderr, /the base run r1 is not on practice-validate/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(m, 'utf8')).validation.status, 'pending', 'nothing written');
+  // A recorded result is never re-derived over.
+  const done = path.join(dir, 'done.json');
+  fs.writeFileSync(done, JSON.stringify({ ...doc, validation: { ...doc.validation, status: 'failed', runs: ['a', 'b'], result: { why: 'x' } } }));
+  assert.match(run('adapter.js', ['validated', done, '--base', r.runDir, '--adapted', r.runDir]).stderr, /already failed/);
   // Stale: a manifest trained on other skills.
   fs.writeFileSync(m, JSON.stringify({ ...doc, harness: { ...doc.harness, skills: '0'.repeat(64) } }));
   const stale = run('adapter.js', ['check', m]);

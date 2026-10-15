@@ -7,7 +7,7 @@
  * adapter to be there: a run without one is a base run, and the runner never reads the selection.
  *
  * The spec (validateSpec):
- *   v 1; dataset { format 'chat-jsonl', fingerprint (the expected dataset's, sha256 hex, or null before one is built),
+ *   v 1; dataset { format 'chat-jsonl', version 2 (with the head trader's tool calls), fingerprint (the expected dataset's, sha256 hex, or null before one is built),
  *   train 'practice-train', validate 'practice-validate', refused ['test', 'final'] }; balance { seed, takeShare [lo, hi],
  *   maxSkillShare, maxYearShare, minYears, minNearMllShare }; steps: step 1 { stages [1], mixStage1 0, validation
  *   'stage-1-exit-test' } and step 2 { stages [2], mixStage1 (0 < x < 1: the slice of stage-1 data mixed back in),
@@ -29,7 +29,7 @@
  *   validateSpec(spec)                         [error]
  *   validateManifest(m, { spec })              [error]
  *   readJsonFile(file)                         the parsed file, or throws with why
- *   currentDigests(root)                       { skills, prompt } of the harness tree
+ *   currentDigests(root)                       { skills, prompt, code } of the harness tree (code: session/record.js CODE_DIRS)
  *   adapterFile(cfg, { home })                 the selected manifest's path, or null (none selected)
  *   adapterTag(cfg, { home })                  null (none), else 'sha256:<16 hex of the manifest's bytes>' or 'unreadable'
  *   adapterCheck({ cfg, role, read, home })    { status: 'PASS' | 'FAIL' | 'N/A', detail } (the preflight's `adapter`)
@@ -59,6 +59,7 @@ function validateSpec(spec) {
   if (!isObj(d)) e.push('dataset: an object');
   else {
     if (d.format !== 'chat-jsonl') e.push('dataset.format: "chat-jsonl"');
+    if (d.version !== 2) e.push('dataset.version: 2 (chat JSONL with the head trader\'s tool calls and their results)');
     if (!(d.fingerprint === null || HEX64.test(String(d.fingerprint)))) e.push('dataset.fingerprint: the expected dataset\'s sha256 (64 hex), or null before one is built');
     if (d.train !== 'practice-train') e.push('dataset.train: "practice-train" (train only on practice-train)');
     if (d.validate !== 'practice-validate') e.push('dataset.validate: "practice-validate"');
@@ -124,7 +125,8 @@ function readJsonFile(file) {
 
 function currentDigests(root) {
   const { treeDigest, HARNESS_DIRS } = require('../session/record');
-  return { skills: treeDigest(root, ['skills']), prompt: treeDigest(root, HARNESS_DIRS) };
+  const { CODE_DIRS } = require('../session/record');
+  return { skills: treeDigest(root, ['skills']), prompt: treeDigest(root, HARNESS_DIRS), code: treeDigest(root, CODE_DIRS) };
 }
 
 function adapterFile(cfg, { home = os.homedir() } = {}) {

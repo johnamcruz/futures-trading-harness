@@ -277,7 +277,11 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
   // And by the training loop's model-scoring verifier, for decisionsByKey alone (the correct-read keying): a code judge
   // whose verdicts go to the archive and the owner's PR body, never to the proposer's prompt (train/loop.js proposalsFor).
-  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js']);
+  // And by an adapter's validation (learning/adapter-validation.js deriveValidation), required by its operator CLI
+  // alone (scripts/adapter.js validated): the result it records is the A/B's verdict, never shown to the model.
+  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/adapter-validation.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js']);
+  const validationUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /adapter-validation'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));
+  assert.deepStrictEqual(validationUsers, ['scripts/adapter.js']);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'model-verifier.js'), 'utf8'), /skillRows|skill-usage|learning-report/);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'proposer.js'), 'utf8'), /model-verifier|ab-compare/);
   const pinUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /run-pins'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));

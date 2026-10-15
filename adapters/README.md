@@ -70,16 +70,33 @@ reason, and neither is ever trained on.
      validate set from practice-validate runs only. A run on test or final
      is refused.
    - **Prompts.** Each example is the exact prompts a role saw, then its
-     response, as model-agnostic chat JSONL (`{"messages": [...]}`). They are
-     byte-faithful where the run recorded them:
-     - the head trader's cycle prompt and its text;
-     - each subagent's task prompt and its reply;
+     response, as model-agnostic chat JSONL (`{"messages": [...]}`, format
+     version 2). They are byte-faithful where the run recorded them:
+     - the head trader's cycle prompt, then its whole turn in order: each
+       model step an assistant message with its `tool_calls`
+       (`{id, type: "function", function: {name, arguments}}`), each call's
+       result a `tool` message (`{tool_call_id, content}`, `task` calls
+       included), then the final assistant text;
      - the system prompt from the run's own `workspace/opencode.json`.
 
-     A transcript the reader doesn't recognize gives no example.
+     Only the head trader's turns are examples by default. A subagent's
+     claims are checked by nothing, so its turns (its task prompt and reply)
+     come only when `--roles <role,...>` (or `all`) names it, each marked
+     `"subagent": true` in `meta.jsonl`.
+
+     A transcript the reader doesn't recognize, or a call it can't read
+     whole, gives no example. A cycle that failed, timed out or was
+     interrupted gives none either: its decisions are unverifiable.
+   - **Repeated samples.** When every sampled repeat of a moment gave the
+     same head response, sampling was probably not applied: `build` warns
+     and records it in `dataset.json` (`repeatedSamples`), and refuses when
+     more than half of the moments are like that.
    - **Duplicates** are dropped.
-   - **The digest.** Each example records the skills and prompt digest its
-     run was made under. Only examples under the harness's digest now (the
+   - **The digest.** Each example records the skills, prompt and code
+     digests its run was made under (code: a briefing or prompt-layout change
+     marks old examples stale too) and its run's exit plan. Examples made
+     under two exit plans are never mixed (refused), and a run without an
+     exit-plan record is dropped and counted. Only examples under the harness's digest now (the
      one an adapter's manifest records) are kept: the others are dropped and
      counted (`show` prints how many), since decisions made under old wording
      teach rules that no longer exist. `--include-digest any` or
@@ -94,7 +111,10 @@ reason, and neither is ever trained on.
        back in.
      - `step2/valid.jsonl`: stage 2.
      - `meta.jsonl`: each example's source run, sample, decision and label.
-     - `dataset.json`: the fingerprint and the source runs.
+     - `dataset.json`: the fingerprint and the source runs, the roles, the
+       exit plan, the repeated samples, and `validSetups` (correct takes
+       against correct passes on valid setups: a pass there is rarely
+       verifiable, so the set leans to taking).
    - `show <folder>` checks the fingerprint against the files.
 
 The scorecard grades each decision. A run whose months the scorecard's look
@@ -154,19 +174,27 @@ The evaluation is two replays of the same windows and seed:
 
 The `adapter` field is a declaration. It enters both run hashes and the A/B
 setup record by the manifest's digest. Compare the two runs with
-`node scripts/ab-compare.js <base run> <adapted run> --field adapter`, and
-apply the keep rule.
+`node scripts/ab-compare.js <base run> <adapted run> --field adapter`.
 
-Record the result:
+Record the result, derived from that comparison (never written by hand):
 
 ```bash
-node scripts/adapter.js validated <manifest> --status passed|failed --runs <base runId>,<adapted runId> --result <result JSON file>
+node scripts/adapter.js validated <manifest> --base <base run dir> --adapted <adapted run dir> [--account <name>]
 ```
+
+It refuses unless both runs are finished on practice-validate, differ only
+in the adapter, and the adapted one ran this manifest. Step 1 passes when no
+measure is worse and every stage-1 exit-test criterion passes on the adapted
+run; step 2 when no measure is worse, the paired Monte Carlo pass rate is
+better and the adapted side never blows. A criterion that can't be read
+leaves the validation pending.
 
 ## 5. Use it
 
 Name the manifest in your local runner config (`"adapter"`) and serve the
-model with the adapter. The training preflight's `adapter` check:
+model with the adapter. The live preflight (`scripts/preflight.js`) refuses a
+declared adapter that is pending, failed, stale or invalid. The training
+preflight's `adapter` check:
 
 - is N/A with no adapter selected;
 - FAILs on a missing or invalid manifest;

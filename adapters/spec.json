@@ -3,6 +3,7 @@
   "about": "The model-neutral training spec for a LoRA adapter on verified decisions (adapters/README.md; checked by scripts/lib/learning/adapter.js validateSpec). The dataset builder (scripts/decision-dataset.js build) balances by it, and an adapter's manifest is checked against it.",
   "dataset": {
     "format": "chat-jsonl",
+    "version": 2,
     "fingerprint": null,
     "train": "practice-train",
     "validate": "practice-validate",

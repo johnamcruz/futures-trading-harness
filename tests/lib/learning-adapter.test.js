@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const A = require('../../scripts/lib/learning/adapter');
 const { validateConfig } = require('../../scripts/lib/autotrader');
-const { treeDigest, HARNESS_DIRS } = require('../../scripts/lib/session/record');
+const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../../scripts/lib/session/record');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -28,6 +28,7 @@ test('the repository\'s spec is valid: the splits, the balance, and the two step
   assert.deepStrictEqual(SPEC.steps.map(s => [s.step, s.stages, s.validation]), [[1, [1], 'stage-1-exit-test'], [2, [2], 'prop-keep-rule']]);
   const bad = (patch, re) => assert.match(A.validateSpec(patch(JSON.parse(JSON.stringify(SPEC)))).join('; '), re);
   bad(s => { s.dataset.train = 'test'; return s; }, /train only on practice-train/);
+  bad(s => { s.dataset.version = 1; return s; }, /dataset.version: 2/);
   bad(s => { s.dataset.refused = ['test']; return s; }, /sealed/);
   bad(s => { s.dataset.fingerprint = 'abc'; return s; }, /dataset.fingerprint/);
   bad(s => { s.steps[1].mixStage1 = 0; return s; }, /steps\[1\]/);
@@ -123,5 +124,6 @@ test('adapterCheck: N/A with none selected; PASS current and validated; FAIL mis
 });
 
 test('currentDigests: the skills digest and the documents the cycles read (the setup record\'s), of this tree', () => {
-  assert.deepStrictEqual(A.currentDigests(ROOT), { skills: treeDigest(ROOT, ['skills']), prompt: treeDigest(ROOT, HARNESS_DIRS) });
+  assert.deepStrictEqual(A.currentDigests(ROOT), { skills: treeDigest(ROOT, ['skills']), prompt: treeDigest(ROOT, HARNESS_DIRS), code: treeDigest(ROOT, CODE_DIRS) });
 });
+
