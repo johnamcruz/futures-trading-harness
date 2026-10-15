@@ -133,9 +133,10 @@ the workspace guard fingerprints `.opencode/` whole (absent).
 The head trader (`scripts/lib/head-prompt.js`). In index mode its entry in
 `workspace/opencode.json` carries a prompt of its own, in place of opencode's
 default one: the skills it reads every cycle (`CORE`: the order gate's
-`REQUIRED_FOR_ENTRY` and `REQUIRED_AT_ENTRY`, then `autonomous-trading`,
+`REQUIRED_FOR_COMPOSED` and `REQUIRED_AT_ENTRY`, then `autonomous-trading`,
 `trader-process`, `htf-to-ltf`, `bar-briefing`, `role-round` and
-`day-context`) embedded whole, the same text a load returns, so they are part
+`day-context`, and last the composed bar's reads the gate requires,
+`confluence-counting`, `invalidation`, `rejection` and `breakout`) embedded whole, the same text a load returns, so they are part
 of its fixed prefix that a prompt cache reuses across cycles instead of about a
 dozen skill-load turns after each cycle's prompt. Any other skill
 (`manage-position`, `leftover-orders`, `lean-cycle`, `entry-outcome`, ...) it

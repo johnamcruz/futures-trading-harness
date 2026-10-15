@@ -37,13 +37,13 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
    $600 on that risk); beyond 3:1 only when that is the real level.
 
-2. **Then the gate requires** `confluence-counting` and `invalidation`
-   whenever you composed on the bar, `rejection` when a read says a candle
-   rejected a level, `breakout` when one says it broke one: in your prompt
-   when it embeds them (don't look them up); else load each (no skill tool:
-   `skill_lookup`). And the journal plan (`[plan-required]`),
-   `setup-judgment` and `trade-plan` (`[skills-at-entry]`) and the role
-   round (`[roles-ran]`).
+2. **Then read** `confluence-counting` and `invalidation` whenever you
+   composed on the bar, `rejection` when a read says a candle rejected a
+   level, `breakout` when one says it broke one: in your prompt when it
+   embeds them (don't look them up); else load each (no skill tool:
+   `skill_lookup`; in index mode the gate requires them). The gate requires
+   the journal plan (`[plan-required]`), `setup-judgment` and `trade-plan`
+   (`[skills-at-entry]`) and the role round (`[roles-ran]`).
 3. **Send it as the record says**: `place_order` `limit` at the record's
    entry (or better), with its `stopLossBracket.ticks`,
    `takeProfitBracket.ticks`, size and contract, rationale

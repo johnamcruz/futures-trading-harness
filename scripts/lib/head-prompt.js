@@ -7,10 +7,10 @@
  * Without a prompt the head trader (opencode.js HEAD_AGENT) reads opencode's default prompt, the workspace
  * instructions (AGENTS.md) and, while it may use the skill tool, opencode's listing of every skill, then loads its
  * per-cycle skills one tool turn each, after the cycle's prompt, where no prompt cache reaches. In index mode its
- * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_COMPOSED and REQUIRED_AT_ENTRY, the others it reads
- * every cycle, and the reads the gate requires on a composed bar), the same text a load returns, as part of its fixed prefix; any other skill it reads whole with the
- * harness tool skill_lookup (the Skills list of AGENTS.md is its index), and opencode's skill tool is denied it
- * (opencode.js sessionPermission). Full mode, and every other harness, stay as before: the skills are loaded.
+ * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_COMPOSED and REQUIRED_AT_ENTRY, the others it
+ * reads every cycle, and a composed bar's reads), the same text a load returns, as part of its fixed prefix; any other
+ * skill it reads whole with the harness tool skill_lookup (the Skills list of AGENTS.md is its index), and opencode's
+ * skill tool is denied it (opencode.js sessionPermission). Full mode, and every other harness, stay as before: the skills are loaded.
  *
  * The order gate counts an embedded skill as loaded only on the runner's attestation (FTH_HEAD_PROMPT, which the
  * runner sets for an opencode run in index mode only), checked whole when an entry is judged: the run's opencode.json
@@ -50,7 +50,7 @@ const HEAD_MARK = 'You are the head trader of the futures trading harness.';
 // Last, the composed bar's own reads (SITUATIONAL entries taught in trade-lifecycle: confluence-counting, invalidation,
 // rejection, breakout), which the gate requires on every composed bar: embedded, they cost no lookup turn per bar (the
 // owner's exception to the prompt's no-growth rule, about 13 KB).
-const COMPOSED_READS = SITUATIONAL.filter(e => e.taughtIn).map(e => e.skill);
+const COMPOSED_READS = [...new Set(SITUATIONAL.filter(e => e.taughtIn).map(e => e.skill))];
 const CORE = [...new Set([
   ...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY,
   'autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context',

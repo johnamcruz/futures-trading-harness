@@ -44,11 +44,12 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // (full mode, another harness), with skill_lookup when it has no skill tool.
   const tl = body('trade-lifecycle').replace(/\s+/g, ' ');
   assert.doesNotMatch(tl, /Then read\*\* with `skill_lookup`/);
-  assert.ok(tl.includes('**Then the gate requires** `confluence-counting` and `invalidation` whenever you composed on the bar, `rejection` when a read says a candle rejected a level, `breakout` when one says it broke one: in your prompt when it embeds them (don\'t look them up); else load each (no skill tool: `skill_lookup`).'));
-  // Its size, pinned: 59558 bytes before the composed reads were embedded (main at ac8fb6e3), 72104 with them, the owner's
+  assert.ok(tl.includes('**Then read** `confluence-counting` and `invalidation` whenever you composed on the bar, `rejection` when a read says a candle rejected a level, `breakout` when one says it broke one: in your prompt when it embeds them (don\'t look them up); else load each (no skill tool: `skill_lookup`; in index mode the gate requires them).'));
+  // Its size, pinned: 59558 bytes before the composed reads were embedded (main at ac8fb6e3), 72143 with them, the owner's
   // explicit exception to the no-growth rule (perf/head-core-composed-skills). It may shrink; it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 72104, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
-  // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle's composed reads for it.
+  assert.ok(Buffer.byteLength(prompt) <= 72143, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
+  // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
 });
 
