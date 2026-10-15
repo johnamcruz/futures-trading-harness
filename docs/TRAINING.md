@@ -280,7 +280,9 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    (the targeted skill's reads right, or, for a wrong-reason refusal, the
    refusals fixed). The targeted skill's used, correct and missed counts
    are shown beside them. The verdict is `helped`, `no effect` or `hurt`.
-   Probing uses practice-train only and spends no looks.
+   Probing uses practice-train only and spends no looks: its tuning look
+   is logged in the loop's ledger, as every loop look is, and counts
+   against no budget.
 4. **Compose.** Code combines every edit that helped into one change
    (`scripts/lib/train/compose.js`). Two edits that touch the same lines:
    the larger paired gain stays and the conflict is reported. An edit that

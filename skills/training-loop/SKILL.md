@@ -75,7 +75,8 @@ ones that helped combined by code and probed once more, then the full keep
 rule. The iteration's `probe-report.json` and the loop's `lessons.jsonl`
 say what each probe showed (`docs/TRAINING.md`, "Propose–Probe–Compose").
 Keep `parallel` at 1 unless your local model server serves that many
-prompts at once.
+prompts at once. A proposal a person imported still comes first, without
+a probe round.
 
 **The tiers.** (1) the scorecard's deterministic checks flag failures;
 (2) the local model reviews its own flagged decisions and proposes; (3) a
