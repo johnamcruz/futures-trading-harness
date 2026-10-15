@@ -152,7 +152,7 @@ function claudeFindings({ argv, webRoles, root = null, user = {} }) {
   }
   for (const v of valuesAfter(argv, '--mcp-config')) {
     const servers = mcpConfigServers(v);
-    if (servers === null) out.push(`claude: an --mcp-config the check can't read (${v.slice(0, 80)})`);
+    if (servers === null) out.push(`claude: an --mcp-config the check can't read (${v.length} characters, not shown)`);
     else for (const name of servers) if (!OWN_SERVERS.includes(name)) out.push(`claude: --mcp-config adds the MCP server ${name}`);
   }
   return out;
