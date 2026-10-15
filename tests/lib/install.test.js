@@ -213,6 +213,10 @@ test('the gateway is forwarded FTH_REPLAY_NOW (Codex passes only listed variable
   const { forwardedEnv } = require('../../scripts/lib/install');
   assert.ok(forwardedEnv({ env: [] }).includes('FTH_REPLAY_NOW'));
   assert.match(codexConfigBlock(path.resolve(__dirname, '..', '..'), activeBroker({ FTH_HOME: tmpDir() })), /"FTH_REPLAY_NOW"/);
+  // And the step's wall start with it: without it a running replay clock (latency charged) would be pinned in the gate.
+  const { harnessToolsEnv } = require('../../scripts/lib/install');
+  assert.ok(forwardedEnv({ env: [] }).includes('FTH_REPLAY_WALL_START') && harnessToolsEnv({ env: [] }).includes('FTH_REPLAY_WALL_START'));
+  assert.match(codexConfigBlock(path.resolve(__dirname, '..', '..'), activeBroker({ FTH_HOME: tmpDir() })), /"FTH_REPLAY_WALL_START"/);
 });
 
 test('opencode: nothing to write (its workspace config is generated); the steps say how to run it', () => {

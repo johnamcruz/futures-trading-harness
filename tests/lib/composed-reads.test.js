@@ -140,6 +140,45 @@ test('a true read the other way refuses the combination; a 15m or 1h CHoCH the o
   assert.strictEqual(r5.reads.find(x => x.read === '3m close bottom').agrees, false);
 });
 
+test('D2\'s 4h tier: a 4h trend read against the side stands beside a 1h CHoCH and a 4h rejection of a key level the side\'s way, never a gap edge', () => {
+  // The honest record: 4h down, the 1h CHoCH up and the 4h candle (closed 14:00, before the 3m's 15:00) that rejected
+  // the previous 4h low up (and a 15m gap's low up).
+  const b = scenario1();
+  b.sections.h1.data.h4.trend = 'down';
+  b.sections.h1.data.lastBreak.last = { kind: 'CHoCH', direction: 'up', level: 21500 };
+  b.sections.m3.data.candles['4h'] = { closedAt: '2026-04-23T14:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
+    relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }],
+    fvgRelations: [{ name: '15m fvg low', price: 21472, side: 'bullish', rel: 'rejected', dir: 'up' }] };
+  const bias = [{ step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' }, { step: 'bias', skill: 'multi-timeframe-analysis', read: '4h down' }];
+  const base = SCENARIO_1.filter(x => x.step !== 'bias').concat(bias);
+  const with4h = rejection => base.concat({ step: 'setup', skill: 'rejection', read: rejection });
+  const honest = CR.checkReads({ reads: with4h('4h rejected previous 4h low up'), side: 'long', briefing: b });
+  assert.strictEqual(honest.ok, true, CR.renderCheck(honest));
+  assert.strictEqual(honest.reads.find(x => x.read === '4h down').reversal, true);
+  assert.match(CR.renderCheck(honest), /"4h down" - the 4h trend is down - against, allowed by the verified CHoCH \(D2\)/);
+  // The 4h read with the 1h CHoCH alone: still against the long.
+  const bare = CR.checkReads({ reads: base, side: 'long', briefing: b });
+  assert.strictEqual(bare.ok, false);
+  assert.strictEqual(bare.reads.find(x => x.read === '4h down').agrees, false);
+  assert.match(CR.renderCheck(bare), /"4h down" - the 4h trend is down - AGAINST the long/);
+  // A 4h rejection of a gap's edge is true, but no key level: no tier.
+  const gap = CR.checkReads({ reads: with4h('4h rejected 15m fvg low up'), side: 'long', briefing: b });
+  assert.strictEqual(gap.reads.find(x => x.read === '4h rejected 15m fvg low up').check, true);
+  assert.strictEqual(gap.reads.find(x => x.read === '4h down').agrees, false);
+  assert.strictEqual(gap.ok, false);
+  // A 15m CHoCH under it never holds the 4h tier, even with the 4h rejection.
+  b.sections.m15.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21530 } };
+  const m15 = with4h('4h rejected previous 4h low up').map(x => (x.read === '1h choch up' ? { ...x, read: '15m choch up' } : x));
+  const r15 = CR.checkReads({ reads: m15, side: 'long', briefing: b });
+  assert.strictEqual(r15.reads.find(x => x.read === '15m choch up').check, true);
+  assert.strictEqual(r15.reads.find(x => x.read === '4h down').agrees, false);
+  // The tier's own reads must stand: a 4h rejection the other way (false here) holds no tier.
+  const wrongWay = CR.checkReads({ reads: with4h('4h rejected previous 4h low down'), side: 'long', briefing: b });
+  assert.strictEqual(wrongWay.reads.find(x => x.read === '4h down').agrees, false);
+  // The one definition: the tiers are the gate's.
+  assert.strictEqual(require('../../scripts/lib/trading/lifecycle-gate').D2_TIERS, CR.D2_TIERS);
+});
+
 test('every candle relation is checked, past the four the briefing text shows', () => {
   const b = scenario1();
   assert.strictEqual(Object.keys(b.sections.m3.data.candles['15m'].levels).length, 4);

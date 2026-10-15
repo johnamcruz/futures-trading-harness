@@ -7,6 +7,7 @@ instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rul
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it
 mtf: trend                    # the gate's trend rule, unless the record holds a verified 15m or 1h CHoCH the trade's way (D2)
+valid_bars: 2                 # a compose record, and its resting limit, stays valid 2 base bars after its bar's close (6 min on 3m)
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
   min_rr: 2                   # compose_check refuses a plan under it
@@ -46,7 +47,10 @@ Code, never the model's arithmetic: a limit entry at the bar's close, the
 stop one tick beyond the named level (at least the larger of 8 ticks and
 0.25 x ATR(20), refused if closer, never widened), the target on the named
 level, R:R at least `risk.min_rr`, and the stated size within
-`risk.max_risk_usd`. The record expires at the next base-bar close.
+`risk.max_risk_usd`. The record expires `valid_bars` base bars after its
+bar's close (two: 6 minutes on the 3m), so a cycle that runs past the next
+close can still enter on the facts of its own bar; the runner cancels a limit
+still resting then.
 
 ### Risk and target
 

@@ -16,6 +16,12 @@
  *   3. one store line (replay/store.js): what ran, the cycle log's summary and
  *      prompt hash, the gate's refusals, and the broker's fills since the
  *      previous time (search_trades through the broker adapter).
+ * With the run's `latency` on (replay/latency.js; the default for a learning run) the cycle's real time is charged as
+ * live: the step runs with FTH_REPLAY_WALL_START, so its replay clock runs with the wall clock, and the broker's clock
+ * file moves with it while the step runs; a decision time the clock already passed runs at the clock (a trade time
+ * whose next time was passed too runs no step: live polls only the newest bar), and the line records the time it ran
+ * (`scheduled`: the time it was due, when later; `skipped`: the trade times passed without a step). The clock never
+ * goes back, a resume included (it starts from the clock file).
  * End of day is retried a minute later (up to 5 times, before 16:00 ET) while
  * the runner hasn't verified the account flat (the retry is saved in the
  * manifest before each end-of-day step, so no stop or crash loses it); a day is done after its last
@@ -32,7 +38,8 @@
  * refused).
  *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
- *   runReplay({ run, baseEnv, root, deps, maxCycles, log })   resolves { cycles, stopped, done }
+ *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
+ *                                                clock a charged step's replay clock runs with, Date.now)
  *   defaultDeps(run, root)                       the real step, broker checks and trade reads
  */
 
@@ -48,6 +55,8 @@ const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
+const latency = require('./latency');
+const { curatedPoints, accountOpen } = require('../learning/curated-lists');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
@@ -124,6 +133,10 @@ function defaultDeps(run, root) {
     async serverCheck(env, at) {
       const why = replayUnattested(await withAdapter({ root, env }, a => a.serverConfig()), at);
       return why && `${why}: is ${run.brokerEnv.clockFile || 'its clock'} read by the server of broker "${run.broker}"?`;
+    },
+    // Whether the account holds a position or a working order (a curated run manages what is open after a window).
+    async open(env, account) {
+      return accountOpen(await withAdapter({ root, env }, a => a.accountState(account)));
     },
     async trades(env, account, since, until) {
       // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).
@@ -207,7 +220,7 @@ async function runReplay(opts) {
   }
 }
 
-async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps(run, root), maxCycles = Infinity, log = () => {} }) {
+async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps(run, root), maxCycles = Infinity, log = () => {}, wall = Date.now }) {
   const { paths, cfg } = run;
   writeJsonAtomic(paths.autotrader, run.derived);
   const startEnv = replayEnv(baseEnv, run, { at: run.start });
@@ -216,9 +229,14 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
+    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
   });
-  const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
+  // other time from the first window on (later days included) is stepped only while a position or working order is
+  // open (managed every bar, as practice does), checked at each day's first, and skipped once flat until the next
+  // window; the broker's fills and brackets work through the gaps.
+  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : all;
   const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
   // the window is inside it. Only on a fresh run (nothing recorded yet): a resumed run keeps the attempt it has, or
@@ -244,9 +262,15 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   }
   log(`${todo.length} of ${points.length} decision times left (${run.cfg.harness}, ${cfg.symbols.join(',')} ${cfg.timeframe}m)`);
   const writeClock = at => writeJsonAtomic(paths.clockFile, { now: at.toISOString() });
-  writeClock(todo[0].t);
-  const why = await deps.serverCheck(replayEnv(baseEnv, run, { at: todo[0].t }), todo[0].t);
+  // Latency charged: the replay clock where the last step left it (the clock file, a resume included); it never goes back.
+  const charged = run.latency === true;
+  let clockMs = charged ? latency.readClockMs(paths.clockFile) : null;
+  const firstAt = new Date(latency.runAt(todo[0], clockMs));
+  writeClock(firstAt);
+  const why = await deps.serverCheck(replayEnv(baseEnv, run, { at: firstAt }), firstAt);
   if (why) throw new Error(`replay refused: ${why}`);
+  // The trade times passed without a step since the last line (latency charged), recorded on the next line.
+  let skipped = [];
 
   let since = manifest.tradesSince ? new Date(manifest.tradesSince) : run.start;
   let cycles = 0;
@@ -255,9 +279,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   let credentialWarned = false;
   const timeoutMs = (cfg.cycleTimeoutMinutes * Math.max(1, cfg.symbols.length) + 2) * 60000;
   const queue = [...todo];
+  // A curated run's management after a window: checked at its first time (and each day's first), then while something
+  // stays open.
+  let managing = true;
+  let managingDay = null;
   while (queue.length) {
     if (cycles >= maxCycles) return { cycles, stopped: `stopped after ${cycles} decision times (--max-cycles)`, done: false };
-    const env = replayEnv(baseEnv, run, { at: queue[0].t });
+    const env = replayEnv(baseEnv, run, { at: new Date(latency.runAt(queue[0], clockMs)) });
     // The run's kill switch (a cycle's workspace change, the runner's error limit): as live, the runner
     // then starts no trade cycle but keeps housekeeping and runs end of day (flat at the close). So the
     // day already under way runs to its end; the run stops before a new day, saying why, and resumes
@@ -266,8 +294,38 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const lastMs = Math.max(lastAtStart, manifest.lastT ? Date.parse(manifest.lastT) : -Infinity);
     const dayUnderWay = Number.isFinite(lastMs) && tradingDayKey(new Date(lastMs)) === queue[0].day;
     if (killed !== null && !dayUnderWay) return { cycles, stopped: `the run's kill switch is on (${env.FTH_KILL_SWITCH_FILE}${killed ? `: ${killed}` : ''}); review it, then remove the file`, done: false };
-    const point = queue.shift();
-    writeClock(point.t);
+    const due = queue.shift();
+    // A failed cycle's time runs again under the time its first try ran at (its line's key, so the attempts fold into
+    // it): queued again here, or due on resume (the manifest's cycleRetry, by that time or the time it was scheduled).
+    const resumed = charged && !due.retry && manifest.cycleRetry && [manifest.cycleRetry.t, manifest.cycleRetry.scheduled].includes(due.t.toISOString());
+    // Latency charged: a trade time the clock passed, whose next time it passed too, runs no step (live polls only the
+    // newest closed bar after a long cycle); any other time runs at the clock when the clock is past it.
+    if (charged && !due.retry && !resumed && latency.skippedForLatency(due, queue[0], clockMs)) {
+      skipped.push(due.t.toISOString());
+      log(`${due.t.toISOString()} ${due.kind}: passed during the previous cycle (the replay clock is at ${new Date(clockMs).toISOString()}); no step, as live`);
+      if (lastOfDay.get(due.day) && queue[0].day !== due.day && due.t >= lastOfDay.get(due.day).t) store.markDayDone(paths, manifest, due.day);
+      continue;
+    }
+    // The line's time (its key): the time it first ran at (its own, or the clock's when later); the step runs at the
+    // clock's time now (ranAt), which is later only for a time run again.
+    const key = resumed ? new Date(manifest.cycleRetry.t) : due.retry ? due.t : new Date(latency.runAt(due, clockMs));
+    const point = key.getTime() === due.t.getTime() ? due : { ...due, t: key, scheduled: due.scheduled || due.t };
+    const ranAt = new Date(latency.runAt(point, clockMs));
+    writeClock(ranAt);
+    if (point.day !== managingDay) {
+      managingDay = point.day;
+      managing = true;
+    }
+    if (point.manage) {
+      if (!managing) continue;
+      // A check that fails manages the bar (never leaves a position alone).
+      const open = await Promise.resolve().then(() => deps.open(env, cfg.account)).then(Boolean, () => true);
+      if (!open) {
+        managing = false;
+        log(`${point.t.toISOString()}: flat outside the curated windows; the clock advances to the next window`);
+        continue;
+      }
+    } else if (point.kind === 'trade') managing = true;
     const started = Date.now();
     // Marked before it runs: a driver stopped before its line is written never runs this time twice.
     manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
@@ -276,11 +334,22 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const eodStep = point.kind === 'eod' || point.kind === 'eod-retry';
     const savedBefore = manifest.eodRetry;
     if (eodStep) {
-      if (retryAfter(run, point)) manifest.eodRetry = savedForm(retryAfter(run, point));
+      if (retryAfter(run, { ...point, t: ranAt })) manifest.eodRetry = savedForm(retryAfter(run, { ...point, t: ranAt }));
       else delete manifest.eodRetry;
     }
     writeJsonAtomic(paths.manifest, manifest);
-    const res = await deps.step(point, env, timeoutMs);
+    // Latency charged: the step's replay clock runs from its time with the wall clock, the broker's clock file with it.
+    // `wall`: the wall clock the step's replay clock runs with (Date.now; a test's own).
+    const wallStart = wall();
+    const stepEnv = charged ? { ...replayEnv(baseEnv, run, { at: ranAt }), [latency.WALL_START]: String(wallStart) } : env;
+    const ticker = charged ? latency.startTicker({ write: writeClock, atMs: ranAt.getTime(), startedMs: wallStart, wall }) : null;
+    let res;
+    try {
+      // The step at the time it runs (a checkpoint, train/decision-points.js, is the clock's state then).
+      res = await deps.step(ranAt.getTime() === point.t.getTime() ? point : { ...point, t: ranAt }, stepEnv, timeoutMs);
+    } finally {
+      if (ticker) clockMs = ticker.stop();
+    }
     const step = store.parseStep(res.output);
     // The pass ran and a cycle in it failed: recorded as an attempt below, and the time runs again.
     // Only an infrastructure failure (no decision: a failed or timed-out harness, no CYCLE RESULT line); the
@@ -298,10 +367,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       }
       throw new Error(`the runner could not run at ${point.t.toISOString()} (exit ${res.code}${res.timedOut ? ', timed out' : ''}); see ${paths.stepsLog}: ${String(res.output || '').trim().split('\n').slice(-3).join(' | ')}`);
     }
+    // Where the step left the clock (latency charged: its fills were made up to then); pinned, the time it ran.
+    const endedAt = charged && Number.isFinite(clockMs) ? new Date(clockMs) : ranAt;
     let trades = null;
     if (cfg.account) {
       try {
-        trades = await deps.trades(env, cfg.account, since, point.t);
+        trades = await deps.trades(env, cfg.account, since, endedAt);
       } catch (err) {
         trades = { error: err.message };
       }
@@ -315,6 +386,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       premarketRetryStarved: step.state && step.state.day === point.day ? step.state.premarketRetryStarved || 0 : 0,
       lanes: point.lanes || null,
     });
+    // Latency charged: when the time was due, when it ran (both only when later), and the trade times passed without a step.
+    if (point.scheduled) rec.scheduled = point.scheduled.toISOString();
+    if (ranAt.getTime() !== point.t.getTime()) rec.ranAt = ranAt.toISOString();
+    // Latency charged: when the step ended on the replay clock (its own scans, orders and fills are up to then).
+    if (charged) rec.endedAt = endedAt.toISOString();
+    if (skipped.length) rec.skipped = skipped;
     // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
     // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist), as live records its broker's;
     // settings that can't be fingerprinted are logged once and recorded as fingerprintError, never a silent null.
@@ -336,20 +413,32 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       else delete manifest.eodRetry;
       const tries = (manifest.cycleRetry && manifest.cycleRetry.t === rec.t ? manifest.cycleRetry.tries : 0) + 1;
       store.appendAttempt(paths, manifest, rec, tries);
+      // The time it was scheduled, so a resume runs it again under this key (latency charged: it ran later).
+      if (point.scheduled) {
+        manifest.cycleRetry.scheduled = point.scheduled.toISOString();
+        writeJsonAtomic(paths.manifest, manifest);
+      }
       cycles += 1;
       failures += 1;
       log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ')}: a failed cycle (try ${tries}); this time runs again`);
       if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t} (it runs again on resume); see ${paths.stepsLog}`, done: false };
-      queue.unshift(point);
+      queue.unshift({ ...point, retry: true });
       continue;
     }
     // A failed read is retried from the same time on the next one (also after a resume).
-    if (!(trades && trades.error)) since = point.t;
+    if (!(trades && trades.error)) since = endedAt;
     manifest.tradesSince = since.toISOString();
     delete manifest.pending;
     // Verified flat: no retry (cleared in the same write as its line).
     if (eodStep && eodVerified(run, point.day)) delete manifest.eodRetry;
+    // Latency charged: the retry a minute after the step ended (never before the clock), or none at or past the close.
+    else if (charged && eodStep && manifest.eodRetry) {
+      const again = retryAfter(run, { ...point, t: endedAt });
+      if (again) manifest.eodRetry = savedForm(again);
+      else delete manifest.eodRetry;
+    }
     store.appendRecord(paths, manifest, rec);
+    skipped = [];
     cycles += 1;
     // A failed cycle, or a bar's pass that ran none and read no bar for a symbol while logging errors (the
     // broker's bars or contract failing): a failure, so a broken broker never reads as a quiet trader.
@@ -360,7 +449,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || (killed !== null ? 'no cycle (kill switch on)' : 'no cycle')}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
     // End of day not verified flat: once more a minute later, as the live runner retries, before the close
     // (saved in the manifest before this step ran, so a stop here, the error limit included, keeps it).
-    const next = eodStep && manifest.eodRetry ? retryAfter(run, point) : null;
+    const next = eodStep && manifest.eodRetry ? retryAfter(run, { ...point, t: endedAt }) : null;
     if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };
     if (next) {
       queue.unshift(next);

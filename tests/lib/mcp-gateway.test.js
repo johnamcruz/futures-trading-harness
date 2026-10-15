@@ -45,7 +45,7 @@ test('the gate log record carries the order\'s contract, side, size, type and ra
 test('a crashing check blocks the order (fail closed)', async () => {
   const r = await handleClientLine(JSON.stringify(call(3, 'place_order')), () => { throw new Error('journal unreadable'); });
   assert.strictEqual(r.forward, null);
-  assert.match(r.respond[0].result.content[0].text, /could not run \(journal unreadable\)/);
+  assert.match(r.respond[0].result.content[0].text, /could not run \(journal unreadable\)\. The order was not sent; close_position still flattens\./);
 });
 
 test('a batch with an order call is refused whole; other batches pass', async () => {

@@ -755,6 +755,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const drafts = [];
   for (const [li, rec] of lines.entries()) {
     const t = Date.parse(rec.t);
+    // The line's own records end where its step ended: with the latency charged (replay/latency.js) the runner's
+    // scans and the orders are stamped on a clock that ran past the line's time (endedAt); pinned, at its time.
+    const ownT = Number.isFinite(Date.parse(rec.endedAt)) ? Math.max(t, Date.parse(rec.endedAt)) : t;
     const cfg = cfgAt(rec.t);
     const nextT = lineTimes.find((x, k) => k > li && x > t) ?? Infinity;
     const tradeCycles = [];
@@ -788,7 +791,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const ctxSym = cyc && cyc.ctx && Array.isArray(cyc.ctx.symbols) ? cyc.ctx.symbols.find(s => s.symbol === symbol) : null;
       const barRec = (rec.bars || []).find(b => b && b.symbol === symbol);
       const barT = (ctxSym && ctxSym.bar && ctxSym.bar.t) || (barRec && barRec.lastBarT) || null;
-      const scanList = (scans.get(`${symbol}|${barT}`) || []).filter(s => Date.parse(s.at) <= t);
+      const scanList = (scans.get(`${symbol}|${barT}`) || []).filter(s => Date.parse(s.at) <= ownT);
       const scan = scanList[scanList.length - 1] || null;
       // What the teacher could trade: a strategy whose status isn't active (paper) can't place a live entry
       // (the gate refuses it; the runner starts no cycle for it) unless the run is in paper mode. A bar no
@@ -808,7 +811,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       else {
         // An order naming no contract (modify, cancel): its order id's contract (the broker's journal), else
         // the line's only symbol; with several symbols and no id to resolve, every label of the cycle says so.
-        const familyOf = o => familyOfId(o.contractId, contractCache) || (o.orderId !== null ? (journal.find(e => e.orderId !== null && String(e.orderId) === String(o.orderId) && e.ms <= t) || {}).family || null : null);
+        const familyOf = o => familyOfId(o.contractId, contractCache) || (o.orderId !== null ? (journal.find(e => e.orderId !== null && String(e.orderId) === String(o.orderId) && e.ms <= ownT) || {}).family || null : null);
         const mine = cyc.orders.filter(o => {
           const of = familyOf(o);
           if (of) return of === fam;
@@ -1014,7 +1017,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     labels.push({
       v: VERSION,
       key: crypto.createHash('sha256').update(`${manifest.runId}|${rec.t}|${d.symbol}|${promptHash}`).digest('hex').slice(0, 24),
-      runId: manifest.runId, t: rec.t, day: rec.day, kind: rec.kind, symbol: d.symbol, barT: d.barT,
+      runId: manifest.runId, t: rec.t, ...(rec.endedAt ? { endedAt: rec.endedAt } : {}), day: rec.day, kind: rec.kind, symbol: d.symbol, barT: d.barT,
       decision: d.decision, interrupted: Boolean(rec.interrupted), cycleFailed: d.cyc ? d.cyc.failed : null, position: d.position || null,
       candidates: d.candidates, values, valuesAbsent, valuesError, archivedBar, archiveError, archivePruned, teacher, gate, outcome,
       counterfactual: counterfactuals.length ? pickCounterfactual(d, counterfactuals) : null, counterfactuals, counterfactualFor: counterfactuals.length ? counterfactualFor : null,
