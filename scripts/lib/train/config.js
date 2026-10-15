@@ -48,7 +48,10 @@ const { resolveProbe } = require('./probe-config');
 
 const LOOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const LIMITS = { maxIterations: [1, 1, 100], maxModelCalls: [200, 1, 100000], maxWallMinutes: [240, 1, 7 * 24 * 60] };
+// [default, min, max] of each setting and budget (config/training.json loop; the budgets' maxima only fall).
+const LOOP = require('../tunables').training().loop;
+const triple = r => [r.default, r.min, r.max];
+const LIMITS = Object.fromEntries(Object.entries(LOOP.limits).map(([k, r]) => [k, triple(r)]));
 
 function readSpec(spec, baseDir, what) {
   if (spec && typeof spec === 'object' && !Array.isArray(spec)) return spec;
@@ -96,11 +99,11 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   try { replay = readSpec(r.replay, baseDir, 'replay'); } catch (err) { errors.push(`replay: ${err.message}`); }
   try { proposer = validateConfig(readSpec(r.proposer, baseDir, 'proposer')); } catch (err) { errors.push(`proposer: ${err.message}`); }
   if (replay && !(typeof replay.workDir === 'string' && /^(\/|~\/)/.test(replay.workDir))) errors.push('replay.workDir: an absolute path or ~/...');
-  const repeats = int(r.repeats, [3, 1, 20], 'repeats', errors);
-  const seed = int(r.seed, [1, 0, 2147483646], 'seed', errors);
-  const maxFlagged = int(r.maxFlagged, [12, 1, 500], 'maxFlagged', errors);
-  const controlPoints = int(r.controlPoints, [12, 0, 500], 'controlPoints', errors);
-  const maxProposals = int(r.maxProposals, [2, 1, 5], 'maxProposals', errors);
+  const repeats = int(r.repeats, triple(LOOP.repeats), 'repeats', errors);
+  const seed = int(r.seed, triple(LOOP.seed), 'seed', errors);
+  const maxFlagged = int(r.maxFlagged, triple(LOOP.maxFlagged), 'maxFlagged', errors);
+  const controlPoints = int(r.controlPoints, triple(LOOP.controlPoints), 'controlPoints', errors);
+  const maxProposals = int(r.maxProposals, triple(LOOP.maxProposals), 'maxProposals', errors);
   const lim = r.limits && typeof r.limits === 'object' ? r.limits : {};
   for (const k of Object.keys(lim)) if (!(k in LIMITS)) errors.push(`limits.${k}: not a limit (${Object.keys(LIMITS).join(', ')})`);
   const limits = Object.fromEntries(Object.entries(LIMITS).map(([k, spec]) => [k, int(lim[k], spec, `limits.${k}`, errors)]));

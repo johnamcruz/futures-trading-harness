@@ -51,14 +51,15 @@ const { roleOf, sessionDate } = require('./splits');
 const { CONTEXT_KEYS } = require('./lifecycle-record');
 
 const VERSION = 2;
-const MIN_N = 20;
-const MIN_DAYS = 10;
-const LEVEL = 0.9;
+const EI = require('../tunables').training().experienceIndex; // config/training.json experienceIndex (minN, minDays and level only rise)
+const MIN_N = EI.minN;
+const MIN_DAYS = EI.minDays;
+const LEVEL = EI.level;
 const KINDS = Object.freeze(['skill', 'read']);
 const PINNED = 'pinned.json';
 /** Examples kept per skill signature and month (the latest of each), so a lookup on any day finds some before it. */
-const EXAMPLES_PER_MONTH = 4;
-const WHY_CHARS = 160;
+const EXAMPLES_PER_MONTH = EI.examplesPerMonth;
+const WHY_CHARS = EI.whyChars;
 
 const ctxVal = (ctx, k) => (ctx && ctx[k] !== null && ctx[k] !== undefined ? ctx[k] : '-');
 const contextKey = ctx => CONTEXT_KEYS.map(k => `${k}=${ctxVal(ctx, k)}`).join(';');
@@ -116,7 +117,7 @@ const sumBy = (rows, f) => {
 };
 
 /** A cell's statistics from its rows ([day, R, entered, regime]) on days strictly before `before` (null: all). */
-function cellStats(rows, { before = null, seed = 1, reps = 2000, key = '' } = {}) {
+function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = '' } = {}) {
   const seen = (rows || []).filter(r => before === null || r[0] < before);
   const withR = seen.filter(r => Number.isFinite(r[1]));
   const n = withR.length;
@@ -231,7 +232,7 @@ function exitOf(decisions) {
  * The index of these decisions (lines of experience logs). `runs`: [{ runId, file, sha256 }] the logs read, for the
  * manifest. Plain passes (no signature) count in `plainPasses` only. `shuffle`: a seed for the shuffled arm.
  */
-function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = null, now = new Date() } = {}) {
+function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuffle = null, now = new Date() } = {}) {
   if (shuffle !== null && !Number.isInteger(shuffle)) throw new Error('shuffle: a whole-number seed');
   if (decisions.some(d => d && !d.bar && !d.cycleAt && !d.day)) throw new Error('index refused: a decision without its bar or day can\'t be placed in the split');
   // The same log twice would count every decision twice: refused; a decision in two logs counts once (its id).

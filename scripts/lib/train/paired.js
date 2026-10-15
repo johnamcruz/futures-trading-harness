@@ -18,8 +18,8 @@
  * - every verifier that applies: a change to a strategy or the rulebook is mechanical and is screened
  *   by the evaluator first (R28), so without one (step 9 not built) it is `blocked`, never kept.
  *
- * DECISION_RULE is frozen code, like the promotion gate (prop/promotion.js): a loop's config may only
- * tighten it (ruleFrom), never loosen it. The LLM proposes; this code judges.
+ * DECISION_RULE is config/training.json decisionRule, tighten-only there (tests/lib/tunables.test.js pins each value): a
+ * loop's config may only tighten it further (ruleFrom), never loosen it. The LLM proposes; this code judges.
  *
  *   DECISION_RULE, ruleFrom(overrides)
  *   mcnemar(b, c)                         exact one-sided p: P(X >= b | n = b + c, 1/2)
@@ -31,7 +31,7 @@
 
 // maxExcluded: the largest share of decisions the champion's scorecard left unchecked (left out of the test) before
 // the result is insufficient evidence.
-const DECISION_RULE = Object.freeze({ alpha: 0.05, minPairs: 20, minDiscordant: 6, minEffect: 0.1, harmTolerance: 0.02, maxExcluded: 0.1 });
+const DECISION_RULE = require('../tunables').training().decisionRule;
 const LOWER_IS_TIGHTER = Object.freeze(['alpha', 'harmTolerance', 'maxExcluded']);
 const NO_DECISION = 'no decision';
 

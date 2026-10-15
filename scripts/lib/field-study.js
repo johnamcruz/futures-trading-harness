@@ -26,7 +26,8 @@ const { roleOf } = require('./prop/splits');
 
 const MINUTE = 60000;
 const FIELD_SPEC = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)(?:\[(\d{1,3})\])?$/;
-const DEFAULT_QUANTILES = Object.freeze([0.8, 0.9, 0.95, 0.99]);
+const FS = require('./tunables').training().fieldStudy; // config/training.json fieldStudy
+const DEFAULT_QUANTILES = FS.quantiles;
 const FREE_ROLES = Object.freeze(['train']);
 
 /** 'a.b.c' or 'a.b.c[2]' -> { spec, path, shift }. */
@@ -231,7 +232,7 @@ function rng(seed) {
  * the move signed by the field). Sets are fixed on the full sample. Days are drawn with replacement,
  * `reps` times, from rng(seed).
  */
-function bootstrap(P, { rx, ry, means = [], reps = 1000, seed = 1 }) {
+function bootstrap(P, { rx, ry, means = [], reps = FS.reps, seed = FS.seed }) {
   const width = 11 + 2 * means.length;
   const days = new Map();
   for (let i = 0; i < P.n; i += 1) {
@@ -290,7 +291,7 @@ function costVerdict(ci, costTicks) {
  * The statistics of one set of pairs: IC, deciles, thresholds, the same-bar reference, the cost line,
  * and (with `boot`) the bootstrap intervals. `thresholds`: |field| levels, else the p80/p90/p95/p99 of |field|.
  */
-function summarize(P, { thresholds = null, costTicks = 2, boot = null } = {}) {
+function summarize(P, { thresholds = null, costTicks = FS.costTicks, boot = null } = {}) {
   const n = P.n;
   const x = P.x.subarray(0, n); const y = P.y.subarray(0, n);
   const res = { n, skipped: P.skipped, tail: P.tail, missing: P.missing };
@@ -363,7 +364,7 @@ function groups(P, by) {
  * The study: for every field and horizon, the overall statistics with bootstrap intervals, and the
  * breakdowns asked for (`by`: ['hour', 'session']), each group with its own intervals.
  */
-function study(t, { fields, horizons, tick, thresholds = null, costTicks = 2, by = [], reps = 1000, seed = 1 }) {
+function study(t, { fields, horizons, tick, thresholds = null, costTicks = FS.costTicks, by = [], reps = FS.reps, seed = FS.seed }) {
   if (!(tick > 0)) throw new Error('tick: the contract\'s tick size');
   const results = [];
   fields.forEach((f, q) => {

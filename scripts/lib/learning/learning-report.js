@@ -63,9 +63,10 @@ const { practiceLine } = require('./setup-moments');
 const { loadPinnedLibrary, libraryShown } = require('./setup-library');
 const { readSkillUsage, skillUsageMarkdown, skillUsageText } = require('./skill-usage');
 
-const ROLLING_DAYS = 5;
-const COLLAPSE_SHARE = 0.8;
-const MIN_COLLAPSE = 10;
+const LR = require('../tunables').training().learningReport; // config/training.json learningReport
+const ROLLING_DAYS = LR.rollingDays;
+const COLLAPSE_SHARE = LR.collapseShare;
+const MIN_COLLAPSE = LR.minCollapse;
 
 const r4 = x => (x === null || !Number.isFinite(x) ? null : Math.round(x * 10000) / 10000);
 const mean = xs => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);

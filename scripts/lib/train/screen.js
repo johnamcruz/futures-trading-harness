@@ -59,7 +59,7 @@ const { tradingDayKey } = require('../trading/clock');
  * small n is the test's to catch, not the effect size's. 5 fixed / 1 broken on 40 has the size (0.10) but not the
  * significance (p about 0.22). The screen only filters; the keep rule is the real gate.
  */
-const SCREEN = Object.freeze({ gainAlpha: 0.1, harmAlpha: 0.2, minDiscordant: 4, minPairs: 10, minEffect: 0.1 });
+const SCREEN = require('../tunables').training().screen; // config/training.json screen (tighten-only)
 const VERDICTS = Object.freeze(['helped', 'no effect', 'hurt']);
 const HALVES = Object.freeze(['probe', 'confirm']);
 

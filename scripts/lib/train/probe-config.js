@@ -30,7 +30,8 @@ const { rolesBetween } = require('../learning/splits');
 const { tradingDayStart } = require('../trading/clock');
 
 const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel']);
-const PROBE_LIMITS = Object.freeze({ k: [4, 1, 8], parallel: [1, 1, 4] });
+// [default, min, max] of each (config/training.json probe).
+const PROBE_LIMITS = Object.freeze(Object.fromEntries(Object.entries(require('../tunables').training().probe).map(([k, r]) => [k, Object.freeze([r.default, r.min, r.max])])));
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const sessionStart = d => tradingDayStart(new Date(`${d}T12:00:00Z`));

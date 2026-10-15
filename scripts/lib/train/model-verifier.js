@@ -80,7 +80,7 @@ const stats = require('../prop/stats');
  * so about 3 x S days), before it shows anything. minOverlap: the share of the champion's decisions (and reads) the
  * challenger must have decided on the same keys before the decision measures pair.
  */
-const KEEP_RULE = Object.freeze({ maxChallengerBlows: 0, level: 0.9, primary: 'passRate', minBlocks: 2, minOverlap: 0.5 });
+const KEEP_RULE = require('../tunables').training().keepRule; // config/training.json keepRule (tighten-only: tests/lib/tunables.test.js)
 const HELD_BACK = Object.freeze(['practice-validate', 'test', 'final']);
 const KEYS = ['account', 'paths', 'reps', 'faults'];
 

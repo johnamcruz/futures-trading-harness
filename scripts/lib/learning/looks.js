@@ -71,7 +71,7 @@ const schedule = require('../schedule');
  */
 const S = () => schedule.current().learning;
 /** Runs one evaluation may hold: its arms (with experience, without, shuffled). */
-const MAX_ARMS = 3;
+const MAX_ARMS = require('../tunables').training().looks.maxArms; // config/training.json (only falls)
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without), and `+library:<hash>` when shown the history library. */

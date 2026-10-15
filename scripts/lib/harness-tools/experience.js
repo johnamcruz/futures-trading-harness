@@ -55,8 +55,8 @@ const { daysNear } = require('../trading/trade-lifecycle');
 const { context } = require('./cli');
 
 const USAGE = 'usage: experience-lookup.js --symbol <ROOT> [--alternative <step>:<skill> (at most 2)] [--role <role>]';
-const MAX_BYTES = 4096;
-const SIMILAR = 3;
+const MAX_BYTES = require('../tunables').training().experienceTool.maxBytes; // config/training.json experienceTool
+const SIMILAR = require('../tunables').training().experienceTool.similar;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^[a-z][a-z-]{0,31}$/;
 
