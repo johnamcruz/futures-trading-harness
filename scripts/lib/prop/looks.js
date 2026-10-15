@@ -43,7 +43,10 @@
  * 1-5, 2026 replay).
  */
 
-const { RECORDED_LOOKS, unitContaining } = require('./splits');
+const splits = require('./splits');
+const schedule = require('../schedule');
+
+const { unitContaining } = splits;
 
 /*
  * The ledger file's format, the one every writer uses (the evaluator, prop/evaluate-run.js, and the
@@ -84,8 +87,8 @@ function parseLedger(text, where = 'the ledger') {
 /** The ledger file's text for these looks (JSON lines). */
 const formatLedger = looks => looks.map(e => `${JSON.stringify(e)}\n`).join('');
 
-/** Looks per budget (an out-of-sample window; the held-out quarters together) before it is retired (R16). */
-const LOOK_BUDGET = 3;
+/** Looks per budget (an out-of-sample window; the held-out quarters together) before it is retired (R16): the schedule's prop.sealed.lookBudget. */
+const lookBudget = () => schedule.current().prop.lookBudget;
 const PURPOSES = Object.freeze(['tuning', 'judging', 'reasoning-fix']);
 const HELD_OUT = 'walk-forward held-out';
 
@@ -95,6 +98,15 @@ function allowed(u) {
   if (u.role === 'select' || u.role === 'oos' || u.part === 'held-out') return ['judging'];
   if (u.role === 'recent') return ['reasoning-fix'];
   return [];
+}
+
+/**
+ * The look a unit requires (schedule.js resolve): { purposes (allowed), budget ('walk-forward held-out' for a held-out
+ * quarter, 'window' for an out-of-sample window, null for none), budgetLooks (its size, or null) }.
+ */
+function lookRule(u) {
+  const b = u.part === 'held-out' ? 'walk-forward held-out' : u.role === 'oos' ? 'window' : null;
+  return { purposes: [...allowed(u)], budget: b, budgetLooks: b ? lookBudget() : null };
 }
 
 const keyOf = u => `${u.block}${u.part ? ` ${u.part}` : ''} [${u.from}, ${u.to})`;
@@ -140,7 +152,7 @@ function budgetOf(unit) {
 function ledgerEntries(ledger) {
   if (!Array.isArray(ledger)) throw new Error('the ledger is required, a list of looks');
   return [
-    ...RECORDED_LOOKS.map(e => ({ units: unitsOf(e).map(x => x.unit), spends: true })),
+    ...splits.RECORDED_LOOKS.map(e => ({ units: unitsOf(e).map(x => x.unit), spends: true })),
     ...ledger.map(e => {
       const units = unitsOf(e).map(x => x.unit);
       // Waived only for a reasoning-fix look where every unit allows one: a mis-tagged entry at a budget spends.
@@ -156,7 +168,7 @@ function usageAt(unit, entries) {
   const budget = budgetOf(unit);
   if (!budget) return { looks, budgeted: false, budget: null, spent: null, remaining: null };
   const spent = entries.filter(e => e.spends && e.units.some(budget.touches)).length;
-  return { looks, budgeted: true, budget: budget.key, spent, remaining: Math.max(0, LOOK_BUDGET - spent) };
+  return { looks, budgeted: true, budget: budget.key, spent, remaining: Math.max(0, lookBudget() - spent) };
 }
 
 /**
@@ -178,7 +190,7 @@ function refusalFor(u, purpose) {
     return `${u.key} allows ${ok.join(', ')} looks only, not ${purpose}`;
   }
   if (u.budgeted && purpose !== 'reasoning-fix' && u.remaining === 0) {
-    return `${u.key}: the ${u.budget} budget has used its ${LOOK_BUDGET} looks and is retired (R16, R17)`;
+    return `${u.key}: the ${u.budget} budget has used its ${lookBudget()} looks and is retired (R16, R17)`;
   }
   return null;
 }
@@ -201,6 +213,8 @@ function checkLook(look, ledger) {
   } catch (e) {
     return { ok: false, refusals: [...refusals, `the ledger can't be read: ${e.message}`], units };
   }
+  // The sealed rule (schedule.js): no look under a schedule whose sealed prop windows changed after a look.
+  refusals.push(...schedule.sealedRefusals('prop', ledger));
   try {
     units = unitsOf(look).map(({ key, unit }) => ({ key, role: unit.role, block: unit.block, part: unit.part, ...usageAt(unit, entries) }));
   } catch (e) {
@@ -215,4 +229,7 @@ function checkLook(look, ledger) {
   return { ok: refusals.length === 0, refusals, units };
 }
 
-module.exports = { LOOK_BUDGET, PURPOSES, lookUsage, checkLook, parseLedger, formatLedger, isListFormat };
+module.exports = {
+  get LOOK_BUDGET() { return lookBudget(); },
+  PURPOSES, lookRule, lookUsage, checkLook, parseLedger, formatLedger, isListFormat,
+};

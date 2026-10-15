@@ -13,7 +13,7 @@
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
- * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
+ * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
@@ -280,6 +280,34 @@ function splitWindow(ctx) {
   return r('split-window', PASS, `${roles[0]} (${USE_OF[roles[0]]})`);
 }
 
+/**
+ * The schedule (config/schedule.json, schedule.js): it loads and validates; the sealed rule holds against both ledgers
+ * (the learning ledger and the training loop's prop ledger); and every look already taken in the run's evaluation was
+ * taken under this schedule (the arms of one evaluation are compared, so they share one). A resume of a run started
+ * under another schedule, with no look to compare, is a WARN. ctx.read.scheduleState() gives { schedule, learning,
+ * prop, run } (the loaded schedule, each ledger's entries, the run's learning-run.json or null); it throws when the
+ * schedule or a ledger can't be read: a FAIL.
+ */
+function scheduleCheck(ctx) {
+  const S = require('../schedule');
+  let st;
+  try { st = ctx.read.scheduleState(ctx.gate); } catch (e) { return r('schedule', FAIL, errText(e)); }
+  const cur = st.schedule.fingerprint;
+  const bad = [...S.sealedRefusals('learning', st.learning, st.schedule), ...S.sealedRefusals('prop', st.prop, st.schedule)];
+  const evaluation = ctx.gate.evaluation;
+  if (evaluation) {
+    const other = st.learning.filter(e => e && e.kind !== 'result' && e.kind !== 'score' && e.evaluation === evaluation && S.entryFingerprint(e).hash !== cur.hash);
+    if (other.length) {
+      const f = S.entryFingerprint(other[0]);
+      bad.push(`evaluation ${evaluation} has ${other.length} look(s) under schedule ${f.version} (${f.hash.slice(0, 12)}), and this run's schedule is ${cur.version} (${cur.hash.slice(0, 12)}): one evaluation runs under one schedule`);
+    }
+  }
+  if (bad.length) return r('schedule', FAIL, bad.join('; '));
+  const rec = st.run && st.run.schedule;
+  if (rec && rec.hash !== cur.hash) return r('schedule', WARN, `the run started under schedule ${rec.version} (${String(rec.hash).slice(0, 12)}); it resumes under ${cur.version} (${cur.hash.slice(0, 12)})`);
+  return r('schedule', PASS, `${cur.version} (${cur.hash.slice(0, 12)}): sealed windows as every look was taken under${evaluation ? `; evaluation ${evaluation} under this schedule` : ''}`);
+}
+
 function latency(ctx) {
   if (ctx.run.latency === undefined) return r('latency', FAIL, 'the resolved run has no latency setting (replay/config.js latency)');
   // A resume of a run started before the setting keeps its pinned clock (replay/config.js startedPinned): it passes, noted.
@@ -515,7 +543,7 @@ function adapter(ctx) {
 
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
-  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, adapter,
 ]);
 
@@ -653,6 +681,16 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     riskRecord: file => require('./risk-record-index').readRiskIndex(file),
     riskPin: home => require('./risk-record-index').riskPin(home),
     learningGate: gate => require('./run-gate').checkLearningRun({ ...gate, env }),
+    scheduleState: gate => {
+      const { readLedger } = require('../prop/ledger-file');
+      const read = file => (fs.existsSync(file) ? readLedger(file) : []);
+      return {
+        schedule: require('../schedule').current(),
+        learning: read(require('./looks').ledgerPath(env)),
+        prop: read(require('../train/state').ledgerFile(env)),
+        run: gate && gate.runDir ? require('./run-gate').readLearningRun(gate.runDir) : null,
+      };
+    },
     rulebook: name => {
       if (!/^[a-z0-9][a-z0-9_-]*$/.test(String(name || ''))) return null;
       const rb = require('../trading/rulebook');
@@ -718,7 +756,7 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, n
 module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
-  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };

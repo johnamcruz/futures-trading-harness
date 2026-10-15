@@ -219,7 +219,7 @@ test('held-out discipline: Train runs freely; Select, Out-of-sample and reserved
   }
   const look = fsy.splitCheck(['2023-06', '2023-07'], { heldOutLook: 'parity check' });
   assert.deepStrictEqual(look.heldOut, ['2023-07']);
-  assert.match(look.warning, /RECORDED_LOOKS/);
+  assert.match(look.warning, /ledger \(R16\) only.*recordedLooks.*frozen/);
   assert.deepStrictEqual(fsy.splitCheck(['2020-12']).months[0].role, 'none');
   // An evening bar belongs to the next session: 2023-06-30 18:00 ET is July's first session.
   assert.deepStrictEqual(fsy.monthsBetween(Date.parse('2023-06-30T22:30:00Z'), Date.parse('2023-06-30T22:31:00Z')), ['2023-07']);

@@ -312,7 +312,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
+    info: { source: 'replay', schedule: require('../schedule').fingerprint(), broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
       // The exit its composed trades are managed by, recorded at seed time: its experience lines are tagged by it,
       // never by the repository's exit when they are written (learning/run-experience.js manifestExit).
       exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)) },
