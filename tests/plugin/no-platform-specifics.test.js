@@ -47,7 +47,6 @@ const REASONS = {
   'firm-time': 'the firm\'s reset or flatten time as harness text',
 };
 const SHRINK_ONLY = [
-  ['README.md', 'firm account firm-time'],
   ['commands/trade-review.md', 'firm-time'],
   ['docs/LEARNED-RULEBOOK.md', 'account'],
   ['docs/QUANT-PLAN.md', 'account'],
