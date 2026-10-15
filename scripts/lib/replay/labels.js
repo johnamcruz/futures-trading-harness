@@ -55,8 +55,8 @@
  * by design, what came after, and only ever in `outcome`, `counterfactual` and
  * `counterfactuals`. Deterministic: the same files give the same labels.
  *
- *   labelRun(runDir, { budgetUsd, strategies, outcomeBars })   { labels, summary }
- *   writeLabels(runDir, { root, budgetUsd, strategies, barsFiles })   writes <runDir>/labels.jsonl and labels-summary.json; { file, summary }
+ *   labelRun(runDir, { budgetUsd, strategies, accounts, outcomeBars })   { labels, summary }
+ *   writeLabels(runDir, { root, budgetUsd, strategies, accounts, barsFiles })   writes <runDir>/labels.jsonl and labels-summary.json; { file, summary }
  */
 
 const crypto = require('crypto');
@@ -66,6 +66,7 @@ const { readJson, writeJsonAtomic } = require('../harness-run');
 const { gateLogPath } = require('../trading/check-order');
 const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
+const { feePerSide } = require('../trading/accounts');
 const { brokerSpecFor, specMismatch } = require('../trading/broker-specs');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN, SESSION_DEFAULTS } = require('../trading/clock');
 const { parseStandardName, readCache } = require('../broker/translator');
@@ -153,19 +154,23 @@ const sign = side => (side === 'buy' ? 1 : side === 'sell' ? -1 : 0);
  * A contract's tick specs { tickSize, tickValue, source } from its standard name (MNQ, NQ:2026-03), else
  * the fallback's (the label's symbol): the broker's, as the run recorded them (`specsFile`, the run home's
  * contracts-<broker>.json through translatorCache: what the run's gate and sizing traded with; `day`, the trading day
- * it traded on, picks that day's), else the static table ('table').
+ * it traded on, picks that day's), else the static table ('table'). `account`, the run's policy account: its fee
+ * for the root is the spec's feesPerSide (ACCOUNT.md fees_per_side, the one home of a fee; neither the broker spec nor the
+ * table has one), so a counterfactual's net is priced; none, or none stated for the root: no feesPerSide, a null net.
  * The one place specs are looked up.
  */
-function contractSpec(contractId, fallback = null, specsFile = null, day = null) {
+function contractSpec(contractId, fallback = null, specsFile = null, day = null, account = null) {
   const rootOf = id => (id ? (specsFile && specsFile.root(String(id))) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
   for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
     const broker = specsFile ? specsFile.spec(root, day) : null;
     const table = specFor(root);
     // As live (broker-specs.js brokerSpecs): a broker spec unlike the static table can't be trusted (live
     // refuses entries on it); measured with the table, flagged.
-    if (broker && table && specMismatch(root, broker)) return { ...table, source: 'mismatch' };
-    if (broker) return { tickSize: broker.tickSize, tickValue: broker.tickValue, feesPerSide: broker.feesPerSide, source: 'broker' };
-    if (table) return { ...table, source: 'table' };
+    const fee = feePerSide(account, root);
+    const withFee = spec => (fee === null ? spec : { ...spec, feesPerSide: fee });
+    if (broker && table && specMismatch(root, broker)) return withFee({ ...table, source: 'mismatch' });
+    if (broker) return withFee({ tickSize: broker.tickSize, tickValue: broker.tickValue, source: 'broker' });
+    if (table) return withFee({ ...table, source: 'table' });
   }
   return null;
 }
@@ -689,7 +694,7 @@ function realDir(runDir) {
  * @param opts.barsSource { SYMBOL: sha256 } of the --bars files, for provenance (else 'run home')
  * @param opts.unfinished label a run that isn't finished (writeLabels allows it only into a folder outside the run home)
  */
-function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false, barsSource = null, log = msg => process.stderr.write(`[labels] ${msg}\n`) } = {}) {
+function labelRun(runDir, { budgetUsd = null, strategies = [], accounts = [], outcomeBars = null, unfinished = false, barsSource = null, log = msg => process.stderr.write(`[labels] ${msg}\n`) } = {}) {
   const dir = realDir(runDir);
   const { manifest, days } = readRun(dir);
   // Labels hold what came after each decision (outcomes, counterfactuals). A run that will go on would let
@@ -918,13 +923,16 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     return list[own !== -1 ? own : Math.max(0, d.signal.fired.findIndex(r => num(r.stopDistance) > 0))] || null;
   };
 
+  // The run's policy account (the one its policy strategy names): the fee that prices a counterfactual's net.
+  const policy = (strategies || []).find(x => x && x.valid !== false && x.signal === 'policy' && x.account);
+  const account = policy ? (accounts || []).find(a => a && a.name === policy.account) || null : null;
   const strategiesHash = hashStrategies(strategies);
   const policyVerdicts = readLines(path.join(home, 'policy-verdicts.jsonl')).filter(isObj);
   const labels = [];
   for (const d of drafts) {
     const { rec } = d;
     const tday = tradingDayKey(new Date(d.t)); // the replayed trading day: its own cache file's spec
-    const spec = contractSpec(d.symbol, d.fam, contractCache, tday);
+    const spec = contractSpec(d.symbol, d.fam, contractCache, tday, account);
     let usedSpec = spec;
     let teacher = null;
     let gate = { decision: 'none', checks: [] };
@@ -937,7 +945,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const isEntry = d.decision === 'flat' && o;
       const rt = isEntry ? entryOf.get(d) || null : null;
       // Decision-time fields read only the order and what was there at t (never its fill).
-      const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache, tday) : spec;
+      const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache, tday, account) : spec;
       usedSpec = ospec;
       if (ospec && ospec.source === 'mismatch') reasons.push('broker spec mismatch');
       // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
@@ -1144,7 +1152,7 @@ function outcomeFor(outcomeBars, sym, tf) {
  * @param opts.outDir where to write (default the run dir); required for an unfinished run, and then
  *   outside the run home (its teacher, on resume, must not read what came after its decisions)
  */
-function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], barsFiles = {}, outDir = null } = {}) {
+function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], accounts = [], barsFiles = {}, outDir = null } = {}) {
   const dir = realDir(runDir);
   const out = outDir ? path.resolve(expandHome(outDir)) : dir;
   const home = path.resolve(dir, '..', '..');
@@ -1153,7 +1161,7 @@ function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], b
   const outcomeBars = outcomeBarsFor(dir, barsFiles);
   // Which data the labels read (--bars): each file's sha256, for the labels' provenance.
   const barsSource = Object.keys(barsFiles).length ? Object.fromEntries(Object.entries(barsFiles).sort().map(([sym, f]) => [sym, crypto.createHash('sha256').update(fs.readFileSync(path.resolve(expandHome(f)))).digest('hex')])) : null;
-  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, outcomeBars, unfinished: Boolean(outDir), barsSource });
+  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, accounts, outcomeBars, unfinished: Boolean(outDir), barsSource });
   fs.mkdirSync(out, { recursive: true });
   const file = path.join(out, 'labels.jsonl');
   const tmp = `${file}.${process.pid}.tmp`;

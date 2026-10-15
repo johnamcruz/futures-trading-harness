@@ -53,13 +53,14 @@ const { readBriefing, current, WINDOWS } = require('./briefing');
 const { trendRuleOf } = require('./reasons');
 const { roleCalls, verdictOf, verdictProblem } = require('./roles-ran');
 const { familyRoot } = require('./contracts');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const SIDES = ['long', 'short'];
 const WINDOW_NAMES = [...new Set(WINDOWS.map(w => w[2]))];
 // The RTH windows (09:30-16:00 ET) and the overnight ones, by their start and end minutes.
-const RTH = new Set(WINDOWS.filter(([a, b]) => a >= 570 && b <= 960).map(w => w[2]));
+const RTH = new Set(WINDOWS.filter(([a, b]) => a >= RTH_OPEN_MIN && b <= RTH_CLOSE_MIN).map(w => w[2]));
 const OVERNIGHT = new Set(['asia', 'london']);
 const VALUES = {
   entries: ['allowed', 'none'], news: ['clear', 'blackout'], trend: ['allowed', 'blocked'],

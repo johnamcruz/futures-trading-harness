@@ -233,6 +233,16 @@ test('volatility cutoffs: the trade stream\'s day regimes use the live regime\'s
   assert.strictEqual(at(REGIME_PARAMS.lowVol + 0.01), 'normal');
 });
 
+test('strategy numbers: the shipped trade_lifecycle keeps the owner\'s risk ceilings (pinned; the value\'s one home is its STRATEGY.md)', () => {
+  const { loadStrategyFile } = require('../../scripts/lib/trading/strategies');
+  const s = loadStrategyFile(path.join(REPO, 'strategies', 'trade_lifecycle', 'STRATEGY.md'));
+  assert.deepStrictEqual(s.errors || [], []);
+  const d = s.data || s;
+  assert.ok(d.risk.max_risk_usd <= 300, `max_risk_usd ${d.risk.max_risk_usd} is above the owner's $300 cap`);
+  assert.ok(d.risk.min_rr >= 2, `min_rr ${d.risk.min_rr} is under 2`);
+  assert.ok(d.valid_bars <= 3, `valid_bars ${d.valid_bars} is above 3`);
+});
+
 // ---- The guard: a removed copy never comes back ----
 
 /** Every .js under scripts/ (the CLIs, hooks and the libraries). */
@@ -268,6 +278,11 @@ const REMOVED = [
   ['a copy of the ATR lengths', /\bconst (?:ATR_PERIOD|ATR_LEN|STOP_ATR_PERIOD)\s*=\s*\d|\batr\([^()]*,\s*(?:14|20)\)|\batr: 14\b|\batrStop: 20\b/, 'scripts/lib/trading/indicators.js'],
   ['a second history window', /\bHISTORY_HOURS\s*=\s*\d/, null],
   ['the trade stream\'s own volatility cutoffs', /\b(?:1\.25|0\.8)\s*\*\s*mean\b/, null],
+  ['a session length in minutes', /\b18\s*\*\s*60\b/, 'scripts/lib/trading/clock.js'],
+  ['a session minute used as a boundary', /(?:[<>]=?|[-+]|===?)\s*(?:570|960|1080)\b|\b(?:570|960|1080)\s*(?:[<>]=?|[-+]|===?)|\[\s*-?\d+,\s*(?:570|960|1080)\b|\b(?:570|960|1080)\s*,\s*(?:\d+|'[^']*')\s*\]/, 'scripts/lib/trading/clock.js'],
+  ['a fee fallback by or', /(?:\?\?|\|\|)\s*0\.37\b/, null],
+  ['a restated cushion fraction', /\bcushion_frac:\s*0\.\d/, null],
+  ['a Monte Carlo path count', /\bpaths\s*[:=]\s*\d{3,}/, 'scripts/lib/prop/mc-size.js', /^scripts\/(?:lib\/(?:prop|learning|train)\/[^/]+|[^/]+)\.js$/],
   ['a loss streak default restated', /'FTH_MAX_CONSECUTIVE_LOSSES',\s*\d/, null],
 ];
 
@@ -290,6 +305,8 @@ test('guard: the guard catches what it claims (a planted copy of each is reporte
     'const CALL_TIMEOUT_MS = 15000;', 'risk(s, { paths: Math.min(paths, 1000) });', 'function g({ paths = 1000 }) {}', 'const RTH_OPEN = 9 * 60 + 30;',
     "  eodAt: '15:50@America/New_York',", 'const MAX_RISK_USD = 300;', "const K = ['cushion_frac', 'cap_usd'];", 'const a = ind.atr(bars, 14);',
     'const HISTORY_HOURS = 250;', 'x = range >= 1.25 * mean;', "maxConsecutiveLosses: intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', 2, { min: 1 }),",
+    'const open = 18 * 60;', 'if (m >= 960) return;', "[960, 1080, 'daily break'],", 'if (m < 570) return;', 'const f = cfg.fee || 0.37;', 'const f = cfg.fee ?? 0.37;',
+    'const s = { cushion_frac: 0.3, cap_usd: 1 };', 'const r = run({ paths: 5000 });', 'const paths = 3000;',
   ];
   for (const line of planted) assert.ok(REMOVED.some(([, re]) => re.test(line)), line);
 });

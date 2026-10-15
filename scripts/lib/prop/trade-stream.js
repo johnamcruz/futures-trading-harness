@@ -70,6 +70,10 @@ function delayFromCycles(durationsMs, percentile = 0.9) {
  * of the `lookback` days before it (only earlier days: causal): 'high' at the live regime's highVol multiple or more,
  * 'low' at its lowVol multiple or less (trading/regime.js REGIME_PARAMS, the cutoffs' one home), else 'normal' (and
  * 'normal' before any history). Map day key -> regime.
+ * Sharing 1.4 / 0.7 with the live regime is deliberate: a different statistic (a day's range against the mean of the
+ * days before it, not a bar's ATR ratio), the same cutoffs, so one number says what a high or low volatility day is.
+ * Fewer days clear them than at the old 1.25 / 0.8, so on a short window stats.js has fewer high/low days and falls
+ * back to the whole pool.
  */
 function dayRegimes(bars, tfMs, lookback = 20) {
   const ranges = new Map();

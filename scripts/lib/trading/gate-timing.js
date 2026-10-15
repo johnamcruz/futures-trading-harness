@@ -2,8 +2,8 @@
 
 /**
  * The order gate's and the order ledger's timing, one home each: every user imports these, so tightening one never
- * leaves a copy loose. Tighten-only: a change here may only make the gate stricter for every user named below (each
- * says which direction is stricter for it); the gate fails closed on what these bound, and none is a setting.
+ * leaves a copy loose. Pinned (exact): a test holds each value exactly, and each user named below says which direction is
+ * stricter for it; the gate fails closed on what these bound, and none is a setting.
  *
  *   PENDING_ORDER_TTL_MS  a market order sent this recently may not show in the broker's positions yet: the gateway's
  *                         order ledger keeps it this long (scripts/mcp-gateway.js), the account gate projects the net
