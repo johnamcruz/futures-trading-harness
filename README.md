@@ -640,9 +640,9 @@ contracts: auto              # micro | mini | auto: live, only with no contract 
   entry to it, and the agents' priority order (the `strategy-library` skill)
   may still skip or halve it. The verdict never picks the side, and it is
   sized in the selected contract (MNQ selected: MNQ, never switched to NQ).
-- `node scripts/backtest.js --config <file> --prop prop_portfolio`
-  runs combine attempts from every start day: pass, blow, and timeout rates,
-  by month.
+- The backtester's mechanical prop runs (combine attempts of a policy's
+  rules setups from every start day) are retired
+  (`docs/research/mechanical-prop-backtester.md`).
 - A configuration is promoted only when, out of sample, it has zero blows in
   every month and a pass rate of at least 40% over 20+ attempts and 2+ months
   (`scripts/lib/prop/promotion.js`, frozen code; the split windows are in
