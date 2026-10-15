@@ -160,6 +160,85 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
 });
 
 
+test('library display: off unless the config says true, part of the setup; a paired with/without-display comparison is an arm dimension of its own', () => {
+  const crypto = require('crypto');
+  const { resolveReplay, setupHash, setupBase, lookArm } = require('../../scripts/lib/replay/config');
+  const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../../scripts/lib/session/record');
+  const L = require('../../scripts/lib/learning/setup-library');
+  const K = require('../../scripts/lib/learning/looks');
+  const ROOT = path.join(__dirname, '..', '..');
+  const user = tmp();
+  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') };
+  const raw = o => ({ runId: 'a', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2025-03-03T14:30:00Z', end: '2025-03-03T15:00:00Z', premarket: false, autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...o });
+  const run = o => resolveReplay(raw(o), { baseDir: user, env, root: ROOT });
+  const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+  const libA = L.writeLibrary(path.join(user, 'libA'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
+  const libB = L.writeLibrary(path.join(user, 'libB'), L.buildLibraryIndex([rec('2022-03-02')], { reps: 20 }));
+  const hashA = L.readLibrary(libA).hash.slice(0, 16);
+  // Config: a boolean, off by default, and only with a library to show.
+  assert.strictEqual(run({ setupLibrary: libA }).libraryDisplay, false);
+  assert.strictEqual(run({ setupLibrary: libA, libraryDisplay: true }).libraryDisplay, true);
+  assert.throws(() => run({ setupLibrary: libA, libraryDisplay: 'yes' }), /libraryDisplay: true or false/);
+  assert.throws(() => run({ libraryDisplay: true }), /libraryDisplay: shows the pinned history library; name it \(setupLibrary\)/);
+  // The hash a setup had before the display existed (the body setupHash had), for a run without a library and one
+  // with a library and no display: their looks in the ledger stay theirs.
+  const before = r => crypto.createHash('sha256').update(JSON.stringify({
+    cfg: { ...r.cfg, dataDir: null, workdir: null }, broker: r.broker, start: r.start.toISOString(), end: r.end.toISOString(), everyNth: r.everyNth,
+    premarket: r.premarket, endOfDay: r.endOfDay, prop: r.prop || null, harness: treeDigest(ROOT, HARNESS_DIRS), code: treeDigest(ROOT, CODE_DIRS),
+    ...(r.setupLibrary ? { library: L.readLibrary(r.setupLibrary).hash } : {}),
+  })).digest('hex');
+  for (const o of [{}, { setupLibrary: libA }, { setupLibrary: libA, libraryDisplay: false }]) assert.strictEqual(setupHash(run(o)), before(run(o)), JSON.stringify(o));
+  // The display is part of the setup: shown and hidden are two setups, sharing their base.
+  const off = run({ setupLibrary: libA });
+  const on = run({ setupLibrary: libA, libraryDisplay: true });
+  assert.notStrictEqual(setupHash(on), setupHash(off));
+  assert.strictEqual(setupBase(on), setupHash(off));
+  assert.strictEqual(setupBase(off), setupHash(off));
+  assert.notStrictEqual(setupBase(run({ setupLibrary: libB, libraryDisplay: true })), setupHash(off), 'another library: another base');
+  // The arm a look names.
+  assert.strictEqual(lookArm(run({})), 'without');
+  assert.strictEqual(lookArm(off), 'without', 'pinned alone: not shown, no library arm');
+  assert.strictEqual(lookArm(on), `without+library:${hashA}`);
+  assert.ok(K.ARM.test(lookArm(on)) && !K.ARM.test(`without+library:${hashA}+library:${hashA}`) && !K.ARM.test('without+library:xyz'));
+  // A paired comparison: the hidden arm and the shown arm of one evaluation, accepted and recorded.
+  const look = (runId, r, over = {}) => ({ evaluation: 'evD', candidate: 'champ', purpose: 'judging', runId, from: '2025-03-03', to: '2025-03-04', arm: lookArm(r), config: setupHash(r), base: setupBase(r), ...over });
+  const ledgerFile = path.join(user, 'looks.jsonl');
+  K.recordLook(ledgerFile, look('r-hidden', off), { create: true });
+  const shown = K.recordLook(ledgerFile, look('r-shown', on));
+  assert.deepStrictEqual([shown.ok, shown.appended, shown.shared], [true, true, true], 'one evaluation, one look spent');
+  const lines = fs.readFileSync(ledgerFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.strictEqual('base' in lines[0], false, 'the hidden arm\'s line is the line it had (its base is its config)');
+  assert.deepStrictEqual([lines[1].arm, lines[1].config, lines[1].base], [`without+library:${hashA}`, setupHash(on), setupHash(off)]);
+  assert.strictEqual(K.lookUsage(lines).test.evaluations, 1);
+  // Refused: a shown arm of another library, or one that also changes the index; a third arm differing from one arm in
+  // both dimensions; an arm whose base contradicts it.
+  const ledger = lines;
+  const refused = (l, why) => { const r = K.checkLook(l, ledger); assert.strictEqual(r.ok, false, JSON.stringify(l)); assert.match(r.refusals.join('; '), why); };
+  const one = [lines[0]];
+  const lB = run({ setupLibrary: libB, libraryDisplay: true });
+  refused({ ...look('r-b', lB) }, /differ only in their experience index, or only in the history library's display/);
+  assert.strictEqual(K.checkLook(look('r-b', lB), one).ok, false);
+  assert.strictEqual(K.checkLook(look('r-idx', on, { arm: `with:${'a'.repeat(16)}+library:${hashA}` }), one).ok, false, 'display and index both changed');
+  assert.ok(K.checkLook(look('r-idx', off, { arm: `with:${'a'.repeat(16)}` }), one).ok, 'the index alone: an arm as before');
+  refused(look('r-idx', off, { arm: `with:${'a'.repeat(16)}` }), /not r-shown's/);
+  refused(look('r-x', on, { base: null }), /names its setup without the display \(base\)/);
+  refused(look('r-x', on, { base: setupHash(on) }), /names its setup without the display \(base\)/);
+  refused(look('r-x', off, { base: 'f'.repeat(64) }), /is not shown the history library: its base is its config/);
+  refused(look('r-y', on), /has its without\+library:[0-9a-f]{16} arm already/);
+  // Through the run gate: the base is carried into the look.
+  const genv = { HOME: tmp(), FTH_HOME: tmp() };
+  const gate = { from: D('2025-03-03T00:00:00Z'), to: D('2025-03-08T00:00:00Z'), env: genv, candidate: 'champ', evaluation: 'evG' };
+  G.startLearningRun(tmp(), { ...gate, runId: 'g-off', arm: lookArm(off), config: setupHash(off), base: setupBase(off) });
+  assert.strictEqual(G.startLearningRun(tmp(), { ...gate, runId: 'g-on', arm: lookArm(on), config: setupHash(on), base: setupBase(on) }).taken.ok, true);
+  assert.throws(() => G.startLearningRun(tmp(), { ...gate, runId: 'g-nobase', arm: `with:${'b'.repeat(16)}+library:${hashA}`, config: setupHash(on) }), /names its setup without the display/);
+  // scripts/replay.js run: the config's flag reaches the run's pin; without it the library is pinned hidden.
+  for (const [display, said] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/]]) {
+    const r = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
+    assert.match(r.stdout, said, r.stderr);
+    assert.strictEqual(L.libraryShown(path.join(r.user, 'replays', 'r')), display === true);
+  }
+});
+
 test('setup-focused practice: allowed on practice-train and practice-validate, kept on resume; refused on test, final and runs not learning', () => {
   const env = { FTH_HOME: tmp() };
   const practice = { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 1, levels: 'key', reactions: ['rejected', 'broke'] };

@@ -61,7 +61,7 @@ test('the same-candle rule: every traded record confirms on a candle that closed
 test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
   const count = {};
   for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
-  assert.deepStrictEqual(count, { traded: 68, 'no-room': 21, 'not-composable': 12, 'no-confirmation': 20, 'no-entry-window': 2 });
+  assert.deepStrictEqual(count, { traded: 79, 'no-room': 24, 'not-composable': 12, 'no-confirmation': 19, 'no-entry-window': 2 });
   // A traded record whose window had an earlier confirming close that did not compose.
   const later = RECORDS.filter(r => r.status === 'traded').find(r => {
     for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {
@@ -180,11 +180,14 @@ test('experience_lookup: the history library in a section of its own, after the 
   // No library pinned: the lookup is as before.
   const plain = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
   assert.doesNotMatch(plain, /History library/);
-  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })));
+  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })), { display: true });
   const text = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
   assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16} \(code-measured, not your decisions\): every number is the standard plan's \(a limit at the confirmation close.*\), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:/);
-  assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[/);
-  assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 .*; 1 more had no room at 2:1/);
+  assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]\n/);
+  assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]; 1 more had no room at 2:1/);
+  // Counts, the win rate and no-room only: never an R (the library measures one fixed plan, not the model's trades).
+  const libText = text.slice(text.indexOf('History library'));
+  assert.doesNotMatch(libText, /mean R|\bR\b|\blast \d/, libText);
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
   assert.doesNotMatch(text, /\b(should|enter|take it|avoid)\b/i, 'never advice');
   // With the model's own index too: its record first; the cap drops the library's lines before the model's cells.
@@ -211,9 +214,54 @@ test('experience_lookup: the history library in a section of its own, after the 
   assert.match(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library \(code-measured, not your decisions\): unreadable \(the pinned library's hash/);
   fs.writeFileSync(pinFile, JSON.stringify(pin));
   // The learning report: the library's hash, apart; none of its rows in the measures.
-  const m = R.learningMeasures({ library: { hash: lib.hash.slice(0, 16) } });
+  const m = R.learningMeasures({ library: { hash: lib.hash.slice(0, 16), shown: true } });
   assert.deepStrictEqual({ ...m, library: null }, R.learningMeasures({}));
   assert.match(R.learningMarkdown(m), /History library [0-9a-f]{16} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record/);
+  assert.match(R.learningMarkdown(R.learningMeasures({ library: { hash: lib.hash.slice(0, 16), shown: false } })), /History library [0-9a-f]{16} pinned: code-measured, not shown to the model \(its display off\)/);
+});
+
+test('experience_lookup: a pinned library is hidden unless the run enables its display; the pin keeps the choice', () => {
+  const AT = '2023-03-15T14:00:00.000Z';
+  const rec = fromLifecycleRecord(record({ at: AT }));
+  const home = tmpHome();
+  fs.mkdirSync(path.join(home, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(home, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(record({ at: AT }))}\n`);
+  const ctx = { env: { FTH_HOME: home, FTH_CYCLE_TRANSCRIPT: path.join(home, 'cycle.jsonl') }, now: () => new Date('2023-03-15T14:01:00.000Z') };
+  const file = L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 }));
+  // Pinned alone: code's (loadPinnedLibrary reads it), never the model's.
+  assert.strictEqual(L.pinLibrary(home, file).display, false);
+  assert.strictEqual(L.loadPinnedLibrary(home).hash.length, 64);
+  assert.strictEqual(L.libraryShown(home), false);
+  const hidden = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
+  assert.doesNotMatch(hidden, /History library|history library/);
+  assert.strictEqual(hidden, `${hidden.split('\n').slice(0, 5).join('\n')}\n`, 'the lookup as it is without a library');
+  const lookups = require('../../scripts/lib/learning/experience-lookups');
+  assert.strictEqual(lookups.readExperienceLookups(ctx.env.FTH_CYCLE_TRANSCRIPT)[0].library, undefined, 'its record names no library it was not shown');
+  // A broken library while hidden says nothing either (the model is never told of it).
+  const pinFile = path.join(home, 'experience', 'library-pinned.json');
+  const pin = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
+  assert.strictEqual(pin.display, undefined, 'a hidden pin is the line it had');
+  fs.writeFileSync(pinFile, JSON.stringify({ ...pin, hash: 'f'.repeat(64) }));
+  assert.doesNotMatch(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library/);
+  fs.writeFileSync(pinFile, JSON.stringify(pin));
+  // A run keeps its display: a resume asking for the other is refused; the same is fine.
+  assert.throws(() => L.pinLibrary(home, file, { display: true }), /pinned its library with the display off; a run keeps it/);
+  assert.throws(() => L.pinLibrary(home, file, { display: 'yes' }), /display: true or false/);
+  assert.strictEqual(L.pinLibrary(home, file, { display: false }).display, false);
+  // Only an explicit true shows it.
+  for (const display of [1, 'true', null]) {
+    fs.writeFileSync(pinFile, JSON.stringify({ ...pin, display }));
+    assert.strictEqual(L.libraryShown(home), false, String(display));
+  }
+  const shownHome = tmpHome();
+  fs.mkdirSync(path.join(shownHome, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(shownHome, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(record({ at: AT }))}\n`);
+  L.pinLibrary(shownHome, file, { display: true });
+  assert.strictEqual(L.libraryShown(shownHome), true);
+  const shownEnv = { FTH_HOME: shownHome, FTH_CYCLE_TRANSCRIPT: path.join(shownHome, 'cycle.jsonl') };
+  assert.match(H.experienceLookup({ symbol: 'MNQ' }, { ...ctx, env: shownEnv }).text, /History library [0-9a-f]{16} \(code-measured/);
+  assert.strictEqual(lookups.readExperienceLookups(shownEnv.FTH_CYCLE_TRANSCRIPT)[0].library, L.loadPinnedLibrary(shownHome).hash);
+  assert.throws(() => L.pinLibrary(shownHome, file), /pinned its library with the display on; a run keeps it/);
 });
 
 test('the cap drops the library\'s lines before the model\'s cells', () => {

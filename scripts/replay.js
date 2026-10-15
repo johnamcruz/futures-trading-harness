@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('replay');
 
 const fs = require('fs');
 const path = require('path');
-const { resolveReplay, setupHash } = require('./lib/replay/config');
+const { resolveReplay, setupHash, setupBase, lookArm } = require('./lib/replay/config');
 const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
@@ -56,7 +56,7 @@ const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
-const { pinIndex, armOf } = require('./lib/learning/experience-index');
+const { pinIndex } = require('./lib/learning/experience-index');
 const { pinLibrary } = require('./lib/learning/setup-library');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -161,13 +161,13 @@ async function run(argv) {
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
   if (!(max === Infinity || (Number.isInteger(max) && max > 0))) throw new Error('--max-cycles: a positive whole number');
   // The learning gate (learning/run-gate.js): checked before the run home is seeded, its look taken before the first cycle.
-  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, practice: r.practice, runDir: r.paths.runDir, arm: armOf(r.experienceIndex), config: setupHash(r) };
+  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, practice: r.practice, runDir: r.paths.runDir, arm: lookArm(r), config: setupHash(r), base: setupBase(r) };
   checkLearningRun(gate);
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
   if (r.experienceIndex) say(`experience index pinned: ${pinIndex(r.paths.runHome, r.experienceIndex).hash.slice(0, 16)}`);
-  if (r.setupLibrary) say(`history library pinned: ${pinLibrary(r.paths.runHome, r.setupLibrary).hash.slice(0, 16)}`);
+  if (r.setupLibrary) say(`history library pinned: ${pinLibrary(r.paths.runHome, r.setupLibrary, { display: r.libraryDisplay }).hash.slice(0, 16)}${r.libraryDisplay ? ', shown to the model' : ', not shown to the model (libraryDisplay off)'}`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);

@@ -19,7 +19,15 @@
  * at most MAX_ARMS runs, each a different arm (with:<index>, without, shuffled:<index>) of the same run setup (its
  * config hash): a judging look names both, so the arms differ in their experience index only.
  *
- * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, from, to, role, at } or a result
+ * The history library's display (replay/config.js libraryDisplay) is an arm dimension of its own: an arm shown the
+ * library ends in `+library:<library hash>` (e.g. `without+library:<hash>`), and its config hash (which names the
+ * display) is not the hidden arm's. A paired with/without-library comparison is two arms of one evaluation that share
+ * their `base` (the setup without the display, replay/config.js setupBase: the same library pinned in both) and their
+ * experience arm, and differ in the display only. Every two arms of an evaluation differ in one dimension: the same
+ * config (their index), or the same base and index (the display); never both. A look's `base` is kept only when it
+ * isn't its config (a run without the display: the line it had).
+ *
+ * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, arm, config, base?, from, to, role, at } or a result
  * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }.
  *
  *   checkLook(look, ledger, { budgets })    { ok, refusals, role, purpose, spent, remaining, budget, repeat, shared, hideOutcomes }
@@ -42,8 +50,13 @@ const FINAL_NEEDS_TEST_PASS = true;
 const MAX_ARMS = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-/** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without). */
-const ARM = /^(?:without|with:[0-9a-f]{16}|shuffled:[0-9a-f]{16})$/;
+/** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without), and `+library:<hash>` when shown the history library. */
+const ARM = /^(?:without|with:[0-9a-f]{16}|shuffled:[0-9a-f]{16})(?:\+library:[0-9a-f]{16})?$/;
+const LIBRARY_ARM = /\+library:[0-9a-f]{16}$/;
+/** An arm's experience part (its index), without the library display. */
+const indexArm = arm => String(arm || '').replace(LIBRARY_ARM, '');
+/** The setup without the library display: the look's base, or its config when it has none (no display). */
+const baseOf = e => e.base || e.config;
 /** Looks taken before the ledger existed, so it starts true. */
 const RECORDED_LOOKS = Object.freeze([
   Object.freeze({ kind: 'look', evaluation: 'llm-replay-2026-06', candidate: 'llm-replay-2026-06', purpose: 'reasoning-fix', runId: 'llm-replay-2026-06', from: '2026-06-01', to: '2026-06-06', role: 'final', what: 'LLM replay, June 1-5 2026, adherence only' }),
@@ -93,13 +106,24 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
     const runs = looksOf(ledger).filter(e => e.evaluation === l.evaluation);
     const arms = new Set(runs.map(e => e.runId));
     if (!arms.has(l.runId) && arms.size >= MAX_ARMS) refusals.push(`evaluation ${l.evaluation} has its ${MAX_ARMS} arms (${[...arms].join(', ')})`);
-    // The arms differ in their index only: the same run setup (its config hash), each a different arm.
+    // Every two arms differ in one dimension: their index (the same run setup, its config hash) or the library's
+    // display (the same base and index); each a different arm.
     if (!arms.has(l.runId)) {
-      if (first.config && l.config !== first.config) refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index; this run's setup (config ${String(l.config).slice(0, 12)}) is not ${String(first.config).slice(0, 12)}'s`);
+      for (const e of runs.filter(x => x.config)) {
+        if (l.config === e.config) continue;
+        const pair = baseOf(e) === baseOf(l) && indexArm(e.arm) === indexArm(l.arm) && LIBRARY_ARM.test(e.arm) !== LIBRARY_ARM.test(l.arm);
+        if (!pair) {
+          refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index, or only in the history library's display; this run's setup (config ${String(l.config).slice(0, 12)}, arm ${l.arm}) is not ${e.runId}'s (config ${String(e.config).slice(0, 12)}, arm ${e.arm})`);
+          break;
+        }
+      }
       if (l.arm && runs.some(e => e.arm === l.arm)) refusals.push(`evaluation ${l.evaluation} has its ${l.arm} arm already`);
     }
   }
-  if (SEALED.includes(role) && l.purpose === 'judging' && !(l.arm && ARM.test(l.arm) && l.config)) refusals.push('a judging look names its arm (with:<index>, without, shuffled:<index>) and its run setup (config hash)');
+  if (SEALED.includes(role) && l.purpose === 'judging' && !(l.arm && ARM.test(l.arm) && l.config)) refusals.push('a judging look names its arm (with:<index>, without, shuffled:<index>, each with +library:<library> when shown the history library) and its run setup (config hash)');
+  // The arm says the display; its base says the same (a shown arm's setup is not its base, a hidden one's is).
+  if (l.arm && LIBRARY_ARM.test(l.arm) && !(l.base && l.config && l.base !== l.config)) refusals.push(`arm ${l.arm} is shown the history library: its look names its setup without the display (base), not its config`);
+  if (l.arm && !LIBRARY_ARM.test(l.arm) && l.base && l.base !== l.config) refusals.push(`arm ${l.arm} is not shown the history library: its base is its config`);
   const judged = new Set(atRole.filter(e => e.purpose === 'judging').map(e => e.evaluation));
   const shared = l.purpose === 'judging' && judged.has(l.evaluation);
   const budget = SEALED.includes(role) ? budgets[role] : null;
@@ -131,6 +155,7 @@ function recordLook(file, look, { create = false, now = new Date(), budgets = LO
     if (!r.repeat) {
       appendLook(file, {
         kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId, arm: look.arm || null, config: look.config || null,
+        ...(look.base && look.base !== look.config ? { base: look.base } : {}),
         from: sessionDate(look.from), to: sessionDate(look.to), role: r.role, at: now.toISOString(),
       });
     }
@@ -170,4 +195,4 @@ function lookUsage(ledger) {
  */
 const ledgerPath = (env = process.env) => path.join(harnessHome({}, String(env.HOME || '').trim() || os.homedir()), 'learning', 'looks.jsonl');
 
-module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, checkLook, recordLook, recordResult, lookUsage, ledgerPath };
+module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, lookUsage, ledgerPath };

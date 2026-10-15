@@ -31,8 +31,10 @@
  *
  *   checkLearningRun(opts)      the gate's answer, nothing recorded (before the run home is seeded); throws when refused
  *   startLearningRun(runHome, { runDir, from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix,
- *       arm, config, env, now })   arm: the experience index the run is shown (with:<hash>, shuffled:<hash>; none:
- *       without); config: the run setup's hash (replay/config.js configHash), so the arms differ in their index only
+ *       arm, config, base, env, now })   arm: the experience index the run is shown (with:<hash>, shuffled:<hash>; none:
+ *       without), `+library:<hash>` when it is shown the history library (looks.js ARM); config: the run setup's hash
+ *       (replay/config.js setupHash), so the arms differ in their index only; base: the setup without the library
+ *       display (replay/config.js setupBase), which a library-display pair shares
  *       { learning, role, look, hideOutcomes, taken }; throws when refused
  *   readLearningRun(dir)        the decision kept in a run dir or a run home, or null (a run started before the gate)
  */
@@ -104,7 +106,7 @@ function checkLearningRun(opts = {}) {
   if (d.look) {
     const file = ledgerPath(opts.env || process.env);
     const ledger = fs.existsSync(file) ? readLedger(file) : [];
-    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null }, ledger);
+    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null }, ledger);
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
   }
   return d;
@@ -125,7 +127,7 @@ function startLearningRun(runHome, opts = {}) {
   if (d.look) {
     ledger = ledgerPath(env);
     if (before && before.ledger && before.ledger !== ledger) throw new Error(`learning run refused: this run's look is in ${before.ledger}, not ${ledger}: one ledger (the same home) for a run and its resumes`);
-    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null }, { create: true, now });
+    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null }, { create: true, now });
   }
   if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, startedAt: now.toISOString() });
   return { ...kept, taken };
