@@ -218,7 +218,8 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
   // composed.record, by the opening fill's order id). Its slot then speaks for that record, whatever was composed
   // after it in the cycle; the legs of one stamped order (its partial fills) are one trade. A stamp that can't be
   // this trade's (its record composed after the fill, another side or root, or its slot holding another order's
-  // trade) is ignored: the time window decides.
+  // trade) is ignored: the time window decides, and a trade no free slot covers has no decision line (a second order
+  // on one record: the gate's one entry per bar and side keeps a gated run from it).
   const orderOf = t => {
     const f = (t.opens || []).find(x => x && x.orderId !== undefined && x.orderId !== null);
     return f ? String(f.orderId) : null;

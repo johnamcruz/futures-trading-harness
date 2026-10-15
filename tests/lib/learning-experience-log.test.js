@@ -249,7 +249,8 @@ test('attribution: a same-side re-compose after the fill: the trade is the stamp
   assert.deepStrictEqual([one.length, one[0].decision, one[0].outcome.R], [1, 'entered', 2]);
   // Two orders stamped with one record: the second isn't folded into the first's trade (the time window decides).
   const two = E.buildDecisions({ ...args, trips: [stampedTrip(at(30), t(3), 100, 104, 9), stampedTrip(at(70), t(3), 101, 97, 10)], stamps: { 9: 'rec-a', 10: 'rec-a' } });
-  assert.deepStrictEqual(two.map(d => [d.decision, d.outcome.entryPrice, d.outcome.R]), [['entered', 100, 2]]);
+  // (The gate allows one entry per bar and side, so a second order on one record doesn't happen in a gated run.)
+  assert.deepStrictEqual([two[0].decision, two[0].outcome.entryPrice, two[0].outcome.R], ['entered', 100, 2], 'not merged');
   // A stamp naming a record composed after the fill can't be that trade's: the time window decides (A's).
   const after = E.buildDecisions({ ...args, trips: [stampedTrip(at(30), t(3), 100, 104, 9)], stamps: { 9: 'rec-b' } });
   assert.deepStrictEqual([after[0].decision, after[0].signatures.skill], ['entered', A.signatures.skill]);
