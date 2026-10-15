@@ -84,12 +84,11 @@ const fib = require('./fib');
 const ind = require('./indicators');
 const { candles: mtfCandles } = require('./mtf');
 const { zonedParts } = require('./clock');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const PARAMS = Object.freeze({ minRun: 2, maxWait: 6, expiry: 12, voidTol: 0.05, bufferAtr: 0.1, minBody: 0.6, minRangeAtr: 1 });
-const ATR_LEN = 14; // the displacement's range is measured against ATR(14) of the CISD timeframe's completed candles
+const ATR_LEN = ind.ATR_PERIOD; // the displacement's range is measured against ATR(14) of the CISD timeframe's completed candles
 const DEAD = new Set(['void', 'expired', 'weak']);
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
 const UPPER_THIRD = 2 / 3;
 
 // The same defaults as strategy params (market-snapshot PARAMS, so a strategy's `params` may set them).
@@ -166,7 +165,7 @@ function candlesOf(bars, minutes, step) {
 function knownAt(bars, c, minutes, step) {
   const end = Date.parse(bars[c.end].t) + step * 60000;
   const p = zonedParts(new Date(end), 'America/New_York');
-  const sinceOpen = (p.hour * 60 + p.minute - 18 * 60 + 1440) % 1440;
+  const sinceOpen = (p.hour * 60 + p.minute - GLOBEX_OPEN_MIN + 1440) % 1440;
   if (minutes === step || (sinceOpen % minutes === 0 && end % 60000 === 0)) return c.end;
   return c.end + 1 < bars.length ? c.end + 1 : -1;
 }
@@ -177,7 +176,7 @@ function keyLevelsAt(bars, levels) {
   return i => {
     const p = zonedParts(new Date(bars[i].t), 'America/New_York');
     const m = p.hour * 60 + p.minute;
-    const rth = m >= RTH_OPEN && m < RTH_CLOSE;
+    const rth = m >= RTH_OPEN_MIN && m < RTH_CLOSE_MIN;
     return [
       ['prior RTH high', levels.prior_high[i], 'high'], ['prior RTH low', levels.prior_low[i], 'low'],
       ...(rth ? [['overnight high', levels.overnight_high[i], 'high'], ['overnight low', levels.overnight_low[i], 'low']] : []),

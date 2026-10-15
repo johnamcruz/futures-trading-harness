@@ -72,12 +72,12 @@ function draw(argv) {
   const seed = whole(argv, '--seed', S.DEFAULTS.seed);
   const { stream, source } = S.sourceStream(runs, { root: ROOT, barsFiles: barsOf(argv), lists: opt(argv, '--lists') || null, seed });
   const doc = S.drawDocument(stream, {
-    account, sizing: policy ? policy.sizing || {} : {}, contracts: (policy && policy.contracts) || 'auto', seed,
+    account, sizing: policy ? policy.sizing || null : null, contracts: (policy && policy.contracts) || 'auto', seed, // none: refused (no code default)
     paths: whole(argv, '--paths', S.DEFAULTS.paths), count: whole(argv, '--count', S.DEFAULTS.count), oversample: oversampleOf(opt(argv, '--oversample')), source,
   });
   const file = S.writeDocument(opt(argv, '--out') || path.join(harnessHome(process.env), 'experience'), doc);
   process.stdout.write(S.documentText(doc));
-  process.stdout.write(`wrote ${file}${policy ? '' : ` (no policy strategy trades ${account.name}: the default sizing)`}\n`);
+  process.stdout.write(`wrote ${file}\n`);
   return 0;
 }
 

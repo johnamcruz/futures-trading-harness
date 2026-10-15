@@ -41,8 +41,9 @@ function runEvaluation(raw, { root, baseDir = process.cwd(), env = process.env, 
   const p = policyStrategy(root, r.prop, env);
   const timeframe = Number.parseInt(p.strategy.timeframe, 10);
   const { prop: _p, from: _f, to: _t, seed, paths, meanBlock, reps, every, cuts, entryDelayMs = 0, faults, facts = true, look: _l, ledger: _g, newLedger: _n, ...bt } = r;
-  const cfg = validateBacktestConfig({ ...bt, timeframe, start: r.from, end: r.to }, baseDir);
   const account = accountNamed(root, p.strategy.account, env);
+  // Priced with the account's fees; its limits are its own (the backtest's maxDailyLoss and maxContracts are refused).
+  const cfg = validateBacktestConfig({ ...bt, timeframe, start: r.from, end: r.to }, baseDir, { account });
   const traded = p.components.map(c => c.name);
   const startMs = sessionStart(r.from);
   const endMs = sessionStart(r.to);
@@ -66,7 +67,6 @@ function runEvaluation(raw, { root, baseDir = process.cwd(), env = process.env, 
   log(`layer 1: ${stream.trades.length} trades over ${stream.days.length} trading days in ${stream.runtimeMs} ms`);
   const result = scoreStream(stream, {
     pass, account, rulebook: { sizing: p.strategy.sizing || null }, contracts: p.strategy.contracts || 'auto',
-    maxDailyLoss: cfg.gate ? cfg.maxDailyLoss : 0,
     ...(seed !== undefined ? { seed } : {}), ...(paths !== undefined ? { paths } : {}), ...(meanBlock !== undefined ? { meanBlock } : {}),
     ...(reps !== undefined ? { reps } : {}), ...(every !== undefined ? { every } : {}), ...(cuts !== undefined ? { cuts } : {}),
     ...(faults ? { faults } : {}),

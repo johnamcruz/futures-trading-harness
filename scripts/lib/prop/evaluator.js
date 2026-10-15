@@ -48,6 +48,7 @@ const { gateFailures } = require('./promotion');
 const { tradingDayStart } = require('../trading/clock');
 const combine = require('../trading/combine');
 const stats = require('./stats');
+const { MC_SIZE, checkSize } = require('./mc-size');
 const at = require('./attempts');
 const { createAttribution } = require('./risk-attribution');
 
@@ -164,10 +165,11 @@ function takePass(given) {
 }
 
 /** The options every scoring checks; returns the fault rates. */
-function checkOptions({ account, seed, paths, every, meanBlock, faults }) {
+function checkOptions({ account, seed, paths, reps, every, meanBlock, faults }) {
   if (!account || !Number.isInteger(account.sessions) || account.sessions < 1) throw new Error('account: an account profile with sessions');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
   if (!(Number.isInteger(paths) && paths >= 0) || !(Number.isInteger(every) && every >= 1)) throw new Error('paths: 0 or more; every: 1 or more');
+  checkSize({ paths, reps }); // above the Monte Carlo's maximum: refused, never clamped
   if (!(meanBlock >= 5 && meanBlock <= 10)) throw new Error(`meanBlock: 5 to 10 days (R9), not ${String(meanBlock)}`);
   const rates = { stopFault: Number(faults.stopFault) || 0, outage: Number(faults.outage) || 0 };
   for (const [k, v] of Object.entries(rates)) if (!(v >= 0 && v <= 1)) throw new Error(`faults.${k}: a rate from 0 to 1, not ${v}`);
@@ -202,14 +204,15 @@ function daysFor(stream, pass, rulebook, { keepOwnExits = false } = {}) {
 
 /** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
 function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) {
-  const sizing = { ...combine.DEFAULT_SIZING, ...(rulebook.sizing || {}) };
+  // The policy's rulebook sizing, every key: none (no policy trades the account) is refused, never a code default.
+  const sizing = combine.requireSizing(rulebook.sizing, `${account.name}: the Monte Carlo sizes from a policy's rulebook entry`);
   const legsCache = new Map();
   return {
     account, sizing, size, multiplier: rulebook.multiplier || at.fullVerdict, mode: contracts, maxDailyLoss,
     // The order gate's loss limits, as live (attempts.js gateLimits: the gate's own config).
     gate: gate === undefined ? at.gateLimits() : gate,
     legsOf: t => {
-      if (!legsCache.has(t.symbol)) legsCache.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) }));
+      if (!legsCache.has(t.symbol)) legsCache.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue }));
       return legsCache.get(t.symbol);
     },
   };
@@ -227,11 +230,11 @@ function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) 
 function scoreStream(stream, opts) {
   const started = Date.now();
   const {
-    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000, meanBlock = 7,
-    reps = 2000, level = 0.9, every = 1, cuts = [0.25, 0.5], faults = {}, attribution = false,
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = MC_SIZE.paths, meanBlock = 7,
+    reps = MC_SIZE.reps, level = 0.9, every = 1, cuts = [0.25, 0.5], faults = {}, attribution = false,
   } = opts || {};
   const pass = takePass(given);
-  const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
+  const rates = checkOptions({ account, seed, paths, reps, every, meanBlock, faults });
   const days = daysFor(stream, pass, rulebook);
   const inWindow = days.flatMap(d => d.trades);
   const S = account.sessions;
@@ -428,14 +431,14 @@ function pairedRunner({ ctx, rates, seed, pools }) {
  */
 function scoreArms(stream, opts) {
   const {
-    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 1000,
-    meanBlock = 7, reps = 1000, level = 0.9, faults = {}, base, arms = {}, sized = 'ceiling',
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = MC_SIZE.paths,
+    meanBlock = 7, reps = MC_SIZE.reps, level = 0.9, faults = {}, base, arms = {}, sized = 'ceiling',
   } = opts || {};
   if (!SIZED.includes(sized)) throw new Error(`scoreArms: sized is one of ${SIZED.join(', ')}, not ${String(sized)}`);
   const pass = takePass(given);
   if (!pass.model || pass.synthetic) throw new Error('scoreArms: a model run\'s own days (a checkModelWindow pass, not a reweighted stream)');
   if (typeof base !== 'function') throw new Error('scoreArms: base, the model\'s own decisions');
-  const rates = checkOptions({ account, seed, paths, every: 1, meanBlock, faults });
+  const rates = checkOptions({ account, seed, paths, reps, every: 1, meanBlock, faults });
   const days = daysFor(stream, pass, rulebook, { keepOwnExits: sized === 'own' }).map(d => {
     const items = [...d.trades, ...(d.passed || [])].sort((a, b) => (Date.parse(a.entryTime) || 0) - (Date.parse(b.entryTime) || 0) || String(a.id).localeCompare(String(b.id)));
     return { ...d, trades: items.map((t, seq) => ({ ...t, seq })) };
@@ -538,8 +541,8 @@ function medianDiff(pairs, { reps, level, rand }) {
  */
 function scorePaired(streamA, streamB, opts) {
   const {
-    passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000,
-    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {}, accountB = account, rulebookB = rulebook, contractsB = contracts, sized = 'ceiling',
+    passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = MC_SIZE.paths,
+    meanBlock = 7, reps = MC_SIZE.reps, level = 0.9, every = 1, faults = {}, accountB = account, rulebookB = rulebook, contractsB = contracts, sized = 'ceiling',
   } = opts || {};
   if (givenA === givenB) throw new Error('scorePaired: one pass per run (passA, passB)');
   if (!SIZED.includes(sized)) throw new Error(`scorePaired: sized is one of ${SIZED.join(', ')}, not ${String(sized)}`);
@@ -547,7 +550,7 @@ function scorePaired(streamA, streamB, opts) {
   const passB = takePass(givenB);
   if (!passA.model || !passB.model) throw new Error('scorePaired compares two model runs (checkModelWindow passes)');
   if (passA.synthetic || passB.synthetic) throw new Error('scorePaired: a reweighted (curated) stream draws its own days; compare full-day or setup-focused runs of the same days');
-  const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
+  const rates = checkOptions({ account, seed, paths, reps, every, meanBlock, faults });
   if (!accountB || accountB.sessions !== account.sessions) throw new Error('scorePaired: the two sides\' accounts must have the same sessions (one attempt length, the same start days)');
   const own = sized === 'own';
   const both = keepOwnExits => {

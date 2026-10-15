@@ -20,7 +20,7 @@ const { contractRoot } = require('./trading/journal');
 const { candidateTrendRule } = require('./trading/signal-state');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
-const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
+const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL, SESSION_DEFAULTS } = require('./trading/clock');
 const { et: etTime, etStamp } = require('./trading/session-context');
 const { historyLines, marketOf } = require('./trading/decision-history');
 const { documents, isOpencodeEvent } = require('./transcript');
@@ -50,9 +50,9 @@ const DEFAULTS = {
   barTimeoutSeconds: 60, // give up on a bar (daily break, halt) and resync
   // The whole market session (18:00-16:00 ET) up to end of day; strategies
   // narrow their own hours (orb: sessions [ny]). Named sessions: asia, london, ny.
-  sessions: ['18:00-15:50@America/New_York'],
+  sessions: [...SESSION_DEFAULTS.sessions],
   premarketAt: '18:05@America/New_York', // briefing at the start of the trading day (before the 08:30 ET data)
-  eodAt: '15:50@America/New_York', // flatten everything; required, no later than the 16:00 ET close
+  eodAt: SESSION_DEFAULTS.eodAt, // flatten everything; required, no later than the 16:00 ET close (trading/clock.js SESSION_DEFAULTS)
   eodReview: true, // false: end of day flattens and records the close without the agents' review run (replay uses it)
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
@@ -63,7 +63,7 @@ const DEFAULTS = {
   // add a whole year: every holiday and every early close (exchange-calendar.js cmeHolidays lists the rules).
   earlyCloseDates: [], // e.g. ["2028-07-03", "2028-11-24"]: early closes (13:00 ET)
   closedDates: [], // e.g. ["2028-01-17", ...]: holidays and other closures (the runner and the gate stay out)
-  earlyCloseEodAt: '12:50@America/New_York',
+  earlyCloseEodAt: SESSION_DEFAULTS.earlyCloseEodAt,
   maxConsecutiveErrors: 3,
   alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
   alertCommand: null, // or an argv array run with the message in FTH_ALERT, e.g. ["osascript", "-e", "display notification (system attribute \"FTH_ALERT\")"]

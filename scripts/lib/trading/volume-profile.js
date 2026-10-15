@@ -42,10 +42,8 @@
  */
 
 const ind = require('./indicators');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
-const GLOBEX_OPEN = 18 * 60;
 const MAX_ROWS = 2000;
 
 /**
@@ -183,8 +181,8 @@ function windowStarts(bars, kind, length) {
   if (kind === 'session') {
     let key = null; let start = -1;
     for (let i = 0; i < n; i += 1) {
-      const k = ind.sessionKey(bars[i].t, GLOBEX_OPEN);
-      if (k !== key) { key = k; start = i > 0 || ind.etInfo(bars[i].t).minute === GLOBEX_OPEN ? i : -1; }
+      const k = ind.sessionKey(bars[i].t, GLOBEX_OPEN_MIN);
+      if (k !== key) { key = k; start = i > 0 || ind.etInfo(bars[i].t).minute === GLOBEX_OPEN_MIN ? i : -1; }
       out[i] = start;
     }
     return out;
@@ -205,7 +203,7 @@ function profileSeries(bars, kind, { length = 0, options = {} } = {}) {
     let day = null; let start = -1; let last = -1; let prior = null;
     for (let i = 0; i < n; i += 1) {
       const { day: d, minute } = ind.etInfo(bars[i].t);
-      const inRth = minute >= RTH_OPEN && minute < RTH_CLOSE;
+      const inRth = minute >= RTH_OPEN_MIN && minute < RTH_CLOSE_MIN;
       // The day in progress ends at the first bar past it (a later day, or 16:00 ET on).
       if (day !== null && (d !== day || !inRth)) {
         if (start >= 0) prior = lean(buildProfile(bars, start, last, options));

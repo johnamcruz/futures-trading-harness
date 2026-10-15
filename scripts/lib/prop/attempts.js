@@ -12,8 +12,8 @@
  *
  * Injected (so the rulebook and the slippage-safe sizing plug in when they land): `size` (default: today's
  * contractPlan sizing), `multiplier` (the verdict's size multiplier from the recorded facts; default 1, today's
- * `full`; 0 skips the setup) and `sizing` (the rulebook's pacing numbers; default the policy's `sizing` over
- * combine.DEFAULT_SIZING; `clock_k` and `r_per_session` are the pacing a trial tunes). An exit mode is applied to the
+ * `full`; 0 skips the setup) and `sizing` (the rulebook's pacing numbers, every key: the policy's `sizing`, no code
+ * default; `clock_k` and `r_per_session` are the pacing a trial tunes). An exit mode is applied to the
  * stream before any attempt (exitAs: each trade re-exited from its recorded path under the policy's exit), so the
  * variants below cut or redraw the re-exited trade. The account's loss_streak_stop applies through combine (a
  * trade's P&L before fees moves the streak; entryBlock skips the rest of the session).
@@ -24,6 +24,7 @@
 
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
+const { requireFee } = require('../trading/accounts');
 const { pick } = require('./stats');
 const { loadConfig } = require('../trading/config');
 const { tradingDayStart } = require('../trading/clock');
@@ -45,14 +46,14 @@ function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction }) {
 
 /**
  * A market's micro and mini legs on the account, as the engine prices them (engine.js legOf): the account's
- * fee, else the contract spec's; the account's max contracts (0 = none). { legs: { micro, mini }, ratio }.
+ * fee (accounts.js requireFee: none is refused, never assumed); the account's max contracts (0 = none).
+ * { legs: { micro, mini }, ratio }.
  */
-function legsFor(account, symbol, { tickValue, feesPerSide = 0.37 } = {}) {
+function legsFor(account, symbol, { tickValue } = {}) {
   const fam = familyOf(symbol);
   const leg = root => {
     const spec = { ...(specFor(root) || {}), ...(root === symbol && tickValue ? { tickValue } : {}) };
-    const fees = account.fees_per_side || {};
-    const fee = fees[root] !== undefined ? fees[root] : spec.feesPerSide ?? feesPerSide;
+    const fee = requireFee(account, root);
     return { root, tickValue: spec.tickValue, fee, max: (account.max_contracts && account.max_contracts[root]) || 0 };
   };
   return fam ? { legs: { micro: leg(fam.micro), mini: leg(fam.mini) }, ratio: fam.ratio } : { legs: { micro: leg(symbol), mini: null }, ratio: 10 };

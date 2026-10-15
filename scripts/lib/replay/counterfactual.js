@@ -40,9 +40,9 @@ const { exitPlan } = require('../trading/evaluator');
 const { createSimBroker, onTick } = require('../backtest/sim-broker');
 const { stopTicks, targetFor } = require('../trading/order-plan');
 const { tradingDayKey } = require('../trading/clock');
-const { DEFAULT_SIZING } = require('../trading/combine');
+const { MIN_STOP_SLIPPAGE_TICKS } = require('../trading/combine');
 
-const SLIPPAGE_TICKS = DEFAULT_SIZING.stop_slippage_ticks; // the backtester's default per market fill (engine.js)
+const SLIPPAGE_TICKS = MIN_STOP_SLIPPAGE_TICKS; // the backtester's default per market fill (engine.js DEFAULTS.slippageTicks)
 const round = (x, d = 4) => (x === null || x === undefined || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
 const resultOf = net => (net > 0 ? 'win' : net < 0 ? 'loss' : 'scratch');
 
@@ -90,7 +90,10 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
   const i = lowerBound(bars, signalMs + tfMs);
   if (i >= bars.length) return unsimulated(base, 'no bars after the signal');
   const broker = createSimBroker({ tickSize: tick, slippageTicks: SLIPPAGE_TICKS });
-  const fee = Number(spec.feesPerSide) || 0;
+  // A fee is never assumed: with none in the spec (the account's, when the caller has one) the trade is priced before
+  // fees, its net unknown (null) and its result read from the gross.
+  const feeKnown = typeof spec.feesPerSide === 'number' && Number.isFinite(spec.feesPerSide) && spec.feesPerSide >= 0;
+  const fee = feeKnown ? spec.feesPerSide : 0;
   if (!Number.isFinite(signalClose)) return unsimulated(base, 'no signal close');
   broker.submitMarket({ sign, risk, size: 1, tickValue: spec.tickValue, fee, plan, target }, { price: signalClose, fill: 'next-open' });
   const expired = why => ({ ...base, entry: null, stop: null, target: null, exitTime: null, exitPrice: null, exitReason: 'expired', R: null, pnl: null, net: null, maeR: null, mfeR: null, result: 'no-trade', simulated: true, reason: why });
@@ -114,8 +117,8 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
   const R = (sign * (done.price - p.entry)) / p.risk;
   return {
     ...base, entry: p.entry, stop: p.initialStop, target: p.target, exitTime: new Date(exitBar.ms + tfMs).toISOString(), exitPrice: done.price,
-    exitReason: done.reason, R: round(R), pnl: round(done.gross, 2), net: round(done.net, 2),
-    maeR: round(p.troughR), mfeR: round(p.peakR), result: resultOf(done.net), simulated: true, reason: null,
+    exitReason: done.reason, R: round(R), pnl: round(done.gross, 2), net: feeKnown ? round(done.net, 2) : null,
+    maeR: round(p.troughR), mfeR: round(p.peakR), result: resultOf(feeKnown ? done.net : done.gross), simulated: true, reason: null,
   };
 }
 

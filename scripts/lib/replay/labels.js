@@ -67,7 +67,7 @@ const { gateLogPath } = require('../trading/check-order');
 const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { brokerSpecFor, specMismatch } = require('../trading/broker-specs');
-const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
+const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN, SESSION_DEFAULTS } = require('../trading/clock');
 const { parseStandardName, readCache } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
@@ -87,7 +87,7 @@ const STOP_ATR_MULTIPLES = [0.5, 0.75, 1, 1.5, 2, 3];
 // A stop further than this from every multiple is out of range (unmapped), never snapped to the end bucket.
 const STOP_ATR_RANGE = [0.375, 4.5];
 const SIZE_STEPS = [0.25, 0.5, 0.75, 1];
-const ATR_PERIOD = 20; // the market features' ATR (trading/market-features.js atr20)
+const ATR_PERIOD = ind.STOP_ATR_PERIOD; // the market features' ATR (trading/market-features.js atr20)
 const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)(?:\s+(long|short|buy|sell))?\b/i;
 const SIDE = { long: 'buy', buy: 'buy', short: 'sell', sell: 'sell' };
@@ -615,7 +615,7 @@ function plannedTarget(strategy, stopTicks, targetDistance, tickSize) {
 
 /** The end of day (ms) of t's trading day, as the runner and the replay schedule place it. */
 function eodOf(cfg, t) {
-  const c = { eodAt: '15:50@America/New_York', earlyCloseEodAt: null, ...cfg, earlyCloseDates: Array.isArray(cfg.earlyCloseDates) ? cfg.earlyCloseDates : [] };
+  const c = { eodAt: SESSION_DEFAULTS.eodAt, earlyCloseEodAt: null, ...cfg, earlyCloseDates: Array.isArray(cfg.earlyCloseDates) ? cfg.earlyCloseDates : [] };
   const start = tradingDayStart(new Date(t));
   const at = endOfDayAt(c, new Date(start.getTime() + 12 * 3600000));
   return at ? start.getTime() + sessionMinuteOf(at, start) * 60000 : start.getTime() + (MARKET_CLOSE_MIN - MARKET_OPEN_MIN + 24 * 60) * 60000;

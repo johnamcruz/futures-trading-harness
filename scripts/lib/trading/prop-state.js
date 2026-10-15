@@ -16,6 +16,7 @@ const path = require('path');
 const combine = require('./combine');
 const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf, selectedLeg } = require('./contracts');
+const { feePerSide } = require('./accounts');
 const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
@@ -507,7 +508,8 @@ function orderSince(entries, sinceIso) {
     && !(entryTime(e) < at));
 }
 
-const feeOf = (account, root) => (account.fees_per_side && account.fees_per_side[root]) ?? (specFor(root) || {}).feesPerSide ?? 0.37;
+// A fee is the account's only (ACCOUNT.md fees_per_side): none is null, and a leg without one sizes nothing.
+const feeOf = (account, root) => feePerSide(account, root);
 
 /*
  * `specOf` (root -> { tickSize, tickValue } or null) is where tick specs come
@@ -515,7 +517,7 @@ const feeOf = (account, root) => (account.fees_per_side && account.fees_per_side
  * specs (broker-specs.js) live. The gate and order_plan pass the broker's.
  */
 
-/** A contract the account can trade: tick value, the account's fee (else the spec's), and its limit. */
+/** A contract the account can trade: tick value, the account's fee (null when its profile states none), and its limit. */
 function legOf(account, root, specOf = specFor) {
   const spec = specOf(root);
   return spec ? { root, tickValue: spec.tickValue, fee: feeOf(account, root), max: (account.max_contracts && account.max_contracts[root]) || 0 } : null;
@@ -550,12 +552,16 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   const fam = familyOf(root);
   const missing = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => !specOf(x));
   if (missing) return { error: specOf === specFor ? `no tick specs for ${missing}` : whyNoSpec(specOf, missing) };
+  const noFee = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => feeOf(account, x) === null);
+  if (noFee) return { error: `no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size` };
   // One stop in ticks sizes both legs: the family's contracts must agree on the tick size.
   if (fam && Math.abs(specOf(fam.micro).tickSize - specOf(fam.mini).tickSize) > 1e-12) {
     return { error: `${fam.micro} and ${fam.mini} have different tick sizes (${specOf(fam.micro).tickSize}, ${specOf(fam.mini).tickSize}): no size can be worked out` };
   }
   if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return { error: 'a combine entry needs stopLossBracket.ticks (the gate sizes the trade from its stop)' };
-  const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
+  const z = strategy.sizing || {}; // the rulebook's, every key (combine.sizingErrors): an incomplete one sizes nothing
+  const bad = combine.sizingErrors(z);
+  if (bad.length) return { error: `${strategy.name} has no whole sizing from its account's rulebook (${bad.join('; ')}): no size` };
   const { legs, ratio, mode } = legsFor(account, root, specOf, selected);
   const plan = combine.contractPlan({
     dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,

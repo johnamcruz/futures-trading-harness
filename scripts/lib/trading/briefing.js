@@ -102,6 +102,7 @@ const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
 const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
+const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -348,7 +349,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   // At a new session's first candle (18:00 ET, Sunday's open) the last session's overnight range and IB are stale: no
   // level (the opening range reads the candle's own first bar, so it is the new session's; the prior RTH day is the
   // day that just closed). The rules language does the same (candle-facts.js relationSeries, `session`).
-  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, 18 * 60) === sessionKey(bars[b].t, 18 * 60);
+  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, GLOBEX_OPEN_MIN) === sessionKey(bars[b].t, GLOBEX_OPEN_MIN);
   const levelsAt = (idx, openIdx, firstIdx) => [
     ...(sameSession(openIdx, firstIdx) ? named(openIdx).filter(([name]) => AT_OPEN.test(name)) : []),
     ...named(firstIdx).filter(([name]) => !AT_OPEN.test(name) && !MOVING.test(name)),

@@ -16,6 +16,7 @@
 
 const path = require('path');
 const markers = require('./order-markers');
+const { PENDING_ORDER_TTL_MS } = require('./gate-timing');
 const { harnessHome } = require('../paths');
 const { writeJsonAtomic, readJson } = require('../harness-run');
 const { isRiskReducing } = require('./order-gate');
@@ -61,13 +62,13 @@ function recordEntryOrder(env, orderId, args, at, onError = () => {}, stamp = nu
 
 /**
  * The grace period: markers.GRACE_MS, never shorter than a lane's wait plus
- * 30 s (an order still in another gateway's lane isn't "gone"). Tests may
+ * PENDING_ORDER_TTL_MS (an order still in another gateway's lane isn't "gone"). Tests may
  * shorten it (FTH_UNKNOWN_ORDER_GRACE_MS); a live or autonomous run can't.
  */
 function graceFor(env, laneTimeoutMs) {
   const asked = Number(env.FTH_UNKNOWN_ORDER_GRACE_MS);
   const test = env.NODE_ENV === 'test' && env.FTH_AUTONOMOUS !== '1';
-  return Math.max(test && asked > 0 ? asked : markers.GRACE_MS, laneTimeoutMs + 30000);
+  return Math.max(test && asked > 0 ? asked : markers.GRACE_MS, laneTimeoutMs + PENDING_ORDER_TTL_MS);
 }
 
 function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, canon = a => a }) {

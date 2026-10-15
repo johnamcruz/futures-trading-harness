@@ -24,7 +24,7 @@
  * The account: --account; else the run's own attempt (its home's combine/<account>.json); else the runner config's
  * `account` when it names a profile; else the policy strategies' account when they agree. None: not scored (no
  * default account). The sizing: the policy strategy that trades that account (its rulebook's sizing, contracts);
- * none: combine.DEFAULT_SIZING, said so.
+ * none is refused before any look (combine.requireSizing: sizing lives only in a policy's rulebook entry, no code default).
  *
  *   resolveAccount({ override, attempts, runnerAccount, strategies, accounts })   { name, why } (name null: none)
  *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, momentOf, barsFiles, seed, paths, reps, faults, attribution, now })
@@ -44,6 +44,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const { MC_SIZE } = require('./mc-size');
+const { requireSizing } = require('../trading/combine');
 const { readModelStream } = require('./model-stream');
 const { reweightStream, curatedRates } = require('./natural-rate');
 const { scoreRiskActions } = require('./risk-actions');
@@ -101,8 +103,9 @@ function reweightRun(runDir, stream, { root = null, barsFiles = {}, rates = null
   return reweightStream(stream, decisions, { rates, weights, listOf, momentOf, seed, stateWeightOf });
 }
 
-function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, momentOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
+function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, momentOf, barsFiles = {}, seed = 1, paths = MC_SIZE.paths, reps = MC_SIZE.reps, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
   if (!account) throw new Error('an account profile to score against');
+  requireSizing(policy && policy.sizing, `${account.name}: no policy strategy with a whole rulebook sizing trades it, so nothing is scored`);
   const { stream, run, diagnostic, pass } = streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now });
   const s = diagnostic === 'reweighted' ? reweightRun(runDir, stream, { root, barsFiles, rates, weights, listOf, momentOf, seed }) : stream;
   const sizing = policy ? policy.sizing || null : null;
@@ -115,11 +118,11 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   let risk = null;
   if (riskActions && acted && diagnostic !== 'reweighted') {
     const again = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(run.ledger || ledgerPath(env), entry), now });
-    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths: Math.min(paths, 1000), reps: Math.min(reps, 1000), faults });
+    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults });
   }
   return {
     ...result, riskActions: risk, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
-    sizingFrom: policy ? `${policy.name}'s rulebook` : 'the default sizing (no policy strategy trades this account)',
+    sizingFrom: `${policy.name}'s rulebook`, // none: refused above (no code default sizing)
     trades: stream.trades.length, runDays: stream.days.length, excluded: stream.excluded, adverse: stream.adverse, reweighted: s.reweighted || null,
   };
 }
@@ -153,8 +156,9 @@ function refuseCurated(runDir) {
   }
 }
 
-function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, accountB, policyB, candidateB = false, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
+function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, accountB, policyB, candidateB = false, barsFiles = {}, seed = 1, paths = MC_SIZE.paths, reps = MC_SIZE.reps, faults = {}, env = process.env, now = new Date() } = {}) {
   if (!account) throw new Error('an account profile to score against');
+  requireSizing(policy && policy.sizing, `${account.name}: no policy strategy with a whole rulebook sizing trades it, so nothing is scored`);
   // Two rulebooks (accountB or policyB given: the training loop's verifier): each side its own policy's whole entry,
   // B's a candidate's when it differs (its pass refused on test and final). Else one rulebook's sizing for both, as before.
   const two = accountB !== undefined || policyB !== undefined;

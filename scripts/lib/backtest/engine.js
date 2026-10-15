@@ -57,12 +57,13 @@ function swingAt(book, minutes, sign, i) {
   return (sign > 0 ? s.low : s.high)[i];
 }
 const { createSimBroker, onTick } = require('./sim-broker');
-const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN } = require('../trading/clock');
+const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN, SESSION_DEFAULTS } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
 const { ceiling } = require('../trading/rulebook');
 const { familyOf, specFor } = require('../trading/contracts');
+const { requireFee } = require('../trading/accounts');
 
 const { normalizeBars } = ind;
 
@@ -77,25 +78,34 @@ function roundHalfEven(x) {
 const DEFAULTS = {
   size: 1,
   riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like the original bot's --risk)
+  // Backtest-only (a plain run, no account): contracts at most. Never used for an account, whose limit is its own
+  // (ACCOUNT.md max_contracts, through combine.contractPlan).
   maxContracts: 5,
-  // Per market fill (entries and stops), in ticks: the one number a prop size counts for its stop (combine sizing.stop_slippage_ticks).
-  slippageTicks: combine.DEFAULT_SIZING.stop_slippage_ticks,
+  // Per market fill (entries and stops), in ticks: the floor a prop size counts for its stop (combine.js
+  // MIN_STOP_SLIPPAGE_TICKS; a policy's rulebook may state more, never less).
+  slippageTicks: combine.MIN_STOP_SLIPPAGE_TICKS,
   fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
   minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
   // Strategies firing both sides on the bar: 'reversal' (as the live gate: only a reversal strategy, mtf: reversal,
   // may enter), 'skip' (no entry), or 'priority' (the first in order trades, as the original bot had no such rule).
   conflict: 'reversal',
-  feesPerSide: null, // per contract; default from the contract spec
+  // A plain run's fee per contract per side (each market's own, else this): none is refused, never assumed. An
+  // account run's fees are its ACCOUNT.md fees_per_side (accounts.js requireFee).
+  feesPerSide: null,
   gate: true,
-  maxDailyLoss: 500, // $ realized loss that ends the trading day, like the broker MCP server's max daily loss (0 = off)
-  sessions: ['18:00-15:50@America/New_York'],
-  eodAt: '15:50@America/New_York',
+  // Backtest-only (a plain run, no account): $ realized loss that ends the trading day (0 = off). Never used for an
+  // account, whose daily limits are its own: ACCOUNT.md daily_loss_limit and RULEBOOK.md daily_loss_soft (combine.js).
+  maxDailyLoss: 500,
+  sessions: [...SESSION_DEFAULTS.sessions],
+  eodAt: SESSION_DEFAULTS.eodAt,
   earlyCloseDates: [], // trading days (YYYY-MM-DD they end on) closing at 13:00 ET: end of day at earlyCloseEodAt
-  earlyCloseEodAt: '12:50@America/New_York',
+  earlyCloseEodAt: SESSION_DEFAULTS.earlyCloseEodAt,
   closedDates: [], // holidays: no trading at all
   window: 500,
   account: null, // an account profile: run as a prop challenge (combine.js)
-  sizing: null, // combine sizing (combine.DEFAULT_SIZING keys)
+  // An account run's sizing: a policy's rulebook entry, every key (combine.SIZING_KEYS); else the policy strategy's
+  // own (prop.strategy.sizing, which the strategy loader takes from the rulebook). None is refused.
+  sizing: null,
   prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (the names of the strategies it trades: the only ones a setup is picked from), contracts (micro | mini | auto) }
   prepared: null, // from prepare(): reuse the evaluator across runs
   // The evaluator's trade stream (prop/trade-stream.js): one position at a time across the markets without an
@@ -242,16 +252,25 @@ function runEngine(markets, strategies, opts = {}) {
     closesToday.push({ pnl: gross, net, ts: bar.ms + tfMs(book) });
     if (cs) cs = combine.applyClose(cs, net, gross);
   };
-  const feeOf = book => (account && account.fees_per_side && account.fees_per_side[book.symbol] !== undefined
-    ? account.fees_per_side[book.symbol] : book.feesPerSide ?? 0.37);
-  // A contract of the book's micro/mini family: the account's fee, else the spec's.
-  // The same fee as the live verdict and the gate (prop-state legOf): the account's, else the contract spec's.
+  // A fee is never assumed: an account run's are its profile's (ACCOUNT.md fees_per_side), the same fee as the live
+  // verdict and the gate (prop-state legOf); a plain run's the market's own, else the run's (feesPerSide).
+  const plainFee = book => {
+    const f = book.feesPerSide ?? o.feesPerSide;
+    if (!(typeof f === 'number' && Number.isFinite(f) && f >= 0)) throw new Error(`${book.symbol}: no fee per side (the market's feesPerSide, or the run's); a fee is never assumed`);
+    return f;
+  };
+  const feeOf = book => (account ? requireFee(account, book.symbol) : plainFee(book));
+  // A contract of the book's micro/mini family, priced with the account's fee.
   const legOf = (book, root) => {
     const spec = { ...(specFor(root) || {}), ...(root === book.symbol ? { tickValue: book.tickValue } : {}) };
-    const fee = account && account.fees_per_side && account.fees_per_side[root] !== undefined ? account.fees_per_side[root]
-      : spec.feesPerSide ?? feeOf(book);
-    return { root, tickValue: spec.tickValue, fee, max: (account && account.max_contracts && account.max_contracts[root]) || 0 };
+    return { root, tickValue: spec.tickValue, fee: requireFee(account, root), max: (account && account.max_contracts && account.max_contracts[root]) || 0 };
   };
+  // Refused up front, not at the first setup: every market's fee, and an account run's sizing (the rulebook's).
+  for (const b of books) feeOf(b);
+  const sizing = account ? combine.requireSizing(o.sizing || (o.prop && o.prop.strategy && o.prop.strategy.sizing), `${account.name}: an account run sizes from a policy's rulebook entry`) : null;
+  // The day's realized-loss stop: a plain run's maxDailyLoss (backtest-only); an account's own limits instead
+  // (combine.js: the firm's daily_loss_limit and the rulebook's daily_loss_soft), never the backtest default.
+  const dailyStopUsd = account ? 0 : o.maxDailyLoss;
 
   const timeline = [];
   books.forEach((b, k) => {
@@ -361,7 +380,7 @@ function runEngine(markets, strategies, opts = {}) {
       if (gateCfg.maxEntriesPerDay > 0 && entriesToday >= gateCfg.maxEntriesPerDay) return;
       const losses = closesToday.filter(c => c.pnl < 0);
       if (losses.length >= gateCfg.maxDailyLosses) return;
-      if (o.maxDailyLoss > 0 && closesToday.reduce((a, c) => a + c.net, 0) <= -o.maxDailyLoss) return;
+      if (dailyStopUsd > 0 && closesToday.reduce((a, c) => a + c.net, 0) <= -dailyStopUsd) return;
       // As the live gate: a loss extends the streak, a win ends it, a scratch neither.
       let streak = 0;
       for (let c = closesToday.length - 1; c >= 0 && closesToday[c].pnl <= 0; c -= 1) if (closesToday[c].pnl < 0) streak += 1;
@@ -382,7 +401,6 @@ function runEngine(markets, strategies, opts = {}) {
     if (cs) {
       // Prop challenge: the size from the account's cushion and clock, in micros
       // or minis (contracts mode), within its limits. Same as live (combine.contractPlan).
-      const sizing = { ...combine.DEFAULT_SIZING, ...(o.sizing || {}) };
       const fam = familyOf(book.symbol);
       const legs = fam ? { micro: legOf(book, fam.micro), mini: legOf(book, fam.mini) } : { micro: legOf(book, book.symbol), mini: null };
       const sizeFor = fraction => combine.contractPlan({

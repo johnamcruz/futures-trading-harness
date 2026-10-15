@@ -83,7 +83,8 @@ const MAX_RETRY_MS = 60000;
 // until it settles, so two closes in flight never over-close into the other side.
 const CLOSE_SETTLE_MS = 10000;
 // End of day that reads the account but doesn't find it flat yet counts as failed runs (kill switch) only after this long.
-const UNFLAT_GRACE_MS = 120000;
+const { ORDER_GRACE_MS } = require('./trading/gate-timing');
+const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
 const FILL_GRACE_MS = 30000;
 // The account read for a run's prompt never holds a run up longer than this.
 const ACCOUNT_READ_MS = 5000;
@@ -479,7 +480,7 @@ function createRunner(deps) {
       const rec = [...entryOrders()].reverse().find(e => {
         const at = Date.parse(e.at);
         return contractRoot(e.contractId) === contractRoot(cid) && e.setup && (!e.side || e.side === side)
-          && at >= dayStart && at <= fillAt + 120000;
+          && at >= dayStart && at <= fillAt + ORDER_GRACE_MS;
       });
       // Exits only: a strategy that stopped loading while its position is open keeps its last exit plan (exitStrategy).
       const strategy = rec && (exitStrategy || strategyNamed)(rec.setup, { symbol: item.symbol, contractId: cid, position: key });
