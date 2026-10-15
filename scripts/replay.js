@@ -57,6 +57,7 @@ const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinForRun } = require('./lib/learning/run-pins');
+const { recordSetup } = require('./lib/train/ab-compare');
 const { pinCurated, curatedPoints } = require('./lib/learning/curated-lists');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -168,6 +169,7 @@ async function run(argv) {
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
   for (const line of pinForRun(r, { fresh, arm: gate.arm })) say(line);
+  recordSetup(r, { env: process.env }); // its setup, once, for an A/B comparison (scripts/ab-compare.js)
   if (r.curated) say(`curated list pinned: ${r.curated.list} of ${pinCurated(r.paths.runHome, r.curated).fingerprint.slice(0, 16)}, ${r.curated.windows.length} window(s)`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
