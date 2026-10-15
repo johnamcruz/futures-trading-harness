@@ -6,10 +6,11 @@
  *
  *   stage 1, learn to trade   a learning run on practice-train or practice-validate; a curated list on practice; latency
  *                             charged; the history library hidden (libraryDisplay off); no prop attempt (account states
- *                             are stage 2's). At its end: the skill-usage report, the scorecard summary and R by setup;
+ *                             are stage 2's); the risk record hidden (riskRecordDisplay off). At its end: the skill-usage report, the scorecard summary and R by setup;
  *                             on a validate run, the stage-1 exit test (EXIT_TEST).
  *   stage 2, pass prop        stage 1's, plus the account states, account facts and prop risk rules (phase 2:
- *                             feat/prop-mc-model, feat/prop-portfolio-missing; not available until merged). At its end:
+ *                             feat/prop-mc-model, feat/prop-portfolio-missing; not available until merged); the model's
+ *                             risk record (riskRecordDisplay) only on a run declared a comparison arm (comparisonArm). At its end:
  *                             the 30-day Monte Carlo by account state; on a validate run, the promotion gate
  *                             (prop/promotion.js, frozen).
  *
@@ -17,7 +18,7 @@
  * the training preflight (learning/preflight.js `stage`). `stage` is part of both run hashes (replay/config.js), so a
  * stage-1 run and a stage-2 run are two runs and two setups.
  *
- *   STAGES                      { 1: { name, defaults, refused }, 2: ... }
+ *   STAGES                      { 1: { name, defaults, refused }, 2: { ..., comparisonOnly } }
  *   EXIT_TEST                   the stage-1 exit test's thresholds (owner-confirmed), the one place for them
  *   applyStage(raw)             { raw (the preset's defaults under the config's own values), stage, errors }
  *   stageRequirements(stage)    what the preflight checks for it
@@ -31,13 +32,15 @@ const { MIN_N, MIN_DAYS, cellStats } = require('../learning/experience-index');
 const STAGES = Object.freeze({
   1: Object.freeze({
     name: 'learn to trade',
-    defaults: Object.freeze({ latency: true, libraryDisplay: false }),
-    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true, prop: 'set' }),
+    defaults: Object.freeze({ latency: true, libraryDisplay: false, riskRecordDisplay: false }),
+    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true, riskRecordDisplay: true, prop: 'set' }),
   }),
   2: Object.freeze({
     name: 'pass prop',
-    defaults: Object.freeze({ latency: true, libraryDisplay: false }),
+    defaults: Object.freeze({ latency: true, libraryDisplay: false, riskRecordDisplay: false }),
     refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true }),
+    // Shown only on a run declared a comparison arm (the replay config's comparisonArm): with/without the risk record.
+    comparisonOnly: Object.freeze(['riskRecordDisplay']),
   }),
 });
 
@@ -75,12 +78,15 @@ function applyStage(raw) {
     if (!has(r, k)) continue;
     if (v === 'set' || r[k] === v) errors.push(`${k}: ${JSON.stringify(r[k])} contradicts stage ${r.stage} (${preset.name})${k === 'prop' ? ': account states are stage 2\'s' : ''}; remove it or change the stage`);
   }
+  for (const k of preset.comparisonOnly || []) {
+    if (r[k] === true && r.comparisonArm !== true) errors.push(`${k}: true in stage ${r.stage} (${preset.name}) only on a run declared a comparison arm (comparisonArm: true); remove it or declare the arm`);
+  }
   return { raw: { ...preset.defaults, ...r }, stage: r.stage, errors };
 }
 
 function stageRequirements(stage) {
   if (!STAGES[stage]) return null;
-  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, prop: stage === 1 ? 'none' : 'allowed', phase2: stage === 2 };
+  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: stage === 1 ? 'off' : 'comparison-arm', prop: stage === 1 ? 'none' : 'allowed', phase2: stage === 2 };
 }
 
 const fmt = x => (x === null || x === undefined || !Number.isFinite(x) ? '-' : x.toFixed(2));

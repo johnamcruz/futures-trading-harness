@@ -128,6 +128,7 @@ The checks:
 - practice mode
 - the library display (shown only on an evaluation's arm, `--evaluation`)
 - the experience index
+- the risk record (N/A when `riskRecordDisplay` is off)
 - the ledger look
 - the stage (stage 2's own requirements: N/A until phase 2)
 - the composed scorecard (N/A until `fix/scorecard-composed`)
@@ -152,12 +153,13 @@ The `stage: 1` preset needs:
 - a curated list on practice;
 - latency charged;
 - the history library hidden (`libraryDisplay` off);
+- the risk record hidden (`riskRecordDisplay` off);
 - no `prop` attempt.
 
-It defaults `latency` to true and `libraryDisplay` to false. An explicit
-value that contradicts the preset (`"learning": false`, `"latency": false`,
-`"libraryDisplay": true`, or a `prop` in stage 1) is refused, never silently
-changed. `stage` is part of the run's hashes.
+It defaults `latency` to true and `libraryDisplay` and `riskRecordDisplay` to
+false. An explicit value that contradicts the preset (`"learning": false`,
+`"latency": false`, `"libraryDisplay": true`, `"riskRecordDisplay": true`, or
+a `prop` in stage 1) is refused, never silently changed. `stage` is part of the run's hashes.
 
 **A practice run:**
 
@@ -263,6 +265,36 @@ screen finds no trades and the change stays blocked until a model-trade Monte
 Carlo exists. The backtester's own prop runs are retired
 (`docs/research/mechanical-prop-backtester.md`).
 
+**The model's risk record.** `experience_lookup` can end with a "Your risk
+record" section: by account state, what reverting the model's own risk
+decisions (standing down, sizing under the ceiling, exiting early, stopping
+for the day) did to the blows and passes over the same Monte Carlo paths. It
+is off by default. Build it from finished practice-train runs:
+
+```bash
+node scripts/risk-record.js build <run home> ... --account <name> [--out dir] [--seed N] [--paths N] [--reps N] [--min-n N]
+node scripts/risk-record.js show <record file>
+```
+
+For each day with a risk action, the build reverts that day's actions alone,
+over paths drawn from the run's days up to and including it, so a day's entry
+holds nothing from later days. The model sees an entry only on bars after its
+day. The output is `risk-record-<hash>.json`, fingerprinted with the runs,
+account, seed and path count it was built from. The build refuses an
+unfinished run, a run that isn't practice-train, and a day that two runs both
+hold.
+
+To show it, set `"riskRecord": "<file>"` and `"riskRecordDisplay": true` in
+the replay config. In stage 2 the display also needs `"comparisonArm": true`:
+the run is one arm of a with/without pair, judged with the paired test. Stage
+1 refuses the display. The preflight's `risk-record` check fails when the
+display is on without a practice-train-built record, or on a test or final
+run (or a window spanning two roles); it is N/A when the display is off. A
+practice-validate run may show it: the record holds practice-train days only,
+so it is train-derived evidence like the walk-forward experience index, and
+validation outcomes never enter it. The run pins the record with its display
+and its `comparisonArm`, and a resume can't change any of them.
+
 **The 30-day Monte Carlo** (phase 2, not merged yet) is printed at the end of
 a stage-2 run. Read it in this order:
 
@@ -329,3 +361,5 @@ reweighted, not a calendar of whole days.
 | `libraryDisplay: shows the pinned history library; name it (setupLibrary)` | The display needs a library to show. |
 | `FAIL curated-source: ... disagree with the run's bars` | The list was scanned from another series than the run's bars: scan it from the bars the replay serves. |
 | `FAIL library-display: libraryDisplay is on, but the run is no library comparison arm` | Show the library only on an evaluation's arm (`--evaluation`). |
+| `riskRecordDisplay: true in stage 2 (pass prop) only on a run declared a comparison arm` | Add `"comparisonArm": true`, or turn the display off. |
+| `FAIL risk-record: ... the risk record is shown on practice-train and practice-validate only` | Show the risk record only on practice-train or practice-validate runs, not test or final. |

@@ -24,6 +24,10 @@
  * another arm, or another setup without its code (`setup`), than its ledger line is refused (its config and base digest
  * the code, so they are not compared: a code fix doesn't strand it).
  *
+ * The model's risk record display (replay/config.js riskRecordDisplay) is a dimension of the same kind: an arm shown it ends
+ * in `+risk:<record hash>` (after any `+library:`), and a with/without-risk-record pair shares its base and index and differs
+ * in that display only (never both displays at once).
+ *
  * The history library's display (replay/config.js libraryDisplay) is an arm dimension of its own: an arm shown the
  * library ends in `+library:<library hash>` (e.g. `without+library:<hash>`), and its config hash (which names the
  * display) is not the hidden arm's. A paired with/without-library comparison is two arms of one evaluation that share
@@ -60,14 +64,22 @@ const MAX_ARMS = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without), and `+library:<hash>` when shown the history library. */
-const ARM = /^(?:without|with:[0-9a-f]{16}|shuffled:[0-9a-f]{16})(?:\+library:[0-9a-f]{16})?$/;
-const LIBRARY_ARM = /\+library:[0-9a-f]{16}$/;
-/** An arm's experience part (its index), without the library display. */
-const indexArm = arm => String(arm || '').replace(LIBRARY_ARM, '');
-/** The setup without the library display: the look's base, or its config when it has none (no display). */
+const ARM = /^(?:without|with:[0-9a-f]{16}|shuffled:[0-9a-f]{16})(?:\+library:[0-9a-f]{16})?(?:\+risk:[0-9a-f]{16})?$/;
+const LIBRARY_ARM = /\+library:[0-9a-f]{16}/;
+const RISK_ARM = /\+risk:[0-9a-f]{16}/;
+/** An arm's experience part (its index), without the displays. */
+const indexArm = arm => String(arm || '').replace(LIBRARY_ARM, '').replace(RISK_ARM, '');
+/** An arm's display of each kind (the suffix, or ''): the dimensions a with/without comparison varies. */
+const libraryPart = arm => (LIBRARY_ARM.exec(String(arm || '')) || [''])[0];
+const riskPart = arm => (RISK_ARM.exec(String(arm || '')) || [''])[0];
+/** The setup without the displays: the look's base, or its config when it has none (no display). */
 const baseOf = e => e.base || e.config;
 /** Whether an arm is shown the history library (the `+library` suffix; replay/config.js lookArm, via scripts/replay.js, is its only producer). */
 const shownArm = arm => LIBRARY_ARM.test(String(arm || ''));
+/** Whether an arm is shown the model's risk record (the `+risk` suffix; lookArm is its only producer). */
+const riskArm = arm => RISK_ARM.test(String(arm || ''));
+/** Whether an arm is shown anything beyond its experience index: its look names its setup without the displays (base). */
+const displayArm = arm => shownArm(arm) || riskArm(arm);
 /** Looks taken before the ledger existed, so it starts true. */
 const RECORDED_LOOKS = Object.freeze([
   Object.freeze({ kind: 'look', evaluation: 'llm-replay-2026-06', candidate: 'llm-replay-2026-06', purpose: 'reasoning-fix', runId: 'llm-replay-2026-06', from: '2026-06-01', to: '2026-06-06', role: 'final', what: 'LLM replay, June 1-5 2026, adherence only' }),
@@ -137,25 +149,29 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
       for (const e of runs.filter(x => x.config)) {
         // The same config: the index differs, and the display and base must agree with it (the config names both).
         if (l.config === e.config) {
-          if (shownArm(e.arm) !== shownArm(l.arm) || baseOf(e) !== baseOf(l)) {
-            refusals.push(`evaluation ${l.evaluation}: arm ${l.arm} has ${e.runId}'s setup (config ${String(e.config).slice(0, 12)}) but not its library display or base (arm ${e.arm})`);
+          if (libraryPart(e.arm) !== libraryPart(l.arm) || riskPart(e.arm) !== riskPart(l.arm) || baseOf(e) !== baseOf(l)) {
+            refusals.push(`evaluation ${l.evaluation}: arm ${l.arm} has ${e.runId}'s setup (config ${String(e.config).slice(0, 12)}) but not its library display or base, or its risk record display (arm ${e.arm})`);
             break;
           }
           continue;
         }
-        const pair = baseOf(e) === baseOf(l) && indexArm(e.arm) === indexArm(l.arm) && shownArm(e.arm) !== shownArm(l.arm);
+        // One display differs, the other kind alike: a display is shown in one arm and hidden in the other.
+        const libDiffers = shownArm(e.arm) !== shownArm(l.arm);
+        const riskDiffers = riskArm(e.arm) !== riskArm(l.arm);
+        const alike = libDiffers ? riskPart(e.arm) === riskPart(l.arm) : libraryPart(e.arm) === libraryPart(l.arm);
+        const pair = baseOf(e) === baseOf(l) && indexArm(e.arm) === indexArm(l.arm) && libDiffers !== riskDiffers && alike;
         if (!pair) {
-          refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index, or only in the history library's display; this run's setup (config ${String(l.config).slice(0, 12)}, arm ${l.arm}) is not ${e.runId}'s (config ${String(e.config).slice(0, 12)}, arm ${e.arm})`);
+          refusals.push(`evaluation ${l.evaluation}: its arms differ only in their experience index, or only in the history library's display, or only in the risk record's; this run's setup (config ${String(l.config).slice(0, 12)}, arm ${l.arm}) is not ${e.runId}'s (config ${String(e.config).slice(0, 12)}, arm ${e.arm})`);
           break;
         }
       }
       if (l.arm && runs.some(e => e.arm === l.arm)) refusals.push(`evaluation ${l.evaluation} has its ${l.arm} arm already`);
     }
   }
-  if (SEALED.includes(role) && l.purpose === 'judging' && !(l.arm && ARM.test(l.arm) && l.config)) refusals.push('a judging look names its arm (with:<index>, without, shuffled:<index>, each with +library:<library> when shown the history library) and its run setup (config hash)');
+  if (SEALED.includes(role) && l.purpose === 'judging' && !(l.arm && ARM.test(l.arm) && l.config)) refusals.push('a judging look names its arm (with:<index>, without, shuffled:<index>, each with +library:<library> when shown the history library, +risk:<record> when shown the risk record) and its run setup (config hash)');
   // The arm says the display; its base says the same (a shown arm's setup is not its base, a hidden one's is).
-  if (l.arm && LIBRARY_ARM.test(l.arm) && !(l.base && l.config && l.base !== l.config)) refusals.push(`arm ${l.arm} is shown the history library: its look names its setup without the display (base), not its config`);
-  if (l.arm && !LIBRARY_ARM.test(l.arm) && l.base && l.base !== l.config) refusals.push(`arm ${l.arm} is not shown the history library: its base is its config`);
+  if (l.arm && displayArm(l.arm) && !(l.base && l.config && l.base !== l.config)) refusals.push(`arm ${l.arm} is shown the history library or the risk record: its look names its setup without the display (base), not its config`);
+  if (l.arm && !displayArm(l.arm) && l.base && l.base !== l.config) refusals.push(`arm ${l.arm} is not shown the history library: its base is its config (nor the risk record)`);
   const judged = new Set(atRole.filter(e => e.purpose === 'judging').map(e => e.evaluation));
   const shared = l.purpose === 'judging' && judged.has(l.evaluation);
   const budget = SEALED.includes(role) ? budgets[role] : null;

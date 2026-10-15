@@ -28,6 +28,14 @@
  *   libraryDisplay true shows the pinned library to the model: experience_lookup's code-measured section (counts, the
  *                  win rate and no-room only); needs setupLibrary; part of the setup (setupHash), so an arm with it
  *                  and one without are two setups, paired only as a library-display arm (learning/looks.js) (default: false)
+ *   riskRecord     a risk record index file (learning/risk-record-index.js buildRiskIndex),
+ *                  pinned for the run at its start (default: none). Pinned alone it is code's, never shown to the model
+ *   riskRecordDisplay true shows the pinned risk record to the model: experience_lookup's "your risk record" section (counts
+ *                  and outcomes of its own risk decisions by account state, practice-train days before the bar's session);
+ *                  needs riskRecord; part of the setup (setupHash) only when on, so existing hashes are unchanged; an arm
+ *                  dimension of its own (learning/looks.js `+risk:`), and a resume can't change it (default: false)
+ *   comparisonArm  true declares the run one arm of a with/without comparison (two replays, the paired test): stage 2
+ *                  shows the risk record only on one (replay/stage.js); a declaration only, in no hash (default: false)
  *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
  *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
  *                  on for a learning run, off for one declared not learning)
@@ -173,6 +181,10 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (r.setupLibrary !== undefined && !(typeof r.setupLibrary === 'string' && r.setupLibrary.trim())) errors.push('setupLibrary: a history library index file (scripts/setup-library.js index)');
   if (r.libraryDisplay !== undefined && typeof r.libraryDisplay !== 'boolean') errors.push('libraryDisplay: true or false');
   else if (r.libraryDisplay === true && r.setupLibrary === undefined) errors.push('libraryDisplay: shows the pinned history library; name it (setupLibrary)');
+  if (r.riskRecord !== undefined && !(typeof r.riskRecord === 'string' && r.riskRecord.trim())) errors.push('riskRecord: a risk record index file (learning/risk-record-index.js)');
+  if (r.riskRecordDisplay !== undefined && typeof r.riskRecordDisplay !== 'boolean') errors.push('riskRecordDisplay: true or false');
+  else if (r.riskRecordDisplay === true && r.riskRecord === undefined) errors.push('riskRecordDisplay: shows the pinned risk record; name it (riskRecord)');
+  if (r.comparisonArm !== undefined && typeof r.comparisonArm !== 'boolean') errors.push('comparisonArm: true or false');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -244,6 +256,11 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
     // Whether the model is shown that library (experience_lookup); off unless the config says true.
     libraryDisplay: r.libraryDisplay === true,
+    // The risk record index the run pins at its start (learning/risk-record-index.js pinRiskRecord), or null, and whether it is shown.
+    riskRecord: r.riskRecord ? path.resolve(baseDir, expandHome(r.riskRecord, home)) : null,
+    riskRecordDisplay: r.riskRecordDisplay === true,
+    // Whether the run is declared one arm of a with/without comparison (replay/stage.js); in no hash.
+    comparisonArm: r.comparisonArm === true,
     prop: r.prop || null,
     // The training stage preset (replay/stage.js), or null.
     stage: staged.stage,
@@ -389,6 +406,8 @@ function setupHash(run, { code = true } = {}) {
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
     // Whether the model is shown it: named only when on, so a run without the display keeps the hash it had.
     ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
+    // The risk record shown to the model, by its hash (named only when shown, so every other setup keeps its hash).
+    ...(run.riskRecord && run.riskRecordDisplay === true ? { riskRecordDisplay: require('../learning/risk-record-index').readRiskIndex(run.riskRecord).hash } : {}),
     // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
@@ -399,13 +418,14 @@ function setupHash(run, { code = true } = {}) {
 const setupFixed = run => setupHash(run, { code: false });
 
 /** The setup without the library display: the two arms of a library-display pair (learning/looks.js) share it. */
-const setupBase = run => setupHash({ ...run, libraryDisplay: false });
+const setupBase = run => setupHash({ ...run, libraryDisplay: false, riskRecordDisplay: false });
 
-/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library. */
+/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library, then `+risk:<hash>` when it shows the risk record. */
 function lookArm(run) {
-  const arm = require('../learning/experience-index').armOf(run.experienceIndex);
-  if (!(run.setupLibrary && run.libraryDisplay === true)) return arm;
-  return `${arm}+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
+  let arm = require('../learning/experience-index').armOf(run.experienceIndex);
+  if (run.setupLibrary && run.libraryDisplay === true) arm += `+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
+  if (run.riskRecord && run.riskRecordDisplay === true) arm += `+risk:${require('../learning/risk-record-index').readRiskIndex(run.riskRecord).hash.slice(0, 16)}`;
+  return arm;
 }
 
 function harnessCommand(run, base = process.env) {
