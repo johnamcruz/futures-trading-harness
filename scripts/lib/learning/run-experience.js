@@ -3,7 +3,8 @@
 /**
  * A finished replay run's experience log (experience-log.js), read from what the run wrote: the store lines (each
  * trade cycle that ran, the fills, the gate's refusals), the trade_lifecycle records in the run home
- * (lifecycle-record.js), and the replayed bars (the run's own bars files, or --bars data as the labels read it).
+ * (lifecycle-record.js), the gateway's stamps on the entries it placed (entry-orders.json), and the replayed bars
+ * (the run's own bars files, or --bars data as the labels read it).
  * Written to <run home>/experience/decisions.jsonl, never the repository.
  *
  * Only a learning run that passed the gate (learning/run-gate.js, <run home>/learning-run.json) has one: its window
@@ -17,6 +18,7 @@
 
 const path = require('path');
 const { readRun } = require('../replay/store');
+const { entryOrders } = require('../harness-run');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
@@ -54,6 +56,9 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
     .filter(x => x && ENTRY_TOOL.test(String(x.tool || '')))
     .map(x => ({ cycleAt: r.t, root: null, check: (x.checks || []).join(',') || 'refused' })));
   const cache = labels.translatorCache(require('../broker/config').contractsCacheFiles(manifest.broker || '', { FTH_HOME: home }));
+  // The gateway's stamp on each composed entry it placed: the record it judged, by order id (the run home's
+  // entry-orders.json), so a trade is credited to that record, never to one composed after it.
+  const stamps = Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), String(e.composed.record)]));
   const trips = legsOf(labels.roundTrips(labels.allFills(lines), cache));
   const outcomeBars = labels.outcomeBarsFor(dir, barsFiles);
   const bars = new Map();
@@ -62,7 +67,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
     return bars.get(r);
   };
   const decisions = buildDecisions({
-    cycles, records: readRecords(home, { runId: manifest.runId }), trips, gateRefusals, barsFor, tfMs,
+    cycles, records: readRecords(home, { runId: manifest.runId }), trips, stamps, gateRefusals, barsFor, tfMs,
     tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now,
   });
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor, trips };

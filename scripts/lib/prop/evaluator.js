@@ -181,7 +181,10 @@ function daysFor(stream, pass, rulebook) {
   if (Boolean(stream.reweighted) !== Boolean(pass.synthetic)) throw new Error(stream.reweighted ? 'a reweighted stream is scored only as a diagnostic (reweighted) score' : 'a diagnostic (reweighted) score needs the reweighted stream (prop/natural-rate.js)');
   if (pass.model && Boolean(rulebook.candidate) !== Boolean(pass.candidateRulebook)) throw new Error('a candidate rulebook is scored only on a pass checked for one (checkModelWindow candidateRulebook), and the account\'s only on one that was not');
   // A reweighted stream's days are resampled, not session dates: no window to hold them to.
-  const days = pass.synthetic ? stream.days : stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
+  const held = pass.synthetic ? stream.days : stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
+  // The policy's exit mode first (attempts.js exitAs): every trade re-exited from its recorded path; none, as recorded.
+  const slip = Number.isFinite(stream.slippageTicks) ? stream.slippageTicks : 1;
+  const days = rulebook.exit ? held.map(d => ({ ...d, trades: d.trades.map(t => at.exitAs(t, rulebook.exit, slip)) })) : held;
   if (days.length !== stream.days.length) throw new Error(`the stream has days outside the window ${pass.from}..${pass.to}`);
   const bad = days.find(d => d.trades.some(t => t.day !== d.day));
   if (bad) throw new Error(`the stream's day ${bad.day} holds a trade of another day`);
@@ -205,7 +208,9 @@ function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) 
 
 /**
  * Score a trade stream (layer 2 and the statistics). opts: { pass (from checkWindow, for this stream's window, or
- * checkModelWindow for a model stream), account, rulebook: { sizing, multiplier, candidate }, size, contracts (micro |
+ * checkModelWindow for a model stream), account, rulebook: { sizing, multiplier, candidate, exit (the policy's exit
+ * mode, as the strategy loader reads it: every trade is re-exited under it from its recorded path first, attempts.js
+ * exitAs; none: as the stream recorded it) }, size, contracts (micro |
  * mini | auto), maxDailyLoss, seed, paths, meanBlock, reps, level, every, cuts, faults: { stopFault, outage, measured },
  * attribution (true: the risk attribution of the resampled paths, prop/risk-attribution.js) }. Returns the result
  * (module header); gateFailures(result) is the promotion gate's verdict on it.

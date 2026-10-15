@@ -6,7 +6,7 @@
  * agents). A policy strategy names one (`account: <name>`) to size by its
  * cushion and to train a policy for it. Extra folders: FTH_ACCOUNTS_DIRS.
  * An account's rulebook (`RULEBOOK.md` beside it, trading/rulebook.js) holds the
- * harness's own numbers for it: `daily_loss_soft` comes from there and only there
+ * harness's own numbers for it: `daily_loss_soft` and `loss_streak_stop` come from there and only there
  * (R1, one place); a missing or invalid rulebook makes the account invalid.
  */
 
@@ -18,7 +18,7 @@ const rulebook = require('./rulebook');
 
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const KEYS = ['name', 'description', 'firm', 'type', 'starting_balance', 'profit_target', 'max_loss', 'max_loss_mode',
-  'daily_loss_limit', 'daily_loss_soft', 'consistency_pct', 'max_contracts', 'sessions', 'fees_per_side'];
+  'daily_loss_limit', 'daily_loss_soft', 'loss_streak_stop', 'consistency_pct', 'max_contracts', 'sessions', 'fees_per_side'];
 const MAX_LOSS_MODES = ['trailing_eod', 'static'];
 const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
 
@@ -46,6 +46,7 @@ function validateAccount(data, body, folderName) {
   req(Number.isInteger(data.sessions), 'sessions: a whole number of trading days');
   req(MAX_LOSS_MODES.includes(data.max_loss_mode), `max_loss_mode: one of ${MAX_LOSS_MODES.join(', ')}`);
   for (const k of ['daily_loss_limit', 'daily_loss_soft', 'consistency_pct']) req(data[k] === undefined || nonneg(data[k]), `${k}: 0 or more`);
+  req(data.loss_streak_stop === undefined || (Number.isInteger(data.loss_streak_stop) && data.loss_streak_stop >= 0), 'loss_streak_stop: a whole number of losing trades, 0 or more (0: off)');
   req(data.consistency_pct === undefined || data.consistency_pct <= 100, 'consistency_pct: 0 to 100');
   if (positive(data.max_loss) && positive(data.daily_loss_soft)) req(data.daily_loss_soft < data.max_loss, 'daily_loss_soft: below max_loss');
   if (positive(data.daily_loss_limit) && positive(data.daily_loss_soft)) req(data.daily_loss_soft <= data.daily_loss_limit, 'daily_loss_soft: at most daily_loss_limit');
@@ -68,14 +69,16 @@ function loadAccountFile(file) {
   const bookErrors = [];
   // One place: the soft stop is never the profile's, and an account without a rulebook (whose enforced values
   // would quietly default to off) is refused.
-  if (parsed.data.daily_loss_soft !== undefined) bookErrors.push(`daily_loss_soft: it lives in ${rulebook.FILE} beside this file, not here (one place)`);
+  for (const k of ['daily_loss_soft', 'loss_streak_stop']) {
+    if (parsed.data[k] !== undefined) bookErrors.push(`${k}: it lives in ${rulebook.FILE} beside this file, not here (one place)`);
+  }
   const bookFile = path.join(path.dirname(file), rulebook.FILE);
   if (!book) bookErrors.push(`${bookFile}: missing; every account has its rulebook beside its ACCOUNT.md (the soft daily stop and its policies' numbers)`);
   else if (!book.valid) bookErrors.push(...book.errors.map(e => `${bookFile}: ${e}`));
-  else data.daily_loss_soft = rulebook.limit(book.daily_loss_soft);
+  else Object.assign(data, { daily_loss_soft: rulebook.limit(book.daily_loss_soft), loss_streak_stop: rulebook.limit(book.loss_streak_stop) });
   const errors = [...bookErrors, ...validateAccount(data, parsed.body, folderName)];
   return {
-    daily_loss_limit: 0, daily_loss_soft: 0, consistency_pct: 0, fees_per_side: {},
+    daily_loss_limit: 0, daily_loss_soft: 0, loss_streak_stop: 0, consistency_pct: 0, fees_per_side: {},
     ...data, name: folderName, file, body: parsed.body, valid: errors.length === 0, errors,
   };
 }

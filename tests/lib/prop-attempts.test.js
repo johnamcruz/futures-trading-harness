@@ -92,9 +92,9 @@ test('attempts: the order gate\'s daily loss count (FTH_MAX_DAILY_LOSSES) refuse
   const why = [];
   const o = at.runAttempt(days(list), ctx({ gate, account: { sessions: 1 }, onSkip: x => why.push(x.why) }));
   assert.deepStrictEqual([o.taken, o.skipped, why], [5, 1, ['daily-losses']]);
-  // A scratch loses its fees: a loss to the gate's count too (net, as attemptFacts counts it).
-  const s = at.runAttempt(days([trade(-5), trade(0), trade(10), trade(-5), trade(10)]), ctx({ gate, account: { sessions: 1 } }));
-  assert.deepStrictEqual([s.taken, s.skipped], [4, 1]);
+  // A scratch (gross 0) is no loss to the gate's count: it counts the broker's P&L before fees, as the loss streak does.
+  const s = at.runAttempt(days([trade(-5), trade(0), trade(10), trade(-5), trade(10), trade(-5), trade(10)]), ctx({ gate, account: { sessions: 1 } }));
+  assert.deepStrictEqual([s.taken, s.skipped], [6, 1]);
   assert.strictEqual(at.runAttempt(days(list), ctx({ gate: null, account: { sessions: 1 } })).taken, 6, 'null: off (a test isolating another rule)');
   // The next day starts afresh.
   assert.strictEqual(at.runAttempt(days(list, [trade(10)]), ctx({ gate, account: { sessions: 2 } })).taken, 6);
@@ -124,6 +124,124 @@ test('attempts: the gate\'s limits are the live gate\'s config (trading/config.j
   // No gate given: the env's (as live), never off.
   const list = Array.from({ length: c.maxDailyLosses + 1 }, () => trade(-5));
   assert.strictEqual(at.runAttempt(days(list), ctx({ account: { sessions: 1, daily_loss_limit: 0 } })).taken, Math.min(c.maxDailyLosses, c.maxConsecutiveLosses));
+});
+
+test('attempts: the account\'s loss_streak_stop skips the rest of the session after that many losses in a row (gross: a scratch neither)', () => {
+  const streak = { daily_limit: 0, loss_streak_stop: 2 };
+  // Two losses, then a winner the same day: skipped; the next day trades again.
+  const o = at.runAttempt(days([trade(-10), trade(-10), trade(60)], [trade(60)]), ctx({ account: { ...streak, sessions: 2 } }));
+  assert.deepStrictEqual([o.taken, o.skipped], [3, 1]);
+  // A scratch (0 ticks: gross 0, net -$7.40 of fees) neither ends nor extends the streak; a win ends it.
+  assert.deepStrictEqual(at.runAttempt(days([trade(-10), trade(0), trade(-10), trade(60)]), ctx({ account: { ...streak, sessions: 1 } })).skipped, 1);
+  assert.deepStrictEqual(at.runAttempt(days([trade(-10), trade(5), trade(-10), trade(60)]), ctx({ account: { ...streak, sessions: 1 } })).skipped, 0);
+  // Off: nothing skipped (the gate's own cooldown off too: gate null isolates this rule).
+  assert.deepStrictEqual(at.runAttempt(days([trade(-10), trade(-10), trade(60)]), ctx({ gate: null, account: { sessions: 1 } })).skipped, 0);
+});
+
+test('attempts: pacing (clock_k) is tunable on the default sizing: a k sizes down to what the pass still needs per session left', () => {
+  const sizes = sizing => {
+    const seen = [];
+    const size = a => { const p = at.defaultSize(a); seen.push(p ? p.size : 0); return p; };
+    at.runAttempt(days([trade(60)]), ctx({ size, sizing: { ...combine.DEFAULT_SIZING, cushion_frac: 0.5, ...sizing }, account: { sessions: 1 } }));
+    return seen[0];
+  };
+  const off = sizes({ clock_k: 0 });
+  const k = sizes({ clock_k: 0.05, r_per_session: 1 });
+  // $1,000 to make in 1 session at 1R: k 0.05 caps the risk at $50, under the cushion's share ($500).
+  assert.ok(off > k && k >= 1, `${off} > ${k}`);
+  assert.strictEqual(k, Math.floor(50 / (21 * 0.5 + 0.74)));
+});
+
+/** A trade's price path (trade-stream.js pricePath): bars of [open, adverse, favourable, close] ticks, the trade's way. */
+const pathed = (bars, extra = {}) => trade(0, { stopTicks: 20, path: bars, ownExit: { targetTicks: 60, trailActivateR: null, trailGivebackR: null }, ...extra });
+
+test('exitAs: the trade re-exited under a policy exit mode from its path, as the engine\'s broker exits it', () => {
+  const up = [[0, -5, 30, 25], [25, 20, 50, 45], [45, 30, 70, 35], [35, -30, 40, -25]];
+  const target = { mode: 'target' };
+  const trail = { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 };
+  // Mode target: out at its own target (60 ticks) on the third bar; the trough is the first bar's -5.
+  assert.deepStrictEqual(at.exitAs(pathed(up), target, 1), { ...pathed(up), moveTicks: 60, troughTicks: [-5], exitedAs: 'target' });
+  // Mode trail: no target; the second bar reaches 2.5R, the stop moves to 2R (40 ticks), and that bar's low (20) is
+  // already through it: out at its close (45), as trailStep closes a trade the new stop wasn't resting for.
+  const t = at.exitAs(pathed(up), trail, 1);
+  assert.deepStrictEqual([t.moveTicks, t.troughTicks], [45, [-5]]);
+  // A resting trailed stop: a later bar through it fills at the stop less the slippage.
+  const rest = [[0, -5, 30, 25], [41, 41, 50, 45], [44, 30, 45, 35]];
+  assert.strictEqual(at.exitAs(pathed(rest), trail, 1).moveTicks, 39);
+  // A trail on top of mode target: the target still fills first here.
+  assert.strictEqual(at.exitAs(pathed(up), { ...target, trail_activate_r: 3, trail_giveback_r: 0.5 }, 1).moveTicks, 60);
+  assert.strictEqual(at.exitAs(pathed(rest), { ...target, ...trail, mode: 'target' }, 1).moveTicks, 39, 'the trail on top of the target exits first when the target is never reached');
+  // The stop first, at the stop or a worse open, less the slippage; a deeper fill is the last trough.
+  const down = [[0, -10, 5, -5], [-5, -25, 0, -20]];
+  assert.deepStrictEqual([at.exitAs(pathed(down), target, 1).moveTicks, at.exitAs(pathed(down), target, 1).troughTicks], [-21, [-10, -21]]);
+  // A bar reaching both the stop and the target is a loss: the stop first, as the engine's broker.
+  assert.strictEqual(at.exitAs(pathed([[0, -25, 70, 10]]), target, 1).moveTicks, -21);
+  const gap = [[-30, -35, -28, -30]];
+  assert.strictEqual(at.exitAs(pathed(gap), target, 1).moveTicks, -31);
+  // Neither hit: out at the path's last close (the end of the day).
+  assert.strictEqual(at.exitAs(pathed([[0, -5, 10, 8], [8, 2, 12, 9]]), target, 1).moveTicks, 9);
+  assert.strictEqual(at.exitAs(pathed(up, { ownExit: null }), target, 1).moveTicks, -21, 'no target of its own: the fourth bar takes the stop');
+  // Kept as recorded: no path, no stop, no exit, an unknown mode, or mode trail without a trail.
+  for (const [x, e] of [[trade(7), target], [pathed(up, { stopTicks: 0 }), target], [pathed(up), null], [pathed(up), { mode: 'own' }], [pathed(up), { mode: 'trail' }]]) {
+    assert.strictEqual(at.exitAs(x, e, 1), x, JSON.stringify(e));
+  }
+});
+
+test('exitAs, target_then_trail: the stop holds to the trade\'s own target, then locks and trails past it; never closed at the target', () => {
+  // 1R = 20 ticks, its own target 60 ticks (3R): the lock at 3R - 0.5R = 50 ticks.
+  const ttt = (over = {}) => ({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...over });
+  // Reaches the target on bar 2 (70), runs to 100 (5R), comes back: the R trail (5R - 1R = 80) takes it out at 80 less a tick.
+  const run = [[0, -5, 30, 25], [52, 52, 70, 65], [82, 82, 100, 95], [95, 70, 96, 72]];
+  const out = at.exitAs(pathed(run), ttt(), 1);
+  assert.deepStrictEqual([out.moveTicks, out.exitedAs], [79, 'target_then_trail'], 'past its target, not closed at 60');
+  assert.strictEqual(at.exitAs(pathed(run), { mode: 'target' }, 1).moveTicks, 60, 'mode target: out at the target');
+  // The lock holds: reaching the target and coming straight back stops out at the lock (50 ticks) less a tick, never lower.
+  const back = [[0, -5, 30, 25], [52, 52, 62, 58], [58, 30, 59, 35]];
+  assert.strictEqual(at.exitAs(pathed(back), ttt(), 1).moveTicks, 49);
+  // Never reaching the target: the original stop, as mode target.
+  const miss = [[0, -5, 50, 45], [45, -30, 46, -25]];
+  assert.strictEqual(at.exitAs(pathed(miss), ttt(), 1).moveTicks, -21);
+  // The structure trail stands a tick behind the recorded swing (15m), never under the lock; none recorded: the R trail.
+  const swings = { '5m': run.map(() => null), '15m': [null, null, 78, 78], '1h': run.map(() => null) };
+  assert.strictEqual(at.exitAs(pathed(run, { swingPath: swings }), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 76, 'a tick behind the 78 swing: out at 77 less a tick (the R trail would be 80)');
+  assert.strictEqual(at.exitAs(pathed(run, { swingPath: { ...swings, '15m': [null, null, 30, 30] } }), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 72, 'a swing under the lock: the lock (50) holds, out at the close');
+  assert.strictEqual(at.exitAs(pathed(run), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 79, 'no swings: the R trail');
+  // Kept as recorded when the exit is malformed.
+  for (const bad of [ttt({ trail_by: 'atr' }), ttt({ lock_giveback_r: 0 }), ttt({ trail_by: 'structure', swing_tf: '4h' })]) { const x = pathed(run); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
+});
+
+test('exitAs: a re-exited trade\'s exit time is its exit bar\'s close (pathEnds), else null; the gate\'s cooldown reads it', () => {
+  const ends = ['14:05', '14:10', '14:15', '14:20'].map(x => Date.parse(`2022-03-01T${x}:00.000Z`));
+  const up = [[0, -5, 30, 25], [25, 20, 50, 45], [45, 30, 70, 35], [35, -30, 40, -25]];
+  const withTimes = pathed(up, { entryTime: '2022-03-01T14:00:00.000Z', exitTime: '2022-03-01T14:20:00.000Z', pathEnds: ends });
+  assert.strictEqual(at.exitAs(withTimes, { mode: 'target' }, 1).exitTime, '2022-03-01T14:15:00.000Z', 'out at the target on the third bar');
+  assert.strictEqual(at.exitAs(pathed(up, { exitTime: '2022-03-01T14:20:00.000Z' }), { mode: 'target' }, 1).exitTime, null, 'no bar times: the recorded exit is no longer the exit');
+  // Two losses re-exited at the stop on their first bar (14:05), the next entry 25 minutes later: cooling down (30).
+  const gate = { maxDailyLosses: 99, maxConsecutiveLosses: 2, lossCooldownMin: 30 };
+  const loser = (e, x) => pathed([[0, -25, 0, -25]], { entryTime: `2022-03-01T${e}:00.000Z`, exitTime: '2022-03-01T16:00:00.000Z', pathEnds: [Date.parse(`2022-03-01T${x}:00.000Z`)] });
+  const two = [loser('14:00', '14:05'), loser('14:10', '14:15')].map(t => at.exitAs(t, { mode: 'target' }, 1));
+  const next = trade(10, { entryTime: '2022-03-01T14:40:00.000Z' });
+  const why = [];
+  const o = at.runAttempt(days([...two, next]), ctx({ gate, account: { sessions: 1 }, onSkip: x => why.push(x.why) }));
+  assert.deepStrictEqual([o.taken, why], [2, ['loss-cooldown']], 'from the re-exit (14:15), not the recorded exit (16:00, which would be fail-open only if earlier)');
+  assert.strictEqual(at.runAttempt(days([...two, trade(10, { entryTime: '2022-03-01T14:46:00.000Z' })]), ctx({ gate, account: { sessions: 1 } })).taken, 3);
+});
+
+test('attempts: one streak for the loss streak stop and the gate\'s cooldown; checks in order, a skipped trade counted once', () => {
+  // loss_streak_stop 2 and the gate's cooldown at 2: the stop (entryBlock) refuses first and ends the session.
+  const gate = { maxDailyLosses: 99, maxConsecutiveLosses: 2, lossCooldownMin: 30 };
+  const timed = (move, entry, exit) => trade(move, { entryTime: `2022-03-01T${entry}:00.000Z`, exitTime: `2022-03-01T${exit}:00.000Z` });
+  const list = [timed(-10, '14:00', '14:05'), timed(-10, '14:06', '14:10'), timed(60, '15:00', '15:05'), timed(60, '15:10', '15:15')];
+  const why = [];
+  const seen = [];
+  const o = at.runAttempt(days(list), ctx({ gate, account: { loss_streak_stop: 2, sessions: 1 }, onSkip: x => why.push(x.why), onTrade: x => seen.push(x.counters.lossStreak) }));
+  assert.deepStrictEqual([o.taken, o.skipped, why], [2, 2, ['blocked', 'blocked']], 'the stop holds past the cooldown');
+  assert.deepStrictEqual(seen, [0, 1], 'the attempt line\'s streak is combine\'s (the session\'s)');
+  // Without the stop the cooldown alone pauses, then lets the 15:00 entry through.
+  assert.strictEqual(at.runAttempt(days(list), ctx({ gate, account: { sessions: 1 } })).taken, 4);
+  // The streak is the session's: a new day starts at 0 for both.
+  const d2 = at.runAttempt(days(list.slice(0, 2), [timed(60, '14:11', '14:15')].map(t => ({ ...t, day: '2022-03-02' }))), ctx({ gate, account: { loss_streak_stop: 2, sessions: 2 } }));
+  assert.strictEqual(d2.taken, 3);
 });
 
 test('attempts: an expectancy cut takes cut x E R off every trade, deeper exits becoming troughs; none when E <= 0', () => {

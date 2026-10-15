@@ -177,6 +177,34 @@ test('early-exit hold: the real fill\'s price, the bracket placed from it (a mid
   assert.deepStrictEqual([t.hold.reason, t.hold.moveTicks, t.hold.r, t.hold.stopTicks], ['hold (stop)', -9, -1.125, 8], 'stopped at 98 less a tick of slippage, from the 100.00 fill');
 });
 
+test('a model trade carries the paths a policy exit re-exits it on (attempts.js exitAs): a mid-bar fill\'s bar by the worse', () => {
+  const at = require('../../scripts/lib/prop/attempts');
+  const ms = iso => Date.parse(iso);
+  const bars = [
+    { ms: ms('2023-03-15T14:00:00.000Z'), o: 99.5, h: 104.5, l: 99.25, c: 100.25 },
+    { ms: ms('2023-03-15T14:03:00.000Z'), o: 100.25, h: 101, l: 99, c: 99.5 },
+    { ms: ms('2023-03-15T14:06:00.000Z'), o: 99.5, h: 99.5, l: 97.75, c: 98 },
+  ];
+  const d = { id: 'e', decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T13:57:00.000Z', plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
+    outcome: { source: 'fills', entryPrice: 100, exitPrice: 100.5, entryTime: '2023-03-15T14:01:00.000Z', exitTime: '2023-03-15T14:05:00.000Z', exitReason: 'closed', R: 0.25 } };
+  const t = modelStream({ decisions: [d], dayKeys: ['2023-03-15'], tfMs: M3, barsFor: () => bars }).trades[0];
+  // The fill's bar: opened at the fill, its whole low (the worse), its close only as favourable (its 104.5 high, before
+  // or after the fill, unknown, never reaches the target); later bars whole.
+  assert.deepStrictEqual(t.path, [[0, -3, 1, 1], [1, -4, 4, -2], [-2, -9, -2, -8]]);
+  assert.deepStrictEqual(t.pathEnds, [ms('2023-03-15T14:03:00.000Z'), ms('2023-03-15T14:06:00.000Z'), ms('2023-03-15T14:09:00.000Z')]);
+  assert.deepStrictEqual(Object.keys(t.swingPath).sort(), ['15m', '1h', '5m']);
+  assert.ok(Object.values(t.swingPath).every(x => x.length === t.path.length), 'one swing level per path bar');
+  assert.deepStrictEqual(t.ownExit, { targetTicks: 16, trailActivateR: null, trailGivebackR: null }, 'the bracket\'s target from the fill');
+  // Re-exited under mode target (and target_then_trail, which holds the stop until the target): the stop on the third bar.
+  const x = at.exitAs(t, { mode: 'target' }, 1);
+  assert.deepStrictEqual([x.moveTicks, x.exitTime, x.exitedAs], [-9, '2023-03-15T14:09:00.000Z', 'target']);
+  assert.strictEqual(at.exitAs(t, { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', swing_tf: '5m', trail_r: 1 }, 1).moveTicks, -9);
+  // Without the bars: no paths (kept as recorded by exitAs).
+  const bare = modelStream({ decisions: [d], dayKeys: ['2023-03-15'], tfMs: M3, barsFor: () => [] }).trades[0];
+  assert.deepStrictEqual([bare.path, bare.pathEnds, bare.swingPath], [null, null, null]);
+  assert.strictEqual(at.exitAs(bare, { mode: 'target' }, 1), bare);
+});
+
 test('bracketExit: on the fill bar only the worse is taken (the stop at its fill, never the open; no target); later bars as usual', () => {
   const { bracketExit } = require('../../scripts/lib/learning/experience-log');
   const t0 = Date.parse('2023-03-15T14:00:00.000Z');

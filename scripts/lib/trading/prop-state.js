@@ -89,8 +89,56 @@ function runningAttempts(home) {
   return names.filter(n => readAttempt(home, n));
 }
 
-/** The combine state from the attempt record and the balance now (live, or the last snapshot). */
-function stateFrom(account, record, balance) {
+/**
+ * The session's closed trades from the broker's fills (search_trades), in time order: [{ gross, at }]. A fill with a
+ * P&L closes; one without opens. The closing fills between two opening fills are one trade (a stop filled in parts
+ * is one loss, not several), its gross the sum of their P&L before fees, as the gate counts a loss. A fill without a
+ * time or a readable P&L throws (the caller keeps the last streak; the balance check refuses entries on it anyway).
+ */
+function tradesFromFills(fills) {
+  if (!Array.isArray(fills)) throw new Error('the fills are not a list');
+  const list = fills.filter(f => f && !f.voided).map(f => {
+    const ms = Date.parse(f.creationTimestamp);
+    if (!Number.isFinite(ms)) throw new Error(`a fill without a time (${JSON.stringify(f)})`);
+    const closing = f.profitAndLoss !== null && f.profitAndLoss !== undefined;
+    const pnl = closing ? Number(f.profitAndLoss) : 0;
+    if (!Number.isFinite(pnl)) throw new Error(`a fill with no readable P&L (${JSON.stringify(f)})`);
+    return { ms, closing, pnl };
+  }).sort((a, b) => a.ms - b.ms);
+  const trades = [];
+  let cur = null;
+  for (const f of list) {
+    if (!f.closing) { cur = null; continue; }
+    if (!cur) { cur = { gross: 0, at: null }; trades.push(cur); }
+    cur.gross = Math.round((cur.gross + f.pnl) * 100) / 100;
+    cur.at = new Date(f.ms).toISOString();
+  }
+  return trades;
+}
+
+/** The loss streak after these closed trades (combine.streakAfter: a loss extends it, a win ends it, a scratch neither). */
+const streakOf = trades => trades.reduce((n, t) => combine.streakAfter(n, t.gross), 0);
+
+/** The record's loss streak for its snapshot's session (0 when it has none for that day). */
+const recordStreak = record => (record && record.lossStreak && record.snapshot && record.lossStreak.day === record.snapshot.day
+  && Number.isInteger(record.lossStreak.count) ? record.lossStreak.count : 0);
+
+/**
+ * The session's loss streak as the runner last recorded it (from the broker's closing fills): { count, stop, day, at }
+ * (`stop`: the account's loss_streak_stop, 0 when off), or null with no attempt or no snapshot today. For the attempt
+ * line and the gate's facts; the gate itself refuses on the snapshot's block (combine.entryBlock).
+ */
+function sessionLossStreak(home, account, now = new Date()) {
+  const r = readAttempt(home, account.name);
+  if (!r || !r.snapshot || r.snapshot.day !== tradingDayKey(now)) return null;
+  return { count: recordStreak(r), stop: account.loss_streak_stop || 0, day: r.snapshot.day, at: (r.lossStreak && r.lossStreak.at) || null };
+}
+
+/**
+ * The combine state from the attempt record and the balance now (live, or the last snapshot). `streak`: the
+ * session's loss streak, by default the record's for its snapshot's day (recordStreak).
+ */
+function stateFrom(account, record, balance, streak = recordStreak(record)) {
   let cs = combine.start(account);
   for (const d of record.days) {
     cs = combine.endDay({ ...cs, balance: d.balance, dayPnl: d.pnl });
@@ -103,7 +151,7 @@ function stateFrom(account, record, balance) {
   const b = Number.isFinite(balance) ? balance : cs.balance;
   // The peak balance: every close and snapshot so far (closed trades only: the snapshot is the realized balance).
   const peak = Math.max(cs.start, record.peak || 0, ...record.days.map(d => d.balance), b);
-  cs = { ...cs, balance: b, peak, dayPnl: Math.round((b - lastEod) * 100) / 100 };
+  cs = { ...cs, balance: b, peak, dayPnl: Math.round((b - lastEod) * 100) / 100, lossStreak: streak };
   if (b <= cs.floor) cs = { ...cs, status: 'blown' };
   if (cs.dailyLimit > 0 && cs.dayPnl <= -cs.dailyLimit) cs.dayStopped = true;
   return cs;
@@ -139,6 +187,36 @@ function balanceCheck(anchor, balance, fills) {
 const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math.abs(c.diff) <= BALANCE_TOLERANCE);
 
 /**
+ * The day's trade counts for the attempt line (combine.attemptFacts): trades closed today and losing ones (the losing
+ * streak is the session's, sessionLossStreak: one source). From the fills this snapshot read (since the day's anchor,
+ * the first flat snapshot); else the day's last counts, only when nothing moved since them (`unchanged`); else, on the
+ * day's first snapshot (its anchor, flat), none yet. Null when unknown (a position open, the fills unread or
+ * unreadable): never stale counts shown as current. Facts only, never a block.
+ */
+function dayCounts(record, day, fills, fresh, open, unchanged = false) {
+  const prev = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === day ? record.snapshot.counts : null;
+  let today = null;
+  if (Array.isArray(fills)) {
+    // Lazily: the account gate reads this module's state, so it can't be loaded with it.
+    const { closingFills, fillLossState } = require('./account-gate');
+    today = { trades: closingFills(fills).length, losses: fillLossState(fills).losses };
+  } else if (prev && unchanged) today = prev;
+  else if (fresh && open === 0) today = { trades: 0, losses: 0 };
+  if (!today) return null;
+  return { day, trades: today.trades, losses: today.losses };
+}
+
+/**
+ * Today's trades and losses for combine.attemptFacts, from the attempt's latest snapshot when it is of today; nulls
+ * otherwise. The losing streak is not here: the attempt line reads sessionLossStreak, its one source.
+ */
+function attemptCounts(record, now = new Date()) {
+  const c = record && record.snapshot && record.snapshot.counts;
+  if (!c || c.day !== tradingDayKey(now)) return { tradesToday: null, lossesToday: null };
+  return { tradesToday: c.trades, lossesToday: c.losses };
+}
+
+/**
  * Save the latest balance and open-position count (the gate reads them),
  * returning the state. A snapshot on a new trading day whose previous
  * snapshot's day has no recorded close marks that close as missed: the
@@ -154,40 +232,15 @@ const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math
  * `unchanged` (the runner saw nothing move since a snapshot that
  * reconciled: same balance, still flat) carries that check forward without
  * asking the broker for its fills again.
+ *
+ * The session's loss streak (the rulebook's loss_streak_stop) is counted from
+ * the same fills, the closed trades since the day's anchor (tradesFromFills):
+ * a new trading day starts at 0, and a snapshot that read no fills (a position
+ * open, nothing moved, or fills that couldn't be read, which refuses entries
+ * anyway) keeps the last count. One position at a time keeps it current: an
+ * entry waits for the next snapshot, and a snapshot with a position open
+ * refuses entries until a flat one has read the closing fills.
  */
-/**
- * The day's trade counts for the attempt line (combine.attemptFacts): trades closed today, losing ones, and the
- * losing streak, which runs on from the last recorded close (its `lossStreak`) until a win. From the fills this
- * snapshot read (since the day's anchor, the first flat snapshot); else the day's last counts, only when nothing moved
- * since them (`unchanged`); else, on the day's first snapshot (its anchor, flat), none yet. Null when unknown (a
- * position open, the fills unread or unreadable, an older record without the last close's streak): never stale counts
- * shown as current. Facts only, never a block.
- */
-function dayCounts(record, day, fills, fresh, open, unchanged = false) {
-  const prior = [...record.days].filter(d => d.day < day).pop();
-  const priorStreak = prior ? (Number.isInteger(prior.lossStreak) ? prior.lossStreak : null) : 0;
-  const prev = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === day ? record.snapshot.counts : null;
-  let today = null;
-  if (Array.isArray(fills)) {
-    // Lazily: the account gate reads this module's state, so it can't be loaded with it.
-    const { closingFills, fillLossState } = require('./account-gate');
-    const closes = closingFills(fills);
-    const st = fillLossState(fills);
-    today = { trades: closes.length, losses: st.losses, streakToday: st.streak, won: closes.some(f => f.pnl > 0) };
-  } else if (prev && unchanged) today = prev;
-  else if (fresh && open === 0) today = { trades: 0, losses: 0, streakToday: 0, won: false };
-  if (!today) return null;
-  const streak = today.won ? today.streakToday : priorStreak === null ? null : priorStreak + today.streakToday;
-  return { day, trades: today.trades, losses: today.losses, streakToday: today.streakToday, won: today.won, streak };
-}
-
-/** The counts combine.attemptFacts takes, from the attempt's latest snapshot when it is of today; nulls otherwise. */
-function attemptCounts(record, now = new Date()) {
-  const c = record && record.snapshot && record.snapshot.counts;
-  if (!c || c.day !== tradingDayKey(now)) return { tradesToday: null, lossesToday: null, lossStreak: null };
-  return { tradesToday: c.trades, lossesToday: c.losses, lossStreak: c.streak };
-}
-
 function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [], fills, fillsError = null, unchanged = false } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
@@ -219,12 +272,23 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
       }
     }
   }
+  const kept = record.lossStreak && record.lossStreak.day === day ? record.lossStreak : { day, count: 0, at: null };
+  let lossStreak = kept;
+  if (!fresh && open === 0 && !fillsError && !unchanged && fills !== undefined) {
+    try {
+      const trades = tradesFromFills((fills || []).filter(f => !(Date.parse(f && f.creationTimestamp) < Date.parse(anchor.at))));
+      lossStreak = { day, count: streakOf(trades), at: trades.length ? trades[trades.length - 1].at : null };
+    } catch (_err) {
+      lossStreak = kept; // an unreadable fill: the balance check above refuses entries on it
+    }
+  }
+  const state = { ...cs, lossStreak: lossStreak.count };
   const counts = dayCounts(record, day, fillsError ? undefined : fills, fresh, open, unchanged && !fillsError);
   writeJson(combineFile(home, account.name), {
-    ...record, missedClose, missedCloses: missed, peak: cs.peak, anchor,
-    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs, counts },
+    ...record, missedClose, missedCloses: missed, peak: cs.peak, anchor, lossStreak,
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(state), block: combine.entryBlock(state), state, counts },
   });
-  return cs;
+  return state;
 }
 
 /** When trading day `day` (YYYY-MM-DD, the date it ends on) ended: the next day's 18:00 ET open, in ms. */
@@ -278,16 +342,10 @@ function recordEndOfDay(home, account, balance, dayKey) {
     return record;
   }
   if (record.startDay && dayKey < record.startDay) throw new Error(`${account.name}: ${dayKey} is before the attempt started (${record.startDay})`);
-  // The day's losing streak at its close (the attempt line's facts carry it into the next day): its last counts.
-  // Only when the closing balance is the snapshot's own: a close after it (the end-of-day flatten) may have lost.
-  const snap = record.snapshot;
-  const c = snap && snap.counts && snap.counts.day === dayKey && Math.abs(snap.balance - balance) <= 0.005 ? snap.counts : null;
-  const streakOf = d => (d.day === dayKey ? (c && Number.isInteger(c.streak) ? c.streak : undefined) : d.lossStreak);
-  const sorted = [...record.days.map(d => ({ day: d.day, balance: d.balance, lossStreak: d.lossStreak })), { day: dayKey, balance }].sort((a, b) => a.day.localeCompare(b.day));
+  const sorted = [...record.days.map(d => ({ day: d.day, balance: d.balance })), { day: dayKey, balance }].sort((a, b) => a.day.localeCompare(b.day));
   let prev = account.starting_balance;
   const days = sorted.map(d => {
-    const streak = streakOf(d);
-    const out = { day: d.day, balance: d.balance, pnl: Math.round((d.balance - prev) * 100) / 100, ...(Number.isInteger(streak) ? { lossStreak: streak } : {}) };
+    const out = { day: d.day, balance: d.balance, pnl: Math.round((d.balance - prev) * 100) / 100 };
     prev = d.balance;
     return out;
   });
@@ -590,6 +648,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

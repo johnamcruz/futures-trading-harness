@@ -24,6 +24,9 @@
  *   noStop            the worst move and the last close to the day's end (trade-stream.js noStopPath) on the run's own
  *                     bars, its worst never shallower than the adverse path's (the fill's own bar included), used only
  *                     when a stop fault is injected; null without the bars;
+ *   path, pathEnds, swingPath, ownExit   what a policy exit re-exits it on (attempts.js exitAs, mode target,
+ *                     target_then_trail or trail; exitPaths): the price path to the day's end from the fill's bar, its
+ *                     bars' close times, the structure trail's swing levels, the bracket's target; nulls without bars;
  *   day, seq          the session day it settled (experience-log.js settledDay) and its order within it, by its fill;
  *   r                 gross R: the price move from the fill to the exit over the stop distance, before fees (the
  *                     stream's `rBasis`); layer 2 settles net dollars (fees per contract), and its expectancy cuts are
@@ -61,7 +64,7 @@
 
 const { SLIPPAGE_TICKS } = require('../replay/counterfactual');
 const { specFor, familyRoot } = require('../trading/contracts');
-const { noStopPath, dayRegimes } = require('./trade-stream');
+const { noStopPath, dayRegimes, pricePath, pathEnds, swingPath } = require('./trade-stream');
 const { runDecisions } = require('../learning/run-experience');
 const { parseAt } = require('../autotrader');
 const { bracketExit } = require('../learning/experience-log');
@@ -115,6 +118,36 @@ function pathOf({ side, entryPrice, exitPrice, entryTime, exitTime, risk, tick, 
   };
 }
 
+/** The run's bars as a book for trade-stream.js's paths, one per bars list (its swing levels computed once). */
+const books = new WeakMap();
+function bookOf(bars, tick) {
+  if (!books.has(bars)) books.set(bars, new Map());
+  const m = books.get(bars);
+  // swingSeries reads each bar's time (`t`); the run's bars carry `ms`, a time file's may lack `t`.
+  if (!m.has(tick)) m.set(tick, { bars: bars.map(x => (x.t ? x : { ...x, t: new Date(x.ms).toISOString() })), tickSize: tick });
+  return m.get(tick);
+}
+
+/**
+ * The paths a policy exit re-exits the trade on (prop/attempts.js exitAs, as trade-stream.js records them): the price
+ * path from the fill's bar to the end of its day (pricePath), when each of those bars closes (pathEnds) and the
+ * structure trail's swing levels along it (swingPath), and its own exit: the bracket's target in ticks from the fill
+ * (the record's target distance; no trail of its own). A fill inside a bar starts the path at that bar, read by the
+ * worse-is-taken rule: its open is the fill, its adverse extreme the whole bar's, its favourable only its close (a high
+ * before the fill never reaches a target or a trail). Nulls without the bars.
+ */
+function exitPaths({ side, entryPrice, entryTime, tick, bars, tfMs, eod, targetDist }) {
+  const entryMs = Date.parse(entryTime);
+  const ownExit = { targetTicks: targetDist > 0 ? round6(targetDist / tick) : null, trailActivateR: null, trailGivebackR: null };
+  const i = Number.isFinite(entryMs) ? bars.findIndex(b => b.ms + tfMs > entryMs) : -1;
+  if (i < 0) return { path: null, pathEnds: null, swingPath: null, ownExit };
+  const book = bookOf(bars, tick);
+  const t = { direction: side, entry: entryPrice, entryTime: new Date(bars[i].ms).toISOString() };
+  const path = pricePath(book, t, { tfMs, eod });
+  if (path && bars[i].ms < entryMs) path[0] = [0, Math.min(0, path[0][1]), Math.max(0, path[0][3]), path[0][3]];
+  return { path, pathEnds: pathEnds(book, t, { tfMs, eod }), swingPath: swingPath(book, t, { tfMs, eod }), ownExit };
+}
+
 function factsOf(d) {
   const facts = Object.fromEntries(CONTEXT.map(k => [k, d.context ? d.context[k] ?? null : null]));
   return { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null };
@@ -163,11 +196,12 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
     }
   }
   const { stopped, entryMs, exitMs, ...path } = p;
+  const paths = exitPaths({ side: d.side, entryPrice: o.entryPrice, entryTime: o.entryTime, tick, bars, tfMs, eod, targetDist: dist });
   return {
     trade: {
       id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, contract: d.contract || null, strategy: 'trade_lifecycle', direction: d.side,
       bar: d.bar, entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason || 'closed',
-      tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37, ...path, r: o.R,
+      tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37, ...path, ...paths, r: o.R,
       facts: factsOf(d), actions, sizeFraction, hold, entryMs, exitMs,
     },
   };
@@ -184,12 +218,15 @@ function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
   const spec = specOf(familyRoot(d.root) || d.root);
   const risk = d.plan && Number.isFinite(d.plan.entry) && Number.isFinite(d.plan.stop) ? Math.abs(d.plan.entry - d.plan.stop) : NaN;
   if (!spec || !(spec.tickSize > 0) || !o.filled || !Number.isFinite(o.exitPrice) || !(risk > 0)) return null;
-  const p = pathOf({ side: d.side, entryPrice: o.entryPrice, exitPrice: o.exitPrice, entryTime: o.entryTime, exitTime: o.exitTime, risk, tick: spec.tickSize, bars: barsFor(d.root) || [], tfMs, eod });
+  const bars = barsFor(d.root) || [];
+  const p = pathOf({ side: d.side, entryPrice: o.entryPrice, exitPrice: o.exitPrice, entryTime: o.entryTime, exitTime: o.exitTime, risk, tick: spec.tickSize, bars, tfMs, eod });
   const { stopped, entryMs: _e, exitMs: _x, ...path } = p;
+  const dist = Number.isFinite(d.plan.target) ? Math.abs(d.plan.target - d.plan.entry) : null;
+  const paths = exitPaths({ side: d.side, entryPrice: o.entryPrice, entryTime: o.entryTime, tick: spec.tickSize, bars, tfMs, eod, targetDist: dist });
   return {
     id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, strategy: 'trade_lifecycle', direction: d.side, bar: d.bar,
     entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason, tickSize: spec.tickSize, tickValue: spec.tickValue,
-    feesPerSide: spec.feesPerSide ?? 0.37, ...path, r: o.R, facts: factsOf(d), actions: [lossBefore ? 'day-stop' : 'pass'], counterfactual: true,
+    feesPerSide: spec.feesPerSide ?? 0.37, ...path, ...paths, r: o.R, facts: factsOf(d), actions: [lossBefore ? 'day-stop' : 'pass'], counterfactual: true,
   };
 }
 
@@ -299,4 +336,4 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   };
 }
 
-module.exports = { modelStream, readModelStream, adversePath };
+module.exports = { modelStream, readModelStream, adversePath, exitPaths };

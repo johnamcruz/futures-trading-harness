@@ -55,11 +55,11 @@ the champion is replaced only with the owner's approval.
 
 | Group | Examples (today's source) | Learned how |
 | --- | --- | --- |
-| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused, never filled from `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
+| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused, never filled from `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); the loss streak stop (`loss_streak_stop`: losing trades in a row before the session takes no new entries); the pacing clock (`clock_k`, off until the search sets it); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. orb in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
 | Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
-| Exits | `prop_portfolio` `exit` (hold the stop, then trail) | The search, jointly with sizing (R10) |
+| Exits | `prop_portfolio` `exit`: its mode (`target`: each trade's own stop and target, a trail on top only when set; `target_then_trail`: the stop held to the trade's own target, then locked near it and trailed past it, behind swings or by R; `trail`: hold the stop, then trail in place of the target) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
 **Units.**
@@ -517,7 +517,13 @@ capped the large winners a low-win-rate strategy needs, and only a joint
 search over sizing, exit and stand-down reached 0% blows at a 41.7% pass rate
 (60 overlapping 30-day episodes on 2024, about 8 independent; another
 strategy and data). That is a reason to search exits widely, not evidence
-for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`) is one candidate.
+for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`: exit
+mode `target_then_trail`, the stop held to the trade's own target, then a
+swing trail past it) is one candidate; the mode, the lock and the trail are
+searched, the attempt simulator re-exiting
+each trade from its recorded path under either (`prop/attempts.js` `exitAs`).
+The loss streak stop (`loss_streak_stop`) and the pacing clock (`clock_k`) are
+searched with them.
 The trail's range is bounded by the target and the consistency rule: one
 winner of several thousand dollars against a $6,000 target makes that day
 more than half the profit, which forces more profit before a pass, so days
@@ -1123,8 +1129,9 @@ What changes in behaviour:
   fraction path for the multiplier, rather than deleting it and adding it
   back. The priority order still halves a trade when the LLM applies it.
 - **No early close once the trail is active.** The policy's hold-or-close decision in a
-  trade goes. The trailing exit (`exit` in `prop_portfolio`) manages every
-  trade, as it does without a bundle today.
+  trade goes. The policy's exit (`exit` in `prop_portfolio`'s rulebook entry:
+  the trade's own stop and target, or a trail) manages every trade, as it
+  does without a bundle today.
 - **The verdict no longer records which policy produced it.** The check
   that pins a verdict to a bundle (prop-state, order_plan) goes. Old
   verdicts expire on their own.

@@ -17,6 +17,10 @@
  *     reaching both stop and target is a loss): it fills at the stop, or at
  *     the bar's open when the bar gapped through it, less slippage; the
  *     target fills at its price, or at a better open, with no slippage;
+ *   - a plan that trails past its target (`plan.afterTarget`, exit mode
+ *     target_then_trail) never fills the target: at the close of the bar that
+ *     reached it, and every bar after, exit-trail.js moves the stop (the lock,
+ *     then the swing or R trail) toward the market only;
  *   - at the bar's close the trail (trail.js) moves the stop toward the
  *     market only (a bar already through the new stop closes at the bar's
  *     close), then the time stop (`plan.maxBars`, bars held) closes at the
@@ -31,7 +35,7 @@
  *   b.fillAtOpen(bar)               a pending entry fills at bar.o -> position | null (dropped)
  *   b.cancel()                      drop a pending entry (or forget the position)
  *   b.onBar(bar, { guard })         settle the open position against the bar -> exit | null
- *   b.manage(bar)                   at the bar's close: trail step, time stop -> exit | null
+ *   b.manage(bar, { swing })        at the bar's close: trail step (swing: the structure trail's level now), time stop -> exit | null
  *   b.exit(price, reason)           close at a price -> exit
  *   b.netAt(price), b.priceForNet(net)   open net P&L at a price, and its inverse
  * exit: { position, price, reason, gross, fees, net }
@@ -41,6 +45,7 @@
  */
 
 const { trailStep } = require('../trading/trail');
+const { afterTargetStep } = require('../trading/exit-trail');
 
 /** A price on the tick grid, free of float noise (2045.1 - 0.2 is 2044.9, not 2044.8999999999999). */
 const onTick = (x, tick) => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
@@ -130,15 +135,22 @@ function createSimBroker({ tickSize, slippageTicks = 1 }) {
       const forced = guard ? guard(worst, p) : null;
       if (forced) return b.exit(forced.price, forced.reason);
       if (stopHit) return b.exit(stopFill, p.stop === p.initialStop ? 'stop' : 'trail');
-      if (targetHit) return b.exit(long ? Math.max(bar.o, p.target) : Math.min(bar.o, p.target), 'target');
+      if (targetHit && !(p.plan && p.plan.afterTarget)) return b.exit(long ? Math.max(bar.o, p.target) : Math.min(bar.o, p.target), 'target');
       p.barsHeld += 1;
       return null;
     },
 
     /** At the bar's close: the trail moves the stop (toward the market only), then the time stop. */
-    manage(bar) {
+    manage(bar, { swing = null } = {}) {
       const q = b.position;
       if (!q || q.pending) return null;
+      if (q.plan.afterTarget) {
+        const at = afterTargetStep(q, bar, q.plan, tickSize, swing);
+        Object.assign(q, { stop: tick(at.stop), peakR: at.peakR, armed: at.armed });
+        if (at.close) return b.exit(at.close.price, 'trail');
+        if (q.plan.maxBars && q.barsHeld >= q.plan.maxBars) return b.exit(bar.c, 'max_bars');
+        return null;
+      }
       const step = trailStep(q, bar, q.plan, tickSize);
       q.stop = tick(step.stop);
       q.peakR = step.peakR;

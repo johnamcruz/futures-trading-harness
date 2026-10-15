@@ -81,7 +81,7 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.match(unread.entryBlock, /snapshot is missing/);
   await hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07');
   await hooks.endOfDay(new Date('2026-10-07T19:55:00Z'), '2026-10-07');
-  assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250, lossStreak: 0 }], "the day's close carries its losing streak (the attempt line's facts)");
+  assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250 }]);
   // A catch-up end of day after the 18:00 ET open records the day it closes, not today, at that day's balance:
   // what the fills since it ended (the catch-up's own close at -$150, fees $0.74) made is taken back out.
   client.fills = [{ creationTimestamp: '2026-10-08T22:05:00Z', profitAndLoss: -150, fees: 0.74 }, { creationTimestamp: '2026-10-08T19:00:00Z', profitAndLoss: 40, fees: 0.74 }];
@@ -448,10 +448,22 @@ test('a round trip between two flat snapshots at the same balance is read anyway
   assert.strictEqual(calls, before + 1);
 });
 
-test('the attempt line\'s losing streak: the counts prop-state records (attemptCounts)', async () => {
-  const { hooks } = setup();
-  const now = new Date('2026-10-07T14:30:00Z');
-  await hooks.snapshot(now);
-  assert.strictEqual(hooks.summaries(now)[0].facts.lossStreak, 0);
-  assert.strictEqual(typeof prop.sessionLossStreak, 'undefined', 'when prop-state gains sessionLossStreak, read it here (one source)');
+test('the attempt line\'s losing streak: prop-state.sessionLossStreak, the one source (the loss streak stop\'s count)', async () => {
+  const { hooks, home, account, client } = setup();
+  const at = x => new Date(`2026-10-07T${x}Z`);
+  await hooks.snapshot(at('14:30:00'));
+  assert.deepStrictEqual([hooks.summaries(at('14:30:30'))[0].facts.lossStreak, prop.sessionLossStreak(home, account, at('14:30:30')).count], [0, 0]);
+  // Two entries each stopped out: a streak of 2 in this session, the same number the gate's stop reads.
+  client.fills = [
+    { creationTimestamp: '2026-10-07T14:31:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T14:33:00Z', profitAndLoss: -20, fees: 0.37 },
+    { creationTimestamp: '2026-10-07T14:35:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T14:37:00Z', profitAndLoss: -30, fees: 0.37 },
+  ];
+  client.accountBalance = async () => 50198.52;
+  await hooks.snapshot(at('14:40:00'));
+  const [sum] = hooks.summaries(at('14:40:30'));
+  assert.deepStrictEqual([sum.facts.lossStreak, sum.facts.tradesToday, sum.facts.lossesToday], [2, 2, 2]);
+  assert.strictEqual(sum.facts.lossStreak, prop.sessionLossStreak(home, account, at('14:40:30')).count);
+  assert.strictEqual(prop.readAttempt(home, account.name).snapshot.state.lossStreak, 2, 'the snapshot\'s state (entryBlock) holds the same count');
+  // The next session starts at 0; before its first snapshot the streak is unknown, never yesterday's shown as today's.
+  assert.strictEqual(hooks.summaries(new Date('2026-10-08T14:30:00Z'))[0].facts.lossStreak, null);
 });

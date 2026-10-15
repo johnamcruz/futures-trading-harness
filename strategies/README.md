@@ -25,7 +25,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 
 | Strategy | Signal | Status |
 |---|---|---|
-| `prop_portfolio` | policy: the prop account layer (sizing, trail, verdicts); lists no strategies until `trade_lifecycle` is built | active |
+| `prop_portfolio` | policy: the prop account layer (sizing, exit, verdicts); lists no strategies until `trade_lifecycle` is built | active |
 
 No rules strategy ships: every one was retired (below). The one strategy to
 come is `trade_lifecycle` (docs/COMPOSED-ENTRY.md): the model composes the

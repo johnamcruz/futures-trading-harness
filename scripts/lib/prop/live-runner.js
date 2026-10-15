@@ -149,7 +149,9 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const cs = state.stateFrom(a, r, fresh ? balance : r.snapshot.balance);
         const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
           .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
-        const counts = state.attemptCounts(r, now);
+        // The losing streak: the session's, as prop-state records it for the loss streak stop (its one source).
+        const streak = state.sessionLossStreak(home, a, now);
+        const counts = { ...state.attemptCounts(r, now), lossStreak: streak ? streak.count : null };
         out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts: combine.attemptFacts(cs, counts) });
       }
       return out;

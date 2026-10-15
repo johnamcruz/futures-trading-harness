@@ -366,4 +366,4 @@ function biasSeries(bars, minutes, opts = {}) {
   return out;
 }
 
-module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };
+module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, closesCandle, stepOf, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };

@@ -52,6 +52,44 @@ test('the shipped strategies: prop_portfolio alone, valid; an old detector signa
   }
 });
 
+test('a policy\'s exit mode: the shipped policy keeps each trade\'s own stop and target; tradeExitPlan merges the policy\'s exit with its component\'s', () => {
+  const { exitPlan, tradeExitPlan } = require('../../scripts/lib/trading/strategies');
+  const portfolio = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  assert.ok(['target', 'target_then_trail'].includes(portfolio.exit.mode), 'never the tight R trail by default');
+  // The shipped exit sets no target of its own (the compose record's bracket is it) and no trail before the target.
+  const shipped = tradeExitPlan(portfolio);
+  assert.deepStrictEqual([shipped.targetR, shipped.target, shipped.trailActivateR, shipped.maxBars], [null, null, null, null]);
+  assert.strictEqual(exitPlan(portfolio).targetR, null, 'its own plan sets no min_rr target either');
+  if (portfolio.exit.mode === 'target_then_trail') assert.ok(shipped.afterTarget && shipped.afterTarget.lockGivebackR > 0 && shipped.afterTarget.trailR > 0);
+  // Mode target_then_trail: the component's own target, trailed past (afterTarget), its keys in that mode only.
+  const after = { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' };
+  assert.deepStrictEqual(tradeExitPlan({ risk: { stop: 'strategy', min_rr: 2 }, exit: after }, { risk: { min_rr: 2 }, exit: { target_r: 3 } }),
+    { ...exitPlan({ risk: { min_rr: 2 }, exit: { target_r: 3 } }), afterTarget: { lockGivebackR: 0.5, trailBy: 'structure', trailR: 1, swingMinutes: 15 } });
+  const component = { risk: { min_rr: 2 }, exit: { target_r: 3, max_bars: 5 } };
+  const policy = exit => ({ risk: { stop: 'strategy', min_rr: 2 }, exit });
+  // Mode target: the component's own plan; with a trail on top when the policy has one.
+  assert.deepStrictEqual(tradeExitPlan(policy({ mode: 'target' }), component), exitPlan(component));
+  assert.deepStrictEqual(tradeExitPlan(policy({ mode: 'target', trail_activate_r: 1, trail_giveback_r: 0.5 }), component), { ...exitPlan(component), trailActivateR: 1, trailGivebackR: 0.5 });
+  // Mode trail, and a policy without a mode (as before): the trail replaces the component's exit.
+  for (const exit of [{ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 }, { trail_activate_r: 2, trail_giveback_r: 0.5 }]) {
+    assert.deepStrictEqual(tradeExitPlan(policy(exit), component), { targetR: null, target: null, trailActivateR: 2, trailGivebackR: 0.5, maxBars: null });
+  }
+  // No policy: the strategy's own.
+  assert.deepStrictEqual(tradeExitPlan(null, component), exitPlan(component));
+  // The vocabulary: a mode is a policy's only, target or trail; mode trail needs the trail.
+  const head = ['name: x', `description: ${'x'.repeat(40)}`, 'status: paper', 'instruments: [MNQ]', 'timeframe: 3m'];
+  const rules = validateStrategy({ ...parseFrontmatter(`---\n${head.join('\n')}\nsignal: rules\n---\n`).data, rules: { long: ['close > open'] }, risk: { stop: 'atr:1', min_rr: 2 }, exit: { mode: 'target', target_r: 2 } }, BODY, 'x');
+  assert.ok(rules.some(e => /exit.mode: only a policy strategy has one/.test(e)), rules.join('; '));
+  const pol = exit => validateStrategy({ ...parseFrontmatter(`---\n${head.join('\n')}\nsignal: policy\n---\n`).data, strategies: [], account: portfolio.account, risk: { stop: 'strategy', min_rr: 2 }, exit }, BODY, 'x');
+  assert.deepStrictEqual(pol({ mode: 'target' }), []);
+  assert.deepStrictEqual(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 }), []);
+  assert.ok(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1 }).some(e => /exit.swing_tf: one of 5m, 15m, 1h/.test(e)));
+  assert.ok(pol({ mode: 'target', lock_giveback_r: 0.5 }).some(e => /exit.lock_giveback_r: only for exit mode target_then_trail/.test(e)));
+  assert.ok(pol({ mode: 'trail' }).some(e => /mode trail needs trail_activate_r and trail_giveback_r/.test(e)));
+  assert.ok(pol({ mode: 'own' }).some(e => /exit.mode: target, target_then_trail, trail/.test(e)));
+  assert.ok(pol({}).some(e => /exit: mode target or target_then_trail .*or trail_activate_r and trail_giveback_r/.test(e)));
+});
+
 test('prop_portfolio ships active with trade_lifecycle, its one component, and is valid; a policy listing none has no setups', () => {
   const portfolio = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
   assert.strictEqual(portfolio.valid, true, portfolio.errors.join('; '));
