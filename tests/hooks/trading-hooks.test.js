@@ -550,6 +550,26 @@ test('order gate fails closed on oversized input', () => {
   assert.strictEqual(r.code, 2);
 });
 
+test('order gate fails closed when its config file is refused (config/runner.json missing or malformed: no default)', () => {
+  const { env } = setup([]);
+  // A plugin root of its own with a copy of scripts/ and config/ (the shipped root links scripts/, whose config is the repo's).
+  const root = tmpDir();
+  fs.cpSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'config'), path.join(root, 'config'), { recursive: true });
+  for (const d of ['strategies', 'accounts']) fs.symlinkSync(path.join(d === 'strategies' ? ROOT : REPO, d), path.join(root, d));
+  const run = (payload) => spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], {
+    input: JSON.stringify(payload), encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_PLUGIN_ROOT: root, ...env },
+  });
+  const runner = JSON.parse(fs.readFileSync(path.join(REPO, 'config', 'runner.json'), 'utf8'));
+  for (const broken of ['{ "version": ', JSON.stringify({ ...runner, gate: { ...runner.gate, maxConsecutiveLosses: 'two' } }), null]) {
+    if (broken === null) fs.rmSync(path.join(root, 'config', 'runner.json'));
+    else fs.writeFileSync(path.join(root, 'config', 'runner.json'), broken);
+    const r = run(orderPayload());
+    assert.strictEqual(r.status, 2, `blocked: ${r.stderr.slice(0, 200)}`);
+    assert.match(r.stderr, /the runner config \(.*runner\.json\) is refused/);
+  }
+});
+
 test('order gate honours an explicit disable, but not in autonomous runs, and never dry-runs', () => {
   const { env } = setup([]);
   assert.strictEqual(gate(orderPayload(), { ...env, FTH_DISABLED_HOOKS: 'pre:trading:order-gate' }).code, 0);
