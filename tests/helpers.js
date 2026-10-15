@@ -68,7 +68,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
  */
 const FLOW_POLICY = Object.freeze({
   sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3 }),
-  exit: Object.freeze({ trail_activate_r: 2, trail_giveback_r: 0.5 }),
+  exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' }),
 });
 
 /**
@@ -206,10 +206,10 @@ function shippedPolicy(from = 'prop_portfolio') {
  * Lists policies in the rulebook of the account folder `accountDir` (accounts/<name>): each with the shipped `from`
  * policy's sizing and exit, and `multipliers` (YAML list lines; none by default). One place, as the loaders require:
  * every account has a RULEBOOK.md beside its ACCOUNT.md, and every policy on it is listed there. Without a rulebook
- * yet one is written: the ACCOUNT.md's daily_loss_soft moves into it (else `soft`, else 0), with the shipped
- * classification. Returns the rulebook's path.
+ * yet one is written: the ACCOUNT.md's daily_loss_soft moves into it (else `soft`, else 0), its loss_streak_stop is `streak`
+ * (off by default), with the shipped classification; each policy's exit is `exit` when given, else the shipped one's. Returns the rulebook's path.
  */
-function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = null, multipliers = null } = {}) {
+function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = null, streak = 'off', multipliers = null, exit = null } = {}) {
   const RB = require('../scripts/lib/trading/rulebook');
   const file = path.join(accountDir, RB.FILE);
   if (!fs.existsSync(file)) {
@@ -219,7 +219,7 @@ function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = 
     if (m) fs.writeFileSync(profileFile, profile.replace(m[0], ''));
     const kinds = k => Object.keys(RB.ITEMS).filter(i => (k === 'enforced') === Boolean(RB.ITEMS[i].enforcedBy)).join(', ');
     fs.writeFileSync(file, ['---', `name: ${path.basename(accountDir)}`, 'description: a test rulebook for a fixture account', 'learned: none',
-      `daily_loss_soft: ${soft ?? (m ? m[1] : 0)}`, `enforced: [${kinds('enforced')}]`, `taught: [${kinds('taught')}]`, '---',
+      `daily_loss_soft: ${soft ?? (m ? m[1] : 0)}`, `loss_streak_stop: ${streak}`, `enforced: [${kinds('enforced')}]`, `taught: [${kinds('taught')}]`, '---',
       '', '## When to Use', '', '## How It Works', '', '## Examples', ''].join('\n'));
   }
   if (!names.length) return file;
@@ -227,13 +227,22 @@ function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = 
   const s = from === 'prop_flow_1m' ? FLOW_POLICY
     : RB.loadRulebookFile(path.join(__dirname, '..', 'accounts', shippedPolicy(from).account, RB.FILE)).policies[from];
   const map = (indent, o) => Object.entries(o).map(([k, v]) => `${indent}${k}: ${v}`);
-  const block = names.flatMap(n => [`  ${n}:`, '    sizing:', ...map('      ', s.sizing), '    exit:', ...map('      ', s.exit),
+  const block = names.flatMap(n => [`  ${n}:`, '    sizing:', ...map('      ', s.sizing), '    exit:', ...map('      ', exit || s.exit),
     ...(multipliers ? ['    multipliers:', ...multipliers] : ['    multipliers: []'])]).join('\n');
   const text = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, /^policies:/m.test(text) ? text.replace(/^policies:[^\n]*\n/m, h => `${h}${block}\n`)
     : text.replace(/^enforced:/m, `policies:\n${block}\nenforced:`));
   return file;
 }
+
+/** A rulebook's text with its first policy's exit block set to `exit` (every key, as written: `off` for no value). */
+function withExitBlock(text, exit) {
+  if (!/^ {4}exit:\n(?: {6}.*\n)+/m.test(text)) throw new Error('no policy exit block');
+  return text.replace(/^ {4}exit:\n(?: {6}.*\n)+/m, `    exit:\n${Object.entries(exit).map(([k, v]) => `      ${k}: ${v}\n`).join('')}`);
+}
+
+/** Every exit key at `off` but the ones given: an exit block for withExitBlock. */
+const exitBlock = (over = {}) => ({ mode: 'target', trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ...over });
 
 /**
  * A plugin root for tests: the shipped strategies (linked) and a copy of the shipped accounts with their rulebooks,
@@ -247,4 +256,4 @@ function rootWithPolicies(policies = {}, opts = {}) {
   return root;
 }
 
-module.exports = { shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+module.exports = { withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

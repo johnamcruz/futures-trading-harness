@@ -40,7 +40,7 @@ const { readBarsArg } = require('../backtest/data');
 const { loadStrategies, scan, rootRefusal, retiredNote, componentsNote } = require('../trading/strategies');
 const { selectedSymbols } = require('../trading/contracts');
 const { loadAccounts } = require('../trading/accounts');
-const { exitPlan, timeframeMs } = require('../trading/evaluator');
+const { exitPlan, tradeExitPlan, timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { loadConfig } = require('../trading/config');
 const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
@@ -90,7 +90,7 @@ function rulesPlan(c, s, { results, root, want, home, specOf }) {
   };
 }
 
-function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, selected }) {
+function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, selected, strategies = [] }) {
   const v = prop.latestVerdict(home, s.name, root);
   if (!v) throw new Error(`${s.name} has no verdict for ${root}: ${componentsNote(s)}; no order`);
   if (!(Date.parse(v.expiresAt) > now.getTime())) throw new Error(`${s.name}'s latest verdict (${v.bar}) expired at ${v.expiresAt}; no order`);
@@ -115,7 +115,8 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, sel
   return {
     account,
     name: s.name, side: v.direction, contract: v.contract, spec: specOf(v.contract), entryRef: r.entryRef, stop: v.stopTicks, stopDistance: null,
-    exit: exitPlan(s), targetDistance: null, size,
+    // Mode target: the component's own exit (its target distance with it); mode trail: the policy's trail.
+    exit: tradeExitPlan(s, strategies.find(x => x.name === v.component) || null), targetDistance: exitPlan(s).own ? r.targetDistance ?? null : null, size,
     sizeWhy: `the verdict's ${v.action} size ${v.maxSize}${size < v.maxSize ? `, cut to the size budget now (${b.size})` : ''}, for ${v.component}'s setup; the stop is the verdict's ${v.stopTicks} ticks`,
     notes: s.status === 'active' ? [] : [`status ${s.status}: plan only, the gate refuses a live entry`],
   };
@@ -167,7 +168,7 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now, selected });
-  const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env), selected };
+  const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env), selected, strategies };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });
   if (s.signal === 'policy') {

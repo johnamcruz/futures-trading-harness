@@ -28,6 +28,10 @@ test('entry records: written once per order, with the time the order was sent an
   recordEntryOrder(env, 41, ENTRY, NOW.getTime());
   const list = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'entry-orders.json'), 'utf8'));
   assert.deepStrictEqual(list.map(e => [e.orderId, e.setup, e.stopPrice, e.at]), [[41, 'orb', 21490, '2026-10-07T14:20:00.000Z']]);
+  // Its own target (the takeProfitBracket), for a trail past it (exit mode target_then_trail); none without one.
+  recordEntryOrder(env, 42, { ...ENTRY, takeProfitBracket: { ticks: 231, type: 'limit' } }, sentAt);
+  const again = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'entry-orders.json'), 'utf8'));
+  assert.deepStrictEqual(again.map(e => e.targetTicks), [undefined, 231]);
 });
 
 test('beforeSend: tags and records the order; with no account an entry is refused and an exit goes untracked', () => {

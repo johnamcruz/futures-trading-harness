@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const c = require('../../scripts/lib/trading/combine');
 const { loadAccounts, accountNamed, validateAccount } = require('../../scripts/lib/trading/accounts');
-const { tmpDir } = require('../helpers');
+const { tmpDir, shippedPolicy } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const acct = (extra = {}) => ({
@@ -114,6 +114,32 @@ test('daily limits: the soft one stops entries, the firm one stops the day; both
   s = c.endDay(s);
   assert.strictEqual(c.entryBlock(s), null);
   assert.strictEqual(c.dailyBreached(c.applyClose(s, -500), -1500), true);
+});
+
+test('loss streak stop: that many losses in a row stop entries for the session; a win ends the streak, a scratch neither; off stops nothing', () => {
+  assert.deepStrictEqual([c.streakAfter(0, -1), c.streakAfter(2, -0.01), c.streakAfter(2, 5), c.streakAfter(2, 0), c.streakAfter(undefined, 0)], [1, 3, 0, 2, 0]);
+  const two = acct({ loss_streak_stop: 2, daily_loss_soft: 0 });
+  let s = c.start(two);
+  assert.deepStrictEqual([s.lossStreakStop, s.lossStreak], [2, 0]);
+  // The streak counts the P&L before fees (as the gate counts the broker's): a scratch that lost its fees is no loss.
+  s = c.applyClose(s, -50, -49.26);
+  assert.strictEqual(c.entryBlock(s), null);
+  s = c.applyClose(s, -0.74, 0);
+  assert.strictEqual(s.lossStreak, 1, 'a scratch neither ends nor extends it');
+  s = c.applyClose(s, -50.74, -50);
+  assert.match(c.entryBlock(s), /^2 losing trades in a row this session, at the loss streak stop \(loss_streak_stop 2\): no new entries until the next session$/);
+  assert.strictEqual(c.budget(s, { cushion_frac: 0.2 }), 0, 'no budget while blocked');
+  assert.strictEqual(c.applyClose(c.applyClose(c.start(two), -10), 10).lossStreak, 0, 'a win ends it');
+  // Without gross, the net decides (the engine and the simulator pass the gross).
+  assert.strictEqual(c.applyClose(c.start(two), -0.74).lossStreak, 1);
+  // A new session starts at 0.
+  s = c.endDay(s);
+  assert.deepStrictEqual([s.lossStreak, c.entryBlock(s)], [0, null]);
+  // Off (0, the rulebook's `off`, or no value at all): no stop, however long the streak.
+  for (const off of [{ loss_streak_stop: 0 }, {}]) {
+    const x = [-1, -1, -1, -1].reduce(t => c.applyClose(t, -10), c.start(acct({ daily_loss_soft: 0, ...off })));
+    assert.deepStrictEqual([x.lossStreak, c.entryBlock(x)], [4, null], JSON.stringify(off));
+  }
 });
 
 test('size budget: a share of the cushion, capped, clock-limited, never past the daily limit', () => {
@@ -321,6 +347,71 @@ test('snapshot: unchanged carries a check that passed on the same balance, anyth
   // An attempt that is over is the first thing the agent hears (stand aside), whatever the balance check says.
   prop.snapshot(home, acct, 96000, at('13:45:02'), { fills: [] });
   assert.match(prop.combineBlock(home, acct.name, at('13:45:30')), /^the attempt is over.*stand aside/);
+});
+
+test('tradesFromFills: closing fills between opening fills are one trade (its gross P&L before fees); voided fills drop; an unreadable fill throws', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const f = (min, pnl, extra = {}) => ({ creationTimestamp: `2026-06-01T14:${String(min).padStart(2, '0')}:00Z`, profitAndLoss: pnl, fees: 0.37, ...extra });
+  assert.deepStrictEqual(prop.tradesFromFills([]), []);
+  const trades = prop.tradesFromFills([f(9, -5), f(1, null), f(2, -10), f(3, -10), f(4, null), f(5, 0), f(6, null), f(7, 12, { voided: true }), f(8, null)]);
+  assert.deepStrictEqual(trades, [
+    { gross: -20, at: '2026-06-01T14:03:00.000Z' }, // a stop filled in two parts: one losing trade
+    { gross: 0, at: '2026-06-01T14:05:00.000Z' }, // a scratch
+    { gross: -5, at: '2026-06-01T14:09:00.000Z' }, // in time order, whatever the list's order
+  ]);
+  assert.throws(() => prop.tradesFromFills([f(1, 'x')]), /no readable P&L/);
+  assert.throws(() => prop.tradesFromFills([{ profitAndLoss: -1 }]), /without a time/);
+  assert.throws(() => prop.tradesFromFills(null), /not a list/);
+});
+
+test('snapshot: the session\'s loss streak from the broker\'s closing fills since the anchor; kept when no fills are read; a new day starts at 0', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const home = tmpDir();
+  const acct = accountNamed(ROOT, shippedPolicy().account, {});
+  const stop = acct.loss_streak_stop;
+  assert.ok(stop >= 2, 'the shipped rulebook stops after at least two');
+  prop.startAttempt(home, acct, new Date('2026-06-01T12:00:00Z'));
+  const at = t => new Date(`2026-06-01T${t}Z`);
+  const trip = (min, gross) => [
+    { creationTimestamp: `2026-06-01T14:${String(min).padStart(2, '0')}:00Z`, profitAndLoss: null, fees: 0.37 },
+    { creationTimestamp: `2026-06-01T14:${String(min + 1).padStart(2, '0')}:00Z`, profitAndLoss: gross, fees: 0.37 },
+  ];
+  const losses = k => Array.from({ length: k }, (_, i) => trip(2 * i + 1, -20)).flat();
+  const balance = fills => Math.round((100000 + fills.reduce((a, x) => a + (x.profitAndLoss || 0) - x.fees, 0)) * 100) / 100;
+  prop.snapshot(home, acct, 100000, at('13:30:02'), { fills: losses(stop) }); // the anchor: its fills are not read
+  assert.deepStrictEqual(prop.sessionLossStreak(home, acct, at('13:31:00')), { count: 0, stop, day: '2026-06-01', at: null });
+  let fills = losses(stop - 1);
+  prop.snapshot(home, acct, balance(fills), at('14:30:02'), { fills });
+  assert.strictEqual(prop.combineBlock(home, acct.name, at('14:30:30')), null);
+  assert.strictEqual(prop.sessionLossStreak(home, acct, at('14:30:30')).count, stop - 1);
+  fills = losses(stop);
+  prop.snapshot(home, acct, balance(fills), at('14:40:02'), { fills });
+  assert.match(prop.combineBlock(home, acct.name, at('14:40:30')), new RegExp(`^${stop} losing trades in a row this session, at the loss streak stop`));
+  assert.deepStrictEqual(prop.sessionLossStreak(home, acct, at('14:40:30')), { count: stop, stop, day: '2026-06-01', at: `2026-06-01T14:${String(2 * stop).padStart(2, '0')}:00.000Z` });
+  // The verdict sizes from the same state: the streak skips the setup.
+  const r = prop.readAttempt(home, acct.name);
+  assert.match(String(require('../../scripts/lib/trading/combine').entryBlock(prop.stateFrom(acct, r, r.snapshot.balance))), /loss streak stop/);
+  // No fills read (unchanged, a position open, fills that failed): the count stays; a failure refuses entries anyway.
+  prop.snapshot(home, acct, balance(fills), at('14:43:02'), { unchanged: true });
+  assert.strictEqual(prop.sessionLossStreak(home, acct, at('14:43:30')).count, stop);
+  prop.snapshot(home, acct, balance(fills), at('14:46:02'), { open: 1, openIds: ['MNQ'] });
+  assert.strictEqual(prop.sessionLossStreak(home, acct, at('14:46:30')).count, stop);
+  prop.snapshot(home, acct, balance(fills), at('14:49:02'), { fillsError: 'search_trades timed out' });
+  assert.strictEqual(prop.sessionLossStreak(home, acct, at('14:49:30')).count, stop);
+  assert.match(prop.combineBlock(home, acct.name, at('14:49:30')), /couldn't be checked/);
+  prop.snapshot(home, acct, balance(fills), at('14:52:02'), { fills: [...fills, { creationTimestamp: '2026-06-01T14:51:00Z', profitAndLoss: 'x' }] });
+  assert.strictEqual(prop.sessionLossStreak(home, acct, at('14:52:30')).count, stop, 'an unreadable fill keeps the last count');
+  // A win ends it.
+  fills = [...losses(stop), ...trip(30, 50)];
+  prop.snapshot(home, acct, balance(fills), at('14:55:02'), { fills });
+  assert.strictEqual(prop.combineBlock(home, acct.name, at('14:55:30')), null);
+  // A new trading day starts at 0; none for a day without a snapshot.
+  prop.snapshot(home, acct, balance(losses(stop)), at('14:58:02'), { fills: losses(stop) });
+  prop.recordEndOfDay(home, acct, balance(losses(stop)), '2026-06-01');
+  assert.strictEqual(prop.sessionLossStreak(home, acct, new Date('2026-06-02T13:30:00Z')), null);
+  prop.snapshot(home, acct, balance(losses(stop)), new Date('2026-06-02T13:30:02Z'));
+  assert.strictEqual(prop.sessionLossStreak(home, acct, new Date('2026-06-02T13:31:00Z')).count, 0);
+  assert.strictEqual(prop.combineBlock(home, acct.name, new Date('2026-06-02T13:31:00Z')), null);
 });
 
 test('orderSince: any order of ours that went through at or after the time (exits and stops too); an unreadable time counts', () => {

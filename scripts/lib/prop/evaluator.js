@@ -100,7 +100,8 @@ const finish = a => ({
 
 /**
  * Score a trade stream (layer 2 and the statistics). opts: { pass (from checkWindow, for this stream's window),
- * account, rulebook: { sizing, multiplier }, size, contracts (micro | mini | auto), maxDailyLoss, seed, paths,
+ * account, rulebook: { sizing, multiplier, exit (the policy's exit mode, as the strategy loader reads it: every
+ * trade is re-exited under it from its recorded path first, attempts.js exitAs; none: as the stream recorded it) }, size, contracts (micro | mini | auto), maxDailyLoss, seed, paths,
  * meanBlock, reps, level, every, cuts, faults: { stopFault, outage, measured } }. Returns the result (module
  * header); gateFailures(result) is the promotion gate's verdict on it.
  */
@@ -119,7 +120,9 @@ function scoreStream(stream, opts) {
   if (!(meanBlock >= 5 && meanBlock <= 10)) throw new Error(`meanBlock: 5 to 10 days (R9), not ${String(meanBlock)}`);
   const rates = { stopFault: Number(faults.stopFault) || 0, outage: Number(faults.outage) || 0 };
   for (const [k, v] of Object.entries(rates)) if (!(v >= 0 && v <= 1)) throw new Error(`faults.${k}: a rate from 0 to 1, not ${v}`);
-  const days = stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
+  const slip = Number.isFinite(stream.slippageTicks) ? stream.slippageTicks : 1;
+  const days = stream.days.filter(d => d.day >= pass.from && d.day < pass.to)
+    .map(d => (rulebook.exit ? { ...d, trades: d.trades.map(t => at.exitAs(t, rulebook.exit, slip)) } : d));
   if (days.length !== stream.days.length) throw new Error(`the stream has days outside the window ${pass.from}..${pass.to}`);
   const bad = days.find(d => d.trades.some(t => t.day !== d.day));
   if (bad) throw new Error(`the stream's day ${bad.day} holds a trade of another day`);
