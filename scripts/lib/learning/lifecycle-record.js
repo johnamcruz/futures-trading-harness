@@ -24,6 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseRead } = require('../trading/composed-reads');
 
 const STEPS = Object.freeze(['bias', 'location', 'setup', 'entry', 'stop', 'target']);
 const CONTEXT_KEYS = Object.freeze(['regime', 'volatility', 'window', 'biasSide', 'alignment', 'dayType']);
@@ -45,9 +46,20 @@ function readForm(read) {
   return String(read || '').toLowerCase().replace(/\s+\d+(?:\.\d+)?\b/g, '').replace(/\s+/g, ' ').trim();
 }
 
-const stepIndex = s => (STEPS.includes(s) ? STEPS.indexOf(s) : STEPS.length);
+/**
+ * A read's normalized form, prices dropped: the record's own `form` (the checker's), else the checker's parse of
+ * the read (composed-reads.js parseRead: `15-min ...` and `60 min up` are `15m ...` and `1h up`), else the read.
+ */
+function formOf(r) {
+  if (typeof r.form === 'string' && r.form.trim()) return readForm(r.form);
+  let parsed = null;
+  try { parsed = parseRead(String(r.read || '')); } catch (_err) { /* not a form */ }
+  return readForm(parsed && parsed.form ? parsed.form : r.read);
+}
+
+const stepIndex = s =>(STEPS.includes(s) ? STEPS.indexOf(s) : STEPS.length);
 const ordered = reads => reads.slice().sort((a, b) => stepIndex(a.step) - stepIndex(b.step) || String(a.step).localeCompare(String(b.step))
-  || a.skill.localeCompare(b.skill) || readForm(a.read).localeCompare(readForm(b.read)));
+  || a.skill.localeCompare(b.skill) || formOf(a).localeCompare(formOf(b)));
 
 /** Step -> skills (sorted within a step), steps in the fixed order: `bias:bos-vs-choch,daily-bias+location:...`. */
 function skillSignature(reads) {
@@ -61,7 +73,7 @@ function skillSignature(reads) {
 
 /** Step -> read form, prices dropped: `bias:1h-bos-up+entry:3m-close-top+...`. */
 function readSignature(reads) {
-  return ordered(reads).map(r => `${r.step}:${readForm(r.read).replace(/ /g, '-')}`).join('+');
+  return ordered(reads).map(r => `${r.step}:${formOf(r).replace(/ /g, '-')}`).join('+');
 }
 
 /** The trend rule for the order's side as with or against (the briefing's words kept when neither). */
@@ -90,7 +102,7 @@ function contextOf(raw) {
 function readsOf(raw) {
   const list = Array.isArray(raw.reads) ? raw.reads : [];
   return list.filter(isObj).map(r => ({
-    step: str(r.step) || 'unknown', skill: str(r.skill) || 'unknown', read: str(r.read) || '',
+    step: str(r.step) || 'unknown', skill: str(r.skill) || 'unknown', read: str(r.read) || '', form: formOf(r),
     why: str(r.why), check: typeof r.check === 'boolean' ? String(r.check) : str(r.check) || (r.ok === true ? 'true' : r.ok === false ? 'false' : null),
     agrees: typeof r.agrees === 'boolean' ? r.agrees : null,
   }));
@@ -147,4 +159,4 @@ function readRecords(home, { runId = null } = {}) {
   return out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }
 
-module.exports = { STEPS, CONTEXT_KEYS, fromLifecycleRecord, recordsDir, readRecords, skillSignature, readSignature, readForm };
+module.exports = { STEPS, CONTEXT_KEYS, fromLifecycleRecord, recordsDir, readRecords, skillSignature, readSignature, readForm, formOf };

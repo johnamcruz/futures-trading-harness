@@ -206,6 +206,18 @@ test('a row is dated by the day its outcome came: a trade carried into the next 
   assert.strictEqual(X.knownDay(ds[0]), '2022-03-02');
   const doc = X.buildIndex(ds, { reps: 50 });
   assert.ok(doc.cells[ALL].some(r => r[0] === '2022-03-02' && r[1] === 9));
+  // Its example too: dated by the exit, so on 03-02 it is not yet shown.
+  const few = decisions(3, 3, () => 1);
+  few[0] = { ...few[0], outcome: { R: 9, exitTime: '2022-03-02T15:00:00.000Z' } };
+  const small = X.buildIndex(few, { reps: 50 });
+  assert.ok(small.examples[SKILL].some(e => e.day === '2022-03-02' && e.R === 9));
+  assert.ok(!X.examplesBefore(small, SKILL, '2022-03-02').some(e => e.R === 9));
+  assert.ok(X.examplesBefore(small, SKILL, '2022-03-03').some(e => e.R === 9));
+  // A run's arm from the index it pins.
+  const file = X.writeIndex(path.join(tmpHome(), 'i'), doc);
+  assert.strictEqual(X.armOf(file), `with:${doc.hash.slice(0, 16)}`);
+  assert.match(X.armOf(X.writeIndex(path.join(tmpHome(), 'j'), X.buildIndex(ds, { reps: 50, shuffle: 3 }))), /^shuffled:[0-9a-f]{16}$/);
+  assert.strictEqual(X.armOf(null), 'without');
   assert.strictEqual(X.cellAt(doc, ALL, '2022-03-02').n, 2, 'on 03-02 only the two 03-01 decisions known then, not the carried one');
   // An outcome that came in practice-validate is leakage.
   const late = decisions(25, 12, () => 1, { from: '2024-06-03T00:00:00Z' });

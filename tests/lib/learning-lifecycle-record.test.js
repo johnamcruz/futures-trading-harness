@@ -16,7 +16,7 @@ test('the adapter: the design\'s record to the loop\'s view (context, reads, pla
   assert.deepStrictEqual(r.context, { regime: 'trend-up', volatility: 'normal', window: 'ny-am', biasSide: 'with', alignment: 'aligned', dayType: 'normal' });
   assert.deepStrictEqual(r.plan, { entry: 100, stop: 98, target: 104, size: 1, rr: 2 });
   assert.strictEqual(r.signatures.skill, 'bias:bos-vs-choch+location:vwap-volume-profile+setup:rejection+entry:candle-reading+stop:invalidation+target:top-down-entry');
-  assert.strictEqual(r.signatures.read, 'bias:1h-bos-up+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+stop:stop-15m-low+target:target-60m-swing');
+  assert.strictEqual(r.signatures.read, 'bias:1h-bos-up+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+stop:stop-15m-low+target:target-1h-swing');
   assert.strictEqual(r.reads[0].why, 'broke the last swing');
   assert.deepStrictEqual(R.CONTEXT_KEYS, ['regime', 'volatility', 'window', 'biasSide', 'alignment', 'dayType']);
 });
@@ -62,4 +62,13 @@ test('the adapter reads the record\'s plan objects (entry, stop, target with the
   assert.deepStrictEqual([r.plan.entry, r.plan.stop, r.plan.target, r.plan.size, r.plan.rr, r.lane, r.contract, r.runId], [100, 98, 104, 2, 2, '3m', 'MNQ:2023-06', 'run-x']);
   assert.strictEqual(fromLifecycleRecord({ ...raw, plan: { ...raw.plan, entry: { limit: 99.75 } } }).plan.entry, 99.75);
   assert.strictEqual(fromLifecycleRecord({ ...raw, runId: 'own' }, { runId: 'run-x' }).runId, 'own');
+});
+
+test('the adapter keeps each read\'s normalized form (the record\'s, else the checker\'s parse), and the signature uses it', () => {
+  const a = record();
+  const spelled = { ...a, signatures: undefined, signature: undefined, reads: a.reads.map(r => (r.step === 'bias' ? { ...r, read: '60 min bos up' } : r.step === 'setup' ? { ...r, read: '15-min rejected prior VAH up' } : r)) };
+  const r = fromLifecycleRecord(spelled);
+  assert.deepStrictEqual(r.reads.slice(0, 3).map(x => x.form), ['1h bos up', 'at prior vah', '15m rejected prior vah up']);
+  assert.strictEqual(r.signatures.read, fromLifecycleRecord({ ...a, signatures: undefined }).signatures.read, 'the same reads, however spelled');
+  assert.strictEqual(fromLifecycleRecord({ ...a, reads: [{ step: 'bias', skill: 's', read: 'x', form: '1h up' }] }).reads[0].form, '1h up', 'the record\'s form first');
 });

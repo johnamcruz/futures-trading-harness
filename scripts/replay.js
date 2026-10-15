@@ -56,7 +56,7 @@ const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
-const { pinIndex } = require('./lib/learning/experience-index');
+const { pinIndex, armOf } = require('./lib/learning/experience-index');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -156,7 +156,7 @@ async function run(argv) {
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
   if (!(max === Infinity || (Number.isInteger(max) && max > 0))) throw new Error('--max-cycles: a positive whole number');
   // The learning gate (learning/run-gate.js): checked before the run home is seeded, its look taken before the first cycle.
-  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, runDir: r.paths.runDir, arm: 'without', config: setupHash(r) };
+  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, runDir: r.paths.runDir, arm: armOf(r.experienceIndex), config: setupHash(r) };
   checkLearningRun(gate);
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
   const learned = startLearningRun(r.paths.runHome, gate);
