@@ -162,3 +162,33 @@ test('a record written under a bare root before 18:00 ET is never named after 18
   tracker.onOverdue(5);
   assert.deepStrictEqual(markers.readMarkers(env).map(m => m.contractId), ['MNQ']);
 });
+
+test('a composed entry\'s stamp: written before it goes, keyed by account and tag; cleared by a settled reply, used once by settle, and cleared on any other entry sent under that tag', async () => {
+  const LR = require('../../scripts/lib/trading/lifecycle-runner');
+  const stamp = { record: 'r1', expiresAt: '2026-10-07T14:33:00.000Z', entry: 21540.25, side: 'long' };
+  const TL = { ...ENTRY, type: 'limit', rationale: 'setup:trade_lifecycle long ...', customTag: 'tl-1' };
+  const key = LR.pendingKey(7, 'tl-1');
+  // A settled reply: the gateway stamps from its own check, so the pending stamp goes.
+  let env = { FTH_HOME: tmpDir() };
+  let t = tracker(env);
+  t.beforeSend({ id: 1, args: TL, risk: false, observed: { composed: stamp }, now: NOW });
+  assert.deepStrictEqual(LR.pendingStamp(env, key), stamp);
+  assert.strictEqual(LR.pendingStamp(env, LR.pendingKey(8, 'tl-1')), null, 'another account');
+  t.onReply(1, reply('{"orderId":5,"success":true}'));
+  assert.strictEqual(LR.pendingStamp(env, key), null);
+  // An error reply keeps it; settle finds the order placed, stamps it once and deletes it.
+  env = { FTH_HOME: tmpDir() };
+  t = tracker(env, { searchOrders: async () => [{ id: 41, customTag: 'tl-1', status: 1 }] });
+  t.beforeSend({ id: 2, args: TL, risk: false, observed: { composed: stamp }, now: NOW });
+  t.onReply(2, reply('HTTP 502 Bad Gateway', true));
+  assert.deepStrictEqual(LR.pendingStamp(env, key), stamp);
+  await t.settle(7, new Date(NOW.getTime() + 40000));
+  const list = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'entry-orders.json'), 'utf8'));
+  assert.deepStrictEqual(list.map(e => [e.orderId, e.composed]), [[41, stamp]]);
+  assert.strictEqual(LR.pendingStamp(env, key), null, 'used: deleted');
+  // An entry with no composed check sent under a tag with a stamp left on it: the stamp goes before it is sent.
+  env = { FTH_HOME: tmpDir() };
+  LR.writePendingStamp(env, key, stamp);
+  tracker(env).beforeSend({ id: 3, args: { ...ENTRY, customTag: 'tl-1' }, risk: false, observed: { observedNet: 0 }, now: NOW });
+  assert.strictEqual(LR.pendingStamp(env, key), null);
+});

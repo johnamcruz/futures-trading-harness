@@ -586,3 +586,80 @@ test('decision path, trade_lifecycle: with the position open, the stop moves and
   assert.match(r.ctx.calls[1].text, /\[composed-reads\]/);
   assert.strictEqual(D.position(w), null, 'flat');
 });
+
+test('decision path, trade_lifecycle, the runner: the history and the cycle log keep the record; a resting limit is cancelled at its expiry, the next bar', async () => {
+  const w = D.world();
+  // A limit below the bar's close (better for a long): it rests unfilled. Its rationale states no prices (the brackets
+  // are ticks from the fill; prices from the reference would disagree with the lower limit: [order-consistency]).
+  const r = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, 4h up, value above, a limit under the close' } }));
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  const resting = D.working(w).filter(o => o.type === 1);
+  assert.strictEqual(resting.length, 1, JSON.stringify(D.working(w)));
+  assert.strictEqual(D.position(w), null);
+  // The decision history: the setup is the composed trade, with its record (reads, checks, signature, stated size).
+  const h = r.state.history.at(-1);
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.deepStrictEqual([h.action, h.setup, h.side, h.composed.id, h.composed.signature, h.composed.size, h.composeCalls], [D.RESULT_ACTION.executed, 'trade_lifecycle', 'long', rec.id, rec.signature, 1, 1]);
+  assert.ok(h.composed.reads.every(x => x.check === true && x.agrees === true), JSON.stringify(h.composed.reads));
+  // The gateway stamped the entry with its record and that record's expiry (the next bar's close) at placement.
+  const stamped = JSON.parse(fs.readFileSync(path.join(w.home, 'entry-orders.json'), 'utf8')).find(e => String(e.orderId) === String(resting[0].id));
+  // The stamp is the gate's own: the record it judged, the expiry it computed, the entry price and the side.
+  assert.deepStrictEqual(stamped.composed, { record: rec.id, expiresAt: rec.expiresAt, entry: 27427.5, side: 'long' });
+  assert.strictEqual(h.composed.id, rec.id, 'the history keeps the order\'s own record');
+  // The cycle log: the cycle's compose_check call.
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual(line.composed, { calls: 1, ok: 1, signatures: [rec.signature] });
+  assert.strictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).composed[0].id, rec.id);
+  // The next bar: the runner cancels it before the cycle (its record expired at that bar's open).
+  const next = await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'nothing new'));
+  assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
+  assert.ok(next.events.some(e => e.kind === 'composed_expired' && String(e.orderId) === String(resting[0].id)), JSON.stringify(next.events.map(e => e.kind)));
+});
+
+test('decision path, trade_lifecycle, a restart: a working composed entry with no readable expiry is cancelled at the first housekeeping', async () => {
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, a limit under the close' } }));
+  const resting = D.working(w).filter(o => o.type === 1);
+  assert.strictEqual(resting.length, 1);
+  // The runner restarts (its state gone) and the gateway's stamp is lost: the entry is still a composed one by its setup.
+  fs.unlinkSync(w.stateFile);
+  const file = path.join(w.home, 'entry-orders.json');
+  fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => { const { composed: _c, ...rest } = e; return rest; })));
+  // The same bar's time again: within the record's life, but no expiry can be read, so it goes at once.
+  const r = await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, 'after a restart'));
+  assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
+  assert.ok(r.events.some(e => e.kind === 'composed_expired' && e.expiresAt === null), JSON.stringify(r.events.map(e => e.kind)));
+});
+
+test('decision path, trade_lifecycle: a cycle outlasting its record\'s expiry has its resting limit cancelled on time, during the cycle', async () => {
+  const w = D.world();
+  w.env.FTH_COMPOSED_WATCH_MS = '50';
+  const steps = composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, a limit under the close' }, result: 'CYCLE RESULT: executed - trade_lifecycle long MNQ 1' });
+  let during = null;
+  // After the executor: the record's expiry passes while the cycle still runs (the stamp moved into the past), and the
+  // cycle goes on long enough for the runner's watch to see it.
+  const late = { act: async () => {
+    const file = path.join(w.home, 'entry-orders.json');
+    // (The replay clock stands still at the decision time: the expiry is moved onto it, as if reached mid-cycle.)
+    fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: decisionAt(FIRED_BAR) } } : e))));
+    await new Promise(r => setTimeout(r, 600));
+    during = D.working(w).filter(o => o.type === 1).length;
+  } };
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [...steps.slice(0, -1), late, steps.at(-1)]);
+  assert.strictEqual(during, 0, 'cancelled while the cycle still ran');
+  const kinds = r.events.map(e => e.kind);
+  assert.ok(kinds.indexOf('composed_expired') !== -1 && kinds.indexOf('composed_expired') < kinds.lastIndexOf('cycle_end'), JSON.stringify(kinds));
+});
+
+test('decision path, trade_lifecycle: on a lane of composed strategies only, a working entry limit the gateway never recorded is cancelled at the next housekeeping', async () => {
+  const w = D.world();
+  // The shipped tree alone: trade_lifecycle and prop_portfolio, both composed.
+  w.env.FTH_STRATEGIES_DIRS = path.join(w.home, 'no-strategies');
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, a limit under the close' } }));
+  assert.strictEqual(D.working(w).filter(o => o.type === 1).length, 1);
+  // Its record lost (a reply that never came and no settle): the gateway's file doesn't have it.
+  fs.writeFileSync(path.join(w.home, 'entry-orders.json'), '[]');
+  const r = await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, 'after the lost record'));
+  assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
+  assert.ok(r.logs.some(l => /never recorded it as an entry/.test(l)), r.logs.join('\n'));
+});

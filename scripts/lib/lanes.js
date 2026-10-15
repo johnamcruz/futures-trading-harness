@@ -39,7 +39,8 @@
  *   omittedPolicyErrors(cfg, strategies, attemptRunning)  a lane's policies list leaving out a policy with a running attempt
  *   retireLanes(cfg, strategies)         marks each lane that lists a retired strategy (strategies.js RETIRED) no folder
  *                                        defines: lane.retired = [names]; returns one error line per such lane
- *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, agents),
+ *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, a
+ *                                        composed strategy listed on a signal lane, agents),
  *                                        after retireLanes (a retired lane is never a refusal: see below)
  *
  * A lane that lists a retired strategy doesn't stop the runner (that would leave an open position untrailed): the
@@ -288,6 +289,8 @@ function retireLanes(cfg, strategies) {
 /** Every refusal the runner checks at start against the strategies and agent roles (after retireLanes marks its lanes). */
 const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => (retireLanes(cfg, strategies), [
   ...laneStrategyErrors(lanesOf(cfg), strategies), ...signalLaneErrors(lanesOf(cfg), strategies),
+  // D11: a lane listing the composed trade (trade_lifecycle, or a policy listing it) cycles every bar.
+  ...require('./trading/lifecycle-runner').composedLaneErrors(lanesOf(cfg), strategies),
   ...omittedPolicyErrors(cfg, strategies, attemptRunning), ...agentErrors(cfg, agents),
 ]);
 

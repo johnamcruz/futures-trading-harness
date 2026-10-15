@@ -489,7 +489,27 @@ function evaluateModify({ input = {}, config }) {
         + 'protective order after a partial exit; the gateway checks it is a decrease). To add size, place a new order.',
     });
   }
+  // Hard rule: a working composed entry (the gateway stamped it with its record's entry price) is never repriced worse
+  // than that price for its side: its stop would land short of the level the reads named. Stops and targets (other
+  // orders) and a better price move freely; exits never reach this (a modify of an exit order isn't in entry-orders).
+  const stamped = composedEntryStamp(config && config.home, input.orderId);
+  const price = input.limitPrice === undefined || input.limitPrice === null || input.limitPrice === '' ? null : Number(input.limitPrice);
+  if (stamped && price !== null) {
+    const worse = !Number.isFinite(price) || (stamped.side === 'long' ? price > stamped.entry + 1e-9 : stamped.side === 'short' ? price < stamped.entry - 1e-9 : true);
+    if (worse) violations.push({ check: 'composed-reprice', message: `order ${input.orderId} is a trade_lifecycle entry at its record's ${stamped.entry} (${stamped.side || 'unknown side'}): a limit of ${input.limitPrice} is worse for it, and its stop would land short of the level its reads named. Keep it, improve it, or cancel it.` });
+  }
   return { intent: 'modify', violations };
+}
+
+/** The gateway's stamp on a working composed entry (entry-orders.json): { entry, side }, or null. */
+function composedEntryStamp(home, orderId) {
+  if (!home || orderId === undefined || orderId === null) return null;
+  try {
+    const e = require('../harness-run').entryOrders(home).find(x => String(x.orderId) === String(orderId));
+    return e && e.composed && Number.isFinite(e.composed.entry) ? { entry: e.composed.entry, side: e.composed.side || null } : null;
+  } catch (_err) {
+    return null;
+  }
 }
 
 function formatBlock(violations) {

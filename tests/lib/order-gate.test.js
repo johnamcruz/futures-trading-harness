@@ -2975,3 +2975,25 @@ test('trade_lifecycle in an attempt: over the verdict\'s size is refused even wh
   // An exit under the policy goes with nothing.
   assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 2, rationale: '[exit] flatten the prop_portfolio long' }).violations, []);
 });
+
+test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {
+  const home = require('../helpers').tmpDir();
+  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([
+    { orderId: 11, contractId: 'MNQ', side: 'buy', setup: 'trade_lifecycle', composed: { record: 'r', expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' } },
+    { orderId: 12, contractId: 'MNQ', side: 'sell', setup: 'trade_lifecycle', composed: { record: 'r', expiresAt: LC.EXPIRES, entry: 21540.25, side: 'short' } },
+    { orderId: 13, contractId: 'MNQ', side: 'buy', setup: 'fx_break' },
+  ]));
+  const cfg = { ...config, home };
+  const mod = input => evaluateModify({ input, config: cfg }).violations.map(v => v.check);
+  assert.deepStrictEqual(mod({ orderId: 11, limitPrice: 21541 }), ['composed-reprice'], 'a long limit raised');
+  assert.deepStrictEqual(mod({ orderId: 11, limitPrice: 'x' }), ['composed-reprice'], 'not a price');
+  assert.deepStrictEqual(mod({ orderId: 11, limitPrice: 21540.25 }), []);
+  assert.deepStrictEqual(mod({ orderId: 11, limitPrice: 21535 }), [], 'better for a long');
+  assert.deepStrictEqual(mod({ orderId: 12, limitPrice: 21539 }), ['composed-reprice'], 'a short limit lowered');
+  assert.deepStrictEqual(mod({ orderId: 12, limitPrice: 21545 }), []);
+  // Another setup's entry, a stop or a target (not in entry-orders), and a stop price move: free.
+  assert.deepStrictEqual(mod({ orderId: 13, limitPrice: 99999 }), []);
+  assert.deepStrictEqual(mod({ orderId: 99, limitPrice: 99999 }), []);
+  assert.deepStrictEqual(mod({ orderId: 11, stopPrice: 21500 }), []);
+  assert.match(evaluateModify({ input: { orderId: 11, limitPrice: 21541 }, config: cfg }).violations[0].message, /worse for it/);
+});

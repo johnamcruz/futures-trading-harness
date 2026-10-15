@@ -140,6 +140,15 @@ function createRunner(deps) {
     // Several lanes: how long a lane due at the same close may hold the cycle. A one-pass process (a replay step)
     // passes 0: it can't wait (its bars are all there at the point; one missing is a gap live would wait out too).
     coalesceHoldMs = COALESCE_HOLD_MS,
+    // The trade lifecycle's composed limits (trading/lifecycle-runner.js, wired by runner-wiring.js): due(orders, now)
+    // the working composed entries whose record expired (the gateway stamped each at placement; one with no readable
+    // expiry is due at once), stamped(roots, sinceMs) a composed entry on these roots that could still be working in a
+    // cycle begun at sinceMs (lifecycle-runner.js liveComposed), onlyComposed() the lane runs composed strategies only, unrecorded(orders, positions,
+    // contractId) the working entry limits the gateway never recorded, forItem(item) the compose records on an item's
+    // bar, byOrder() order id -> its record id. null: none.
+    composed = null,
+    // How often a running cycle's composed limits are checked for expiry (watchComposed).
+    composedWatchMs = 5000,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -341,6 +350,57 @@ function createRunner(deps) {
       log(`${sym.symbol}: ${err.message}`, 'error');
       return null;
     }
+  }
+
+  /**
+   * Cancel a composed limit entry still working at its record's expiry (the next base-bar close): the broker interface
+   * has no time in force, so an unfilled composed entry never outlives its record. Cancels are risk-reducing.
+   */
+  async function expireComposed(item, { orders, positions }, { unrecorded = false } = {}) {
+    if (!composed) return;
+    const root = famOf(item.contractId);
+    // Outside a cycle, on a lane of composed strategies only: a working entry limit the gateway never recorded can't be
+    // tied to a record, so it goes too (during a cycle its own entry may not be recorded yet: never then).
+    const stray = unrecorded && composed.onlyComposed() ? composed.unrecorded(orders || [], positions || [], item.contractId).map(o => ({ order: o, entry: null })) : [];
+    for (const { order: o, entry } of [...composed.due((orders || []).filter(x => famOf(x.contractId) === root), clock.now()), ...stray]) {
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+      } catch (err) {
+        log(`${item.symbol}: could not cancel the expired composed entry ${o.id} (${err.message}); the next bar retries`, 'error');
+        continue;
+      }
+      const c = (entry && entry.composed) || {};
+      log(`${item.symbol}: cancelled the composed entry ${o.id}: ${!entry ? 'the gateway never recorded it as an entry' : c.expiresAt ? `its record expired at ${c.expiresAt}` : 'no record expiry was stamped for it'}`);
+      emit('composed_expired', { symbol: item.symbol, orderId: o.id, expiresAt: c.expiresAt || null, record: c.record || null });
+    }
+  }
+
+  /**
+   * While a cycle runs (the runner awaits it), its composed limits still expire: every `composedWatchMs` the run's
+   * symbols' due composed entries are cancelled (expireComposed), so a cycle outlasting a record's expiry never leaves
+   * its limit working. Returns the stop.
+   */
+  function watchComposed(items) {
+    if (!composed || !cfg.account || cfg.paper || typeof client.accountState !== 'function' || !(composedWatchMs > 0)) return () => {};
+    let busy = false;
+    const since = clock.now().getTime();
+    const roots = items.map(x => x.contractId || x.symbol);
+    const timer = setInterval(async () => {
+      if (busy) return;
+      // No account read unless a composed entry stamped for these roots could still be working (one placed this cycle,
+      // or one whose stamp has no expiry): most cycles place none.
+      if (!composed.stamped(roots, since)) return;
+      busy = true;
+      try {
+        for (const item of items) await expireComposed(item, await client.accountState(cfg.account));
+      } catch (err) {
+        log(`composed expiry during the cycle: ${err.message}`, 'error');
+      } finally {
+        busy = false;
+      }
+    }, composedWatchMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    return () => clearInterval(timer);
   }
 
   /** Cancel leftover orders on a flat contract root (never pending entries). */
@@ -545,6 +605,7 @@ function createRunner(deps) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
       const account = await client.accountState(cfg.account);
+      await expireComposed(item, account, { unrecorded: true });
       await cleanupFlat(item, account, { noCycles });
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
@@ -1385,7 +1446,13 @@ function createRunner(deps) {
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
-          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+          const stopWatch = watchComposed(run);
+          let r;
+          try {
+            r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+          } finally {
+            stopWatch();
+          }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
           if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [], lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
@@ -1407,7 +1474,7 @@ function createRunner(deps) {
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
+            entry = decisionEntry({ ...base, items: composed ? (byOrder => run.map(x => ({ ...x, composed: composed.forItem(x), composedOrders: byOrder })))(composed.byOrder()) : run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

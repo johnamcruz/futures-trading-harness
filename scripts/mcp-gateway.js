@@ -147,7 +147,7 @@ function main(argv) {
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(clock.now(), loadConfig(process.env));
     if (late && !violations.some(v => v.check === 'market-hours')) violations.push({ check: 'market-hours', message: late });
-    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: clock.now().getTime() });
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: clock.now().getTime(), composed: base.composed || null });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };
 
@@ -192,7 +192,7 @@ function main(argv) {
     }
     const placed = resultJson(response);
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
-      recordEntryOrder(process.env, placed.orderId, args, sent.sentAt || clock.now().getTime(), logErr);
+      recordEntryOrder(process.env, placed.orderId, args, sent.sentAt || clock.now().getTime(), logErr, sent.composed);
     }
     if (observedNet === null) return;
     // Every order type: a marketable limit or stop fills at once too. While

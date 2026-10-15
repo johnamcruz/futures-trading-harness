@@ -1652,3 +1652,32 @@ test('holdAccountLock: relinked is logged; taken is logged and recorded, nothing
   assert.ok(logs.some(([l, m]) => l === 'error' && /the check failed \(EIO\)/.test(m)));
   assert.ok(logs.some(([l, m]) => l === 'error' && /could not write the kill switch/.test(m)));
 });
+
+test('a running cycle reads the account for composed expiry only while a composed entry on its symbols may be working', async () => {
+  const run = async live => {
+    const clockRef = { t: et(10, 0, 2) };
+    let inCycle = false;
+    let reads = 0;
+    const asked = [];
+    const base = fakeMarket({ minutes: 3, accountState: { positions: [], orders: [] } }).client(clockRef);
+    const runner = createRunner({
+      cfg: validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', timeframe: 3, account: '7' }), root: '/r',
+      client: { ...base, async accountState() { if (inCycle) reads += 1; return base.accountState(); }, async cancelOrder() {} },
+      clock: { now: () => new Date(clockRef.t) },
+      runCycle: async action => {
+        if (action === 'trade') { inCycle = true; await new Promise(r => setTimeout(r, 200)); inCycle = false; }
+        return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' };
+      },
+      isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {}, writeBars: () => '/b.json', scanFor: () => [],
+      composed: { due: () => [], stamped: (roots, since) => { asked.push([roots, since]); return live; }, onlyComposed: () => false, unrecorded: () => [], forItem: () => [], byOrder: () => ({}) },
+      composedWatchMs: 20,
+    });
+    await runner.step();
+    return { reads, asked };
+  };
+  const none = await run(false);
+  assert.ok(none.asked.length > 0, 'the watch ran');
+  assert.strictEqual(none.reads, 0, 'no composed entry stamped: no account read during the cycle');
+  assert.deepStrictEqual(none.asked[0], [['MNQ'], et(10, 0, 2)], 'asked for the cycle\'s symbols since its start');
+  assert.ok((await run(true)).reads > 0, 'one may be working: the account is read');
+});

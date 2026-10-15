@@ -10,7 +10,8 @@
  *       tick, the action (entered, skipped, vetoed, managed, no-trade, flattened, blocked, planned, error), and the
  *       setup's strategy, side and stop distance (1R) when there is one. `items`: the cycle's { symbol, minutes,
  *       tickSize, bar: { t, c }, scan, verdicts }; `entries`: the journal read after the cycle (the entry it placed,
- *       if any); `output`: the cycle's transcript. A no-trade with a setup on the table is `vetoed` when the cycle's
+ *       if any; an item's `composed`: the compose records on its bar, lifecycle-runner.js recordSummary, whose latest
+ *       OK one is its setup, trade_lifecycle); `output`: the cycle's transcript. A no-trade with a setup on the table is `vetoed` when the cycle's
  *       phase-2 report (roles-ran.js round and latestPhase2: the latest phase-2 call as the gate finds it, never phase 1;
  *       `cycle` and `cached`: the cycle kind and the roles served from the cache) is a veto (verdictOf) naming its setup
  *       (or, naming none of the cycle's setups, its symbol); else
@@ -86,6 +87,11 @@ function setupOf(item) {
   if (v && v.strategy && v.direction) {
     return { setup: v.strategy, side: v.direction, stop: Number(v.stopTicks) > 0 && tick > 0 ? num(v.stopTicks * tick) : null, target: null, why: v.action === 'skip' ? v.reason || null : null };
   }
+  // The model's own composed trade (trade_lifecycle): its latest OK compose record on the bar (lifecycle-runner.js
+  // recordSummary), its stop and target as distances from the bar's close (the record's entry price).
+  const rec = (Array.isArray(item.composed) ? item.composed : []).filter(x => x && x.ok).at(-1);
+  const close = Number(item.bar && item.bar.c);
+  if (rec) return { setup: 'trade_lifecycle', side: rec.side, stop: Number.isFinite(rec.stop) && Number.isFinite(close) ? num(Math.abs(close - rec.stop)) : null, target: Number.isFinite(rec.target) && Number.isFinite(close) ? num(Math.abs(rec.target - close)) : null, why: null };
   const r = (Array.isArray(item.scan) ? item.scan : []).find(x => x && x.candidate && x.direction && x.signal === 'rules');
   return r ? { setup: r.name, side: r.direction, stop: Number(r.stopDistance) > 0 ? num(r.stopDistance) : null, target: Number(r.targetDistance) > 0 ? num(r.targetDistance) : null, why: null } : null;
 }
@@ -163,10 +169,18 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
     : setup && action0 !== 'entered' ? { setup: setup.setup, side: setup.side, stop: setup.stop, target: setup.target } : {};
   const why = setup && setup.why ? { why: String(setup.why) } : {};
   const contract = item.contractId || item.bar.contractId || null;
+  // The compose records on the bar (the composed-entry design section 5): the one this decision is about (its side),
+  // with its reads, each check, the signatures and the stated size; and how many compose_check calls the bar had.
+  const recs = Array.isArray(item.composed) ? item.composed.filter(Boolean) : [];
+  // The order's own record (the gateway stamped it at placement: item.composedOrders, order id -> record id) when it
+  // placed one; else the latest for the decision's side.
+  const own = placed && item.composedOrders && placed.orderId !== null && placed.orderId !== undefined ? item.composedOrders[String(placed.orderId)] : null;
+  const chosen = (own && recs.find(x => x.id === own)) || recs.filter(x => !facts.side || x.side === facts.side).at(-1) || null;
   return {
     ...base, symbol: item.symbol, tf: Number(item.minutes) || null, bar: item.bar.t, price: Number(item.bar.c), tick, ...(contract ? { contract } : {}), action,
     ...Object.fromEntries(Object.entries(facts).filter(([, x]) => x !== null && x !== undefined)), ...why,
     ...(unknown ? { details: 'unavailable' } : {}),
+    ...(chosen ? { composed: chosen, composeCalls: recs.length } : {}),
     ...(placed && placed.orderId !== null && placed.orderId !== undefined ? { orderId: placed.orderId } : {}),
     // Its entry order's size: a runner exit record is its R only when it closed all of it.
     ...(placed && placed.size ? { entrySize: placed.size } : {}),

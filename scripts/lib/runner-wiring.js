@@ -58,6 +58,8 @@ const { buildSignals, writeSignals, syncRetiredMarks } = require('./trading/sign
 const RC = require('./trading/report-cache');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
+const LR = require('./trading/lifecycle-runner');
+const { recordsAt } = require('./trading/lifecycle-gate');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
 const { barsArchiver } = require('./session/bars-archive');
 const { fieldValues } = require('./session/record');
@@ -460,7 +462,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     dayContext: dayLine,
     // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
     // the last reviewed trades' record on their own line.
-    lessons: ({ entries } = {}) => digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false }),
+    // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
+    // its experience record, not the journal's instincts (the composed-entry design, PR 14).
+    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false })),
     recentTrades: ({ entries } = {}) => recentTrades(entries || journal(), 10),
     tradesSummary: ({ entries } = {}) => formSummary(entries || journal(), 10),
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
@@ -490,10 +494,23 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
     event,
     entryOrders: () => entryOrders(home),
+    // The trade lifecycle's composed limits: stamped with their record's expiry after a cycle, cancelled at it.
+    composed: {
+      due: (orders, at) => LR.dueComposed({ entries: entryOrders(home), orders, composed: LR.composedSetups(strategies()), now: at }),
+      // A composed entry on these roots that may still be working: its expiry not passed when the cycle began, or no
+      // expiry stamped and sent since then (an older one without an expiry was cancelled before the cycle).
+      stamped: (roots, since) => LR.liveComposed({ entries: entryOrders(home), roots, since }),
+      onlyComposed: () => { const tags = LR.composedSetups(strategies()); const on = strategies().filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name)); },
+      unrecorded: (orders, positions, contractId) => LR.unrecordedEntries({ entries: entryOrders(home), orders, positions, root: contractId }),
+      forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
+      byOrder: () => Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), e.composed.record])),
+    },
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
     exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
     barClosed: record.closed,
+    // A running cycle's composed limits are checked for expiry this often (runner.js watchComposed); a test may shorten it.
+    ...(env.NODE_ENV === 'test' && Number(env.FTH_COMPOSED_WATCH_MS) > 0 && env.FTH_AUTONOMOUS !== '1' ? { composedWatchMs: Number(env.FTH_COMPOSED_WATCH_MS) } : {}),
     // A replay pass is one step in its own process: it can't hold a cycle for a lane that is late (runner.js).
     ...passHold(env),
   });
