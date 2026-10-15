@@ -72,7 +72,7 @@ const { limitOutcome } = require('./experience-log');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
 const { assertUse, sessionDate } = require('./splits');
 const { cellStats, cellKey, contextKey, knownDay, assertPracticeTrain, MIN_N, MIN_DAYS, LEVEL } = require('./experience-index');
-const { CONTEXT_KEYS } = require('./lifecycle-record');
+const { CONTEXT_KEYS, contextOf: recordContext } = require('./lifecycle-record');
 const { barMinutes, aggregate } = require('../backtest/data');
 
 // 2: the limit window is the strategy's valid_bars (1 held it one bar); a version-1 library is rebuilt.
@@ -291,13 +291,16 @@ function buildLibraryIndex(records, { sources = [], seed = 1, reps = 2000, now =
     const day = knownDay(r);
     if (r.status === 'no-room' && r.setupKey) (noRoom[r.setupKey] = noRoom[r.setupKey] || []).push(day);
     if (r.status !== 'traded') continue;
-    const row = [day, hasR(r) ? r.outcome.R : null, 1, (r.context && r.context.regime) || '-'];
+    // The scan keeps compose_check's raw context (`trendSide`, raw case); the cells key it as the lifecycle record
+    // does (lifecycle-record.js contextOf), so experience_lookup's candidate finds its own context here.
+    const ctx = recordContext(r);
+    const row = [day, hasR(r) ? r.outcome.R : null, 1, ctx.regime || '-'];
     add(cellKey('read', r.signature), row);
-    for (const k of CONTEXT_KEYS) add(cellKey('read', r.signature, `${k}=${r.context && r.context[k] !== null && r.context[k] !== undefined ? r.context[k] : '-'}`), row);
-    add(cellKey('read', r.signature, contextKey(r.context)), row);
+    for (const k of CONTEXT_KEYS) add(cellKey('read', r.signature, `${k}=${ctx[k] !== null && ctx[k] !== undefined ? ctx[k] : '-'}`), row);
+    add(cellKey('read', r.signature, contextKey(ctx)), row);
     if (r.setupKey) {
       add(cellKey('setup', r.setupKey), row);
-      add(cellKey('setup', r.setupKey, contextKey(r.context)), row);
+      add(cellKey('setup', r.setupKey, contextKey(ctx)), row);
     }
   }
   const keys = Object.keys(cells).sort();
