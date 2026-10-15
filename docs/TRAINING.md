@@ -152,6 +152,9 @@ The checks:
   needed, the daily and soft room, today's trades, losses and streak, and
   nothing that says the state was drawn
 - the Monte Carlo
+- the adapter (N/A with none selected): the selected fine-tuning adapter's
+  manifest is valid, current (its skills and prompt digests the harness's
+  now) and validated (section 9)
 
 The 5m facts need a 1m data lane in the runner config
 (`{ "timeframe": 1, "trigger": "data" }`) and one-minute bars in `--bars`, as
@@ -726,7 +729,90 @@ yet).
 - **Practice equals live.** The same runner, agents, skills, gate and
   briefing. Only the data, the clock and the fills are simulated.
 
-## 9. Troubleshooting
+## 9. Fine-tuning on verified decisions (after stage 2)
+
+When stage 2 is done, the local model can be fine-tuned with a LoRA adapter on
+the decisions the code verified correct. Everything for it is in place, and
+nothing uses it until then. `adapters/README.md` explains how to build, judge
+and use an adapter. In short:
+
+1. **Label by process, never by outcome**
+   (`scripts/lib/learning/decision-label.js`).
+   - **A take** is correct only if every claimed read is verified true, the
+     scorecard grades it right, its R:R is at least `min_rr`, its risk is at
+     most `max_risk_usd`, no gate or risk rule refused it, and (stage 2) the
+     account state is known to leave room.
+   - **A pass** is correct when a mechanical rule says no trade (a step of
+     the priority order, or no setup found), or when the account state calls
+     for standing down. compose_check refusing the model's own plans is not
+     enough.
+   - **A risk action** is correct when it fits the rules for that account
+     state.
+
+   A losing trade made by the process is correct; a winning trade made
+   against it is not. Everything else is `incorrect` or `unverifiable`, with
+   its reason, and is never trained on.
+2. **Sample.** `node scripts/decision-dataset.js sample` re-runs each curated
+   practice-train moment K times with sampling on. It reuses the decision-point
+   replay, seeds each sample and records which sample produced which decision.
+   The sampling settings come from a local file.
+3. **Build.** `node scripts/decision-dataset.js build` writes the correct
+   decisions as model-agnostic chat JSONL:
+   - the exact prompts the head trader saw, then its whole turn with its
+     tool calls and their results (format version 2); a subagent's turns only
+     when `--roles` names it (its claims are unchecked);
+   - never a failed, timed-out or interrupted cycle;
+   - balanced by `adapters/spec.json`;
+   - deduplicated and fingerprinted, with its source runs;
+   - only examples made under the harness's skills, prompt and code digests
+     now (the stale ones dropped and counted; `--include-digest` keeps others
+     by name, marked), under one exit plan;
+   - a warning, and a refusal past half, when the sampled repeats of moments
+     all answered the same.
+
+   Train comes from practice-train only and validate from practice-validate
+   only; test and final are refused. Each example is tagged stage 1 (no
+   account state) or stage 2 (account state plus risk action).
+4. **Train in two steps** (`adapters/spec.json`): step 1 on stage-1 data
+   alone, then step 2 on stage-2 data with the spec's slice of stage-1 data
+   mixed back in. The template is `adapters/<base>/train.example.sh`; the
+   weights stay local.
+5. **Record the manifest** (`node scripts/adapter.js init`): the harness
+   commit, the skills, prompt and code digests, the dataset fingerprint, the
+   base model, the training settings, step 2's parent (the step-1 manifest's
+   tag and path) and the validation result.
+6. **Judge it on practice-validate**:
+   - step 1 by the stage-1 exit test;
+   - step 2 by the full keep rule of section 6 (`model-verifier.js decide`,
+     the pair as one held-out window): `kept` passes, `inconclusive` stays
+     pending, anything else fails; zero blows on real attempts and resampled
+     paths alike, and a resampled-only gain never passes.
+
+   The evaluation is two replays of the same windows and seed, base and
+   adapted. The adapted run's runner config declares the adapter
+   (`"adapter": "<manifest>"`). The declared adapter is in both run hashes by
+   its manifest's digest, so the pair differs in that one field: compare them
+   with `node scripts/ab-compare.js <base> <adapted> --field adapter`, and
+   record the result with `node scripts/adapter.js validated <manifest>
+   --base <run dir> --adapted <run dir>`, which derives it from that
+   comparison and records its evidence (the runs, their setup record
+   digests, a hash over the record).
+7. **Use it.** The live preflight refuses a declared adapter that is
+   pending, failed, stale, invalid or not backed by its evidence. The
+   training preflight's `adapter` check:
+   - is N/A with no adapter selected;
+   - FAILs on a missing or invalid manifest;
+   - FAILs on a stale adapter (its skills, prompt or code digest isn't the
+     harness's now);
+   - FAILs on a missing or failed validation, or a passed one not backed by
+     its evidence (a hand edit);
+   - FAILs on a step-2 adapter whose parent is missing, changed, or not
+     passed with its evidence;
+   - FAILs on a pending validation outside practice-validate.
+
+`adapters/` is the one folder that may name a model.
+
+## 10. Troubleshooting
 
 | Message | Meaning |
 | --- | --- |

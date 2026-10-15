@@ -61,6 +61,7 @@
  *                                          overlap: the share of the champion's keys the challenger decided)
  *   pooledInterval(strata, { block, reps, level, rand })   the stratified block bootstrap of the stacked differences
  *   decide(windows, { rule, heldOut })     { verdict: kept | rejected | inconclusive, reasons, diagnostic, pooled }
+ *   readsByKey(runDir, { root })           a run's decisions' reads by key (the reads measure's input)
  *   verify({ cfg, pairs, seed, root, candidateRoot, env, heldOut, rule, deps })   the verifier: { available, verdict, ... }
  *   combine({ panel, model, evaluator, rule })   the loop's verdict: the keep rule decides; the panel's harms, its blows
  *                                          and the mechanical evaluator's failures can only reject
@@ -399,4 +400,4 @@ function combine({ panel, model, evaluator = null, rule = DECISION_RULE }) {
   return { verdict: model.verdict, reasons: model.reasons };
 }
 
-module.exports = { KEEP_RULE, HELD_BACK, resolveModelScore, windowErrors, lookErrors, candidateErrors, adherence, reads, pooledInterval, decide, verify, combine, withoutExitChanges };
+module.exports = { KEEP_RULE, HELD_BACK, resolveModelScore, windowErrors, lookErrors, candidateErrors, adherence, reads, pooledInterval, decide, verify, combine, withoutExitChanges, readsByKey };

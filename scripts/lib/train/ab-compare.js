@@ -15,7 +15,8 @@
  *   documents  harness (the documents the cycles read) and skills digests
  *   code       the scripts' digest
  *   config     every other setting, one field each (cfg.<key>, practice.<key>, gate.<variable>, everyNth, premarket,
- *              endOfDay, prop, latency, library, libraryDisplay, and the window with a list)
+ *              endOfDay, prop, latency, library, libraryDisplay, the window with a list, and adapter (the fine-tuning
+ *              adapter the runner config declares, by its manifest's digest: a base and an adapted run differ in it alone)
  *
  * compareSetups refuses unless every pinned part is the same, the code is the same, and the setups differ in one
  * thing: the documents, or exactly one config field the operator declares (`field`; a library-display pair, the same
@@ -61,6 +62,7 @@ const { readDecisions, logFile } = require('../learning/experience-log');
 const { familyRoot } = require('../trading/contracts');
 const { streamFor, pick, quantile, round4 } = require('../prop/stats');
 const { CREDENTIAL } = require('../broker/config');
+const { adapterTag } = require('../learning/adapter');
 
 const SETUP_FILE = 'setup.json';
 const PINNED = Object.freeze(['stage', 'list', 'seed', 'market', 'data', 'index']);
@@ -84,7 +86,7 @@ const flat = (prefix, obj) => Object.fromEntries(Object.entries(obj || {}).filte
 /** The run's setup record (see the head), from its resolved config (replay/config.js resolveReplay). */
 function setupRecord(run, { env = process.env } = {}) {
   const { gate, brokerEntry, brokerSettings } = runSettings(run, env);
-  const { dataDir: _d, workdir: _w, symbols, timeframe, ...cfg } = run.cfg || {};
+  const { dataDir: _d, workdir: _w, symbols, timeframe, adapter: _a, ...cfg } = run.cfg || {};
   const { seed = null, ...practice } = run.practice || {};
   const window = `${run.start.toISOString()}..${run.end.toISOString()}`;
   const arm = lookArm(run);
@@ -107,6 +109,10 @@ function setupRecord(run, { env = process.env } = {}) {
       prop: JSON.stringify(run.prop || null), latency: JSON.stringify(run.latency === true), library: JSON.stringify(library),
       libraryDisplay: JSON.stringify(Boolean(run.setupLibrary && run.libraryDisplay === true)),
       ...(run.curated ? { window: JSON.stringify(window) } : {}),
+      // The fine-tuning adapter the runner config declares, by its manifest's digest (learning/adapter.js adapterTag),
+      // never its path: a base and an adapted run differ in this one declared field (--field adapter). Named only when
+      // one is declared, so a base run's record is the one it had.
+      ...(adapterTag(run.cfg) ? { adapter: JSON.stringify(adapterTag(run.cfg)) } : {}),
     },
   };
 }
