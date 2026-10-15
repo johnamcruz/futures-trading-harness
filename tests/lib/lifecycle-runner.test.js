@@ -30,19 +30,29 @@ test('D11: a lane listing the composed trade on trigger "signal" is refused at s
   assert.ok(startErrors(cfg, SHIPPED, []).some(e => /trade_lifecycle on trigger "signal"/.test(e)));
 });
 
-test('the gateway\'s stamp on a composed entry: its record on the cycle\'s bar and that record\'s expiry; due at it, or at once with none', () => {
+test('the gateway\'s stamp on a composed entry: the gate\'s own (handed over, or written before sending by its tag); never looked up again; another setup none', () => {
   const home = tmpDir();
-  const rec = LC.writeScenario(home);
-  const env = { FTH_HOME: home, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) };
+  const env = { FTH_HOME: home };
   const args = (o = {}) => ({ contractId: 'MNQ', side: 'buy', rationale: 'setup:trade_lifecycle long ...', ...o });
-  assert.deepStrictEqual(LR.entryStamp(env, args()), { record: rec.id, expiresAt: LC.EXPIRES, bar: LC.BAR });
-  assert.deepStrictEqual(LR.entryStamp(env, args({ rationale: 'setup:prop_portfolio long trade_lifecycle ...' })), { record: rec.id, expiresAt: LC.EXPIRES, bar: LC.BAR }, 'a policy listing it');
-  // Several lanes: the briefing's bar over the lane bar that closed.
-  assert.strictEqual(LR.entryStamp({ ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T13:59:00.000Z' }), FTH_CYCLE_BRIEFING_BARS: JSON.stringify({ MNQ: LC.BAR }) }, args()).record, rec.id);
-  assert.deepStrictEqual(LR.entryStamp(env, args({ side: 'sell', rationale: 'setup:trade_lifecycle short' })), { record: null, expiresAt: null, bar: LC.BAR });
-  assert.deepStrictEqual(LR.entryStamp({ FTH_HOME: home }, args()), { record: null, expiresAt: null, bar: null }, 'no cycle bar');
+  const gate = { record: 'r1', expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' };
+  assert.deepStrictEqual(LR.entryStamp(env, args(), gate), gate);
+  // Written before sending, keyed by the order's customTag: an order found placed later (no reply) carries it.
+  LR.writePendingStamp(env, 'tag-1', gate);
+  assert.deepStrictEqual(LR.pendingStamp(env, 'tag-1'), gate);
+  assert.deepStrictEqual(LR.entryStamp(env, args(), null, 'tag-1'), gate);
+  // A composed entry with no stamp (the gate's lost): no record, no expiry, so due at once; a policy's tag too.
+  assert.deepStrictEqual(LR.entryStamp(env, args(), null, 'other'), { record: null, expiresAt: null });
+  assert.deepStrictEqual(LR.entryStamp(env, args({ rationale: 'setup:prop_portfolio long trade_lifecycle ...' })), { record: null, expiresAt: null });
+  // A record on disk is never looked up at this point.
+  LC.writeScenario(home);
+  assert.deepStrictEqual(LR.entryStamp({ ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }, args()), { record: null, expiresAt: null });
   assert.strictEqual(LR.entryStamp(env, args({ rationale: 'setup:fx_break long' })), null, 'another setup: no stamp');
   assert.strictEqual(LR.entryStamp(env, args({ rationale: '[exit] flat' })), null);
+  // Kept bounded.
+  for (let i = 0; i < 205; i += 1) LR.writePendingStamp(env, `t${i}`, gate);
+  assert.strictEqual(LR.pendingStamp(env, 'tag-1'), null);
+  assert.deepStrictEqual(LR.pendingStamp(env, 't204'), gate);
+  const rec = { id: 'r1' };
   // Due: at or after the stamped expiry; at once when there is none (stamped without a record, or not stamped at all,
   // as after a restart); never another setup's order, never one the gateway didn't record.
   const composed = LR.composedSetups(SHIPPED);
@@ -56,6 +66,21 @@ test('the gateway\'s stamp on a composed entry: its record on the cycle\'s bar a
   const due = at => LR.dueComposed({ entries, orders, composed, now: new Date(at) }).map(x => x.order.id);
   assert.deepStrictEqual(due('2026-10-07T14:02:59Z'), [2, 3]);
   assert.deepStrictEqual(due(LC.EXPIRES), [1, 2, 3]);
+});
+
+test('unrecorded working entry limits (a lane of composed strategies only): flat, or adding to the position\'s side; a target, a stop or a recorded entry stays', () => {
+  const entries = [{ orderId: 1 }];
+  const orders = [
+    { id: 1, contractId: 'MNQ:2026-12', type: 1, side: 0 },
+    { id: 2, contractId: 'MNQ:2026-12', type: 1, side: 0 },
+    { id: 3, contractId: 'MNQ:2026-12', type: 1, side: 1 },
+    { id: 4, contractId: 'MNQ:2026-12', type: 4, side: 1 },
+    { id: 5, contractId: 'MES:2026-12', type: 1, side: 0 },
+  ];
+  const ids = positions => LR.unrecordedEntries({ entries, orders, positions, root: 'MNQ' }).map(o => o.id);
+  assert.deepStrictEqual(ids([]), [2, 3], 'flat: every unrecorded limit');
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 1, size: 1 }]), [2], 'long: a buy limit adds; the sell limit is its target');
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 2, size: 1 }]), [3]);
 });
 
 test('a record as the history and the cycle log keep it; a cycle\'s own compose_check calls by its id', () => {

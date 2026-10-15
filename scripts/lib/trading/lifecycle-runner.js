@@ -9,13 +9,19 @@
  *                                     "signal": nothing fires for it, so it would never cycle (D11: every bar)
  *   runsComposed(strategies, timeframe)   an active composed strategy trades this timeframe (the journal instincts are
  *                                     off for such a run: the experience record replaces them)
- *   entryStamp(env, args, root)       the gateway's stamp on a composed entry it lets through (order-tracker.js
- *                                     recordEntryOrder, entry-orders.json): its compose record on the cycle's bar
- *                                     (FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), that record's id and expiry; null
- *                                     for an entry of another setup. Never throws (a failure stamps no record: due at once)
+ *   isComposedEntry(env, args, root)  an entry (place_order arguments) of a composed setup (its tag), by the registry
+ *   writePendingStamp(env, tag, stamp) / pendingStamp(env, tag)   the gate's stamp on a composed entry (the record it
+ *                                     judged, the expiry it computed, the entry price, the side), written before the
+ *                                     order goes (keyed by its customTag) so an order found placed later carries it
+ *   entryStamp(env, args, stamp, tag)  the stamp entry-orders.json keeps: the gate's (given, or pending by tag); a
+ *                                     composed entry without one gets { record: null, expiresAt: null } (due at once);
+ *                                     another setup's: null. Never re-looked-up at reply time
  *   dueComposed({ entries, orders, composed, now })   the working orders that are composed entries (their gateway
  *                                     record's setup) whose stamped expiry has come, or that have no readable expiry
  *                                     (stamped without a record, or not stamped: after a restart too): [{ order, entry }]
+ *   unrecordedEntries({ entries, orders, positions, root })   on a lane that runs only composed strategies: the
+ *                                     working limit orders on the root the gateway never recorded as entries, flat or
+ *                                     adding to the position's side (a bracket's target, the other side, stays)
  *   recordSummary(record)             a record as the decision history and the cycle log keep it: id, side, ok, the
  *                                     signatures, the stated size, the stop and target, each read with its check
  *   cycleComposed(home, cycleId, symbols)   the records the cycle's compose_check calls wrote (their cycleId)
@@ -53,24 +59,39 @@ function runsComposed(strategies, timeframe) {
   return (strategies || []).some(s => s && s.valid !== false && s.signal === 'composed' && s.status === 'active' && s.timeframe === timeframe);
 }
 
-function entryStamp(env, args, root = path.resolve(__dirname, '..', '..', '..')) {
+const PENDING_KEPT = 200;
+const pendingFile = env => path.join(require('../paths').harnessHome(env), 'composed-stamps.json');
+
+function isComposedEntry(env, args, root = path.resolve(__dirname, '..', '..', '..')) {
   try {
     const setup = (/^\s*setup:([a-z0-9][a-z0-9_-]*)/i.exec(String((args && args.rationale) || '')) || [])[1];
-    if (!setup) return null;
+    if (!setup) return false;
     const { loadStrategies } = require('./strategies');
-    if (!composedSetups(loadStrategies(root, env).strategies).has(setup.toLowerCase())) return null;
-    const { loadConfig } = require('./config');
-    const { recordsAt } = require('./lifecycle-gate');
-    const cfg = loadConfig(env);
-    const sym = contractRoot(String(args.contractId || ''));
-    const bar = { ...(cfg.cycleBars || {}), ...(cfg.cycleBriefingBars || {}) }[familyRoot(sym)] || null;
-    const side = String(args.side || '').toLowerCase() === 'buy' ? 'long' : String(args.side || '').toLowerCase() === 'sell' ? 'short' : null;
-    const recs = bar && side ? recordsAt(cfg.home, sym, bar).filter(r => r.side === side) : [];
-    const rec = recs.length ? recs[recs.length - 1] : null;
-    return { record: rec ? rec.id : null, expiresAt: rec && rec.expiresAt ? rec.expiresAt : null, bar };
+    return composedSetups(loadStrategies(root, env).strategies).has(setup.toLowerCase());
   } catch (_err) {
-    return { record: null, expiresAt: null, bar: null };
+    return true; // can't tell: treated as composed, so a missing stamp cancels it (fails safe)
   }
+}
+
+function writePendingStamp(env, tag, stamp) {
+  const { readJson, writeJsonAtomic } = require('../harness-run');
+  const file = pendingFile(env);
+  const all = readJson(file, {});
+  const next = { ...(isObj(all) ? all : {}), [String(tag)]: stamp };
+  const keys = Object.keys(next);
+  writeJsonAtomic(file, Object.fromEntries(keys.slice(-PENDING_KEPT).map(k => [k, next[k]])));
+}
+
+function pendingStamp(env, tag) {
+  if (tag === undefined || tag === null) return null;
+  const all = require('../harness-run').readJson(pendingFile(env), {});
+  return isObj(all) && isObj(all[String(tag)]) ? all[String(tag)] : null;
+}
+
+function entryStamp(env, args, stamp = null, tag = null) {
+  const given = isObj(stamp) ? stamp : pendingStamp(env, tag);
+  if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...(Number.isFinite(given.entry) ? { entry: given.entry } : {}), ...(given.side ? { side: given.side } : {}) };
+  return isComposedEntry(env, args) ? { record: null, expiresAt: null } : null;
 }
 
 function dueComposed({ entries = [], orders = [], composed = new Set(), now = new Date() }) {
@@ -82,6 +103,19 @@ function dueComposed({ entries = [], orders = [], composed = new Set(), now = ne
     if (!Number.isFinite(t) || now.getTime() >= t) out.push({ order: o, entry: e });
   }
   return out;
+}
+
+// Broker order sides as the interface's enum (0 buy, 1 sell) or words; position types 1 long, 2 short.
+const orderSign = o => (o.side === 0 || /^(buy|long)$/i.test(String(o.side)) ? 1 : o.side === 1 || /^(sell|short)$/i.test(String(o.side)) ? -1 : 0);
+const LIMIT = new Set([1, '1', 'limit', 'Limit', 'LIMIT']);
+
+function unrecordedEntries({ entries = [], orders = [], positions = [], root }) {
+  const known = new Set((entries || []).map(e => String(e.orderId)));
+  const fam = r => familyRoot(contractRoot(String(r || '')));
+  const open = (positions || []).filter(p => p && fam(p.contractId) === fam(root) && Number(p.size) > 0);
+  const posSign = open.length ? (Number(open[0].type) === 2 ? -1 : 1) : 0;
+  return (orders || []).filter(o => o && LIMIT.has(o.type) && fam(o.contractId) === fam(root) && !known.has(String(o.id))
+    && (!posSign || orderSign(o) === posSign));
 }
 
 function recordSummary(r) {
@@ -104,4 +138,4 @@ function cycleComposed(home, cycleId, symbols = []) {
   return roots.flatMap(root => readRecords(home, root).filter(r => r.cycleId === cycleId)).map(recordSummary);
 }
 
-module.exports = { composedSetups, composedLaneErrors, runsComposed, entryStamp, dueComposed, recordSummary, cycleComposed };
+module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, writePendingStamp, pendingStamp, entryStamp, dueComposed, unrecordedEntries, recordSummary, cycleComposed };

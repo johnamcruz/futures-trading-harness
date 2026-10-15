@@ -497,6 +497,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The trade lifecycle's composed limits: stamped with their record's expiry after a cycle, cancelled at it.
     composed: {
       due: (orders, at) => LR.dueComposed({ entries: entryOrders(home), orders, composed: LR.composedSetups(strategies()), now: at }),
+      onlyComposed: () => { const tags = LR.composedSetups(strategies()); const on = strategies().filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name)); },
+      unrecorded: (orders, positions, contractId) => LR.unrecordedEntries({ entries: entryOrders(home), orders, positions, root: contractId }),
       forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
       byOrder: () => Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), e.composed.record])),
     },
@@ -504,6 +506,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
     barClosed: record.closed,
+    // A running cycle's composed limits are checked for expiry this often (runner.js watchComposed); a test may shorten it.
+    ...(env.NODE_ENV === 'test' && Number(env.FTH_COMPOSED_WATCH_MS) > 0 && env.FTH_AUTONOMOUS !== '1' ? { composedWatchMs: Number(env.FTH_COMPOSED_WATCH_MS) } : {}),
     // A replay pass is one step in its own process: it can't hold a cycle for a lane that is late (runner.js).
     ...passHold(env),
   });

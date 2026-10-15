@@ -2736,3 +2736,15 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   const exit = await run(() => {}, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });
   assert.strictEqual(exit.sent.length, 1, exit.texts[1]);
 });
+
+test('order gate (hook): modify_order may not reprice a working trade_lifecycle entry worse than its record\'s entry; a better price and a stop move go', () => {
+  const home = trendHome();
+  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 21, contractId: 'MNQ', side: 'buy', setup: 'trade_lifecycle', composed: { record: 'r', expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' } }]));
+  const { env } = setup([], { FTH_HOME: home });
+  const modify = args => gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, ...args } }, env);
+  const worse = modify({ orderId: 21, limitPrice: 21542 });
+  assert.strictEqual(worse.code, 2);
+  assert.match(worse.stderr, /\[composed-reprice\]/);
+  assert.strictEqual(modify({ orderId: 21, limitPrice: 21538 }).code, 0);
+  assert.strictEqual(modify({ orderId: 22, stopPrice: 21500 }).code, 0);
+});

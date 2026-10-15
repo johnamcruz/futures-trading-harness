@@ -32,7 +32,7 @@ const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
  * (bracket ticks or the "stop <price>" in the rationale) and when it was sent.
  * Best effort; an id already recorded is kept as it is.
  */
-function recordEntryOrder(env, orderId, args, at, onError = () => {}) {
+function recordEntryOrder(env, orderId, args, at, onError = () => {}, stamp = null, tag = null) {
   try {
     const file = path.join(harnessHome(env), 'entry-orders.json');
     const list = readJson(file, []);
@@ -47,7 +47,9 @@ function recordEntryOrder(env, orderId, args, at, onError = () => {}) {
       stopPrice: stop ? Number(stop[1]) : null, at: new Date(at).toISOString(),
       // A composed entry (trade_lifecycle): its compose record on the cycle's bar and that record's expiry, at placement,
       // so the runner cancels it unfilled at the expiry, a restart in between too (lifecycle-runner.js dueComposed).
-      ...(() => { const c = require('./lifecycle-runner').entryStamp(env, args); return c ? { composed: c } : {}; })(),
+      // The gate's own stamp (the record it judged, the expiry it computed), handed over at the reply or written before
+      // the order went (keyed by its customTag); never looked up again here.
+      ...(() => { const c = require('./lifecycle-runner').entryStamp(env, args, stamp, tag); return c ? { composed: c } : {}; })(),
     };
     writeJsonAtomic(file, [...(Array.isArray(list) ? list : []), entry].slice(-ENTRY_ORDERS_KEPT));
   } catch (err) {
@@ -109,6 +111,10 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
       const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: name() });
       if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
+      // A composed entry's stamp from the gate (the gateway's check, observed.composed), on disk before it goes.
+      if (!risk && observed && observed.composed) {
+        try { require('./lifecycle-runner').writePendingStamp(env, prep.tag, observed.composed); } catch (err) { onError(`could not stamp ${prep.tag}: ${err.message}`); }
+      }
       if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag, name });
       return prep;
     },
@@ -170,7 +176,7 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
       for (const { marker: m, order } of r.placed) {
         const own = ownCall(m);
         if (own) { tagOf.delete(own[0]); settledIds.push(own[0]); }
-        if (!m.risk && order.id !== undefined && order.id !== null) recordEntryOrder(env, order.id, m.args || m, Date.parse(m.sentAt), onError);
+        if (!m.risk && order.id !== undefined && order.id !== null) recordEntryOrder(env, order.id, m.args || m, Date.parse(m.sentAt), onError, null, m.tag);
       }
       // Not placed: a reply that still comes later is recorded as usual.
       for (const m of r.gone) { const own = ownCall(m); if (own) tagOf.delete(own[0]); }
