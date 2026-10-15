@@ -109,6 +109,9 @@ test('a record as the history and the cycle log keep it; a cycle\'s own compose_
   assert.deepStrictEqual([s.id, s.side, s.ok, s.size, s.stop, s.target, s.rr, s.reads.length, s.problems], [rec.id, 'long', true, 1, 21512.5, 21598, 2.08, 6, 0]);
   assert.deepStrictEqual([s.symbol, s.entry, s.tick, s.tickValue], ['MNQ', 21540.25, 0.25, 0.5]);
   assert.strictEqual(s.signature, rec.signature);
+  // The first level in the way (the scorecard's room for a composed setup).
+  assert.deepStrictEqual(LR.recordSummary({ ...rec, plan: { ...rec.plan, inTheWay: { name: 'prior 1h high', price: 21560, R: 0.71 } } }).inTheWay, { name: 'prior 1h high', price: 21560, R: 0.71 });
+  assert.strictEqual(LR.recordSummary({ ...rec, plan: { ...rec.plan, inTheWay: null } }).inTheWay, null);
   assert.deepStrictEqual(LR.cycleComposed(home, 'abc', ['MNQ', 'NQ']).map(x => x.id), [rec.id]);
   assert.deepStrictEqual([LR.cycleComposed(home, null, ['MNQ']), LR.cycleComposed(home, 'other', ['MNQ']), LR.recordSummary(null)], [[], [], null]);
 });

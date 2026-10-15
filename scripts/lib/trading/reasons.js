@@ -10,13 +10,22 @@
  *
  * The facts: { window: { name, until, et, entriesAllowed } | null, news: { inBlackout, until, reason, error } | null, scanned, setups: [{ name, component, policy,
  * direction, candidate, style, verdict, trendAllows, prevailing, room: { inTheWay, needR }, alignment, confluence,
- * blocked, vwapSide, lunch }], trendRule: { prevailing, long, short }, attempt: { account, status, entryBlock } | null }.
+ * blocked, vwapSide, lunch, composed? }], trendRule: { prevailing, long, short }, attempt: { account, status, entryBlock } | null }.
  * Anything unknown is null, and a claim about it is `unchecked`, never confirmed.
+ *
+ * A composed setup (trade_lifecycle: the cycle's latest OK compose record on a side, `composed` set) is judged on its
+ * own record, never the strategy priority order: step 1 (a no-entry window, a news blackout), its verified reads, its
+ * plan; take at most the record's stated size (the composed-entry design, section 5).
  *
  *   checkReasons(text, facts)            each clause's claims: true | false | unchecked, judgment, unparsed
  *   expectedDecision(facts), expectedForEntry(facts, setup, side), setupSteps(setup, facts)   the priority order
- *   factsFromBriefing(briefing, { attempts, verdicts })   the facts of a live bar: its briefing, the started attempts,
- *                                                       the policy verdicts on it
+ *   factsFromBriefing(briefing, { attempts, verdicts, composed, root })   the facts of a live bar: its briefing, the
+ *                                                       started attempts, the policy verdicts and the family's compose
+ *                                                       records on it (root: the contract the check is for)
+ *   composedSetup(record, { window, news, aliases }), composedSetupsFrom(records, ctx)   a compose record (lifecycle-runner.js
+ *                                                       recordSummary) as a setup; the latest OK one per side; aliases:
+ *                                                       the policies listing the composed strategy (an entry's tag)
+ *   tagged(setup, name)                  whether an entry tagged `name` is on the setup
  *   reasonCheck(text, facts)             checkReasons plus every setup's steps, one by one
  *   renderCheck(result)                  the check as text, for the roles
  */
@@ -31,8 +40,74 @@ const etClock = ms => ET.format(new Date(ms));
 // ---------------------------------------------------------------------------------------------
 // Expected decision
 
+/**
+ * A composed setup's steps (the composed-entry design, section 5): not the strategy priority order but its own record.
+ * Step 1 (a no-entry window or news blackout) still decides; then each verified read of the record, then its plan (the
+ * code's entry, stop, target and the stated size, the ceiling an entry on it is held to).
+ */
+function composedSteps(s) {
+  const c = s.composed;
+  // A policy's verdict on the record (prop/composed-verdict.js) that skips it is a hard stop too.
+  const skip = s.verdict && s.verdict.action === 'skip' ? `the verdict is skip${s.verdict.reason ? ` (${s.verdict.reason})` : ''}` : null;
+  const stop = s.blocked || skip;
+  const out = [{ step: 1, name: STEPS[0], result: stop ? 'no-trade' : 'pass', why: stop || 'no hard stop' }];
+  for (const r of c.reads) out.push({ step: r.step || 'read', name: r.skill || 'read', result: 'pass', why: `${r.read || ''} (verified by compose_check)`.trim() });
+  out.push({ step: 'plan', name: 'plan', result: 'pass', why: `record ${c.record}: limit ${c.entry ?? '?'}, stop ${c.stop ?? '?'}, target ${c.target ?? '?'}, R:R ${c.rr ?? '?'}, size ${c.size ?? '?'}` });
+  return out;
+}
+
+/**
+ * The cycle's composed setup on one side (trade_lifecycle): the latest compose record for the side (the one the gate
+ * judges), when it is OK (every read verified, the plan standing); else none. `rec` is a record as the cycle log and the
+ * decision history keep it (lifecycle-runner.js recordSummary). A no-entry window or a news blackout blocks it (step 1).
+ */
+function composedSetup(rec, { window = null, news = null, aliases = [] } = {}) {
+  if (!isObj(rec) || rec.ok !== true || (rec.side !== 'long' && rec.side !== 'short')) return null;
+  const entry = num(rec.entry);
+  const stop = num(rec.stop);
+  const rr = num(rec.rr);
+  const way = isObj(rec.inTheWay) ? { name: rec.inTheWay.name, R: num(rec.inTheWay.R) } : null;
+  // As the briefing blocks a candidate: a no-entry window, a news blackout, or news that can't be read (the gate refuses).
+  const blocked = isObj(window) && window.entriesAllowed === false ? `the ${window.name} window allows no entries`
+    : isObj(news) && news.inBlackout === true ? `a news blackout${news.reason ? ` (${news.reason})` : ''}`
+      : isObj(news) && news.inBlackout !== false ? `news unknown${news.error ? ` (${news.error})` : ''}` : null;
+  return {
+    // trade-lifecycle.js's STRATEGY, required here: it requires composed-reads.js, which requires this module at load.
+    name: require('./trade-lifecycle').STRATEGY, component: null, policy: false, direction: rec.side, candidate: true, style: 'composed',
+    stopPoints: entry !== null && stop !== null ? Math.abs(entry - stop) : null, verdict: null, trendAllows: null, prevailing: null,
+    // The room as the record states it: the first level in the way and its R against the plan's R:R (an older record
+    // without the field: unknown).
+    room: 'inTheWay' in rec && rr !== null ? { inTheWay: way, needR: rr } : null,
+    alignment: null, confluence: null, blocked, vwapSide: null, lunch: false,
+    // The setup tags an entry on it goes under besides its own name: a policy listing the composed strategy (in an
+    // attempt every entry is tagged with the policy), from the strategies' own lists (lifecycle-runner.js composedSetups).
+    aliases: [...new Set((Array.isArray(aliases) ? aliases : []).filter(a => typeof a === 'string' && a))],
+    composed: {
+      record: rec.id || null, signature: rec.signature || null, entry, stop, target: num(rec.target), rr, size: Number.isInteger(rec.size) ? rec.size : null,
+      reads: (Array.isArray(rec.reads) ? rec.reads : []).filter(isObj).map(r => ({ step: r.step || null, skill: r.skill || null, read: r.read || null })),
+    },
+  };
+}
+
+/** Whether an entry tagged `name` is on setup s: its name, its component, or (a composed setup) a policy listing it. */
+const tagged = (s, name) => Boolean(name) && (s.name === name || s.component === name || (Boolean(s.composed) && Array.isArray(s.aliases) && s.aliases.includes(name)));
+
+/**
+ * The composed setups of a family's records on a bar (recordSummary shape), in record order: the latest per side across
+ * the family (the one the gate judges), when OK and, given `root`, on that contract (a size stated for one contract is
+ * not one for another of the family: the gate refuses it).
+ */
+function composedSetupsFrom(records, { root = null, ...ctx } = {}) {
+  const latest = new Map();
+  for (const r of Array.isArray(records) ? records : []) if (isObj(r) && (r.side === 'long' || r.side === 'short')) latest.set(r.side, r);
+  // The record's contract: its symbol, else its contract (as the gate reads it).
+  const on = r => { const sym = r.symbol || r.contract; return !root || (Boolean(sym) && String(sym).toUpperCase() === root); };
+  return [...latest.values()].filter(on).map(r => composedSetup(r, ctx)).filter(Boolean);
+}
+
 /** One setup's steps of the priority order: [{ step, name, result: pass|no-trade|half|judgment|unknown, why }]. */
 function setupSteps(s, facts) {
+  if (s.composed) return composedSteps(s);
   const out = [];
   const add = (step, result, why) => out.push({ step, name: STEPS[step - 1], result, why });
   const s1 = s.blocked ? s.blocked : s.verdict && s.verdict.action === 'skip' ? `the verdict is skip${s.verdict.reason ? ` (${s.verdict.reason})` : ''}`
@@ -53,7 +128,7 @@ function setupSteps(s, facts) {
   else if (al === 'counter') add(4, s.style === 'reversal' ? 'pass' : 'no-trade', s.style === 'reversal' ? 'counter, a reversal (step 2 decides)' : 'counter on a non-reversal setup');
   else add(4, 'unknown', 'the multi-timeframe read for its side is unknown');
   add(5, 'judgment', 'the strategy\'s own context filter and skip rules');
-  const against = (s.confluence && s.confluence.against.length ? s.confluence.against : []).concat(facts.setups.filter(x => x !== s && x.candidate && x.direction !== s.direction).map(x => x.name));
+  const against = (s.confluence && s.confluence.against.length ? s.confluence.against : []).concat(facts.setups.filter(x => x !== s && x.candidate && !x.composed && x.direction !== s.direction).map(x => x.name));
   add(6, against.length ? 'no-trade' : 'pass', against.length ? `against: ${[...new Set(against)].join(', ')}` : s.confluence && s.confluence.with.length ? `with ${s.confluence.with.join(', ')}` : 'none');
   const secondary = [s.vwapSide && s.vwapSide !== 'at' && (s.direction === 'long' ? s.vwapSide === 'below' : s.vwapSide === 'above') ? 'the VWAP on the other side' : null, s.lunch ? 'the lunch lull' : null].filter(Boolean);
   add(7, secondary.length ? 'judgment' : 'pass', secondary.length ? `${secondary.join(', ')}: may halve` : 'none against');
@@ -69,6 +144,17 @@ const NONE = { setup: null, steps: [], judgment: [], couldSkip: [] };
  */
 function setupExpectation(s, facts) {
   const steps = setupSteps(s, facts);
+  if (s.composed) {
+    // Judged on its own plan: a hard stop says no trade; else take, at most the record's stated size (and the policy
+    // verdict's size, when one sized it).
+    const stop = steps.find(x => x.result === 'no-trade');
+    const max = s.verdict ? num(s.verdict.maxSize) : null;
+    const size = s.composed.size;
+    return {
+      decision: stop ? 'no-trade' : 'take', ceiling: stop ? 0 : size !== null && max !== null ? Math.min(size, max) : size, half: false, decidedBy: stop ? stop.step : 'take', setup: s.name, strategy: s.name,
+      direction: s.direction, steps, judgment: [], couldSkip: [], composed: s.composed.record,
+    };
+  }
   const stop = steps.find(x => x.result === 'no-trade');
   const unknown = steps.find(x => x.result === 'unknown');
   const halves = steps.filter(x => x.result === 'half' || (x.step === 2 && x.result === 'judgment'));
@@ -85,12 +171,16 @@ function setupExpectation(s, facts) {
 
 /** What the priority order's mechanical steps expect at a decision (a skip is judged against the setup the order lets go furthest). */
 function expectedDecision(facts) {
+  // No scan: the rules setups are unknown, so a pass can't be judged (an entry on a composed setup still is: expectedForEntry).
   if (!facts.scanned) return { decision: 'unchecked', ceiling: null, decidedBy: 'no scan', ...NONE };
   if (!facts.setups.length) return { decision: 'no-trade', ceiling: 0, decidedBy: 'no setup', ...NONE };
   const each = facts.setups.map(s => setupExpectation(s, facts));
   // The setup the order lets go furthest: a clean take (no judgment step can turn it down), else a take a judgment
   // step can turn down, else an unchecked, else the first no-trade. A couldSkip excuses a skip only when every take has one.
-  const rank = e => (e.decision === 'take' ? (e.couldSkip.length ? 1 : 0) : e.decision === 'unchecked' ? 2 : 3);
+  // A composed take ranks after a rules take a judgment step can turn down: a pass is excused on the rules setup's own
+  // terms first, never made right by the model's composing beside it.
+  // ...and after an unchecked rules setup: knowing less about the scan never makes a pass more surely right.
+  const rank = e => (e.decision === 'take' ? (e.composed !== undefined ? 2.5 : e.couldSkip.length ? 1 : 0) : e.decision === 'unchecked' ? 2 : 3);
   return [...each].sort((a, b) => rank(a) - rank(b))[0];
 }
 
@@ -99,8 +189,15 @@ function expectedDecision(facts) {
  * own name, else a component it names) on the side it took; none such: unchecked (no setup at all: no trade).
  */
 function expectedForEntry(facts, setupName, side) {
-  if (!facts.scanned || facts.setups.length === 0) return expectedDecision(facts);
-  const s = facts.setups.find(x => x.direction === side && x.name === setupName) || facts.setups.find(x => x.direction === side && x.component === setupName);
+  // A composed entry is judged on its own record, whether or not the bar's scan was logged.
+  const composed = facts.setups.find(x => x.composed && x.direction === side && tagged(x, setupName));
+  if (composed) return setupExpectation(composed, facts);
+  // An entry under a composed tag (facts.composedTags, the scorecard's) with no OK record on its side has no setup.
+  if (setupName === require('./trade-lifecycle').STRATEGY || (facts.composedTags || []).includes(setupName)) return { decision: 'no-trade', ceiling: 0, decidedBy: 'no setup', ...NONE, setup: setupName, direction: side };
+  // Any other entry is judged on the scan's setups alone: a compose record beside it is no setup of its own.
+  const rules = facts.setups.filter(x => !x.composed);
+  if (!facts.scanned || rules.length === 0) return expectedDecision({ ...facts, setups: rules });
+  const s = rules.find(x => x.direction === side && x.name === setupName) || rules.find(x => x.direction === side && x.component === setupName);
   return s ? setupExpectation(s, facts) : { decision: 'unchecked', ceiling: null, decidedBy: 'no matching setup', ...NONE, setup: setupName || null, direction: side };
 }
 
@@ -161,7 +258,9 @@ const hhmm = s => s.replace(/^(\d):/, '0$1:');
 /** One claim checked against the facts: { kind, clause, check: true|false|unchecked, why }. */
 function checkClaim(kind, clause, facts, text = clause) {
   const ok = (v, why) => ({ kind, clause, check: v, why });
-  const fired = facts.setups.filter(s => s.candidate);
+  // What fired: the scan's candidates and the policy verdicts; a composed setup is the model's own record, never a
+  // strategy that fired (the runner's "no rules strategy fired" stays true beside one).
+  const fired = facts.setups.filter(s => s.candidate && !s.composed);
   if (kind === 'no-entry-window') {
     const w = facts.window;
     const news = isObj(facts.news) ? facts.news : null;
@@ -349,7 +448,7 @@ function setupOf(c, { prevailing, rule, alignment, lunch }) {
  * that bar, and the started attempts (combine_status's rows: { account, started, status, entryBlock }; null: unknown).
  * A verdict joins its own setup when the briefing lists it, else takes its component's facts on its side.
  */
-function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
+function factsFromBriefing(b, { attempts = null, verdicts = [], composed = [], root = null } = {}) {
   const m3 = sectionData(b, 'm3');
   const alignment = isObj(sectionData(b, 'm15').alignment) ? sectionData(b, 'm15').alignment : {};
   const rule = trendRuleOf(m3.trendRule);
@@ -361,8 +460,17 @@ function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
   const setups = scanned ? m3.candidates.filter(c => isObj(c) && c.name && c.direction).map(c => setupOf(c, ctx)) : [];
   // Fill a side the line leaves unknown from what the candidates say for it.
   for (const s of setups) if (rule[s.direction] === null && s.style === 'trend') rule[s.direction] = s.trendAllows;
+  // The compose records on the bar (recordSummary shape): the latest OK one per side is a composed setup.
+  const composedSetups = composedSetupsFrom(composed, { window, news: isObj(m3.news) ? m3.news : null, root });
   for (const v of (verdicts || []).filter(x => isObj(x) && x.strategy && x.direction)) {
     const verdict = { action: v.action, maxSize: num(v.maxSize), contract: v.contract || null, stopTicks: num(v.stopTicks), reason: v.reason || null };
+    // A policy's verdict on a compose record (prop/composed-verdict.js: its component the composed strategy, or the
+    // record named) is that composed setup's verdict, never a setup of its own (nothing fired for it).
+    if (v.record || v.component === require('./trade-lifecycle').STRATEGY) {
+      const c = composedSetups.find(s => s.direction === v.direction && (!v.record || s.composed.record === v.record));
+      if (c) Object.assign(c, { verdict, aliases: [...new Set([...c.aliases, v.strategy])] });
+      continue;
+    }
     const own = setups.find(s => s.name === v.strategy && s.direction === v.direction);
     // A verdict is the policy's setup on the bar (a skip too: step 1 decides it), as the scan lists it.
     const comp = setups.find(s => s.name === v.component && s.direction === v.direction && !s.policy);
@@ -374,6 +482,7 @@ function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
     // The briefing holds the scan before the runner's screen: a component a policy owns trades only through its verdict.
     if (comp) Object.assign(comp, { candidate: false, blocked: `traded through ${v.strategy} (its verdict decides)` });
   }
+  setups.push(...composedSetups);
   const rows = Array.isArray(attempts) ? attempts.filter(r => isObj(r) && r.started) : null;
   const a = rows ? rows.find(r => r.status === 'active') || rows[0] || null : null;
   const attempt = !rows ? null : a ? { account: a.account || null, status: a.status || 'unknown', entryBlock: a.entryBlock || null } : { account: null, status: 'none', entryBlock: null };
@@ -387,7 +496,7 @@ function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
 /** checkReasons on a stated decision (a CYCLE RESULT line, a VERDICT line, or the reasons alone), and every setup's steps. */
 function reasonCheck(text, facts) {
   const r = checkReasons(String(text || '').replace(/^\s*VERDICT:\s*/i, ''), facts);
-  const steps = (facts.setups || []).map(s => ({ setup: s.name, direction: s.direction, steps: setupSteps(s, facts).map(({ step, name, result, why }) => ({ step, name, result, why })) }));
+  const steps = (facts.setups || []).map(s => ({ setup: s.name, direction: s.direction, ...(s.composed ? { composed: s.composed.record } : {}), steps: setupSteps(s, facts).map(({ step, name, result, why }) => ({ step, name, result, why })) }));
   return { ...r, steps, falseCount: r.claims.filter(c => c.check === false).length };
 }
 
@@ -401,13 +510,13 @@ function renderCheck(r) {
   for (const c of r.unparsed) out.push(`- UNPARSED "${c}": no fact recognized; check it yourself against the briefing`);
   if (!r.claims.length && !r.judgment.length && !r.unparsed.length) out.push('- no reason stated to check');
   out.push(r.steps.length ? 'The priority order, step by step, as the facts answer it:' : 'The priority order: no setup on this bar (no candidate, no verdict).');
-  for (const s of r.steps) out.push(`- ${s.setup} ${s.direction}: ${s.steps.map(x => `${x.step} ${x.name} ${x.result} (${x.why})`).join('; ')}`);
+  for (const s of r.steps) out.push(`- ${s.setup} ${s.direction}${s.composed !== undefined ? ` (composed: its record's reads and plan, not a strategy's priority order)` : ''}: ${s.steps.map(x => `${x.step} ${x.name} ${x.result} (${x.why})`).join('; ')}`);
   out.push(r.falseCount ? `${r.falseCount} reason${r.falseCount === 1 ? '' : 's'} FALSE: ${r.falseCount === 1 ? 'name it, drop it' : 'name each, drop them'}, and make the decision again from the facts.`
     : 'No reason is false by these facts; an UNCHECKED or UNPARSED one is still yours to check.');
   return `${out.join('\n')}\n`;
 }
 
 module.exports = {
-  STEPS, NONE, setupSteps, setupExpectation, expectedDecision, expectedForEntry, clausesOf, checkClaim, checkReasons,
+  STEPS, NONE, setupSteps, setupExpectation, composedSetup, composedSetupsFrom, tagged, expectedDecision, expectedForEntry, clausesOf, checkClaim, checkReasons,
   trendRuleOf, factsFromBriefing, reasonCheck, renderCheck,
 };

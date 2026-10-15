@@ -14,7 +14,8 @@
  * at that time (all local, the run home):
  *   logs/scans-<day>.jsonl          the scanned bar: what fired, the trend rule per strategy, confluence
  *   policy-verdicts.jsonl           a policy strategy's verdict on the bar (component, size, the attempt)
- *   logs/cycles/<day>/*.json        the cycle's context: the attempt (balance, floor, cushion, entry block)
+ *   logs/cycles/<day>/*.json        the cycle's context: the attempt (balance, floor, cushion, entry block), and its
+ *                                   compose records (`composed`: the composed setups)
  *   bars/, bars-scratch/ (or --bars) the bars closed by the decision: the briefing rebuilt with the
  *                                   runner's own code (trading/briefing.js) for the room and the
  *                                   multi-timeframe read of each setup, as the model was given them
@@ -32,6 +33,12 @@
  * The highest step that says no trade decides; else a step it can't compute (no bars, no scan)
  * leaves it `unchecked`; else `take`, at most the verdict's size (halved once, floor; 0 is no trade).
  * With no setup on the bar the expectation is no trade ('no setup').
+ *
+ * A composed setup (trade_lifecycle: the cycle's latest OK compose record on a side) is judged on its own record
+ * (trading/reasons.js composedSetup), not these steps: a no-entry window or news blackout says no trade; else take, at
+ * most the record's stated size. An entry on it is right within that size, a bad size over it; a pass on it is right
+ * (a good decision by default; a wrong stated reason when a reason is false), and a pass with no OK record is no trade
+ * ('no setup'). An entry tagged with a policy that lists a composed strategy is on the composed setup.
  *
  * Reasons: the CYCLE RESULT text is split into clauses; each claim a clause makes that the facts can
  * check (a no-entry window, nothing fired, the trend rule blocking a side, no attempt, no verdict,
@@ -71,14 +78,17 @@ const fs = require('fs');
 const path = require('path');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { readLines, readRun } = require('./store');
-const { labelRun, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
+const { labelRun, composedTagsAt, countedEntry, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
 const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
 const { loadRoundSteps } = require('../trading/round-numbers');
 const { exitPlan } = require('../trading/evaluator');
 const { historyBars } = require('../autotrader');
 const { expandHome } = require('../paths');
-const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf } = require('../trading/reasons');
+const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf, composedSetupsFrom, tagged } = require('../trading/reasons');
+const { familyRoot } = require('../trading/contracts');
+const { parseStandardName } = require('../broker/translator');
+const { STRATEGY: COMPOSED } = require('../trading/trade-lifecycle');
 const F = require('./failures');
 const { checkLook } = require('../prop/looks');
 const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
@@ -119,17 +129,23 @@ function classify(label, facts, expected, reasons) {
     return why.push(`${act} in a trade: judgment`), out('unchecked', null);
   }
   if (act === 'long' || act === 'short') {
-    const o = (label.teacher.orders || []).find(x => x.tool === 'place_order' && !x.riskReducing) || {};
+    // The entry the label counts (a refused try before it is one decision with it).
+    const o = countedEntry(label.teacher.orders) || {};
     if (label.gate && label.gate.decision === 'refused') return why.push(`refused by ${label.gate.by || 'the gate'}${label.gate.checks && label.gate.checks.length ? `: ${label.gate.checks.join(', ')}` : ''}`), out('risk-rule rejection', false);
     const style = facts.styleOf(o.setup);
-    const same = facts.setups.filter(s => s.direction === act && s.candidate);
-    const other = facts.setups.filter(s => s.direction !== act && s.candidate);
+    // A composed setup is the side an entry on it must take; any other entry's sides are the scan's setups alone.
+    const composedTag = o.setup === COMPOSED || (facts.composedTags || []).includes(o.setup) || facts.setups.some(s => s.composed && tagged(s, o.setup));
+    const pool = composedTag ? facts.setups.filter(s => s.composed) : facts.setups.filter(s => !s.composed);
+    const same = pool.filter(s => s.direction === act && s.candidate);
+    const other = pool.filter(s => s.direction !== act && s.candidate);
     // The trend rule for the setup it traded (a policy's component), else for the strategy it named.
-    const own = facts.setups.find(s => (s.name === o.setup || s.component === o.setup) && s.direction === act);
-    const ownOther = facts.setups.some(s => (s.name === o.setup || s.component === o.setup) && s.direction !== act);
-    const against = own ? own.style !== 'reversal' && own.trendAllows === false : style === 'trend' && facts.trendRule[act] === false;
+    // From the same pool: an entry under a composed tag has no rules setup of its own, and the gate judges it against the
+    // trend by its reads (no scan's trend rule).
+    const own = pool.find(s => tagged(s, o.setup) && s.direction === act);
+    const ownOn = pool.find(s => tagged(s, o.setup) && s.direction !== act);
+    const against = own ? own.style !== 'reversal' && own.trendAllows === false : !composedTag && style === 'trend' && facts.trendRule[act] === false;
     if (style === 'manual') return why.push('a manual strategy: its trigger is the model\'s'), out('unchecked', null);
-    if ((!own && ownOther) || (!same.length && other.length) || against) return why.push(against ? `the trend rule blocks ${act}s` : `the setup was ${other[0].direction}`), out('wrong-side entry', false);
+    if ((!own && ownOn) || (!same.length && other.length) || against) return why.push(against ? `the trend rule blocks ${act}s` : `the setup was ${(ownOn || other[0]).direction}`), out('wrong-side entry', false);
     if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
     const size = num((label.teacher.size || {}).contracts) || num(o.size);
     if (expected.ceiling === 0) return why.push(`the order says no trade (${expected.decidedBy === 'no setup' ? 'no setup' : `step ${expected.decidedBy}`})`), out('bad size', false);
@@ -142,6 +158,13 @@ function classify(label, facts, expected, reasons) {
   // A skip (or standing aside with nothing to take).
   if (expected.decision === 'no-trade') return out(falseReason ? 'wrong stated reason' : 'right', true);
   if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
+  // A pass on an OK compose record: the record is a checker's, not advice, and passing is a good decision by default,
+  // scored as one (the composed-entry design: "passes by default: a pass is a good decision and is scored as one"); its
+  // outcome is the learning report's counterfactual grade, not adherence.
+  if (expected.composed !== undefined) {
+    why.push(`a pass on the verified compose record ${expected.composed}: passing is the model's call`);
+    return out(falseReason ? 'wrong stated reason' : 'right', true);
+  }
   if (expected.couldSkip && expected.couldSkip.length) {
     why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`);
     return out(falseReason ? 'wrong stated reason' : 'unchecked', null);
@@ -274,7 +297,9 @@ function runRecords(home, { strategies, outcomeBars }) {
     }
   }
   const verdicts = new Map();
-  for (const v of readLines(path.join(home, 'policy-verdicts.jsonl'))) {
+  // In file order: the latest verdict per policy is the last one written (labels.js composedTagsAt reads it so too).
+  const verdictList = readLines(path.join(home, 'policy-verdicts.jsonl')).filter(isObj);
+  for (const v of verdictList) {
     if (!isObj(v) || !v.symbol || !v.bar) continue;
     const k = `${v.symbol}|${v.bar}|${v.strategy}`;
     if (!verdicts.has(k)) verdicts.set(k, []);
@@ -292,7 +317,7 @@ function runRecords(home, { strategies, outcomeBars }) {
   // The bars the runner hands a cycle under a config.
   const countFor = cfg => { const tf = Number(cfg.timeframe) || null; return Number(cfg.bars) > 0 ? Number(cfg.bars) : tf ? historyBars(tf) : 0; };
   // The run's own round-number steps (its home, seeded at its start), never today's user config.
-  return { scans, verdicts, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')), roundSteps: loadRoundSteps({ FTH_HOME: home }) };
+  return { scans, verdicts, verdictList, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')), roundSteps: loadRoundSteps({ FTH_HOME: home }) };
 }
 
 const before = (list, t) => (list || []).filter(x => Date.parse(x.at) <= t).pop() || null;
@@ -324,7 +349,7 @@ function windowAt(t) {
 }
 
 /** The facts at one decision: window, setups (with the trend rule, room, read, confluence), trend rule per side, attempt. */
-function factsAt(label, rec, { home, tf, count, accounts }) {
+function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] }) {
   const t = Date.parse(label.t);
   const facts = {
     t: label.t, et: etClock(t), window: windowAt(t), news: newsState(rec.blackouts, new Date(t)),
@@ -375,14 +400,48 @@ function factsAt(label, rec, { home, tf, count, accounts }) {
       });
     }
   }
-  facts.attempt = attemptAt(label, facts, { home, accounts });
+  // The cycle's compose records for this symbol's bar (the cycle log's `composed`): the latest OK one per side is a
+  // composed setup, judged on its own record (the composed-entry design, section 5).
+  const tags = [...composedTagsAt(strategies, rec.verdictList, label.symbol, label.barT)];
+  // The tags an entry on a composed setup goes under: an entry under one is judged on a composed setup or none.
+  facts.composedTags = tags;
+  const cycleRoot = label.symbol ? (parseStandardName(String(label.symbol)) || {}).root || null : null;
+  const composedSetups = composedSetupsFrom(composedOf(doc, label), { window: facts.window, news: facts.news, aliases: tags, root: entryRoot(label) || cycleRoot });
+  // A policy's verdict on a record (prop/composed-verdict.js, `record` its id): the latest is that setup's verdict, so a
+  // skip is a hard stop and its size a ceiling, as the gate holds the entry to it.
+  for (const s of composedSetups) {
+    const v = rec.verdictList.filter(x => isObj(x) && x.record && x.record === s.composed.record).pop();
+    if (v) s.verdict = { action: v.action, maxSize: num(v.maxSize), contract: v.contract || null, stopTicks: num(v.stopTicks), reason: v.reason || null };
+  }
+  facts.setups.push(...composedSetups);
+  facts.attempt = attemptAt(label, facts, { accounts, doc });
   return facts;
 }
 
+/**
+ * The contract root an entry was placed on (its order's contract, a standard name), as the gate checks the record's
+ * contract against it; null for no entry, or a broker id no standard name gives (the cycle's symbol then).
+ */
+function entryRoot(label) {
+  const act = label.teacher ? label.teacher.action : null;
+  if (act !== 'long' && act !== 'short') return null;
+  const o = countedEntry(label.teacher.orders);
+  const std = o && o.contractId ? parseStandardName(String(o.contractId)) : null;
+  return std ? std.root : null;
+}
+
+/** The compose records (recordSummary shape) the cycle log kept for the label's symbol family and bar, in order. */
+function composedOf(doc, label) {
+  const list = isObj(doc) && Array.isArray(doc.composed) ? doc.composed.filter(isObj) : [];
+  const fam = label.symbol ? familyRoot(String(label.symbol).toUpperCase()) : null;
+  const bar = Date.parse(label.barT);
+  return list.filter(r => (!fam || !r.symbol || familyRoot(String(r.symbol).toUpperCase()) === fam)
+    // The bar exactly, as the gate's recordsAt: a record with none (a refused call) is on no bar.
+    && Number.isFinite(bar) && Date.parse(r.bar) === bar);
+}
+
 /** The attempt as the cycle's context showed it (else the verdict's), with the daily-limit headroom and the balance check. */
-function attemptAt(label, facts, { home, accounts }) {
-  const file = label.provenance && label.provenance.cycleFile;
-  const doc = file && file.startsWith('logs/cycles/') ? readJson(path.join(home, file), null) : null;
+function attemptAt(label, facts, { accounts, doc }) {
   const ctx = isObj(doc) && isObj(doc.context) ? doc.context : null;
   const a = (ctx && Array.isArray(ctx.attempts) && ctx.attempts.find(isObj)) || (facts.setups.find(s => s.verdictCombine) || {}).verdictCombine || null;
   if (!a) return ctx && Array.isArray(ctx.attempts) ? { account: null, status: 'none' } : null;
@@ -424,21 +483,21 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       continue;
     }
     const cfg = cfgAt(label.t);
-    const facts = factsAt(label, rec, { home, tf: Number(cfg.timeframe) || null, count: rec.countFor(cfg), accounts });
+    const cycleFile = label.provenance && label.provenance.cycleFile;
+    const doc = cycleFile && cycleFile.startsWith('logs/cycles/') ? readJson(path.join(home, cycleFile), null) : null;
+    const facts = factsAt(label, rec, { tf: Number(cfg.timeframe) || null, count: rec.countFor(cfg), accounts, doc, strategies });
     const act = label.teacher ? label.teacher.action : null;
     const expected = label.decision === 'in-trade' ? { decision: 'hold', ceiling: null, decidedBy: 'in a trade', ...NONE }
       : act === 'long' || act === 'short' ? expectedForEntry(facts, label.teacher.setup, act) : expectedDecision(facts);
     // An entry is known from its orders, whatever the result's first word: a window claim is no ground for it.
     const reasons = checkReasons(label.result, facts, { entered: act === 'long' || act === 'short' });
-    const cycleFile = label.provenance && label.provenance.cycleFile;
-    const doc = cycleFile && cycleFile.startsWith('logs/cycles/') ? readJson(path.join(home, cycleFile), null) : null;
     const flow = F.flowOf(label, facts, rec.byName);
     const claimChecks = F.claimChecksOf(doc, label.result);
     // On a reasoning-fix look no outcome is read: an exit is judged without the trade's excursion (early close: unchecked).
     const seen = hide ? { ...label, outcome: null } : label;
     const verdict = withChecks(classify(seen, facts, expected, reasons), { label, facts, flow, claimChecks });
     const o = label.outcome;
-    const { styleOf: _styleOf, planOf: _planOf, ...plainFacts } = facts;
+    const { styleOf: _styleOf, planOf: _planOf, composedTags: _tags, ...plainFacts } = facts;
     records.push({
       v: VERSION, key: label.key, t: label.t, day: label.day, symbol: label.symbol, barT: label.barT, decision: label.decision,
       facts: { ...plainFacts, setups: facts.setups.map(({ verdictCombine: _vc, ...s }) => s) },
