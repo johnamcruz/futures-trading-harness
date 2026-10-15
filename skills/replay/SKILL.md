@@ -52,8 +52,9 @@ broker.
    on runs not learning; the report counts the bars skipped and the time
    saved, and the learning report says the run was setup-focused. Optional
    `setupLibrary` pins a history library index (`scripts/setup-library.js`,
-   practice-train only): `experience_lookup` shows it apart from your own
-   record, as code-measured history.
+   practice-train only); pinned alone it is not shown. `libraryDisplay: true`
+   shows it in `experience_lookup`, apart from your own record, as
+   code-measured history: counts, win rate and no-room only.
 3. **Isolation.** Each run gets its own fresh harness home,
    `<workDir>/<runId>`, never the live one: the driver refuses a run home that
    is or overlaps `~/.futures-trading-harness`, your `FTH_HOME`, or the
@@ -65,7 +66,9 @@ broker.
    account. The order gate is never relaxed: it judges every order at the
    replayed time.
 4. **The loop**, one process per decision time (the replay clock is frozen
-   per process): the broker's clock moves to the time (fills in between
+   per process, or, with the run's `latency` on, the default for a learning
+   run, runs with the wall clock from each decision time, so the cycle's own
+   time is charged as live): the broker's clock moves to the time (fills in between
    happen in the broker), then `autotrader.js --once` runs one pass of the
    live loop there with `FTH_REPLAY_NOW`. Decision times are the closes of
    the runner's bars inside its sessions (polled `barDelaySeconds` after the

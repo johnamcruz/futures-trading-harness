@@ -15,7 +15,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 1. **Compose.** Reason through `trader-process`, each step with the skill
    that fits, and call `compose_check` with one read per step at least and
    your size. Pass unless every read is true now and agrees with your side.
-   The record is for this bar and side; it expires at the next bar close.
+   The record is for this bar and side; it expires `valid_bars` base bars
+   after its bar's close (two: 6 minutes on the 3m).
 
    | Step | Read forms | The skill for the fact |
    | --- | --- | --- |
@@ -30,6 +31,9 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    The setup is the reaction on a closed candle (often 15m); an entry read
    your way must be on a candle that closed after it (often the next 3m).
+   A CISD setup is timed from its confirming candle
+   (`m3.cisd.<tf>.confirmedClose`): the entry read closes after it; a CISD
+   with no close time is refused.
    Each needs a true read your way; `at`, `touched`, `swept`, volume,
    participation and a setup `in ote` only support it.
 
@@ -64,7 +68,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |
 | `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED and with or against your side, then the plan in code; recorded for this bar, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
-| `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then the code-measured history library apart (not yours); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
+| `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 ## Examples
 
