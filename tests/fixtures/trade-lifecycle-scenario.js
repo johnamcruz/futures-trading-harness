@@ -5,8 +5,8 @@
 
 /**
  * Scenario 1 (MNQ, 3m bars): the 60m broke up (BOS) and price holds above the prior RTH high; the 15m candle traded
- * below the prior VAH 21530.13 and closed back above it; the 3m candle closed at its high with momentum; the 15m low
- * 21512.75 is the invalidation; the next 60m swing above is 21598.00. Entry reference 21540.25; ATR(20) 40 points
+ * below the prior VAH 21530.13 and closed back above it (14:30-14:45 UTC); a later 3m candle (closing 15:00, the
+ * confirmation after the reaction) closed at its high with momentum; the 15m low 21512.75 is the invalidation; the next 60m swing above is 21598.00. Entry reference 21540.25; ATR(20) 40 points
  * (the reference stop 0.5 x ATR(20) = 20).
  */
 function scenario1() {
@@ -43,9 +43,9 @@ function scenario1() {
           sweeps: [{ name: 'prior RTH high', price: 21520, side: 'high', key: true }],
           cisd: { '3m': 'none in these bars', '15m': { dir: 'bullish', level: 21520, status: 'touched', priceInOte: false }, '5m': 'unavailable (not whole 3m bars; no 1m bars configured)' },
           candles: {
-            '3m': { t: '2026-04-23T14:57:00.000Z', o: 21530.5, h: 21541, l: 21529.75, c: 21540.25, closeLocation: 'top', rangeAtr: 1.3, volRatio: 1.6, pattern: 'displacement', dir: 'up', levels: {}, relations: [{ name: 'prior VAH', price: 21530.13, rel: 'broke', dir: 'up' }] },
+            '3m': { t: '2026-04-23T14:57:00.000Z', closedAt: '2026-04-23T15:00:00.000Z', o: 21530.5, h: 21541, l: 21529.75, c: 21540.25, closeLocation: 'top', rangeAtr: 1.3, volRatio: 1.6, pattern: 'displacement', dir: 'up', levels: {}, relations: [{ name: 'prior VAH', price: 21530.13, rel: 'broke', dir: 'up' }] },
             '5m': { unavailable: 'not whole 3m bars; no 1m bars configured' },
-            '15m': { t: '2026-04-23T14:45:00.000Z', o: 21536, h: 21545, l: 21512.75, c: 21541, closeLocation: 'top', rangeAtr: 1.1, volRatio: 1.2, pattern: 'hammer',
+            '15m': { t: '2026-04-23T14:30:00.000Z', closedAt: '2026-04-23T14:45:00.000Z', o: 21536, h: 21545, l: 21512.75, c: 21541, closeLocation: 'top', rangeAtr: 1.1, volRatio: 1.2, pattern: 'hammer',
               levels: { 'prior VAH': 'rejected: closed back above', 'VWAP (rth)': 'broke above', 'prior RTH high': 'touched', 'IB high': 'touched' }, moreLevels: 2, relations: relations15 },
             '1h': { t: '2026-04-23T14:00:00.000Z', o: 21500, h: 21545, l: 21490, c: 21541, closeLocation: 'top', rangeAtr: 1.4, volRatio: 1.1, pattern: 'none', levels: {}, relations: [] },
           },
