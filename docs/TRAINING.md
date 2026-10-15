@@ -642,6 +642,33 @@ merged, and no document is edited outside the candidate's own tree.
 - **Reasoning-fix looks.** `--reasoning-fix` takes a free look whose outcomes
   are hidden.
 
+## Tuning plan (stages 1 and 2)
+
+Stage 1 tunes setup decisions. Stage 2 tunes risk decisions by account
+state, also scored by the 30-day Monte Carlo. Both follow the same plan:
+
+1. Run Propose–Probe–Compose rounds until the correct-decision rate stops
+   rising. Stopped: two rounds in a row with no significant paired gain on
+   the same moments.
+2. A skill that doesn't move after rounds of wording edits → switch
+   levers: make the fact clearer in the briefing (code), or rely on LoRA.
+3. Train LoRA on correct decisions made under the settled skills only
+   (the same skills and prompt digest). Validate base against adapted
+   with the keep rule.
+4. Run more Propose–Probe–Compose rounds with the adapter, on the
+   remaining errors only.
+5. Retrain the adapter only when the skills change meaningfully. The
+   preflight refuses a stale adapter.
+6. Done: stage 1 when its exit test passes (pooled validate runs); stage 2
+   when the promotion gate passes on validate. Then the sealed 2025 test,
+   then 2026.
+
+Track per round: the correct-decision rate overall and per skill, with
+correct passes and correct entries reported apart.
+
+The LoRA steps are the LoRA section's (branch `feat/lora-ready`, not merged
+yet).
+
 ## 8. Rules that keep it honest
 
 - **No outcomes shown to the model.** It sees only its own record (the
