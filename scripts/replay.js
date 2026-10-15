@@ -15,7 +15,7 @@
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
  *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>]   month by month, with each
  *       month's combine verdict (a fresh attempt each month; account: --account, the runner config's, the prop
- *       strategy's, else topstep_100k); writes report.md, with the skill usage (--bars as for labels)
+ *       strategy's, else topstep_100k); writes report.md
  *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
  *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups;
  *       --out: write elsewhere (required for an unfinished run, outside its run home)
