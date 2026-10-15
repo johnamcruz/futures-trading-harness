@@ -99,6 +99,31 @@ test('the good fixture: every check passes (every feature merged); the risk reco
   assert.ok(P.formatReport(res).split('\n').every(l => !l || /^(PASS|FAIL|WARN|N\/A) /.test(l) || /^training preflight/.test(l)));
 });
 
+test('adapter: N/A with none selected; a stale adapter (its skills or prompt digest not the harness\'s now) refuses the run', () => {
+  const now = { skills: '1'.repeat(64), prompt: '2'.repeat(64) };
+  const m = {
+    v: 1, name: 'm1', base: { model: 'b', folder: 'f' }, harness: { commit: 'c'.repeat(40), ...now }, dataset: { fingerprint: 'd'.repeat(64) },
+    training: { step: 1, method: 'lora', seed: 1, settings: { iters: 1 } }, validation: { kind: 'stage-1-exit-test', window: 'practice-validate', status: 'passed', runs: ['a', 'b'], result: { ok: true } },
+  };
+  const file = path.join(tmp(), 'manifest.json');
+  fs.writeFileSync(file, JSON.stringify(m));
+  const read = d => ({ adapterManifest: f => JSON.parse(fs.readFileSync(f, 'utf8')), adapterSpec: () => JSON.parse(fs.readFileSync(path.join(ROOT, 'adapters', 'spec.json'), 'utf8')), harnessDigests: () => d });
+  const run = { cfg: { ...ctx().run.cfg, adapter: file } };
+  assert.strictEqual(one(P.adapter, ctx()).status, P.NA);
+  assert.strictEqual(one(P.adapter, ctx({ run, read: read(now) })).status, P.PASS);
+  const stale = P.runChecks(ctx({ run, read: read({ ...now, skills: '9'.repeat(64) }) }));
+  assert.strictEqual(stale.ok, false, 'a FAIL refuses the run');
+  assert.match(stale.results.find(x => x.check === 'adapter').detail, /stale: its skills digest/);
+  fs.writeFileSync(file, JSON.stringify({ ...m, validation: undefined }));
+  assert.match(one(P.adapter, ctx({ run, read: read(now) })).detail, /the validation result is missing/);
+  fs.rmSync(file);
+  assert.strictEqual(one(P.adapter, ctx({ run, read: read(now) })).status, P.FAIL);
+  // The real readers: the repository's spec, and the harness digests the setup record names.
+  const real = P.defaultReaders(ROOT, {});
+  assert.deepStrictEqual(real.harnessDigests(), require('../../scripts/lib/learning/adapter').currentDigests(ROOT));
+  assert.strictEqual(real.adapterSpec().v, 1);
+});
+
 test('each check fails on a broken fixture', () => {
   const cases = [
     [P.strategy, { lifecycle: { max_risk_usd: undefined, risk: { stop: 'structure', min_rr: 2, max_risk_usd: 301 } } }, /max_risk_usd 301/],

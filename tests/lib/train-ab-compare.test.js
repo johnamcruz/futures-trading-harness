@@ -163,6 +163,36 @@ test('setups: refused unless they share stage, list or window, seed, market, dat
   assert.match(AB.compareSetups({ ...base, config: { ...base.config, 'gate.FTH_X_TOKEN': '"a"' } }, base, { field: 'gate.FTH_X_TOKEN' }).differs.join(''), /gate.FTH_X_TOKEN: \(redacted\) vs \(redacted\)/); // check-secrets: allow (a fake credential-like name)
 });
 
+test('a base and an adapted run differ in the one declared field `adapter`, by the manifest\'s digest (never its path)', () => {
+  const w = world();
+  const { configHash, setupHash } = require('../../scripts/lib/replay/config');
+  const manifest = path.join(w.dir, 'adapters', 'm1', 'manifest.json');
+  fs.mkdirSync(path.dirname(manifest), { recursive: true });
+  fs.writeFileSync(manifest, '{"v":1,"name":"m1"}\n');
+  const adapted = o => resolve(w, 'b', { over: { autotrader: { ...config(w, 'b').autotrader, adapter: manifest } }, ...o });
+  const base = AB.setupRecord(resolve(w, 'a'), { env: w.env });
+  const rec = AB.setupRecord(adapted(), { env: w.env });
+  assert.ok(!('adapter' in base.config) && !('cfg.adapter' in base.config), 'a base run\'s record names no adapter');
+  assert.match(rec.config.adapter, /^"sha256:[0-9a-f]{16}"$/);
+  assert.ok(!JSON.stringify(rec).includes(manifest), 'the path is never recorded');
+  const r = AB.compareSetups(base, rec);
+  assert.strictEqual(r.ok, false);
+  assert.match(r.refusals.join(), /config field adapter differs: declare it \(--field adapter\)/);
+  assert.deepStrictEqual(AB.compareSetups(base, rec, { field: 'adapter' }).refusals, []);
+  // The hashes: an adapted run is another run and setup; a retrained adapter at the same path another again.
+  const [h0, s0] = [configHash(resolve(w, 'a'), w.env), setupHash(resolve(w, 'a'))];
+  const [h1, s1] = [configHash(adapted(), w.env), setupHash(adapted())];
+  assert.notStrictEqual(h0, h1);
+  assert.notStrictEqual(s0, s1);
+  fs.writeFileSync(manifest, '{"v":1,"name":"m1","retrained":true}\n');
+  assert.notStrictEqual(configHash(adapted(), w.env), h1);
+  assert.notStrictEqual(setupHash(adapted()), s1);
+  assert.notStrictEqual(AB.setupRecord(adapted(), { env: w.env }).config.adapter, rec.config.adapter);
+  // A missing manifest never throws here: it is recorded as unreadable (the preflight refuses the run).
+  fs.rmSync(manifest);
+  assert.strictEqual(AB.setupRecord(adapted(), { env: w.env }).config.adapter, '"unreadable"');
+});
+
 test('pairing: one decision per (root, bar); an entry\'s legs averaged, a pass 0; another bar is not a pair', () => {
   const m = AB.decisionsByKey([decision(BARS[0], { R: 2 }), decision(BARS[0], { R: 1 }), decision(BARS[1], { entered: false }), { ...decision(BARS[2]), root: 'MES' }, decision(BARS[3], { R: null })]);
   assert.deepStrictEqual([...m.keys()], [`MNQ|${BARS[0]}`, `MNQ|${BARS[1]}`, `MES|${BARS[2]}`, `MNQ|${BARS[3]}`]);
