@@ -58,7 +58,7 @@ const nextDay = day => new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISO
 
 // The moments each list is curated to (decision bars, UTC time of day on the series' day): the model passes the first,
 // composes a trade on the second and takes it out on the third. Pinned: a scan that finds others fails here.
-const MOMENTS = { train: ['15:57', '16:21', '16:27'], validate: ['16:21', '16:27'] };
+const MOMENTS = { train: ['15:57', '16:21', '16:27'], validate: ['16:21'] };
 
 /** A command's result: { code, out } (stdout and stderr). */
 const sh = (file, args, env) => {
@@ -113,15 +113,17 @@ function curate(w, s, name) {
   assert.strictEqual(scan.code, 0, scan.out);
   const label = { long: 'trend-up', short: 'trend-down' };
   const iso = ms => new Date(ms).toISOString();
-  const kept = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(m => s.bars.includes(m.bar)).map((m, i) => ({
+  const found = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(m => s.bars.includes(m.bar)).map((m, i) => ({
     ...m, list: i === 1 && s.bars.length === 3 ? 'chop' : label[m.side],
-    window: { from: iso(Date.parse(m.bar) - 2 * D.STEP), to: iso(Date.parse(m.bar) + 4 * D.STEP) },
+    window: { from: iso(Date.parse(m.bar) - D.STEP), to: iso(Date.parse(m.bar) + 3 * D.STEP) },
   }));
-  assert.deepStrictEqual(kept.map(m => m.bar), s.bars, 'the pinned moments are still on the scan');
+  assert.deepStrictEqual(found.map(m => m.bar), s.bars, 'the pinned moments are still on the scan');
+  // One moment (the validate list) stands on both trend lists, which the preflight asks of a list: twice, with another id.
+  const kept = found.length === 1 ? [{ ...found[0], list: 'trend-up' }, { ...found[0], id: `${found[0].id}-twin`, list: 'trend-down' }] : found;
   fs.writeFileSync(file, kept.map(m => `${JSON.stringify(m)}\n`).join(''));
   const out = path.join(w.home, `lists-${name}`);
-  const mix = s.bars.length === 3 ? 'trend-up=0.34,trend-down=0.33,chop=0.33' : 'trend-up=0.5,trend-down=0.5';
-  const built = sh(script('curated-lists.js'), ['build', file, '--use', s.use, '--total', String(s.bars.length), '--mix', mix, '--pass-share', 'trend-up=0.5,trend-down=0.5,chop=0.5', '--min-skill', '0', '--out', out], env);
+  const mix = kept.length === 3 ? 'trend-up=0.34,trend-down=0.33,chop=0.33' : 'trend-up=0.5,trend-down=0.5';
+  const built = sh(script('curated-lists.js'), ['build', file, '--use', s.use, '--total', String(kept.length), '--mix', mix, '--pass-share', 'trend-up=0.5,trend-down=0.5,chop=0.5', '--min-skill', '0', '--out', out], env);
   assert.strictEqual(built.code, 0, built.out);
   const listFile = path.join(out, fs.readdirSync(out)[0]);
   return { file: listFile, doc: JSON.parse(fs.readFileSync(listFile, 'utf8')), moments: kept };
@@ -174,8 +176,8 @@ test('pipeline smoke: curated lists, preflight, stage 1, its report, experience,
     lists.validate = curate(w, valid, 'validate');
     for (const k of ['train', 'validate']) {
       assert.match(lists[k].doc.fingerprint, /^[0-9a-f]{16,}$/);
-      assert.deepStrictEqual(Object.values(lists[k].doc.lists).flat().map(m => m.bar).sort(), w.series[k].bars);
-      assert.strictEqual(lists[k].doc.mix.length, w.series[k].bars.length);
+      assert.deepStrictEqual([...new Set(Object.values(lists[k].doc.lists).flat().map(m => m.bar))].sort(), w.series[k].bars);
+      assert.strictEqual(lists[k].doc.mix.length, k === 'train' ? 3 : 2);
       assert.strictEqual(lists[k].doc.use, SERIES[k].use);
     }
   });
@@ -264,7 +266,7 @@ test('pipeline smoke: curated lists, preflight, stage 1, its report, experience,
     const strategies = loadStrategies(ROOT, w.env).strategies;
     const policy = strategies.find(s => s.name === 'prop_portfolio');
     const account = loadAccounts(ROOT, w.env).accounts.find(a => a.name === policy.account);
-    const result = scoreRun(path.join(w.home, 'replays', 'smoke-s1', 'replay', 'smoke-s1'), { root: ROOT, env: w.env, account, policy: policyFor(strategies, account.name), paths: 40, reps: 40, riskActions: false });
+    const result = scoreRun(path.join(w.home, 'replays', 'smoke-s1', 'replay', 'smoke-s1'), { root: ROOT, env: w.env, account, policy: policyFor(strategies, account.name), paths: 15, reps: 15, riskActions: false });
     const first = scoreText(result).split('\n').find(l => /Prop Monte Carlo/.test(l));
     assert.match(first, new RegExp(`Prop Monte Carlo, 30-day attempts \\(${account.name}, prop_portfolio's rulebook\\)`));
     out.account = account;

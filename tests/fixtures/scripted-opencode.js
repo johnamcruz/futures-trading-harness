@@ -27,7 +27,7 @@ function stepsFor(script, bar, w) {
     // A live cycle takes minutes before its order; the replay broker's clock moves in ticks of a second (latency.js TICK_MS),
     // so a scripted one waits for a tick: the order fills after the compose record it follows, as the experience log reads it.
     const steps = cycle();
-    steps.splice(steps.findIndex(s => s.executor), 0, { act: () => new Promise(resolve => setTimeout(resolve, 1500)) });
+    steps.splice(steps.findIndex(s => s.executor), 0, { act: () => new Promise(resolve => setTimeout(resolve, 900)) });
     return steps;
   }
   if (step.do === 'exit') {
