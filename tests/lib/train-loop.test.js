@@ -597,6 +597,10 @@ test('model scoring config: tuning on practice-train only; held out through lear
   assert.throws(() => resolveLoop(raw({ heldOutWindows: [{ from: '2024-08-05', to: '2024-08-06' }] })), /learning.evaluation: the model-scored loop judges held out through learning looks/);
   assert.ok(resolveLoop(raw({ heldOutWindows: [{ from: '2024-08-05', to: '2024-08-06' }], learning: { evaluation: 'ev', validate: true } })));
   assert.throws(() => resolveLoop(raw({ modelScore: { account: 'acct_a', seed: 9 } })), /modelScore.seed/);
+  // The keep rule pairs full-day windows: a curated list is refused before any replay (without modelScore it stays allowed).
+  const curated = { ...base.replay, curatedList: { file: 'curated-practice-x.json', list: 'mix' } };
+  assert.throws(() => resolveLoop(raw({ replay: curated })), /replay.curatedList: the model-scored loop judges full-day windows/);
+  assert.ok(resolveLoop({ ...raw({ replay: curated }), modelScore: undefined }));
 });
 
 test('model scoring held out: the challenger\'s held-out run takes its own learning look before its first cycle; the verifier judges held out', async () => {

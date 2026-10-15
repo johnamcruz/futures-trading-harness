@@ -10,7 +10,8 @@
  * with the runs, the account and the Monte Carlo settings it was built from in the hash.
  *
  * Refused: a run that isn't finished, isn't a learning run, or isn't practice-train (a held-out run's outcomes are
- * judged, never shown); a real (full-day) run with an entry it couldn't settle; a day two runs both hold.
+ * judged, never shown); a setup-focused or curated run (its setups at practice density: full-day runs only); a run with
+ * an entry it couldn't settle; a day two runs both hold.
  *
  *   dayStream(stream, day)                       the stream through `day`, only `day`'s risk actions kept
  *   actedDays(stream)                            the days with a risk action, in order
@@ -52,7 +53,8 @@ function runDirOf(p) {
 function defaultReadRun(runDir, { root, barsFiles }) {
   const manifest = JSON.parse(fs.readFileSync(path.join(runDir, 'manifest.json'), 'utf8'));
   const { stream, run } = require('../prop/model-stream').readModelStream(runDir, { root, barsFiles });
-  return { stream, run, finished: manifest.finished === true };
+  const curated = Boolean(require('./curated-lists').loadPinnedCurated(run.home || path.resolve(runDir, '..', '..')));
+  return { stream, run: { ...run, curated }, finished: manifest.finished === true };
 }
 
 function runRiskEntries(runDir, { root = null, env = process.env, account, policy = null, seed = 1, paths = PATHS, reps = REPS, barsFiles = {}, now = new Date(), readRun = null } = {}) {
@@ -62,8 +64,12 @@ function runRiskEntries(runDir, { root = null, env = process.env, account, polic
   const id = run.runId || dir;
   if (!finished) throw new Error(`run ${id} is not finished: build from finished runs`);
   if (run.learning !== true || run.role !== 'practice-train') throw new Error(`run ${id} is ${run.learning === true ? run.role || 'no role' : 'not a learning run'}, not practice-train: the risk record is built from practice-train runs only (a held-out run's outcomes are judged, never shown)`);
-  const diagnostic = run.practice ? 'setup-focused' : null;
-  if (!diagnostic && stream.excluded.length) throw new Error(`run ${id}: ${stream.excluded.length} entr${stream.excluded.length === 1 ? 'y' : 'ies'} without a settled outcome: a full-day run's record never leaves one out`);
+  // Full-day runs only: a setup-focused or curated run's days hold its setups at their practice density (and a curated
+  // list's are outcome-balanced), so the paths its counterfactuals run on would not be the market's days. Its days are
+  // its own, so they can't be reweighted here either (scoreArms needs the run's real days).
+  if (run.practice || run.curated) throw new Error(`run ${id} is a ${run.curated ? 'curated' : 'setup-focused'} practice run: its risk actions come at practice density, not a live day's; the risk record is built from full-day practice-train runs only`);
+  const diagnostic = null;
+  if (stream.excluded.length) throw new Error(`run ${id}: ${stream.excluded.length} entr${stream.excluded.length === 1 ? 'y' : 'ies'} without a settled outcome: a full-day run's record never leaves one out`);
   const { checkModelWindow } = require('../prop/evaluator');
   const { scoreRiskActions } = require('../prop/risk-actions');
   const { gateLimits } = require('../prop/attempts');

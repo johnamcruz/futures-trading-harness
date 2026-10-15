@@ -201,8 +201,9 @@ node scripts/replay.js run --config s1-practice.json --bars MNQ=<1m bars>
 
 **A validate run:** the same, with a window in practice-validate (for
 example `"start": "2024-07-01T00:00:00Z"`, `"end": "2024-10-01T00:00:00Z"`),
-the validate list (`curated-validate-<fingerprint>.json`), and `--validate`.
-Every validate run is a look, logged in the ledger and counted.
+the validate list (`curated-validate-<fingerprint>.json`), `--validate` and
+`--candidate <name>`, the name of the skill version being validated. Every
+validate run is a look, logged in the ledger and counted.
 
 **At the end of the run**, the replay prints:
 
@@ -219,15 +220,37 @@ Every validate run is a look, logged in the ledger and counted.
 
 | Test | Threshold |
 | --- | --- |
-| Planned reward:risk | at least 2R on every entry (`min_rr` enforces it; the test checks none fell under) |
 | Average winner | at least 1.8R, realized |
 | Expectancy | at least +0.3R per entry, and the lower bound of its interval above 0 |
-| Correct-read rate | at least 0.80 of the compose records' reads true |
+| Correct-read rate | at least 0.80 of the composed decisions with every read true |
 | Process adherence | at least 0.80 scorecard agreement |
+
+Planned reward:risk (at least 2R) is printed as a sanity line, not a
+criterion: `min_rr` already enforces it. The correct-read rate counts
+decisions, not reads: a decision passes only when all its reads are true, so
+many trivially true reads can't carry a false one.
+
+**Pooled over the candidate's validate runs.** The test is never judged on
+one run alone: each retry of a run would be a fresh chance at a false pass
+(about 1 to 2% a run at zero edge). It pools the candidate's validate runs
+from the ledger, the first 3 only (`VALIDATE_RUNS_PER_CANDIDATE` in
+`scripts/lib/learning/looks.js`). A later run of that candidate is not read
+and can't change the verdict. The runs are read from their run homes beside
+this one (the same `workDir`); a counted run that isn't found makes the test
+fail. A run without `--candidate` is its own candidate, so its retries never
+pool and its test can't pass. A new skill version is a new candidate. Give
+the candidate's runs different windows: two runs of the same days add
+correlated samples, not independent ones.
 
 Each threshold reports PASS only over at least 20 samples. That is the
 experience index's `MIN_N`, the same rule a cell needs before it shows a rate.
-Below 20 it reports "insufficient sample (n)", never PASS. The expectancy's
+Below 20 it reports "insufficient sample (n)", never PASS. The average winner
+needs 20 winners. At the thresholds' own profile (winners 1.8R, losers 1R,
++0.3R a trade: a 46% win rate) that is about 43 entries on average and 53 to
+reach it nine times in ten (61 at a 40% win rate). Plan for 50 to 60 entries
+across the pooled runs, and they must be distinct: runs over the same days replay the same
+moments, so each (day, moment) counts once (the report says "overlapping validate windows:
+counted once"). The expectancy's
 interval is the experience index's day bootstrap (90%, whole trading days
 resampled), so it also needs 10 distinct days (`MIN_DAYS`). Process adherence
 is N/A until the scorecard scores composed setups
@@ -309,6 +332,9 @@ fresh account:
    for the day, at the target, its P&L), as practised and reweighted to the
    natural mix of states. The prop Monte Carlo weights each decision by its
    day's state weight, so the model's take rate counts at the natural mix.
+   The take rate is per curated moment: every moment the run stepped is a
+   candidate, including one the model composed nothing on, and a moment it
+   entered twice counts as one entry.
    Read the reweighted numbers; the raw ones are the oversampled practice.
    The weights come from the planned assignment, not from the days actually
    run (the report line says "N of M days run"). A moment whose loss streak
@@ -347,8 +373,9 @@ over paths drawn from the run's days up to and including it, so a day's entry
 holds nothing from later days. The model sees an entry only on bars after its
 day. The output is `risk-record-<hash>.json`, fingerprinted with the runs,
 account, seed and path count it was built from. The build refuses an
-unfinished run, a run that isn't practice-train, and a day that two runs both
-hold.
+unfinished run, a run that isn't practice-train, a setup-focused or curated
+run (its setups come at practice density, not a live day's: build from
+full-day practice-train runs), and a day that two runs both hold.
 
 To show it, set `"riskRecord": "<file>"` and `"riskRecordDisplay": true` in
 the replay config. In stage 2 the display also needs `"comparisonArm": true`:
@@ -385,12 +412,21 @@ judges a change on the model's own trades. The verifier is
 measured. The seed is the loop's, and both sides use it.
 
 **What runs.** The challenger's tree replays every window the champion
-replayed: the same replay config, the same seed, the same days or curated
-moments. Then, window by window, the two runs are scored:
+replayed: the same replay config, the same seed, the same days. Then, window
+by window, the two runs are scored:
 
 - **The paired 30-day Monte Carlo** (`prop/model-score.js pairRuns`). Both
   runs go through the same start days, the same resampled day blocks and the
-  same faults. Every difference is champion minus challenger, with a 90%
+  same faults. Each side is scored as the model traded: every entry at its
+  own filled share of the code's ceiling, and at its own exit where it took
+  itself out (an early exit, a tightened stop). An exit the runner made (its
+  trail or time stop, read from the run's event log) is the policy's, not the
+  model's. The policy's exit re-exits every trade the model didn't take out
+  itself. So a challenger that cuts losers near
+  the max loss limit scores apart from one that holds, and one that sizes up
+  pays for it. The ceiling-sized result (every entry at the ceiling under the
+  policy's exit) is printed beside it, labelled, and never judged. Every
+  difference is champion minus challenger, with a 90%
   paired interval. Two kinds of attempt come out of it:
   - **real attempts**, one per start day of the window. Their interval is a
     block bootstrap in blocks of the account's sessions (S, 30), so it
@@ -423,14 +459,32 @@ order:
    - **No window worse.** No window may be significantly worse on its real
      attempts in pass rate, blow rate or median days to pass.
    - **Enough days.** A window needs at least two blocks of S real start
-     days, about 3 × S trading days (90 for 30 sessions). A shorter window
-     shows nothing, and the verdict is `inconclusive`.
+     days (`KEEP_RULE.minBlocks`), so at least 3 × S session days: 90 for 30
+     sessions, about four and a half months. A shorter window shows nothing,
+     and the verdict is `inconclusive`. A 1-month practice window (about 21
+     sessions) or a 3-month validate window (about 64) is always
+     inconclusive. Two blocks is already the fewest a block bootstrap can
+     resample, so the minimum is not lowered.
 4. **(d) Process adherence and the correct-read rate are not significantly
    worse** in any window. "Significantly" uses the loop's decision rule: at
    least `minDiscordant` discordant decisions and p at most `alpha`. Each
    needs at least the rule's `minPairs` paired decisions (20), and the
    challenger must have decided on at least half of the champion's keys.
    Fewer, or decisions that don't pair, is `inconclusive`, never a pass.
+
+**Windows that work.** Full-day windows (no `curatedList` in the loop's
+replay config: the config refuses one with `modelScore`, and `pairRuns`
+refuses a curated run), each at least 90 sessions:
+
+```json
+"tuningWindows": [{ "from": "2023-01-03", "to": "2023-06-01" }, { "from": "2023-06-01", "to": "2023-11-01" }],
+"heldOutWindows": [{ "from": "2024-07-01", "to": "2025-01-01" }]
+```
+
+These hold 103, 106 and 128 sessions. A curated run is never paired: its
+moments are picked outcome-balanced, so even at natural rates its outcomes are
+the list's, not the market's, and its rebuilt days are drawn, so it has no
+real start days to pair.
 
 A change that adds return but adds a blow is rejected. A change with no
 significant pooled gain is not kept. A measure that can't be read (an
@@ -471,9 +525,9 @@ is blocked. The policy's sizing, exit and multipliers (the account's
   Judging is refused before any look is taken when the budget left can't
   hold them all, so final (one look) can't be judged this way. Judge on
   practice-validate first.
-- A curated or setup-focused (diagnostic) score can keep a change on tuning,
-  labelled diagnostic, but it never judges held-out months and never
-  promotes.
+- A setup-focused (diagnostic) score can keep a change on tuning, labelled
+  diagnostic, but it never judges held-out months and never promotes. A
+  curated run is never paired.
 - The promotion gate (`prop/promotion.js`) is frozen and stays the final
   gate. Held-out judging reports its verdict on the challenger's score
   beside the keep rule, and never replaces it. A kept change is not a

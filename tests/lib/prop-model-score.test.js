@@ -69,8 +69,8 @@ test('natural rates: a curated run\'s trades rebuilt at each list\'s natural fre
   const decisions = [];
   const s = modelStreamOf(days, d => {
     const out = [];
-    for (let i = 0; i < 20; i += 1) { decisions.push({ id: `${d}-s${i}`, day: d, decision: i < 8 ? 'entered' : 'passed', list: 'sweep' }); if (i < 8) out.push(modelTrade(`${d}-s${i}`, 60)); }
-    for (let i = 0; i < 4; i += 1) { decisions.push({ id: `${d}-f${i}`, day: d, decision: i < 2 ? 'entered' : 'passed', list: 'fvg' }); if (i < 2) out.push(modelTrade(`${d}-f${i}`, -40)); }
+    for (let i = 0; i < 20; i += 1) { decisions.push({ id: `${d}-s${i}`, day: d, decision: i < 8 ? 'entered' : 'passed', list: 'sweep', moment: `${d}-s${i}` }); if (i < 8) out.push(modelTrade(`${d}-s${i}`, 60)); }
+    for (let i = 0; i < 4; i += 1) { decisions.push({ id: `${d}-f${i}`, day: d, decision: i < 2 ? 'entered' : 'passed', list: 'fvg', moment: `${d}-f${i}` }); if (i < 2) out.push(modelTrade(`${d}-f${i}`, -40)); }
     return out;
   });
   decisions.push({ id: 'none', day: days[0], decision: 'none' });
@@ -95,12 +95,52 @@ test('natural rates: a curated run\'s trades rebuilt at each list\'s natural fre
   assert.ok(Math.abs(n / 2000 - 45) < 1, 'a large mean in chunks');
 });
 
+test('natural rates: the candidates are the moments stepped (plain passes included), the entries the distinct moments entered', () => {
+  // The review's case: 10 moments of one list, 2 entered, 8 where the model composed nothing (plain passes, `none`),
+  // one entered moment composed twice. The scan finds 1 candidate a day: 2 of 10 taken is 0.2 trades a day, not 1.0.
+  const days = weekdays('2022-03-01', 10);
+  const decisions = [];
+  const s = modelStreamOf(days, (d, k) => {
+    const moment = `m${k}`;
+    if (k === 0) {
+      decisions.push({ id: `${d}-a`, decision: 'entered', moment }, { id: `${d}-b`, decision: 'passed', moment });
+      return [modelTrade(`${d}-a`, 60)];
+    }
+    if (k === 1) {
+      // Entered twice in one moment (a re-entry): one candidate taken, its two trades sharing its rate.
+      decisions.push({ id: `${d}-a`, decision: 'entered', moment }, { id: `${d}-b`, decision: 'entered', moment });
+      return [modelTrade(`${d}-a`, -40), modelTrade(`${d}-b`, 60)];
+    }
+    decisions.push({ id: `${d}-x`, decision: 'none', moment }, { id: `${d}-y`, decision: 'none', moment });
+    return [];
+  });
+  decisions.push({ id: 'between', decision: 'none' }); // a cycle between the moments: no candidate
+  const rates = { trend: { candidatesPerDay: 1 } };
+  const nat = naturalRates(s, decisions, { rates });
+  assert.deepStrictEqual([nat.lists.trend.moments, nat.lists.trend.candidates, nat.lists.trend.entered, nat.lists.trend.tradesPerDay], [10, 10, 2, 0.2]);
+  assert.ok(Math.abs(nat.tradesPerDay - 0.2) < 1e-9, `${nat.tradesPerDay}`);
+  assert.ok(Math.abs(nat.perTrade.get(`${days[1]}-a`) - 0.05) < 1e-9, 'a moment entered twice: its trades share its rate');
+  const rw = reweightStream(s, decisions, { rates, days: 4000, seed: 3 });
+  assert.ok(Math.abs(rw.trades.length / 4000 - 0.2) < 0.02, `rebuilt at 0.2 a day (${rw.trades.length / 4000})`);
+  // A composed decision outside every moment can't be counted: refused, never guessed.
+  assert.throws(() => naturalRates(s, [...decisions, { id: 'stray', decision: 'passed' }], { rates }), /decision stray lies in no curated moment/);
+  // From the lists document's windows (curatedRates): the same count, a window holding several cycles one moment.
+  const { curatedRates } = require('../../scripts/lib/prop/natural-rate');
+  const win = d => ({ from: `${d}T14:00:00.000Z`, to: `${d}T15:00:00.000Z` });
+  const doc = { lists: { trend: days.map((d, k) => ({ id: `m${k}`, day: d, window: win(d) })) }, coverage: { trend: { candidates: 10 } }, mix: days.map((_d, k) => `m${k}`) };
+  const c = curatedRates(doc, { scanDays: 10 });
+  const placed = decisions.filter(x => x.id !== 'between').map(x => ({ ...x, moment: undefined, cycleAt: `${x.id.slice(0, 10)}T14:${x.id.endsWith('b') || x.id.endsWith('y') ? '30' : '03'}:00.000Z` }));
+  placed.push({ id: 'between', decision: 'none', cycleAt: `${days[3]}T16:00:00.000Z` });
+  const viaDoc = naturalRates(s, placed, { rates: c.rates, listOf: c.listOf, momentOf: c.momentOf });
+  assert.deepStrictEqual([viaDoc.lists.trend.moments, viaDoc.lists.trend.entered, viaDoc.lists.trend.tradesPerDay], [10, 2, 0.2]);
+});
+
 test('a curated run\'s score is "diagnostic (reweighted)" and the promotion gate refuses it; the zero-blow gate is untouched', () => {
   const days = weekdays('2022-03-01', 5);
   const decisions = [];
   const s = modelStreamOf(days, d => {
     const out = [];
-    for (let i = 0; i < 6; i += 1) { decisions.push({ id: `${d}-${i}`, day: d, decision: 'entered', list: 'sweep' }); out.push(modelTrade(`${d}-${i}`, i % 3 === 2 ? -40 : 60)); }
+    for (let i = 0; i < 6; i += 1) { decisions.push({ id: `${d}-${i}`, day: d, decision: 'entered', list: 'sweep', moment: `${d}-${i}` }); out.push(modelTrade(`${d}-${i}`, i % 3 === 2 ? -40 : 60)); }
     return out;
   });
   const rw = reweightStream(s, decisions, { rates: { sweep: { candidatesPerDay: 1 } }, days: 300, seed: 1 });
@@ -204,6 +244,77 @@ test('scorePaired with a rulebook per side: B sized under its own (a candidate\'
   // A candidate rulebook only on a candidate's pass (refused on test and final by checkModelWindow), and one attempt length.
   assert.throws(() => scorePaired(A, A, { ...opts, rulebookB: tight, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) }), /candidate rulebook is scored only on a pass checked for one/);
   assert.throws(() => scorePaired(A, A, { ...opts, accountB: { ...ACCOUNT, sessions: 20 }, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) }), /same sessions/);
+});
+
+/**
+ * Stage-2 risk decisions the keep rule must see. Two setups a day on 160 days, half at +60 ticks, half losers whose
+ * second bar gaps through the 40-tick stop (filled at -81), each with its price path, under a policy exit (mode target):
+ * re-exited, every trade is the bracket's. hold: every loser rides into the gap. cut: the model takes every loser out
+ * at -10 ticks on its first bar (early-exit). size: every entry at a share of the ceiling (sizeFraction).
+ */
+function riskRuns() {
+  const days = weekdays('2022-01-03', 160);
+  const r = rng(11);
+  const script = days.map(() => Array.from({ length: 2 }, () => r() < 0.5));
+  const trade = (d, i, win, extra = {}) => modelTrade(`${d}-${i}`, win ? 60 : -81, {}, {
+    path: win ? [[0, -5, 65, 60]] : [[0, -20, 5, -15], [-80, -90, -75, -85]], ownExit: { targetTicks: 60, trailActivateR: null, trailGivebackR: null },
+    troughTicks: win ? [-5] : [-20, -81], overshootTicks: null, ...extra,
+  });
+  const of = f => modelStreamOf(days, (d, k) => script[k].map((win, i) => f(d, i, win)));
+  return {
+    hold: of((d, i, win) => trade(d, i, win)),
+    cut: of((d, i, win) => (win ? trade(d, i, win) : trade(d, i, win, { moveTicks: -10, r: -0.25, troughTicks: [-10], actions: ['early-exit'] }))),
+    size: f => of((d, i, win) => trade(d, i, win, { sizeFraction: f, actions: f < 1 ? ['size-down'] : [] })),
+    opts: { ...quick, paths: 300, reps: 300, rulebook: { exit: { mode: 'target' }, sizing: { cushion_frac: 0.4 } } },
+  };
+}
+const pair = (A, B, opts) => scorePaired(A, B, { ...opts, passA: checkModelWindow({ run: run({ runId: 'champ' }) }), passB: checkModelWindow({ run: run({ runId: 'chall' }) }) });
+
+test('scorePaired sized "own": a challenger that cuts its losers early scores apart from one that holds; at the ceiling the policy exit erased it', () => {
+  const { hold, cut, opts } = riskRuns();
+  const own = pair(hold, cut, { ...opts, sized: 'own' });
+  assert.strictEqual(own.sizedAs, 'own');
+  assert.ok(own.blows.a > 0 && own.blows.b === 0, `the holder blows, the cutter never (${JSON.stringify(own.blows)})`);
+  assert.strictEqual(own.verdict, 'B better');
+  // Beside it, labelled: the ceiling under the policy exit, where both runs are the same trades.
+  assert.match(own.ceiling.label, /code's ceiling .* never judged/);
+  assert.deepStrictEqual(own.ceiling.a, own.ceiling.b, 'at the ceiling every exit is the bracket\'s: no difference');
+  assert.ok(own.ceiling.blows.b > 0, 'at the ceiling the cutter rides into the gap too');
+  assert.strictEqual(own.ceiling.verdict, 'no significant difference');
+  // The default (the ceiling) is unchanged and carries no own line.
+  const ceil = pair(hold, cut, opts);
+  assert.deepStrictEqual([ceil.sizedAs, ceil.ceiling, ceil.verdict], ['ceiling', undefined, 'no significant difference']);
+  assert.throws(() => pair(hold, cut, { ...opts, sized: 'model' }), /sized is one of ceiling, own/);
+});
+
+test('scoreArms sized "own": the model\'s early exits aren\'t re-exited under the policy exit in the base', () => {
+  const { scoreArms, ownShare } = require('../../scripts/lib/prop/evaluator');
+  const { hold, cut, opts } = riskRuns();
+  const go = (stream, sized) => scoreArms(stream, { ...opts, base: ownShare, ...(sized ? { sized } : {}), pass: checkModelWindow({ run: run({ runId: 'arms' }) }) });
+  assert.deepStrictEqual(go(cut).base, go(hold).base, 'at the ceiling every exit is the bracket\'s: the cut is erased');
+  assert.deepStrictEqual(go(hold, 'own').base, go(hold).base, 'no early-exit action: unchanged');
+  const own = go(cut, 'own').base;
+  assert.notDeepStrictEqual(own, go(cut).base, 'the model\'s own exits stand in the base');
+  assert.ok(own.blowRate < go(hold, 'own').base.blowRate, 'cutting the losers before the gap blows less');
+  assert.throws(() => go(cut, 'model'), /sized is one of ceiling, own/);
+  // The risk-action scoring uses it: its base is the model as it traded.
+  const sr = require('../../scripts/lib/prop/risk-actions').scoreRiskActions(cut, { ...opts, pass: checkModelWindow({ run: run({ runId: 'ra' }) }) });
+  assert.deepStrictEqual(sr.base, own);
+});
+
+test('scorePaired sized "own": a challenger that sizes up is penalized for it; a policy-exited trade keeps the policy exit', () => {
+  const { size, opts } = riskRuns();
+  // The champion sized a tenth of the ceiling, the challenger the whole of it: only the challenger blows.
+  const own = pair(size(0.1), size(1), { ...opts, sized: 'own' });
+  assert.ok(own.blows.a === 0 && own.blows.b > 0, `full size blows (${JSON.stringify(own.blows)})`);
+  assert.strictEqual(own.verdict, 'A better');
+  assert.deepStrictEqual(own.ceiling.a, own.ceiling.b, 'at the ceiling both are the same');
+  // A loser the bracket closed (no early exit of the model's) is still re-exited under the policy exit: the holder's
+  // recorded -81 and a version recorded at -10 without the action score alike.
+  const { hold } = riskRuns();
+  const relabel = modelStreamOf(hold.days.map(d => d.day), (_d, k) => hold.days[k].trades.map(t => (t.moveTicks < 0 ? { ...t, moveTicks: -10, troughTicks: [-10] } : t)));
+  const same = pair(hold, relabel, { ...opts, sized: 'own' });
+  assert.deepStrictEqual(same.a, same.b, 'no early-exit action: the policy exit decides, whatever was recorded');
 });
 
 test('scorePaired: side B is exited under its own rulebook exit (A\'s unchanged), so B\'s result changes', () => {
@@ -330,15 +441,12 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   const line = learningText({ decisions: { composed: 0, entered: 0, passed: 0, refused: 0, none: 0 }, steps: {}, reads: {}, diversity: {}, passes: { good: 0, missed: 0 }, lookups: {}, record: { all: {} }, prop: scoreSummary(r) });
   assert.match(line, /; 0 independent attempts: resampled only, not evidence; prop Monte Carlo \(real, 2 distinct days, 0 independent attempts, sized at the code's ceiling\)/);
   assert.match(line, /resampled \(conditional on these days\)/);
-  // Rates given by hand make it a reweighted, diagnostic score.
+  // Rates given by hand reweight a curated run only: its candidates are the moments its lists document places.
   const ratesFile = path.join(home, 'rates.json');
   fs.writeFileSync(ratesFile, JSON.stringify({ sweep: { candidatesPerDay: 0.5 } }));
   const root = path.resolve(__dirname, '..', '..');
-  const sec = propScoreSection(dir, { root, ratesFile });
-  assert.strictEqual(sec.error, undefined, sec.error);
-  assert.deepStrictEqual([sec.result.score, sec.summary.score], ['diagnostic (reweighted)', 'diagnostic (reweighted)']);
-  assert.match(sec.text, /Prop Monte Carlo, 30-day attempts .*: diagnostic \(reweighted\), never a promotion score/);
-  assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 2, 'each score logged');
+  assert.match(propScoreSection(dir, { root, ratesFile }).text, /not scored \(rates by hand reweight a curated run: its candidates are the curated moments it stepped/);
+  assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 1, 'nothing scored, nothing logged');
   assert.match(propScoreSection(dir, { root, override: 'no_such_account' }).text, /Prop Monte Carlo: not scored/);
   // No account: not scored, said why.
   assert.deepStrictEqual(resolveAccount({ accounts: [{ name: 'a' }, { name: 'b' }], strategies: [] }).name, null);
@@ -372,6 +480,9 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
   const bad = mk(true);
   const res = pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 200, reps: 200 });
   assert.deepStrictEqual(res.runs, { a: 'run1', b: 'run1' });
+  // Judged as the model traded (its own sizes and exits), the ceiling-sized line beside it, labelled.
+  assert.deepStrictEqual([res.sizedAs, res.ceiling.sizedAs], ['own', 'ceiling']);
+  assert.match(res.ceiling.label, /never judged/);
   assert.ok(res.diff.resampled.passRate.diff >= 0, JSON.stringify(res.diff.resampled.passRate));
   assert.ok(res.a.resampled.passRate >= res.b.resampled.passRate);
   // policyB: each side under its own policy; candidateB: B's a candidate rulebook, its pass checked for one.
@@ -432,25 +543,36 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
     ],
   });
   // A lists document: one trend-up moment whose window holds the decision; the scan found 60 trend-up candidates.
+  // A second moment (07-16) where the model composed nothing: a plain pass, still a candidate it let go.
   const moment = { id: 'm1', list: 'trend-up', day: '2024-07-15', window: { from: '2024-07-15T13:30:00.000Z', to: '2024-07-15T14:00:00.000Z' } };
-  const lists = Object.fromEntries(CL.LISTS.map(n => [n, n === 'trend-up' ? [moment] : []]));
+  const quiet = { id: 'm2', list: 'trend-up', day: '2024-07-16', window: { from: '2024-07-16T13:30:00.000Z', to: '2024-07-16T14:00:00.000Z' } };
+  const lists = Object.fromEntries(CL.LISTS.map(n => [n, n === 'trend-up' ? [moment, quiet] : []]));
   const coverage = Object.fromEntries([...CL.LISTS.map(n => [n, { candidates: n === 'trend-up' ? 60 : 0 }]), ['mix', { candidates: 60 }]]);
-  const body = { v: CL.VERSION, kind: CL.KIND, builtAt: 'x', use: 'validate', role: 'practice-validate', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, seed: 1, options: {}, sources: [], lists, mix: ['m1'], short: {}, coverage };
+  const body = { v: CL.VERSION, kind: CL.KIND, builtAt: 'x', use: 'validate', role: 'practice-validate', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, seed: 1, options: {}, sources: [], lists, mix: ['m1', 'm2'], short: {}, coverage };
   const doc = { ...body, fingerprint: CL.fingerprintOf(body) };
   const file = path.join(home, 'curated.json');
   fs.writeFileSync(file, JSON.stringify(doc));
   CL.pinCurated(home, { file, list: 'mix', fingerprint: doc.fingerprint });
   const c = curatedRates(doc, { list: 'mix', scanDays: 120, delayMs: 2000 });
   assert.deepStrictEqual(c.rates['trend-up'], { candidatesPerDay: 0.5 });
-  assert.deepStrictEqual([c.listOf({ cycleAt: t0 }), c.listOf({ cycleAt: '2024-07-16T14:00:00.000Z' })], ['trend-up', null]);
+  assert.deepStrictEqual([c.listOf({ cycleAt: t0 }), c.listOf({ cycleAt: '2024-07-16T14:00:00.000Z' })], ['trend-up', 'trend-up']);
+  assert.deepStrictEqual([c.momentOf({ cycleAt: t0 }), c.momentOf({ cycleAt: '2024-07-16T14:00:02.000Z' }), c.momentOf({ cycleAt: '2024-07-16T15:00:00.000Z' })], [['m1'], ['m2'], []]);
   assert.match(curatedRates(doc).scanDaysFrom, /an estimate/);
   const root = path.resolve(__dirname, '..', '..');
   const sec = propScoreSection(dir, { root, curated: { file, list: 'mix' } });
   assert.strictEqual(sec.error, undefined, sec.error);
   assert.strictEqual(sec.result.score, 'diagnostic (reweighted)');
   assert.match(sec.text, /rebuilt at natural rates .* from mix of [0-9a-f]{16}, \d+ scan days/);
+  // One of the two moments stepped entered (the plain pass counts): the scan's candidates a day x 1/2 taken.
+  const L = sec.result.reweighted.lists['trend-up'];
+  assert.deepStrictEqual([L.moments, L.entered, sec.result.reweighted.tradesPerDay], [2, 1, L.candidatesPerDay / 2]);
   assert.strictEqual(sec.result.promotion.passes, false);
   assert.match(propScoreSection(dir, { root }).text, /not scored \(a curated run is scored at its lists' natural rates/);
+  // The keep rule's paired judge never reads a curated run (outcome-balanced moments, drawn days): refused before any score.
+  const { pairRuns } = require('../../scripts/lib/prop/model-score');
+  const before = looks.scoresOf(readLedger(ledger)).length;
+  assert.throws(() => pairRuns(dir, dir, { account: ACCOUNT, paths: 10, reps: 10 }), /run1 is a curated run: a paired judge never reads one .* replay full-day windows/);
+  assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, before, 'refused before any score is logged');
   assert.match(propScoreSection(dir, { root, curated: { file, list: 'trend-up' } }).text, /not scored \(the run pinned curated list/);
 });
 
