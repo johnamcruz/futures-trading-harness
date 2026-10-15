@@ -45,7 +45,7 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./trading/
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan, retiredCopies } = require('./trading/strategies');
+const { loadStrategies, scan, retiredCopies, composedExit } = require('./trading/strategies');
 const { lanesOf, laneStrategies, analystFrames, retireLanes } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
@@ -541,6 +541,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     },
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
     exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
+    // A composed trade is managed by the exit of the policy that lists it, with or without an attempt (the practice
+    // exit is the attempt's): evaluator.js composedExit.
+    exitPlanOf: s => composedExit(s, strategies()).plan,
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
     barClosed: record.closed,
     // A running cycle's composed limits are checked for expiry this often (runner.js watchComposed); a test may shorten it.

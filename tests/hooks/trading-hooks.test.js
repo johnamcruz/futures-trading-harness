@@ -3017,3 +3017,31 @@ test('order gate (hook): modify_order may not reprice a working trade_lifecycle 
   assert.strictEqual(modify({ orderId: 21, limitPrice: 21538 }).code, 0);
   assert.strictEqual(modify({ orderId: 22, stopPrice: 21500 }).code, 0);
 });
+
+test('replay wiring (opencode): the runner\'s plugin refuses launching a role that reaches the web on a replay step, never on a live one', async () => {
+  const at = require('../../scripts/lib/autotrader');
+  const oc = require('../../scripts/lib/opencode');
+  const web = oc.webRoles(require('../../scripts/lib/harness-sync').loadAgents(REPO));
+  const plugin = await require('../../scripts/opencode-plugin').server();
+  const call = async env => {
+    const saved = process.env.FTH_DENIED_ROLES;
+    if (env.FTH_DENIED_ROLES === undefined) delete process.env.FTH_DENIED_ROLES; else process.env.FTH_DENIED_ROLES = env.FTH_DENIED_ROLES;
+    try {
+      await plugin['tool.execute.before']({ tool: 'task' }, { args: { subagent_type: web[0] } });
+      return null;
+    } catch (err) {
+      return err.message;
+    } finally {
+      if (saved === undefined) delete process.env.FTH_DENIED_ROLES; else process.env.FTH_DENIED_ROLES = saved;
+    }
+  };
+  const cfg = at.validateConfig({ harness: 'opencode' });
+  const replay = at.childEnv(cfg, REPO, { FTH_HOME: tmpDir(), FTH_REPLAY_NOW: '2022-03-01T13:05:00Z' }, { action: 'premarket' });
+  assert.match(await call(replay), /\[denied-role\] .* it reaches the web, which a replay never does/);
+  // Its permissions too: the session denies the web and the role's launch.
+  const run = JSON.parse(replay.OPENCODE_CONFIG_CONTENT);
+  assert.deepStrictEqual([run.permission.websearch, run.permission.webfetch, run.permission.task[web[0]]], ['deny', 'deny', 'deny']);
+  const live = at.childEnv(cfg, REPO, { FTH_HOME: tmpDir() }, { action: 'premarket' });
+  assert.strictEqual(await call(live), null);
+  assert.deepStrictEqual([JSON.parse(live.OPENCODE_CONFIG_CONTENT).permission.websearch, JSON.parse(live.OPENCODE_CONFIG_CONTENT).permission.task[web[0]]], ['allow', 'allow']);
+});

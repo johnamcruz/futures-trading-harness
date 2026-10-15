@@ -230,3 +230,25 @@ test('a decision counts once; the same log given twice is refused', () => {
   assert.strictEqual(X.buildIndex([...ds, ...ds], { reps: 50 }).decisions, 25);
   assert.throws(() => X.buildIndex(ds, { runs: [{ runId: 'a', sha256: 'h1' }, { runId: 'b', sha256: 'h1' }] }), /the same experience log given twice/);
 });
+
+test('index: decisions scored under two exit plans are refused (a mode or its parameters); the index holds its one plan (untagged lines: none)', () => {
+  const E = require('../../scripts/lib/learning/experience-log');
+  const A = E.exitRecord({ mode: 'target_then_trail', plan: { afterTarget: { trailBy: 'structure', swingMinutes: 15 } } });
+  const B = E.exitRecord({ mode: 'target_then_trail', plan: { afterTarget: { trailBy: 'structure', swingMinutes: 5 } } });
+  const C = E.exitRecord(E.BRACKETS);
+  const tagged = (list, x) => list.map(d => ({ ...d, exit: x.mode, exitPlan: x.hash }));
+  const trail = tagged(decisions(30, 15, i => (i % 2 ? 1 : -1)), A);
+  const built = X.buildIndex(trail);
+  assert.deepStrictEqual([built.exit, built.exitPlan], ['target_then_trail', A.hash]);
+  // The hash is of the plan, whatever order its keys were built in.
+  assert.strictEqual(E.exitHash({ plan: { b: 1, a: 2 }, mode: 'm' }), E.exitHash({ mode: 'm', plan: { a: 2, b: 1 } }));
+  const none = X.buildIndex(decisions(30, 15, () => 1));
+  assert.deepStrictEqual([none.exit, none.exitPlan], [null, null], 'lines written before the record');
+  const old = decisions(10, 5, () => 1, { tag: 'o' });
+  assert.throws(() => X.buildIndex([...trail, ...old]), new RegExp(`index refused: its decisions were scored under different exit plans \\(target_then_trail ${A.hash.slice(0, 12)}: 30, untagged \\(written before the exit plan was recorded\\): 10\\)`));
+  assert.throws(() => X.buildIndex([...trail, ...tagged(old, C)]), new RegExp(`different exit plans \\(target_then_trail ${A.hash.slice(0, 12)}: 30, brackets ${C.hash.slice(0, 12)}: 10\\)`));
+  // One mode, other parameters: two plans, refused.
+  assert.throws(() => X.buildIndex([...trail, ...tagged(old, B)]), /different exit plans/);
+  // A plan's lines that disagree on its mode: edited, refused.
+  assert.throws(() => X.buildIndex([...trail, ...tagged(old, { ...A, mode: 'brackets' })]), /one exit plan under two modes/);
+});

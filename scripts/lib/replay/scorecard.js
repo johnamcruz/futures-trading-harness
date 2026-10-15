@@ -83,7 +83,7 @@ const { labelRun, composedTagsAt, countedEntry, loadBars, inside, realDir, unfin
 const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
 const { loadRoundSteps } = require('../trading/round-numbers');
-const { exitPlan } = require('../trading/evaluator');
+const { exitPlan, composedExit } = require('../trading/evaluator');
 const { historyBars } = require('../autotrader');
 const { expandHome } = require('../paths');
 const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf, composedSetupsFrom, tagged } = require('../trading/reasons');
@@ -207,7 +207,7 @@ function earlyClose(label, facts, why, out) {
   const held = o.entryTime ? (Date.parse(facts.t) - Date.parse(o.entryTime)) / 60000 : null;
   if (plan.maxBars && held !== null && held >= plan.maxBars * plan.minutes) return judged(`past the time stop (${plan.maxBars} bars)`);
   if (o.mfeR >= 1 && o.r <= o.mfeR / 2) return judged(`gave back most of a ${o.mfeR}R best`);
-  const reach = plan.trailActivateR ?? plan.targetR;
+  const reach = plan.trailActivateR ?? plan.targetR ?? plan.ownTargetR;
   if (reach === null || reach === undefined) return judged('the plan has no R exit to compare');
   if (o.mfeR >= reach) return judged(`the plan's ${reach}R was reached: managing it is judgment`);
   why.push(`closed at ${o.r}R, its best ${o.mfeR}R, before the plan's ${reach}R`);
@@ -351,6 +351,19 @@ function windowAt(t) {
   return { name: win.name, until: etClock(win.until.getTime()), et: etClock(t), entriesAllowed: win.entries === 'allowed' };
 }
 
+/**
+ * The exit plan a trade under setup `name` is managed by, and its bar size (a max_bars counts its own bars), or null.
+ * A composed strategy's trades exit by the policy that lists it, in an attempt or not (evaluator.js composedExit, as the
+ * runner manages them), so an entry under either tag is judged the same. An exit at the trade's own target (a policy's
+ * mode target or target_then_trail) is at least risk.min_rr away: under it the target is known not reached (ownTargetR).
+ */
+function planFor(name, byName, tf) {
+  const s = byName.get(name);
+  if (!s || !s.risk) return null;
+  const plan = composedExit(s, [...byName.values()]).plan;
+  return { ...plan, ...(plan.own || plan.afterTarget ? { ownTargetR: num(s.risk.min_rr) } : {}), minutes: parseInt(s.timeframe, 10) || tf };
+}
+
 /** The facts at one decision: window, setups (with the trend rule, room, read, confluence), trend rule per side, attempt. */
 function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] }) {
   const t = Date.parse(label.t);
@@ -362,8 +375,8 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
     timeframe: tf, barsHanded: count,
     scanned: false, setups: [], fired: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
-    // A strategy's exit plan and bar size (its max_bars count in its own bars).
-    planOf: name => { const s = rec.byName.get(name); return s && s.risk ? { ...exitPlan(s), minutes: parseInt(s.timeframe, 10) || tf } : null; },
+    // A strategy's exit plan and bar size (its max_bars count in its own bars): planFor.
+    planOf: name => planFor(name, rec.byName, tf),
   };
   const scan = before(rec.scans.get(`${label.symbol}|${label.barT}`), ownT);
   if (scan && Array.isArray(scan.results)) {
@@ -675,4 +688,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
     : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };
+module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor };
