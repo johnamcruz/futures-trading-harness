@@ -93,12 +93,13 @@ function libraryLine(label, c, noRoom = null) {
 /** The history library's section for the candidate (none without a library). */
 function librarySection(lib, rec, before) {
   if (!lib) return [];
-  if (lib.error) return [`History library (code-measured, not your decisions): unreadable (${lib.error}).`];
+  // An unreadable library is said in the tail (libraryError), never dropped by the cap.
+  if (lib.error) return [];
   const full = contextKey(rec.context);
   const at = key => libraryCellAt(lib, key, before);
   const setup = setupKeyOf(rec.reads);
   return [
-    `History library ${lib.hash.slice(0, 16)}, code-measured, not your decisions (one fixed standard trade at every reaction: ${lib.standard.replace(/^one fixed standard at every reaction: /, '')}):`,
+    `History library ${lib.hash.slice(0, 16)} (code-measured, not your decisions): every number is the standard plan's (a limit at the confirmation close, the stop one tick past the reaction candle, the first level at 2:1 or more), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:`,
     libraryLine('read signature, this context', at(cellKey('read', rec.signatures.read, full))),
     libraryLine('read signature, any context', at(cellKey('read', rec.signatures.read))),
     ...(setup ? [
@@ -107,6 +108,9 @@ function librarySection(lib, rec, before) {
     ] : ['- no setup reaction read in the candidate']),
   ];
 }
+
+/** The line saying the pinned library can't be read (kept in the tail: the cap never hides it), or none. */
+const libraryError = lib => (lib && lib.error ? [`History library (code-measured, not your decisions): unreadable (${lib.error}); no library numbers this lookup.`] : []);
 
 /** Text at most MAX_BYTES: whole lines from the end of each optional block are dropped first (the library's before the model's cells). */
 function capped(head, cells, similar, tail, library = []) {
@@ -141,7 +145,7 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     `skill signature: ${rec.signatures.skill}`, `read signature: ${rec.signatures.read}`, `context: ${contextKey(rec.context)}`,
   ];
   const before = sessionDate(Date.parse(rec.bar));
-  if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], [], librarySection(library, rec, before)) };
+  if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], libraryError(library), librarySection(library, rec, before)) };
   const at = key => cellAt(index, key, before);
   const full = contextKey(rec.context);
   const cells = [
@@ -160,7 +164,7 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => exampleLines(x.e));
   const similar = ['Similar past decisions (same skills, closest context):', ...(examples.length ? examples : ['- none'])];
   const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic.`];
-  return { text: capped([...head, 'Cells:'], cells, similar, tail, librarySection(library, rec, before)) };
+  return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library)], librarySection(library, rec, before)) };
 }
 
 /** argv to { symbol, alternative, role }. */
@@ -183,4 +187,4 @@ function parseArgv(argv) {
   return o;
 }
 
-module.exports = { USAGE, MAX_BYTES, experienceLookup, parseArgv, swapStep, librarySection };
+module.exports = { USAGE, MAX_BYTES, experienceLookup, parseArgv, swapStep, librarySection, capped };

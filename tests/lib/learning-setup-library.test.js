@@ -43,10 +43,34 @@ test('scan: deterministic on the fixture bars; every record from a fixed-level o
   assert.ok(RECORDS.length > 50, `records: ${RECORDS.length}`);
   const traded = RECORDS.filter(r => r.status === 'traded');
   assert.ok(traded.length > 30, `traded: ${traded.length}`);
-  assert.ok(RECORDS.every(r => ['traded', 'no-confirmation', 'not-composable', 'stop-under-floor', 'no-room'].includes(r.status)));
+  assert.ok(RECORDS.every(r => ['traded', 'no-confirmation', 'not-composable', 'stop-under-floor', 'no-room', 'no-entry-window'].includes(r.status)));
   assert.ok(RECORDS.every(r => r.setupKey && /^setup:15m-(rejected|broke)-/.test(r.setupKey)));
   assert.ok(RECORDS.some(r => r.status === 'no-room'), 'a reaction with no level at 2:1 is recorded as no room');
   assert.strictEqual(new Set(RECORDS.map(r => r.id)).size, RECORDS.length);
+});
+
+test('the same-candle rule: every traded record confirms on a candle that closed after the reaction candle, in an entry window', () => {
+  const { sessionWindow } = require('../../scripts/lib/trading/briefing');
+  const traded = RECORDS.filter(r => r.status === 'traded');
+  for (const r of traded) {
+    assert.ok(Date.parse(r.bar) + 180000 > Date.parse(r.reactionAt), `${r.id}: bar ${r.bar}, reaction ${r.reactionAt}`);
+    assert.strictEqual(sessionWindow(new Date(Date.parse(r.bar) + 180000)).entries, 'allowed', `${r.id} in a no-entry window`);
+  }
+});
+
+test('a checker or plan refusal is not-composable with its problem, never no-room; no-room is a verified target short of 2:1', () => {
+  for (const r of RECORDS.filter(x => x.status === 'no-room')) assert.match(r.why, /R:R .* under the strategy's min 2|no level on the winning side/, r.id);
+  const r = RECORDS.find(x => x.status === 'traded');
+  const b = JSON.parse(JSON.stringify(briefAt(r.bar)));
+  const m3 = b.sections.m3.data;
+  const far = r.side === 'long' ? m3.price + 500 : m3.price - 500;
+  // Targets the checker can't verify (a timeframe it doesn't know): a refusal, not a lack of room.
+  m3.swingTargets = { above: [{ frame: '7m', price: far }], below: [{ frame: '7m', price: far }] };
+  m3.rangeTargets = {};
+  m3.fvgs = {};
+  const c = L.composeAt(b, r.reaction, { side: r.side, tick: 0.25 });
+  assert.strictEqual(c.status, 'not-composable');
+  assert.match(c.why, /^the checker refused target 7m swing/);
 });
 
 test('the standard: entry at the confirmation close, stop one tick beyond the reaction candle, the target at 2:1 or more, the experience log\'s fill model', () => {
@@ -80,7 +104,8 @@ test('causal: changing the bars after a point changes no read, plan or signature
   const cut = BARS.findIndex(b => b.t >= '2020-05-01T16:00:00.000Z');
   const moved = BARS.map((b, i) => (i <= cut ? b : { ...b, o: b.o + 300, h: b.h + 700, l: b.l - 700, c: b.c - 300 }));
   const other = scan(moved);
-  const before = r => Date.parse(r.bar) + 180000 <= Date.parse(BARS[cut].t) + 180000;
+  // A moment whose whole window (its 15m candle's life after the reaction) ended by the cut.
+  const before = r => Date.parse(r.reactionAt) + 15 * 60000 <= Date.parse(BARS[cut].t) + 180000;
   const key = r => JSON.stringify([r.id, r.bar, r.status, r.reads, r.signature, r.plan]);
   assert.deepStrictEqual(other.filter(before).map(key), RECORDS.filter(before).map(key));
   assert.ok(RECORDS.filter(before).length > 20);
@@ -140,7 +165,7 @@ test('experience_lookup: the history library in a section of its own, after the 
   assert.doesNotMatch(plain, /History library/);
   L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })));
   const text = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
-  assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16}, code-measured, not your decisions \(one fixed standard trade at every reaction: a limit at the confirmation close/);
+  assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16} \(code-measured, not your decisions\): every number is the standard plan's \(a limit at the confirmation close.*\), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:/);
   assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[/);
   assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 .*; 1 more had no room at 2:1/);
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
@@ -156,10 +181,36 @@ test('experience_lookup: the history library in a section of its own, after the 
   const lib = L.loadPinnedLibrary(home);
   const section = H.librarySection(lib, rec, '2023-03-15');
   assert.strictEqual(section.length, 5);
+  // Walk-forward in the section: an earlier candidate's day sees fewer rows and fewer no-room days.
+  const early = H.librarySection(lib, rec, '2022-03-07');
+  assert.match(early.find(l => /read signature, any context/.test(l)), /too few samples \(n=12, 6 days\)/);
+  assert.match(section.find(l => /read signature, any context/.test(l)), /n 23 \(12 days/);
+  assert.match(early.find(l => /any context/.test(l) && /^- setup:/.test(l)), /too few samples \(n=12, 6 days\)$/, 'the no-room day (the 12th) is after it');
+  // A pin whose hash isn't its file's is refused; an unreadable library is said, whatever the cap.
+  const pinFile = path.join(home, 'experience', 'library-pinned.json');
+  const pin = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
+  fs.writeFileSync(pinFile, JSON.stringify({ ...pin, hash: 'f'.repeat(64) }));
+  assert.throws(() => L.loadPinnedLibrary(home), /the pinned library's hash ffffffffffffffff is not its file's/);
+  assert.match(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library \(code-measured, not your decisions\): unreadable \(the pinned library's hash/);
+  fs.writeFileSync(pinFile, JSON.stringify(pin));
   // The learning report: the library's hash, apart; none of its rows in the measures.
   const m = R.learningMeasures({ library: { hash: lib.hash.slice(0, 16) } });
   assert.deepStrictEqual({ ...m, library: null }, R.learningMeasures({}));
   assert.match(R.learningMarkdown(m), /History library [0-9a-f]{16} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record/);
+});
+
+test('the cap drops the library\'s lines before the model\'s cells', () => {
+  const line = (k, n) => `- ${k} ${n} ${'x'.repeat(90)}`;
+  const cells = Array.from({ length: 33 }, (_, i) => line('cell', i));
+  const lib = ['History library header', ...Array.from({ length: 10 }, (_, i) => line('lib', i))];
+  const text = H.capped(['head'], cells.slice(), ['similar'], ['tail'], lib.slice());
+  assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
+  assert.ok(cells.every(c => text.includes(c)), 'every model cell kept');
+  assert.ok(text.includes('lib 0') && !text.includes('lib 9'), 'the library\'s last lines dropped');
+  // More than the library can free: it goes entirely, then the model's cells are trimmed.
+  const many = Array.from({ length: 45 }, (_, i) => line('cell', i));
+  const tight = H.capped(['head'], many.slice(), ['similar'], ['tail'], lib.slice());
+  assert.ok(!tight.includes('History library header') && tight.includes('cell 0') && tight.includes('cell 44'));
 });
 
 test('CLI: scan, index, pin and show on fixture bars', () => {

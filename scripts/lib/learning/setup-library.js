@@ -8,20 +8,26 @@
  * "history library: code-measured, not your decisions", next to the model's own record.
  *
  * Per reaction moment (scanLibrary), on the bar briefings the runner builds (briefing.js, bar by bar, causal):
- *   confirmation   the first entry-timeframe close in the reaction's window (the reaction bar and the closes after it
- *                  while its candle is still the last completed one) whose candle confirms the reaction's side, in this
- *                  order: an entry pattern (hammer or bullish engulfing long, shooting star or bearish engulfing short),
- *                  momentum that way, a close in the far third. None in the window: `no-confirmation`.
+ *   confirmation   the first entry-timeframe close in the reaction's window (the closes AFTER the reaction bar, while
+ *                  its candle is still the last completed one: an entry read is on a candle closed after the setup
+ *                  candle, the gate's same-candle rule) whose candle confirms the reaction's side, in this order: an
+ *                  entry pattern (hammer or bullish engulfing long, shooting star or bearish engulfing short), momentum
+ *                  that way, a close in the far third, and that composes; a confirming close that doesn't compose
+ *                  leaves the next one to try. A close in a no-entry window (briefing.js sessionWindow, the gate's
+ *                  entry clock) is skipped (`no-entry-window` when nothing else was tried). None: `no-confirmation`;
+ *                  otherwise the last close tried says why.
  *   reads          the reads TRUE at the confirmation bar, in compose_check's read forms (composed-reads.js), one per
  *                  step: bias `1h <trend>` when the 1h trend is the side's or a range, else `regime <name>`; location
  *                  `at <level>` (`at <tf> fvg`), else `vwap <side>`; setup the reaction itself (`15m rejected prior vah
  *                  down`); entry the confirming read; stop `<tf> high|low <price>`, the reaction candle's far side;
  *                  target the nearest real level (a swing target, the prior 1h or 4h high, mid or low, a gap's edge)
  *                  whose plan is at least 2:1. checkReads verifies them all on that briefing, so the signature is the
- *                  one a model stating the same reads gets. Not every read true: `not-composable`.
+ *                  one a model stating the same reads gets. Not every read true, or the checker or the plan refusing
+ *                  the combination for anything but room: `not-composable`, with the problem.
  *   plan           trade-lifecycle.js planOf, as compose_check plans a model's record: a limit at the confirmation
  *                  close, the stop one tick beyond the reaction candle (D3), D13's floor (a closer stop is refused,
- *                  never widened: `stop-under-floor`), the target on the tick, R:R at least 2 (none: `no-room`).
+ *                  never widened: `stop-under-floor`), the target on the tick, R:R at least 2 (no verified target reaching it:
+ *                  `no-room`).
  *   outcome        experience-log.js limitOutcome, the experience log's counterfactual: the limit until the record
  *                  expires (the next base-bar close), the stop checked first on every bar, SLIPPAGE_TICKS on the stop,
  *                  out at end of day.
@@ -47,7 +53,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { buildBriefing } = require('../trading/briefing');
+const { buildBriefing, sessionWindow } = require('../trading/briefing');
 const { checkReads, parseRead } = require('../trading/composed-reads');
 const { planOf } = require('../trading/trade-lifecycle');
 const { limitOutcome } = require('./experience-log');
@@ -142,19 +148,26 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf }) {
   }
   if (!pair) return { status: 'not-composable', why: 'no true bias and location read for the side' };
   let floorRefused = null;
+  // No room only when a target the checker verified fell short of 2:1; a refusal by the checker (or by the plan for
+  // another reason) is not-composable, with its problem.
+  let short = null;
+  let refused = null;
   for (const t of targets) {
     const list = reads(pair[0], pair[1], t.read);
     const checked = checkReads({ reads: list, side, briefing: b, tick });
-    if (!checked.ok) continue;
+    if (!checked.ok) { refused = refused || `the checker refused ${t.read}: ${checked.problems[0] || (checked.reads.find(r => r.check !== true) || {}).fact || 'a read is not true'}`; continue; }
     const planned = planOf({ checked, briefing: b, side, size: 1, tick, tickValue: 1, minRR: MIN_RR, maxRiskUsd: Number.MAX_SAFE_INTEGER });
-    if (!planned.plan) continue;
+    if (!planned.plan) { refused = refused || `the plan refused ${t.read}: ${planned.problems[0]}`; continue; }
     const floor = planned.problems.find(p => /under the minimum/.test(p));
     if (floor) { floorRefused = floor; break; }
-    if (planned.problems.length) continue;
+    const others = planned.problems.filter(p => !/^R:R .* is under the strategy's min/.test(p));
+    if (others.length) { refused = refused || `the plan refused ${t.read}: ${others[0]}`; continue; }
+    if (planned.problems.length) { short = short || planned.problems[0]; continue; }
     return { status: 'traded', reads: list, checked, plan: planned.plan };
   }
   if (floorRefused) return { status: 'stop-under-floor', why: floorRefused };
-  return { status: 'no-room', why: `no level at ${MIN_RR}:1 or more` };
+  if (short) return { status: 'no-room', why: `no level at ${MIN_RR}:1 or more (${short})` };
+  return { status: 'not-composable', why: refused || 'no target the checker verifies' };
 }
 
 /** 'setup:<slug>' of the first setup relation read, or null. */
@@ -195,17 +208,23 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
     const side = sideOf(reaction.dir);
     if (!side) continue;
     const base = { v: VERSION, root, day, reactionAt: m.candle.closedAt, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price }, side };
-    let rec = { ...base, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), bar: list[i].t, status: 'no-confirmation', reads: [], signature: null, setupKey: null, context: null, plan: null, outcome: null };
-    // The window: the reaction bar and the closes after it while its candle is the last completed one.
-    for (let j = i; j < Math.min(list.length, i + span); j += 1) {
+    let rec = { ...base, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), bar: list[i].t, status: 'no-confirmation', why: null, reads: [], signature: null, setupKey: null, context: null, plan: null, outcome: null };
+    // The window: the closes AFTER the reaction bar (an entry read is on a candle closed after the setup candle, the
+    // gate's same-candle rule) while the reaction candle is the last completed one. Each confirming close is tried in
+    // turn until one composes; a close in a no-entry window (the gate's entry clock, briefing.js sessionWindow) is skipped.
+    for (let j = i + 1; j < Math.min(list.length, i + span); j += 1) {
       const cj = list[j].ms + tfMs;
-      if (j > i && (cj % stepMs === 0 || !inSession(cj) || sessionDate(cj - 1) !== day)) break;
-      const bj = j === i ? b : brief(j);
+      if (cj % stepMs === 0 || !inSession(cj) || sessionDate(cj - 1) !== day) break;
+      if (sessionWindow(new Date(cj)).entries !== 'allowed') {
+        if (rec.status === 'no-confirmation') rec = { ...rec, bar: list[j].t, status: 'no-entry-window', why: sessionWindow(new Date(cj)).text };
+        continue;
+      }
+      const bj = brief(j);
       const cand = m3Of(bj).candles[tfLabel(setupTf)];
       if (!cand || cand.closedAt !== m.candle.closedAt) break;
       if (!entryRead(m3Of(bj).candles[tfLabel(minutes)], side, tfLabel(minutes))) continue;
       const r = composeAt(bj, reaction, { side, tick, setupTf });
-      rec = { ...rec, bar: list[j].t, status: r.status, ...(r.why ? { why: r.why } : {}) };
+      rec = { ...rec, bar: list[j].t, status: r.status, why: r.why || null };
       if (r.status === 'traded') {
         const outcome = limitOutcome({ bars: list, tfMs, side, entry: r.plan.entry.price, stop: r.plan.stop.price, target: r.plan.target.price, fromMs: cj, expiresMs: new Date(bj.sections.m3.validUntil).getTime(), eodMs: eodOf(cj), tick });
         rec = {
@@ -214,7 +233,8 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
           outcome: { ...outcome, source: 'library' },
         };
       } else {
-        rec = { ...rec, setupKey: `setup:${parseRead(`${tfLabel(setupTf)} ${reaction.rel} ${levelWords(reaction.name)} ${reaction.dir}`).slug}` };
+        // Not composed on this close: the next confirming close is tried.
+        continue;
       }
       break;
     }
