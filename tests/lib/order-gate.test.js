@@ -2819,7 +2819,7 @@ test('trade_lifecycle, D2 ("CHoCH at or above the trend"): each tier on the gate
     const b = LC.briefing({ m3: { lastBreak: B.kind(m3) } });
     b.sections.m15.data.lastBreak = B.kind(m15);
     b.sections.h1.data.lastBreak = B.kind(h1);
-    b.sections.m3.data.candles['4h'] = { o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top', relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }] };
+    b.sections.m3.data.candles['4h'] = { closedAt: '2026-10-07T10:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top', relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }] };
     return b;
   };
   const reads = (bias, extraSetup = []) => [

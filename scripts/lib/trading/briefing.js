@@ -841,14 +841,15 @@ const GAP_REL_RANK = { rejected: 0, broke: 1, touched: 2 };
 const GAP_TF_RANK = { '1h': 0, '15m': 1, '5m': 2 };
 /**
  * A candle line's fair value gap relation (candle-facts.js fvgRelations), only when it met a gap's edge: the single
- * strongest, rejected before broke before touched, the higher timeframe's gap first ("; rejected up 15m fvg high 103").
+ * strongest, rejected before broke before touched, the higher timeframe's gap first, in the read's word order with the
+ * price after it ("; rejected 15m fvg high up (103)": the read `<line's tf> rejected 15m fvg high up`).
  */
 function gapText(c) {
   const list = (Array.isArray(c.fvgRelations) ? c.fvgRelations : []).filter(r => r && GAP_REL_RANK[r.rel] !== undefined);
   if (!list.length) return '';
   const tfRank = r => { const k = GAP_TF_RANK[String(r.name).split(' ')[0]]; return k === undefined ? 9 : k; };
   const r = [...list].sort((x, y) => (GAP_REL_RANK[x.rel] - GAP_REL_RANK[y.rel]) || (tfRank(x) - tfRank(y)))[0];
-  return `; ${r.rel}${r.dir ? ` ${r.dir}` : ''} ${r.name} ${r.price}`;
+  return `; ${r.rel} ${r.name}${r.dir ? ` ${r.dir}` : ''} (${r.price})`;
 }
 
 /** The summary's completed-candle lines: one per timeframe (EVENT_FRAMES only on an event), then the next swing targets. */

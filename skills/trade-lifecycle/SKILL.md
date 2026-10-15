@@ -21,16 +21,17 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | --- | --- | --- |
    | bias | trend, bos/choch, prior RTH range, trend rule, read, regime, day type | `multi-timeframe-analysis`, `daily-bias`, `bos-vs-choch`, `trend-vs-range` |
    | location | at a level, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
-   | setup | rejected/broke/touched a level or gap edge (`15m fvg low`: a hold rejects, a failure breaks), pattern, cisd, ote, swept | `rejection`, `breakout`, `breakout-vs-fakeout`, `pullback-vs-reversal`, `cisd`, `candle-reading`, `fair-value-gaps` |
-   | entry | close location, momentum, pattern (hammer, bullish engulfing: long; shooting star, bearish engulfing: short), `volume high`, `participation high`, absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | setup | rejected/broke/touched a level or gap edge (a bullish gap holds `rejected 15m fvg low up`, fails `broke 15m fvg low down`, a close inside is touched; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `breakout-vs-fakeout`, `pullback-vs-reversal`, `cisd`, `candle-reading`, `fair-value-gaps` |
+   | entry | close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `volume high`, `participation high`, absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | stop at a level | `invalidation` |
    | target | target at a level | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled | `manage-position` |
 
-   The setup is the reaction on a closed candle (often 15m); the entry
-   confirms it on the next closed candle(s) (often 3m). Each needs a true
-   read pointing your way; volume, `at` and `touched` only support it.
+   The setup is the reaction on a closed candle (often 15m); an entry read
+   your way must be on a candle that closed after it (often the next 3m).
+   Each needs a true read your way; `at`, `touched`, `swept`, volume,
+   participation and a setup `in ote` only support it.
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about

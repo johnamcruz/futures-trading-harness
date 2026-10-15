@@ -37,9 +37,10 @@
  *                                           the gaps as they stood at the candle's open, the same relation rule (a
  *                                           bounce is a rejection, a failure a break)     as above
  *   <tf> pattern <name>                     m3.candles.<tf>.patterns (or pattern)          engulfing by its colour,
- *                                                                                         displacement by its dir; in
- *                                           the entry step only ENTRY_PATTERNS (hammer and bullish engulfing long,
- *                                           shooting star and bearish engulfing short)
+ *                                                                                         hammer long, shooting star
+ *                                                                                         short, displacement by its
+ *                                                                                         dir; in the entry step only
+ *                                           ENTRY_PATTERNS (hammer, shooting star, bullish and bearish engulfing)
  *   <tf> volume high                        m3.candles.<tf>.volRatio >= VOLUME_HIGH (1.5)  none
  *   participation high                      m3.participation.relVolLast3VsPrior20 >= 1.5   none
  *   <tf> absorption at <level> up|down      m3.candles.<tf> relations (fvgRelations for a gap edge), volRatio,
@@ -73,8 +74,9 @@
  * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
  * (the same pattern in setup and entry counts once). The combination is ok when every read is true and agrees,
- * every step is stated, the setup and the entry each hold a true read pointing to the side, and there is exactly one
- * stop and one target read.
+ * every step is stated, the setup and the entry each hold a true read pointing to the side (a setup OTE zone is none),
+ * an entry one is on a candle that closed after the setup's pointing candle reads (reaction, then confirmation), and
+ * there is exactly one stop and one target read.
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
  *   checkRead(parsed, briefing, { side, tick })  { check, fact, field, value, dir, price? }
@@ -329,6 +331,20 @@ function netAtrOf(c) {
   return h > l && rangeAtr > 0 ? Math.round((Math.abs(cl - o) * rangeAtr / (h - l)) * 100) / 100 : 0;
 }
 
+// The reads made on one completed candle (`<tf> ...`): the ones timed for reaction, then confirmation.
+const CANDLE_KINDS = new Set(['relation', 'pattern', 'close', 'momentum', 'absorption']);
+const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
+
+/** When a timeframe's completed candle in the briefing closed (ms): its closedAt, else its open plus its length; null. */
+function candleClose(m3, tf) {
+  const c = isObj(m3) && isObj(m3.candles) ? m3.candles[tf] : null;
+  if (!isObj(c) || c.unavailable) return null;
+  const at = Date.parse(c.closedAt);
+  if (Number.isFinite(at)) return at;
+  const t = Date.parse(c.t);
+  return Number.isFinite(t) && TF_MIN[tf] ? t + TF_MIN[tf] * 60000 : null;
+}
+
 /**
  * The relations a level read is checked in: a gap edge ('<tf> fvg low|high') the candle's fvgRelations (the gaps as they
  * stood at its open), any other level its relations. list null: the briefing doesn't hold them.
@@ -482,7 +498,8 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
       if (!got.c) return res('unchecked', got.why);
       const list = Array.isArray(got.c.patterns) ? got.c.patterns : typeof got.c.pattern === 'string' ? [got.c.pattern] : null;
       if (!list) return res('unchecked', `the ${p.tf} candle's pattern is unknown`);
-      const dir = p.value === 'bullish engulfing' ? 'long' : p.value === 'bearish engulfing' ? 'short' : p.value === 'displacement' ? dirSide(got.c.dir) : null;
+      // Engulfing by its colour, a hammer long and a shooting star short (ENTRY_PATTERNS), displacement by its dir.
+      const dir = ENTRY_PATTERNS[p.value] || (p.value === 'displacement' ? dirSide(got.c.dir) : null);
       return res(list.map(levelName).includes(p.value) && p.value !== 'none', `the ${p.tf} candle: ${list.join(', ')}`, { field: `m3.candles.${p.tf}.patterns`, value: list.join(', '), dir });
     }
     case 'cisd': {
@@ -628,7 +645,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
     if (p.form) seen.add(p.form);
     const c = checkRead(p, briefing, { tick });
-    return { ...row, ...c, ...(entryPattern ? { dir: ENTRY_PATTERNS[p.value] } : {}), agrees: true };
+    return { ...row, ...c, agrees: true };
   });
   // Side agreement (D12), with D2's verified reversal: a true 15m or 1h CHoCH the side's way lets a trend or break read
   // against the side stand on a timeframe at or below the CHoCH's (a 15m CHoCH never excuses a 1h or 4h trend; a 3m
@@ -649,10 +666,25 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
   // The reaction and its confirmation point the trade's way: the setup and the entry each need a true read whose
   // direction is the side (reads without a direction, such as touched, at, volume or participation, support it only).
+  // An OTE zone is where the pullback sits, not a reaction: it counts as no setup read pointing.
+  const pointing = s => checked.filter(r => r.step === s && r.check === true && r.dir === side && !(s === 'setup' && r.kind === 'ote'));
   if (SIDES.includes(side)) {
     for (const s of ['setup', 'entry']) {
       if (missingSteps.includes(s)) continue;
-      if (!checked.some(r => r.step === s && r.check === true && r.dir === side)) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
+      if (!pointing(s).length) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
+    }
+    // Reaction, then confirmation: when the setup's pointing reads are candle reads, an entry read pointing the side must
+    // be on a candle that closed after the last of them (the candle after the 15m rejection, never the 15m candle
+    // itself or the last 3m inside it). A candle whose close time the briefing doesn't hold can't confirm or be timed.
+    const setupCandles = pointing('setup').filter(r => CANDLE_KINDS.has(r.kind));
+    const entries = pointing('entry').filter(r => CANDLE_KINDS.has(r.kind));
+    if (setupCandles.length && entries.length) {
+      const setupTimes = setupCandles.map(r => candleClose(m3, r.form.split(' ')[0]));
+      const after = Math.max(...setupTimes);
+      if (setupTimes.some(t => t === null)) problems.push('a setup candle\'s close time is not in the briefing: the confirmation can\'t be timed');
+      else if (!entries.some(r => { const t = candleClose(m3, r.form.split(' ')[0]); return t !== null && t > after; })) {
+        problems.push(`no entry read pointing ${side} is on a candle that closed after the setup's (${new Date(after).toISOString()}): the confirmation is the next closed candle, not the reaction's own`);
+      }
     }
   }
   for (const k of ['stop', 'target']) {

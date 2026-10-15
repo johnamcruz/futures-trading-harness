@@ -2692,7 +2692,7 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
   b.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
-  b.sections.m3.data.candles['4h'] = { o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
+  b.sections.m3.data.candles['4h'] = { closedAt: '2026-10-07T10:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
     relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }],
     fvgRelations: [{ name: '15m fvg low', price: 21472, side: 'bullish', rel: 'rejected', dir: 'up' }] };
   const run = rejection => {

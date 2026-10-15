@@ -224,12 +224,11 @@ test('rBucket and readSignature with a stated R', () => {
 const fixtureBars = () => loadBars(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(({ ms, ...b }) => b); // eslint-disable-line no-unused-vars
 const briefingAt = (bars, i) => clone(buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, i + 1), minutes: 3, scan: [], now: new Date(Date.parse(bars[i].t) + 180000) }));
 
-test('scenario 1 on the fixture bars: the 3m bar of 2026-04-24 09:57 ET (bar 773) as the owner\'s ideal long', () => {
-  // The 1h changed character up and price holds above the prior RTH high 27155.75; the 15m traded under it and closed
-  // back above; the 3m closed at its high on 1.5x volume and 1.43 ATR of range; wrong under the 15m low 27130.25;
-  // target the next 1h swing high 27363.75 (170 points over 63.50 of risk: 2.68R).
-  const b = briefingAt(fixtureBars(), 773);
-  const reads = [
+test('scenario 1 on the fixture bars: the 15m rejection closing 10:00 ET, confirmed by the 3m closing 10:09 ET (bar 776), not by the 3m inside it (bar 773)', () => {
+  // The 1h changed character up and price holds above the prior RTH high 27155.75; the 15m (09:45-10:00 ET) traded
+  // under it and closed back above; wrong under the 15m low 27130.25; target the next 1h swing high 27363.75.
+  const bars = fixtureBars();
+  const at773 = [
     { step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' },
     { step: 'bias', skill: 'daily-bias', read: 'above prior RTH range' },
     { step: 'location', skill: 'levels-and-reactions', read: 'at prior RTH high' },
@@ -239,10 +238,20 @@ test('scenario 1 on the fixture bars: the 3m bar of 2026-04-24 09:57 ET (bar 773
     { step: 'stop', skill: 'invalidation', read: 'stop 15m low 27130.25' },
     { step: 'target', skill: 'top-down-entry', read: 'target 1h swing 27363.75' },
   ];
+  // Bar 773 (09:57-10:00 ET): the last 3m inside the 15m closes with it. Every read is true, but nothing confirms the
+  // reaction after it closed.
+  const r773 = CR.checkReads({ reads: at773, side: 'long', briefing: briefingAt(bars, 773) });
+  assert.ok(r773.reads.every(x => x.check === true && x.agrees), CR.renderCheck(r773));
+  assert.strictEqual(r773.ok, false);
+  assert.ok(r773.problems.some(p => /no entry read pointing long is on a candle that closed after the setup's \(2026-04-24T14:00:00.000Z\)/.test(p)), r773.problems.join('; '));
+  // Bar 776 (10:06-10:09 ET): the 3m closed at its high after the 15m closed: the confirmation. Still above the VWAP.
+  const b = briefingAt(bars, 776);
+  const reads = at773.filter(x => x.read !== '3m momentum up').map(x => (x.step === 'location' ? { ...x, skill: 'vwap-volume-profile', read: 'vwap above' } : x));
   const r = CR.checkReads({ reads, side: 'long', briefing: b });
   assert.strictEqual(r.ok, true, CR.renderCheck(r));
-  assert.strictEqual(r.reference, 27193.75);
-  assert.strictEqual(r.signature, 'bias:1h-choch-up+bias:above-prior-rth-range+location:at-prior-rth-high+setup:15m-rejected-prior-rth-high-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:1h-swing-over-2.5r');
+  // 154.50 points to the target over 79.00 of risk: 1.96R.
+  assert.strictEqual(r.reference, 27209.25);
+  assert.strictEqual(r.signature, 'bias:1h-choch-up+bias:above-prior-rth-range+location:vwap-above+setup:15m-rejected-prior-rth-high-up+entry:3m-close-top+stop:15m-low+target:1h-swing-1.5-2.5r');
   // A relation past the four the text shows (the 15m met seven levels) verifies.
   assert.ok(!('previous 15m low' in b.sections.m3.data.candles['15m'].levels));
   assert.strictEqual(CR.checkRead(CR.parseRead('15m rejected previous 15m low up'), b).check, true);
@@ -519,33 +528,32 @@ test('an unavailable frame, no gap or no range in the briefing is never verified
   assert.strictEqual(one('stop prior 4h low 21499.75').check, 'unchecked');
 });
 
-test('composed on the fixture bars: bar 773\'s long with the prior 4h mid or 1h high as its target; a gap below is a short\'s', () => {
-  // Bar 773 (2026-04-24 09:57 ET), price 27193.75, stop the 15m low 27130.25 (63.50 points). The prior 4h candle
-  // 27363.75-27108: mid 27235.875, on the tick toward the entry 27235.75 (42.00 points = 168 ticks, 0.66R); the prior
-  // 1h high 27266.75 (73.00 points = 292 ticks, 1.15R). The 15m and 1h gaps from 10:00 ET are partly filled: their
-  // unfilled part 27120.75-27130.25 lies below price.
-  const b = briefingAt(fixtureBars(), 773);
+test('composed on the fixture bars: bar 776\'s long with the prior 4h mid or 1h high as its target; a gap below is a short\'s', () => {
+  // Bar 776 (2026-04-24 10:06 ET, the 3m confirming the 15m rejection that closed 10:00), price 27209.25, stop the 15m
+  // low 27130.25 (79.00 points). The prior 4h candle 27363.75-27108: mid 27235.875, on the tick toward the entry
+  // 27235.75 (26.50 points = 106 ticks, 0.34R); the prior 1h high 27266.75 (57.50 points = 230 ticks, 0.73R). The 15m
+  // and 1h gaps from 10:00 ET are partly filled: their unfilled part 27120.75-27130.25 lies below price.
+  const b = briefingAt(fixtureBars(), 776);
   const m3 = b.sections.m3.data;
   assert.strictEqual(m3.rangeTargets['4h'].mid.price, 27235.875);
   assert.deepStrictEqual(m3.fvgs['15m'][0].unfilled, [27120.75, 27130.25]);
   const base = [
     { step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' },
     { step: 'bias', skill: 'daily-bias', read: 'above prior RTH range' },
-    { step: 'location', skill: 'levels-and-reactions', read: 'at prior RTH high' },
+    { step: 'location', skill: 'vwap-volume-profile', read: 'vwap above' },
     { step: 'setup', skill: 'rejection', read: '15m rejected prior RTH high up' },
     { step: 'entry', skill: 'candle-reading', read: '3m close top' },
-    { step: 'entry', skill: 'momentum-and-volume', read: '3m momentum up' },
     { step: 'stop', skill: 'invalidation', read: 'stop 15m low 27130.25' },
   ];
   const withTarget = (read, skill = 'top-down-entry') => base.concat({ step: 'target', skill, read });
   const mid = CR.checkReads({ reads: withTarget('target prior 4h mid 27235.875'), side: 'long', briefing: b });
   assert.strictEqual(mid.ok, true, CR.renderCheck(mid));
   assert.deepStrictEqual(mid.target, { source: 'prior-4h-mid', level: 27235.75 });
-  assert.strictEqual(CR.targetROf(mid.reference, mid.stop.level, mid.target.level), 0.66);
+  assert.strictEqual(CR.targetROf(mid.reference, mid.stop.level, mid.target.level), 0.34);
   assert.match(mid.signature, /\+target:prior-4h-mid-under-1\.5r$/);
   const high = CR.checkReads({ reads: withTarget('target prior 1h high 27266.75'), side: 'long', briefing: b });
   assert.strictEqual(high.ok, true, CR.renderCheck(high));
-  assert.strictEqual(CR.targetROf(high.reference, high.stop.level, high.target.level), 1.15);
+  assert.strictEqual(CR.targetROf(high.reference, high.stop.level, high.target.level), 0.73);
   // The partly filled gap's unfilled high is below price: true, a short's target, against the long.
   const gap = CR.checkReads({ reads: withTarget('target 1h fvg high 27130.25', 'fair-value-gaps'), side: 'long', briefing: b });
   assert.strictEqual(gap.reads.at(-1).check, true);
