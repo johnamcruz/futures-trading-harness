@@ -16,6 +16,10 @@
  *   markets), resampled by the bootstrap (R9);
  * - its no-stop path: the worst move and the last close until the end of the day, for a stop that wasn't
  *   working (an injected fault, R9);
+ * - its price path, bar by bar from the fill to the end of its day ([open, adverse, favourable, close] in ticks
+ *   the trade's way), and its own exit (its component's target in ticks from the fill and its trail, the policy's
+ *   exit aside), and the structure trail's swing levels along that path (each swing timeframe a rulebook may name, as
+ *   confirmed by each bar's close), so the second layer can exit it under another exit mode (prop/attempts.js exitAs);
  * - its facts, by the functions live uses, never a copy: the scan (trading/strategies.js scan: the
  *   confluence) and the briefing (trading/briefing.js buildBriefing: the trend rule, the multi-timeframe
  *   read, the room to the first level in its way and the room it needs), on the bars the runner hands a
@@ -34,6 +38,9 @@ const { fieldPaths } = require('../backtest/bar-fields');
 const { scan } = require('../trading/strategies');
 const { buildBriefing } = require('../trading/briefing');
 const { historyBars, parseAt } = require('../autotrader');
+const { exitPlan } = require('../trading/evaluator');
+const { SWING_TFS, swingSeries } = require('../trading/exit-trail');
+const { roundHalfEven } = require('../backtest/engine');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 
@@ -83,24 +90,72 @@ function dayRegimes(bars, tfMs, lookback = 20) {
   return out;
 }
 
-/** The worst move and the last close (signed ticks from the entry) from the fill bar to the end of that trading day. */
-function noStopPath(book, t, { tfMs, eod }) {
+/**
+ * The trade's price path from the fill bar to the end of that trading day (the end-of-day flatten, as the engine
+ * exits): each bar as [open, adverse extreme, favourable extreme, close], signed ticks from the entry, the trade's
+ * way. null when no bar is at or after the fill.
+ */
+function pricePath(book, t, opts) {
   const sign = t.direction === 'long' ? 1 : -1;
+  const at = x => round6((sign * (x - t.entry)) / book.tickSize);
+  const idx = pathIndexes(book, t, opts);
+  return idx.length ? idx.map(k => { const b = book.bars[k]; return [at(b.o), at(sign > 0 ? b.l : b.h), at(sign > 0 ? b.h : b.l), at(b.c)]; }) : null;
+}
+
+/** The book's bar indexes of a trade's path: from the fill bar to the end of that trading day (the end-of-day flatten). */
+function pathIndexes(book, t, { tfMs, eod }) {
   const fillMs = Date.parse(t.entryTime);
   let k = book.bars.findIndex(b => b.ms >= fillMs);
-  if (k < 0) return null;
+  if (k < 0) return [];
   const day = tradingDayStart(new Date(book.bars[k].ms + tfMs)).getTime();
-  let worst = 0;
-  let close = null;
+  const out = [];
   for (; k < book.bars.length; k += 1) {
-    const b = book.bars[k];
-    const closeAt = new Date(b.ms + tfMs);
+    const closeAt = new Date(book.bars[k].ms + tfMs);
     if (tradingDayStart(closeAt).getTime() !== day) break;
-    worst = Math.min(worst, (sign * ((sign > 0 ? b.l : b.h) - t.entry)) / book.tickSize);
-    close = (sign * (b.c - t.entry)) / book.tickSize;
+    out.push(k);
     if (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt)) break;
   }
-  return close === null ? null : { worstTicks: round6(worst), closeTicks: round6(close) };
+  return out;
+}
+
+/**
+ * The structure trail's levels along a trade's path (exit-trail.js swingSeries, by each bar's close, never later bars):
+ * per swing timeframe a structure trail may name (SWING_TFS), one value per path bar, the latest confirmed swing on
+ * the trade's side (a long's swing low, a short's high) in signed ticks from the entry, the trade's way; null with none.
+ */
+function swingPath(book, t, opts) {
+  const sign = t.direction === 'long' ? 1 : -1;
+  const idx = pathIndexes(book, t, opts);
+  if (!idx.length) return null;
+  book.swings = book.swings || new Map();
+  return Object.fromEntries(Object.entries(SWING_TFS).map(([tf, m]) => {
+    if (!book.swings.has(m)) book.swings.set(m, swingSeries(book.bars, m));
+    const s = book.swings.get(m);
+    return [tf, idx.map(k => { const v = (sign > 0 ? s.low : s.high)[k]; return v === null ? null : round6((sign * (v - t.entry)) / book.tickSize); })];
+  }));
+}
+
+/** The worst move and the last close (signed ticks from the entry) from the fill bar to the end of that trading day. */
+function noStopPath(book, t, opts) {
+  const p = pricePath(book, t, opts);
+  return p ? { worstTicks: round6(Math.min(0, ...p.map(x => x[1]))), closeTicks: p[p.length - 1][3] } : null;
+}
+
+/**
+ * The trade's own exit, its component's (exitPlan), whatever exit the policy ran it with: the target in ticks from
+ * the fill (a target in R from the setup's stop distance, or a level from the signal bar's close, as the engine
+ * places them; null without one) and the component's own trail in R (null without one).
+ */
+function ownExit(t, component, tick) {
+  if (!component) return null;
+  const plan = exitPlan(component);
+  const sign = t.direction === 'long' ? 1 : -1;
+  const setup = t.setup || {};
+  let level = null;
+  if (plan.targetR && setup.stopDistance > 0) level = t.entry + sign * Math.max(1, roundHalfEven((plan.targetR * setup.stopDistance) / tick)) * tick;
+  else if (plan.target && setup.targetDistance > 0 && Number.isFinite(setup.close)) level = setup.close + sign * roundHalfEven(setup.targetDistance / tick) * tick;
+  const targetTicks = level === null ? null : round6((sign * (level - t.entry)) / tick);
+  return { targetTicks: targetTicks !== null && targetTicks > 0 ? targetTicks : null, trailActivateR: plan.trailActivateR, trailGivebackR: plan.trailGivebackR };
 }
 
 /** The facts at a trade's setup, by the live scan and briefing on the bars a cycle is handed. */
@@ -170,6 +225,9 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
       stopTicks, moveTicks, r: t.r, maeR: t.maeR, mfeR: t.mfeR, troughTicks: t.troughTicks || [],
       overshootTicks: stopped ? Math.max(0, round6((sign * (t.initialStop - t.exit)) / tick - slip)) : null,
       noStop: noStopPath(book, t, { tfMs, eod }),
+      path: pricePath(book, t, { tfMs, eod }),
+      swingPath: swingPath(book, t, { tfMs, eod }),
+      ownExit: ownExit(t, strategies.find(x => x.name === t.strategy) || null, tick),
       facts: facts ? factsAt(book, t, { strategies, tfMin, count, roundSteps }) : { error: 'facts not computed (facts: false)' },
     };
   });
@@ -193,4 +251,4 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
   };
 }
 
-module.exports = { tradeStream, tradingDays, delayFromCycles, dayRegimes, noStopPath, factsAt };
+module.exports = { tradeStream, tradingDays, delayFromCycles, dayRegimes, noStopPath, pricePath, swingPath, ownExit, factsAt };

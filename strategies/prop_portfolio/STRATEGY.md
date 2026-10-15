@@ -1,6 +1,6 @@
 ---
 name: prop_portfolio
-description: Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade. Its one component is trade_lifecycle.
+description: Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and exits each trade by its rulebook's exit (today the trade's own stop until its own target, then a trail past it). Its one component is trade_lifecycle.
 version: 3
 status: active                # the owner's call; its setups are trade_lifecycle's compose records; no live trading until the owner says trade_lifecycle is correct
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
@@ -21,7 +21,7 @@ source: harness design (the prop challenge as a strategy); the learned-rulebook 
 The account layer of the prop challenge: one 100K combine on four
 index futures (Nasdaq, S&P, Dow, Russell). It sizes each setup of the
 strategies it lists at the account's size budget, or skips one the budget
-can't fund, and its trail exits every trade.
+can't fund, and exits every trade by its rulebook's exit.
 
 **Its one component is `trade_lifecycle`**, the composed trade the model
 builds from its skills (docs/COMPOSED-ENTRY.md, section 3.7); every rules
@@ -63,8 +63,15 @@ on the replay broker, and there is no live trading until the owner says
 4. The verdict: every setup gets the full size its budget allows (step 3),
    times the verdict's multiplier (the rulebook's enforced items; none yet,
    so 1), or a skip when the budget can't fund one contract at its stop, the
-   attempt blocks entries, or the multiplier is 0. The trail (the rulebook's
-   `exit`) manages every trade.
+   attempt blocks entries (its soft daily stop, its loss streak stop:
+   `loss_streak_stop` losing trades in a row stop new entries for the
+   session), or the multiplier is 0. The rulebook's `exit` manages every
+   trade: exit mode `target` keeps the trade's own stop and target (the compose
+   record's brackets), with a trail on top only when the rulebook sets one;
+   `target_then_trail` holds the stop to the trade's own target and then, in
+   place of the exit there, locks the stop near it and trails it behind the
+   last confirmed swing (or by R), so a winner can run; exit mode `trail` puts
+   the R trail in place of the target.
 5. A verdict is a ceiling: take it only when the priority order (the
    strategy-library skill) says so, and then exactly as given:
    `setup:prop_portfolio`, the verdict's contract and side, at most its

@@ -545,6 +545,60 @@ test('combine: the account blocks entries at the soft daily limit and sizes from
   assert.match(ev(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480' })).violations[0].message, /needs stopLossBracket.ticks/);
 });
 
+/**
+ * Round trips for the broker's fills (search_trades): each [gross P&L, closing fills] opens with a fill without a P&L
+ * and closes with that many fills sharing the gross; $0.37 a side. Times from `from` (ms), a minute apart.
+ */
+function roundTrips(trips, from) {
+  const fills = [];
+  let t = from;
+  const at = () => new Date((t += 60000)).toISOString();
+  for (const [gross, parts = 1] of trips) {
+    fills.push({ creationTimestamp: at(), profitAndLoss: null, fees: 0.37 });
+    for (let k = 0; k < parts; k += 1) fills.push({ creationTimestamp: at(), profitAndLoss: gross / parts, fees: 0.37 / parts });
+  }
+  return { fills, net: Math.round(fills.reduce((a, f) => a + (f.profitAndLoss || 0) - f.fees, 0) * 100) / 100 };
+}
+
+/** A mini attempt (loss_streak_stop 2) whose session closed `trips` (roundTrips), snapshotted a minute before NOW. */
+function streakSetup(trips, { stop = 2 } = {}) {
+  const account = { ...MINI, loss_streak_stop: stop };
+  const home = trendHome();
+  prop.startAttempt(home, account, new Date(NOW.getTime() - 86400000));
+  const anchorAt = NOW.getTime() - 40 * 60000;
+  prop.snapshot(home, account, 50000, new Date(anchorAt)); // the day's first flat snapshot: the anchor
+  const { fills, net } = roundTrips(trips, anchorAt);
+  prop.snapshot(home, account, Math.round((50000 + net) * 100) / 100, new Date(NOW.getTime() - 60000), { fills });
+  prop.appendVerdict(home, {
+    strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+    maxSize: 50, bar: BAR, at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(),
+  });
+  return input => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, skipChecks: new Set(['combine', 'policy', 'strategy']) }, strategies: [propStrategy(), EMA_CROSS], accounts: [account] });
+}
+
+test('combine: after loss_streak_stop losing trades in a row the session takes no new entries (hard); exits and protective stops still go', () => {
+  const refusal = /mini: 2 losing trades in a row this session, at the loss streak stop \(loss_streak_stop 2\): no new entries until the next session/;
+  const two = streakSetup([[-20], [-20]]);
+  const r = two(entryOrder());
+  assert.strictEqual(r.violations.length, 1, JSON.stringify(r.violations));
+  assert.strictEqual(r.violations[0].check, 'combine');
+  assert.match(r.violations[0].message, refusal);
+  // Exits and protective orders are never held, streak or not.
+  for (const rationale of ['[exit] flatten the long', '[protect] stop for the long']) {
+    assert.deepStrictEqual(two(entryOrder({ side: 'sell', rationale })), { intent: 'risk-reducing', violations: [] }, rationale);
+  }
+  // One loss: entries go. A win ends the streak; a scratch (gross 0) neither ends nor extends it.
+  assert.deepStrictEqual(streakSetup([[-20]])(entryOrder()).violations, []);
+  assert.deepStrictEqual(streakSetup([[-20], [30], [-20]])(entryOrder()).violations, []);
+  assert.match(streakSetup([[-20], [0], [-20]])(entryOrder()).violations[0].message, refusal);
+  // A stop filled in parts is one losing trade, not several.
+  assert.deepStrictEqual(streakSetup([[-20, 3]])(entryOrder()).violations, []);
+  // The rulebook's value decides: 3 in a row with a stop of 3, none with it off (0).
+  assert.deepStrictEqual(streakSetup([[-20], [-20]], { stop: 3 })(entryOrder()).violations, []);
+  assert.match(streakSetup([[-20], [-20], [-20]], { stop: 3 })(entryOrder()).violations[0].message, /3 losing trades in a row/);
+  assert.deepStrictEqual(streakSetup([[-20], [-20], [-20]], { stop: 0 })(entryOrder()).violations, []);
+});
+
 test('combine: at the profit target the gate stops entries only once today\'s close would pass (consistency)', () => {
   const consistent = { ...MINI, consistency_pct: 50 };
   // $2,500 yesterday, +$600 today: $3,100 profit, but the best day is over 50% of it. Entries go on.
