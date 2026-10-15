@@ -62,7 +62,7 @@ const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -102,11 +102,12 @@ function report(argv) {
   const pick = resolveAccount({ override: arg(argv, '--account'), runnerAccount: runner.account, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts });
   const verdict = evaluate(days, accountNamed(ROOT, pick.name, process.env), { daysDone: manifest.daysDone || null, why: pick.why });
   const file = path.join(path.resolve(dir), 'report.md');
-  // The learning measures, when the run has an experience log (learning/learning-report.js).
+  // The learning measures, when the run has an experience log, and its skill usage (learning/learning-report.js).
   const learned = learning.readLearning(path.resolve(dir, '..', '..'));
-  const measures = learned ? learning.learningMeasures(learned) : null;
-  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}${measures ? `\n${learning.learningMarkdown(measures)}` : ''}`);
-  process.stdout.write(toText(summary) + verdictText(verdict) + (measures ? learning.learningText(measures) : ''));
+  const usage = learning.skillUsageFor(dir, { barsFiles: barsArgs(argv) });
+  const measures = learned ? learning.learningMeasures({ ...learned, skillUsage: usage }) : null;
+  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}${measures ? `\n${learning.learningMarkdown(measures)}` : usage ? `\n${learning.usageMarkdown(usage)}` : ''}`);
+  process.stdout.write(toText(summary) + verdictText(verdict) + (measures ? learning.learningText(measures) : learning.usageText(usage)));
   say(`wrote ${file}`);
   return 0;
 }
