@@ -147,6 +147,12 @@ test('the shards: every family read with root null; an older single file read wi
   assert.throws(() => TL.readRecords(home, 'MNQ'), /can't be read \(EISDIR\)/);
   assert.throws(() => TL.readRecords(home, 'MNQ', { days: ['2026-10-09'] }), /can't be read \(EISDIR\)/);
   assert.strictEqual(TL.readRecords(home, 'MNQ', { days: ['2026-10-07'] }).length, 2, 'another day\'s shard is never opened');
+  // The family's folder not a folder (a shard's path can't be reached): throws, never none.
+  const blocked = tmpDir();
+  fs.mkdirSync(path.join(blocked, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(blocked, 'trade-lifecycle', 'MNQ'), 'x');
+  assert.throws(() => TL.readRecords(blocked, 'MNQ', { days: ['2026-10-07'] }), /can't be read \(ENOTDIR\)/);
+  assert.throws(() => TL.readRecords(blocked, 'MNQ'), /can't be read \(ENOTDIR\)/);
   // Over the cap: throws, named.
   const big = tmpDir();
   fs.mkdirSync(path.dirname(TL.recordFile(big, 'MNQ', '2026-10-07')), { recursive: true });
