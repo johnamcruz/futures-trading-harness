@@ -645,3 +645,21 @@ test('model scoring held out: a judging that would need more looks than a sealed
   fs.writeFileSync(file, `${line(0)}\n${line(1)}\n`);
   await assert.rejects(L.judgeHeldOut({ loop: one.loop, env: one.env, root: ROOT, steps: one.steps, proposalId: k1.proposalId, heldOutLook: true }), /test: .* 2 look\(s\).* 1 of its 3 are left/);
 });
+
+test('model scoring held out: a rulebook-editing proposal on a sealed window is refused before any look or replay', async () => {
+  const H = [{ from: '2025-03-03', to: '2025-03-04' }];
+  const w = world({ proposals: [fix], loop: { modelScore: MODEL, heldOutWindows: H, learning: { evaluation: 'ev1' } } });
+  w.steps.modelVerifier = verdictStub([]);
+  await run(w, { dryRun: true });
+  // The kept change is re-pointed at a rulebook edit (its tuning ran as a skill edit; only the held-out judging is under test).
+  const text = fs.readFileSync(w.paths.archive, 'utf8').split(SKILL).join('accounts/acct_a/RULEBOOK.md');
+  fs.writeFileSync(w.paths.archive, text);
+  const [kept] = readArchive(w.paths.archive);
+  const replays = w.calls.replay;
+  await assert.rejects(L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true }), /held-out judging refused: .*edits a rulebook.*refused before any look is spent/);
+  const ledger = path.join(w.env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl');
+  assert.ok(!fs.existsSync(ledger) || fs.readFileSync(ledger, 'utf8').trim() === '', 'no learning look taken');
+  assert.ok(!S.readLedger(w.paths.ledger).some(l => l.purpose === 'judging'), 'no judging look taken');
+  assert.strictEqual(w.calls.replay, replays, 'nothing replayed');
+  assert.ok(!readArchive(w.paths.archive).some(e => e.phase === 'held-out'));
+});

@@ -361,9 +361,11 @@ test('W2 the two sides\' rulebooks from real trees: one rulebook; a tightened si
   const gone = run(tree(d => editFile(path.join(d, 'strategies', POLICY.name, 'STRATEGY.md'), /^status: active/m, 'status: disabled')));
   assert.strictEqual(gone.v.verdict, 'blocked');
   assert.match(gone.v.reasons[0], /adds or removes the policy/);
-  // A contracts change on the policy: a candidate, scored under its own contracts.
+  // A contracts change on the policy: no guard covers it, so it is blocked, never scored.
   const minis = run(tree(d => editFile(path.join(d, 'strategies', POLICY.name, 'STRATEGY.md'), /^contracts: auto/m, 'contracts: micro')));
-  assert.deepStrictEqual([minis.o.candidateB, minis.o.policyB.contracts, minis.o.policy.contracts], [true, 'micro', 'auto']);
+  assert.strictEqual(minis.v.verdict, 'blocked');
+  assert.match(minis.v.reasons[0], /policy's contracts/);
+  assert.strictEqual(minis.o, undefined, 'never scored');
 });
 
 test('W3 verify end to end with its default parts: real trees, real replay runs, pairRuns, the reads by key', () => {
@@ -421,4 +423,28 @@ test('combine: the keep rule decides; the panel\'s blows and harms and the evalu
   const rej = MV.combine({ panel: quiet, model: { available: true, verdict: 'rejected', reasons: ['(a) blow'] } });
   assert.deepStrictEqual(rej, { verdict: 'rejected', reasons: ['(a) blow'] });
   assert.strictEqual(MV.combine({ panel: quiet, model: { available: true, verdict: 'inconclusive', reasons: ['short'] } }).verdict, 'inconclusive');
+});
+
+test('contracts: a policy contracts difference between the trees is blocked, not scored', () => {
+  const seen = [];
+  const v = MV.verify({ cfg: CFG, pairs: PAIRS, seed: 3, root: '/c', candidateRoot: '/x', deps: deps({ seen, sides: { contractsDiffers: true } }) });
+  assert.strictEqual(v.verdict, 'blocked');
+  assert.match(v.reasons[0], /policy's contracts/);
+  assert.strictEqual(seen.length, 0, 'not scored');
+});
+
+test('exit-change filter: only the guard\'s own exit message is dropped; a free-text value containing ".exit: changed" stays', () => {
+  const exit = 'accounts/a/RULEBOOK.md: policies.p-1.exit: changed (the exit mode and trail are searched, R10; never a proposal\'s to change); a proposal only tightens a rulebook';
+  const other = 'accounts/a/RULEBOOK.md: policies.p.sizing.cap_usd: 1 -> 2 is looser; a proposal only tightens a rulebook';
+  const free = 'accounts/a/RULEBOOK.md: enforced: policies.x.exit: changed (note) moved out of enforced (the code no longer holds it); a proposal only tightens a rulebook';
+  assert.deepStrictEqual(MV.withoutExitChanges([exit, other, free]), [other, free]);
+});
+
+test('candidateErrors: a rulebook edit on a sealed window is refused up front; on practice windows or a skill edit it is not', () => {
+  const rb = { edits: [{ file: 'accounts/a/RULEBOOK.md', find: 'x', replace: 'y' }] };
+  const skill = { edits: [{ file: 'skills/a/SKILL.md', find: 'x', replace: 'y' }] };
+  const sealed = [{ from: '2025-03-03', to: '2025-03-04' }];
+  assert.match(MV.candidateErrors(sealed, rb)[0], /edits a rulebook.*sealed window/);
+  assert.deepStrictEqual(MV.candidateErrors(sealed, skill), []);
+  assert.deepStrictEqual(MV.candidateErrors([{ from: '2024-09-10', to: '2024-09-11' }], rb), []);
 });

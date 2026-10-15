@@ -206,6 +206,19 @@ test('scorePaired with a rulebook per side: B sized under its own (a candidate\'
   assert.throws(() => scorePaired(A, A, { ...opts, accountB: { ...ACCOUNT, sessions: 20 }, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) }), /same sessions/);
 });
 
+test('scorePaired: side B is exited under its own rulebook exit (A\'s unchanged), so B\'s result changes', () => {
+  // Each trade recorded a +60 win, but its path hits the 40-tick stop on the first bar: only a re-exit (exit.mode) shows it.
+  const trade = d => [modelTrade(`${d}-0`, 60, {}, { path: [[0, -45, 10, -40], [-40, -45, 70, 60]] })];
+  const S = modelStreamOf(DAYS, trade);
+  const pa = () => checkModelWindow({ run: run({ runId: 'ea' }) });
+  const pb = () => checkModelWindow({ run: run({ runId: 'eb' }) });
+  const same = scorePaired(S, S, { ...quick, passA: pa(), passB: pb() });
+  const exited = scorePaired(S, S, { ...quick, rulebookB: { exit: { mode: 'target' } }, passA: pa(), passB: pb() });
+  assert.deepStrictEqual(exited.a, same.a, 'side A keeps its own exit (the recorded one)');
+  assert.notDeepStrictEqual(exited.b.real, same.b.real, 'side B was re-exited under its own rulebook');
+  assert.ok(exited.b.real.passRate < same.b.real.passRate, 'every B trade stops out on its path: B passes less');
+});
+
 test('policyRulebook: a policy\'s whole entry as the Monte Carlo applies it; its multipliers on the trade\'s facts fail closed', () => {
   const { policyRulebook } = require('../../scripts/lib/prop/model-score');
   const t = modelTrade('t1', 60, { volatility: 'high' });

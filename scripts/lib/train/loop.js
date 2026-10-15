@@ -516,6 +516,8 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     // up front when the budget left can't hold them, so a judging never spends looks and then blocks. A resume took
     // its looks already.
     if (loop.modelScore && !ctx.state.done[`judging:${tag}`]) {
+      const candidate = MV.candidateErrors(loop.heldOutWindows, entry.proposal);
+      if (candidate.length) throw new Error(`held-out judging refused: ${candidate.join('; ')}`);
       const ledgerFile = learningLedgerPath(env);
       const refused = MV.lookErrors(loop.heldOutWindows, fs.existsSync(ledgerFile) ? readLedgerFile(ledgerFile) : [], { perWindow: 2 });
       if (refused.length) throw new Error(`held-out judging refused: ${refused.join('; ')}`);

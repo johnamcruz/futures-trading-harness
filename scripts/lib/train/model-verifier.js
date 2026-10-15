@@ -33,8 +33,8 @@
  * that fails, a window too short, too few decisions) is never a pass: the verdict is `blocked` or `inconclusive`.
  *
  * The two sides' rulebooks: the account (its firm rules: sessions, target, max loss, daily limit) must be the same on
- * both trees, or the change is blocked. The policy's sizing, exit and multipliers (the account's RULEBOOK.md) and its
- * contracts may differ: each side is then scored under its own (pairRuns policyB), the challenger's as a candidate
+ * both trees, or the change is blocked. The policy's sizing, exit and multipliers (the account's RULEBOOK.md)
+ * (not its contracts: a difference there is blocked) may differ: each side is then scored under its own (pairRuns policyB), the challenger's as a candidate
  * rulebook (prop/evaluator.js checkModelWindow candidateRulebook: refused on test and final, judged on practice-train
  * and practice-validate only), labelled as such; a rulebook that loosens a limit the rulebook guard forbids
  * (train/rulebook-guard.js; the exit is the search's, judged here, never a limit) is rejected unscored.
@@ -127,6 +127,18 @@ function lookErrors(windows, ledger, { perWindow = 2, budgets = null } = {}) {
     if (n > left) out.push(`${role}: judging these windows takes ${n} look(s) (${perWindow} per window: the champion's run and the challenger's), and ${left} of its ${budget} are left: refused before any look is spent`);
   }
   return out;
+}
+
+/**
+ * Before any replay or look: a challenger whose rulebook differs is scored as a candidate rulebook, which a sealed
+ * window (test, final) refuses (prop/evaluator.js checkModelWindow). So a proposal that edits a rulebook is refused
+ * up front when any held-out window is sealed, rather than after both replays have spent their looks.
+ */
+function candidateErrors(windows, proposal) {
+  const edits = proposal && Array.isArray(proposal.edits) ? proposal.edits : [];
+  if (!edits.some(e => require('./proposal').kindOf(e.file) === 'rulebook')) return [];
+  return (windows || []).filter(w => { const r = rolesOf(w); return r.length === 1 && SEALED.includes(r[0]); })
+    .map(w => `${w.from}..${w.to}: the proposal edits a rulebook, a candidate rulebook never scored on a sealed window (tune it on practice-train, choose it on practice-validate): refused before any look is spent`);
 }
 
 const records = list => (list || []).filter(d => d && d.key && d.category).map(d => ({ key: d.key, repeat: 0, category: d.category, blow: d.blow === true }));
@@ -254,9 +266,17 @@ function readsByKey(runDir, { root }) {
 }
 
 /**
+ * The guard's findings without its exit-change ones (the exit is judged here, not refused). Matches the guard's own
+ * message, `<file>: policies.<name>.exit: changed (`, at its start, so a free-text value that merely contains
+ * ".exit: changed" is never dropped.
+ */
+const withoutExitChanges = errors => errors.filter(e => !/^[^ ]+: policies\.[a-z0-9_-]+\.exit: changed \(/.test(e));
+
+/**
  * Each side's account and policy. The account's firm rules (its ACCOUNT.md: sessions, target, max loss, daily limit,
- * contracts, fees) must be the same on both trees; the rulebook's numbers (the soft stop, the loss streak stop, the
- * policy's sizing, exit and multipliers) and the policy's contracts may differ, and a rulebook that loosens a limit
+ * contracts, fees) must be the same on both trees, and so must the policy's contracts (a difference is blocked, not
+ * scored: no guard covers it); the rulebook's numbers (the soft stop, the loss streak stop, the
+ * policy's sizing, exit and multipliers) may differ, and a rulebook that loosens a limit
  * is refused by the rulebook guard (train/rulebook-guard.js; its exit check aside: the exit is judged here).
  */
 function defaultSides({ cfg, root, candidateRoot, env }) {
@@ -272,19 +292,20 @@ function defaultSides({ cfg, root, candidateRoot, env }) {
     const bookFile = path.join(path.dirname(account.file), rb.FILE);
     return {
       account, policy, firm: JSON.stringify(firm), bookText: fs.existsSync(bookFile) ? fs.readFileSync(bookFile, 'utf8') : '',
-      book: JSON.stringify([soft, streak, policy ? [policy.name, policy.sizing || null, policy.multipliers || null, policy.contracts || null] : null]),
+      book: JSON.stringify([soft, streak, policy ? [policy.name, policy.sizing || null, policy.multipliers || null] : null]),
+      contracts: JSON.stringify(policy ? policy.contracts || null : null),
       exit: JSON.stringify(policy ? policy.exit || null : null),
     };
   };
   const a = of(root);
   const b = candidateRoot ? of(candidateRoot) : a;
   const where = `accounts/${a.account.name}/${rb.FILE}`;
-  const loosenings = a.bookText !== b.bookText ? require('./rulebook-guard').rulebookErrors(where, a.bookText, b.bookText).filter(e => !/\.exit: changed/.test(e)) : [];
+  const loosenings = a.bookText !== b.bookText ? withoutExitChanges(require('./rulebook-guard').rulebookErrors(where, a.bookText, b.bookText)) : [];
   const exitDiffers = a.exit !== b.exit;
   const candidateB = a.book !== b.book || exitDiffers;
   return {
     account: a.account, policy: a.policy, accountB: b.account, policyB: b.policy, firmDiffers: a.firm !== b.firm, policyMissing: Boolean(a.policy) !== Boolean(b.policy),
-    candidateB, exitDiffers, loosenings,
+    candidateB, exitDiffers, contractsDiffers: a.contracts !== b.contracts, loosenings,
     pairing: exitDiffers ? 'different trade streams under different sizing/exit' : candidateB ? 'different sizing (the same exit)' : 'one rulebook',
   };
 }
@@ -324,6 +345,7 @@ function verify({ cfg, pairs, seed, root, candidateRoot = null, env = process.en
     const sides = d.sides({ cfg, root, candidateRoot, env });
     if (sides.firmDiffers) return { available: true, verdict: 'blocked', reasons: ['the challenger changes the account\'s firm rules (its ACCOUNT.md): both sides attempt one account, so this change can\'t be judged here'], windows: [] };
     if (sides.policyMissing) return { available: true, verdict: 'blocked', reasons: ['the challenger adds or removes the policy that trades the account: the two sides\' sizing can\'t be paired'], windows: [] };
+    if (sides.contractsDiffers) return { available: true, verdict: 'blocked', reasons: ['the challenger changes the policy\'s contracts: no guard covers it and the two sides\' sizing would differ in kind, so this change can\'t be judged here'], windows: [] };
     if ((sides.loosenings || []).length) return { available: true, verdict: 'rejected', reasons: sides.loosenings.map(e => `the rulebook guard: ${e}`), windows: [] };
     const opts = { root, env, account: sides.account, policy: sides.policy, seed, paths: cfg.paths, reps: cfg.reps, faults: cfg.faults };
     const two = { accountB: sides.accountB || sides.account, policyB: sides.policyB === undefined ? sides.policy : sides.policyB, candidateB: sides.candidateB === true };
@@ -370,4 +392,4 @@ function combine({ panel, model, evaluator = null, rule = DECISION_RULE }) {
   return { verdict: model.verdict, reasons: model.reasons };
 }
 
-module.exports = { KEEP_RULE, HELD_BACK, resolveModelScore, windowErrors, lookErrors, adherence, reads, pooledInterval, decide, verify, combine };
+module.exports = { KEEP_RULE, HELD_BACK, resolveModelScore, windowErrors, lookErrors, candidateErrors, adherence, reads, pooledInterval, decide, verify, combine, withoutExitChanges };
