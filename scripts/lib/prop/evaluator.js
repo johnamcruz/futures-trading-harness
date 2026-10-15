@@ -369,7 +369,7 @@ function pairedRunner({ ctx, rates, seed, pools }) {
         const plan = ctx.size(args);
         if ((plan && plan.size >= 1) || !keep.has(args.trade) || !(args.fraction > 0)) return plan;
         // One contract of the smaller leg: a micro unless only minis trade (one mini can be the whole ceiling).
-        const full = ctx.size({ ...args, fraction: 1, mode: args.mode === 'mini' ? 'mini' : 'micro' });
+        const full = ctx.size({ ...args, fraction: 1, mode: args.mode === 'mini' ? 'mini' : 'micro' }) || ctx.size({ ...args, fraction: 1 });
         return full && full.size >= 1 ? { ...full, size: 1 } : plan;
       },
       onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },

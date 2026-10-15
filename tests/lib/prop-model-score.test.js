@@ -351,7 +351,8 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
   const { curatedRates } = require('../../scripts/lib/prop/natural-rate');
   const home = tmpHome('fth-pmc-');
   const ledger = path.join(home, 'ledger', 'looks.jsonl');
-  const t0 = '2024-07-15T14:00:00.000Z';
+  // The decision on the window's last bar: its close (14:00) plus the runner's default 2 s poll delay.
+  const t0 = '2024-07-15T14:00:02.000Z';
   looks.recordLook(ledger, { evaluation: 'v2', candidate: 'v2', purpose: 'validate', runId: 'run1', from: '2024-07-15', to: '2024-07-17' }, { create: true });
   const gate = { learning: true, role: 'practice-validate', look: { evaluation: 'v2', candidate: 'v2', purpose: 'validate' }, hideOutcomes: false, ledger, practice: { mode: 'setup-focus', setupTf: 15 } };
   const { dir } = multiDayRun({
@@ -363,7 +364,7 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
     ],
   });
   // A lists document: one trend-up moment whose window holds the decision; the scan found 60 trend-up candidates.
-  const moment = { id: 'm1', list: 'trend-up', day: '2024-07-15', window: { from: '2024-07-15T13:30:00.000Z', to: '2024-07-15T14:30:00.000Z' } };
+  const moment = { id: 'm1', list: 'trend-up', day: '2024-07-15', window: { from: '2024-07-15T13:30:00.000Z', to: '2024-07-15T14:00:00.000Z' } };
   const lists = Object.fromEntries(CL.LISTS.map(n => [n, n === 'trend-up' ? [moment] : []]));
   const coverage = Object.fromEntries([...CL.LISTS.map(n => [n, { candidates: n === 'trend-up' ? 60 : 0 }]), ['mix', { candidates: 60 }]]);
   const body = { v: CL.VERSION, kind: CL.KIND, builtAt: 'x', use: 'validate', role: 'practice-validate', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, seed: 1, options: {}, sources: [], lists, mix: ['m1'], short: {}, coverage };
@@ -371,7 +372,7 @@ test('a curated run is reweighted at its lists\' natural rates from the curated 
   const file = path.join(home, 'curated.json');
   fs.writeFileSync(file, JSON.stringify(doc));
   CL.pinCurated(home, { file, list: 'mix', fingerprint: doc.fingerprint });
-  const c = curatedRates(doc, { list: 'mix', scanDays: 120 });
+  const c = curatedRates(doc, { list: 'mix', scanDays: 120, delayMs: 2000 });
   assert.deepStrictEqual(c.rates['trend-up'], { candidatesPerDay: 0.5 });
   assert.deepStrictEqual([c.listOf({ cycleAt: t0 }), c.listOf({ cycleAt: '2024-07-16T14:00:00.000Z' })], ['trend-up', null]);
   assert.match(curatedRates(doc).scanDaysFrom, /an estimate/);

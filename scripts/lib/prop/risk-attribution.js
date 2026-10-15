@@ -126,7 +126,9 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
 /**
  * The risk record: the attribution's cells with at least `minN` trades, as lines the learning loop can show, each with
  * its sample size ("near the max loss limit, alignment=counter: n 40, 9 in attempts that blew, 3 that passed, mean R
- * -0.42"), the whole text at most maxBytes (fewest-sample lines dropped first). Counts over Monte Carlo paths: a trade
+ * -0.42"), the whole text at most maxBytes (fewest-sample lines dropped first). For a model run's attribution: a test or
+ * final role (the attribution's own, or `role`) is refused (the learning split's sealed windows; a mechanical pass's
+ * schedule roles are not checked here). Counts over Monte Carlo paths: a trade
  * is counted once per path it was taken on. Kept apart from the model's trade cells.
  */
 function riskRecord(attribution, { minN = 10, maxBytes = MAX_BYTES, source = null, role = null } = {}) {

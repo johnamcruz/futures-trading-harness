@@ -174,7 +174,8 @@ function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
   const pinned = loadPinnedCurated(path.resolve(runDir, '..', '..'));
   let runner = {};
   try { runner = JSON.parse(fs.readFileSync(path.join(runDir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { /* none: no poll delay */ }
-  const delayMs = (Number(runner.barDelaySeconds) || 0) * 1000;
+  // The poll delay the driver stepped with: the runner config over the runner's defaults (autotrader.js DEFAULTS).
+  const delayMs = Number({ ...require('../autotrader').DEFAULTS, ...runner }.barDelaySeconds || 0) * 1000;
   const docOf = () => {
     if (!pinned || !curated || !curated.file) return null;
     const doc = readLists(curated.file);
