@@ -47,7 +47,7 @@ const { validateConfig, buildCommand } = require('../autotrader');
 const { activeBroker, loadBrokers, CREDENTIAL } = require('../broker/config');
 const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
-const { treeDigest, HARNESS_DIRS } = require('../session/record');
+const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -266,8 +266,23 @@ function configHash(run, base = process.env) {
 }
 
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
+/**
+ * A run's setup, from its config alone (no environment, nothing seeded): the runner config, broker, window, the
+ * decision times' settings and the harness's documents and code. Not its runId, learning flag or experience index:
+ * the arms of one evaluation (learning/looks.js) share it and differ in their index only.
+ */
+function setupHash(run) {
+  const body = {
+    // The runner config without the run's own folders (its runId is in their paths).
+    cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
+    premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
+    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
 function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

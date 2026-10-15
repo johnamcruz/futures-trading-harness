@@ -35,6 +35,7 @@
  *   examplesBefore(index, skillSig, before)   the examples before a day, latest first
  *   indexHash(doc), writeIndex(dir, doc), readIndex(file)
  *   pinIndex(runHome, file)             the run's own frozen copy (pinned.json); a run keeps the index it pinned
+ *   armOf(file)                         the arm a run pinning it is (with:<hash>, shuffled:<hash>; no file: without)
  *   loadPinned(home)                    the pinned index, its hash checked; null when none is pinned or the run is
  *                                       declared not learning
  *   cellKey(kind, sig, ctx), contextKey(ctx), decisionDay(d), knownDay(d)
@@ -273,6 +274,13 @@ function learningRun(home) {
  * (before the bar's session), so an index spanning the run's own months shows only their past. A run keeps the index
  * it pinned (another hash is refused); a run declared not learning is refused.
  */
+/** A run's arm (learning/looks.js) from the index it will pin: with:<hash 16>, shuffled:<hash 16>, or without (none). */
+function armOf(file) {
+  if (!file) return 'without';
+  const doc = readIndex(file);
+  return `${doc.shuffle === null || doc.shuffle === undefined ? 'with' : 'shuffled'}:${doc.hash.slice(0, 16)}`;
+}
+
 function pinIndex(runHome, file) {
   const doc = readIndex(file);
   const run = learningRun(runHome);
@@ -300,6 +308,6 @@ function loadPinned(home) {
 }
 
 module.exports = {
-  VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned,
+  VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
   cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain,
 };

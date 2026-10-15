@@ -7,7 +7,10 @@ const os = require('os');
 const path = require('path');
 const K = require('../../scripts/lib/learning/looks');
 
-const look = (from, to, o = {}) => ({ evaluation: 'ev1', candidate: 'champ', purpose: 'judging', runId: 'r1', from, to, ...o });
+const ARMS = ['without', `with:${'a'.repeat(16)}`, `shuffled:${'b'.repeat(16)}`];
+// Each run its own arm (by its name's end), and every run of the same setup.
+const armOf = runId => ARMS[/without$/.test(runId) ? 0 : /with$/.test(runId) ? 1 : /shuffled$/.test(runId) ? 2 : /(\d)$/.test(runId) ? Number(runId.slice(-1)) % 3 : 0];
+const look = (from, to, o = {}) => ({ evaluation: 'ev1', candidate: 'champ', purpose: 'judging', runId: 'r1', from, to, config: 'c0nf', arm: armOf(o.runId || 'r1'), ...o });
 const TEST = ['2025-02-03', '2025-03-01'];
 const FINAL = ['2026-03-02', '2026-04-01'];
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-learn-looks-'));
@@ -30,7 +33,7 @@ test('test: the arms of one evaluation share a look; three evaluations spend it;
   const fourth = K.checkLook(look(...TEST, { evaluation: 'ev4', runId: 'ev4' }), ledger);
   assert.deepStrictEqual([fourth.ok, fourth.spent, fourth.remaining], [false, 3, 0]);
   assert.match(fourth.refusals[0], /test: its 3 look\(s\) are spent \(counted per evaluation\)/);
-  const arm = K.checkLook(look(...TEST, { evaluation: 'ev2', runId: 'ev2-shuffled' }), ledger);
+  const arm = K.checkLook(look(...TEST, { evaluation: 'ev2', runId: 'ev2-without' }), ledger);
   assert.deepStrictEqual([arm.ok, arm.shared], [true, true], 'another arm of a spent evaluation runs');
   assert.strictEqual(K.checkLook(look(...TEST, { evaluation: 'ev2', runId: 'ev2' }), ledger).repeat, true);
   // Reasoning-fix: free, outcomes hidden.
@@ -82,7 +85,7 @@ test('recordLook and recordResult: the file under its lock; a missing ledger onl
   assert.ok(!fs.existsSync(`${file}.lock`));
   const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.deepStrictEqual(lines.map(l => [l.kind, l.role]), [['look', 'test'], ['result', 'test'], ['look', 'final']]);
-  assert.strictEqual(K.ledgerPath({ FTH_HOME: '/h' }), path.join('/h', 'learning', 'looks.jsonl'));
+  assert.strictEqual(K.ledgerPath({ FTH_HOME: '/h', HOME: '/u' }), path.join('/u', '.futures-trading-harness', 'learning', 'looks.jsonl'), 'the default home, whatever FTH_HOME');
 });
 
 test('an evaluation id is its first look\'s: another candidate, purpose or window is refused; at most three arms', () => {
@@ -96,4 +99,16 @@ test('an evaluation id is its first look\'s: another candidate, purpose or windo
   assert.match(K.checkLook(look(...TEST, { runId: 'a4' }), three).refusals.join(), /evaluation ev1 has its 3 arms \(a1, a2, a3\)/);
   assert.ok(K.checkLook(look(...TEST, { runId: 'a3' }), three).repeat, 'a resume of an arm');
   assert.strictEqual(K.MAX_ARMS, 3);
+});
+
+test('the arms differ in their index only: each a different arm, all of the same run setup; a judging look names both', () => {
+  const ledger = [{ kind: 'look', ...look(...TEST, { runId: 'a1' }), role: 'test' }];
+  assert.match(K.checkLook(look(...TEST, { runId: 'b', arm: ARMS[1] }), ledger).refusals.join(), /evaluation ev1 has its with:a{16} arm already/);
+  assert.match(K.checkLook(look(...TEST, { runId: 'a2', config: 'other' }), ledger).refusals.join(), /its arms differ only in their experience index/);
+  assert.ok(K.checkLook(look(...TEST, { runId: 'a2' }), ledger).ok);
+  for (const bad of [{ arm: null }, { arm: 'with:short' }, { config: null }]) {
+    assert.match(K.checkLook(look(...TEST, { evaluation: 'n1', runId: 'n1', ...bad }), []).refusals.join(), /a judging look names its arm .* and its run setup/, JSON.stringify(bad));
+  }
+  // A reasoning-fix or validate look needs neither.
+  assert.ok(K.checkLook(look(...TEST, { evaluation: 'f9', runId: 'f9', purpose: 'reasoning-fix', arm: null, config: null }), []).ok);
 });

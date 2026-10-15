@@ -112,7 +112,7 @@ test('composed-reads: the order as the record says: a limit at the reference or 
 
 test('composed-reads: the minimum stop, min_rr and the specs fail closed; a check that throws refuses', () => {
   // D13: a stop at the 3m low 21529 (11.25 + a tick = 46 ticks) is fine; one at 21535.25 (21 ticks) is under 24.
-  const near = F.briefing({ m3: { candles: { '15m': { l: 21535.25, h: 21545, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] }, '3m': { closeLocation: 'top' } } } });
+  const near = F.briefing({ m3: { candles: { '15m': { closedAt: '2026-10-07T13:45:00.000Z', l: 21535.25, h: 21545, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] }, '3m': { closedAt: F.CLOSE, closeLocation: 'top' } } } });
   const { home } = world({ b: near, reads: F.READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop 15m low 21535.25' } : x)) });
   assert.match(judge(home).message, /21 ticks, under the minimum 24 .* never widened/);
   const ok = world();
