@@ -167,7 +167,7 @@ function defaultRead(run, { root, env, barsFiles = {} }) {
 /** The skill-usage lines: the run's real report (learning-report.js skillUsageFor) when merged, else N/A. */
 function skillUsageLines(merged, rd) {
   if (!merged) return ['skill usage: N/A (needs feat/skill-usage)'];
-  let u = null;
+  let u;
   try { u = rd.skillUsage ? rd.skillUsage() : null; } catch (e) { u = { error: String(e.message).split('\n')[0] }; }
   if (!u) return ['skill usage: no compose records in the run'];
   return require('../learning/learning-report').usageText(u).trimEnd().split('\n');
