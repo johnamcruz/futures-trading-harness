@@ -76,12 +76,12 @@ function findingsFrom({ skills = [], refusals = [], exists = () => true, max = 8
     if (s.wrong > 0) row(s.skill).items.push({ kind: 'misread', count: s.wrong, of: s.reads, detail: s.topRefusals.map(x => `${x.what} (${x.count})`).join('; ') });
     if (s.missed > 0) row(s.skill).items.push({ kind: 'missed', count: s.missed, of: s.relevant, detail: s.topMissed.map(x => `${x.what} (${x.count})`).join('; ') });
   }
-  const bySkill = new Map();
+  const owned = new Map();
   for (const r of refusals) {
     const owners = r.skills.filter(probed);
-    for (const s of owners.length ? owners : [null]) bySkill.set(s, [...(bySkill.get(s) || []), r]);
+    for (const s of owners.length ? owners : [null]) owned.set(s, [...(owned.get(s) || []), r]);
   }
-  for (const [s, list] of bySkill) {
+  for (const [s, list] of owned) {
     const reasons = [...new Set(list.flatMap(r => r.falseReasons))].slice(0, 2).join('; ');
     row(s).items.push({ kind: 'wrong-reason refusal', count: list.length, of: null, detail: reasons });
   }
