@@ -71,6 +71,9 @@ test('the screen: a scripted helpful edit passes; harmful and neutral ones do no
   assert.match(blow.harms.join(), /1 blow\(s\)/);
   // Dropping the skill is no fix: a misread turned into "no read of a claimed" stays a failure.
   assert.strictEqual(SC.screen(SC.measure(champ, side({ state: i => (i % 2 ? 'right' : 'missed') }), target)).verdict, 'no effect');
+  // Not significant: 4 fixed against 2 broken (p 0.34) is no gain, however permissive the screen.
+  const mixed = SC.measure(champ, side({ state: i => (i % 2 ? (i < 4 ? 'misread' : 'right') : i < 8 ? 'right' : 'misread') }), target);
+  assert.deepStrictEqual([mixed.target.b, mixed.target.c, SC.screen(mixed).verdict], [4, 2, 'no effect']);
   // Noise: 2 fixed, 0 broken is under the screen's minimum.
   assert.strictEqual(SC.screen(SC.measure(champ, side({ state: i => (i % 2 || i < 4 ? 'right' : 'misread') }), target)).verdict, 'no effect');
   // A wrong-reason refusal's target: the champion's wrong stated reasons now right.
@@ -243,9 +246,11 @@ test('pool: at most `limit` at once; every started one finishes; the first error
 const MODEL = { account: 'acct_a', paths: 500 };
 // The tree's skill text decides each side's decisions: GOOD fixes every misread of skill a and every wrong reason,
 // SOME fixes 6 of the 10 misreads only, BAD misreads everywhere; anything else is the champion's (every other decision wrong).
-const behaviour = text => (text.includes('BAD') ? 'bad' : text.includes('GOOD') ? 'good' : text.includes('SOME') ? 'some' : 'champion');
+// REASON fixes the wrong reasons only; SOME and REASON together cancel (the champion's decisions).
+const behaviour = text => (text.includes('BAD') ? 'bad' : text.includes('GOOD') ? 'good'
+  : text.includes('SOME') && text.includes('REASON') ? 'champion' : text.includes('SOME') ? 'some' : text.includes('REASON') ? 'reason' : 'champion');
 const stateOf = (b, i) => (b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 12) ? 'right' : 'misread');
-const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || i % 2 ? 'right' : 'wrong stated reason');
+const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
 function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
   const user = tmpDir();
@@ -259,7 +264,7 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
     probe: { replay: { ...replay, stage: 1, curatedList: { file: 'curated.json', list: 'mix' }, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } }, windows: WINDOW, k: 4, parallel: 2 },
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
-  loop.probe = { ...loop.probe, replay };
+  loop.probe = { ...loop.probe, replay: { ...replay, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
   const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0 };
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
@@ -271,7 +276,7 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
       fs.writeFileSync(path.join(run.paths.runHome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['x'], replay: true, journalEnv: 'SIM_JOURNAL', env: [] } } }));
     },
     runReplay: async ({ run, root, deps }) => {
-      calls.runs.push({ runId: run.runId, start: run.start.toISOString(), end: run.end.toISOString(), tree: path.basename(root) });
+      calls.runs.push({ runId: run.runId, start: run.start.toISOString(), end: run.end.toISOString(), practice: run.practice || null, tree: path.basename(root) });
       const manifest = store.openRun(run.paths, { runId: run.runId, hash: 'h' });
       const done = store.recordedTimes(run.paths.runDir);
       const todo = TIMES.filter(t => !done.has(t));
@@ -335,7 +340,10 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   // Every probe replayed the same moments with the same replay config as the champion's probe run.
   const probeRuns = w.calls.runs.filter(r => r.runId.endsWith('-p0'));
   assert.strictEqual(probeRuns.length, 1 + 4 + 1, 'the champion, four probes, one combined change');
-  assert.deepStrictEqual([...new Set(probeRuns.map(r => `${r.start}..${r.end}`))], [`${probeRuns[0].start}..${probeRuns[0].end}`]);
+  assert.deepStrictEqual([...new Set(probeRuns.map(r => `${r.start}..${r.end}|${JSON.stringify(r.practice)}`))], [`${probeRuns[0].start}..${probeRuns[0].end}|${JSON.stringify(probeRuns[0].practice)}`]);
+  assert.strictEqual(probeRuns[0].practice.seed, 7, 'the probe config\'s seed, on every side');
+  // The keep rule's runs are the loop's own full-day replay config, never the probes'.
+  assert.ok(w.calls.runs.filter(r => r.runId.endsWith('-t0')).every(r => r.practice === null));
   assert.strictEqual(probeRuns[0].tree, 'champion');
   assert.deepStrictEqual(probeRuns.slice(1, 5).map(r => r.runId).sort(), report.probes.map(p => `l1-p-${p.id}-p0`).sort());
   // The two helpful edits touch the same line: the larger gain (GOOD) kept, the conflict reported.
@@ -376,6 +384,19 @@ test('the combined change still needs the full keep rule: a screen pass with a r
     assert.strictEqual(e.verdict, verdict);
     assert.strictEqual(w.calls.branches.length, 0);
   }
+});
+
+test('compose re-probes the combined change: two edits that each helped but cancel together never reach the keep rule', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rewording', '- line one', '- line one, SOME', 'some'), tagged('a', 'F2', 'rule', '- line two', '- line two\n- REASON → say it', 'reasons')] });
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.deepStrictEqual(report.probes.map(p => [p.finding, p.verdict]), [['F1', 'helped'], ['F2', 'helped']]);
+  assert.strictEqual(report.composition.parts.length, 2);
+  assert.deepStrictEqual([report.composed.verdict, report.composed.cancelled.length], ['no effect', 2]);
+  assert.strictEqual(w.calls.verifier.length, 0, 'never to the keep rule');
+  assert.deepStrictEqual(readArchive(w.paths.archive), []);
+  const last = LS.readLessons(path.join(w.paths.dir, LS.FILE)).pop();
+  assert.deepStrictEqual([last.composed, last.parts, last.verdict], [true, 2, 'no effect']);
 });
 
 test('nothing passes the screen: no proposal reaches the keep rule; the next round\'s proposer reads the lessons, never held-out data', async () => {
