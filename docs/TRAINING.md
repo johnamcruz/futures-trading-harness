@@ -65,8 +65,11 @@ comparable.
   them. Scan the NQ 3-minute series as root MNQ: MNQ trades at NQ's prices.
 - **Regenerate if the source changes.** If the replay is switched to the
   raw-price derived store, regenerate the lists from that source, so the two
-  always match. The preflight can't yet tell which bars a list came from: keep
-  them in step yourself.
+  always match. The preflight's `curated-source` check compares the list's
+  moments with the bars you give the run (`--bars`): a moment whose decision
+  bar closed elsewhere than its entry means another series, and the run is
+  refused. Give the run the bars the replay serves, so the check sees what the
+  model sees.
 - **History coverage.** The history starts 2021-04, so practice-train
   effectively covers 2021-04 to 2024-07.
 
@@ -118,7 +121,8 @@ The checks:
 - generated adapters in sync
 - the facts (a sample briefing on the bars you give: 1h, 4h, 15m, 3m and 5m,
   VWAP, FVGs, briefing age)
-- the curated list (its fingerprint, market, use and lists)
+- the curated list (its fingerprint, market, use and lists), and its source
+  (its moments' entries against the run's bars; N/A with nothing to compare)
 - the split window
 - latency (charged on every learning run)
 - practice mode
@@ -310,3 +314,5 @@ reweighted, not a calendar of whole days.
 | `curatedList: runs through setup-focused practice; set practice too` | A curated run needs `practice`. |
 | `a validate curated list runs on practice-validate, not on this practice-train run` | You used the wrong list for the window. |
 | `libraryDisplay: shows the pinned history library; name it (setupLibrary)` | The display needs a library to show. |
+| `FAIL curated-source: ... disagree with the run's bars` | The list was scanned from another series than the run's bars: scan it from the bars the replay serves. |
+| `FAIL library-display: libraryDisplay is on, but the run is no library comparison arm` | Show the library only on an evaluation's arm (`--evaluation`). |

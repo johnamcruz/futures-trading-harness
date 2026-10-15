@@ -24,6 +24,11 @@ const DAY_BARS = (() => {
   return PF.writeMinuteBars(path.join(dir, 'MNQ-1m.csv'), '2022-03-07');
 })();
 
+// A list moment the standard traded on the day's bars: its decision bar's open and close (its entry).
+const REAL = P.defaultReaders(ROOT, {}, { barsFiles: { MNQ: DAY_BARS } });
+const [BAR_MS, BAR_CLOSE] = [...REAL.barCloses('MNQ', 3)].find(([ms]) => ms >= Date.parse('2022-03-07T14:30:00Z'));
+const MOMENT = { bar: new Date(BAR_MS).toISOString(), standard: { plan: { entry: BAR_CLOSE, stop: BAR_CLOSE - 10, target: BAR_CLOSE + 20, rr: 2 } } };
+
 /** A run that passes every check, with every feature merged; `over` patches the run, `gate` the gate, `read` the readers. */
 function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book = {} } = {}) {
   const strategies = [
@@ -46,7 +51,9 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       head: () => ({ prompt: 'p', core: [...CORE, ...READS], composedReads: READS, embedded: [...CORE, ...READS], attestation: { sha256: 'a'.repeat(64) }, expectedSha256: 'a'.repeat(64) }),
       syncStale: () => [],
       sampleBriefing: real.sampleBriefing,
-      curatedDoc: () => ({ fingerprint: 'f1', use: 'practice', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, lists: { 'trend-up': [{}], 'trend-down': [{}] }, coverage: { mix: { under: [] } } }),
+      barCloses: real.barCloses,
+      tickOf: () => 0.25,
+      curatedDoc: () => ({ fingerprint: 'f1', use: 'practice', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, lists: { 'trend-up': [MOMENT], 'trend-down': [{}] }, coverage: { mix: { under: [] } } }),
       index: () => ({ hash: 'b'.repeat(64), walkForward: true, roles: ['practice-train'], months: { from: '2020-01-06', to: '2024-06-28' } }),
       learningGate: () => ({ learning: true, role: 'practice-train', look: null }),
       rulebook: name => (name === 'acct' ? rulebook : null),
@@ -64,6 +71,7 @@ test('the good fixture: every check passes (every feature merged)', () => {
   assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS), [], P.formatReport(res));
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.results.length, P.CHECKS.length);
+  assert.deepStrictEqual(res.results.find(x => x.check === 'curated-source'), { check: 'curated-source', status: P.PASS, detail: '1 list moment(s) closed at their entry in the bars given: one source' });
   assert.ok(P.formatReport(res).split('\n').every(l => !l || /^(PASS|FAIL|WARN|N\/A) /.test(l) || /^training preflight/.test(l)));
 });
 
@@ -109,6 +117,9 @@ test('each check fails on a broken fixture', () => {
     [P.stage, { run: { libraryDisplay: undefined } }, /history library stays hidden/],
     // Stage 2's stage-1 part is still judged.
     [P.stage, { run: { stage: 2, latency: false } }, /stage 2: latency is charged/],
+    // The list scanned from another series: its moment's entry isn't the run's bar's close.
+    [P.curatedSource, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [{ ...MOMENT, standard: { plan: { ...MOMENT.standard.plan, entry: BAR_CLOSE + 7.5 } } }] } }) } }, /1 of 1 list moment\(s\) disagree with the run's bars .*scanned from another series/],
+    [P.curatedSource, { read: { curatedDoc: () => { throw new Error('c.json: unreadable'); } } }, /unreadable/],
     [P.splitWindow, { gate: { from: D('2024-06-28T00:00:00Z'), to: D('2024-07-03T00:00:00Z') } }, /spans practice-train \+ practice-validate/],
     [P.splitWindow, { gate: { from: D('2019-03-04T00:00:00Z'), to: D('2019-03-05T00:00:00Z') } }, /no learning role/],
     [P.latency, { run: { latency: false } }, /latency: true/],
@@ -146,6 +157,13 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   assert.strictEqual(P.libraryDisplay(ctx({ run: { libraryDisplay: true }, gate: { evaluation: 'ev1' } })).status, P.PASS);
   assert.strictEqual(P.practiceMode(ctx({ gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') }, run: { practice: null } })).status, P.PASS);
   assert.strictEqual(P.curatedList(ctx({ run: { curated: null } })).status, P.PASS);
+  // The source check: within half a tick is one source; nothing to compare (no list, no moment in the bars, no bars) is N/A.
+  assert.strictEqual(P.curatedSource(ctx({ read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [{ ...MOMENT, standard: { plan: { ...MOMENT.standard.plan, entry: BAR_CLOSE + 0.1 } } }] } }) } })).status, P.PASS);
+  // The reader: the bars given aggregated to the list's timeframe; another symbol, or no timeframe, says why.
+  assert.ok(REAL.barCloses('MNQ', 3).size > 0 && REAL.barCloses('MNQ', 1).size > REAL.barCloses('MNQ', 3).size);
+  assert.match(REAL.barCloses('MES', 3).error, /no MES bars given/);
+  assert.match(REAL.barCloses('MNQ', null).error, /no bar timeframe/);
+  for (const c of [ctx({ run: { curated: null } }), ctx({ read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [{ ...MOMENT, bar: '2023-01-03T15:00:00.000Z' }] } }) } }), ctx({ read: { barCloses: () => ({ error: 'no MNQ bars given (--bars)' }) } })]) assert.strictEqual(P.curatedSource(c).status, P.NA);
   assert.strictEqual(P.experienceIndex(ctx({ run: { experienceIndex: null } })).status, P.PASS);
   // Stage 2's own requirements are phase 2's: N/A with the reason (a curated run refuses prop: the account states come
   // from feat/prop-mc-model), never a FAIL.

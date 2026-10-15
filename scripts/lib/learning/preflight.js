@@ -13,7 +13,7 @@
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
- * adapters-in-sync, facts, curated-list, split-window, latency, practice-mode, library-display, experience-index,
+ * adapters-in-sync, facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
  * ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-facts, monte-carlo. A check of a feature on another branch
  * (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones (#188-#191) are judged, and a
@@ -223,6 +223,31 @@ function curatedList(ctx) {
   return r('curated-list', PASS, `${c.list} of ${doc.fingerprint.slice(0, 12)} (${doc.use}), every skill at its minimum`);
 }
 
+/**
+ * The curated list's source against the run's bars: each list moment the standard traded whose bar is in the bars given
+ * (--bars, aggregated to the list's bar timeframe) closed there at the moment's entry (its decision bar's close). A list
+ * scanned from another series (raw prices against back-adjusted ones, another contract) disagrees: FAIL. No moment in
+ * the bars given: N/A (nothing to compare).
+ */
+function curatedSource(ctx) {
+  const c = ctx.run.curated;
+  if (!c) return r('curated-source', NA, 'no curated list');
+  let doc;
+  try { doc = ctx.read.curatedDoc(c.file); } catch (e) { return r('curated-source', FAIL, errText(e)); }
+  const symbol = ((ctx.run.cfg || {}).symbols || [])[0];
+  const closes = ctx.read.barCloses(symbol, (doc.market || {}).minutes);
+  if (closes.error) return r('curated-source', NA, closes.error);
+  const tick = Number(ctx.read.tickOf(symbol)) || 0.25;
+  const moments = Object.values(doc.lists || {}).flat().filter(m => m && m.standard && m.standard.plan && Number.isFinite(m.standard.plan.entry) && closes.has(Date.parse(m.bar)));
+  if (!moments.length) return r('curated-source', NA, `no list moment in the ${symbol} bars given to compare`);
+  const off = moments.filter(m => Math.abs(closes.get(Date.parse(m.bar)) - m.standard.plan.entry) > tick / 2);
+  if (off.length) {
+    const m = off[0];
+    return r('curated-source', FAIL, `${off.length} of ${moments.length} list moment(s) disagree with the run's bars (the first: the ${m.bar} bar closed ${closes.get(Date.parse(m.bar))} in the bars given, ${m.standard.plan.entry} in the list): the list was scanned from another series; scan it from the bars the replay serves`);
+  }
+  return r('curated-source', PASS, `${moments.length} list moment(s) closed at their entry in the bars given: one source`);
+}
+
 function splitWindow(ctx) {
   let roles;
   try { roles = rolesBetween(ctx.gate.from, ctx.gate.to); } catch (e) { return r('split-window', FAIL, errText(e)); }
@@ -360,7 +385,7 @@ function monteCarlo(ctx) {
 
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
-  splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
+  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
   propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
 ]);
 
@@ -393,6 +418,21 @@ const once = fn => {
     return v;
   };
 };
+
+/** The run's bars (--bars for the symbol) at `minutes` (1m aggregated): Map(open ms -> close), or { error }. */
+function barCloses({ barsFiles }, symbol, minutes) {
+  const { readBarsArg, barMinutes, aggregate } = require('../backtest/data');
+  const file = barsFiles && symbol ? barsFiles[symbol] : null;
+  if (!file) return { error: `no ${symbol || 'symbol'} bars given (--bars) to compare the list with` };
+  if (!(Number.isInteger(minutes) && minutes > 0)) return { error: 'the list names no bar timeframe' };
+  const raw = readBarsArg(file);
+  const m = raw.length > 1 ? barMinutes(raw) : minutes;
+  let bars;
+  if (m === minutes) bars = raw;
+  else if (m === 1) bars = aggregate(raw, { unit: 2, unitNumber: minutes, nowMs: Infinity, extraFields: 'drop' });
+  else return { error: `${path.basename(file)}: ${m}-minute bars, not the list's ${minutes}m or one-minute` };
+  return new Map(bars.map(b => [Date.parse(b.t), b.c]));
+}
 
 /** The sample briefing on the run's bar data: its first bar closing after the run's start, built as the runner builds it. */
 function sampleBriefing({ barsFiles, env }, { symbol, minutes, start, end, barDelayMs, minuteLane }) {
@@ -444,6 +484,8 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),
     sampleBriefing: opts => sampleBriefing({ barsFiles, env }, opts),
+    barCloses: (symbol, minutes) => barCloses({ barsFiles }, symbol, minutes),
+    tickOf: symbol => { const s = require('../trading/contracts').specFor(symbol); return s ? s.tickSize : null; },
     curatedDoc: file => require('./curated-lists').readLists(file),
     index: file => require('./experience-index').readIndex(file),
     learningGate: gate => require('./run-gate').checkLearningRun({ ...gate, env }),
@@ -497,7 +539,7 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, l
 module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
-  splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
+  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
   propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
   crosswalkOf, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };
