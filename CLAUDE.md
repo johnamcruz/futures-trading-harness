@@ -183,9 +183,11 @@ request, every time, whatever the size of the change:
    that preflight points to), `docs/research/mtf-setup-catalog.md` (the
    census the basics skills cite as evidence),
    `docs/research/cisd-ote-textbook.md` (the census the `cisd` and
-   `fib-retracement` skills cite), and `docs/COMPOSED-ENTRY.md` (the
+   `fib-retracement` skills cite), `docs/COMPOSED-ENTRY.md` (the
    approved design of `trade_lifecycle` that `prop_portfolio`, the
-   rulebook and the retired-strategy list point to).
+   rulebook and the retired-strategy list point to), and `docs/TRAINING.md`
+   (the training guide the replay's stages and the training preflight
+   point to).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
