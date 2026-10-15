@@ -189,11 +189,13 @@ function daysFor(stream, pass, rulebook) {
 }
 
 /** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
-function contextFor({ account, rulebook, size, contracts, maxDailyLoss }) {
+function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) {
   const sizing = { ...combine.DEFAULT_SIZING, ...(rulebook.sizing || {}) };
   const legsCache = new Map();
   return {
     account, sizing, size, multiplier: rulebook.multiplier || at.fullVerdict, mode: contracts, maxDailyLoss,
+    // The order gate's loss limits, as live (attempts.js gateLimits: the gate's own config).
+    gate: gate === undefined ? at.gateLimits() : gate,
     legsOf: t => {
       if (!legsCache.has(t.symbol)) legsCache.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) }));
       return legsCache.get(t.symbol);
@@ -211,7 +213,7 @@ function contextFor({ account, rulebook, size, contracts, maxDailyLoss }) {
 function scoreStream(stream, opts) {
   const started = Date.now();
   const {
-    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 2000, meanBlock = 7,
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000, meanBlock = 7,
     reps = 2000, level = 0.9, every = 1, cuts = [0.25, 0.5], faults = {}, attribution = false,
   } = opts || {};
   const pass = takePass(given);
@@ -219,7 +221,7 @@ function scoreStream(stream, opts) {
   const days = daysFor(stream, pass, rulebook);
   const inWindow = days.flatMap(d => d.trades);
   const S = account.sessions;
-  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate });
   const { sizing } = ctx;
   const branch = Array.isArray(stream.fieldBranch) && stream.fieldBranch.length > 0;
   const covers = d => !branch || attemptFlowCovered(d, S);
@@ -336,7 +338,7 @@ function scoreStream(stream, opts) {
     window: { from: pass.from, to: pass.to, role: pass.unit.role, block: pass.unit.block, part: pass.unit.part, days: days.length },
     look: pass.look,
     inputs: {
-      sessions: S, every, seed, paths, reps, level, cuts, sizing, contracts, maxDailyLoss, expectancyR: Math.round(eR * 10000) / 10000,
+      sessions: S, every, seed, paths, reps, level, cuts, sizing, contracts, maxDailyLoss, gate: ctx.gate, expectancyR: Math.round(eR * 10000) / 10000,
       entryDelayMs: stream.entryDelayMs, faults: { ...rates, measured: Boolean(faults.measured) },
       // Trades a stop fault can't reach (no no-stop path): with a fault rate above 0 they run as recorded.
       noFaultPath: inWindow.filter(t => !t.noStop).length, rBasis: stream.rBasis || 'gross',
@@ -406,7 +408,7 @@ function pairedRunner({ ctx, rates, seed, pools }) {
  */
 function scoreArms(stream, opts) {
   const {
-    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 1000,
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 1000,
     meanBlock = 7, reps = 1000, level = 0.9, faults = {}, base, arms = {},
   } = opts || {};
   const pass = takePass(given);
@@ -418,7 +420,7 @@ function scoreArms(stream, opts) {
     return { ...d, trades: items.map((t, seq) => ({ ...t, seq })) };
   });
   const S = account.sessions;
-  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate });
   // The overshoots the run's own fills showed (a counterfactual's stop fill carries no gap of its own).
   const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools(stream.days.flatMap(d => d.trades.filter(t => !t.counterfactual))) });
   const regimes = days.map(d => d.regime || 'normal');
@@ -502,7 +504,7 @@ function medianDiff(pairs, { reps, level, rand }) {
  */
 function scorePaired(streamA, streamB, opts) {
   const {
-    passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 2000,
+    passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000,
     meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {},
   } = opts || {};
   if (givenA === givenB) throw new Error('scorePaired: one pass per run (passA, passB)');
@@ -515,7 +517,7 @@ function scorePaired(streamA, streamB, opts) {
   const daysB = daysFor(streamB, passB, rulebook);
   if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
   const S = account.sessions;
-  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate });
   const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades)) });
   const startIdx = [];
   for (let i = 0; i < daysA.length - S; i += 1) if (i % every === 0) startIdx.push(i);

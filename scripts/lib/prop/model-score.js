@@ -40,6 +40,7 @@ const { reweightStream, curatedRates } = require('./natural-rate');
 const { scoreRiskActions } = require('./risk-actions');
 const { checkModelWindow, scoreStream, scorePaired } = require('./evaluator');
 const { recordScore, ledgerPath } = require('../learning/looks');
+const { gateLimits } = require('./attempts');
 
 
 function resolveAccount({ override = null, attempts = [], runnerAccount = null, strategies = [], accounts = [] }) {
@@ -87,7 +88,7 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   }
   const sizing = policy ? policy.sizing || null : null;
   const result = scoreStream(s, {
-    pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, faults, attribution,
+    pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, attribution,
   });
   // The model's risk actions against their counterfactuals (prop/risk-actions.js): on the run's own days, a scoring of
   // its own (logged beside the run's look as every scoring is); not for a reweighted stream (its days are drawn).
@@ -95,7 +96,7 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   let risk = null;
   if (riskActions && acted && diagnostic !== 'reweighted') {
     const again = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(run.ledger || ledgerPath(env), entry), now });
-    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths: Math.min(paths, 1000), reps: Math.min(reps, 1000), faults });
+    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths: Math.min(paths, 1000), reps: Math.min(reps, 1000), faults });
   }
   return {
     ...result, riskActions: risk, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
@@ -109,7 +110,7 @@ function pairRuns(runDirA, runDirB, { root = null, account, policy = null, barsF
   const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
   const b = streamAndPass(runDirB, { root, barsFiles, faults, env, now });
   const res = scorePaired(a.stream, b.stream, {
-    passA: a.pass, passB: b.pass, account, rulebook: { sizing: policy ? policy.sizing || null : null }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, faults,
+    passA: a.pass, passB: b.pass, account, rulebook: { sizing: policy ? policy.sizing || null : null }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults,
   });
   return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
 }

@@ -109,6 +109,11 @@ test('a curated run\'s score is "diagnostic (reweighted)" and the promotion gate
   const r = scoreStream(rw, { ...quick, pass: checkModelWindow({ run: run(), diagnostic: 'reweighted' }) });
   assert.deepStrictEqual([r.score, r.diagnostic, r.promotion.passes], ['diagnostic (reweighted)', true, false]);
   assert.match(r.promotion.failures[0], /diagnostic \(reweighted\)\) is never a promotion score/);
+  // The rebuilt days go through the gate's loss limits too (the env's by default, as live).
+  assert.deepStrictEqual(r.inputs.gate, at.gateLimits());
+  const strict = scoreStream(rw, { ...quick, pass: checkModelWindow({ run: run(), diagnostic: 'reweighted' }), gate: { maxDailyLosses: 1, maxConsecutiveLosses: 99, lossCooldownMin: 0 } });
+  const open = scoreStream(rw, { ...quick, pass: checkModelWindow({ run: run(), diagnostic: 'reweighted' }), gate: null });
+  assert.notDeepStrictEqual([strict.resampled.passRate, strict.resampled.medianDaysToPass], [open.resampled.passRate, open.resampled.medianDaysToPass], 'one loss a day: the rebuilt days trade less');
   // The gate's own: a result that would pass, refused only for being diagnostic.
   const good = { attempts: 40, passed: 30, blown: 0, ess: 25, months: { '2024-07': { blown: 0 }, '2024-08': { blown: 0 } } };
   assert.deepStrictEqual(gateFailures(good), []);

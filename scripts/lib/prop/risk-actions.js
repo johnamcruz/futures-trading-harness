@@ -37,7 +37,7 @@
  */
 
 const { scoreArms } = require('./evaluator');
-const { STATES: STATE_LIST, stateOf } = require('./risk-attribution');
+const { STATES: STATE_LIST, stateOf, HELD_OUT } = require('./risk-attribution');
 
 const KINDS = Object.freeze(['pass', 'day-stop', 'size-down', 'early-exit']);
 const STATES = Object.freeze([...STATE_LIST, 'all']);
@@ -94,9 +94,11 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
  * kind and state with at least minN paths it changed, e.g. "near the max loss limit, standing down (a pass on a valid
  * setup): n 30 paths, saved 4 blows, caused 0, cost 1 pass, gained 2". Counterfactual, and said so; at most maxBytes.
  */
-function riskActionRecord(result, { minN = 10, maxBytes = MAX_BYTES } = {}) {
+function riskActionRecord(result, { minN = 10, maxBytes = MAX_BYTES, role = null } = {}) {
   if (!result || !result.actions) throw new Error('riskActionRecord: a scoreRiskActions result');
-  if (result.look && ['test', 'final'].includes(result.look.role)) throw new Error(`a ${result.look.role} run's outcomes are judged, never shown to the model: no risk-action record`);
+  // Validation, test and final outcomes choose or judge; the model never sees them (practice-train only).
+  const sealed = HELD_OUT.find(r => r === role || (result.look && r === result.look.role));
+  if (sealed) throw new Error(`a ${sealed} run's outcomes are judged, never shown to the model: no risk-action record`);
   const cells = [];
   for (const kind of KINDS) {
     for (const state of STATES) {

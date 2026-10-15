@@ -45,7 +45,7 @@ function sampleAccountStates(stream, { account, sizing = {}, contracts = 'auto',
   if (!days.length) throw new Error('the stream has no days to draw attempt paths from');
   const legs = new Map();
   const ctx = {
-    account, sizing: { ...combine.DEFAULT_SIZING, ...sizing }, mode: contracts,
+    account, sizing: { ...combine.DEFAULT_SIZING, ...sizing }, mode: contracts, gate: at.gateLimits(),
     legsOf: t => { if (!legs.has(t.symbol)) legs.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) })); return legs.get(t.symbol); },
   };
   const regimes = days.map(d => d.regime || 'normal');

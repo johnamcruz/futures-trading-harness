@@ -165,7 +165,7 @@ test('early-exit hold: the real fill\'s price, the bracket placed from it (a mid
   // Fill at 100.00 at 14:01 inside the 14:00 bar (open 99.50); closed early at 100.50 at 14:05. Stop 98.00 from the real
   // fill (8 ticks), target 104.00. The 14:06 bar reaches 97.75: the stop from 100 is hit; from 99.50 (97.50) it would not be.
   const bars = [
-    { ms: ms('2023-03-15T14:00:00.000Z'), o: 99.5, h: 100.5, l: 99.25, c: 100.25 },
+    { ms: ms('2023-03-15T14:00:00.000Z'), o: 99.5, h: 104.5, l: 99.25, c: 100.25 }, // its high at the target: before or after the fill, unknown
     { ms: ms('2023-03-15T14:03:00.000Z'), o: 100.25, h: 101, l: 99, c: 99.5 },
     { ms: ms('2023-03-15T14:06:00.000Z'), o: 99.5, h: 99.5, l: 97.75, c: 98 },
   ];

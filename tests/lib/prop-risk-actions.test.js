@@ -121,4 +121,26 @@ test('the base is the model as it traded: a share under one contract still takes
   assert.strictEqual(scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), base: t => ({ fraction: t.sizeFraction }) }).base.passRate, 0, 'without it, half of one contract is none');
   assert.throws(() => riskActionRecord({ actions: {}, look: { role: 'test' } }), /judged, never shown/);
   assert.throws(() => riskRecord({ states: {}, cells: [] }, { role: 'final' }), /judged, never shown/);
+  // Validation outcomes choose between candidates: never shown to the model either.
+  assert.throws(() => riskActionRecord({ actions: {}, look: { role: 'practice-validate' } }), /practice-validate run's outcomes are judged, never shown/);
+  assert.throws(() => riskActionRecord({ actions: {}, look: null }, { role: 'practice-validate' }), /never shown/);
+  assert.throws(() => riskRecord({ states: {}, cells: [] }, { role: 'practice-validate' }), /never shown/);
+  assert.throws(() => riskRecord({ states: {}, cells: [], role: 'practice-validate' }), /never shown/);
+});
+
+test('a counterfactual arm never takes an entry the gate would refuse: after the day\'s loss limit, the pass stays a pass', () => {
+  const { scoreArms } = require('../../scripts/lib/prop/evaluator');
+  const days = weekdays('2022-01-03', 10);
+  const loss = (d, k, hh) => modelTrade(`${d}-${k}`, -4, {}, { entryTime: `${d}T${hh}:00:00.000Z`, exitTime: `${d}T${hh}:05:00.000Z`, actions: [] });
+  const stream = modelStreamOf(days, d => [loss(d, 0, '14'), loss(d, 1, '15'), loss(d, 2, '16')]);
+  stream.days.forEach(day => { day.passed = [modelTrade(`${day.day}-p`, 80, {}, { entryTime: `${day.day}T19:00:00.000Z`, actions: ['pass'], counterfactual: true })]; });
+  const run = { runId: 'r', from: '2022-01-03', to: '2022-01-15', learning: true, role: 'practice-train' };
+  const base = t => (t.counterfactual ? null : { fraction: 1 });
+  const arms = { take: t => ({ fraction: 1, changed: Boolean(t.counterfactual) }) };
+  const opts = { account: ACCOUNT, contracts: 'micro', paths: 20, reps: 20, seed: 1, base, arms };
+  // Three losses a day, the gate's limit of three (its loss streak cools down for hours after the second, too).
+  const gated = scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), gate: { maxDailyLosses: 3, maxConsecutiveLosses: 99, lossCooldownMin: 0 } });
+  assert.strictEqual(gated.arms.take.applied, 0, 'the 19:00 setup comes after the third loss: refused, as live');
+  const open = scoreArms(stream, { ...opts, pass: checkModelWindow({ run }), gate: null });
+  assert.ok(open.arms.take.applied > 0, 'without the gate the arm would have taken it');
 });

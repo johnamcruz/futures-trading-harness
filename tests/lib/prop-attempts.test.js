@@ -85,6 +85,47 @@ test('attempts: entry blocks and the realized daily stop skip trades', () => {
   assert.deepStrictEqual([m.taken, m.skipped], [1, 2]);
 });
 
+test('attempts: the order gate\'s daily loss count (FTH_MAX_DAILY_LOSSES) refuses the day\'s entries after it, as live', () => {
+  const gate = { maxDailyLosses: 3, maxConsecutiveLosses: 99, lossCooldownMin: 0 };
+  // Losses and wins alternating (no streak): the fourth entry after the third loss is refused.
+  const list = [trade(-5), trade(10), trade(-5), trade(10), trade(-5), trade(10)];
+  const why = [];
+  const o = at.runAttempt(days(list), ctx({ gate, account: { sessions: 1 }, onSkip: x => why.push(x.why) }));
+  assert.deepStrictEqual([o.taken, o.skipped, why], [5, 1, ['daily-losses']]);
+  // A scratch loses its fees: a loss to the gate's count too (net, as attemptFacts counts it).
+  const s = at.runAttempt(days([trade(-5), trade(0), trade(10), trade(-5), trade(10)]), ctx({ gate, account: { sessions: 1 } }));
+  assert.deepStrictEqual([s.taken, s.skipped], [4, 1]);
+  assert.strictEqual(at.runAttempt(days(list), ctx({ gate: null, account: { sessions: 1 } })).taken, 6, 'null: off (a test isolating another rule)');
+  // The next day starts afresh.
+  assert.strictEqual(at.runAttempt(days(list, [trade(10)]), ctx({ gate, account: { sessions: 2 } })).taken, 6);
+});
+
+test('attempts: the order gate\'s loss-streak cooldown (FTH_MAX_CONSECUTIVE_LOSSES, FTH_LOSS_COOLDOWN_MIN), by the time into the session', () => {
+  const gate = { maxDailyLosses: 99, maxConsecutiveLosses: 2, lossCooldownMin: 30 };
+  const timed = (move, entry, exit, day = '2022-03-01') => trade(move, { entryTime: `${day}T${entry}:00.000Z`, exitTime: `${day}T${exit}:00.000Z` });
+  const why = [];
+  const run = list => at.runAttempt(days(list), ctx({ gate, account: { sessions: 1 }, onSkip: x => why.push(x.why) }));
+  const two = [timed(-5, '14:00', '14:10'), timed(-5, '14:12', '14:20')];
+  assert.deepStrictEqual([run([...two, timed(10, '14:40', '14:45')]).taken, why], [2, ['loss-cooldown']], '20 minutes after the second loss: cooling down');
+  assert.strictEqual(run([...two, timed(10, '14:50', '14:55')]).taken, 3, '30 minutes after: allowed');
+  assert.strictEqual(run([...two, trade(10)]).taken, 2, 'no time on the entry: can\'t show the cooldown passed, refused (fails closed)');
+  assert.strictEqual(run([timed(-5, '14:00', '14:10'), timed(10, '14:12', '14:15'), timed(-5, '14:16', '14:20'), timed(10, '14:22', '14:25')]).taken, 4, 'a win ends the streak');
+  // A reweighted day joins trades of different dates: the time into each one's session, never the calendar.
+  const mixed = [timed(-5, '14:00', '14:10', '2022-03-01'), timed(-5, '14:12', '14:20', '2022-03-02')];
+  assert.strictEqual(run([...mixed, timed(10, '14:40', '14:45', '2022-03-03')]).taken, 2);
+  assert.strictEqual(run([...mixed, timed(10, '14:50', '14:55', '2022-02-22')]).taken, 3);
+});
+
+test('attempts: the gate\'s limits are the live gate\'s config (trading/config.js loadConfig, the same env), and the default', () => {
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  const c = loadConfig({});
+  assert.deepStrictEqual(at.gateLimits({}), { maxDailyLosses: c.maxDailyLosses, maxConsecutiveLosses: c.maxConsecutiveLosses, lossCooldownMin: c.lossCooldownMin });
+  assert.deepStrictEqual(at.gateLimits({ FTH_MAX_DAILY_LOSSES: '2', FTH_MAX_CONSECUTIVE_LOSSES: '4', FTH_LOSS_COOLDOWN_MIN: '45' }), { maxDailyLosses: 2, maxConsecutiveLosses: 4, lossCooldownMin: 45 });
+  // No gate given: the env's (as live), never off.
+  const list = Array.from({ length: c.maxDailyLosses + 1 }, () => trade(-5));
+  assert.strictEqual(at.runAttempt(days(list), ctx({ account: { sessions: 1, daily_loss_limit: 0 } })).taken, Math.min(c.maxDailyLosses, c.maxConsecutiveLosses));
+});
+
 test('attempts: an expectancy cut takes cut x E R off every trade, deeper exits becoming troughs; none when E <= 0', () => {
   const trades = [trade(40), trade(-20)]; // E = (2 - 1) / 2 = 0.5 R
   const eR = at.expectancyR(trades);
