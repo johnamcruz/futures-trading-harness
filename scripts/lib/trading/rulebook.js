@@ -5,7 +5,7 @@
  * prop policies trade with, one document per account, `accounts/<name>/RULEBOOK.md`
  * beside its ACCOUNT.md. The frontmatter holds the values, the body the evidence that
  * set each one (R3). Nothing else states them: the account loader (accounts.js) takes
- * `daily_loss_soft` from it and the strategy loader (strategies.js) each policy's
+ * `daily_loss_soft` and `loss_streak_stop` from it and the strategy loader (strategies.js) each policy's
  * `sizing`, `exit` and `multipliers`, so the runner, the verdict, the gate and the
  * backtester all read them from here (R1). Every item is classified (R4): `enforced`
  * (the code or the gate holds it) or `taught` (a skill the agent loads teaches it).
@@ -14,7 +14,8 @@
  *                                       it can be held (enforcedBy) or taught (taughtIn)
  *   validateRulebook(data, body, folder) problems (empty = valid)
  *   loadRulebookFile(file)              the parsed rulebook ({ ...data, file, body, valid, errors }), null when none
- *   policyEntry(rulebook, name)         that policy's { sizing, exit, multipliers }, or null
+ *   policyEntry(rulebook, name)         that policy's { sizing, exit, multipliers }, or null (exit as the strategy
+ *                                       loader reads it: { mode, trail_activate_r?, trail_giveback_r? }, `off` left out)
  *   ceiling(items, facts, now)          the verdict's multiplier from the enforced multiplier items
  *
  * Pure but for reading the file; no network.
@@ -24,13 +25,27 @@ const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
 const { DEFAULT_SIZING } = require('./combine');
+const { SWING_TFS } = require('./exit-trail');
 
-/** The sizing keys every policy entry states (each key the sizing reads), and the trail every entry states. */
+/** The sizing keys every policy entry states (each key the sizing reads), and the exit keys every entry states. */
 const SIZING_KEYS = Object.freeze(Object.keys(DEFAULT_SIZING));
-const EXIT_KEYS = Object.freeze(['trail_activate_r', 'trail_giveback_r']);
+const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf']);
+/**
+ * How a policy's trades exit (every key stated; a key the mode doesn't use is `off`):
+ * - `target`: at each trade's own stop and target (a compose record's brackets, a rules component's own exit), with
+ *   the trail on top only when trail_activate_r and trail_giveback_r are R;
+ * - `target_then_trail`: the original stop until the trade's own target is reached, then no exit there: the stop
+ *   locks at the target's R less lock_giveback_r and trails behind the last confirmed swing on swing_tf (trail_by
+ *   structure; trail_r behind the best price until a swing is confirmed) or trail_r behind the best price (trail_by r)
+ *   (trading/exit-trail.js);
+ * - `trail`: the trail replaces the trade's own target (hold its stop until trail_activate_r, then trail_giveback_r
+ *   behind the best price).
+ */
+const EXIT_MODES = Object.freeze(['target', 'target_then_trail', 'trail']);
+const TRAIL_BY = Object.freeze(['r', 'structure']);
 
 const FILE = 'RULEBOOK.md';
-const KEYS = ['name', 'description', 'learned', 'daily_loss_soft', 'policies', 'enforced', 'taught'];
+const KEYS = ['name', 'description', 'learned', 'daily_loss_soft', 'loss_streak_stop', 'policies', 'enforced', 'taught'];
 const POLICY_KEYS = ['sizing', 'exit', 'multipliers'];
 const MULTIPLIER_KEYS = ['item', 'fact', 'values', 'max_age_min'];
 const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
@@ -44,8 +59,9 @@ const STEP = n => ({ skill: 'strategy-library', step: n });
  */
 const ITEMS = Object.freeze({
   daily_loss_soft: { group: 'pacing', what: 'no new entries once the day is down this many dollars', enforcedBy: 'combine.entryBlock: the verdict skips and the gate refuses (combineBlock)' },
+  loss_streak_stop: { group: 'pacing', what: 'no new entries for the rest of the session after this many losing trades in a row (a scratch neither ends nor extends the streak)', enforcedBy: "combine.entryBlock on the session's closed trades (live: the broker's closing fills, prop-state snapshot): the verdict skips, the gate refuses (combineBlock), the backtester and the attempt simulator skip" },
   sizing: { group: 'pacing', what: "each policy's size budget: its share of the cushion, the cap, the drawdown halving, the one-contract guard, the stop's expected slippage", enforcedBy: 'combine.budget and contractPlan: the verdict, the gate (budgetPlan) and the backtester' },
-  exit: { group: 'exits', what: "each policy's trail: hold the setup's stop, then trail behind the best price", enforcedBy: 'evaluator.exitPlan: the runner\'s trail live and the backtester\'s broker' },
+  exit: { group: 'exits', what: "each policy's exit: the trade's own stop and target (mode target, an optional trail on top), the target then a trail past it with a lock (mode target_then_trail), or the trail in place of the target (mode trail)", enforcedBy: "evaluator.exitPlan and tradeExitPlan: the runner's trail live (none in mode target with the trail off: the entry's own brackets stand), the backtester's broker and the attempt simulator (prop/attempts.js exitAs)" },
   multipliers: { group: 'priority', what: "the enforced size multipliers folded into the verdict's ceiling", enforcedBy: 'rulebook.ceiling: the verdict (prop/verdict.js) and the gate (prop-state verdictMultiplier)' },
   target_stop: { group: 'pacing', what: "no new entries once today's close would pass the attempt", enforcedBy: 'combine.entryBlock' },
   consistency_stop: { group: 'pacing', what: 'past the target with today the best day: no more entries today', enforcedBy: 'combine.entryBlock' },
@@ -96,10 +112,60 @@ const SIZING_RULES = {
   drawdown_halve_usd: [offOrPositive, `dollars above 0, or ${OFF} (no drawdown halving)`],
   stop_slippage_ticks: [x => typeof x === 'number' && Number.isFinite(x) && x >= 1, 'ticks, at least 1'],
 };
-const EXIT_RULE = [x => positive(x) && x <= 50, 'R above 0, at most 50'];
+const EXIT_RULE = [x => x === OFF || (positive(x) && x <= 50), `R above 0, at most 50, or ${OFF} (no trail)`];
+/** A whole number of losing trades, at least 1, or off: 0 is refused (a slip of the pen would turn the stop off unseen). */
+const STREAK_RULE = [x => x === OFF || (Number.isInteger(x) && x >= 1), `a whole number of losing trades, at least 1, or ${OFF} (no loss streak stop)`];
 const SOFT_RULE = [offOrPositive, `dollars above 0, or ${OFF} (no soft daily stop)`];
 /** A limit's value as the code reads it: `off` is 0 (the code's "no limit"). */
 const limit = v => (v === OFF ? 0 : v);
+
+/** What each exit value may be (every one stated; `off` where the mode doesn't use it). */
+const EXIT_VALUE = {
+  trail_activate_r: EXIT_RULE,
+  trail_giveback_r: EXIT_RULE,
+  lock_giveback_r: EXIT_RULE,
+  trail_r: EXIT_RULE,
+  trail_by: [x => x === OFF || TRAIL_BY.includes(x), `${TRAIL_BY.join(' or ')}, or ${OFF}`],
+  swing_tf: [x => x === OFF || Object.hasOwn(SWING_TFS, x), `one of ${Object.keys(SWING_TFS).join(', ')}, or ${OFF}`],
+};
+
+/**
+ * Problems with one policy's exit: every key stated and valid, the mode one of EXIT_MODES, and the values the mode
+ * uses set while the rest are `off`: target, the trail both off or both R (a trail on top); trail, both R;
+ * target_then_trail, the lock, trail_by and trail_r set (trail_r: the R trail, and the structure trail's fallback),
+ * swing_tf with trail_by structure only, and no 2R-style trail.
+ */
+function exitErrors(x, at) {
+  const out = [];
+  for (const k of Object.keys(x)) if (!EXIT_KEYS.includes(k)) out.push(`${at}.exit.${k}: unknown key (${EXIT_KEYS.join(', ')})`);
+  if (x.mode === undefined) out.push(`${at}.exit.mode: missing; state it (${EXIT_MODES.join(', ')}: how every trade exits)`);
+  else if (!EXIT_MODES.includes(x.mode)) out.push(`${at}.exit.mode: ${JSON.stringify(x.mode)} is not ${EXIT_MODES.join(', ')}`);
+  for (const [k, [ok, what]] of Object.entries(EXIT_VALUE)) {
+    if (x[k] === undefined) out.push(`${at}.exit.${k}: missing; state it (${OFF} where the mode doesn't use it)`);
+    else if (!ok(x[k])) out.push(`${at}.exit.${k}: ${JSON.stringify(x[k])} is not ${what}`);
+  }
+  if (out.length) return out;
+  const on = k => x[k] !== OFF;
+  const need = (k, why) => { if (!on(k)) out.push(`${at}.exit.${k}: mode ${x.mode} needs it (${why})`); };
+  const offIn = (k, why) => { if (on(k)) out.push(`${at}.exit.${k}: ${OFF} in mode ${x.mode} (${why})`); };
+  const trail = ['trail_activate_r', 'trail_giveback_r'];
+  const after = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
+  if (on(trail[0]) !== on(trail[1])) out.push(`${at}.exit: trail_activate_r and trail_giveback_r are both ${OFF} or both R (a trail needs both)`);
+  if (x.mode === 'trail') {
+    for (const k of trail) need(k, 'the trail is how every trade exits');
+    for (const k of after) offIn(k, 'only target_then_trail trails after the target');
+  } else if (x.mode === 'target') {
+    for (const k of after) offIn(k, 'only target_then_trail trails after the target');
+  } else {
+    for (const k of trail) offIn(k, 'it trails only once the target is reached');
+    need('lock_giveback_r', 'the stop locks at the target\'s R less it');
+    need('trail_by', `${TRAIL_BY.join(' or ')}`);
+    need('trail_r', 'the R trail, and the structure trail\'s fallback until a swing is confirmed');
+    if (x.trail_by === 'structure') need('swing_tf', 'the swings the stop trails behind');
+    else offIn('swing_tf', 'only a structure trail reads swings');
+  }
+  return out;
+}
 
 /** Validate a rulebook's frontmatter and body against its account folder. Messages name the key. */
 function validateRulebook(data, body, folderName) {
@@ -112,6 +178,8 @@ function validateRulebook(data, body, folderName) {
   // Enforced, so stated: never a code default.
   if (data.daily_loss_soft === undefined) errors.push('daily_loss_soft: missing; state it (enforced: no code default)');
   else req(SOFT_RULE[0](data.daily_loss_soft), `daily_loss_soft: ${JSON.stringify(data.daily_loss_soft)} is not ${SOFT_RULE[1]}`);
+  if (data.loss_streak_stop === undefined) errors.push('loss_streak_stop: missing; state it (enforced: no code default)');
+  else req(STREAK_RULE[0](data.loss_streak_stop), `loss_streak_stop: ${JSON.stringify(data.loss_streak_stop)} is not ${STREAK_RULE[1]}`);
   const list = k => (Array.isArray(data[k]) ? data[k] : null);
   const enforced = list('enforced');
   const taught = list('taught');
@@ -142,14 +210,8 @@ function validateRulebook(data, body, folderName) {
             else req(SIZING_RULES[k][0](p.sizing[k]), `${at}.sizing.${k}: ${JSON.stringify(p.sizing[k])} is not ${SIZING_RULES[k][1]}`);
           }
         }
-        if (!isMap(p.exit)) errors.push(`${at}.exit: missing or not a map; state ${EXIT_KEYS.join(' and ')}`);
-        else {
-          for (const k of Object.keys(p.exit)) if (!EXIT_KEYS.includes(k)) errors.push(`${at}.exit.${k}: unknown key (${EXIT_KEYS.join(', ')})`);
-          for (const k of EXIT_KEYS) {
-            if (p.exit[k] === undefined) errors.push(`${at}.exit.${k}: missing; state it (the trail that exits every trade)`);
-            else req(EXIT_RULE[0](p.exit[k]), `${at}.exit.${k}: ${JSON.stringify(p.exit[k])} is not ${EXIT_RULE[1]}`);
-          }
-        }
+        if (!isMap(p.exit)) errors.push(`${at}.exit: missing or not a map; state ${EXIT_KEYS.join(', ')}`);
+        else errors.push(...exitErrors(p.exit, at));
         if (p.multipliers === undefined) errors.push(`${at}.multipliers: missing; state it ([] for none)`);
         else errors.push(...multiplierErrors(p.multipliers, name, enforced || []));
       }
@@ -173,12 +235,17 @@ function loadRulebookFile(file) {
   return { ...parsed.data, file, body: parsed.body, valid: errors.length === 0, errors };
 }
 
-/** A policy's entry in a valid rulebook ({ sizing, exit, multipliers }, `off` read as 0), or null when it has none. */
+/**
+ * A policy's entry in a valid rulebook ({ sizing, exit, multipliers }, a sizing `off` read as 0), or null when it has
+ * none. The exit as the strategy loader reads it: its mode, and the trail's two values only when they are R (`off`: no trail).
+ */
 function policyEntry(rulebook, name) {
   const p = rulebook && isMap(rulebook.policies) && Object.hasOwn(rulebook.policies, name) ? rulebook.policies[name] : null;
   if (!p) return null;
   const sizing = Object.fromEntries(Object.entries(p.sizing || {}).map(([k, v]) => [k, limit(v)]));
-  return { sizing, exit: p.exit, multipliers: p.multipliers };
+  const x = isMap(p.exit) ? p.exit : {};
+  const exit = { mode: x.mode, ...Object.fromEntries(EXIT_KEYS.filter(k => k !== 'mode' && x[k] !== OFF && x[k] !== undefined).map(k => [k, x[k]])) };
+  return { sizing, exit, multipliers: p.multipliers };
 }
 
 /**
@@ -206,4 +273,4 @@ function ceiling(items = [], facts = {}, now = new Date()) {
   return { multiplier: Math.max(0, Math.min(1, multiplier)), why };
 }
 
-module.exports = { FILE, OFF, ITEMS, KEYS, SIZING_KEYS, EXIT_KEYS, limit, validateRulebook, loadRulebookFile, policyEntry, ceiling };
+module.exports = { FILE, OFF, ITEMS, KEYS, SIZING_KEYS, EXIT_KEYS, EXIT_MODES, TRAIL_BY, limit, validateRulebook, loadRulebookFile, policyEntry, ceiling };

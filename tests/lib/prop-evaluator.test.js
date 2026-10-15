@@ -196,6 +196,19 @@ test('evaluator: a judged held-out window that passes reads as a pass to the pro
   assert.strictEqual(r.window.role, 'select');
 });
 
+test('evaluator: the rulebook\'s exit mode re-exits every trade from its path before any attempt (the phase-2 search tunes it)', () => {
+  const list = sessionDays('2022-03-01', 60);
+  // Recorded at a 1-tick scalp; its path reaches its own 60-tick target on the second bar.
+  const path = [[0, -5, 30, 25], [25, 20, 70, 60]];
+  const s = streamOf(list, () => [trade(1, { path, ownExit: { targetTicks: 60, trailActivateR: null, trailGivebackR: null } })]);
+  const score = rulebook => scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[59]) }), { rulebook, paths: 0, cuts: [] }));
+  const asRecorded = score({});
+  const own = score({ exit: { mode: 'target' } });
+  assert.deepStrictEqual([asRecorded.passed, asRecorded.timeout > 0], [0, true], 'a tick a day never passes');
+  assert.strictEqual(own.passed, own.attempts, 'its own target every day: every attempt passes');
+  assert.ok(own.attempts > 0);
+});
+
 test('evaluator: a policy with a field branch: covered attempts give the pass rate, attempts and months; every attempt counts blows', () => {
   // Train 2021-03..2021-09; coverage starts 2021-05: attempts whose first session is before May are not covered.
   const list = sessionDays('2021-03-01', 120).filter(d => d < '2021-09-01');
@@ -296,6 +309,40 @@ const market = bars => ({ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, f
 const engine = { timeframe: 3, gate: true, gateConfig: { ...loadConfig({}), roundSteps: require('../../scripts/lib/trading/round-numbers').defaultRoundSteps() }, window: 160, maxDailyLoss: 500 };
 const BARS = series(40);
 const GAPPY = series(40, 5, 60);
+
+for (const [label, bars] of [['plain bars', BARS], ['gapped bars', GAPPY]]) test(`trade stream: each trade's path and own exit re-exit it as the engine did, under either exit mode (${label})`, () => {
+  // The component's own exit: a 3R target. Run once in each mode; exitAs on the recorded path gives each trade's exit back.
+  const own = strategy({ exit: { target_r: 3 } });
+  const from = Date.parse('2022-01-10T00:00:00Z');
+  const modes = [{ mode: 'target' }, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 }, { mode: 'target', trail_activate_r: 1.5, trail_giveback_r: 1 },
+    { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'r', trail_r: 1 }, { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'structure', trail_r: 1, swing_tf: '15m' }];
+  const streams = modes.map(exit => tradeStream({ markets: [market(bars)], strategies: [own], prop: { strategy: { ...own, signal: 'policy', exit }, components: ['trendy'], contracts: 'micro' }, engine, from, facts: false }));
+  modes.forEach((exit, m) => {
+    const s = streams[m];
+    assert.ok(s.trades.length > 50, `${s.trades.length}`);
+    assert.ok(s.trades.every(t => Array.isArray(t.path) && t.path.length && t.ownExit && t.ownExit.targetTicks > 0 && t.ownExit.trailActivateR === null), 'every trade carries its path and its own 3R target');
+    const done = s.trades.filter(t => t.reason !== 'end');
+    for (const t of done) {
+      const again = at.exitAs(t, exit, s.slippageTicks);
+      assert.strictEqual(again.moveTicks, t.moveTicks, `${JSON.stringify(exit)} ${t.entryTime} ${t.reason}`);
+      assert.deepStrictEqual(again.troughTicks, t.troughTicks, `${JSON.stringify(exit)} ${t.entryTime} troughs`);
+    }
+    if (exit.mode === 'trail' || exit.trail_activate_r || exit.mode === 'target_then_trail') assert.ok(done.some(t => t.reason === 'trail'), 'some trades trail out');
+    // Past the target: never closed at the target; a trade trailed out past it kept at least the lock.
+    if (exit.mode === 'target_then_trail') {
+      assert.ok(!done.some(t => t.reason === 'target'), 'never closed at its own target');
+      assert.ok(done.some(t => t.moveTicks > t.ownExit.targetTicks), 'some ran past their target');
+      if (exit.trail_by === 'structure') assert.ok(s.trades.some(t => t.swingPath['15m'].some(x => x !== null)), 'the 15m swings are recorded along the paths');
+    }
+    if (exit.mode === 'target' && !exit.trail_activate_r) assert.ok(done.some(t => t.reason === 'target'), 'some trades reach their own target');
+  });
+  assert.notDeepStrictEqual(streams[3].trades.map(t => t.moveTicks), streams[4].trades.map(t => t.moveTicks), 'the structure trail is not the R trail');
+  // Re-exited across modes: the target run's trades under the trail mode exit as the trail run's same trades did.
+  const byEntry = new Map(streams[1].trades.map(t => [t.entryTime, t]));
+  const shared = streams[0].trades.filter(t => t.reason !== 'end' && byEntry.has(t.entryTime) && byEntry.get(t.entryTime).reason !== 'end');
+  assert.ok(shared.length > 10);
+  for (const t of shared) assert.strictEqual(at.exitAs(t, modes[1], streams[0].slippageTicks).moveTicks, byEntry.get(t.entryTime).moveTicks, t.entryTime);
+});
 
 for (const [label, bars] of [['plain bars', BARS], ['gapped bars: blows and daily limits', GAPPY]]) test(`trade stream: layer 2 on the stream reproduces the engine's own attempts, start by start (${label})`, () => {
   const acct = account({ profit_target: 250, max_loss: 500, daily_loss_limit: 300, daily_loss_soft: 250, consistency_pct: 50, sessions: 6, max_contracts: { MNQ: 20 } });

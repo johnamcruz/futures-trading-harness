@@ -11,7 +11,7 @@
  *   values no entry lists (0: the setup is skipped), the effective multiplier never rises, and a fact is never
  *   accepted staler; so a value added above 0 where it was unlisted, a raised value, or a removed entry is refused,
  *   and duplicates are judged on their product;
- * - no policy added or removed; an exit (the trail) unchanged: it is searched (R10), never a limit to loosen;
+ * - no policy added or removed; an exit (its mode and trail) unchanged: it is searched (R10), never a limit to loosen;
  * - no item moved out of `enforced`;
  * - no key removed.
  *
@@ -26,6 +26,7 @@ const { OFF, validateRulebook } = require('../trading/rulebook');
 /** Which way is stricter: 'lower' (a smaller number is stricter) or 'higher'. `off` is no limit: the loosest. */
 const DIRECTION = Object.freeze({
   daily_loss_soft: 'lower', // dollars down before entries stop: stopping sooner is stricter
+  loss_streak_stop: 'lower', // losing trades in a row before the session stops: stopping sooner is stricter
   cushion_frac: 'lower', // share of the cushion a trade risks
   cap_usd: 'lower', // dollars a trade risks at most
   clock_k: 'lower', // at most k x what the pass still needs per session: a smaller k sizes smaller
@@ -96,7 +97,7 @@ function multipliersLooser(at, was, now, out) {
 function loosenings(before, after) {
   const out = [];
   for (const k of Object.keys(before)) if (after[k] === undefined) out.push(`${k}: removed (a rulebook key is never removed)`);
-  if (before.daily_loss_soft !== undefined) limitLooser('daily_loss_soft', 'daily_loss_soft', before.daily_loss_soft, after.daily_loss_soft, out);
+  for (const k of ['daily_loss_soft', 'loss_streak_stop']) if (before[k] !== undefined) limitLooser(k, k, before[k], after[k], out);
   const enforcedNow = new Set(Array.isArray(after.enforced) ? after.enforced : []);
   for (const k of Array.isArray(before.enforced) ? before.enforced : []) if (!enforcedNow.has(k)) out.push(`enforced: ${k} moved out of enforced (the code no longer holds it)`);
   const pb = isMap(before.policies) ? before.policies : {};
@@ -108,7 +109,7 @@ function loosenings(before, after) {
     if (!isMap(q)) { out.push(`${at}: removed`); continue; }
     for (const k of Object.keys(p)) if (q[k] === undefined) out.push(`${at}.${k}: removed`);
     for (const [k, v] of Object.entries(isMap(p.sizing) ? p.sizing : {})) limitLooser(k, `${at}.sizing.${k}`, v, isMap(q.sizing) ? q.sizing[k] : undefined, out);
-    if (!same(p.exit, q.exit)) out.push(`${at}.exit: changed (the trail is searched, R10; never a proposal's to change)`);
+    if (!same(p.exit, q.exit)) out.push(`${at}.exit: changed (the exit mode and trail are searched, R10; never a proposal's to change)`);
     multipliersLooser(`${at}.multipliers`, p.multipliers, q.multipliers, out);
   }
   return out;
