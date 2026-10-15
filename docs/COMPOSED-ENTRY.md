@@ -30,6 +30,14 @@ it differs):
   flight) owns targets (section 3.4).
 - **The code stays** until its own PRs (section 9's table): dead code is
   kept and tested through fixtures meanwhile.
+- **A plan holds two base bars** (the owner, 2026-10-14): a compose record
+  expires the strategy's `valid_bars` base bars after its bar's close (2:
+  6 minutes on the 3m), not at the next close, so a cycle that runs past the
+  next close can still enter on the facts of its own bar. The gate works the
+  expiry out again from that bar's briefing (`lifecycle-gate.js`), and
+  replay charges each cycle's real time on its clock (the replay config's
+  `latency`, `replay/latency.js`), so an entry lost to expiry in a replay is
+  one live would lose too.
 
 ## 1. Thesis
 
@@ -283,12 +291,14 @@ disagreeing read refuses it, naming the read.
 runner passes the cycle bar; without it `briefingFor` would return the
 briefing current at the wall clock, so the tool refuses rather than guess.
 It then works out the plan in code and appends a record to
-`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl` (one file per index family; its
+`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl` (one shard per index family
+and trading day: the session date of the record's bar, at the 18:00 ET
+rollover, so the gate reads the cycle bar's one shard; its
 schema is `RECORD_KEYS` in `trading/trade-lifecycle.js`), the way the runner
 records policy verdicts (`prop-state.js:526`):
 
 - the root, contract, side, bar (the briefing's `asOf`), `at`, `expiresAt`
-  (the next base-bar close), the cycle id and the lane (the briefing's base
+  (the strategy's `valid_bars` base bars after the bar's close), the cycle id and the lane (the briefing's base
   timeframe); the run id comes with the runner (PR 14);
 - the context: `m3.regime` (primary and volatility), `m3.window`, the trend
   rule for the side, `m15.alignment` for the side, `m3.today.dayType`
@@ -533,7 +543,7 @@ computes.
 
 | Source | Gives the log |
 |---|---|
-| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
+| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
 | Cycle log (`cycle-log.js`: `<FTH_HOME>/logs/cycles-<day>.jsonl`) | The cycle's result, its `compose_check` and `experience_lookup` calls, the gate's refusals |
 | Decision history (`decision-history.js`) | The action words (entered, skipped, no-trade) and its fill matching for an entered trade's real R (`closedTrade`, `decision-history.js:326`). The history itself is not the log: the runner keeps only the last ten (`runner.js:1410`) |
 | Counterfactual (`replay/counterfactual.js:70`, `simulate`) | A pass's R from the record's stop and target distances, with the backtester's slippage |

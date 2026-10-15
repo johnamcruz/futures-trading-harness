@@ -69,7 +69,7 @@ test('R:R under the minimum, a size over the dollar cap, no cap, a bad size, an 
   assert.strictEqual(plan({ tick: null }).plan, null);
 });
 
-test('buildRecord: the schema; ok only when every read and the plan stand; expiry is the next base-bar close', () => {
+test('buildRecord: the schema; ok only when every read and the plan stand; expiry is validBars base bars after the bar\'s close (the next close by default)', () => {
   const { checked, briefing, ...planned } = plan();
   const r = TL.buildRecord({ at: '2026-04-23T15:00:05.000Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing, checked, planned, cycleId: 'c1' });
   assert.deepStrictEqual(Object.keys(r), TL.RECORD_KEYS);
@@ -77,6 +77,14 @@ test('buildRecord: the schema; ok only when every read and the plan stand; expir
   assert.strictEqual(r.strategy, 'trade_lifecycle');
   assert.strictEqual(r.bar, '2026-04-23T14:57:00.000Z');
   assert.strictEqual(r.expiresAt, '2026-04-23T15:03:00.000Z');
+  // The strategy's valid_bars: two 3m bars after the 15:00 close; an unusable count is one bar.
+  assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing, checked, planned, validBars: 2 }).expiresAt, '2026-04-23T15:06:00.000Z');
+  for (const bad of [0, -1, 1.5, '2', null]) assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing, checked, planned, validBars: bad }).expiresAt, '2026-04-23T15:03:00.000Z', String(bad));
+  // expiryOf: no readable minutes, the next close only; no validUntil, none.
+  assert.strictEqual(TL.expiryOf({ ...briefing, minutes: undefined }, 3), Date.parse('2026-04-23T15:03:00.000Z'));
+  assert.strictEqual(TL.expiryOf({ ...briefing, minutes: 3 }, 3), Date.parse('2026-04-23T15:09:00.000Z'));
+  assert.ok(Number.isNaN(TL.expiryOf({ sections: { m3: {} } }, 2)));
+  assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing: { ...briefing, sections: { ...briefing.sections, m3: { ...briefing.sections.m3, validUntil: 'x' } } }, checked, planned, validBars: 2 }).expiresAt, null);
   assert.strictEqual(r.plan.size, 2);
   assert.strictEqual(r.signature, checked.signature);
   assert.deepStrictEqual(r.context, checked.context);
@@ -95,17 +103,74 @@ test('buildRecord: the schema; ok only when every read and the plan stand; expir
   assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', problems: ['no cycle bar'] }).ok, false);
 });
 
-test('the record file: under FTH_HOME, one family per file, append-only, unreadable lines skipped', () => {
+test('the record file: under FTH_HOME, one shard per family and trading day, append-only, unreadable lines skipped', () => {
   const home = tmpDir();
-  assert.strictEqual(TL.recordFile(home, 'NQ'), path.join(home, 'trade-lifecycle', 'MNQ.jsonl'));
+  assert.strictEqual(TL.recordFile(home, 'NQ', '2026-10-07'), path.join(home, 'trade-lifecycle', 'MNQ', '2026-10-07.jsonl'));
+  assert.throws(() => TL.recordFile(home, 'MNQ', '../x'), /not a trading day/);
   assert.deepStrictEqual(TL.readRecords(home, 'MNQ'), []);
-  const a = TL.buildRecord({ at: '1', root: 'MNQ', side: 'long', problems: ['x'] });
-  const b = TL.buildRecord({ at: '2', root: 'NQ', side: 'short', problems: ['y'] });
+  const a = TL.buildRecord({ at: '2026-10-07T14:00:00.000Z', root: 'MNQ', side: 'long', problems: ['x'] });
+  const b = TL.buildRecord({ at: '2026-10-07T14:01:00.000Z', root: 'NQ', side: 'short', problems: ['y'] });
   TL.appendRecord(home, a);
-  fs.appendFileSync(TL.recordFile(home, 'MNQ'), 'not json\n');
+  fs.appendFileSync(TL.recordFile(home, 'MNQ', '2026-10-07'), 'not json\n');
   TL.appendRecord(home, b);
-  assert.deepStrictEqual(TL.readRecords(home, 'MNQ').map(r => r.at), ['1', '2']);
-  assert.strictEqual(fs.readFileSync(TL.recordFile(home, 'MNQ'), 'utf8').split('\n').filter(Boolean).length, 3);
+  assert.deepStrictEqual(TL.readRecords(home, 'MNQ').map(r => r.at), [a.at, b.at]);
+  assert.strictEqual(fs.readFileSync(TL.recordFile(home, 'MNQ', '2026-10-07'), 'utf8').split('\n').filter(Boolean).length, 3);
+  // A record with no time to file it under is never written to a guessed day.
+  assert.throws(() => TL.appendRecord(home, { ...a, at: 'x', bar: null }), /no bar or time/);
+});
+
+test('the shards: a record is filed under its bar\'s session day (18:00 ET rollover), not the time it was written', () => {
+  const home = tmpDir();
+  // 17:57 ET (21:57 UTC, EDT) is 2026-10-07's session; 18:00 ET is 2026-10-08's.
+  assert.deepStrictEqual([TL.dayOf('2026-10-07T21:57:00.000Z'), TL.dayOf('2026-10-07T21:59:59.999Z'), TL.dayOf('2026-10-07T22:00:00.000Z')], ['2026-10-07', '2026-10-07', '2026-10-08']);
+  // Standard time (EST): the rollover is 23:00 UTC.
+  assert.deepStrictEqual([TL.dayOf('2026-12-07T22:59:00.000Z'), TL.dayOf('2026-12-07T23:00:00.000Z')], ['2026-12-07', '2026-12-08']);
+  assert.strictEqual(TL.dayOf('not a time'), null);
+  const onBar = TL.buildRecord({ at: '2026-10-07T22:00:01.000Z', root: 'MNQ', side: 'long', problems: ['x'] });
+  TL.appendRecord(home, { ...onBar, bar: '2026-10-07T21:57:00.000Z' });
+  TL.appendRecord(home, onBar); // no bar: its `at`
+  assert.deepStrictEqual(fs.readdirSync(path.join(home, 'trade-lifecycle', 'MNQ')).sort(), ['2026-10-07.jsonl', '2026-10-08.jsonl']);
+  assert.strictEqual(TL.readRecords(home, 'MNQ', { days: ['2026-10-07'] })[0].bar, '2026-10-07T21:57:00.000Z');
+  assert.strictEqual(TL.readRecords(home, 'MNQ', { days: ['2026-10-08'] })[0].bar, null);
+  assert.strictEqual(TL.readRecords(home, 'NQ').length, 2, 'every day, oldest day first');
+  assert.throws(() => TL.readRecords(home, 'MNQ', { days: ['../../etc'] }), /not trading days/);
+  // The days around a time: the one before, its own, the one after (across a weekend: the keys the shards use).
+  assert.deepStrictEqual(TL.daysNear('2026-10-07T22:00:00.000Z'), ['2026-10-07', '2026-10-08', '2026-10-09']);
+  assert.deepStrictEqual(TL.daysNear(new Date('2026-10-07T21:59:00.000Z')), ['2026-10-06', '2026-10-07', '2026-10-08']);
+  assert.deepStrictEqual(TL.daysNear('x'), []);
+});
+
+test('the shards: every family read with root null; an older single file read with them; a file that can\'t be read or is too large throws', () => {
+  const home = tmpDir();
+  const rec = (at, root) => TL.buildRecord({ at, root, side: 'long', problems: ['x'] });
+  TL.appendRecord(home, rec('2026-10-07T14:00:00.000Z', 'MNQ'));
+  TL.appendRecord(home, rec('2026-10-08T14:00:00.000Z', 'MES'));
+  // An older home's single file: read, never written; a day's read takes only its records of that day.
+  fs.writeFileSync(TL.legacyFile(home, 'MNQ'), `${JSON.stringify(rec('2026-10-01T14:00:00.000Z', 'MNQ'))}\n${JSON.stringify(rec('2026-10-07T13:00:00.000Z', 'MNQ'))}\n`);
+  fs.writeFileSync(path.join(home, 'trade-lifecycle', 'notes.txt'), 'x');
+  assert.deepStrictEqual(TL.readRecords(home).map(r => `${r.root} ${r.at.slice(0, 13)}`), ['MES 2026-10-08T14', 'MNQ 2026-10-01T14', 'MNQ 2026-10-07T13', 'MNQ 2026-10-07T14']);
+  assert.deepStrictEqual(TL.readRecords(home, 'MNQ', { days: ['2026-10-07'] }).map(r => r.at.slice(0, 13)), ['2026-10-07T13', '2026-10-07T14']);
+  // An unreadable shard throws (a full read and that day's read), never read as none.
+  fs.mkdirSync(TL.recordFile(home, 'MNQ', '2026-10-09'));
+  assert.throws(() => TL.readRecords(home, 'MNQ'), /can't be read \(EISDIR\)/);
+  assert.throws(() => TL.readRecords(home, 'MNQ', { days: ['2026-10-09'] }), /can't be read \(EISDIR\)/);
+  assert.strictEqual(TL.readRecords(home, 'MNQ', { days: ['2026-10-07'] }).length, 2, 'another day\'s shard is never opened');
+  // The family's folder not a folder (a shard's path can't be reached): throws, never none.
+  const blocked = tmpDir();
+  fs.mkdirSync(path.join(blocked, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(blocked, 'trade-lifecycle', 'MNQ'), 'x');
+  assert.throws(() => TL.readRecords(blocked, 'MNQ', { days: ['2026-10-07'] }), /can't be read \(ENOTDIR\)/);
+  assert.throws(() => TL.readRecords(blocked, 'MNQ'), /can't be read \(ENOTDIR\)/);
+  // Over the cap: throws, named.
+  const big = tmpDir();
+  fs.mkdirSync(path.dirname(TL.recordFile(big, 'MNQ', '2026-10-07')), { recursive: true });
+  fs.writeFileSync(TL.recordFile(big, 'MNQ', '2026-10-07'), '');
+  fs.truncateSync(TL.recordFile(big, 'MNQ', '2026-10-07'), TL.MAX_BYTES + 1);
+  assert.throws(() => TL.readRecords(big, 'MNQ', { days: ['2026-10-07'] }), /is over 67108864 bytes/);
+  // An older home's single file over the cap: refused, saying what it is and what to do.
+  fs.writeFileSync(TL.legacyFile(big, 'MES'), '');
+  fs.truncateSync(TL.legacyFile(big, 'MES'), TL.MAX_BYTES + 1);
+  assert.throws(() => TL.readRecords(big, 'MES', { days: ['2026-10-07'] }), /MES\.jsonl, an older home's single file from before the day shards, is over 67108864 bytes: [^]*continue in a new run home/);
 });
 
 test('R:R is compared unrounded: 231/111 ticks (2.0811) meets a min of 2.0805 though it shows 2.08, and fails 2.0812', () => {

@@ -496,6 +496,16 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   // A record on another bar is not this bar's.
   appendRecord(tmpDir(), rec);
   assert.deepStrictEqual(L.composedAt(home, 'MNQ', '2026-10-07T13:54:00.000Z'), []);
+  // The bar's day shard unreadable: no composed facts (a rules entry isn't refused for it), while the composed entry's
+  // own check reads the same shard and refuses it (fails closed).
+  const { recordFile } = require('../../scripts/lib/trading/trade-lifecycle');
+  const broken = tmpDir();
+  writeBriefing(broken, F.briefing());
+  require('fs').mkdirSync(recordFile(broken, 'MNQ', '2026-10-07'), { recursive: true });
+  assert.deepStrictEqual([L.composedAt(broken, 'MNQ', F.BAR), L.briefingFactsKey(broken, 'MNQ', now, {})], [[], 'v-scenario-1']);
+  const doc = require('../../scripts/lib/trading/strategies').loadStrategies(path.resolve(__dirname, '..', '..'), {}).strategies.find(s => s.name === 'trade_lifecycle');
+  const refused = require('../../scripts/lib/trading/lifecycle-gate').composedRefusal({ name: 'trade_lifecycle', strategy: doc, home: broken, root: 'MNQ', input: F.order(), now, cycleBars: { MNQ: F.BAR }, specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }) });
+  assert.match(refused.message, /can't be read \(EISDIR\)[^]*fails closed/);
   // No role's index requires a taught entry; the head prompt doesn't list one; trade-lifecycle names each.
   const roleSkills = require('../../scripts/lib/role-skills');
   const required = roleSkills.requiredByRole(path.resolve(__dirname, '..', '..'), 'index');

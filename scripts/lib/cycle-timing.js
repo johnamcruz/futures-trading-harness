@@ -6,8 +6,10 @@
  *
  * The timeline, on the cycle's own clock (the replay clock's in a replay, as the gate reads it: harness-now.js; the
  * wall clock live): the cycle starts at its time (`cycleAtMs`), and every later moment is that time plus the wall time
- * the run had taken by then. In a replay that is the projected live latency: the replay clock is pinned at the decision
- * time and the replay broker fills at the bar, so only the run's own time is added. Times read from the transcript,
+ * the run had taken by then. In a replay with its latency charged (replay config `latency`: the replay clock runs with
+ * the wall clock from the decision time, FTH_REPLAY_WALL_START) that is the latency the run actually had: orders went,
+ * and records expired, at those times (`charged`). With a pinned replay clock it is projected: the replay clock stays at
+ * the decision time and the replay broker fills there, so only the run's own time is added. Times read from the transcript,
  * each event's own when it carries one:
  *
  *   - opencode `run --format json`: a task call's state.time {start, end}; the head trader's text event's part.time.end
@@ -30,12 +32,15 @@
  * is no deadline: neither overran nor missed is counted.
  *
  *   transcriptTimes(text, lineTimes)   { roles: [{ role, start, end, ok }], resultAt, orders: [{ ms, entry }] } (wall ms)
- *   gateEntries(env, fromMs, toMs)     [{ ms, decision, entry }] this cycle's place_order decisions in the gate log
+ *   gateEntries(env, fromMs, toMs)     [{ ms, decision, entry, expired }] this cycle's place_order decisions in the gate log
+ *                                      (expired: refused because its compose record's time ran out: lifecycle-gate.js)
  *   barWindow(context, minutes)        { barClose, nextClose, setup, deadline } (ms; nulls without bars or a session)
  *   cycleTiming(input)                 the cycle log's `timing` record
  *   runTiming(run)                     cycleTiming for a run as cycle-run.js ran it (its clock, its gate log), or null
  *   timingReport(cycles)               { all, setup, quiet }: latencies, overruns, setups decided/entered in time or
- *                                      missed, per-role median
+ *                                      missed, entries lost to expiry (`expired`: entry orders the gate refused because
+ *                                      their compose record had expired; with the latency charged, lost to it), per-role
+ *                                      median
  *
  * Never throws on a malformed transcript or gate log: what it can't read it leaves out.
  */
@@ -139,7 +144,7 @@ function transcriptTimes(text, lineTimes = null) {
  */
 function gateEntries(env, fromMs, toMs) {
   return require('./cycle-log').gateOrders(env, fromMs, toMs)
-    .map(e => ({ ms: e.ms, decision: e.decision || null, entry: isEntry(e.rationale) }))
+    .map(e => ({ ms: e.ms, decision: e.decision || null, entry: isEntry(e.rationale), expired: e.decision === 'blocked' && (Array.isArray(e.violations) ? e.violations : []).some(v => isObj(v) && v.expired === true) }))
     .sort((a, b) => a.ms - b.ms);
 }
 
@@ -178,7 +183,7 @@ const iso = ms => (ms === null || ms === undefined ? null : new Date(ms).toISOSt
  * run's wall start and end), cycleAtMs (the cycle's own time at its start), replay, gate ([{ ms, decision, entry }] from
  * gateEntries), ok, timedOut, result }.
  */
-function cycleTiming({ text = '', lineTimes = null, context = null, minutes = null, startedMs, endedMs, cycleAtMs = startedMs, replay = false, gate = [], ok = null, timedOut = false, result = null }) {
+function cycleTiming({ text = '', lineTimes = null, context = null, minutes = null, startedMs, endedMs, cycleAtMs = startedMs, replay = false, charged = false, gate = [], ok = null, timedOut = false, result = null }) {
   const onClock = w => (w === null || w === undefined ? null : cycleAtMs + (w - startedMs));
   const t = transcriptTimes(text, lineTimes);
   // The gate's records when it logged any order (it sees the executor's too), else the transcript's calls.
@@ -193,7 +198,7 @@ function cycleTiming({ text = '', lineTimes = null, context = null, minutes = nu
   const at = { decision: onClock(decision), order: onClock(first && first.ms), end: onClock(endedMs) };
   const since = x => (x === null || bars.barClose === null ? null : x - bars.barClose);
   const record = {
-    clock: replay ? 'replay' : 'wall',
+    clock: replay ? 'replay' : 'wall', ...(replay && charged ? { charged: true } : {}),
     barClose: iso(bars.barClose), nextBarClose: iso(bars.nextClose),
     start: iso(cycleAtMs), decision: iso(at.decision), decisionFrom, order: iso(at.order), orderDecision, orders: entries.length, end: iso(at.end),
     roles: t.roles.map(r => ({ role: r.role, start: iso(onClock(r.start)), end: iso(onClock(r.end)), ms: r.start !== null && r.end !== null ? r.end - r.start : null, ...(r.ok ? {} : { ok: false }) })),
@@ -202,6 +207,8 @@ function cycleTiming({ text = '', lineTimes = null, context = null, minutes = nu
     // The decision came after the next bar closed (no decision: the cycle's end did); null without a next bar in session.
     overran: bars.nextClose === null ? null : (at.decision ?? at.end) > bars.nextClose,
     setup: bars.setup,
+    // Entry orders the gate refused because their compose record had expired (only the gate's records say why).
+    expired: (gate || []).filter(o => o.entry && o.expired).length,
   };
   if (bars.setup) {
     // Decided in time (an entry order or the decision line before the bar was superseded); entered in time (an entry
@@ -228,7 +235,8 @@ function group(timings) {
   for (const x of timings) if (x.setupMissed) missedBy[x.setupMissed] = (missedBy[x.setupMissed] || 0) + 1;
   const stat = xs => ({ n: xs.length, median: quantile(xs, 0.5), p90: quantile(xs, 0.9) });
   return {
-    cycles: timings.length, replay: timings.filter(x => x.clock === 'replay').length,
+    cycles: timings.length, replay: timings.filter(x => x.clock === 'replay').length, charged: timings.filter(x => x.charged === true).length,
+    expired: timings.reduce((n, x) => n + (Number.isInteger(x.expired) ? x.expired : 0), 0),
     decision: stat(lat('decision')), order: stat(lat('order')), overran: timings.filter(x => x.overran).length,
     decidedInTime: timings.filter(x => x.setupCaught === true).length, enteredInTime: timings.filter(x => x.enteredInTime === true).length,
     missed: timings.filter(x => x.setupCaught === false).length, missedBy, noDeadline: timings.filter(x => x.setup && x.setupCaught === null).length,
@@ -252,13 +260,13 @@ function runTiming({ res, cfg, context, env, startedMs, endedMs, now, result }) 
   try {
     const runEnv = (res && res.env) || env || {};
     // The cycle's own time as the cycle log files it (cycle-log.js cycleClock: the replay clock's in a replay).
-    const clock = require('./cycle-log').cycleClock(runEnv, now);
+    const clock = require('./cycle-log').cycleClock(runEnv, now, startedMs);
     const cycleAtMs = clock.cycleAt.getTime();
     const lineTimes = Array.isArray(res.lineTimes) ? res.lineTimes : null;
     const gate = gateEntries(runEnv, startedMs, endedMs + GATE_SLACK_MS);
     return cycleTiming({
       text: lineTimes ? res.stdout : res.output, lineTimes, context, minutes: cfg && cfg.timeframe, startedMs, endedMs, cycleAtMs,
-      replay: clock.replay, gate, ok: res.ok, timedOut: res.timedOut, result,
+      replay: clock.replay, charged: clock.charged, gate, ok: res.ok, timedOut: res.timedOut, result,
     });
   } catch (_err) {
     return null;
