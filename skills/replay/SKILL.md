@@ -50,7 +50,10 @@ broker.
    with something open; the other bars are still polled, briefed, scanned and
    recorded, and the broker fills between them. Refused on test and final and
    on runs not learning; the report counts the bars skipped and the time
-   saved, and the learning report says the run was setup-focused.
+   saved, and the learning report says the run was setup-focused. Optional
+   `setupLibrary` pins a history library index (`scripts/setup-library.js`,
+   practice-train only): `experience_lookup` shows it apart from your own
+   record, as code-measured history.
 3. **Isolation.** Each run gets its own fresh harness home,
    `<workDir>/<runId>`, never the live one: the driver refuses a run home that
    is or overlaps `~/.futures-trading-harness`, your `FTH_HOME`, or the

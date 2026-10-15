@@ -10,7 +10,7 @@
  *       default; "learning": false in the config declares one that is not) lies in one window of the learning split
  *       and takes its look first (learning/run-gate.js): --validate for practice-validate months, --candidate and
  *       --evaluation (the arms of one evaluation share it) for test or final, --reasoning-fix (outcomes hidden); every
- *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl; the config's experienceIndex is pinned for the
+ *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl; the config's experienceIndex (and setupLibrary) is pinned for the
  *       run (learning/experience-index.js)
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
  *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>]   month by month, with each
@@ -57,6 +57,7 @@ const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinIndex, armOf } = require('./lib/learning/experience-index');
+const { pinLibrary } = require('./lib/learning/setup-library');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
@@ -166,6 +167,7 @@ async function run(argv) {
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
   if (r.experienceIndex) say(`experience index pinned: ${pinIndex(r.paths.runHome, r.experienceIndex).hash.slice(0, 16)}`);
+  if (r.setupLibrary) say(`history library pinned: ${pinLibrary(r.paths.runHome, r.setupLibrary).hash.slice(0, 16)}`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);

@@ -34,7 +34,10 @@
  *                    setup-focused run ran cycles only at selected bars, so its measures are said to be from one (a
  *                    later full-day evaluation is the comparable one)
  *
- *   learningMeasures({ decisions, records, lookups, index, practice })   the measures
+ *   library          the run's pinned history library (learning/setup-library.js): its hash only. Code's measurements, never
+ *                    the model's decisions: nothing above reads it (the record is the experience index's alone)
+ *
+ *   learningMeasures({ decisions, records, lookups, index, practice, library })   the measures
  *   readLearning(home)                { decisions, records, lookups, index, practice } from a run home (null without a log)
  *   learningMarkdown(m), learningText(m)
  */
@@ -46,6 +49,7 @@ const { readRecords, STEPS, CONTEXT_KEYS } = require('./lifecycle-record');
 const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
 const { readLearningRun } = require('./run-gate');
 const { practiceLine } = require('./setup-moments');
+const { loadPinnedLibrary } = require('./setup-library');
 
 const ROLLING_DAYS = 5;
 const COLLAPSE_SHARE = 0.8;
@@ -79,7 +83,7 @@ function follows(list, index) {
   return out;
 }
 
-function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null } = {}) {
+function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null, library = null } = {}) {
   const composed = decisions.filter(d => d.decision !== 'none');
   const entered = composed.filter(d => d.decision === 'entered');
   const stepsOf = d => new Set((d.reads || []).map(r => r.step).filter(s => STEPS.includes(s))).size;
@@ -96,6 +100,7 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
   const topShare = top ? rate(top[1], composed.length) : null;
   return {
     practice: practice || null,
+    library: library || null,
     decisions: { total: decisions.length, composed: composed.length, entered: entered.length, passed: composed.filter(d => d.decision === 'passed').length, refused: composed.filter(d => d.decision === 'refused').length, none: decisions.length - composed.length },
     steps: { mean: r4(mean(composed.map(stepsOf))), allSix: composed.filter(d => stepsOf(d) === STEPS.length).length },
     skillsPerTrade: r4(mean(entered.map(d => new Set((d.reads || []).map(r => r.skill)).size))),
@@ -183,7 +188,9 @@ function readLearning(home) {
   let indexError = null;
   try { index = loadPinned(home); } catch (err) { indexError = err.message; }
   const run = readLearningRun(home);
-  return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError, practice: (run && run.practice) || null };
+  let library;
+  try { const lib = loadPinnedLibrary(home); library = lib ? { hash: lib.hash.slice(0, 16) } : null; } catch (err) { library = { error: err.message }; }
+  return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError, practice: (run && run.practice) || null, library };
 }
 
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
@@ -201,6 +208,7 @@ function learningMarkdown(m) {
   return [
     '## Learning', '',
     ...(m.practice ? [`- This run was ${practiceLine(m.practice)}.`] : []),
+    ...(m.library ? [`- History library ${m.library.hash || `unreadable (${m.library.error})`} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record.`] : []),
     `- Decisions: ${d.total} (${d.composed} composed: ${d.entered} entered, ${d.passed} passed, ${d.refused} refused; ${d.none} plain passes)`,
     `- Steps covered per composed decision: ${f2(m.steps.mean)} (${m.steps.allSix} cover all six); distinct skills per trade: ${f2(m.skillsPerTrade)}`,
     `- Reads verified: ${m.reads.verified} of ${m.reads.reads} (${f2(m.reads.rate)}); records ok: ${m.reads.recordsOk} of ${m.reads.records}`,
