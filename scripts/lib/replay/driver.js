@@ -302,7 +302,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
+    info: { source: 'replay', schedule: require('../schedule').fingerprint(), broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
   });
   // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
   // other time from the first window on (later days included) is stepped only while a position or working order is

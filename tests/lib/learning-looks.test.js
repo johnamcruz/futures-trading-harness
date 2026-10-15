@@ -66,9 +66,10 @@ test('validate: counted, never budgeted; purposes per window; refusals', () => {
   assert.match(K.checkLook(look(...TEST, { purpose: 'tuning' }), []).refusals.join(), /purpose/);
   assert.match(K.checkLook(look(...TEST), null).refusals.join(), /ledger is required/);
   const usage = K.lookUsage([{ kind: 'look', ...look('2024-08-01', '2024-09-03', { purpose: 'validate' }), role: 'practice-validate' }, { kind: 'look', ...look(...TEST), role: 'test' }, { kind: 'look', ...look(...TEST, { runId: 'r2' }), role: 'test' }]);
-  assert.deepStrictEqual(usage['practice-validate'], { looks: 1, runs: 1, evaluations: 0 });
-  assert.deepStrictEqual(usage.test, { looks: 2, runs: 2, evaluations: 1 });
-  assert.deepStrictEqual(usage.final, { looks: 1, runs: 1, evaluations: 0 }, 'the recorded June 2026 replay');
+  // versions: the schedule version each look was taken under (a line without a fingerprint: the first, v1).
+  assert.deepStrictEqual(usage['practice-validate'], { looks: 1, runs: 1, evaluations: 0, versions: { v1: 1 } });
+  assert.deepStrictEqual(usage.test, { looks: 2, runs: 2, evaluations: 1, versions: { v1: 2 } });
+  assert.deepStrictEqual(usage.final, { looks: 1, runs: 1, evaluations: 0, versions: { v1: 1 } }, 'the recorded June 2026 replay');
 });
 
 test('recordLook and recordResult: the file under its lock; a missing ledger only on purpose; a result follows its look', () => {

@@ -445,7 +445,8 @@ node scripts/field-study.js --data data/MNQ-1m/ --symbol MNQ \
   (`scripts/lib/prop/splits.js`). Only Train months run freely: a span with
   a Select, Out-of-sample, Recent, walk-forward or reserve month is refused
   unless `--held-out-look "<reason>"` is given, and that look must then be
-  recorded in `RECORDED_LOOKS` and the ledger (`docs/LEARNED-RULEBOOK.md`,
+  recorded in `RECORDED_LOOKS` (`config/schedule.json`,
+  `prop.sealed.recordedLooks`) and the ledger (`docs/LEARNED-RULEBOOK.md`,
   section 4 and R16). A study is a claim's first measurement, on Train;
   thresholds it suggests are judged on held-out months by calibration
   (R11-R13, R34), never by rerunning the study there.

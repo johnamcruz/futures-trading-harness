@@ -2,20 +2,20 @@
 
 /**
  * The learning loop's data split (the composed-entry design, section 4.7, with the owner's split): which months the model
- * practises on, which check that it learned, and which stay sealed. Separate from prop/splits.js on purpose: that
- * schedule is the promotion gate's (prop/promotion.js), frozen, and starts in 2021; this one is the learning loop's
- * and never moves a prop window. Each window is [from, to), session dates, `to` exclusive.
+ * practises on, which check that it learned, and which stay sealed. Its windows are config, config/schedule.json
+ * `learning` (scripts/lib/schedule.js loads and validates it, and refuses a change to the sealed ones after a look);
+ * the prop promotion schedule (prop/splits.js) is the same file's `prop`, with other windows, and never moves a
+ * learning window. Each window is [from, to), session dates, `to` exclusive.
  *
- * - practice-train, 2020-01-01 to 2024-07-01: practice replays (exploration included), the experience log's
- *   teaching records, the experience index, lessons. Four and a half years: the 2020 crash and recovery, the 2021
- *   trend, the 2022 bear, the 2023-24 recovery, so the index sees every regime the briefing names.
- * - practice-validate, 2024-07-01 to 2025-01-01: the last six months before test, held back from the index. A
- *   validation replay reads the index built from practice-train and is never indexed itself. The carve-out is the
- *   tail, not a month per quarter: a held-back month between two practised months shares their regime and their
- *   news (leakage by adjacency), and the index would be judged on the weeks next to what built it; the tail is
- *   later in time than everything the index saw, so validate is a forward test, as test and final are after it.
- * - test, 2025-01-01 to 2026-01-01: sealed, judged under the learning ledger's budget (learning/looks.js).
- * - final, 2026-01-01 to 2027-01-01 (bars to about 2026-07-20): sealed for the final check (learning/looks.js).
+ * - practice-train: practice replays (exploration included), the experience log's teaching records, the experience
+ *   index, lessons. Long enough that the index sees every regime the briefing names.
+ * - practice-validate: the last months before test, held back from the index. A validation replay reads the index
+ *   built from practice-train and is never indexed itself. The carve-out is the tail, not a month per quarter: a
+ *   held-back month between two practised months shares their regime and their news (leakage by adjacency), and the
+ *   index would be judged on the weeks next to what built it; the tail is later in time than everything the index
+ *   saw, so validate is a forward test, as test and final are after it.
+ * - test: sealed, judged under the learning ledger's budget (learning/looks.js).
+ * - final: sealed for the final check (learning/looks.js).
  *
  * Earlier and later dates have no learning role and are refused. A date string ('YYYY-MM-DD') is a session date; a
  * Date or a millisecond timestamp (a bar's time) is converted to its session first (18:00 ET rollover).
@@ -23,6 +23,7 @@
  * The guard: practise and index only on practice-train (assertUse 'practice' and 'index'), validate only on
  * practice-validate; a run starts through learning/run-gate.js, which takes the run's look before its first cycle.
  *
+ *   WINDOWS                           { role: [from, to) } from the schedule (read when used)
  *   roleOf(date)                      'practice-train' | 'practice-validate' | 'test' | 'final' (throws outside)
  *   rolesBetween(from, to)            the roles [from, to) touches, in order
  *   assertUse(use, from, to)          throws unless every day of [from, to) is a role the use allows (USES)
@@ -31,14 +32,11 @@
  */
 
 const { tradingDayKey } = require('../trading/clock');
+const schedule = require('../schedule');
 
-const WINDOWS = Object.freeze({
-  'practice-train': Object.freeze(['2020-01-01', '2024-07-01']),
-  'practice-validate': Object.freeze(['2024-07-01', '2025-01-01']),
-  test: Object.freeze(['2025-01-01', '2026-01-01']),
-  final: Object.freeze(['2026-01-01', '2027-01-01']),
-});
-const ROLES = Object.freeze(Object.keys(WINDOWS));
+/** The windows, from the schedule (a refused schedule throws: no role without it). */
+const windows = () => schedule.current().learning.windows;
+const ROLES = Object.freeze(['practice-train', 'practice-validate', 'test', 'final']);
 const SEALED = Object.freeze(['test', 'final']);
 /** What each use may touch. Practice and the index: practice-train only. */
 const USES = Object.freeze({
@@ -75,19 +73,26 @@ function lastDay(to) {
 
 function roleOf(date) {
   const d = sessionDate(date);
-  const role = ROLES.find(r => d >= WINDOWS[r][0] && d < WINDOWS[r][1]);
-  if (!role) throw new Error(`${d} has no learning role (${WINDOWS['practice-train'][0]} to ${WINDOWS.final[1]})`);
+  const W = windows();
+  const role = ROLES.find(r => d >= W[r][0] && d < W[r][1]);
+  if (!role) throw new Error(`${d} has no learning role (${W['practice-train'][0]} to ${W.final[1]}, config/schedule.json)`);
   return role;
 }
 
-/** The roles [from, to) touches, in order; throws on an empty range or one reaching outside the schedule. */
+/** The roles [from, to) touches, in order; throws on an empty range or one reaching outside the schedule (or a gap in it). */
 function rolesBetween(from, to) {
   const a = sessionDate(from);
   const b = lastDay(to);
   if (!(a <= b)) throw new Error(`empty range ${a}..${String(to)}`);
   const first = roleOf(a);
   const last = roleOf(b);
-  return ROLES.slice(ROLES.indexOf(first), ROLES.indexOf(last) + 1);
+  const roles = ROLES.slice(ROLES.indexOf(first), ROLES.indexOf(last) + 1);
+  // A gap between two windows (the schedule allows one) has no role: a range across it is refused.
+  const W = windows();
+  for (let i = 1; i < roles.length; i++) {
+    if (W[roles[i - 1]][1] !== W[roles[i]][0]) throw new Error(`${a}..${b} crosses days with no learning role (${W[roles[i - 1]][1]} to ${W[roles[i]][0]}, config/schedule.json)`);
+  }
+  return roles;
 }
 
 /** Throws unless every day of [from, to) is in a role `use` allows. Returns the roles. */
@@ -107,7 +112,11 @@ function assertUse(use, from, to) {
 function touchesHeldBack(from, to) {
   const a = sessionDate(from);
   const b = lastDay(to);
-  return a < WINDOWS.final[1] && b >= WINDOWS['practice-validate'][0];
+  const W = windows();
+  return a < W.final[1] && b >= W['practice-validate'][0];
 }
 
-module.exports = { WINDOWS, ROLES, SEALED, USES, roleOf, rolesBetween, assertUse, touchesHeldBack, sessionDate };
+module.exports = {
+  get WINDOWS() { return windows(); },
+  ROLES, SEALED, USES, roleOf, rolesBetween, assertUse, touchesHeldBack, sessionDate,
+};

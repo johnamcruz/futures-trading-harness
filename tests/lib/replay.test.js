@@ -271,6 +271,8 @@ test('driver: one step per decision time at its time, a line each, end of day re
   // The manifest says where its decisions came from and which version of the agent made them (R33's fingerprints today).
   const man = store.readRun(w.run.paths.runDir).manifest;
   assert.strictEqual(man.source, 'replay');
+  // And the schedule it ran under (config/schedule.json's fingerprint, scripts/lib/schedule.js).
+  assert.deepStrictEqual(man.schedule, require('../../scripts/lib/schedule').fingerprint());
   // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist: none on this one), as live records its broker's.
   assert.deepStrictEqual(man.fingerprints, require('../../scripts/lib/session/record').fingerprints(ROOT, { broker: { name: 'sim', settings: {}, refused: [] } }));
   assert.deepStrictEqual(man.versions.map(v => [v.since, v.hash]), [[lines[0].t, man.hash]], 'one version: the agent didn\'t change across the resume');

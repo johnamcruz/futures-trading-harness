@@ -34,7 +34,7 @@ const os = require('os');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { harnessHome } = require('../paths');
 const { checkLook } = require('../prop/looks');
-const { RECORDED_LOOKS } = require('../prop/splits');
+const propSplits = require('../prop/splits'); // RECORDED_LOOKS: the schedule's, read when used
 const LF = require('../prop/ledger-file');
 
 const VERSION = 1;
@@ -210,7 +210,7 @@ function takeJudgingLook(file, look, { snapshot, own = null, resume = false, now
     }
     const months = ws => new Set(ws.flatMap(w => monthsOf(w.from, w.to)));
     const mine = months(look.ranges);
-    const used = [...RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...ledger.filter(l => l.purpose === 'judging')]
+    const used = [...propSplits.RECORDED_LOOKS.map(l => ({ ranges: [l] })), ...ledger.filter(l => l.purpose === 'judging')]
       .flatMap(l => [...months(Array.isArray(l.ranges) ? l.ranges : [l])]).filter(m => mine.has(m));
     if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
     // The look's own rules (budget, role) checked before anything is written.
@@ -223,4 +223,4 @@ function takeJudgingLook(file, look, { snapshot, own = null, resume = false, now
   });
 }
 
-module.exports = { VERSION, loopPaths, acquireLock, lockHolder, openState, saveState, budgetLeft, spend, readLedger, logLook, takeJudgingLook, monthsOf };
+module.exports = { VERSION, ledgerFile, loopPaths, acquireLock, lockHolder, openState, saveState, budgetLeft, spend, readLedger, logLook, takeJudgingLook, monthsOf };

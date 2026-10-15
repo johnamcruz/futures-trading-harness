@@ -609,7 +609,8 @@ strategy, on covered months only (section 4).
   measured on 54 days of 2024 (March 4-22, April 8-19, May 20-24, June
   6-21 in Select; August 1-9 in Out-of-sample), so it is **a held-out look**
   at both windows. It is recorded as one, beside the June replay, in
-  `RECORDED_LOOKS` (`scripts/lib/prop/splits.js`: a `select` entry from
+  `RECORDED_LOOKS` (`config/schedule.json` `prop.sealed.recordedLooks`,
+  read by `scripts/lib/prop/splits.js`: a `select` entry from
   2024-03-04 to 2024-06-22 and an `oos` entry from 2024-08-01 to
   2024-08-10, `to` exclusive, with a test that each lies in its block), so
   the ledger (R16) starts with it; it counts against Out-of-sample's
@@ -716,7 +717,8 @@ these:
 The first three are the promotion gate's numbers, frozen in code since
 PR #70 (`scripts/lib/prop/promotion.js`, with a test that they may only rise).
 **They never live in the learnable rulebook**, so no proposed diff can lower
-them. The split windows are in `scripts/lib/prop/splits.js` (train from
+them. The split windows are in `config/schedule.json`, read by
+`scripts/lib/prop/splits.js` (train from
 2021-01-01, where Phase B's data begins 2021-05, the start of flow
 coverage, section 4; select; out-of-sample), with a
 test that out-of-sample never overlaps train or select and never moves

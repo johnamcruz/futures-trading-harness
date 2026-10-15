@@ -35,7 +35,7 @@
 const fs = require('fs');
 const path = require('path');
 const { MIN_N, MIN_DAYS, cellStats } = require('../learning/experience-index');
-const { VALIDATE_RUNS_PER_CANDIDATE } = require('../learning/looks');
+const learningLooks = require('../learning/looks'); // VALIDATE_RUNS_PER_CANDIDATE: the schedule's, read when used
 
 const STAGES = Object.freeze({
   1: Object.freeze({
@@ -185,7 +185,7 @@ function pooledExitTest(pool, { scorecardComposed = true } = {}) {
   let poolLine;
   if (!pool.named) poolLine = { test: 'pool', status: 'N/A', detail: `run ${pool.runId} names no candidate (--candidate <name> with --validate): an unnamed run is its own candidate, so its retries never pool and the cap never counts them` };
   else if (pool.missing.length) poolLine = { test: 'pool', status: 'INSUFFICIENT', detail: `candidate ${pool.candidate}'s validate run(s) ${pool.missing.join(', ')} not found beside this one: a pool without them could flatter it` };
-  else poolLine = { test: 'pool', status: 'PASS', detail: `candidate ${pool.candidate}: ${ids.join(', ')} pooled (the first ${VALIDATE_RUNS_PER_CANDIDATE} validate runs at most)` };
+  else poolLine = { test: 'pool', status: 'PASS', detail: `candidate ${pool.candidate}: ${ids.join(', ')} pooled (the first ${learningLooks.VALIDATE_RUNS_PER_CANDIDATE} validate runs at most)` };
   const errored = pool.counted.find(r => r.adherence && r.adherence.error);
   const adherence = !scorecardComposed ? { unavailable: 'needs fix/scorecard-composed (the scorecard doesn\'t score composed setups yet)' }
     : errored ? { unavailable: `run ${errored.runId}'s scorecard not scored (${errored.adherence.error})` }

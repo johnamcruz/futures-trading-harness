@@ -6,10 +6,10 @@
  * spent here. Its own file, ~/.futures-trading-harness/learning/looks.jsonl (the default home, whatever FTH_HOME), in the prop ledger's format (prop/looks.js parseLedger,
  * prop/ledger-file.js: JSON lines, appended under a lock), so the two budgets never mix.
  *
- * The owner's rules (the defaults, BUDGETS and FINAL_NEEDS_TEST_PASS):
- *   test (2025)          judging: LOOK_BUDGETS.test looks, counted per evaluation: every arm of one evaluation (with
+ * The owner's rules (the schedule's learning.sealed, config/schedule.json: LOOK_BUDGETS and FINAL_NEEDS_TEST_PASS):
+ *   test                 judging: LOOK_BUDGETS.test looks, counted per evaluation: every arm of one evaluation (with
  *                        experience, without, shuffled) runs under one evaluation id and spends one look together
- *   final (2026)         judging: LOOK_BUDGETS.final look, and only for a candidate with a test pass in the ledger
+ *   final                judging: LOOK_BUDGETS.final look, and only for a candidate with a test pass in the ledger
  *                        (recordResult)
  *   reasoning-fix        at test or final: free, and the run's outcomes are hidden (hideOutcomes)
  *   practice-validate    purpose validate: no budget, but every run is logged and counted; the stage-1 exit test
@@ -58,18 +58,20 @@ const path = require('path');
 const { harnessHome } = require('../paths');
 const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
 const { rolesBetween, sessionDate, SEALED } = require('./splits');
+const schedule = require('../schedule');
 
-const LOOK_BUDGETS = Object.freeze({ test: 3, final: 1 });
-const FINAL_NEEDS_TEST_PASS = true;
+/**
+ * The schedule's learning budgets (config/schedule.json learning.sealed, schedule.js): looks per sealed window
+ * (LOOK_BUDGETS, counted per evaluation), whether the final look needs a test pass (FINAL_NEEDS_TEST_PASS), and the
+ * validate runs of one candidate the stage-1 exit test pools (VALIDATE_RUNS_PER_CANDIDATE, validateRuns). Each
+ * validate run judged alone would be a fresh chance at a false pass (about 1 to 2% a run at zero edge), so retries
+ * compound; the test reads the candidate's runs pooled, and only its first VALIDATE_RUNS_PER_CANDIDATE: at most that
+ * many looks at one candidate's exit test, and a later run can't move it. A new candidate (another skill version)
+ * starts its own. Read when used: a refused schedule throws, never a default.
+ */
+const S = () => schedule.current().learning;
 /** Runs one evaluation may hold: its arms (with experience, without, shuffled). */
 const MAX_ARMS = 3;
-/**
- * The validate runs of one candidate the stage-1 exit test pools (validateRuns), the one place this number lives. Each
- * run judged alone would be a fresh chance at a false pass (about 1 to 2% a run at zero edge), so retries compound; the
- * test reads the candidate's runs pooled, and only its first VALIDATE_RUNS_PER_CANDIDATE: at most that many looks at
- * one candidate's exit test, and a later run can't move it. A new candidate (another skill version) starts its own.
- */
-const VALIDATE_RUNS_PER_CANDIDATE = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without), and `+library:<hash>` when shown the history library. */
@@ -89,10 +91,8 @@ const shownArm = arm => LIBRARY_ARM.test(String(arm || ''));
 const riskArm = arm => RISK_ARM.test(String(arm || ''));
 /** Whether an arm is shown anything beyond its experience index: its look names its setup without the displays (base). */
 const displayArm = arm => shownArm(arm) || riskArm(arm);
-/** Looks taken before the ledger existed, so it starts true. */
-const RECORDED_LOOKS = Object.freeze([
-  Object.freeze({ kind: 'look', evaluation: 'llm-replay-2026-06', candidate: 'llm-replay-2026-06', purpose: 'reasoning-fix', runId: 'llm-replay-2026-06', from: '2026-06-01', to: '2026-06-06', role: 'final', what: 'LLM replay, June 1-5 2026, adherence only' }),
-]);
+/** Looks taken before the ledger existed, so it starts true: the schedule's learning.sealed.recordedLooks. */
+const recordedLooks = () => S().recordedLooks;
 
 const roleOfLook = e => {
   if (typeof e.role === 'string') return e.role;
@@ -104,10 +104,23 @@ const roleOfLook = e => {
   }
 };
 // A score (recordScore) reads the outcomes a look already allowed: never a look of its own, never a budget spent.
-const looksOf = ledger => [...RECORDED_LOOKS, ...ledger.filter(e => e && e.kind !== 'result' && e.kind !== 'score')];
+const looksOf = ledger => [...recordedLooks(), ...ledger.filter(e => e && e.kind !== 'result' && e.kind !== 'score')];
 const resultsOf = ledger => ledger.filter(e => e && e.kind === 'result');
 
-function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
+/**
+ * The look a learning role requires (schedule.js resolve): { purposes (allowed), budget (looks per sealed window,
+ * counted per evaluation, or null), needsTestPass, validateCap (the validate runs the exit test pools, or null) }.
+ */
+function lookRule(role) {
+  const s = S();
+  if (role === 'practice-train') return { purposes: [], budget: null, needsTestPass: false, validateCap: null };
+  if (role === 'practice-validate') return { purposes: ['validate'], budget: null, needsTestPass: false, validateCap: s.validateRunsPerCandidate };
+  if (!SEALED.includes(role)) throw new Error(`no learning role "${role}"`);
+  return { purposes: ['judging', 'reasoning-fix'], budget: s.lookBudgets[role], needsTestPass: role === 'final' && s.finalNeedsTestPass, validateCap: null };
+}
+
+function checkLook(look, ledger, { budgets = null } = {}) {
+  budgets = budgets || S().lookBudgets;
   const refusals = [];
   const l = look || {};
   if (!ID.test(String(l.evaluation || ''))) refusals.push('a look names its evaluation id (letters, digits, ".", "_", "-"; the arms of one evaluation share it)');
@@ -115,6 +128,8 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   if (!ID.test(String(l.runId || ''))) refusals.push('a look names its run id');
   if (!PURPOSES.includes(l.purpose)) refusals.push(`a look names its purpose, one of ${PURPOSES.join(', ')}; not ${String(l.purpose)}`);
   if (!Array.isArray(ledger)) return { ok: false, refusals: [...refusals, 'the ledger is required, a list of looks'], role: null };
+  // The sealed rule (schedule.js): no look under a schedule whose sealed learning windows changed after a look.
+  refusals.push(...schedule.sealedRefusals('learning', ledger));
   let roles;
   try {
     roles = rolesBetween(l.from, l.to);
@@ -141,8 +156,13 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   if (prior && prior.setup != null && prior.setup !== (l.setup || null)) {
     refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} with another setup (${String(l.setup).slice(0, 12)}, not ${String(prior.setup).slice(0, 12)}: its runner config, documents, library or its display changed): a resume keeps its setup (start another runId)`);
   }
-  // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
+  // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms), and
+  // the same schedule (config/schedule.json): its arms are compared, so none runs under another schedule.
   const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);
+  const evalSchedule = first ? schedule.entryFingerprint(first) : null;
+  if (evalSchedule && evalSchedule.hash !== schedule.current().fingerprint.hash) {
+    refusals.push(`evaluation ${l.evaluation} was taken under schedule ${evalSchedule.version} (${evalSchedule.hash.slice(0, 12)}), not the current ${schedule.current().version} (${schedule.current().fingerprint.hash.slice(0, 12)}): one evaluation runs under one schedule (start another evaluation id)`);
+  }
   if (first && refusals.length === 0) {
     let span = null;
     try { span = [sessionDate(l.from), sessionDate(l.to)]; } catch (_err) { /* refused above */ }
@@ -188,24 +208,31 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   const remaining = budget === null ? null : Math.max(0, budget - spent);
   if (refusals.length === 0 && l.purpose === 'judging' && !shared) {
     if (remaining === 0) refusals.push(`${role}: its ${budget} look(s) are spent (counted per evaluation); the window is sealed`);
-    if (role === 'final' && FINAL_NEEDS_TEST_PASS && !resultsOf(ledger).some(r => r.role === 'test' && r.result === 'pass' && r.candidate === l.candidate)) {
+    if (role === 'final' && S().finalNeedsTestPass && !resultsOf(ledger).some(r => r.role === 'test' && r.result === 'pass' && r.candidate === l.candidate)) {
       refusals.push(`final: candidate ${l.candidate} has no test pass in the ledger; the final look comes only after one (recordResult)`);
     }
   }
   return { ok: refusals.length === 0, refusals, role, purpose: l.purpose, budget, spent, remaining, repeat, shared, hideOutcomes: l.purpose === 'reasoning-fix' };
 }
 
-/** Run fn on the ledger's looks under its lock; a missing ledger is started only with `create`. */
+/**
+ * Run fn on the ledger's looks under its lock; a missing ledger is started only with `create`. Nothing is written
+ * under a schedule the sealed rule refuses (schedule.js assertSealed): a look, a result or a score.
+ */
 function underLock(file, create, fn) {
   if (!fs.existsSync(file)) {
     if (!create) readLedger(file); // throws: no ledger at <file>
     fs.mkdirSync(path.dirname(file), { recursive: true });
   }
-  return withLedgerLock(file, () => fn(readLedger(file, { create })));
+  return withLedgerLock(file, () => {
+    const ledger = readLedger(file, { create });
+    schedule.assertSealed('learning', ledger);
+    return fn(ledger);
+  });
 }
 
 /** Check a look and append it (a repeat of the same run is not appended again). Throws when refused. */
-function recordLook(file, look, { create = false, now = new Date(), budgets = LOOK_BUDGETS } = {}) {
+function recordLook(file, look, { create = false, now = new Date(), budgets = null } = {}) {
   return underLock(file, create, ledger => {
     const r = checkLook(look, ledger, { budgets });
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
@@ -260,10 +287,11 @@ function recordScore(file, entry) {
 function validateRuns(ledger, candidate) {
   const validate = looksOf(Array.isArray(ledger) ? ledger : []).filter(e => e.purpose === 'validate' && roleOfLook(e) === 'practice-validate');
   const ids = [...new Set(validate.filter(e => e.candidate === candidate).map(e => e.runId))];
-  const counted = ids.slice(0, VALIDATE_RUNS_PER_CANDIDATE);
+  const cap = S().validateRunsPerCandidate;
+  const counted = ids.slice(0, cap);
   const windows = counted.map(id => { const l = validate.find(e => e.runId === id); return { runId: id, from: l.from, to: l.to }; });
   return {
-    counted, windows, beyond: ids.slice(VALIDATE_RUNS_PER_CANDIDATE),
+    counted, windows, beyond: ids.slice(cap),
     all: { runs: new Set(validate.map(e => e.runId)).size, candidates: new Set(validate.map(e => e.candidate)).size },
   };
 }
@@ -271,18 +299,23 @@ function validateRuns(ledger, candidate) {
 /** The scores in the ledger (recordScore), oldest first. */
 const scoresOf = ledger => (Array.isArray(ledger) ? ledger.filter(e => e && e.kind === 'score') : []);
 
-/** Per role: { looks, runs, evaluations (judging), validateRuns }. */
+/**
+ * Per role: { looks, runs, evaluations (judging), versions }: versions, the schedule version each look was taken under
+ * ({ version: looks }; a look from before fingerprints, and a recorded look, the first schedule's: schedule.js).
+ */
 function lookUsage(ledger) {
   const out = {};
   for (const e of looksOf(ledger)) {
     const role = roleOfLook(e);
     if (!role) continue;
-    const u = out[role] || (out[role] = { looks: 0, runs: new Set(), evaluations: new Set() });
+    const u = out[role] || (out[role] = { looks: 0, runs: new Set(), evaluations: new Set(), versions: {} });
     u.looks += 1;
     u.runs.add(e.runId);
     if (e.purpose === 'judging') u.evaluations.add(e.evaluation);
+    const v = schedule.scheduleVersion(e);
+    u.versions[v] = (u.versions[v] || 0) + 1;
   }
-  return Object.fromEntries(Object.entries(out).map(([k, u]) => [k, { looks: u.looks, runs: u.runs.size, evaluations: u.evaluations.size }]));
+  return Object.fromEntries(Object.entries(out).map(([k, u]) => [k, { looks: u.looks, runs: u.runs.size, evaluations: u.evaluations.size, versions: u.versions }]));
 }
 
 /**
@@ -291,4 +324,11 @@ function lookUsage(ledger) {
  */
 const ledgerPath = (env = process.env) => path.join(harnessHome({}, String(env.HOME || '').trim() || os.homedir()), 'learning', 'looks.jsonl');
 
-module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, VALIDATE_RUNS_PER_CANDIDATE, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, recordScore, scoresOf, validateRuns, lookUsage, ledgerPath };
+module.exports = {
+  // The schedule's values, read when used (config/schedule.json learning.sealed).
+  get LOOK_BUDGETS() { return S().lookBudgets; },
+  get FINAL_NEEDS_TEST_PASS() { return S().finalNeedsTestPass; },
+  get VALIDATE_RUNS_PER_CANDIDATE() { return S().validateRunsPerCandidate; },
+  get RECORDED_LOOKS() { return recordedLooks(); },
+  MAX_ARMS, PURPOSES, ARM, lookRule, checkLook, recordLook, recordResult, recordScore, scoresOf, validateRuns, lookUsage, ledgerPath,
+};

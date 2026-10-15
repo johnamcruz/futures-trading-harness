@@ -56,6 +56,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       curatedDoc: () => ({ fingerprint: 'f1', use: 'practice', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, lists: { 'trend-up': [MOMENT], 'trend-down': [{}] }, coverage: { mix: { under: [] } } }),
       index: () => ({ hash: 'b'.repeat(64), walkForward: true, roles: ['practice-train'], months: { from: '2020-01-06', to: '2024-06-28' } }),
       learningGate: () => ({ learning: true, role: 'practice-train', look: null }),
+      scheduleState: () => ({ schedule: require('../../scripts/lib/schedule').current(), learning: [], prop: [], run: null }),
       riskRecord: () => ({ hash: 'c'.repeat(64), walkForward: true, roles: ['practice-train'], days: 3, entries: [{ day: '2022-03-01', role: 'practice-train', cells: {} }] }),
       riskPin: () => null,
       rulebook: name => (name === 'acct' ? rulebook : null),
@@ -445,4 +446,42 @@ test('stage: stage 1 keeps the risk record hidden; stage 2 shows it only on a de
   assert.deepStrictEqual([two.status, /shown only on a run declared a comparison arm \(comparisonArm\)/.test(two.detail)], [P.FAIL, true]);
   assert.strictEqual(P.stage(ctx({ run: { ...on, stage: 2, comparisonArm: true, accountStates: STATES_RUN } })).status, P.PASS, 'stage 2 on a comparison arm, from account states: holds');
   assert.strictEqual(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN } })).status, P.PASS, 'off: nothing to declare');
+});
+
+test('schedule: FAILs on a schedule that can\'t load, a broken sealed rule (either ledger) or an evaluation under another schedule; WARNs on a resume under another', () => {
+  const S = require('../../scripts/lib/schedule');
+  const cur = S.current();
+  const state = over => ({ read: { scheduleState: () => ({ schedule: cur, learning: [], prop: [], run: null, ...over }) } });
+  const pass = one(P.scheduleCheck, ctx(state({})));
+  assert.strictEqual(pass.status, P.PASS, pass.detail);
+  assert.strictEqual(pass.check, 'schedule');
+  assert.ok(pass.detail.startsWith(`${cur.version} (${cur.fingerprint.hash.slice(0, 12)})`), pass.detail);
+  const other = { version: 'v0', hash: 'f'.repeat(64), sealed: { learning: 'e'.repeat(64), prop: 'd'.repeat(64) } };
+  const fail = (c, why) => { const res = one(P.scheduleCheck, c); assert.strictEqual(res.status, P.FAIL, res.detail); assert.match(res.detail, why); };
+  fail({ ...ctx(), read: { ...ctx().read, scheduleState: () => { throw new Error('the schedule config (x) is refused: bad'); } } }, /the schedule config \(x\) is refused: bad/);
+  fail(ctx(state({ learning: [{ kind: 'look', role: 'final', evaluation: 'e', runId: 'e', from: '2026-02-02', to: '2026-02-03', schedule: other }] })), /sealed learning windows .* schedule v0/);
+  fail(ctx(state({ prop: [{ candidate: 'c', purpose: 'tuning', ranges: [{ from: '2022-03-01', to: '2022-03-02' }], schedule: other }] })), /sealed prop windows .* schedule v0/);
+  // The same evaluation under another schedule (its sealed windows the same: only the open ones changed).
+  const prev = { ...other, sealed: cur.fingerprint.sealed };
+  const evalLook = { kind: 'look', role: 'practice-validate', evaluation: 'ev', runId: 'a', purpose: 'validate', from: '2024-07-08', to: '2024-07-09', schedule: prev };
+  fail(ctx({ ...state({ learning: [evalLook] }), gate: { evaluation: 'ev' } }), /evaluation ev has 1 look\(s\) under schedule v0 .* one evaluation runs under one schedule/);
+  assert.strictEqual(one(P.scheduleCheck, ctx({ ...state({ learning: [{ ...evalLook, schedule: cur.fingerprint }] }), gate: { evaluation: 'ev' } })).status, P.PASS);
+  assert.strictEqual(one(P.scheduleCheck, ctx({ ...state({ learning: [evalLook] }), gate: { evaluation: 'other' } })).status, P.PASS, 'another evaluation');
+  const warn = one(P.scheduleCheck, ctx(state({ run: { schedule: prev } })));
+  assert.strictEqual(warn.status, P.WARN);
+  assert.match(warn.detail, /started under schedule v0 .* resumes under v1/);
+  // In the report, between curated-source and split-window.
+  const names = P.runChecks(ctx()).results.map(x => x.check);
+  assert.strictEqual(names[names.indexOf('schedule') + 1], 'split-window');
+  // The real reader: the committed schedule, both ledgers (none yet under a fresh home), the run's record.
+  const home = tmp();
+  const runDir = path.join(home, 'run');
+  fs.mkdirSync(runDir);
+  fs.writeFileSync(path.join(runDir, 'learning-run.json'), JSON.stringify({ learning: true, role: 'practice-train', schedule: prev }));
+  const st = P.defaultReaders(ROOT, { HOME: home }).scheduleState({ runDir });
+  assert.strictEqual(st.schedule, cur);
+  assert.deepStrictEqual([st.learning, st.prop, st.run.schedule], [[], [], prev]);
+  fs.mkdirSync(path.join(home, '.futures-trading-harness', 'learning'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.futures-trading-harness', 'learning', 'looks.jsonl'), '');
+  assert.throws(() => P.defaultReaders(ROOT, { HOME: home }).scheduleState({ runDir }), /is empty/, 'an unreadable ledger throws: a FAIL');
 });

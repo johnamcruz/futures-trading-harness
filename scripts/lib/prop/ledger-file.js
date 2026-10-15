@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parseLedger, formatLedger, isListFormat } = require('./looks');
+const schedule = require('../schedule');
 
 /**
  * The ledger's looks. A missing file is refused unless `create` (a new ledger, named on purpose): a mistyped
@@ -39,9 +40,12 @@ function rewrite(file, text) {
 
 /**
  * Append one look to the ledger file, synced before the look is taken. A file in the earlier list format is
- * rewritten as lines, its looks first: none is lost. Call it holding the lock (withLedgerLock).
+ * rewritten as lines, its looks first: none is lost. Call it holding the lock (withLedgerLock). Every entry records
+ * the schedule it was written under (schedule.js fingerprint: version, hash, sealed hashes), replacing any it
+ * carried; a refused schedule writes nothing.
  */
-function appendLook(file, entry) {
+function appendLook(file, rawEntry) {
+  const entry = { ...rawEntry, schedule: schedule.fingerprint() };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   if (isListFormat(old)) {

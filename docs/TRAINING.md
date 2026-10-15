@@ -20,7 +20,8 @@ One replay, two presets: the replay config's `stage`.
 Stage 2 starts only after stage 1's exit test passes on a validate run.
 Both stages use the same curated lists throughout.
 
-The data split (`scripts/lib/learning/splits.js`):
+The data split (`config/schedule.json`, read through
+`scripts/lib/schedule.js`; see "The schedule is config" below):
 
 | Window | Dates | Use |
 | --- | --- | --- |
@@ -71,8 +72,9 @@ comparable.
   bar closed elsewhere than its entry means another series, and the run is
   refused. Give the run the bars the replay serves, so the check sees what the
   model sees.
-- **History coverage.** The history starts 2021-04, so practice-train
-  effectively covers 2021-04 to 2024-07.
+- **History coverage.** The history starts 2021-04 (`data.start` in
+  `config/schedule.json`), so practice-train effectively covers 2021-04 to
+  2024-07.
 
 The standard trade each moment measures is a limit held the strategy's
 `valid_bars` base bars after its bar's close, the plan the gate allows (the
@@ -551,6 +553,61 @@ merged, and no document is edited outside the candidate's own tree.
   budget doesn't come back.
 - **Reasoning-fix looks.** `--reasoning-fix` takes a free look whose outcomes
   are hidden.
+
+### The schedule is config
+
+Both schedules, the learning split above and the prop promotion schedule
+(`scripts/lib/prop/splits.js`), live in one file, `config/schedule.json`.
+It also holds the look budgets, the validate cap per candidate, the
+recorded looks and the data dates. Before, they were two copies in code,
+and when the copies disagreed, valid runs were refused. Now every module
+reads the file through one resolver, `scripts/lib/schedule.js`.
+
+The file has an `open` part and a `sealed` part for each schedule:
+
+- **Open:** practice-train and practice-validate (learning), train and
+  select (prop).
+- **Sealed:** test and final with their budgets, final's test-pass rule,
+  the validate cap and the recorded looks (learning); out-of-sample,
+  Recent, the LLM month, the reserve size, the look budget and the
+  recorded looks (prop).
+
+What you can and can't change:
+
+- **You can extend the data dates** (`data.start`, `data.flowCoverage`).
+  New months need no edit: they fall into the half-year walk-forward and
+  reserve blocks by rule.
+- **You can move the open windows.** For example, start practice-train
+  earlier, or change where practice-validate starts. Windows must stay in
+  order and must not overlap; a gap is allowed, and its days have no role.
+- **You can't change a sealed part once a look was taken under it.** For
+  learning, that is any ledger entry at test or final; for prop, any look.
+  The recorded looks count as such looks, so today both sealed parts are
+  fixed. Changing a sealed window after looking at it would let a result
+  pick its own test.
+- **A changed file needs a new `version`.** If you edit the file and keep
+  its version name, the change is refused.
+- **Budgets only tighten.** A test refuses a higher look budget or validate
+  cap, a smaller reserve, or final without its test-pass rule.
+
+How it's enforced:
+
+- **Fingerprints.** Every ledger entry, `learning-run.json` and replay
+  manifest records the schedule it was taken under: its version, its hash,
+  and a hash of each sealed part. `lookUsage` reports the version of each
+  look. Entries written before fingerprints count as version `v1`.
+- **The ledgers check every look.** A look under a schedule whose sealed
+  part differs from the one a sealed look was taken under is refused.
+- **The preflight `schedule` check** FAILs on the same rule. It also FAILs
+  when a look in the run's evaluation was taken under another schedule,
+  since the arms of one evaluation must be comparable. A resume under
+  another schedule gets a WARN.
+- **Fail closed.** A missing or unreadable file, an unknown or missing key,
+  a bad date, or overlapping windows refuse everything that needs a role.
+
+The promotion gate's thresholds stay frozen in code
+(`scripts/lib/prop/promotion.js`). Only when its windows fall comes from
+the schedule.
 
 ## 8. Rules that keep it honest
 
