@@ -1120,16 +1120,21 @@ test('MCP gateway wiring: a failed, lost or null search_trades never holds an [e
   const protect = id => call(id, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' });
   for (const fault of [{ FAKE_ERROR: 'search_trades' }, { FAKE_DROP: 'search_trades' }, { FAKE_TRADES: 'null' }]) {
     const argsFile = path.join(tmpDir(), 'args.jsonl');
-    const t0 = Date.now();
-    // Each on its own gateway: once an exit is sent, the long counts as closed for the next order.
-    const ex = await gatewayRun({ ...fault, FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile }, [exit(1)]);
-    const pr = await gatewayRun({ ...fault, FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile }, [protect(2)]);
     const label = JSON.stringify(fault);
+    // Each on its own gateway (once an exit is sent, the long counts as closed for the next order), each timed:
+    // no call timeout (15 s) waited on.
+    const timed = async msg => {
+      const t0 = Date.now();
+      const r = await gatewayRun({ ...fault, FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile }, [msg]);
+      assert.ok(Date.now() - t0 < require(path.join(REPO, 'scripts', 'lib', 'trading', 'mcp-gateway')).CALL_TIMEOUT_MS, `${label}: waited on a read it never uses`);
+      return r;
+    };
+    const ex = await timed(exit(1));
+    const pr = await timed(protect(2));
     assert.strictEqual(text(ex.byId[1]), 'forwarded:tools/call:place_order', `${label}: ${text(ex.byId[1])}`);
     assert.strictEqual(text(pr.byId[2]), 'forwarded:tools/call:place_order', `${label}: ${text(pr.byId[2])}`);
     const asked = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l).name);
     assert.ok(!asked.includes('search_trades'), `${label}: an exit asked for the fills`);
-    assert.ok(Date.now() - t0 < require(path.join(REPO, 'scripts', 'lib', 'trading', 'mcp-gateway')).CALL_TIMEOUT_MS, `${label}: no call timeout waited on`);
   }
   // An entry still reads the fills: a broker error there refuses it (fail closed), with the close_position hint.
   const entry = await gatewayRun({ FAKE_ERROR: 'search_trades' }, [call(3, 'place_order', ORDER)]);

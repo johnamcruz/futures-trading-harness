@@ -3,8 +3,8 @@
  * MCP order gateway: run the broker MCP server behind the harness order gate so every
  * MCP client gets the same enforcement, with or without hook support. This
  * is the authoritative gate: besides the journal and strategy checks, it asks
- * the server for live positions, working orders, and today's fills, so
- * [exit]/[protect] labels and loss counts can't be faked.
+ * the server for live positions, working orders, and (entries only) today's
+ * fills, so [exit]/[protect] labels and loss counts can't be faked.
  *
  *   node scripts/mcp-gateway.js                  the broker in the broker config
  *   node scripts/mcp-gateway.js -- <server command> [args...]
