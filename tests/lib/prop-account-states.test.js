@@ -42,6 +42,7 @@ test('the draws come from the Monte Carlo paths of the model\'s own trades: thei
     assert.ok(Math.abs(ACCOUNT.starting_balance + d.state.days.reduce((a, x) => a + x, 0) + d.state.dayPnl - d.state.balance) < 0.02);
     assert.deepStrictEqual(d.facts, combine.attemptFacts(cs, { tradesToday: d.state.tradesToday, lossesToday: d.state.lossesToday, lossStreak: d.state.lossStreak }));
     if (d.bucket === 'after-losses') assert.ok(d.state.lossesToday > 0 && d.state.dayPnl !== 0);
+    assert.ok(d.state.lossStreak < GATE.maxConsecutiveLosses, 'a streak at the gate limit would still be cooling down at the window start');
     if (d.bucket === 'near-mll') assert.strictEqual(stateOf(cs), 'near-mll');
   }
   // A stream that only wins never shows a loss today nor the floor near: those buckets are empty, so nothing is drawn there.
@@ -244,11 +245,11 @@ test('the replay config: account states need a curated list and never prop; the 
 });
 
 /** The run to its end with a replay broker that applies the balance schedule (or not: `applies` false). */
-async function statesRun(w, { open = () => false, applies = true, run = null, maxCycles = Infinity } = {}) {
+async function statesRun(w, { open = () => false, applies = true, run = null, resolved = null, maxCycles = Infinity } = {}) {
   const { seedRunHome, runReplay } = require('../../scripts/lib/replay/driver');
   const { startLearningRun } = require('../../scripts/lib/learning/run-gate');
   const C = require('../../scripts/lib/learning/curated-lists');
-  const r = run || w.resolve({});
+  const r = run || resolved || w.resolve({});
   if (!run) {
     seedRunHome(r, { root: REPO, userEnv: w.env });
     startLearningRun(r.paths.runHome, { from: r.start, to: r.end, runId: r.runId, practice: r.practice, runDir: r.paths.runDir, env: w.env });
@@ -315,6 +316,18 @@ test('the driver: a day that opens with a position still open keeps its attempt 
   const sched = JSON.parse(fs.readFileSync(first.run.paths.balanceSchedule, 'utf8'));
   assert.deepStrictEqual(sched.map(e => e.day), ['2022-03-01', '2022-03-03']);
   assert.deepStrictEqual(S.readStatesLog(first.run.paths.runDir).filter(x => x.kind === 'start').map(x => x.day), ['2022-03-01', '2022-03-03']);
+});
+
+test('the driver refuses a day it can\'t seed: a broker error reading the open state, a carried day with no attempt, a day outside the assignment', async () => {
+  const w = statesWorld();
+  await assert.rejects(statesRun(w, { open: () => { throw new Error('broker down'); } }), /replay refused: can't read the account to seed the day \(broker down\)/);
+  assert.deepStrictEqual(S.readStatesLog(w.resolve({}).paths.runDir).filter(x => x.kind === 'carried'), []);
+  const v = statesWorld();
+  await assert.rejects(statesRun(v, { open: () => true }), /replay refused: 2022-03-01 opens with a position or working order but the run has no attempt to carry/);
+  const u = statesWorld();
+  const r = u.resolve({});
+  r.accountStates.assignment.days = r.accountStates.assignment.days.filter(d => d.day !== '2022-03-03');
+  await assert.rejects(statesRun(u, { run: null, resolved: r }), /replay refused: 2022-03-03 has no drawn account state/);
 });
 
 test('scripts/account-states.js: show prints a document\'s buckets; a usage error or a refused draw exits 1', () => {

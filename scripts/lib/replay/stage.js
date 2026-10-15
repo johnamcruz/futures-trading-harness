@@ -180,12 +180,12 @@ const pctOf = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1
 const rateText = r => `${pctOf(r.raw)} as practised, ${pctOf(r.weighted)} reweighted`;
 
 /** The practice by account state (prop/account-states.js practiceByState): each attempt's end, raw and reweighted. */
-function practiceLines(log) {
+function practiceLines(log, planned = null) {
   if (!log.some(x => x.kind === 'start')) return ['practice by account state: no day started from a drawn state (accountStates)'];
   const p = require('../prop/account-states').practiceByState(log);
   const one = (name, v) => `  ${name}: ${v.attempts} attempt(s); blown ${rateText(v.blown)}; stopped for the day ${rateText(v.stopped)}; at the target ${rateText(v.target)}; mean P&L ${fmt(v.pnl.raw)} as practised, ${fmt(v.pnl.weighted)} reweighted`;
   return [
-    `practice by account state: ${p.days} day(s) from drawn states, ${p.ended} ended (reweighted: each to its state's natural share of the model's own Monte Carlo paths)`,
+    `practice by account state: ${p.days} day(s) from drawn states, ${p.ended} ended (reweighted: each to its state's natural share of the model's own Monte Carlo paths; weights from the planned assignment; ${p.days} of ${planned === null ? '?' : planned} days run)`,
     one('all', p.all), ...Object.entries(p.byBucket).map(([b, v]) => one(b, v)),
   ];
 }
@@ -225,7 +225,7 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
     for (const x of tests) lines.push(`  ${x.status} ${x.test}: ${x.detail}`);
   }
   if (run.stage === 2) {
-    lines.push(...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir)));
+    lines.push(...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir), run.accountStates && run.accountStates.assignment ? run.accountStates.assignment.days.length : null));
     lines.push(f.monteCarlo ? '30-day Monte Carlo by account state: see the prop report' : '30-day Monte Carlo by account state: N/A (phase 2, needs feat/prop-mc-model)');
     if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');
   }

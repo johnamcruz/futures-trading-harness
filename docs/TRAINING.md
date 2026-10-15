@@ -305,6 +305,10 @@ fresh account:
    natural mix of states. The prop Monte Carlo weights each decision by its
    day's state weight, so the model's take rate counts at the natural mix.
    Read the reweighted numbers; the raw ones are the oversampled practice.
+   The weights come from the planned assignment, not from the days actually
+   run (the report line says "N of M days run"). A moment whose loss streak
+   is at the gate's consecutive-loss limit is never drawn: a seeded day puts
+   its last loss at the window start, where that cooldown would still run.
 
 **Validate with the promotion gate:** the stage-1 validate config with
 `"stage": 2` and `--validate`. At the end, the run prints the promotion gate

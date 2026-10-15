@@ -14,7 +14,8 @@
  * The practice draw (drawPracticeStates, the replay's): the population is every decision moment on the paths, the
  * account as each day opened and as it stood after each trade the attempt took, wherever a new entry was still allowed
  * (no entry block: the attempt over, the firm's daily limit, the soft daily stop, the loss streak stop; and fewer losing
- * trades today than the order gate's daily limit). Each is put in a practice bucket (practiceBucketOf, first that holds):
+ * trades today than the order gate's daily limit, and a loss streak under the gate's consecutive-loss limit: a seeded
+ * day puts its last loss at the window start, where a streak at the limit would still be cooling down). Each is put in a practice bucket (practiceBucketOf, first that holds):
  *   near-mll       the cushion to the floor at most NEAR_MLL of the max loss limit (risk-attribution's)
  *   after-losses   a losing trade closed today
  *   near-target    the profit at least NEAR_TARGET of the target
@@ -193,10 +194,13 @@ function drawPracticeStates(stream, { account, sizing = {}, contracts = 'auto', 
   const o = checkOversample(oversample);
   const ctx = attemptContext(account, { sizing, contracts, gate });
   const maxLosses = ctx.gate ? ctx.gate.maxDailyLosses : Infinity;
+  // A seeded after-losses day's last loss is put at the window start, so a streak at the gate's limit would still be in its
+  // cooldown there: those moments are left out (a streak under the limit has no cooldown to cover).
+  const maxStreak = ctx.gate ? ctx.gate.maxConsecutiveLosses : Infinity;
   const pool = Object.fromEntries(PRACTICE_BUCKETS.map(b => [b, []]));
   // A new entry is still allowed there: no entry block, and the gate's daily count of losing trades not reached.
   const add = (cs, counters) => {
-    if (cs.status !== 'active' || cs.dayStopped || combine.entryBlock(cs) || (counters.lossesToday || 0) >= maxLosses) return;
+    if (cs.status !== 'active' || cs.dayStopped || combine.entryBlock(cs) || (counters.lossesToday || 0) >= maxLosses || (cs.lossStreak || 0) >= maxStreak) return;
     pool[practiceBucketOf(cs, counters)].push(compact(cs, counters));
   };
   for (const list of attemptPaths(stream, account, { seed, paths, meanBlock, label: 'account-states:practice-paths' })) {

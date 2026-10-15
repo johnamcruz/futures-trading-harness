@@ -184,12 +184,18 @@ function endEpisode(run, account) {
 
 /** Seed the day's drawn account state before its first step (see the header); once per day, a resume included. */
 async function seedDay(run, point, ranAt, env, deps, root, log) {
+  if (readLines(run.paths.statesLog).some(x => x.day === point.day && ['start', 'carried'].includes(x.kind))) return;
   const a = run.accountStates.assignment.days.find(d => d.day === point.day);
-  if (!a || readLines(run.paths.statesLog).some(x => x.day === point.day && ['start', 'carried'].includes(x.kind))) return;
+  // Never a silent run on the prior attempt: a day the assignment doesn't cover is refused.
+  if (!a) throw new Error(`replay refused: ${point.day} has no drawn account state in the run's assignment (the run's days and its account states disagree)`);
   if (!run.cfg.account) throw new Error('replay refused: a run with account states needs the replay broker\'s account (the runner config\'s account)');
   const account = accountNamed(root || run.root, run.accountStates.account, env);
-  const open = await Promise.resolve().then(() => deps.open(env, run.cfg.account)).then(Boolean, () => true);
+  // A broker error is not "open": the day can't be seeded or carried on a guess (fail closed).
+  const open = await Promise.resolve().then(() => deps.open(env, run.cfg.account)).then(Boolean, err => {
+    throw new Error(`replay refused: can't read the account to seed the day (${String(err && err.message || err).split('\n')[0]})`);
+  });
   if (open) {
+    if (!readAttempt(run.paths.runHome, account.name)) throw new Error(`replay refused: ${point.day} opens with a position or working order but the run has no attempt to carry`);
     fs.appendFileSync(run.paths.statesLog, `${JSON.stringify({ kind: 'carried', day: point.day, at: ranAt.toISOString() })}\n`);
     log(`${point.day}: a position or working order is still open; the day goes on from the attempt it has`);
     return;
