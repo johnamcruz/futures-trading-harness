@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const path = require('path');
 const { composedName, composedRefusal, recordUsed } = require('../../scripts/lib/trading/lifecycle-gate');
 const { appendVerdict } = require('../../scripts/lib/trading/prop-state');
-const { appendRecord, recordFile: recordsFile, readRecords } = require('../../scripts/lib/trading/trade-lifecycle');
+const { appendRecord, recordFile: recordsFile, legacyFile, readRecords } = require('../../scripts/lib/trading/trade-lifecycle');
 const { writeBriefing } = require('../../scripts/lib/trading/briefing');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
@@ -85,11 +85,59 @@ test('composed-reads: the record must be this bar\'s, this side\'s, unexpired an
   ({ home, rec } = world());
   appendRecord(home, { ...rec, plan: { ...rec.plan, stop: { ...rec.plan.stop, ticks: 90 } } });
   assert.match(judge(home).message, /record's plan \(90-tick stop.* is not the plan its reads give now \(111-tick stop/);
-  // An unreadable record file: no record (fails closed).
+  // An unreadable shard for the bar's day: refused, never read as no record or skipped (fails closed); the same for an
+  // older home's single file that can't be read.
   home = tmpDir();
   writeBriefing(home, F.briefing());
-  require('fs').mkdirSync(recordsFile(home, 'MNQ'), { recursive: true });
-  assert.match(judge(home).message, /no compose record/);
+  require('fs').mkdirSync(recordsFile(home, 'MNQ', '2026-10-07'), { recursive: true });
+  assert.match(judge(home).message, /the check failed \(the compose record \S+2026-10-07\.jsonl can't be read \(EISDIR\)\): no entry \(fails closed\)\. Exits, protective stops and stop moves still go\./);
+  ({ home } = world());
+  require('fs').mkdirSync(legacyFile(home, 'MNQ'), { recursive: true });
+  assert.match(judge(home).message, /the check failed \(the compose record \S+MNQ\.jsonl can't be read \(EISDIR\)\): no entry \(fails closed\)/);
+});
+
+test('composed-reads: the record is found by its bar\'s day shard alone, the session day at the 18:00 ET rollover', () => {
+  const fs = require('fs');
+  // The scenario's bar (13:57 UTC, 09:57 ET) is in the 2026-10-07 session: its record is in that day's shard.
+  const { home, rec } = world();
+  assert.ok(fs.existsSync(recordsFile(home, 'MNQ', '2026-10-07')));
+  // Every other day's shard unreadable: the gate never opens them, so the entry still goes.
+  for (const day of ['2026-10-06', '2026-10-08', '2026-10-09']) fs.mkdirSync(recordsFile(home, 'MNQ', day), { recursive: true });
+  assert.strictEqual(judge(home).message, null);
+  // The record's own day unreadable: refused.
+  fs.renameSync(recordsFile(home, 'MNQ', '2026-10-07'), path.join(home, 'moved.jsonl'));
+  fs.mkdirSync(recordsFile(home, 'MNQ', '2026-10-07'));
+  assert.match(judge(home).message, /can't be read \(EISDIR\)[^]*fails closed/);
+  // An older home's single file (before the shards) is still read: the record there goes.
+  const old = tmpDir();
+  writeBriefing(old, F.briefing());
+  fs.mkdirSync(path.dirname(legacyFile(old, 'MNQ')), { recursive: true });
+  fs.writeFileSync(legacyFile(old, 'MNQ'), `${JSON.stringify(rec)}\n`);
+  assert.strictEqual(judge(old).message, null);
+  assert.deepStrictEqual(readRecords(old, 'MNQ', { days: ['2026-10-06'] }), [], 'only its records of the day asked');
+});
+
+test('composed-reads: a record composed at 17:59 ET on the 17:57 bar is found by a check at 18:00 ET, after the rollover', () => {
+  // The bar opened 17:57 ET (21:57 UTC, EDT) is in the 2026-10-07 session; 18:00 ET starts 2026-10-08's. The record
+  // is filed by its bar, so the check on that cycle bar, after the rollover, reads the same shard.
+  const BAR = '2026-10-07T21:57:00.000Z';
+  const CLOSE = '2026-10-07T22:00:00.000Z';
+  const b = F.briefing();
+  const shift = x => JSON.parse(JSON.stringify(x).split(F.BAR).join(BAR).split(F.EXPIRES).join('2026-10-07T22:03:00.000Z').split(F.CLOSE).join(CLOSE)
+    .split('2026-10-07T13:30:00.000Z').join('2026-10-07T21:30:00.000Z').split('2026-10-07T13:45:00.000Z').join('2026-10-07T21:45:00.000Z'));
+  const home = tmpDir();
+  const rec = F.writeScenario(home, { b: shift(b), at: '2026-10-07T21:59:30.000Z' });
+  assert.strictEqual(rec.bar, BAR);
+  assert.ok(require('fs').existsSync(recordsFile(home, 'MNQ', '2026-10-07')));
+  const at18 = judge(home, { now: new Date('2026-10-07T22:00:02Z'), cycleBars: { MNQ: BAR } });
+  assert.strictEqual(at18.message, null, 'found across the rollover');
+  // A record written after the rollover on that bar (at 18:00:01 ET) is filed under the bar's day too.
+  const late = tmpDir();
+  F.writeScenario(late, { b: shift(b), at: '2026-10-07T22:00:01.000Z' });
+  assert.ok(require('fs').existsSync(recordsFile(late, 'MNQ', '2026-10-07')) && !require('fs').existsSync(recordsFile(late, 'MNQ', '2026-10-08')));
+  assert.strictEqual(judge(late, { now: new Date('2026-10-07T22:00:02Z'), cycleBars: { MNQ: BAR } }).message, null);
+  // The next session's bar (18:00 ET) reads 2026-10-08's shard: this record isn't its record.
+  assert.match(judge(home, { now: new Date('2026-10-07T22:00:02Z'), cycleBars: { MNQ: CLOSE } }).message, /briefing can't be read|no compose record/);
 });
 
 test('composed-reads: the order as the record says: a limit at the reference or better, its ticks, its stated size', () => {

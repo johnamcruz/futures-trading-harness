@@ -40,7 +40,7 @@ function tmpHome(prefix = 'fth-learn-') {
 
 /**
  * A finished replay run under <home>/replay/<runId>: one day, trade cycles at `times`, fills in the first line,
- * the records in <home>/trade-lifecycle/MNQ.jsonl and bars in <home>/bars/MNQ-3m.json.
+ * the records in their day shards under <home>/trade-lifecycle/MNQ/ and bars in <home>/bars/MNQ-3m.json.
  */
 function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], refusals = {}, records = [], barRows = [], barsStart = null, runId = 'run1', gate = undefined } = {}) {
   const dir = path.join(home, 'replay', runId);
@@ -53,8 +53,9 @@ function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], 
   fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify({ timeframe: 3, symbols: ['MNQ'] }));
   const lines = times.map((t, i) => ({ t, day, kind: 'trade', ran: [{ action: 'trade', ok: true }], cycles: [{ action: 'trade', at: t, ok: true }], refusals: refusals[t] || [], trades: i === times.length - 1 ? fills : [] }));
   fs.writeFileSync(path.join(dir, `${day}.jsonl`), lines.map(l => `${JSON.stringify(l)}\n`).join(''));
+  // Filed as compose_check files them: one shard per family and trading day (trade-lifecycle.js appendRecord).
   fs.mkdirSync(path.join(home, 'trade-lifecycle'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'trade-lifecycle', 'MNQ.jsonl'), records.map(r => `${JSON.stringify(r)}\n`).join(''));
+  for (const r of records) require('../../scripts/lib/trading/trade-lifecycle').appendRecord(home, r);
   fs.mkdirSync(path.join(home, 'bars'), { recursive: true });
   fs.writeFileSync(path.join(home, 'bars', 'MNQ-3m.json'), JSON.stringify(bars(barsStart || times[0], barRows).map(({ ms: _m, ...b }) => b)));
   return { home, dir };

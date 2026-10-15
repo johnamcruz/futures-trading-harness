@@ -2752,6 +2752,32 @@ test('trade_lifecycle: the stated size goes only within the ceilings: $300 the h
   assert.ok(checks(lcEval(lcHome({ size: 1 }), LC.order({ size: 2 }))).includes('composed-reads'));
 });
 
+test('trade_lifecycle: a long run\'s record: the gate reads the cycle bar\'s day shard alone; that shard unreadable refuses the entry, never an exit', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const home = lcHome();
+  // A year of other days' shards, each over the size cap: any read of one would throw.
+  const start = Date.parse('2025-10-06T14:00:00.000Z');
+  for (let d = 0; d < 365; d += 1) {
+    const day = TL.dayOf(start + d * 86400000);
+    if (day === '2026-10-07') continue;
+    const file = TL.recordFile(home, 'MNQ', day);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '');
+    fs.truncateSync(file, TL.MAX_BYTES + 1);
+  }
+  assert.deepStrictEqual(lcEval(home).violations, []);
+  // The bar's own day unreadable: refused with what failed, and exits and protective stops still go.
+  fs.rmSync(TL.recordFile(home, 'MNQ', '2026-10-07'));
+  fs.mkdirSync(TL.recordFile(home, 'MNQ', '2026-10-07'));
+  const r = lcEval(home);
+  assert.deepStrictEqual(checks(r), ['composed-reads']);
+  assert.match(r.violations[0].message, /can't be read \(EISDIR\)\): no entry \(fails closed\)\. Exits, protective stops and stop moves still go\./);
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
+});
+
 test('trade_lifecycle: exits, protective stops and stop moves go with no record, no briefing and no cycle bar', () => {
   const home = trendHome();
   for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {

@@ -3,9 +3,16 @@
 /**
  * The trade lifecycle's record (the trade-lifecycle design: its record and plan): what compose_check
  * (harness-tools/compose.js) works out from the model's checked reads (composed-reads.js) and appends, one line per
- * call, to <FTH_HOME>/trade-lifecycle/<ROOT>.jsonl. Append-only, never in the repository, never read back as a
- * verdict: the order gate (PR C) re-runs the checker on a record's reads against the cycle bar's briefing and never
- * trusts its `ok`.
+ * call, to <FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl: one shard per family and trading day, the day the session
+ * date (clock.js tradingDayKey, the 18:00 ET rollover) of the record's bar (its `at` when it has no bar). Keyed on
+ * the bar, never the wall clock: a record composed on the 17:57 bar is in that bar's day however late it was
+ * written, and the gate, which looks a record up by its cycle bar, reads that one shard. Append-only, never in the
+ * repository, never read back as a verdict: the order gate (PR C) re-runs the checker on a record's reads against
+ * the cycle bar's briefing and never trusts its `ok`.
+ *
+ * An older home's single file (<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl, before the shards) is still read, never
+ * written: a day's read takes its records of that day, a full read all of them. A file over MAX_BYTES, or one that
+ * exists and can't be read, throws (never read as no records): the gate refuses the entry on it.
  *
  * The plan, in code, never the model's arithmetic:
  *   entry    a limit at the reference price (the briefing's last close), valid until the record expires (expiresAt:
@@ -20,11 +27,18 @@
  *            risk.max_risk_usd (required); maxSize the most that cap allows
  *   inTheWay the first level between the entry and the target (m3.nearestLiquidity) and its R
  *
- *   recordFile(home, root)                       the record file of a root's family (MNQ and NQ share one)
+ *   recordFile(home, root, day)                  a root family's shard for a trading day (MNQ and NQ share one)
+ *   legacyFile(home, root)                       the family's single file from before the shards (read only)
+ *   shardDay(record), dayOf(time)                the trading day a record's shard is, of a time; null when undated
+ *   daysNear(time)                               the trading days before, of and after a time (the shards a record
+ *                                                live at that time can be in)
  *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd })   { plan, problems }
  *   stopFloorTicks(briefing, tick)               D13's floor in ticks, or null when ATR(20) is unknown
  *   buildRecord({ ... })                         the record (schema: RECORD_KEYS)
- *   appendRecord(home, record) / readRecords(home, root)
+ *   appendRecord(home, record)                   to the record's day shard
+ *   readRecords(home, root, { days })            the records of a root's family (every family: root null), oldest
+ *                                                first; `days`: only those days' shards (and the old file's records
+ *                                                of those days); throws on a file that can't be read
  *   renderRecord(record)                         the record as text, for the model
  */
 
@@ -32,6 +46,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { familyRoot } = require('./contracts');
+const { tradingDayKey, tradingDayStart } = require('./clock');
 const { renderCheck } = require('./composed-reads');
 
 const STRATEGY = 'trade_lifecycle';
@@ -40,6 +55,10 @@ const STOP_BUFFER_TICKS = 1; // D3
 const FLOOR_TICKS = 8; // D13
 const FLOOR_ATR = 0.25; // D13: 0.25 x ATR(20)
 const MAX_SIZE = 100;
+const DIR = 'trade-lifecycle';
+const MAX_BYTES = 64 * 1024 * 1024; // a file (a day's shard, or an older home's single file) larger than this throws
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const FAMILY = /^[A-Z0-9]{1,8}$/;
 // lane: the bars the reads were checked on (the briefing's base timeframe); contract: the briefing's contract;
 // exploratory: false until practice exploration (the learning loop's) is built.
 const RECORD_KEYS = ['schema', 'id', 'at', 'strategy', 'root', 'symbol', 'contract', 'lane', 'side', 'bar', 'expiresAt', 'cycleId', 'exploratory', 'ok', 'problems', 'reads', 'signature', 'skillSignature', 'context', 'plan'];
@@ -48,7 +67,32 @@ const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const round2 = x => Math.round(x * 100) / 100;
 
-const recordFile = (home, root) => path.join(home, 'trade-lifecycle', `${familyRoot(root)}.jsonl`);
+const familyDir = (home, root) => path.join(home, DIR, familyRoot(root));
+const legacyFile = (home, root) => path.join(home, DIR, `${familyRoot(root)}.jsonl`);
+function recordFile(home, root, day) {
+  if (!DAY.test(String(day))) throw new Error(`not a trading day: ${JSON.stringify(day)}`);
+  return path.join(familyDir(home, root), `${day}.jsonl`);
+}
+
+const msOf = time => (typeof time === 'number' ? time : typeof time === 'string' ? Date.parse(time) : time instanceof Date ? time.getTime() : NaN);
+
+/** The trading day (session date, 18:00 ET rollover) of a time, or null when it isn't one. */
+function dayOf(time) {
+  const t = msOf(time);
+  return Number.isFinite(t) ? tradingDayKey(new Date(t)) : null;
+}
+
+/** The day a record's shard is: its bar's (the briefing it was checked on), else its `at`'s; null when neither. */
+const shardDay = record => (isObj(record) ? dayOf(record.bar) || dayOf(record.at) : null);
+
+/** The trading days before, of and after `time` (a record live at `time` has its bar in one of them). */
+function daysNear(time) {
+  const t = msOf(time);
+  if (!Number.isFinite(t)) return [];
+  const start = tradingDayStart(new Date(t)).getTime();
+  // A trading day is 23 to 25 hours: 30 hours after its start is in the next one.
+  return [...new Set([dayOf(start - 1), dayOf(t), dayOf(start + 30 * 3600000)])];
+}
 
 /** Prices on the tick: k ticks, as the tick's own decimals hold it. */
 function ticker(tick) {
@@ -128,19 +172,63 @@ function buildRecord({ at, root, symbol, side, briefing = null, checked = null, 
   return Object.fromEntries(RECORD_KEYS.map(k => [k, k === 'id' ? id : body[k]]));
 }
 
-/** Append one record (one line); the file and its folder made as needed. */
+/** Append one record (one line) to its day's shard; the file and its folder made as needed. */
 function appendRecord(home, record) {
-  const file = recordFile(home, record.root);
+  const day = shardDay(record);
+  if (!day) throw new Error('the record has no bar or time to file it under');
+  const file = recordFile(home, record.root, day);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(record)}\n`);
   return file;
 }
 
-/** Every record of a root's family, oldest first (an unreadable line is skipped; no file, none). */
-function readRecords(home, root) {
+const unreadable = (what, err) => new Error(`the compose record ${what} can't be read (${err.code || err.message})`);
+
+/** A record file's records (an unreadable line is skipped; no file, none); over MAX_BYTES or unreadable, throws. */
+function readFile(file) {
+  let size;
+  try { size = fs.statSync(file).size; } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw unreadable(file, err);
+  }
+  if (size > MAX_BYTES) throw new Error(`the compose record ${file} is over ${MAX_BYTES} bytes`);
   let text;
-  try { text = fs.readFileSync(recordFile(home, root), 'utf8'); } catch (_err) { return []; }
+  try { text = fs.readFileSync(file, 'utf8'); } catch (err) { throw unreadable(file, err); }
   return text.split('\n').filter(Boolean).flatMap(l => { try { const r = JSON.parse(l); return isObj(r) ? [r] : []; } catch (_err) { return []; } });
+}
+
+/** A folder's entries; none when it doesn't exist; throws when it can't be read. */
+function list(dir) {
+  try { return fs.readdirSync(dir, { withFileTypes: true }); } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw unreadable(dir, err);
+  }
+}
+
+/** The families with records under the home (a shard folder or an older single file), sorted. */
+const families = home => [...new Set(list(path.join(home, DIR)).flatMap(e => {
+  if (e.isDirectory()) return FAMILY.test(e.name) ? [e.name] : [];
+  const m = /^([A-Z0-9]{1,8})\.jsonl$/.exec(e.name);
+  return m ? [m[1]] : [];
+}))].sort();
+
+/** A family's shard days, sorted (every `<day>.jsonl` in its folder). */
+const shardDays = (home, root) => list(familyDir(home, root)).map(e => e.name)
+  .filter(n => n.endsWith('.jsonl') && DAY.test(n.slice(0, -6))).map(n => n.slice(0, -6)).sort();
+
+/**
+ * The records of a root's family (root null: every family's), oldest first: the older single file's, then each
+ * day's shard in day order. `days`: only those days' shards, never a listing of the others (the gate's read is one
+ * file), and of the older file only its records of those days. A file that can't be read throws.
+ */
+function readRecords(home, root = null, { days = null } = {}) {
+  if (days !== null && (!Array.isArray(days) || !days.every(d => DAY.test(String(d))))) throw new Error(`not trading days: ${JSON.stringify(days)}`);
+  const roots = root === null ? families(home) : [familyRoot(root)];
+  return roots.flatMap(r => {
+    const old = readFile(legacyFile(home, r)).filter(x => days === null || days.includes(shardDay(x)));
+    const names = days !== null ? [...new Set(days)].sort() : shardDays(home, r);
+    return [...old, ...names.flatMap(d => readFile(recordFile(home, r, d)))];
+  });
 }
 
 /** The record as text: the checked reads, the plan and what stands. */
@@ -157,4 +245,4 @@ function renderRecord(r, checked = null) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, STOP_BUFFER_TICKS, FLOOR_TICKS, FLOOR_ATR, MAX_SIZE, recordFile, stopFloorTicks, planOf, buildRecord, appendRecord, readRecords, renderRecord };
+module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, STOP_BUFFER_TICKS, FLOOR_TICKS, FLOOR_ATR, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopFloorTicks, planOf, buildRecord, appendRecord, readRecords, renderRecord };

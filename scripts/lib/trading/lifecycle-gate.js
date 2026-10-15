@@ -24,7 +24,9 @@
  * Anything missing, unreadable or throwing refuses (fails closed).
  *
  *   isComposed(strategy)            a strategy (or a name) of signal composed, or trade_lifecycle
- *   recordsAt(home, root, bar)      the root's trade_lifecycle records for the bar opened at `bar` (same instant)
+ *   recordsAt(home, root, bar)      the root's trade_lifecycle records for the bar opened at `bar` (same instant), read
+ *                                   from that bar's day shard alone (trade-lifecycle.js: a record is filed under its
+ *                                   bar's trading day); a shard that can't be read throws (the entry refused)
  *   readsOf(record)                 the reads as the model stated them: [{ step, skill, read, why }]
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
@@ -50,7 +52,7 @@ const { briefingFor } = require('./fact-claims');
 const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
 const { RULE_FRAMES, trendRule } = require('./mtf');
 const { checkReads } = require('./composed-reads');
-const { STRATEGY, readRecords, planOf } = require('./trade-lifecycle');
+const { STRATEGY, readRecords, planOf, dayOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const SIGNAL = 'composed';
@@ -61,7 +63,8 @@ const fmt = (x, tick) => Number(x).toFixed((String(tick).split('.')[1] || '').le
 
 const isComposed = s => (typeof s === 'string' ? s === STRATEGY : Boolean(s) && (s.signal === SIGNAL || s.name === STRATEGY));
 const sameInstant = (a, b) => Number.isFinite(Date.parse(a)) && Date.parse(a) === Date.parse(b);
-const recordsAt = (home, root, bar) => readRecords(home, root).filter(r => r.strategy === STRATEGY && sameInstant(r.bar, bar));
+const recordsAt = (home, root, bar) => (dayOf(bar) === null ? []
+  : readRecords(home, root, { days: [dayOf(bar)] }).filter(r => r.strategy === STRATEGY && sameInstant(r.bar, bar)));
 const readsOf = record => (isObj(record) && Array.isArray(record.reads) ? record.reads : [])
   .map(r => (isObj(r) ? { step: r.step, skill: r.skill, read: r.read, why: r.why } : {}));
 

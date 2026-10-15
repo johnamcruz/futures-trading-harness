@@ -116,6 +116,29 @@ test('walk-forward: the record shown is only from days before the candidate bar\
   assert.match(text, /days before 2022-03-10 only/);
 });
 
+test('experience_lookup: a long run\'s record (thousands of records over hundreds of days) is read only near the clock', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const { h, ctx } = home({ records: [] });
+  fs.rmSync(path.join(h, 'trade-lifecycle', 'MNQ.jsonl'));
+  // 3,000 verified records, 10 a day over 300 days before the candidate's.
+  const start = Date.parse('2022-05-02T14:00:00.000Z');
+  for (let d = 0; d < 300; d += 1) {
+    for (let i = 0; i < 10; i += 1) TL.appendRecord(h, record({ at: new Date(start + d * 86400000 + i * 600000).toISOString() }));
+  }
+  TL.appendRecord(h, record({ at: AT }));
+  // Every shard but the clock's days (before, of, after) over the cap: a read of any of them would throw.
+  const near = TL.daysNear(NOW());
+  const days = fs.readdirSync(path.join(h, 'trade-lifecycle', 'MNQ')).map(n => n.slice(0, 10)).filter(d => !near.includes(d));
+  assert.ok(days.length >= 200, `${days.length} shards`);
+  for (const d of days) fs.truncateSync(TL.recordFile(h, 'MNQ', d), TL.MAX_BYTES + 1);
+  const { text } = H.experienceLookup({ symbol: 'MNQ', role: 'risk-manager' }, ctx);
+  assert.match(text, /^Experience for MNQ long, bar 2023-03-15T13:57:00.000Z:/);
+  // The clock's own day unreadable: the lookup says so, never answers on no record.
+  fs.rmSync(TL.recordFile(h, 'MNQ', '2023-03-15'));
+  fs.mkdirSync(TL.recordFile(h, 'MNQ', '2023-03-15'));
+  assert.throws(() => H.experienceLookup({ symbol: 'MNQ' }, ctx), /can't be read \(EISDIR\)/);
+});
+
 test('experience_lookup: no verified unexpired record is refused (nothing recorded); no pinned index says no record', () => {
   const stale = home({ records: [record({ at: AT })] });
   assert.throws(() => H.experienceLookup({ symbol: 'MNQ' }, { ...stale.ctx, now: () => new Date('2023-03-15T14:03:00.000Z') }), /no verified trade_lifecycle record for MNQ/);
