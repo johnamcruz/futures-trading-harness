@@ -371,6 +371,28 @@ cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,
 refuses to start unless the server lists every interface tool, has trading
 enabled, and allows the account.
 
+**Runner lanes** (`scripts/lib/lanes.js`, `scripts/lib/lane-cycle.js`). The
+runner config's optional `lanes` lists timeframe lanes, each with a bar clock
+per symbol; the first is the runner's own `timeframe` and `trigger`. A lane's
+`trigger` is `bar` (a cycle every bar), `signal` (a cycle only when one of its
+strategies fires or something is open), or `data`. A data lane, a further lane
+on 1m bars that lists no strategies or policies, only fetches its bars: the
+first lane's bar briefing builds from them what its own bars can't (the 5m
+candles, the 5m structure, the 5m FVGs, from completed 1m bars up to the
+decision time only). It scans nothing, starts no cycle, runs no role, gets no
+housekeeping, adds no session-record point, and never sets a cycle's time
+budget, so with one trading lane the cycles, prompts and decision history
+are the one-lane runner's. Its bar of a shared close still coalesces with
+the first lane's (the cycle waits a few seconds for it, so that close's 5m
+candle is complete). Live polls it every minute; replay adds no decision
+time for it and polls it at the trading lanes' times, through the replay
+broker's 1m bars, cut at the replay clock. Preflight lists it as "bars only".
+An analyst can't take a data lane's timeframe as its own.
+
+```json
+"lanes": [{ "timeframe": 3, "trigger": "bar" }, { "timeframe": 1, "trigger": "data" }]
+```
+
 Further safeguards:
 
 - **Workspace fingerprint.** The runner fingerprints the workspace's

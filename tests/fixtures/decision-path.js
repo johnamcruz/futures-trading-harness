@@ -75,8 +75,15 @@ const strategyReads = w => (w.mode === 'full' ? [] : STRATEGY_SKILLS);
 // cached; a cached analyst is served only with lookups made under the same facts key (the e2e's cache cases).
 const CACHE_SERVED = ['risk-manager'];
 
-/** A harness home on a replay mock exchange serving the parity bars; the runner's config and state file. */
-function world({ mode = 'index' } = {}) {
+// The parity bars as 1m bars (golden-bars.js toMinutes: three per 3m bar, its path open, extreme, extreme, close),
+// served at 1m for a data lane (lanes.js trigger "data").
+const MINUTE_BARS = require('./golden-bars').toMinutes(BARS.map(b => ({ ...b, ms: Date.parse(b.t) }))).map(({ ms: _ms, ...b }) => b);
+
+/**
+ * A harness home on a replay mock exchange serving the parity bars; the runner's config and state file. `dataLane`:
+ * the runner config adds a 1m data lane ({ timeframe: 1, trigger: "data" }), the exchange serving MINUTE_BARS at 1m.
+ */
+function world({ mode = 'index', dataLane = false } = {}) {
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   const state = path.join(home, 'exchange.json');
@@ -87,7 +94,7 @@ function world({ mode = 'index' } = {}) {
     broker: 'replaymock',
     brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS', env: ['MOCK_STATE', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_ALLOWED_ACCOUNTS'] } },
   }));
-  exchange.initState(state, { nowMs: Date.parse(decisionAt(QUIET_BAR)), prices: { [MNQ_ID]: BARS[0].c }, bars: { [MNQ_ID]: BARS } });
+  exchange.initState(state, { nowMs: Date.parse(decisionAt(QUIET_BAR)), prices: { [MNQ_ID]: BARS[0].c }, bars: { [MNQ_ID]: BARS, ...(dataLane ? { [`${MNQ_ID}@1m`]: MINUTE_BARS } : {}) } });
   fs.mkdirSync(path.join(home, 'no-accounts'));
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, NODE_ENV: 'test',
@@ -97,7 +104,7 @@ function world({ mode = 'index' } = {}) {
     // The roles' and the head trader's skills: index (the default, no variable) or full, as the runner reads it.
     ...(mode === 'full' ? { FTH_ROLE_SKILLS: 'full' } : {}),
   };
-  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400 });
+  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400, ...(dataLane ? { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] } : {}) });
   return { home, state, journal, clock, env, cfg, mode, stateFile: path.join(home, 'runner-state.json') };
 }
 
@@ -259,6 +266,6 @@ const working = w => exchange.read(w.state).orders.filter(o => o.status === 1 &&
 const placedAtBroker = w => exchange.read(w.state).calls.filter(c => c.tool === 'place_order');
 
 module.exports = {
-  ROOT, SETUP, MNQ_ID, STRATEGY_SKILLS, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
+  ROOT, SETUP, MNQ_ID, STRATEGY_SKILLS, STEP, BARS, MINUTE_BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
   entryCycle, passCycle, roundSteps, manualArgs, planOf, gateLog, cycleLines, position, working, placedAtBroker,
 };
