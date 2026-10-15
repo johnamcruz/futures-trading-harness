@@ -41,11 +41,12 @@ function rewrite(file, text) {
 /**
  * Append one look to the ledger file, synced before the look is taken. A file in the earlier list format is
  * rewritten as lines, its looks first: none is lost. Call it holding the lock (withLedgerLock). Every entry records
- * the schedule it was written under (schedule.js fingerprint: version, hash, sealed hashes), replacing any it
- * carried; a refused schedule writes nothing.
+ * the schedule it was written under (schedule.js fingerprint: version, hash, sealed hashes) and the config files'
+ * (tunables.js fingerprints: each file's version and hash), replacing any it carried; a refused schedule or config file
+ * writes nothing.
  */
 function appendLook(file, rawEntry) {
-  const entry = { ...rawEntry, schedule: schedule.fingerprint() };
+  const entry = { ...rawEntry, schedule: schedule.fingerprint(), configFiles: require('../tunables').fingerprints() };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   if (isListFormat(old)) {

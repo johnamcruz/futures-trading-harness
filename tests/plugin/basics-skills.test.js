@@ -533,7 +533,8 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.ok(String(data.description).length <= 160, `${String(data.description).length} characters`);
   // Swings: strictly above (below) the k bars on each side, k = 2, confirmed k bars later; the 15m and 1h use the default.
   const se = read('scripts/lib/trading/structure-events.js');
-  assert.match(se, /function pivots\(bars, k = 2\)/);
+  assert.match(se, /function pivots\(bars, k = AN\.indicators\.swingK\)/);
+  assert.strictEqual(require('../../scripts/lib/tunables').analysis().indicators.swingK, 2, 'config/analysis.json: the swing confirmation the skill teaches');
   assert.match(se, /if \(!\(bars\[j\]\.h > bars\[m\]\.h\)\) hi = false;/);
   assert.match(se, /confirmedAt: j \+ k/);
   // Breaks: a close strictly beyond the last unbroken swing, once; BOS with the previous break's direction, else CHoCH.

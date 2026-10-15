@@ -22,8 +22,8 @@
 
 const { hasTag, reviewResult, entryTime } = require('./journal');
 
-const MIN_SETUP_TRADES = 3;
-const RECENT_REVIEWS = 30;
+const MIN_SETUP_TRADES = require('../tunables').runner().prompt.instinctsMinSetupTrades; // config/runner.json
+const RECENT_REVIEWS = require('../tunables').runner().prompt.instinctsRecentReviews;
 
 const tagValue = (e, prefix) => {
   const t = (Array.isArray(e.tags) ? e.tags : []).find(x => String(x).toLowerCase().startsWith(`${prefix}:`));

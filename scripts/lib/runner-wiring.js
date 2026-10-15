@@ -443,7 +443,18 @@ const passHold = env => (env.FTH_REPLAY_NOW ? { coalesceHoldMs: 0 } : {});
 /** The signal record of a lane's closed bar (signal-state.js), marked when the lane lists a retired strategy (lanes.js retireLanes). */
 const laneSignals = (cfg, item, results, at) => buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: (item.minutes || cfg.timeframe) * 60000, now: at, retiredLane: (lanesOf(cfg)[item.lane || 0] || {}).retired || null });
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null }) {
+/**
+ * Whether the runner runs exits-only: a config file refused (tunables.js critical()). Said as an error in the run log
+ * (log: the terminal, the day's log, an alert) and in the gate log. Returns true then, else false.
+ */
+function exitsOnly(env, log, critical = require('./tunables').critical()) {
+  if (!critical) return false;
+  log(`${critical.message} The runner runs exits-only: no cycle and no new entry; housekeeping closes what no cycle can protect, and end of day flattens.`, 'error');
+  require('./trading/check-order').logDecision({ source: 'runner', decision: 'config-critical', message: critical.message }, env);
+  return true;
+}
+
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -465,6 +476,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     onDrop: d => event({ at: now().toISOString(), kind: 'exit_plan_dropped', ...d }),
   });
   const journal = () => readJournal(resolveJournalPath(env));
+  // A refused config file (CRITICAL, tunables.js): exits-only, as under the kill switch, without writing it: no cycle (no
+  // new entry), while housekeeping closes what no cycle can protect and end of day flattens, on the built-in values.
+  const critical = exitsOnly(env, log, configCritical); // configCritical: the error (tests); undefined: tunables.js critical()
   const record = barRecorder({ cfg, home, env, now, log, onBarClosed });
   const recorder = briefingRecorder(home, cfg, now, env, { frames, dataDir, log });
   return createRunner({
@@ -474,7 +488,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     client,
     clock: { now },
     runCycle,
-    isKillSwitchOn: () => fs.existsSync(killSwitchFile),
+    isKillSwitchOn: () => critical || fs.existsSync(killSwitchFile),
+    exitsOnly: critical,
     createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
     loadState,
     saveState,
@@ -555,4 +570,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

@@ -30,9 +30,10 @@ const { parseFrontmatter } = require('../frontmatter');
 const { rulebookErrors } = require('./rulebook-guard');
 
 const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'unchecked'));
-const MAX_EDITS = 3;
-const MAX_TEXT = 2000;
-const MAX_CHANGED = 3000;
+const PROP = require('../tunables').training().proposal; // config/training.json proposal (each only falls)
+const MAX_EDITS = PROP.maxEdits;
+const MAX_TEXT = PROP.maxText;
+const MAX_CHANGED = PROP.maxChanged;
 // The loop's own skills (training-verdict is the training-loop skill's verdict, split out): never a proposal's to edit.
 const LOOP_SKILLS = Object.freeze(['training-loop', 'training-verdict', 'design-self-review']);
 const ALLOWED = Object.freeze([

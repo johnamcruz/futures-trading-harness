@@ -550,6 +550,67 @@ test('order gate fails closed on oversized input', () => {
   assert.strictEqual(r.code, 2);
 });
 
+/**
+ * A plugin root of its own with a copy of scripts/ and config/ (to break a config file; the shipped root links scripts/,
+ * whose config is the repository's), and the test root's strategies with the repository's retired list beside them.
+ */
+function copiedGateRoot() {
+  const root = tmpDir();
+  fs.cpSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'config'), path.join(root, 'config'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'strategies'));
+  for (const s of fs.readdirSync(path.join(ROOT, 'strategies'))) fs.symlinkSync(path.join(ROOT, 'strategies', s), path.join(root, 'strategies', s));
+  fs.symlinkSync(path.join(REPO, 'strategies', 'retired.json'), path.join(root, 'strategies', 'retired.json'));
+  fs.symlinkSync(path.join(REPO, 'accounts'), path.join(root, 'accounts'));
+  const run = (payload, env) => {
+    const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], {
+      input: JSON.stringify(payload), encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_PLUGIN_ROOT: root, ...env },
+    });
+    return { code: r.status, stderr: r.stderr };
+  };
+  return { root, run };
+}
+
+test('order gate: a refused config file (runner.json missing, not JSON, mistyped or loosened) refuses every entry with the critical error; exits, stops and closes still go', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const { root, run } = copiedGateRoot();
+  const exits = [
+    orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the anytime long at 21480' }),
+    orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
+    { tool_name: 'mcp__broker__close_position', tool_input: { accountId: 1, contractId: entryOrder().contractId } },
+    { tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 5, stopPrice: 21490, reason: '[protect] trail' } },
+  ];
+  // The positive control: the copied root runs the gate (never "could not run"), the planned entry and every exit go.
+  const ok = run(orderPayload(), env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+  for (const p of exits) assert.strictEqual(run(p, env).code, 0, `${p.tool_name}: committed config`);
+  const runner = JSON.parse(fs.readFileSync(path.join(REPO, 'config', 'runner.json'), 'utf8'));
+  for (const [broken, why] of [
+    [null, /it can't be read \(ENOENT\)/],
+    ['{ "version": ', /not JSON/],
+    [JSON.stringify({ ...runner, gate: { ...runner.gate, maxConsecutiveLosses: 'two' } }), /gate\.maxConsecutiveLosses: a whole number from 1 to Infinity, not "two"/],
+    [JSON.stringify({ ...runner, gate: { ...runner.gate, maxDailyLosses: 9 } }), /gate\.maxDailyLosses is 9, above its pinned 3/],
+  ]) {
+    if (broken === null) fs.rmSync(path.join(root, 'config', 'runner.json'), { force: true });
+    else fs.writeFileSync(path.join(root, 'config', 'runner.json'), broken);
+    const r = run(orderPayload(), env);
+    assert.strictEqual(r.code, 2, `blocked: ${r.stderr.slice(0, 300)}`);
+    assert.doesNotMatch(r.stderr, /could not run/, 'refused by the gate, not by a crash');
+    assert.match(r.stderr, /- \[config-critical\] CRITICAL config error/);
+    assert.match(r.stderr, /the runner config \(.*runner\.json\) is refused: /);
+    assert.match(r.stderr, why);
+    assert.match(r.stderr, /Exits, protective stops, cancels and close_position still go\./);
+    for (const p of exits) {
+      const e = run(p, env);
+      assert.strictEqual(e.code, 0, `${p.tool_name} ${(p.tool_input.rationale || p.tool_input.reason || '')}: ${e.stderr.slice(0, 300)}`);
+    }
+  }
+  // The gate log has the critical error (the gate's own record, and the refused entry's).
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(log.some(e => e.decision === 'config-critical' && /CRITICAL config error/.test(e.message) && e.tool === undefined));
+  assert.ok(log.some(e => e.decision === 'blocked' && e.violations.some(v => v.check === 'config-critical')));
+});
+
 test('order gate honours an explicit disable, but not in autonomous runs, and never dry-runs', () => {
   const { env } = setup([]);
   assert.strictEqual(gate(orderPayload(), { ...env, FTH_DISABLED_HOOKS: 'pre:trading:order-gate' }).code, 0);
@@ -694,6 +755,55 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   assert.ok(!out.includes('fth-gw-'), 'gateway-internal responses must not reach the client');
   const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.strictEqual(log[0].decision, 'blocked');
+});
+
+test('MCP gateway: a refused config file still starts the gateway; entries are refused with the critical error, exits, stops and close_position are forwarded', async () => {
+  const { spawn } = require('child_process');
+  const { root } = copiedGateRoot();
+  const session = async (risky = 'protect') => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+    };
+    const gw = spawn(process.execPath, [path.join(root, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    let err = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stderr.on('data', c => { err += c; });
+    const send = m => gw.stdin.write(`${JSON.stringify(m)}\n`);
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+    send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } });
+    if (risky === 'protect') send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'place_order', arguments: { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' } } });
+    if (risky === 'exit') send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'place_order', arguments: { ...EXIT_BASE, side: 'sell', rationale: '[exit] take profit' } } });
+    send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'close_position', arguments: { accountId: 1, contractId: 'MNQ' } } });
+    gw.stdin.end();
+    const code = await new Promise(resolve => gw.on('close', resolve));
+    const byId = Object.fromEntries(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).map(r => [r.id, r]));
+    const log = fs.existsSync(env.FTH_GATE_LOG) ? fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l)) : [];
+    return { code, byId, err, log };
+  };
+  // The positive control: the committed config (the copied root runs): the entry is refused for its own reasons.
+  let s = await session();
+  assert.strictEqual(s.code, 0, s.err);
+  assert.strictEqual(s.byId[1].result.content[0].text, 'forwarded:initialize');
+  assert.doesNotMatch(s.byId[2].result.content[0].text, /config-critical/);
+  assert.strictEqual(s.byId[5].result.content[0].text, 'forwarded:tools/call:close_position');
+  // runner.json refused: the gateway starts (it used to exit at load), says so and logs it.
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), '{ "version": ');
+  s = await session();
+  assert.strictEqual(s.code, 0, s.err);
+  assert.match(s.err, /\[fth\] CRITICAL config error/);
+  assert.strictEqual(s.byId[1].result.content[0].text, 'forwarded:initialize');
+  assert.strictEqual(s.byId[2].result.isError, true);
+  assert.match(s.byId[2].result.content[0].text, /- \[config-critical\] CRITICAL config error .*\n?.*the runner config \(.*runner\.json\) is refused: not JSON/);
+  assert.doesNotMatch(s.byId[2].result.content[0].text, /\[position-open\]/, 'refused on the config, before any account read (the open long would add position-open)');
+  assert.strictEqual(s.byId[3].result.content[0].text, 'forwarded:tools/call:place_order', '[protect]');
+  assert.strictEqual((await session('exit')).byId[4].result.content[0].text, 'forwarded:tools/call:place_order', '[exit]');
+  assert.strictEqual(s.byId[5].result.content[0].text, 'forwarded:tools/call:close_position');
+  assert.ok(s.log.some(e => e.source === 'gateway' && e.decision === 'config-critical' && /not JSON/.test(e.message)), 'logged at start');
+  assert.ok(s.log.some(e => e.source === 'gateway' && e.decision === 'blocked' && e.violations.some(v => v.check === 'config-critical')));
 });
 
 test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills are in flight', async () => {

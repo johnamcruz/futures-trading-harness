@@ -17,8 +17,8 @@
 
 const fs = require('fs');
 
-const MAX_PER_BAR = 2;
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_PER_BAR = require('../tunables').training().experienceLookups.maxPerBar; // config/training.json, tighten-only
+const MAX_BYTES = require('../tunables').runner().limits.experienceLookupsBytes; // config/runner.json
 
 const lookupsFile = transcript => `${transcript}.experience.jsonl`;
 const transcriptOf = env => String((env && env.FTH_CYCLE_TRANSCRIPT) || '').trim();

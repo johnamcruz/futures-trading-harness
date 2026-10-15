@@ -1,0 +1,1352 @@
+{
+ "training": {
+  "exitTest.plannedRR": {
+   "value": 2,
+   "from": "replay/stage.js EXIT_TEST.plannedRR"
+  },
+  "exitTest.avgWinnerR": {
+   "value": 1.8,
+   "from": "replay/stage.js EXIT_TEST.avgWinnerR"
+  },
+  "exitTest.expectancyR": {
+   "value": 0.3,
+   "from": "replay/stage.js EXIT_TEST.expectancyR"
+  },
+  "exitTest.expectancyLoAbove": {
+   "value": 0,
+   "from": "replay/stage.js EXIT_TEST.expectancyLoAbove"
+  },
+  "exitTest.correctReadRate": {
+   "value": 0.8,
+   "from": "replay/stage.js EXIT_TEST.correctReadRate"
+  },
+  "exitTest.processAdherence": {
+   "value": 0.8,
+   "from": "replay/stage.js EXIT_TEST.processAdherence"
+  },
+  "exitTest.seed": {
+   "value": 1,
+   "from": "replay/stage.js exitTest cellStats seed"
+  },
+  "exitTest.reps": {
+   "value": 2000,
+   "from": "replay/stage.js exitTest cellStats reps"
+  },
+  "experienceIndex.minN": {
+   "value": 20,
+   "from": "learning/experience-index.js MIN_N (and EXIT_TEST.minN)"
+  },
+  "experienceIndex.minDays": {
+   "value": 10,
+   "from": "learning/experience-index.js MIN_DAYS (and EXIT_TEST.minDays)"
+  },
+  "experienceIndex.level": {
+   "value": 0.9,
+   "from": "learning/experience-index.js LEVEL"
+  },
+  "experienceIndex.examplesPerMonth": {
+   "value": 4,
+   "from": "learning/experience-index.js EXAMPLES_PER_MONTH"
+  },
+  "experienceIndex.whyChars": {
+   "value": 160,
+   "from": "learning/experience-index.js WHY_CHARS"
+  },
+  "experienceIndex.seed": {
+   "value": 1,
+   "from": "learning/experience-index.js cellStats/buildIndex seed default"
+  },
+  "experienceIndex.reps": {
+   "value": 2000,
+   "from": "learning/experience-index.js cellStats/buildIndex reps default"
+  },
+  "experienceLookups.maxPerBar": {
+   "value": 2,
+   "from": "learning/experience-lookups.js MAX_PER_BAR"
+  },
+  "experienceTool.maxBytes": {
+   "value": 4096,
+   "from": "harness-tools/experience.js MAX_BYTES"
+  },
+  "experienceTool.similar": {
+   "value": 3,
+   "from": "harness-tools/experience.js SIMILAR"
+  },
+  "riskRecord.minN": {
+   "value": 10,
+   "from": "learning/risk-record-index.js MIN_N"
+  },
+  "riskRecord.maxBytes": {
+   "value": 4096,
+   "from": "prop/risk-attribution.js MAX_BYTES (and prop/risk-actions.js MAX_BYTES)"
+  },
+  "keepRule.maxChallengerBlows": {
+   "value": 0,
+   "from": "train/model-verifier.js KEEP_RULE.maxChallengerBlows"
+  },
+  "keepRule.level": {
+   "value": 0.9,
+   "from": "train/model-verifier.js KEEP_RULE.level"
+  },
+  "keepRule.primary": {
+   "value": "passRate",
+   "from": "train/model-verifier.js KEEP_RULE.primary"
+  },
+  "keepRule.minBlocks": {
+   "value": 2,
+   "from": "train/model-verifier.js KEEP_RULE.minBlocks"
+  },
+  "keepRule.minOverlap": {
+   "value": 0.5,
+   "from": "train/model-verifier.js KEEP_RULE.minOverlap"
+  },
+  "decisionRule.alpha": {
+   "value": 0.05,
+   "from": "train/paired.js DECISION_RULE.alpha"
+  },
+  "decisionRule.minPairs": {
+   "value": 20,
+   "from": "train/paired.js DECISION_RULE.minPairs"
+  },
+  "decisionRule.minDiscordant": {
+   "value": 6,
+   "from": "train/paired.js DECISION_RULE.minDiscordant"
+  },
+  "decisionRule.minEffect": {
+   "value": 0.1,
+   "from": "train/paired.js DECISION_RULE.minEffect"
+  },
+  "decisionRule.harmTolerance": {
+   "value": 0.02,
+   "from": "train/paired.js DECISION_RULE.harmTolerance"
+  },
+  "decisionRule.maxExcluded": {
+   "value": 0.1,
+   "from": "train/paired.js DECISION_RULE.maxExcluded"
+  },
+  "screen.gainAlpha": {
+   "value": 0.1,
+   "from": "train/screen.js SCREEN.gainAlpha"
+  },
+  "screen.harmAlpha": {
+   "value": 0.2,
+   "from": "train/screen.js SCREEN.harmAlpha"
+  },
+  "screen.minDiscordant": {
+   "value": 4,
+   "from": "train/screen.js SCREEN.minDiscordant"
+  },
+  "screen.minPairs": {
+   "value": 10,
+   "from": "train/screen.js SCREEN.minPairs"
+  },
+  "screen.minEffect": {
+   "value": 0.1,
+   "from": "train/screen.js SCREEN.minEffect"
+  },
+  "probe.k": {
+   "value": {
+    "default": 4,
+    "min": 1,
+    "max": 8
+   },
+   "from": "train/probe-config.js PROBE_LIMITS.k [default, min, max]"
+  },
+  "probe.parallel": {
+   "value": {
+    "default": 1,
+    "min": 1,
+    "max": 4
+   },
+   "from": "train/probe-config.js PROBE_LIMITS.parallel [default, min, max]"
+  },
+  "abCompare.level": {
+   "value": 0.9,
+   "from": "train/ab-compare.js LEVEL"
+  },
+  "abCompare.reps": {
+   "value": 2000,
+   "from": "train/ab-compare.js REPS"
+  },
+  "loop.repeats": {
+   "value": {
+    "default": 3,
+    "min": 1,
+    "max": 20
+   },
+   "from": "train/config.js resolveLoop int(r.repeats, [default, min, max])"
+  },
+  "loop.seed": {
+   "value": {
+    "default": 1,
+    "min": 0,
+    "max": 2147483646
+   },
+   "from": "train/config.js resolveLoop int(r.seed, [default, min, max])"
+  },
+  "loop.maxFlagged": {
+   "value": {
+    "default": 12,
+    "min": 1,
+    "max": 500
+   },
+   "from": "train/config.js resolveLoop int(r.maxFlagged, [default, min, max])"
+  },
+  "loop.controlPoints": {
+   "value": {
+    "default": 12,
+    "min": 0,
+    "max": 500
+   },
+   "from": "train/config.js resolveLoop int(r.controlPoints, [default, min, max])"
+  },
+  "loop.maxProposals": {
+   "value": {
+    "default": 2,
+    "min": 1,
+    "max": 5
+   },
+   "from": "train/config.js resolveLoop int(r.maxProposals, [default, min, max])"
+  },
+  "loop.limits.maxIterations": {
+   "value": {
+    "default": 1,
+    "min": 1,
+    "max": 100
+   },
+   "from": "train/config.js LIMITS.maxIterations [default, min, max]"
+  },
+  "loop.limits.maxModelCalls": {
+   "value": {
+    "default": 200,
+    "min": 1,
+    "max": 100000
+   },
+   "from": "train/config.js LIMITS.maxModelCalls [default, min, max]"
+  },
+  "loop.limits.maxWallMinutes": {
+   "value": {
+    "default": 240,
+    "min": 1,
+    "max": 10080
+   },
+   "from": "train/config.js LIMITS.maxWallMinutes [default, min, max]"
+  },
+  "proposal.maxEdits": {
+   "value": 3,
+   "from": "train/proposal.js MAX_EDITS"
+  },
+  "proposal.maxText": {
+   "value": 2000,
+   "from": "train/proposal.js MAX_TEXT"
+  },
+  "proposal.maxChanged": {
+   "value": 3000,
+   "from": "train/proposal.js MAX_CHANGED"
+  },
+  "learningReport.rollingDays": {
+   "value": 5,
+   "from": "learning/learning-report.js ROLLING_DAYS"
+  },
+  "learningReport.collapseShare": {
+   "value": 0.8,
+   "from": "learning/learning-report.js COLLAPSE_SHARE"
+  },
+  "learningReport.minCollapse": {
+   "value": 10,
+   "from": "learning/learning-report.js MIN_COLLAPSE"
+  },
+  "looks.maxArms": {
+   "value": 3,
+   "from": "learning/looks.js MAX_ARMS"
+  },
+  "fieldStudy.quantiles": {
+   "value": [
+    0.8,
+    0.9,
+    0.95,
+    0.99
+   ],
+   "from": "field-study.js DEFAULT_QUANTILES"
+  },
+  "fieldStudy.confluenceLevels": {
+   "value": [
+    0.6,
+    0.8
+   ],
+   "from": "field-confluence.js DEFAULT_LEVELS"
+  },
+  "fieldStudy.minEvents": {
+   "value": 30,
+   "from": "field-confluence.js MIN_EVENTS"
+  },
+  "fieldStudy.minDays": {
+   "value": 10,
+   "from": "field-confluence.js MIN_DAYS"
+  },
+  "fieldStudy.costTicks": {
+   "value": 2,
+   "from": "field-study.js study costTicks default (and field-confluence.js)"
+  },
+  "fieldStudy.reps": {
+   "value": 1000,
+   "from": "field-study.js study reps default (and field-confluence.js)"
+  },
+  "fieldStudy.seed": {
+   "value": 1,
+   "from": "field-study.js study seed default (and field-confluence.js)"
+  },
+  "skillCaps.skillBytes": {
+   "value": 3400,
+   "from": "skill-caps.js SKILL_BYTES"
+  },
+  "skillCaps.setupSkillBytes": {
+   "value": 4000,
+   "from": "skill-caps.js SETUP_SKILL_BYTES"
+  },
+  "compose.maxExpects": {
+   "value": 300,
+   "from": "train/compose.js MAX_EXPECTS"
+  },
+  "compose.maxWhy": {
+   "value": 1000,
+   "from": "train/compose.js MAX_WHY"
+  },
+  "lessons.maxLines": {
+   "value": 8,
+   "from": "train/lessons.js MAX_LINES"
+  },
+  "lessons.maxChars": {
+   "value": 1200,
+   "from": "train/lessons.js MAX_CHARS"
+  },
+  "probeEdit.maxLine": {
+   "value": 120,
+   "from": "train/probe-edit.js MAX_LINE"
+  },
+  "skillUsage.top": {
+   "value": 3,
+   "from": "learning/skill-usage.js TOP"
+  }
+ },
+ "replay": {
+  "latency.tickMs": {
+   "value": 1000,
+   "from": "replay/latency.js TICK_MS"
+  },
+  "stages.1": {
+   "value": {
+    "name": "learn to trade",
+    "defaults": {
+     "latency": true,
+     "libraryDisplay": false,
+     "riskRecordDisplay": false
+    },
+    "refused": {
+     "learning": false,
+     "latency": false,
+     "libraryDisplay": true,
+     "riskRecordDisplay": true,
+     "prop": "set",
+     "accountStates": "set"
+    },
+    "comparisonOnly": []
+   },
+   "from": "replay/stage.js STAGES[1]"
+  },
+  "stages.2": {
+   "value": {
+    "name": "pass prop",
+    "defaults": {
+     "latency": true,
+     "libraryDisplay": false,
+     "riskRecordDisplay": false
+    },
+    "refused": {
+     "learning": false,
+     "latency": false,
+     "libraryDisplay": true
+    },
+    "comparisonOnly": [
+     "riskRecordDisplay"
+    ]
+   },
+   "from": "replay/stage.js STAGES[2]"
+  },
+  "curatedLists.total": {
+   "value": 200,
+   "from": "learning/curated-lists.js DEFAULTS.total"
+  },
+  "curatedLists.mix": {
+   "value": {
+    "trend-up": 0.35,
+    "trend-down": 0.35,
+    "trend-end": 0.1,
+    "chop": 0.1,
+    "counter-trend": 0.1
+   },
+   "from": "learning/curated-lists.js DEFAULTS.mix"
+  },
+  "curatedLists.minSkill": {
+   "value": 3,
+   "from": "learning/curated-lists.js DEFAULTS.minSkill"
+  },
+  "curatedLists.passShare": {
+   "value": {
+    "trend-end": 0.6,
+    "chop": 0.7,
+    "counter-trend": 0.7
+   },
+   "from": "learning/curated-lists.js DEFAULTS.passShare"
+  },
+  "curatedLists.seed": {
+   "value": 1,
+   "from": "learning/curated-lists.js DEFAULTS.seed"
+  },
+  "curatedLists.yearCap": {
+   "value": 1.5,
+   "from": "learning/curated-lists.js YEAR_CAP"
+  },
+  "curatedMoments.leadSetup": {
+   "value": 2,
+   "from": "learning/curated-moments.js LEAD_SETUP"
+  },
+  "curatedMoments.firstBar": {
+   "value": 300,
+   "from": "learning/curated-moments.js FIRST_BAR"
+  },
+  "windowBars": {
+   "value": 700,
+   "from": "learning/setup-library.js WINDOW_BARS; learning/preflight.js WINDOW_BARS"
+  },
+  "setupLibrary.minRR": {
+   "value": 2,
+   "from": "learning/setup-library.js MIN_RR"
+  },
+  "setupMoments.setupTf": {
+   "value": 15,
+   "from": "learning/setup-moments.js DEFAULTS.setupTf"
+  },
+  "setupMoments.quietSample": {
+   "value": 0.15,
+   "from": "learning/setup-moments.js DEFAULTS.quietSample"
+  },
+  "setupMoments.seed": {
+   "value": 0,
+   "from": "learning/setup-moments.js DEFAULTS.seed"
+  },
+  "setupMoments.levels": {
+   "value": "key",
+   "from": "learning/setup-moments.js DEFAULTS.levels"
+  },
+  "setupMoments.setupTfs": {
+   "value": [
+    5,
+    15,
+    60
+   ],
+   "from": "learning/setup-moments.js SETUP_TFS"
+  },
+  "accountStates.seed": {
+   "value": 1,
+   "from": "prop/account-states.js DEFAULTS.seed"
+  },
+  "accountStates.count": {
+   "value": 200,
+   "from": "prop/account-states.js DEFAULTS.count"
+  },
+  "accountStates.meanBlock": {
+   "value": 7,
+   "from": "prop/account-states.js DEFAULTS.meanBlock"
+  },
+  "accountStates.perBucket": {
+   "value": 5,
+   "from": "prop/account-states.js sampleAccountStates perBucket default"
+  },
+  "accountStates.oversample": {
+   "value": {
+    "fresh": 1,
+    "mid": 1,
+    "near-target": 1,
+    "near-mll": 3,
+    "after-losses": 3
+   },
+   "from": "prop/account-states.js DEFAULT_OVERSAMPLE"
+  },
+  "accountStates.cutoffs.nearMll": {
+   "value": 0.35,
+   "from": "prop/risk-attribution.js NEAR_MLL"
+  },
+  "accountStates.cutoffs.nearTarget": {
+   "value": 0.7,
+   "from": "prop/risk-attribution.js NEAR_TARGET"
+  },
+  "driver.eodRetries": {
+   "value": 5,
+   "from": "replay/driver.js EOD_RETRIES"
+  },
+  "labels.stopAtrMultiples": {
+   "value": [
+    0.5,
+    0.75,
+    1,
+    1.5,
+    2,
+    3
+   ],
+   "from": "replay/labels.js STOP_ATR_MULTIPLES"
+  },
+  "labels.stopAtrRange": {
+   "value": [
+    0.375,
+    4.5
+   ],
+   "from": "replay/labels.js STOP_ATR_RANGE"
+  },
+  "labels.sizeSteps": {
+   "value": [
+    0.25,
+    0.5,
+    0.75,
+    1
+   ],
+   "from": "replay/labels.js SIZE_STEPS"
+  },
+  "labels.pairMs": {
+   "value": 1000,
+   "from": "replay/labels.js PAIR_MS"
+  },
+  "backtest.maxContracts": {
+   "value": 5,
+   "from": "backtest/engine.js DEFAULTS.maxContracts"
+  },
+  "backtest.maxDailyLoss": {
+   "value": 500,
+   "from": "backtest/engine.js DEFAULTS.maxDailyLoss"
+  },
+  "backtest.warmupBars": {
+   "value": 2000,
+   "from": "backtest/run.js WARMUP_BARS"
+  },
+  "backtest.auditJumpAtr": {
+   "value": 8,
+   "from": "backtest/data.js auditBars jumpAtr default"
+  },
+  "backtest.auditTop": {
+   "value": 5,
+   "from": "backtest/data.js auditBars top default"
+  },
+  "backtest.walkForward.trainMonths": {
+   "value": 6,
+   "from": "backtest/walk-forward.js runWalkForward trainMonths default"
+  },
+  "backtest.walkForward.testMonths": {
+   "value": 1,
+   "from": "backtest/walk-forward.js runWalkForward testMonths default"
+  },
+  "backtest.walkForward.minTrades": {
+   "value": 20,
+   "from": "backtest/walk-forward.js runWalkForward minTrades default"
+  },
+  "scorecard.giveBackMinMfeR": {
+   "value": 1,
+   "from": "replay/scorecard.js earlyClose give-back: best at least x R"
+  },
+  "scorecard.giveBackShare": {
+   "value": 0.5,
+   "from": "replay/scorecard.js earlyClose give-back: closed at most mfeR / 2"
+  }
+ },
+ "runner": {
+  "gate.pendingOrderTtlMs": {
+   "value": 30000,
+   "from": "trading/gate-timing.js PENDING_ORDER_TTL_MS"
+  },
+  "gate.orderGraceMs": {
+   "value": 120000,
+   "from": "trading/gate-timing.js ORDER_GRACE_MS"
+  },
+  "gate.callTimeoutMs": {
+   "value": 15000,
+   "from": "trading/gate-timing.js CALL_TIMEOUT_MS"
+  },
+  "gate.laneTimeoutMs": {
+   "value": 30000,
+   "from": "trading/mcp-gateway.js DEFAULT_LANE_TIMEOUT_MS"
+  },
+  "gate.lookupExtraMs": {
+   "value": 5000,
+   "from": "trading/mcp-gateway.js LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + x"
+  },
+  "gate.markerLookbackMs": {
+   "value": 60000,
+   "from": "trading/order-markers.js LOOKBACK_MS"
+  },
+  "gate.planMaxAgeMin": {
+   "value": 120,
+   "from": "trading/config.js loadConfig FTH_PLAN_MAX_AGE_MIN default"
+  },
+  "gate.maxConsecutiveLosses": {
+   "value": 2,
+   "from": "trading/config.js loadConfig FTH_MAX_CONSECUTIVE_LOSSES default"
+  },
+  "gate.lossCooldownMin": {
+   "value": 30,
+   "from": "trading/config.js loadConfig FTH_LOSS_COOLDOWN_MIN default"
+  },
+  "gate.maxDailyLosses": {
+   "value": 3,
+   "from": "trading/config.js loadConfig FTH_MAX_DAILY_LOSSES default"
+  },
+  "gate.maxEntriesPerDay": {
+   "value": 6,
+   "from": "trading/config.js loadConfig FTH_MAX_ENTRIES_PER_DAY default"
+  },
+  "gate.mtfMaxAgeMin": {
+   "value": 15,
+   "from": "trading/config.js loadConfig FTH_MTF_MAX_AGE_MIN default"
+  },
+  "gate.signalMaxAgeBars": {
+   "value": 3,
+   "from": "trading/config.js loadConfig FTH_SIGNAL_MAX_AGE_BARS default"
+  },
+  "gate.minConfluence": {
+   "value": 1,
+   "from": "trading/config.js loadConfig FTH_MIN_CONFLUENCE default"
+  },
+  "gate.maxCorrelatedPositions": {
+   "value": 1,
+   "from": "trading/config.js loadConfig FTH_MAX_CORRELATED_POSITIONS default"
+  },
+  "gate.noEntryWindows": {
+   "value": [
+    "09:30-09:35@America/New_York",
+    "15:45-16:00@America/New_York"
+   ],
+   "from": "trading/config.js DEFAULT_NO_ENTRY_WINDOWS"
+  },
+  "gate.signalMaxAgeCeilingMin": {
+   "value": 45,
+   "from": "trading/signal-state.js MAX_AGE_CEILING_MIN"
+  },
+  "gate.futureToleranceMin": {
+   "value": 1,
+   "from": "trading/signal-state.js FUTURE_TOLERANCE_MIN"
+  },
+  "gate.bracketToleranceTicks": {
+   "value": 1,
+   "from": "trading/order-gate.js bracket vs rationale tolerance (ticks)"
+  },
+  "gate.bracketSpanToleranceTicks": {
+   "value": 2,
+   "from": "trading/order-gate.js bracket span tolerance (ticks)"
+  },
+  "lifecycle.maxSize": {
+   "value": 100,
+   "from": "trading/trade-lifecycle.js MAX_SIZE"
+  },
+  "account.snapshotMaxAgeMs": {
+   "value": 600000,
+   "from": "trading/prop-state.js SNAPSHOT_MAX_AGE_MS"
+  },
+  "account.balanceToleranceUsd": {
+   "value": 0.01,
+   "from": "trading/prop-state.js BALANCE_TOLERANCE"
+  },
+  "account.snapshotFutureToleranceMs": {
+   "value": 60000,
+   "from": "trading/prop-state.js SNAPSHOT_FUTURE_TOLERANCE_MS"
+  },
+  "account.verdictsKept": {
+   "value": 500,
+   "from": "trading/prop-state.js VERDICT_KEEP"
+  },
+  "clock.serverTimeToleranceMs": {
+   "value": 300000,
+   "from": "trading/harness-now.js SERVER_TIME_TOLERANCE_MS"
+  },
+  "clock.wallStartMaxAgeMs": {
+   "value": 86400000,
+   "from": "trading/harness-now.js WALL_START_MAX_AGE_MS"
+  },
+  "clock.wallStartAheadMs": {
+   "value": 5000,
+   "from": "trading/harness-now.js WALL_START_AHEAD_MS"
+  },
+  "cycle.timeoutMinMinutes": {
+   "value": 3,
+   "from": "autotrader.js cycleTimeoutMinutes max(x, 2 x timeframe)"
+  },
+  "cycle.timeoutBars": {
+   "value": 2,
+   "from": "autotrader.js cycleTimeoutMinutes max(3, x * timeframe)"
+  },
+  "cycle.extraCyclesPerDay": {
+   "value": 10,
+   "from": "autotrader.js maxCyclesPerDay ceil(22 h / timeframe) + x"
+  },
+  "cycle.maxConsecutiveErrors": {
+   "value": 3,
+   "from": "autotrader.js DEFAULTS.maxConsecutiveErrors"
+  },
+  "cycle.slowFromMin": {
+   "value": 3,
+   "from": "lane-cycle.js SLOW_FROM_MIN"
+  },
+  "cycle.coalesceHoldMs": {
+   "value": 10000,
+   "from": "runner.js COALESCE_HOLD_MS"
+  },
+  "bars.timeframe": {
+   "value": 3,
+   "from": "autotrader.js DEFAULTS.timeframe"
+  },
+  "bars.delaySeconds": {
+   "value": 2,
+   "from": "autotrader.js DEFAULTS.barDelaySeconds"
+  },
+  "bars.pollSeconds": {
+   "value": 2,
+   "from": "autotrader.js DEFAULTS.barPollSeconds"
+  },
+  "bars.timeoutSeconds": {
+   "value": 60,
+   "from": "autotrader.js DEFAULTS.barTimeoutSeconds"
+  },
+  "bars.staleAfterBars": {
+   "value": 0.5,
+   "from": "bar-clock.js onBars stale limit (minutes x 60000) / 2"
+  },
+  "bars.maxPollMs": {
+   "value": 10000,
+   "from": "runner.js MAX_POLL_MS"
+  },
+  "bars.sleepMaxMs": {
+   "value": 5000,
+   "from": "bar-clock.js sleepMs maxMs default"
+  },
+  "bars.sleepMinMs": {
+   "value": 250,
+   "from": "bar-clock.js sleepMs minMs default"
+  },
+  "bars.historyMinBars": {
+   "value": 2000,
+   "from": "autotrader.js historyBars at least x"
+  },
+  "bars.historyDays": {
+   "value": 3,
+   "from": "autotrader.js historyBars x trading days"
+  },
+  "bars.historyDayHours": {
+   "value": 23,
+   "from": "autotrader.js historyBars x hours a trading day"
+  },
+  "bars.premarketAt": {
+   "value": "18:05@America/New_York",
+   "from": "autotrader.js DEFAULTS.premarketAt"
+  },
+  "runner.idleMs": {
+   "value": 5000,
+   "from": "runner.js IDLE_MS"
+  },
+  "runner.resyncsBeforeReroll": {
+   "value": 3,
+   "from": "runner.js RESYNCS_BEFORE_REROLL"
+  },
+  "runner.lookupRetryMs": {
+   "value": 30000,
+   "from": "runner.js LOOKUP_RETRY_MS"
+  },
+  "runner.maxRetryMs": {
+   "value": 60000,
+   "from": "runner.js MAX_RETRY_MS"
+  },
+  "runner.closeSettleMs": {
+   "value": 10000,
+   "from": "runner.js CLOSE_SETTLE_MS"
+  },
+  "runner.fillGraceMs": {
+   "value": 30000,
+   "from": "runner.js FILL_GRACE_MS"
+  },
+  "runner.accountReadMs": {
+   "value": 5000,
+   "from": "runner.js ACCOUNT_READ_MS"
+  },
+  "runner.closeRetryMs": {
+   "value": 60000,
+   "from": "runner.js CLOSE_RETRY_MS"
+  },
+  "runner.closeTries": {
+   "value": 5,
+   "from": "runner.js CLOSE_TRIES"
+  },
+  "runner.premarketRetryMs": {
+   "value": [
+    60000,
+    120000,
+    300000,
+    600000
+   ],
+   "from": "runner.js PREMARKET_RETRY_MS"
+  },
+  "runner.composedWatchMs": {
+   "value": 5000,
+   "from": "runner.js composedWatchMs default"
+  },
+  "runner.wakeEarlyMs": {
+   "value": 5000,
+   "from": "runner.js next wake x ms before a due time"
+  },
+  "runner.minManagedRiskTicks": {
+   "value": 4,
+   "from": "runner.js smallest managed stop (ticks)"
+  },
+  "runner.runnerCloseToleranceMs": {
+   "value": 60000,
+   "from": "prop/model-stream.js RUNNER_CLOSE_TOLERANCE_MS"
+  },
+  "prompt.recentDecisions": {
+   "value": 10,
+   "from": "autotrader.js RECENT_IN_PROMPT"
+  },
+  "prompt.historyPerLane": {
+   "value": 10,
+   "from": "lane-cycle.js HISTORY_PER_LANE"
+  },
+  "prompt.slowerContext": {
+   "value": 3,
+   "from": "lane-cycle.js SLOWER_CONTEXT"
+  },
+  "prompt.planChars": {
+   "value": 400,
+   "from": "trading/session-context.js PLAN_CHARS"
+  },
+  "prompt.reasonChars": {
+   "value": 100,
+   "from": "trading/decision-history.js REASON_CHARS"
+  },
+  "prompt.exitsKept": {
+   "value": 50,
+   "from": "trading/decision-history.js EXITS_KEPT"
+  },
+  "prompt.unseenReads": {
+   "value": 10,
+   "from": "trading/decision-history.js UNSEEN_READS"
+  },
+  "prompt.sessionStartLessons": {
+   "value": 10,
+   "from": "hooks/trading-session-start.js MAX_LESSONS"
+  },
+  "prompt.sessionStartLessonChars": {
+   "value": 300,
+   "from": "hooks/trading-session-start.js MAX_TEXT"
+  },
+  "prompt.reportMaxText": {
+   "value": 8000,
+   "from": "trading/report-cache.js MAX_TEXT"
+  },
+  "prompt.phase1MaxAgeMs": {
+   "value": 1800000,
+   "from": "trading/report-cache.js PHASE1_MAX_AGE_MS"
+  },
+  "prompt.trackRecordMinSlice": {
+   "value": 10,
+   "from": "trading/track-record.js MIN_SLICE"
+  },
+  "prompt.trackRecordLiveSlice": {
+   "value": 5,
+   "from": "trading/track-record.js LIVE_SLICE"
+  },
+  "prompt.instinctsMinSetupTrades": {
+   "value": 3,
+   "from": "trading/instincts.js MIN_SETUP_TRADES"
+  },
+  "prompt.instinctsRecentReviews": {
+   "value": 30,
+   "from": "trading/instincts.js RECENT_REVIEWS"
+  },
+  "session.fillsTimeoutMs": {
+   "value": 10000,
+   "from": "session/live.js FILLS_TIMEOUT_MS"
+  },
+  "session.retryTimeoutMs": {
+   "value": 4000,
+   "from": "session/live.js RETRY_TIMEOUT_MS"
+  },
+  "session.retryMs": {
+   "value": 60000,
+   "from": "session/live.js RETRY_MS"
+  },
+  "session.retryAlertAfter": {
+   "value": 5,
+   "from": "session/live.js RETRY_ALERT_AFTER"
+  },
+  "session.backoffMs": {
+   "value": 1800000,
+   "from": "session/live.js BACKOFF_MS"
+  },
+  "session.recentSessions": {
+   "value": 7,
+   "from": "session/live.js RECENT_SESSIONS"
+  },
+  "session.archiveDays": {
+   "value": 90,
+   "from": "session/bars-archive.js DEFAULT_DAYS"
+  },
+  "session.archiveMaxDays": {
+   "value": 3650,
+   "from": "session/bars-archive.js MAX_DAYS"
+  },
+  "session.entryMatchMs": {
+   "value": 300000,
+   "from": "trading/open-trades.js MATCH_MS"
+  },
+  "session.reconcileWindowMin": {
+   "value": 10,
+   "from": "trading/reconcile.js reconcile windowMin default"
+  },
+  "session.gateSlackMs": {
+   "value": 2000,
+   "from": "cycle-log.js GATE_SLACK_MS; cycle-timing.js GATE_SLACK_MS; replay/labels.js GATE_SLACK_MS"
+  },
+  "alerts.throttleMinutes": {
+   "value": 10,
+   "from": "alerts.js createAlerter throttleMinutes default"
+  },
+  "alerts.staleMinutes": {
+   "value": 5,
+   "from": "alerts.js watchdogStatus staleMinutes default"
+  },
+  "alerts.webhookTimeoutMs": {
+   "value": 5000,
+   "from": "alerts.js postJson timeoutMs default"
+  },
+  "limits.gateTailBytes": {
+   "value": 4194304,
+   "from": "cycle-log.js GATE_TAIL_BYTES"
+  },
+  "limits.rolesRanBytes": {
+   "value": 52428800,
+   "from": "trading/roles-ran.js MAX_BYTES"
+  },
+  "limits.skillsLoadedBytes": {
+   "value": 52428800,
+   "from": "trading/skills-loaded.js MAX_BYTES"
+  },
+  "limits.skillLookupsBytes": {
+   "value": 5242880,
+   "from": "trading/skill-lookups.js MAX_BYTES"
+  },
+  "limits.experienceLookupsBytes": {
+   "value": 5242880,
+   "from": "learning/experience-lookups.js MAX_BYTES"
+  },
+  "limits.journalTailBytes": {
+   "value": 8388608,
+   "from": "trading/journal.js MAX_TAIL_BYTES"
+  },
+  "limits.lifecycleBytes": {
+   "value": 67108864,
+   "from": "trading/trade-lifecycle.js MAX_BYTES"
+  },
+  "limits.skillUsageBytes": {
+   "value": 67108864,
+   "from": "learning/skill-usage.js MAX_BYTES"
+  },
+  "limits.barsFileBytes": {
+   "value": 52428800,
+   "from": "harness-tools/paths.js MAX_BYTES"
+  },
+  "limits.headPromptConfigBytes": {
+   "value": 4194304,
+   "from": "head-prompt.js MAX_CONFIG_BYTES"
+  },
+  "limits.historyChunkBars": {
+   "value": 10000,
+   "from": "broker/adapter.js HISTORY_CHUNK_BARS"
+  },
+  "limits.entryOrdersKept": {
+   "value": 200,
+   "from": "trading/order-tracker.js ENTRY_ORDERS_KEPT"
+  },
+  "limits.pendingKept": {
+   "value": 200,
+   "from": "trading/lifecycle-runner.js PENDING_KEPT"
+  },
+  "monteCarlo.paths": {
+   "value": 2000,
+   "from": "prop/mc-size.js MC_SIZE.paths"
+  },
+  "monteCarlo.reps": {
+   "value": 2000,
+   "from": "prop/mc-size.js MC_SIZE.reps"
+  },
+  "monteCarlo.max": {
+   "value": 20000,
+   "from": "prop/mc-size.js MC_MAX"
+  },
+  "gate.factsMinChecked": {
+   "value": 2,
+   "from": "trading/fact-claims.js MIN_CHECKED"
+  },
+  "gate.factsMaxItems": {
+   "value": 20,
+   "from": "trading/fact-claims.js MAX_ITEMS"
+  },
+  "runner.calendarWarnDays": {
+   "value": 30,
+   "from": "trading/exchange-calendar.js WARN_DAYS"
+  },
+  "runner.killGraceMs": {
+   "value": 10000,
+   "from": "harness-run.js SIGKILL after a timed-out run's SIGTERM"
+  },
+  "runner.exitKillGraceMs": {
+   "value": 2000,
+   "from": "harness-run.js SIGKILL after an exited run's group SIGTERM"
+  },
+  "runner.probeTimeoutMs": {
+   "value": 600000,
+   "from": "headless-check.js runProbe timeoutMs default (10 * 60000)"
+  },
+  "runner.preflightSampleBars": {
+   "value": 20,
+   "from": "preflight.js SAMPLE_BARS"
+  },
+  "prompt.valuesPerStrategy": {
+   "value": 6,
+   "from": "trading/rules.js VALUES_PER_STRATEGY"
+  },
+  "prompt.brokerFieldsKept": {
+   "value": 3,
+   "from": "trading/broker-fields.js LAST"
+  },
+  "prompt.brokerFieldsBytes": {
+   "value": 600,
+   "from": "trading/broker-fields.js MAX_BYTES"
+  },
+  "prompt.brokerFieldChars": {
+   "value": 250,
+   "from": "trading/broker-fields.js TEXT_MAX"
+  },
+  "limits.probeOutputBytes": {
+   "value": 67108864,
+   "from": "headless-check.js runProbe maxBuffer (64 * 1024 * 1024)"
+  },
+  "broker.cacheKeepDays": {
+   "value": 30,
+   "from": "broker/config.js pruneReplayCaches keepDays default"
+  },
+  "broker.siblingDays": {
+   "value": 30,
+   "from": "broker/translator.js SIBLING_DAYS"
+  }
+ },
+ "analysis": {
+  "indicators.atrPeriod": {
+   "value": 14,
+   "from": "trading/indicators.js ATR_PERIOD"
+  },
+  "indicators.stopAtrPeriod": {
+   "value": 20,
+   "from": "trading/indicators.js STOP_ATR_PERIOD"
+  },
+  "indicators.adxPeriod": {
+   "value": 14,
+   "from": "trading/indicators.js adx period default"
+  },
+  "indicators.supertrendPeriod": {
+   "value": 10,
+   "from": "trading/indicators.js supertrend period default"
+  },
+  "indicators.supertrendMult": {
+   "value": 3,
+   "from": "trading/indicators.js supertrend mult default"
+  },
+  "indicators.keltnerLen": {
+   "value": 20,
+   "from": "trading/indicators.js keltner emaLen default"
+  },
+  "indicators.keltnerMult": {
+   "value": 1.5,
+   "from": "trading/indicators.js keltner mult default"
+  },
+  "indicators.keltnerAtr": {
+   "value": 20,
+   "from": "trading/indicators.js keltner atrPeriod default"
+  },
+  "indicators.swingK": {
+   "value": 2,
+   "from": "trading/indicators.js swings k default (and structure-events.js k, market-snapshot PARAMS.swingK, mtf DEFAULTS.swingK, candle-facts SWING_K)"
+  },
+  "indicators.openingRangeMinutes": {
+   "value": 15,
+   "from": "trading/indicators.js openingRange minutes default (and market-snapshot PARAMS.orbMinutes, level-closes ORB_MINUTES)"
+  },
+  "snapshot.emaFast": {
+   "value": 9,
+   "from": "trading/market-snapshot.js PARAMS.emaFast"
+  },
+  "snapshot.emaSlow": {
+   "value": 20,
+   "from": "trading/market-snapshot.js PARAMS.emaSlow"
+  },
+  "snapshot.adxSlopeBars": {
+   "value": 5,
+   "from": "trading/market-snapshot.js PARAMS.adxSlopeBars"
+  },
+  "snapshot.stopAtrMult": {
+   "value": 0.5,
+   "from": "trading/market-snapshot.js PARAMS.stopAtrMult"
+  },
+  "snapshot.vpLookback": {
+   "value": 360,
+   "from": "trading/market-snapshot.js PARAMS.vpLookback"
+  },
+  "regime.trendAdx": {
+   "value": 20,
+   "from": "trading/regime.js REGIME_PARAMS.trendAdx"
+  },
+  "regime.rangeAdx": {
+   "value": 18,
+   "from": "trading/regime.js REGIME_PARAMS.rangeAdx"
+  },
+  "regime.slopeBars": {
+   "value": 5,
+   "from": "trading/regime.js REGIME_PARAMS.slopeBars"
+  },
+  "regime.slopeAtr": {
+   "value": 0.3,
+   "from": "trading/regime.js REGIME_PARAMS.slopeAtr"
+  },
+  "regime.crossBars": {
+   "value": 30,
+   "from": "trading/regime.js REGIME_PARAMS.crossBars"
+  },
+  "regime.maxTrendCrosses": {
+   "value": 3,
+   "from": "trading/regime.js REGIME_PARAMS.maxTrendCrosses"
+  },
+  "regime.rangeCrosses": {
+   "value": 5,
+   "from": "trading/regime.js REGIME_PARAMS.rangeCrosses"
+  },
+  "regime.volLookback": {
+   "value": 100,
+   "from": "trading/regime.js REGIME_PARAMS.volLookback"
+  },
+  "regime.highVol": {
+   "value": 1.4,
+   "from": "trading/regime.js REGIME_PARAMS.highVol"
+  },
+  "regime.lowVol": {
+   "value": 0.7,
+   "from": "trading/regime.js REGIME_PARAMS.lowVol"
+  },
+  "regime.minBars": {
+   "value": 60,
+   "from": "trading/regime.js classifyRegime needs max(x, slopeBars + 30) bars"
+  },
+  "regime.minBarsOverSlope": {
+   "value": 30,
+   "from": "trading/regime.js classifyRegime needs max(60, slopeBars + x) bars"
+  },
+  "cisd": {
+   "value": {
+    "minRun": 2,
+    "maxWait": 6,
+    "expiry": 12,
+    "voidTol": 0.05,
+    "bufferAtr": 0.1,
+    "minBody": 0.6,
+    "minRangeAtr": 1
+   },
+   "from": "trading/cisd.js PARAMS"
+  },
+  "crt": {
+   "value": {
+    "sweepBars": 10,
+    "shiftBars": 5,
+    "maxDepth": 0.5,
+    "minRangeAtr": 2,
+    "bufferAtr": 0.25,
+    "minRR": 2
+   },
+   "from": "trading/crt.js DEFAULTS"
+  },
+  "volumeProfile": {
+   "value": {
+    "vpRows": 100,
+    "vpRowSize": 0,
+    "vpValueArea": 70,
+    "vpNodePct": 9,
+    "vpTroughPct": 7,
+    "vpThreshold": 1
+   },
+   "from": "trading/volume-profile.js PARAM_DEFAULTS"
+  },
+  "candles.dojiBody": {
+   "value": 0.1,
+   "from": "trading/candle-facts.js DEF.dojiBody"
+  },
+  "candles.wickBody": {
+   "value": 2,
+   "from": "trading/candle-facts.js DEF.wickBody"
+  },
+  "candles.wickRange": {
+   "value": 0.6,
+   "from": "trading/candle-facts.js DEF.wickRange"
+  },
+  "candles.otherWick": {
+   "value": 0.15,
+   "from": "trading/candle-facts.js DEF.otherWick"
+  },
+  "candles.dispBody": {
+   "value": 0.7,
+   "from": "trading/candle-facts.js DEF.dispBody"
+  },
+  "candles.dispAtr": {
+   "value": 1.5,
+   "from": "trading/candle-facts.js DEF.dispAtr"
+  },
+  "candles.volLen": {
+   "value": 20,
+   "from": "trading/candle-facts.js VOL_LEN"
+  },
+  "candles.volMin": {
+   "value": 5,
+   "from": "trading/candle-facts.js VOL_MIN"
+  },
+  "candles.maxActive": {
+   "value": 50,
+   "from": "trading/candle-facts.js MAX_ACTIVE"
+  },
+  "candles.maxLevels": {
+   "value": 4,
+   "from": "trading/candle-facts.js MAX_LEVELS"
+  },
+  "candles.timeframes": {
+   "value": [
+    3,
+    5,
+    15,
+    60,
+    240
+   ],
+   "from": "trading/candle-facts.js TIMEFRAMES"
+  },
+  "candles.rangeFrames": {
+   "value": [
+    60,
+    240
+   ],
+   "from": "trading/candle-facts.js RANGE_FRAMES"
+  },
+  "mtf.fast": {
+   "value": 20,
+   "from": "trading/mtf.js DEFAULTS.fast"
+  },
+  "mtf.slow": {
+   "value": 50,
+   "from": "trading/mtf.js DEFAULTS.slow"
+  },
+  "mtf.rangeLen": {
+   "value": 20,
+   "from": "trading/mtf.js DEFAULTS.rangeLen"
+  },
+  "mtf.maxCandles": {
+   "value": 300,
+   "from": "trading/mtf.js DEFAULTS.maxCandles"
+  },
+  "mtf.historyHours": {
+   "value": 240,
+   "from": "trading/mtf.js DEFAULTS.historyHours"
+  },
+  "mtf.historyMarginHours": {
+   "value": 10,
+   "from": "trading/mtf.js HISTORY_MARGIN_HOURS"
+  },
+  "mtf.ruleFrames": {
+   "value": [
+    240,
+    60,
+    15
+   ],
+   "from": "trading/mtf.js RULE_FRAMES"
+  },
+  "dayContext": {
+   "value": {
+    "ibMinutes": 60,
+    "openMinutes": 30,
+    "adrDays": 10
+   },
+   "from": "trading/day-context.js DEFAULTS"
+  },
+  "levelCloses.maxCloses": {
+   "value": 20,
+   "from": "trading/level-closes.js MAX_CLOSES"
+  },
+  "structure.sweepBars": {
+   "value": 10,
+   "from": "trading/structure-events.js sweeps n default"
+  },
+  "structure.swingLevels": {
+   "value": 3,
+   "from": "trading/structure-events.js swingLevels n default"
+  },
+  "structure.m5Recent": {
+   "value": 3,
+   "from": "trading/m5-structure.js RECENT"
+  },
+  "momentum.rangeAtr": {
+   "value": 1,
+   "from": "trading/momentum.js RANGE_ATR"
+  },
+  "momentum.volRatio": {
+   "value": 1,
+   "from": "trading/momentum.js VOL_RATIO"
+  },
+  "composedReads.volumeHigh": {
+   "value": 1.5,
+   "from": "trading/composed-reads.js VOLUME_HIGH"
+  },
+  "composedReads.absorptionProgressAtr": {
+   "value": 0.5,
+   "from": "trading/composed-reads.js ABSORPTION.progressAtr"
+  },
+  "fvg.frames": {
+   "value": [
+    5,
+    15,
+    60
+   ],
+   "from": "trading/fvg-frames.js FRAMES"
+  },
+  "fvg.window": {
+   "value": 60,
+   "from": "trading/fvg-frames.js WINDOW"
+  },
+  "fvg.max": {
+   "value": 3,
+   "from": "trading/fvg-frames.js MAX"
+  },
+  "briefing.equalK": {
+   "value": 2,
+   "from": "trading/briefing.js EQUAL_K"
+  },
+  "briefing.cisdFrames": {
+   "value": [
+    3,
+    5,
+    15,
+    60
+   ],
+   "from": "trading/briefing.js CISD_FRAMES"
+  },
+  "evaluator.windowBars": {
+   "value": 500,
+   "from": "trading/evaluator.js DEFAULT_WINDOW (and backtest/engine.js DEFAULTS.window); backtest/engine.js DEFAULTS.window"
+  }
+ }
+}

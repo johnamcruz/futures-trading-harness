@@ -1,0 +1,62 @@
+{
+  "version": "v1",
+  "exitTest": {
+    "plannedRR": 2,
+    "avgWinnerR": 1.8,
+    "expectancyR": 0.3,
+    "expectancyLoAbove": 0,
+    "correctReadRate": 0.8,
+    "processAdherence": 0.8,
+    "seed": 1,
+    "reps": 2000
+  },
+  "experienceIndex": {
+    "minN": 20,
+    "minDays": 10,
+    "level": 0.9,
+    "examplesPerMonth": 4,
+    "whyChars": 160,
+    "seed": 1,
+    "reps": 2000
+  },
+  "experienceLookups": { "maxPerBar": 2 },
+  "experienceTool": { "maxBytes": 4096, "similar": 3 },
+  "riskRecord": { "minN": 10, "maxBytes": 4096 },
+  "keepRule": { "maxChallengerBlows": 0, "level": 0.9, "primary": "passRate", "minBlocks": 2, "minOverlap": 0.5 },
+  "decisionRule": { "alpha": 0.05, "minPairs": 20, "minDiscordant": 6, "minEffect": 0.1, "harmTolerance": 0.02, "maxExcluded": 0.1 },
+  "screen": { "gainAlpha": 0.1, "harmAlpha": 0.2, "minDiscordant": 4, "minPairs": 10, "minEffect": 0.1 },
+  "probe": {
+    "k": { "default": 4, "min": 1, "max": 8 },
+    "parallel": { "default": 1, "min": 1, "max": 4 }
+  },
+  "abCompare": { "level": 0.9, "reps": 2000 },
+  "loop": {
+    "repeats": { "default": 3, "min": 1, "max": 20 },
+    "seed": { "default": 1, "min": 0, "max": 2147483646 },
+    "maxFlagged": { "default": 12, "min": 1, "max": 500 },
+    "controlPoints": { "default": 12, "min": 0, "max": 500 },
+    "maxProposals": { "default": 2, "min": 1, "max": 5 },
+    "limits": {
+      "maxIterations": { "default": 1, "min": 1, "max": 100 },
+      "maxModelCalls": { "default": 200, "min": 1, "max": 100000 },
+      "maxWallMinutes": { "default": 240, "min": 1, "max": 10080 }
+    }
+  },
+  "proposal": { "maxEdits": 3, "maxText": 2000, "maxChanged": 3000 },
+  "learningReport": { "rollingDays": 5, "collapseShare": 0.8, "minCollapse": 10 },
+  "looks": { "maxArms": 3 },
+  "fieldStudy": {
+    "quantiles": [0.8, 0.9, 0.95, 0.99],
+    "confluenceLevels": [0.6, 0.8],
+    "minEvents": 30,
+    "minDays": 10,
+    "costTicks": 2,
+    "reps": 1000,
+    "seed": 1
+  },
+  "skillCaps": { "skillBytes": 3400, "setupSkillBytes": 4000 },
+  "compose": { "maxExpects": 300, "maxWhy": 1000 },
+  "lessons": { "maxLines": 8, "maxChars": 1200 },
+  "probeEdit": { "maxLine": 120 },
+  "skillUsage": { "top": 3 }
+}

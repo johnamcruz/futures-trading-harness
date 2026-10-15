@@ -234,7 +234,7 @@ function readBarsArg(file) {
  * low, or a close outside the range). Returns { bars, missing, gaps (largest
  * first), jumps, invalid, warnings }.
  */
-function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
+function auditBars(bars, timeframe, { jumpAtr = require('../tunables').replay().backtest.auditJumpAtr, top = require('../tunables').replay().backtest.auditTop } = {}) {
   const { inMarketHours, tradingDayKey } = require('../trading/clock');
   const { atr, STOP_ATR_PERIOD } = require('../trading/indicators');
   const step = timeframe * MINUTE;

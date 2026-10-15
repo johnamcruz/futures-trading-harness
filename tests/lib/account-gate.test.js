@@ -42,6 +42,18 @@ test('[protect] stops and limits may not stack beyond the position (one of each 
   assert.deepStrictEqual(evaluateAccount({ input: target, positions: long1, orders: restingStop, config }), []);
 });
 
+test('a refused config file (config.configCritical): every entry is refused with the critical error, never skippable; exits and stops still go', () => {
+  assert.strictEqual(config.configCritical, null, 'the committed files: no critical error');
+  const critical = { ...config, configCritical: 'CRITICAL config error: the runner config (x) is refused: gate.x: missing', skipChecks: new Set(['config-critical', 'position-open']) };
+  const v = evaluateAccount({ input: order(), positions: [], config: critical });
+  assert.deepStrictEqual(checks(v), ['config-critical']);
+  assert.match(v[0].message, /^CRITICAL config error: the runner config \(x\) is refused: gate\.x: missing Exits, protective stops, cancels and close_position still go\.$/);
+  assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] x' }), positions: long1, config: critical }), []);
+  assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', type: 'stop', stopPrice: 1, rationale: '[protect] stop' }), positions: long1, config: critical }), []);
+  // An [exit] still has to reduce a real position (the built-in values judge it as usual).
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order({ rationale: '[exit] x' }), positions: [], config: critical })), ['exposure']);
+});
+
 test('entries are refused while a position is open', () => {
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: long1, config })), ['position-open']);
   assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [], config }), []);

@@ -54,14 +54,15 @@ const { GATE_ENV } = require('../replay/config');
 const { isTradeTime } = require('../replay/schedule');
 const { decisionRecord, killSwitchReason, fillsBetween, fingerprints, brokerFingerprint, noteVersion, treeDigest, gateReader, HARNESS_DIRS, CODE_DIRS } = require('./record');
 
-const FILLS_TIMEOUT_MS = 10000;
+const SESS = require('../tunables').runner().session; // config/runner.json session
+const FILLS_TIMEOUT_MS = SESS.fillsTimeoutMs;
 // A retry's read: shorter than the runner's idle pause, and only when the pass returned a longer wait.
-const RETRY_TIMEOUT_MS = 4000;
-const RETRY_MS = 60000;
-const RETRY_ALERT_AFTER = 5;
-const BACKOFF_MS = 30 * 60000;
+const RETRY_TIMEOUT_MS = SESS.retryTimeoutMs;
+const RETRY_MS = SESS.retryMs;
+const RETRY_ALERT_AFTER = SESS.retryAlertAfter;
+const BACKOFF_MS = SESS.backoffMs;
 // Sessions checked at start for fills still to record (the last week or so).
-const RECENT_SESSIONS = 7;
+const RECENT_SESSIONS = SESS.recentSessions;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 function sessionPaths(home, day) {

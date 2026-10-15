@@ -84,6 +84,12 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   (loaded by `scripts/lib/config-files.js`: one file per area, fail closed, hashed into every run
   and ledger entry). Its sealed windows never change after a look, and a changed file needs a new
   `version` (docs/TRAINING.md, "The schedule is config").
+- Tunables are config: `config/training.json`, `replay.json`, `runner.json` and `analysis.json`,
+  read only through `scripts/lib/tunables.js` (the same loader; tighten-only keys pinned in its
+  `PINS`, refused on load). A broken file is a critical error: no entry, run, replay, training
+  or preflight; exits still run on its `BUILT_IN` values. Code states no tunable: a value with a document home is read
+  from it, the promotion gate stays frozen, and `tests/plugin/no-tunable-literals.test.js`
+  refuses a new literal (docs/TRAINING.md, "Config files").
 - `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
   (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`, with the rulebook's multiplier), combine attempts on
   a trade stream (`attempts.js`, scored by `evaluator.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
@@ -175,7 +181,9 @@ request, every time, whatever the size of the change:
    (`tests/plugin/no-platform-specifics.test.js`, `tests/plugin/platform-scan.js`) or their pins
    (`tests/plugin/no-platform-specifics.pins.json`), other than lines removed, is a finding by
    default. So is a changed golden (`tests/fixtures/golden/`, `tests/scripts/cli-parity.snapshot.json`)
-   that the pull request doesn't explain as intended (CONTRIBUTING.md, "Golden files"). Every confirmed finding is fixed (or,
+   that the pull request doesn't explain as intended (CONTRIBUTING.md, "Golden files"), and so is any change to the
+   tunables' pins or built-ins (`PINS`, `BUILT_IN` in `scripts/lib/tunables.js`, which `tests/lib/tunables.test.js`
+   imports) other than a tightened pin. Every confirmed finding is fixed (or,
    if not worth its code, answered with the reason), then the regression
    runs again and the fixes get their own review, until a round confirms
    nothing new.

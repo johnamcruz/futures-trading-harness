@@ -39,9 +39,10 @@ const ind = require('./indicators');
 const { fvgAt } = require('./market-snapshot');
 const { completedCandlesAt, label } = require('./candle-facts');
 
-const FRAMES = [5, 15, 60];
-const WINDOW = 60;
-const MAX = 3;
+const FVG = require('../tunables').analysis().fvg; // config/analysis.json fvg
+const FRAMES = FVG.frames;
+const WINDOW = FVG.window;
+const MAX = FVG.max;
 
 /** The unfilled gaps of candles[0..j] as of source bar `upto`, each with the last completed candle's retest. */
 function gapsOn({ src, upto, candles, j }, { window = WINDOW, max = MAX } = {}) {

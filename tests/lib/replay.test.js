@@ -273,6 +273,7 @@ test('driver: one step per decision time at its time, a line each, end of day re
   assert.strictEqual(man.source, 'replay');
   // And the schedule it ran under (config/schedule.json's fingerprint, scripts/lib/schedule.js).
   assert.deepStrictEqual(man.schedule, require('../../scripts/lib/schedule').fingerprint());
+  assert.deepStrictEqual(man.configFiles, require('../../scripts/lib/tunables').fingerprints(), 'the config files the run ran under');
   // The exit its composed trades are managed by, recorded at seed time (its experience lines are tagged by it).
   const XL = require('../../scripts/lib/learning/experience-log');
   assert.deepStrictEqual(man.exit, XL.exitRecord(require('../../scripts/lib/learning/run-experience').runExit(ROOT, w.env)));

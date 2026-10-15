@@ -187,14 +187,14 @@ const atClose = (lb, mins) => {
 /** A profile summary's levels to the cent (as the snapshot gives them without a tick): room, R and labels use these. */
 const cents = p => (p ? { ...p, ...Object.fromEntries(['poc', 'vah', 'val', 'low', 'high', 'hvnAbove', 'hvnBelow', 'lvnAbove', 'lvnBelow'].map(k => [k, round2(p[k])])), hvn: (p.hvn || []).map(round2), lvn: (p.lvn || []).map(round2) } : {});
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
-const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
+const EQUAL_K = require('../tunables').analysis().briefing.equalK; // the snapshot's swing confirmation (bars after the pivot; config/analysis.json)
 // A frame's pointer for what it leaves out: the session's facts are the runner's briefing's, one value each.
 const SESSION_ELSEWHERE = 'is in the runner\'s bar briefing (bar_briefing without a timeframe)';
 // The m3 fields a frame leaves out: the session's facts (computed on the runner's bars only).
 const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
 
 // The timeframes the CISD facts are read on (completed candles; one the bars can't build is unavailable).
-const CISD_FRAMES = [3, 5, 15, 60];
+const CISD_FRAMES = require('../tunables').analysis().briefing.cisdFrames;
 
 /** The latest CISD per timeframe, compact (cisd.js cisdFacts; prices on the tick by `level`). */
 function cisdBlock(bars, level, levels = causalLevels(bars)) {

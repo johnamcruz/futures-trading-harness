@@ -16,21 +16,24 @@ const { SNAPSHOT_PARAMS: SNAPSHOT_CISD, strongCandle } = require('./cisd');
 const { closeLocation } = require('./candle-facts');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
+// The defaults a strategy's `params` override (config/analysis.json: snapshot, indicators, crt, cisd, volumeProfile,
+// dayContext; one home each, so the snapshot's defaults and each read's own are the same values).
+const AN = require('../tunables').analysis();
 const PARAMS = {
-  emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
-  stPeriod: 10, stMult: 3,
-  kcLen: 20, kcMult: 1.5, kcAtr: 20,
-  swingK: 2,
-  orbMinutes: 15,
-  atrStop: ind.STOP_ATR_PERIOD, stopAtrMult: 0.5,
+  emaFast: AN.snapshot.emaFast, emaSlow: AN.snapshot.emaSlow, adxPeriod: AN.indicators.adxPeriod, adxSlopeBars: AN.snapshot.adxSlopeBars,
+  stPeriod: AN.indicators.supertrendPeriod, stMult: AN.indicators.supertrendMult,
+  kcLen: AN.indicators.keltnerLen, kcMult: AN.indicators.keltnerMult, kcAtr: AN.indicators.keltnerAtr,
+  swingK: AN.indicators.swingK,
+  orbMinutes: AN.indicators.openingRangeMinutes,
+  atrStop: ind.STOP_ATR_PERIOD, stopAtrMult: AN.snapshot.stopAtrMult,
   // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
-  crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
+  crtSweepBars: AN.crt.sweepBars, crtShiftBars: AN.crt.shiftBars, crtMaxDepth: AN.crt.maxDepth, crtMinRangeAtr: AN.crt.minRangeAtr, crtBufferAtr: AN.crt.bufferAtr, crtMinRR: AN.crt.minRR,
   // CISD and its OTE bounce (cisd_* / ote_* / in_ote series, scripts/lib/trading/cisd.js): defaults and meaning there.
   ...SNAPSHOT_CISD,
   // Volume profile settings (vpRows, vpRowSize, ...): defaults and meaning in volume-profile.js.
   ...vp.PARAM_DEFAULTS,
-  vpLookback: 360, // bars in the snapshot's rolling profile
-  adrDays: 10, // days in the average daily range (day-context.js)
+  vpLookback: AN.snapshot.vpLookback, // bars in the snapshot's rolling profile
+  adrDays: AN.dayContext.adrDays, // days in the average daily range (day-context.js)
 };
 
 

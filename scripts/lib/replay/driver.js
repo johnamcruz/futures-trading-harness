@@ -73,7 +73,7 @@ const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../tradin
 const combine = require('../trading/combine');
 const { accountNamed } = require('../trading/accounts');
 
-const EOD_RETRIES = 5;
+const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
 // Minutes from the 18:00 ET open to the 16:00 ET close.
 const CLOSE_SESSION_MIN = 24 * 60 - MARKET_OPEN_MIN + MARKET_CLOSE_MIN;
 
@@ -312,7 +312,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', schedule: require('../schedule').fingerprint(), broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
+    info: { source: 'replay', schedule: require('../schedule').fingerprint(), configFiles: require('../tunables').fingerprints(), broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
       // The exit its composed trades are managed by, recorded at seed time: its experience lines are tagged by it,
       // never by the repository's exit when they are written (learning/run-experience.js manifestExit).
       exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)) },

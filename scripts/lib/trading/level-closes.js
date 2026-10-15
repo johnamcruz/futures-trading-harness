@@ -28,8 +28,8 @@ const ind = require('./indicators');
 const vp = require('./volume-profile');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const ORB_MINUTES = 15; // market-snapshot PARAMS.orbMinutes: the opening range the briefing shows
-const MAX_CLOSES = 20;
+const ORB_MINUTES = require('../tunables').analysis().indicators.openingRangeMinutes; // the opening range the briefing shows (config/analysis.json)
+const MAX_CLOSES = require('../tunables').analysis().levelCloses.maxCloses;
 
 const MEMO = new WeakMap();
 const memo = (bars, key, make) => {

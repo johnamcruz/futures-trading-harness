@@ -48,7 +48,7 @@ const { marketHoursErrors } = require('../autotrader');
 const walkForward = require('./walk-forward');
 const { fieldPaths, fieldCoverage, describeMissing, describeCoverage } = require('./bar-fields');
 
-const WARMUP_BARS = 2000;
+const WARMUP_BARS = require('../tunables').replay().backtest.warmupBars; // config/replay.json
 
 
 /** "HH:MM@Zone" with a real time and time zone. */

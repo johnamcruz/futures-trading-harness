@@ -20,7 +20,7 @@ const { STOP_PRICE } = require('./order-gate');
 
 const STOP_TYPES = new Set([3, 4, 5]);
 const LIMIT_TYPE = 1;
-const MATCH_MS = 5 * 60000; // the entry's order_placed is at most this before the position opened
+const MATCH_MS = require('../tunables').runner().session.entryMatchMs; // the entry's order_placed is at most this before the position opened (config/runner.json)
 
 /** The entry's order_placed journal entry for a position: the last successful one on its contract before it opened. */
 function entryOrder(entries, position) {
@@ -38,7 +38,7 @@ function entryOrder(entries, position) {
  * initialStop, risk, stop, target, last, rNow, mfeR, maeR, barsHeld, notes }].
  * `barsFor(position)`: the closed bars of its contract ({ t, o, h, l, c }), or null.
  */
-function openTrades({ positions = [], orders = [], entries = [], barsFor = () => null, stepMs = 180000 }) {
+function openTrades({ positions = [], orders = [], entries = [], barsFor = () => null, stepMs = require('../tunables').runner().bars.timeframe * 60000 }) {
   return positions.filter(p => Number(p.size) > 0 && (p.type === 1 || p.type === 2)).map(p => {
     const sign = p.type === 1 ? 1 : -1;
     const entry = Number(p.averagePrice);

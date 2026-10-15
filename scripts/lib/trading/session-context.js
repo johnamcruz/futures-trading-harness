@@ -27,7 +27,7 @@ const et = t => { const p = parts(t); return `${pad(p.hour)}:${pad(p.minute)} ET
 /** "2026-10-08 10:33:20 ET" */
 const etStamp = t => { const p = parts(t); return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)} ET`; };
 
-const PLAN_CHARS = 400;
+const PLAN_CHARS = require('../tunables').runner().prompt.planChars; // config/runner.json
 
 /** One line: today's premarket plan for `symbol`, or that there is none. */
 function premarketPlan(entries, symbol, now) {

@@ -109,9 +109,9 @@ const { CALL_TIMEOUT_MS } = require('./gate-timing');
  * normally answered "not sent" before the lane gives up on it (behind another hung lookup it may not be, and is then
  * an order of unknown outcome, which still blocks new entries).
  */
-const LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + 5000;
+const LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + require('../tunables').runner().gate.lookupExtraMs;
 /** How long the gateway holds the order lane for a server reply by default (FTH_LANE_TIMEOUT_MS overrides). */
-const DEFAULT_LANE_TIMEOUT_MS = 30000;
+const DEFAULT_LANE_TIMEOUT_MS = require('../tunables').runner().gate.laneTimeoutMs;
 
 /**
  * Calls tools on the wrapped server on the gateway's own behalf. Requests use
@@ -277,4 +277,14 @@ function closeRefused(response) {
   return Boolean(body) && body.success === false;
 }
 
-module.exports = { CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS, canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * At the gateway's start: a refused config file (tunables.js critical()) is logged to the gate log (tunables.js already
+ * said it on stderr). The gateway starts anyway: exits are never held; checkOrder refuses every entry. Returns the error.
+ */
+function sayCritical(env = process.env) {
+  const critical = require('../tunables').critical();
+  if (critical) require('./check-order').logDecision({ source: 'gateway', decision: 'config-critical', message: critical.message }, env);
+  return critical;
+}
+
+module.exports = { sayCritical, CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS, canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

@@ -106,6 +106,7 @@ function readProposal(file) {
 }
 
 async function main(argv) {
+  require('./lib/tunables').assertUsable(); // a refused config file: no training (the CRITICAL error)
   const cmd = argv[0];
   if (!['plan', 'run', 'status', 'judge', 'import-proposal'].includes(cmd)) throw new Error(USAGE);
   const loop = load(argv);

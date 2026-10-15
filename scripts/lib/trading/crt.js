@@ -33,7 +33,7 @@
 
 const { htfCandles } = require('./indicators');
 
-const DEFAULTS = { sweepBars: 10, shiftBars: 5, maxDepth: 0.5, minRangeAtr: 2, bufferAtr: 0.25, minRR: 2 };
+const DEFAULTS = { ...require('../tunables').analysis().crt }; // config/analysis.json crt (market-snapshot PARAMS crt* read the same)
 
 function crtSeries(bars, minutes, atr, opts = {}) {
   // An undefined option keeps its default (a missing param must not disable the detector).

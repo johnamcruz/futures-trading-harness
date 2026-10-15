@@ -265,4 +265,10 @@ const testSizing = (extra = {}) => ({ ...TEST_SIZING, ...extra });
 /** A plain backtest's fee per contract per side in tests: a fee is never assumed (no account, no contract-table fee). */
 const TEST_FEE = 0.37;
 
-module.exports = { TEST_SIZING, testSizing, TEST_FEE, withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+/** The shipped trade_lifecycle strategy's stop rule (its STRATEGY.md risk: the numbers' one home; trade-lifecycle.js stopRuleOf). */
+function lifecycleStopRule() {
+  const doc = require('../scripts/lib/trading/strategies').loadStrategies(path.resolve(__dirname, '..'), {}).strategies.find(s => s.name === 'trade_lifecycle');
+  return require('../scripts/lib/trading/trade-lifecycle').stopRuleOf(doc.risk);
+}
+
+module.exports = { lifecycleStopRule, TEST_SIZING, testSizing, TEST_FEE, withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

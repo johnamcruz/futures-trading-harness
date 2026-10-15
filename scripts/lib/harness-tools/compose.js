@@ -21,7 +21,7 @@ const { cycleBarOf } = require('./briefing');
 const { skillCatalog } = require('./skills');
 const { briefingFor } = require('../trading/fact-claims');
 const { checkReads } = require('../trading/composed-reads');
-const { STRATEGY, planOf, buildRecord, appendRecord, renderRecord } = require('../trading/trade-lifecycle');
+const { STRATEGY, planOf, stopRuleOf, buildRecord, appendRecord, renderRecord } = require('../trading/trade-lifecycle');
 const { loadStrategies } = require('../trading/strategies');
 const { specFor } = require('../trading/contracts');
 const { cycleId } = require('../trading/check-order');
@@ -57,7 +57,7 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const tick = spec ? spec.tickSize : null;
   const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25 });
   const planned = checked.stop && checked.target
-    ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd })
+    ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk) })
     : null;
   const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);

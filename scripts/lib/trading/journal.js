@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 
-const MAX_TAIL_BYTES = 8 * 1024 * 1024;
+const MAX_TAIL_BYTES = require('../tunables').runner().limits.journalTailBytes; // config/runner.json
 
 function resolveJournalPath(env = process.env) {
   return require('../broker/config').activeBroker(env).journalPath;

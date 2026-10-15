@@ -41,6 +41,7 @@ function barsArgs(argv) {
 }
 
 function main(argv, { env = process.env, out = process.stdout, err = process.stderr } = {}) {
+  require('./lib/tunables').assertUsable(); // a refused config file: no training preflight (the CRITICAL error)
   const file = arg(argv, '--config');
   if (!file) {
     err.write(`${USAGE}\n`);

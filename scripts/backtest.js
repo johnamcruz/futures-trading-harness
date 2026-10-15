@@ -110,6 +110,7 @@ function unknownFlags(argv) {
 }
 
 async function main(argv) {
+  require('./lib/tunables').assertUsable(); // a refused config file: no backtest on built-in values (the CRITICAL error)
   if (argv[0] === 'fetch') return fetchBars(argv.slice(1));
   const bad = unknownFlags(argv);
   if (bad.length) throw new Error(`unknown argument${bad.length > 1 ? 's' : ''}: ${bad.join(' ')} (flags: ${[...VALUE_FLAGS, ...BOOL_FLAGS].join(' ')})`);

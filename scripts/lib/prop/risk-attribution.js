@@ -33,10 +33,11 @@
 const combine = require('../trading/combine');
 
 const STATES = Object.freeze(['fresh', 'mid', 'near-target', 'near-mll']);
-const NEAR_MLL = 0.35;
-const NEAR_TARGET = 0.7;
+const CUT = require('../tunables').replay().accountStates.cutoffs; // config/replay.json (the states the draw buckets)
+const NEAR_MLL = CUT.nearMll;
+const NEAR_TARGET = CUT.nearTarget;
 const CELL_KEYS = Object.freeze(['alignment', 'biasSide', 'window', 'regime']);
-const MAX_BYTES = 4096;
+const MAX_BYTES = require('../tunables').training().riskRecord.maxBytes; // config/training.json
 /** The learning roles whose outcomes never reach the model as a record: validation chooses, test and final judge. */
 const HELD_OUT = Object.freeze(['practice-validate', 'test', 'final']);
 
@@ -133,7 +134,7 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
  * schedule roles are not checked here). Counts over Monte Carlo paths: a trade
  * is counted once per path it was taken on. Kept apart from the model's trade cells.
  */
-function riskRecord(attribution, { minN = 10, maxBytes = MAX_BYTES, source = null, role = null } = {}) {
+function riskRecord(attribution, { minN = require('../tunables').training().riskRecord.minN, maxBytes = MAX_BYTES, source = null, role = null } = {}) {
   if (!attribution || !attribution.states) throw new Error('riskRecord: a risk attribution (prop/evaluator.js, attribution: true)');
   // Validation, test and final outcomes choose or judge; the model never sees them (practice-train only).
   const sealed = HELD_OUT.find(r => r === role || r === attribution.role);

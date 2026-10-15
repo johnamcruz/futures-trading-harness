@@ -155,9 +155,9 @@ function summarize(output, embedded = [], gate = []) {
 const COMPOSED_TAG = /^\s*setup:(?:trade_lifecycle\b|[a-z0-9_-]+\s+(?:long|short)\s+trade_lifecycle\b)/i;
 
 // The gate log's tail read for a cycle's orders (it grows for the life of the home; a cycle's records are its last).
-const GATE_TAIL_BYTES = 4 * 1024 * 1024;
+const GATE_TAIL_BYTES = require('./tunables').runner().limits.gateTailBytes; // config/runner.json
 // After the cycle's end, the slack for the log write (replay/labels.js GATE_SLACK_MS).
-const GATE_SLACK_MS = 2000;
+const GATE_SLACK_MS = require('./tunables').runner().session.gateSlackMs;
 
 /**
  * The gateway's place_order records (the gate log, gateLogPath(env): harness-owned, stamped by the wall clock, the

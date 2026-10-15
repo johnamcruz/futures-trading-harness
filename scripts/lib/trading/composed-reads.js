@@ -107,13 +107,13 @@ const READ_MAX = 120;
 const WHY_MAX = 160;
 const SKILL = /^[a-z0-9][a-z0-9-]{0,63}$/;
 // D4: the momentum bar read (range at least 1 ATR(14), volume at least the 20-bar average, close in the far third).
-const MOMENTUM = { rangeAtr: 1, volRatio: 1 };
+const MOMENTUM = { rangeAtr: require('../tunables').analysis().momentum.rangeAtr, volRatio: require('../tunables').analysis().momentum.volRatio }; // config/analysis.json momentum (momentum.js reads the same)
 // High volume: at least 1.5 times the average (the snapshot's own participation scale, market-snapshot.js: "under 1.0
 // is thin participation, 1.5+ strong"; the absorption skill's "about 1.5 times"). Momentum asks only for the average.
-const VOLUME_HIGH = 1.5;
+const VOLUME_HIGH = require('../tunables').analysis().composedReads.volumeHigh;
 // Absorption (the absorption skill): high volume (VOLUME_HIGH) with little progress, the candle's net move |close -
 // open| at most half its timeframe's ATR(14), at a level it met without closing beyond (rejected, or touched and held).
-const ABSORPTION = { volRatio: VOLUME_HIGH, progressAtr: 0.5 };
+const ABSORPTION = { volRatio: VOLUME_HIGH, progressAtr: require('../tunables').analysis().composedReads.absorptionProgressAtr };
 // A fair value gap's edge as a level name ('15m fvg low'), and a gap zone as a location ('15m fvg').
 const FVG_EDGE = /^(1m|3m|5m|15m|1h|4h) fvg (low|high)$/;
 const FVG_ZONE = /^(1m|3m|5m|15m|1h|4h) fvg$/;

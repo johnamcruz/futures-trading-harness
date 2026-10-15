@@ -34,7 +34,7 @@ const { HELD_OUT } = require('../prop/risk-attribution');
 const VERSION = 1;
 const KIND = 'risk-record-index';
 const PINNED = 'risk-record-pinned.json';
-const MIN_N = 10;
+const MIN_N = require('../tunables').training().riskRecord.minN; // config/training.json (only rises)
 const FIELDS = Object.freeze(['n', 'savedBlows', 'causedBlows', 'costPasses', 'gainedPasses']);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);

@@ -34,11 +34,12 @@ const { PARAMS } = require('./trading/market-snapshot');
 const { inSessions, timeframeMs, DEFAULT_WINDOW } = require('./trading/evaluator');
 
 const { ATR_PERIOD } = require('./trading/indicators'); // the reads' ATR, one home
-const DEFAULT_LEVELS = Object.freeze([0.6, 0.8]);
+const FS = require('./tunables').training().fieldStudy; // config/training.json fieldStudy
+const DEFAULT_LEVELS = FS.confluenceLevels;
 // A class needs this many events over this many trading days for intervals, differences and a cost verdict:
 // a handful of events in a day or two gives a degenerate interval, never evidence.
-const MIN_EVENTS = 30;
-const MIN_DAYS = 10;
+const MIN_EVENTS = FS.minEvents;
+const MIN_DAYS = FS.minDays;
 // A strategy's series start cold at each chunk's first bar (an average seeded there, a high with too few
 // bars); the live scan has history. Its first WARMUP bars in a chunk (the evaluator's window) fire nothing.
 const WARMUP = DEFAULT_WINDOW;
@@ -264,7 +265,7 @@ function readSums(s) {
 const STAT_KEYS = [...CLASSES.flatMap(c => [`${c}.mean`, `${c}.follow`, `${c}.plusFirst`]), 'agreeMinusDisagree.mean', 'agreeMinusNeutral.mean', 'agreeMinusDisagree.follow', 'agreeMinusNeutral.follow', 'agreeMinusDisagree.plusFirst', 'agreeMinusNeutral.plusFirst'];
 
 /** 95% intervals of every statistic in readSums, resampling days with replacement (seeded). */
-function bootDays(blocks, { reps = 1000, seed = 1 } = {}) {
+function bootDays(blocks, { reps = FS.reps, seed = FS.seed } = {}) {
   if (blocks.length < 2) return null;
   const draw = fsy.rng(seed);
   const s = new Float64Array(3 * W);
@@ -288,7 +289,7 @@ const excludesZero = c => Boolean(c) && (c[0] > 0 || c[1] < 0);
  * mean excursions, +1R / -1R first; the differences; intervals; the cost line (a class clears it when its
  * mean move's interval lies wholly above the cost).
  */
-function summarizeClasses(E, thr, { idx = null, costTicks = 2, boot = null } = {}) {
+function summarizeClasses(E, thr, { idx = null, costTicks = FS.costTicks, boot = null } = {}) {
   const ids = idx || Array.from({ length: E.n }, (_, i) => i);
   const classes = CLASSES.map(name => ({ name, n: 0, mean: null, follow: null, mfe: null, mae: null, plusFirst: null, minusFirst: null, tie: null }));
   const acc = CLASSES.map(() => ({ fwd: 0, fol: 0, mfe: 0, mae: 0, r: 0, p: 0, m: 0, tie: 0, days: new Set() }));
@@ -353,7 +354,7 @@ function fieldLevels(t, q, levels) {
  * The study. events: parsed price events and joined strategy events (joinStrategyEvents). For every event,
  * field, horizon and threshold: the classes overall and by each `by` group, with intervals.
  */
-function confluence(t, { fields, events, horizons, tick, thresholds = null, costTicks = 2, by = [], rMode = 'bar', reps = 1000, seed = 1 }) {
+function confluence(t, { fields, events, horizons, tick, thresholds = null, costTicks = FS.costTicks, by = [], rMode = 'bar', reps = FS.reps, seed = FS.seed }) {
   if (!(tick > 0)) throw new Error('tick: the contract\'s tick size');
   if (!['bar', 'atr'].includes(rMode)) throw new Error('R: bar (the event bar\'s range) or atr');
   const atr = priorAtr(t);

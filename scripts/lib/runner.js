@@ -74,32 +74,35 @@ const { timeframeMs } = require('./trading/evaluator');
 const { lanesOf, tfLabel, retiredLaneText, isDataLane } = require('./lanes');
 const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory, laneBarsOf } = require('./lane-cycle');
 
-const IDLE_MS = 5000;
-const RESYNCS_BEFORE_REROLL = 3;
-const MAX_POLL_MS = 10000;
-const LOOKUP_RETRY_MS = 30000;
-const MAX_RETRY_MS = 60000;
+// The runner's timing (config/runner.json `runner`; closeSettleMs only rises, fillGraceMs and minManagedRiskTicks pinned).
+const TUN = require('./tunables').runner();
+const RUN = TUN.runner;
+const IDLE_MS = RUN.idleMs;
+const RESYNCS_BEFORE_REROLL = RUN.resyncsBeforeReroll;
+const MAX_POLL_MS = TUN.bars.maxPollMs;
+const LOOKUP_RETRY_MS = RUN.lookupRetryMs;
+const MAX_RETRY_MS = RUN.maxRetryMs;
 // A close sent this recently may not have filled yet: the contract is not closed (or its orders cancelled) again
 // until it settles, so two closes in flight never over-close into the other side.
-const CLOSE_SETTLE_MS = 10000;
+const CLOSE_SETTLE_MS = RUN.closeSettleMs;
 // End of day that reads the account but doesn't find it flat yet counts as failed runs (kill switch) only after this long.
 const { ORDER_GRACE_MS } = require('./trading/gate-timing');
 const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
-const FILL_GRACE_MS = 30000;
+const FILL_GRACE_MS = RUN.fillGraceMs;
 // The account read for a run's prompt never holds a run up longer than this.
-const ACCOUNT_READ_MS = 5000;
+const ACCOUNT_READ_MS = RUN.accountReadMs;
 // A closing balance that couldn't be recorded is retried this often, this many times.
-const CLOSE_RETRY_MS = 60000;
-const CLOSE_TRIES = 5;
+const CLOSE_RETRY_MS = RUN.closeRetryMs;
+const CLOSE_TRIES = RUN.closeTries;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 // A failed premarket is tried again after these pauses (then every 10 min), until a session window opens.
-const PREMARKET_RETRY_MS = [60000, 120000, 300000, 600000];
+const PREMARKET_RETRY_MS = RUN.premarketRetryMs;
 // Several lanes: how long a lane due at the same close as one that already closed may keep the cycle waiting.
-const COALESCE_HOLD_MS = 10000;
+const COALESCE_HOLD_MS = TUN.cycle.coalesceHoldMs;
 
 function createRunner(deps) {
   const {
-    cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
+    cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch, exitsOnly = false,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null, exitStrategy = null, exitPlanOf = exitPlan,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
@@ -157,7 +160,7 @@ function createRunner(deps) {
     // bar, byOrder() order id -> its record id. null: none.
     composed = null,
     // How often a running cycle's composed limits are checked for expiry (watchComposed).
-    composedWatchMs = 5000,
+    composedWatchMs = RUN.composedWatchMs,
     // Setup-focused practice (learning/setup-moments.js selectBar, wired only on a practice replay): (item, open) ->
     // { run, why, reason }, whether a bar the trigger would run a cycle on runs one. null: every bar as live.
     practiceSelect = null,
@@ -497,7 +500,7 @@ function createRunner(deps) {
       const tfMin = ((strategy && timeframeMs(strategy.timeframe)) || cfg.timeframe * 60000) / 60000;
       const maxRunnerBars = plan && plan.maxBars ? Math.ceil((plan.maxBars * tfMin) / cfg.timeframe) : null;
       // Past the target: the trade's own target (its bracket), whose resting order is cancelled so the trail can run.
-      const ok = managed && tick > 0 && risk >= 4 * tick - 1e-9;
+      const ok = managed && tick > 0 && risk >= RUN.minManagedRiskTicks * tick - 1e-9;
       const after = ok && plan.afterTarget ? liveTarget({ rec, entry, sign, tick, orders, contractId: cid }) : null;
       t = ok
         ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null, ...(after ? { target: after.price, armed: false } : {}) }
@@ -1012,7 +1015,7 @@ function createRunner(deps) {
     const t0 = Math.ceil(now.getTime() / 60000) * 60000;
     for (let k = 0; k <= 1440; k += 1) {
       const t = t0 + k * 60000;
-      if (inSession(cfg, new Date(t))) return Math.max(0, t + delayMs - now.getTime() - 5000);
+      if (inSession(cfg, new Date(t))) return Math.max(0, t + delayMs - now.getTime() - RUN.wakeEarlyMs);
     }
     return null;
   }
@@ -1020,7 +1023,7 @@ function createRunner(deps) {
   /** Time from `now` to the next bar's poll, less a margin for the run's own start: 0 when one is due or unknown. */
   function msToNextBar(now) {
     const due = nextBarDueAt();
-    return due === null ? 0 : Math.max(0, due - now.getTime() - 5000);
+    return due === null ? 0 : Math.max(0, due - now.getTime() - RUN.wakeEarlyMs);
   }
 
   /** The account as read for a run, for the event log. */
@@ -1178,7 +1181,7 @@ function createRunner(deps) {
       const gap = coverageError(now, { closed: cfg.closedDates, early: cfg.earlyCloseDates });
       if (gap) { log(gap, 'error'); emit('calendar_ending', { message: gap }); }
     }
-    let d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+    let d = decide(cfg, state, now, { killSwitch: isKillSwitchOn(), exitsOnly });
     state = d.state;
     // A premarket that failed: tried again after its pause, until a session window opens; then the day trades
     // without a plan (premarketUnavailable: the prompt, the event log and the session record say so).
@@ -1191,12 +1194,12 @@ function createRunner(deps) {
         log(`premarket: no plan after ${state.premarketTries} failed run(s) and the session is open (or opens before another try could end); trading without a premarket plan until a retry succeeds`, 'error');
         emit('premarket_unavailable', { day: state.day, tries: state.premarketTries });
         saveState(state);
-        d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+        d = decide(cfg, state, now, { killSwitch: isKillSwitchOn(), exitsOnly });
         state = d.state;
       } else if (Date.parse(state.premarketRetryAt) > now.getTime()) {
         // Waiting for its retry never holds up risk-reducing work: the pass goes on as if premarket were done
         // (trailing, leftover orders, housekeeping), and still starts no cycle (it isn't done: below, decide says so).
-        const waiting = decide(cfg, { ...state, premarketDone: true }, now, { killSwitch: isKillSwitchOn() });
+        const waiting = decide(cfg, { ...state, premarketDone: true }, now, { killSwitch: isKillSwitchOn(), exitsOnly });
         d = { ...waiting, state: { ...waiting.state, premarketDone: false } };
         state = d.state;
       }
@@ -1220,7 +1223,7 @@ function createRunner(deps) {
       for (const job of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
-        if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
+        if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn(), exitsOnly }).action === 'eod') break;
         if (limitFor(d.action, at) < 30000) { noTime(); continue; }
         const acct = await accountSnapshot(at);
         // The time limit counts from after the account read.
@@ -1298,7 +1301,7 @@ function createRunner(deps) {
     const ready = carried.filter(x => now.getTime() <= Date.parse(x.bar.t) + x.minutes * 60000 + delayMs + coalesceHoldMs + MAX_POLL_MS);
     for (let i = 0; i < syms.length; i += 1) {
       // A slow API can make a pass long: if end of day came due meanwhile, run it first.
-      if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() }).action === 'eod') return 0;
+      if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn(), exitsOnly }).action === 'eod') return 0;
       const item = await pollSymbol(i, now);
       if (item) ready.push(item);
     }
@@ -1342,7 +1345,7 @@ function createRunner(deps) {
         }
       }
       // Re-check: a symbol's poll may have taken a while, the kill switch may be on now.
-      const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() });
+      const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn(), exitsOnly });
       state = again.state;
       if (again.action === 'trade' || again.action === 'manage') {
         let manageOnly = again.action === 'manage';

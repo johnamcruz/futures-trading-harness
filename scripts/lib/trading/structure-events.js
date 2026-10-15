@@ -18,8 +18,10 @@
  *   untestedSwings(bars, swings) the swings price hasn't traded back to since their candle closed (swing.end)
  */
 
+const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation and the scan sizes
+
 /** Confirmed fractal swings, oldest first. */
-function pivots(bars, k = 2) {
+function pivots(bars, k = AN.indicators.swingK) {
   const out = [];
   for (let j = k; j < bars.length - k; j += 1) {
     let hi = true;
@@ -36,7 +38,7 @@ function pivots(bars, k = 2) {
 }
 
 /** The latest structure breaks: a close through the last confirmed, unbroken swing high (up) or low (down). */
-function lastBreaks(bars, k = 2) {
+function lastBreaks(bars, k = AN.indicators.swingK) {
   const ps = pivots(bars, k);
   let hi = null; // the last confirmed swing high not yet broken
   let lo = null;
@@ -68,7 +70,7 @@ function lastBreaks(bars, k = 2) {
  * within that bar or the next two; a low level the same below. One per level (the most recent), key levels first
  * (`key: true`), then most recent first.
  */
-function sweeps(bars, levels, n = 10) {
+function sweeps(bars, levels, n = AN.structure.sweepBars) {
   const out = [];
   const from = Math.max(1, bars.length - n);
   const seen = new Set();
@@ -107,7 +109,7 @@ function untestedSwings(bars, swings) {
 }
 
 /** The last n confirmed swing highs and lows, oldest first, each with the first close through it after confirmation. */
-function swingLevels(bars, k = 2, n = 3) {
+function swingLevels(bars, k = AN.indicators.swingK, n = AN.structure.swingLevels) {
   const ps = pivots(bars, k);
   const pick = type => ps.filter(x => x.type === type).slice(-n).map(x => {
     const j = bars.findIndex((b, idx) => idx > x.confirmedAt - 1 && (type === 'high' ? b.c > x.price : b.c < x.price));

@@ -174,7 +174,7 @@ const entryMsOf = e => { const f = Date.parse(e.outcome && e.outcome.entryTime);
  * market by the contract id of the close event, else the decision's own contract) closed from the fill to the exit plus
  * that tolerance. Nothing else is the runner's: a close outside it is the model's.
  */
-const RUNNER_CLOSE_TOLERANCE_MS = 60000;
+const RUNNER_CLOSE_TOLERANCE_MS = require('../tunables').runner().runner.runnerCloseToleranceMs; // config/runner.json
 
 function runnerExit(events = [], exits = []) {
   const symbolOf = new Map((events || []).filter(e => e && e.kind === 'position_closed' && e.contractId !== undefined).map(e => [String(e.contractId), e.symbol]));

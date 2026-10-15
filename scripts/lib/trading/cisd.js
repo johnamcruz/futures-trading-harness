@@ -86,7 +86,7 @@ const { candles: mtfCandles } = require('./mtf');
 const { zonedParts } = require('./clock');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const PARAMS = Object.freeze({ minRun: 2, maxWait: 6, expiry: 12, voidTol: 0.05, bufferAtr: 0.1, minBody: 0.6, minRangeAtr: 1 });
+const PARAMS = Object.freeze({ ...require('../tunables').analysis().cisd }); // config/analysis.json cisd
 const ATR_LEN = ind.ATR_PERIOD; // the displacement's range is measured against ATR(14) of the CISD timeframe's completed candles
 const DEAD = new Set(['void', 'expired', 'weak']);
 const UPPER_THIRD = 2 / 3;

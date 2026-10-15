@@ -27,8 +27,8 @@ const path = require('path');
 const { validateProposal, FAILURES } = require('./proposal');
 const { styleErrors } = require('./probe-edit');
 
-const MAX_EXPECTS = 300;
-const MAX_WHY = 1000;
+const MAX_EXPECTS = require('../tunables').training().compose.maxExpects; // config/training.json compose
+const MAX_WHY = require('../tunables').training().compose.maxWhy;
 
 function gainOf(part) {
   const t = part.measures && part.measures.target;

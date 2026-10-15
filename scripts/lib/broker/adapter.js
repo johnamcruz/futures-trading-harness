@@ -40,7 +40,7 @@ const { signedSize } = require('../trading/positions');
 class BrokerError extends Error {}
 
 const BAR_LIMIT = 20000; // the most get_bars returns at once (interface)
-const HISTORY_CHUNK_BARS = 10000; // bars per get_bars call when paging through history (half the limit)
+const HISTORY_CHUNK_BARS = require('../tunables').runner().limits.historyChunkBars; // bars per get_bars call when paging through history (config/runner.json)
 const UNITS = { s: ['second', 1000], m: ['minute', 60000], h: ['hour', 3600000], d: ['day', 86400000] };
 
 /**

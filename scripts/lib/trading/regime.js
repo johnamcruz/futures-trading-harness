@@ -18,18 +18,10 @@
 const ind = require('./indicators');
 const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const REGIME_PARAMS = {
-  trendAdx: 20,
-  rangeAdx: 18,
-  slopeBars: 5,
-  slopeAtr: 0.3, // EMA(20) move over slopeBars, in ATR(14) units
-  crossBars: 30,
-  maxTrendCrosses: 3,
-  rangeCrosses: 5,
-  volLookback: 100,
-  highVol: 1.4,
-  lowVol: 0.7,
-};
+// config/analysis.json regime (slopeAtr: EMA(20) move over slopeBars, in ATR(14) units); minBars and minBarsOverSlope
+// are the bars a classification needs, max(minBars, slopeBars + minBarsOverSlope).
+const { minBars: MIN_BARS, minBarsOverSlope: MIN_BARS_OVER_SLOPE, ...REGIME_DEFAULTS } = require('../tunables').analysis().regime;
+const REGIME_PARAMS = { ...REGIME_DEFAULTS };
 
 const PRIMARY = ['trend-up', 'trend-down', 'range', 'transition'];
 const TAGS = [...PRIMARY, 'trend', 'high-vol', 'normal-vol', 'low-vol'];
@@ -55,7 +47,7 @@ function vwapCrosses(bars, vwap, from) {
 function classifyRegime(bars, overrides = {}) {
   const p = { ...REGIME_PARAMS, ...overrides };
   const n = bars.length;
-  if (n < Math.max(60, p.slopeBars + 30)) return null;
+  if (n < Math.max(MIN_BARS, p.slopeBars + MIN_BARS_OVER_SLOPE)) return null;
   const i = n - 1;
   const closes = bars.map(b => b.c);
   const adx = ind.adx(bars, 14);

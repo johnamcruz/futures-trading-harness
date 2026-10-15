@@ -14,8 +14,8 @@
  *                                                          'none' (no momentum), or null (an input is missing: unknown)
  */
 
-const RANGE_ATR = 1;
-const VOL_RATIO = 1;
+const RANGE_ATR = require('../tunables').analysis().momentum.rangeAtr; // config/analysis.json momentum
+const VOL_RATIO = require('../tunables').analysis().momentum.volRatio;
 
 function momentumRead(c) {
   if (!c || !Number.isFinite(c.rangeAtr) || !Number.isFinite(c.volRatio) || !c.closeLocation) return null;

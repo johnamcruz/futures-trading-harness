@@ -57,7 +57,7 @@ const { recordsAt, readsOf } = require('./lifecycle-gate');
 const { parseRead } = require('./composed-reads');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = require('../tunables').runner().limits.skillLookupsBytes; // config/runner.json
 
 const lookupsFile = transcript => `${transcript}.lookups.jsonl`;
 

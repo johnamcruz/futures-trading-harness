@@ -42,7 +42,7 @@ const { STATES: STATE_LIST, stateOf, HELD_OUT } = require('./risk-attribution');
 
 const KINDS = Object.freeze(['pass', 'day-stop', 'size-down', 'early-exit']);
 const STATES = Object.freeze([...STATE_LIST, 'all']);
-const MAX_BYTES = 4096;
+const MAX_BYTES = require('../tunables').training().riskRecord.maxBytes; // config/training.json
 
 /** The model's own decisions (base) and one arm per kind of action and state that reverts it there. */
 function riskActionArms() {
@@ -92,7 +92,7 @@ const STATE_WORDS = { fresh: 'fresh (first session)', mid: 'mid-attempt', 'near-
  * kind and state with at least minN paths it changed, e.g. "near the max loss limit, standing down (a pass on a valid
  * setup): n 30 paths, saved 4 blows, caused 0, cost 1 pass, gained 2". Counterfactual, and said so; at most maxBytes.
  */
-function riskActionRecord(result, { minN = 10, maxBytes = MAX_BYTES, role = null } = {}) {
+function riskActionRecord(result, { minN = require('../tunables').training().riskRecord.minN, maxBytes = MAX_BYTES, role = null } = {}) {
   if (!result || !result.actions) throw new Error('riskActionRecord: a scoreRiskActions result');
   // Validation, test and final outcomes choose or judge; the model never sees them (practice-train only).
   const sealed = HELD_OUT.find(r => r === role || (result.look && r === result.look.role));

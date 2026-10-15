@@ -30,7 +30,7 @@ const ind = require('./indicators');
 const { profileSeries, optionsFromParams } = require('./volume-profile');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const DEFAULTS = { ibMinutes: 60, openMinutes: 30, adrDays: 10 };
+const DEFAULTS = { ...require('../tunables').analysis().dayContext }; // config/analysis.json dayContext
 
 /** The bar step in minutes (the smallest gap between bars). */
 function stepMinutes(bars) {

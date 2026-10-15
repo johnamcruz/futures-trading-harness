@@ -49,7 +49,7 @@ const { inMarketHours, MARKET_HOURS_LABEL } = require('./trading/clock');
 const { resolveClock, SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
 
 const r = (check, status, detail = '') => ({ check, status, detail });
-const SAMPLE_BARS = 20;
+const SAMPLE_BARS = require('./tunables').runner().runner.preflightSampleBars; // config/runner.json
 
 /** The adapter check's readers (learning/adapter.js): the manifest, the spec, the harness's digests now. */
 function adapterReaders(root) {

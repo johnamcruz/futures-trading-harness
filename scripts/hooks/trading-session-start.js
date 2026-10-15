@@ -38,8 +38,8 @@ function attemptLines(home, now) {
   });
 }
 
-const MAX_LESSONS = 10;
-const MAX_TEXT = 300;
+const MAX_LESSONS = require('../lib/tunables').runner().prompt.sessionStartLessons; // config/runner.json
+const MAX_TEXT = require('../lib/tunables').runner().prompt.sessionStartLessonChars;
 
 function clip(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim();

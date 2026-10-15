@@ -42,8 +42,9 @@ test('ledger file: a list-format file is converted on append, nothing lost; a mi
   fs.writeFileSync(file, JSON.stringify([look('old1'), look('old2')], null, 2));
   appendLook(file, look('new'));
   assert.deepStrictEqual(readLedger(file).map(e => e.candidate), ['old1', 'old2', 'new']);
-  // The appended look records the schedule it was written under (schedule.js fingerprint); the old ones are kept as they were.
-  assert.strictEqual(fs.readFileSync(file, 'utf8'), formatLedger([look('old1'), look('old2'), { ...look('new'), schedule: require('../../scripts/lib/schedule').fingerprint() }]));
+  // The appended look records the schedule and the config files it was written under (schedule.js fingerprint,
+  // tunables.js fingerprints); the old ones are kept as they were.
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), formatLedger([look('old1'), look('old2'), { ...look('new'), schedule: require('../../scripts/lib/schedule').fingerprint(), configFiles: require('../../scripts/lib/tunables').fingerprints() }]));
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['ledger.json'], 'no temporary file left');
   // A hand-edited last line without its newline is ended before the next look.
   fs.writeFileSync(file, JSON.stringify(look('x')));

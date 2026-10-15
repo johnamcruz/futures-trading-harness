@@ -12,6 +12,7 @@
 
 const { contractRoot, entryTime } = require('./journal');
 const { familyRoot } = require('./contracts');
+const TUN = require('../tunables').runner(); // the default bar and entry window (config/runner.json)
 
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)(?:\s+(long|short|buy|sell))?\b/i;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -45,7 +46,7 @@ function entriesOf(journal) {
  * @param journal the journal entries of the day
  * @param opts { timeframeMin, windowMin (how long after the bar's close an entry still counts as taking it; default 10) }
  */
-function reconcile(scans, journal, { timeframeMin = 3, windowMin = 10 } = {}) {
+function reconcile(scans, journal, { timeframeMin = TUN.bars.timeframe, windowMin = TUN.session.reconcileWindowMin } = {}) {
   const signals = signalsOf(scans, timeframeMin);
   const entries = entriesOf(journal);
   const notes = journal.filter(e => e.kind === 'note' || e.kind === 'plan');

@@ -144,7 +144,7 @@ function startLearningRun(runHome, opts = {}) {
   }
   // The schedule the run started under (schedule.js fingerprint), kept with its decision: the preflight's schedule check
   // compares it, and its look's ledger line carries the same.
-  if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, schedule: schedule.fingerprint(), startedAt: now.toISOString() });
+  if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, schedule: schedule.fingerprint(), configFiles: require('../tunables').fingerprints(), startedAt: now.toISOString() });
   return { ...kept, taken };
 }
 

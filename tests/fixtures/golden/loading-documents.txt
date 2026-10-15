@@ -712,7 +712,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "3010 chars sha256:a4c46e87b67854eb",
+  "body": "3059 chars sha256:6441f1f449b470d9",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -729,7 +729,10 @@ strategy trade_lifecycle: {
   "risk": {
     "stop": "structure",
     "min_rr": 2,
-    "max_risk_usd": 300
+    "max_risk_usd": 300,
+    "stop_buffer_ticks": 1,
+    "stop_floor_ticks": 8,
+    "stop_floor_atr": 0.25
   },
   "signal": "composed",
   "source": "the owner's trade-lifecycle design (the model learns which skills to combine from the market)",

@@ -39,14 +39,14 @@ const path = require('path');
 const zlib = require('zlib');
 const { tradingDayKey } = require('../trading/clock');
 
-const DEFAULT_DAYS = 90;
+const DEFAULT_DAYS = require('../tunables').runner().session.archiveDays; // config/runner.json
 const DAY_FILE = /^bars-(\d{4}-\d{2}-\d{2})\.jsonl\.gz$/;
 const IDX_FILE = /^bars-(\d{4}-\d{2}-\d{2})\.idx\.json$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 // The index's entry for the archive's committed length (no symbol key has this form).
 const BYTES = '#bytes';
 // The most trading days a live home keeps (about 14 years); a larger setting is capped, with a warning.
-const MAX_DAYS = 3650;
+const MAX_DAYS = require('../tunables').runner().session.archiveMaxDays;
 
 const archiveFile = (dir, day) => path.join(dir, `bars-${day}.jsonl.gz`);
 const indexFile = (dir, day) => path.join(dir, `bars-${day}.idx.json`);

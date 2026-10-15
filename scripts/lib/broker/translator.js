@@ -94,7 +94,7 @@ function parseTicker(name, now = new Date()) {
 
 const plainObject = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
 const DAY_FILE = /^(contracts-[a-z0-9_-]+)\.(\d{4}-\d{2}-\d{2})\.json$/i; // broker/config.js contractsCacheFile
-const SIBLING_DAYS = 30; // a day file reads the ids of the days this near it (and the live file's)
+const SIBLING_DAYS = require('../tunables').runner().broker.siblingDays; // a day file reads the ids of the days this near it (and the live file's; config/runner.json)
 const dayMs = d => Date.parse(`${d}T00:00:00Z`);
 const idEntry = v => Boolean(v) && typeof v === 'object' && typeof v.root === 'string' && typeof v.month === 'string';
 

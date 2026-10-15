@@ -29,8 +29,8 @@ const { reviewResult, hasTag } = require('./journal');
 const { reviewR } = require('./instincts');
 const { zonedParts } = require('./clock');
 
-const MIN_SLICE = 10; // a regime or hour with fewer trades is not shown
-const LIVE_SLICE = 5; // nor a live regime slice with fewer reviewed trades
+const MIN_SLICE = require('../tunables').runner().prompt.trackRecordMinSlice; // a regime or hour with fewer trades is not shown (config/runner.json)
+const LIVE_SLICE = require('../tunables').runner().prompt.trackRecordLiveSlice; // nor a live regime slice with fewer reviewed trades
 
 /** The value at quantile q (0..1) of `xs`, nearest rank; null when empty. */
 function quantile(xs, q) {

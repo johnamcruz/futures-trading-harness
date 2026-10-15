@@ -22,7 +22,7 @@
  * stage-1 run and a stage-2 run are two runs and two setups.
  *
  *   STAGES                      { 1: { name, defaults, refused }, 2: { ..., comparisonOnly } }
- *   EXIT_TEST                   the stage-1 exit test's thresholds (owner-confirmed), the one place for them
+ *   EXIT_TEST                   the stage-1 exit test's thresholds (owner-confirmed; config/training.json exitTest)
  *   applyStage(raw)             { raw (the preset's defaults under the config's own values), stage, errors }
  *   stageRequirements(stage)    what the preflight checks for it
  *   exitTest({ decisions, adherence })   [{ test, status: PASS | FAIL | INSUFFICIENT | N/A | SANITY, detail }]
@@ -37,20 +37,11 @@ const path = require('path');
 const { MIN_N, MIN_DAYS, cellStats } = require('../learning/experience-index');
 const learningLooks = require('../learning/looks'); // VALIDATE_RUNS_PER_CANDIDATE: the schedule's, read when used
 
-const STAGES = Object.freeze({
-  1: Object.freeze({
-    name: 'learn to trade',
-    defaults: Object.freeze({ latency: true, libraryDisplay: false, riskRecordDisplay: false }),
-    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true, riskRecordDisplay: true, prop: 'set', accountStates: 'set' }),
-  }),
-  2: Object.freeze({
-    name: 'pass prop',
-    defaults: Object.freeze({ latency: true, libraryDisplay: false, riskRecordDisplay: false }),
-    refused: Object.freeze({ learning: false, latency: false, libraryDisplay: true }),
-    // Shown only on a run declared a comparison arm (the replay config's comparisonArm): with/without the risk record.
-    comparisonOnly: Object.freeze(['riskRecordDisplay']),
-  }),
-});
+// The presets (config/replay.json stages, pinned exactly): each stage's name, defaults and refused values, and
+// comparisonOnly, the features shown only on a run declared a comparison arm (the replay config's comparisonArm).
+const STAGES = Object.freeze(Object.fromEntries(Object.entries(require('../tunables').replay().stages).map(([n, s]) => [n, Object.freeze({
+  name: s.name, defaults: s.defaults, refused: s.refused, ...(s.comparisonOnly.length ? { comparisonOnly: s.comparisonOnly } : {}),
+})])));
 
 /**
  * The stage-1 exit test (owner-confirmed, 2026-10-14), judged on a candidate's pooled practice-validate runs (its
@@ -67,13 +58,14 @@ const STAGES = Object.freeze({
  *                      decision, so trivially true reads can't carry a decision with a false one)
  *   processAdherence   the scorecard's agreement rate (agree of agree + disagree), at least this
  */
+const EX = require('../tunables').training().exitTest; // config/training.json exitTest (its bars only rise)
 const EXIT_TEST = Object.freeze({
-  plannedRR: 2,
-  avgWinnerR: 1.8,
-  expectancyR: 0.3,
-  expectancyLoAbove: 0,
-  correctReadRate: 0.8,
-  processAdherence: 0.8,
+  plannedRR: EX.plannedRR,
+  avgWinnerR: EX.avgWinnerR,
+  expectancyR: EX.expectancyR,
+  expectancyLoAbove: EX.expectancyLoAbove,
+  correctReadRate: EX.correctReadRate,
+  processAdherence: EX.processAdherence,
   minN: MIN_N,
   minDays: MIN_DAYS,
 });
@@ -122,7 +114,7 @@ function exitTest({ decisions = [], adherence = null }) {
     t('avg-winner', m >= T.avgWinnerR ? 'PASS' : 'FAIL', `${fmt(m)}R over ${winners.length} winners (at least ${T.avgWinnerR}R)`);
   }
   const rows = withR.map(d => [d.settledDay || d.day, d.outcome.R, 1, (d.context && d.context.regime) || '-']);
-  const cell = cellStats(rows, { seed: 1, reps: 2000, key: 'stage-1-exit' });
+  const cell = cellStats(rows, { seed: EX.seed, reps: EX.reps, key: 'stage-1-exit' });
   if (!cell.enough) t('expectancy', 'INSUFFICIENT', `insufficient sample (${cell.n} entries, ${cell.days} days; at least ${T.minN} over ${T.minDays} days)`);
   else {
     const ok = cell.meanR.mean >= T.expectancyR && cell.meanR.lo > T.expectancyLoAbove;

@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const TL = require('../../scripts/lib/trading/trade-lifecycle');
 const { checkReads } = require('../../scripts/lib/trading/composed-reads');
-const { tmpDir } = require('../helpers');
+const { tmpDir, lifecycleStopRule } = require('../helpers');
 const { scenario1, SCENARIO_1, SKILLS } = require('../fixtures/trade-lifecycle-scenario');
 
 const MNQ = { tick: 0.25, tickValue: 0.5 };
@@ -18,7 +18,7 @@ const plan = (over = {}) => {
   const briefing = over.briefing || scenario1();
   const side = over.side || 'long';
   const checked = checkReads({ reads: over.reads || SCENARIO_1, side, briefing, skills: SKILLS });
-  return { checked, briefing, ...TL.planOf({ checked, briefing, side, size: 2, minRR: 2, maxRiskUsd: 150, ...MNQ, ...over }) };
+  return { checked, briefing, ...TL.planOf({ checked, briefing, side, size: 2, minRR: 2, maxRiskUsd: 150, stopRule: lifecycleStopRule(), ...MNQ, ...over }) };
 };
 
 test('scenario 1, tick-checked: the stop one tick under 21512.75, 111 ticks, $55.50 a contract, 231 ticks to 21598, 2.08R', () => {
@@ -54,10 +54,29 @@ test('D13: a stop under max(8 ticks, 0.25 x ATR(20)) is refused, never widened; 
   assert.strictEqual(tight.plan.stop.floorTicks, 120);
   assert.ok(tight.problems.some(x => /111 ticks, under the minimum 120/.test(x)));
   // A small ATR: the 8-tick floor.
-  assert.strictEqual(TL.stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: 1 } } } } }, 0.25), 8);
+  assert.strictEqual(TL.stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: 1 } } } } }, 0.25, lifecycleStopRule()), 8);
   b.sections.m3.data.referenceStop = null;
-  assert.strictEqual(TL.stopFloorTicks(b, 0.25), null);
+  assert.strictEqual(TL.stopFloorTicks(b, 0.25, lifecycleStopRule()), null);
   assert.ok(plan({ briefing: b }).problems.some(x => /ATR\(20\) is unknown/.test(x)));
+});
+
+test('the stop rule\'s one home is the strategy\'s STRATEGY.md risk: its numbers are what the plan uses; none, no plan', () => {
+  // The shipped values (the code's constants before they moved: 1 tick beyond, the larger of 8 ticks and 0.25 x ATR(20)).
+  assert.deepStrictEqual({ ...lifecycleStopRule() }, { bufferTicks: 1, floorTicks: 8, floorAtr: 0.25 });
+  // The plan reads the rule it is given: a 2-tick buffer moves the stop a tick further, a 12-tick floor raises the floor.
+  const one = plan().plan;
+  const two = plan({ stopRule: { bufferTicks: 2, floorTicks: 8, floorAtr: 0.25 } }).plan;
+  assert.deepStrictEqual([two.stop.price, two.stop.ticks, two.stop.bufferTicks], [one.stop.price - 0.25, one.stop.ticks + 1, 2]);
+  assert.strictEqual(TL.stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: 1 } } } } }, 0.25, { bufferTicks: 1, floorTicks: 12, floorAtr: 0.25 }), 12);
+  assert.strictEqual(TL.stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: 60 } } } } }, 0.25, { bufferTicks: 1, floorTicks: 8, floorAtr: 0.5 }), 240);
+  // No rule, or an incomplete one: no plan (never a default).
+  for (const risk of [undefined, {}, { stop_buffer_ticks: 1, stop_floor_ticks: 8 }, { stop_buffer_ticks: 1, stop_floor_ticks: 0, stop_floor_atr: 0.25 }, { stop_buffer_ticks: -1, stop_floor_ticks: 8, stop_floor_atr: 0.25 }, { stop_buffer_ticks: 1, stop_floor_ticks: 8, stop_floor_atr: '0.25' }]) {
+    assert.strictEqual(TL.stopRuleOf(risk), null, JSON.stringify(risk));
+  }
+  const none = plan({ stopRule: null });
+  assert.strictEqual(none.plan, null);
+  assert.match(none.problems[0], /states no whole stop rule \(risk\.stop_buffer_ticks, risk\.stop_floor_ticks, risk\.stop_floor_atr\)/);
+  assert.ok(!('STOP_BUFFER_TICKS' in TL) && !('FLOOR_TICKS' in TL) && !('FLOOR_ATR' in TL), 'no code copy of the rule');
 });
 
 test('R:R under the minimum, a size over the dollar cap, no cap, a bad size, an unknown tick: each refused', () => {

@@ -122,7 +122,9 @@ test('attempts: the gate\'s limits are the live gate\'s config (trading/config.j
   const { loadConfig } = require('../../scripts/lib/trading/config');
   const c = loadConfig({});
   assert.deepStrictEqual(at.gateLimits({}), { maxDailyLosses: c.maxDailyLosses, maxConsecutiveLosses: c.maxConsecutiveLosses, lossCooldownMin: c.lossCooldownMin });
-  assert.deepStrictEqual(at.gateLimits({ FTH_MAX_DAILY_LOSSES: '2', FTH_MAX_CONSECUTIVE_LOSSES: '4', FTH_LOSS_COOLDOWN_MIN: '45' }), { maxDailyLosses: 2, maxConsecutiveLosses: 4, lossCooldownMin: 45 });
+  assert.deepStrictEqual(at.gateLimits({ FTH_MAX_DAILY_LOSSES: '2', FTH_MAX_CONSECUTIVE_LOSSES: '1', FTH_LOSS_COOLDOWN_MIN: '45' }), { maxDailyLosses: 2, maxConsecutiveLosses: 1, lossCooldownMin: 45 });
+  // The streak's env override only tightens: a higher one is held at the config's (pinned) value.
+  assert.strictEqual(at.gateLimits({ FTH_MAX_CONSECUTIVE_LOSSES: '4' }).maxConsecutiveLosses, c.maxConsecutiveLosses);
   // No gate given: the env's (as live), never off.
   const list = Array.from({ length: c.maxDailyLosses + 1 }, () => trade(-5));
   assert.strictEqual(at.runAttempt(days(list), ctx({ account: { sessions: 1, daily_loss_limit: 0 } })).taken, Math.min(c.maxDailyLosses, c.maxConsecutiveLosses));

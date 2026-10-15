@@ -43,10 +43,12 @@ function laneBarsOf(items) {
   return out;
 }
 
-const SLOW_FROM_MIN = 3; // "3m and slower" goes first on a tie
+const TUN = require('./tunables').runner(); // config/runner.json cycle and prompt
+const SLOW_FROM_MIN = TUN.cycle.slowFromMin; // "3m and slower" goes first on a tie
 const LOWER_PRIORITY = 'lower priority';
 
-const fallbackBudget = tf => Math.max(3, 2 * tf);
+// The runner's default cycle budget (autotrader.js validateConfig): config/runner.json cycle.
+const fallbackBudget = tf => Math.max(TUN.cycle.timeoutMinMinutes, TUN.cycle.timeoutBars * tf);
 
 function laneBudgetMin(cfg, lane) {
   const first = (Array.isArray(cfg.lanes) && cfg.lanes.length ? cfg.lanes[0].timeframe : cfg.timeframe);
@@ -108,8 +110,8 @@ function lanesLine(closed) {
   return ` Lanes closed this cycle: ${list.map(one).join(', ')}; one cycle covers them all (decide once for every lane's setups).`;
 }
 
-const HISTORY_PER_LANE = 10;
-const SLOWER_CONTEXT = 3;
+const HISTORY_PER_LANE = TUN.prompt.historyPerLane;
+const SLOWER_CONTEXT = TUN.prompt.slowerContext;
 // An entry's lanes ("3m"); one from before lanes were tagged counts as the first lane's.
 const entryLanes = (h, first) => (Array.isArray(h && h.lanes) && h.lanes.length ? h.lanes : [first]);
 

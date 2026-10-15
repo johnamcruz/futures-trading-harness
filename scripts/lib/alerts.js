@@ -23,12 +23,13 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { spawn } = require('child_process');
+const ALERTS = require('./tunables').runner().alerts; // config/runner.json alerts
 
 const dayKey = d => d.toISOString().slice(0, 10);
 const heartbeatFile = home => path.join(home, 'autotrader-heartbeat.json');
 
 /** POST JSON to an https URL; resolves true/false, never rejects. */
-function postJson(url, body, timeoutMs = 5000) {
+function postJson(url, body, timeoutMs = ALERTS.webhookTimeoutMs) {
   return new Promise(resolve => {
     try {
       const u = new URL(url);
@@ -59,7 +60,7 @@ function runCommand(argv, message) {
   }
 }
 
-function createAlerter({ home, webhook = '', command = null, throttleMinutes = 10, now = () => new Date(), post = postJson, run = runCommand, label = 'futures-trading-harness' } = {}) {
+function createAlerter({ home, webhook = '', command = null, throttleMinutes = ALERTS.throttleMinutes, now = () => new Date(), post = postJson, run = runCommand, label = 'futures-trading-harness' } = {}) {
   const lastSent = new Map();
   return function alert(message, { kind = 'error' } = {}) {
     const at = now();
@@ -99,7 +100,7 @@ function writeHeartbeat(home, info = {}, now = new Date()) {
  * { ok, problems: [..], heartbeat, ageMinutes } for the watchdog. `staleMinutes`:
  * how long without a pass counts as dead (default: 3 bars, at least 5 minutes).
  */
-function watchdogStatus(home, { now = new Date(), staleMinutes = 5, killSwitchFile = path.join(home, 'STOP') } = {}) {
+function watchdogStatus(home, { now = new Date(), staleMinutes = ALERTS.staleMinutes, killSwitchFile = path.join(home, 'STOP') } = {}) {
   const problems = [];
   let hb = null;
   try {

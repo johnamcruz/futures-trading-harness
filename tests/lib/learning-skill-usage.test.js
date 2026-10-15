@@ -25,7 +25,7 @@ const A = [
 ];
 function rec(bar, side, reads, { briefing = at('MNQ', bar), size = 1 } = {}) {
   const checked = checkReads({ reads: reads.map(([step, skill, read]) => ({ step, skill, read, why: 'x' })), side, briefing });
-  const planned = TL.planOf({ checked, briefing, side, size, tick: 0.25, tickValue: 0.5, minRR: 2, maxRiskUsd: 300 });
+  const planned = TL.planOf({ checked, briefing, side, size, tick: 0.25, tickValue: 0.5, minRR: 2, maxRiskUsd: 300, stopRule: require('../helpers').lifecycleStopRule() });
   return TL.buildRecord({ at: new Date(Date.parse(bar) + 182000).toISOString(), root: 'MNQ', symbol: 'MNQ', side, briefing, checked, planned });
 }
 // The bar's ok record; then the same bar again with a FALSE read (named under another skill), an unverifiable one, and

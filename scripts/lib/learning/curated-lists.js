@@ -63,17 +63,12 @@ const KIND = 'curated-lists';
 const PINNED = 'curated-pinned.json';
 const ROLE = Object.freeze({ practice: 'practice-train', validate: 'practice-validate' });
 const LISTS = Object.freeze(['trend-up', 'trend-down', 'trend-end', 'chop', 'counter-trend']);
-const DEFAULTS = Object.freeze({
-  total: 200,
-  mix: Object.freeze({ 'trend-up': 0.35, 'trend-down': 0.35, 'trend-end': 0.1, chop: 0.1, 'counter-trend': 0.1 }),
-  minSkill: 3,
-  passShare: Object.freeze({ 'trend-end': 0.6, chop: 0.7, 'counter-trend': 0.7 }),
-  seed: 1,
-});
+const CL = require('../tunables').replay().curatedLists; // config/replay.json curatedLists
+const DEFAULTS = Object.freeze({ total: CL.total, mix: CL.mix, minSkill: CL.minSkill, passShare: CL.passShare, seed: CL.seed });
 /** Every skill a read maps to (curated-moments.js READ_SKILL, the crosswalk's). */
 const skillsOf = () => [...new Set([...Object.values(momentsLib().READ_SKILL).flatMap(Object.values), momentsLib().SHAPE_SKILL])].sort();
 /** A year holds at most this many times its even share of a list (the years that have candidates). */
-const YEAR_CAP = 1.5;
+const YEAR_CAP = CL.yearCap;
 const OUTCOMES = ['win', 'loss', 'scratch', 'unfilled', 'no-room', 'not-composable', 'stop-under-floor', 'no-confirmation', 'no-entry-window'];
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);

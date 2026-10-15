@@ -68,8 +68,8 @@ const SETUP_FILE = 'setup.json';
 const PINNED = Object.freeze(['stage', 'list', 'seed', 'market', 'data', 'index']);
 const METRICS = Object.freeze(['r-decision', 'r-trade', 'reads', 'process', 'entries', 'skills', 'mc']);
 const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'unchecked'));
-const LEVEL = 0.9;
-const REPS = 2000;
+const LEVEL = require('../tunables').training().abCompare.level; // config/training.json abCompare
+const REPS = require('../tunables').training().abCompare.reps;
 const BETTER = 'B better';
 const WORSE = 'B worse';
 const NONE = 'no significant difference';
