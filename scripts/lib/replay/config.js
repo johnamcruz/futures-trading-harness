@@ -25,6 +25,9 @@
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
  *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
  *                  experience_lookup's code-measured section (default: none)
+ *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list>,
+ *                  manageTailMin: 60 }; with `practice` only: the run steps only the list's windows (and their days'
+ *                  premarket and end of day), pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -54,6 +57,7 @@ const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
+const { validateCuratedConfig, curatedForRun } = require('../learning/curated-lists');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -145,6 +149,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   }
   const practice = validatePractice(r.practice);
   errors.push(...practice.errors);
+  const curatedCfg = validateCuratedConfig(r.curatedList);
+  errors.push(...curatedCfg.errors);
+  if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -163,6 +170,15 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
   };
+  // The curated list, its windows inside the run's and its use the run's window (a validation list never on practice-train).
+  let curated = null;
+  if (curatedCfg.curated) {
+    try {
+      curated = curatedForRun({ ...curatedCfg.curated, file: path.resolve(baseDir, expandHome(curatedCfg.curated.file, home)), start, end });
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
   if (base.practice !== undefined || overrides.practice !== undefined) throw new Error('invalid replay config:\n- practice: set in the replay config (its own field), never in the runner config or overrides');
   const holidays = holidayDates(start, end);
@@ -187,6 +203,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     prop: r.prop || null,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
+    // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
+    curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
@@ -276,6 +294,8 @@ function configHash(run, base = process.env) {
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
+    // The curated list a run replays (its decision times are the list's): named only when there is one.
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list, manageTailMin: run.curated.manageTailMin } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -296,6 +316,8 @@ function setupHash(run) {
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
     // the hash it had (its looks in the ledger stay its own).
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
+    // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list, manageTailMin: run.curated.manageTailMin } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }

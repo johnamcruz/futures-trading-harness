@@ -48,6 +48,7 @@ const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
+const { curatedPoints } = require('../learning/curated-lists');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
@@ -218,7 +219,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     runId: run.runId, hash,
     info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
-  const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  // A curated run (learning/curated-lists.js) steps only its list's windows, their management tails, and their days'
+  // premarket and end of day; the clock jumps between them, the broker's fills and brackets working through the gaps.
+  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : all;
   const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
   // the window is inside it. Only on a fresh run (nothing recorded yet): a resumed run keeps the attempt it has, or

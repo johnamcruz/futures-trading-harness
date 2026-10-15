@@ -409,24 +409,31 @@ function dayLine(sym, bars) {
  * Setup-focused practice's bar selector (learning/setup-moments.js selectBar), from the bar's own briefing (the
  * symbol's, the facts the model reads), or null without `practice`. Refused (throws) unless the run is a replay
  * (FTH_REPLAY_NOW) of a practice learning run (the run home's learning-run.json: practice-train or practice-validate):
- * live and the sealed windows always run every bar.
+ * live and the sealed windows always run every bar. With a pinned curated list (learning/curated-lists.js), only its
+ * windows run practice; outside them a bar runs only with something open.
  */
 function practiceSelector(cfg, home, env) {
   if (!cfg.practice) return null;
   const { selectBar } = require('./learning/setup-moments');
   const { readLearningRun } = require('./learning/run-gate');
+  const { loadPinnedCurated, curatedSelect } = require('./learning/curated-lists');
   const run = readLearningRun(home);
   if (!env.FTH_REPLAY_NOW) throw new Error('practice (setup-focus) runs only in a replay: live runs every bar');
   if (!run || run.learning !== true || !['practice-train', 'practice-validate'].includes(run.role)) {
     throw new Error(`practice (setup-focus) runs only on a practice-train or practice-validate learning run (this run: ${run ? (run.learning ? run.role : 'not a learning run') : 'no learning-run.json'}); test and final run every bar`);
   }
+  // The pinned curated list (its fingerprint checked; a broken pin throws: practice never runs the wrong bars).
+  const curated = loadPinnedCurated(home);
   return (item, open) => {
     const b = readBriefing(home, item.symbol);
     const data = b && b.sections && b.sections.m3 && b.sections.m3.data;
     const barClose = Date.parse(item.bar.t) + (item.minutes || cfg.timeframe) * 60000;
     // The first lane's briefing as of this close (another lane's bar reads the one holding then); an older one is none.
     const candles = data && data.bar && Date.parse(data.bar.t) + cfg.timeframe * 60000 <= barClose && Date.parse(b.sections.m3.validUntil) >= barClose ? data.candles : null;
-    return selectBar({ practice: cfg.practice, candles, symbol: item.symbol, bar: item.bar.t, barClose, open });
+    const select = () => selectBar({ practice: cfg.practice, candles, symbol: item.symbol, bar: item.bar.t, barClose, open });
+    // A curated run (learning/curated-lists.js): the same practice inside the pinned list's windows; outside them a bar
+    // runs only to manage what is open.
+    return curated ? curatedSelect({ windows: curated.windows, barClose, open, select }) : select();
   };
 }
 
