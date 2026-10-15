@@ -332,6 +332,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message });
+    // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
+    else if (named && named.signal === 'policy') {
+      const v = latestVerdict(config.home, named.name, contractRoot(input.contractId));
+      if (!v || v.record !== composedCheck.record.id) violations.push({ check: 'policy', message: `setup:${named.name}: the latest verdict is not the one sized on the compose record of ${composedCheck.record.at} (order_plan records it): plan the entry again.` });
+    }
   }
   // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
   // the tier its frame needs among the record's re-checked reads (lifecycle-gate.js reversalAllowed); then the trend

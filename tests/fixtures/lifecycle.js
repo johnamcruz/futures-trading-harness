@@ -32,7 +32,7 @@ function briefing(over = {}) {
       m3: {
         version: 'v-scenario-1', validUntil: EXPIRES,
         data: {
-          price: 21540.25, oneR: { points: 12, basis: '0.5 x 3m ATR(20) 24' }, referenceStop: { distance: 12, long: 21528.25, short: 21552.25 },
+          price: 21540.25, bar: { t: BAR, o: 21530, h: 21541, l: 21529, c: 21540.25, v: 500 }, oneR: { points: 12, basis: '0.5 x 3m ATR(20) 24' }, referenceStop: { distance: 12, long: 21528.25, short: 21552.25 },
           trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short.',
           vwap: { applies: 'rth', side: 'above' }, location: { priorValue: 'above' }, news: { inBlackout: false },
           candles: { '3m': { o: 21530, h: 21541, l: 21529, c: 21540.25, closeLocation: 'top' }, '15m': { o: 21520, h: 21545, l: 21512.75, c: 21540.25, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] } },

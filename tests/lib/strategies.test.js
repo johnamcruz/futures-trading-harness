@@ -52,12 +52,20 @@ test('the shipped strategies: prop_portfolio alone, valid; an old detector signa
   }
 });
 
-test('prop_portfolio ships active with no strategies and is valid; a policy listing none has no setups', () => {
+test('prop_portfolio ships active with trade_lifecycle, its one component, and is valid; a policy listing none has no setups', () => {
   const portfolio = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
   assert.strictEqual(portfolio.valid, true, portfolio.errors.join('; '));
   assert.strictEqual(portfolio.status, 'active');
   assert.strictEqual(portfolio.signal, 'policy');
-  assert.deepStrictEqual(portfolio.strategies, []);
+  assert.deepStrictEqual(portfolio.strategies, ['trade_lifecycle']);
+  // A composed component trades inside it under the same status rule (active goes; paper only in a paper run).
+  const { componentRefusal } = require('../../scripts/lib/trading/strategies');
+  const shipped = loadStrategies(ROOT, {}).strategies;
+  assert.strictEqual(componentRefusal(portfolio, shipped, 'trade_lifecycle'), null);
+  const registry = shipped.map(s => (s.name === 'trade_lifecycle' ? { ...s, status: 'paper' } : s));
+  assert.strictEqual(componentRefusal(portfolio, registry, 'trade_lifecycle', { paper: true }), null);
+  assert.match(componentRefusal(portfolio, registry, 'trade_lifecycle'), /status "paper"/);
+  assert.match(componentRefusal(portfolio, shipped.map(s => (s.name === 'trade_lifecycle' ? { ...s, signal: 'manual' } : s)), 'trade_lifecycle'), /signal: manual; a policy trades rules strategies and composed ones only/);
   // Validation alone: an empty list is valid (no setups yet); a missing, duplicated or malformed one is not.
   const base = { name: 'p', description: 'x'.repeat(40), status: 'active', instruments: ['MNQ', 'NQ', 'MES', 'ES'], timeframe: '3m', signal: 'policy', strategies: [], account: 'acct', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, risk: { stop: 'strategy', min_rr: 2 } };
   const body = '## When to Use\n## How It Works\n## Examples';
@@ -69,13 +77,13 @@ test('prop_portfolio ships active with no strategies and is valid; a policy list
   const t = i => new Date(Date.UTC(2026, 9, 7, 14) + i * 180000).toISOString();
   const bars = Array.from({ length: 30 }, (_, k) => ({ t: t(k), o: 100 + k, h: 101 + k, l: 99 + k, c: 100.5 + k, v: 10 }));
   for (const symbol of ['MNQ', 'ES']) {
-    const [r, ...rest] = scan([portfolio], bars, { symbol });
+    const [r, ...rest] = scan([{ ...portfolio, strategies: [] }], bars, { symbol });
     assert.deepStrictEqual(rest, [], symbol);
     assert.strictEqual(r.signal, 'policy');
     assert.strictEqual(r.candidate, false);
     assert.match(r.note, /no strategies listed: no setups/);
   }
-  assert.deepStrictEqual(recentSignals([portfolio], bars, { symbol: 'MNQ', count: 3 }).map(x => x.fired), [[], [], []]);
+  assert.deepStrictEqual(recentSignals([{ ...portfolio, strategies: [] }], bars, { symbol: 'MNQ', count: 3 }).map(x => x.fired), [[], [], []]);
 });
 
 test('the template parses and only fails on its placeholder name', () => {
