@@ -24,6 +24,9 @@
  *       for review (flagged.jsonl, flagged.md); --bars and --out as for labels; a look at the schedule's months
  *       (prop/looks.js): --purpose reasoning-fix (default in Recent: outcomes hidden) | tuning (default elsewhere) |
  *       judging, --ledger <file> (required for judging; an allowed look is appended to it), --candidate <name>
+ *   node scripts/replay.js experience <run dir> [--bars SYM=file ...]   the learning loop's experience log (<run
+ *       home>/experience/decisions.jsonl; learning/run-experience.js), of a learning run that passed the gate; `run`
+ *       writes it when the run finishes.
  *   report, labels and scorecard read a live session's folder (<FTH_HOME>/sessions/<day>, session/live.js) as a run's
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
@@ -51,10 +54,11 @@ const { loadAccounts, accountNamed } = require('./lib/trading/accounts');
 const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
+const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -144,6 +148,7 @@ function labels(argv) {
   return 0;
 }
 
+
 async function run(argv) {
   const r = load(argv);
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
@@ -157,6 +162,10 @@ async function run(argv) {
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);
   else say(`done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
+  // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
+  if (res.done) {
+    try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
+  }
   return res.stopped && !/max-cycles/.test(res.stopped) ? 1 : 0;
 }
 
@@ -167,6 +176,7 @@ async function main(argv) {
   if (cmd === 'report') return report(argv);
   if (cmd === 'labels') return labels(argv);
   if (cmd === 'scorecard') return score(argv);
+  if (cmd === 'experience') { say(experienceLine(writeRunExperience(argv[1] && !argv[1].startsWith('--') ? argv[1] : '', { root: ROOT, barsFiles: barsArgs(argv) }))); return 0; }
   throw new Error(USAGE);
 }
 
