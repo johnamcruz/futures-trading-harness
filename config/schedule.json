@@ -1,0 +1,45 @@
+{
+  "version": "v1",
+  "data": {
+    "start": "2021-04-01",
+    "flowCoverage": ["2021-05-01", "2025-12-01"]
+  },
+  "learning": {
+    "open": {
+      "practice-train": ["2020-01-01", "2024-07-01"],
+      "practice-validate": ["2024-07-01", "2025-01-01"]
+    },
+    "sealed": {
+      "windows": {
+        "test": ["2025-01-01", "2026-01-01"],
+        "final": ["2026-01-01", "2027-01-01"]
+      },
+      "lookBudgets": { "test": 3, "final": 1 },
+      "finalNeedsTestPass": true,
+      "validateRunsPerCandidate": 3,
+      "recordedLooks": [
+        { "kind": "look", "evaluation": "llm-replay-2026-06", "candidate": "llm-replay-2026-06", "purpose": "reasoning-fix", "runId": "llm-replay-2026-06", "from": "2026-06-01", "to": "2026-06-06", "role": "final", "what": "LLM replay, June 1-5 2026, adherence only" }
+      ]
+    }
+  },
+  "prop": {
+    "open": {
+      "train": ["2021-01-01", "2023-07-01"],
+      "select": ["2023-07-01", "2024-07-01"]
+    },
+    "sealed": {
+      "blocks": {
+        "oos": ["2024-07-01", "2025-07-01"],
+        "recent": ["2025-07-01", "2026-07-01"]
+      },
+      "llmFrom": "2026-06-01",
+      "reserveMinMonths": 12,
+      "lookBudget": 3,
+      "recordedLooks": [
+        { "block": "recent", "from": "2026-06-01", "to": "2026-06-06", "what": "LLM replay, June 1-5 2026", "use": "adherence only, no candidate claims (R22)" },
+        { "block": "select", "from": "2024-03-04", "to": "2024-06-22", "what": "flow parity check", "use": "decided recalibration only, no threshold value" },
+        { "block": "oos", "from": "2024-08-01", "to": "2024-08-10", "what": "flow parity check", "use": "decided recalibration only, no threshold value" }
+      ]
+    }
+  }
+}

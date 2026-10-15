@@ -118,7 +118,7 @@ function windowErrors(tuning = [], heldOut = []) {
  * takes there (perWindow looks per window: the champion's run and the challenger's, each an evaluation of its own),
  * so a judging never spends looks and then blocks. ledger: the learning ledger's lines (learning/looks.js).
  */
-function lookErrors(windows, ledger, { perWindow = 2, budgets = null } = {}) {
+function lookErrors(windows, ledger, { perWindow = 2 } = {}) {
   const looks = require('../learning/looks');
   const usage = looks.lookUsage(Array.isArray(ledger) ? ledger : []);
   const need = new Map();
@@ -128,7 +128,7 @@ function lookErrors(windows, ledger, { perWindow = 2, budgets = null } = {}) {
   }
   const out = [];
   for (const [role, n] of need) {
-    const budget = (budgets || looks.LOOK_BUDGETS)[role];
+    const budget = looks.LOOK_BUDGETS[role];
     const left = Math.max(0, budget - ((usage[role] && usage[role].evaluations) || 0));
     if (n > left) out.push(`${role}: judging these windows takes ${n} look(s) (${perWindow} per window: the champion's run and the challenger's), and ${left} of its ${budget} are left: refused before any look is spent`);
   }

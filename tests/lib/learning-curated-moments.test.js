@@ -228,7 +228,16 @@ test('CLI: scan (practice-train only), build and show on fixture bars; the list 
   const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-curated-cli-'));
   const bars = path.join(dir, 'MNQ-3m.json');
   fs.writeFileSync(bars, JSON.stringify(BARS));
-  const cli = (...args) => spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir } });
+  // The fixture bars are from 2020, before the committed data start: the scan reads a schedule whose data starts earlier.
+  const sched = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'config', 'schedule.json'), 'utf8'));
+  sched.data.start = '2020-01-01';
+  const early = path.join(dir, 'schedule-early.json');
+  fs.writeFileSync(early, JSON.stringify(sched));
+  const useFile = path.join(__dirname, '..', 'fixtures', 'schedule', 'use-file.js');
+  const cli = (...args) => spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir, NODE_OPTIONS: `--require ${useFile}`, FTH_TEST_SCHEDULE_SOURCE: early } });
+  const plain = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'curated-lists.js'), 'scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-05-01', '--to', '2020-05-02', '--use', 'practice', '--out', path.join(dir, 'x.jsonl')], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir } });
+  assert.notStrictEqual(plain.status, 0);
+  assert.match(plain.stderr, /before the data's start 2021-04-01/);
   const out = path.join(dir, 'moments.jsonl');
   let r = cli('scan', '--bars', bars, '--root', 'MNQ', '--from', '2020-05-01', '--to', '2020-05-02', '--use', 'practice', '--window-bars', String(WINDOW), '--out', out);
   assert.strictEqual(r.status, 0, r.stderr);

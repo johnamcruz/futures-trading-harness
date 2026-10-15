@@ -408,3 +408,10 @@ test('accountOpen and listSizes: an unreadable size is open; a size of 0 flat; l
   assert.deepStrictEqual(C.listSizes(10, C.DEFAULTS.mix), { 'trend-up': 4, 'trend-down': 3, 'trend-end': 1, chop: 1, 'counter-trend': 1 });
   assert.deepStrictEqual(C.listSizes(5, { 'trend-up': 0.5, 'trend-down': 0.5 }), { 'trend-up': 3, 'trend-down': 2, 'trend-end': 0, chop: 0, 'counter-trend': 0 });
 });
+
+test('data.start is used: a scan from before the data start is refused, one on or after it passes', () => {
+  assert.throws(() => C.assertWithinData('2021-03-31', '2021-04-01'), /before the data's start 2021-04-01/);
+  assert.strictEqual(C.assertWithinData('2021-04-01', '2021-04-01'), '2021-04-01');
+  assert.throws(() => C.assertWithinData('2020-01-02'), /before the data's start 2021-04-01/); // the committed schedule's
+  assert.strictEqual(C.assertWithinData('2022-03-01'), '2022-03-01');
+});

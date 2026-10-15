@@ -80,7 +80,9 @@ function checkedScorecard(scorecard) {
     if (!opts || !opts.look || typeof opts.look.purpose !== 'string' || !Array.isArray(opts.look.ledger)) {
       throw new Error('a scorecard reads a run only under a look (purpose and ledger): refused');
     }
-    // A learning run (learning-run.json) follows the learning split and ledger; any other, the prop schedule.
+    // A learning run (learning-run.json) follows the learning split and ledger; any other, the prop schedule. Both are
+    // config/schedule.json's, through scripts/lib/schedule.js: a refused schedule refuses the read here.
+    require('../schedule').current();
     const run = readRun(opts.runDir);
     learningLook(opts.runDir, run, { ...opts.look, env: opts.env || process.env }) || lookAt(run, opts.look);
     return scorecard(opts);

@@ -1,97 +1,54 @@
 'use strict';
 
 /**
- * The data split windows, one canonical copy for everything that scores a
- * prop configuration on history: train (calibration and search), select
- * (choosing among candidates) and oos (the promotion gate,
- * prop/promotion.js). Each is [from, to): ISO dates, `to` exclusive. A
- * window changes only when the out-of-sample one is retired; out of sample
- * never overlaps train or select and never moves backward
- * (tests/lib/prop-splits.test.js).
+ * The data split windows for everything that scores a prop configuration on history: train (calibration and
+ * search), select (choosing among candidates) and oos (the promotion gate, prop/promotion.js). Their dates are config,
+ * config/schedule.json `prop` (scripts/lib/schedule.js loads and validates it): train and select are its open part,
+ * oos, recent, the LLM month, the reserve size, the look budget and the recorded looks its sealed part, which never
+ * changes after a look (schedule.js sealedRefusals). Each is [from, to): ISO dates, `to` exclusive; out of sample
+ * never overlaps train or select (the schedule's validation; tests/lib/prop-splits.test.js).
  *
- * The schedule (docs/LEARNED-RULEBOOK.md section 4, R16, R17, R32): every
- * month from SCHEDULE_START on has exactly one mechanical role, set in
- * advance, so nothing chooses a month's use after seeing it:
+ * The schedule (docs/LEARNED-RULEBOOK.md section 4, R16, R17, R32): every month from SCHEDULE_START on has exactly
+ * one mechanical role, set in advance, so nothing chooses a month's use after seeing it:
  *
- * - train, select, oos: SPLITS below, unchanged.
- * - recent (2025-07 to 2026-06): reserved, the next out-of-sample window once
- *   the current one is retired through the ledger. Its one recorded look is
- *   the June 1-5, 2026 LLM replay, adherence only (RECORDED_LOOKS).
- * - from 2026-07 on, by half-year, by rule: every H2 is walk-forward and
- *   every H1 is reserve, so they alternate starting with 2026-H2 =
- *   walk-forward, 2027-H1 = reserve, 2027-H2 = walk-forward, ...
- * - each walk-forward half-year is two contiguous quarters, tuning first and
- *   held-out second: the held-out quarter is later in time than everything
- *   the proposer and Optuna were shown, so a held-out look is a forward test,
- *   and tuning data arrives first so the loop can start while the held-out
- *   months are still coming in.
- * - reserve half-years accumulate (oosQueue) until they hold at least
- *   RESERVE_MIN_MONTHS before they form an out-of-sample window. That is a
- *   computation, not a promotion: retiring a window goes through the ledger.
+ * - train, select, oos: SPLITS.
+ * - recent (RECENT): reserved, the next out-of-sample window once the current one is retired through the ledger.
+ *   Its one recorded look is the LLM replay, adherence only (RECORDED_LOOKS).
+ * - from NEW_MONTHS_FROM (Recent's end, a half-year) on, by half-year, by rule: the first half-year is
+ *   walk-forward, the next reserve, and they alternate.
+ * - each walk-forward half-year is two contiguous quarters, tuning first and held-out second: the held-out quarter
+ *   is later in time than everything the proposer and Optuna were shown, so a held-out look is a forward test, and
+ *   tuning data arrives first so the loop can start while the held-out months are still coming in.
+ * - reserve half-years accumulate (oosQueue) until they hold at least RESERVE_MIN_MONTHS before they form an
+ *   out-of-sample window. That is a computation, not a promotion: retiring a window goes through the ledger.
  *
- * The LLM role (months from LLM_FROM, after the model's training cutoff) is
- * orthogonal: a flag on a month, never a mechanical role of its own. So is
- * flow coverage (FLOW_COVERAGE, 2021-05 to 2025-11): it limits which months
- * carry flow, never a month's role. An attempt of a policy with a flow branch
- * is covered when its start day plus `sessions` sessions is covered
- * (attemptFlowCovered), decided at the start. Which looks at these months
- * are allowed and which count against a budget: prop/looks.js.
+ * The LLM role (months from LLM_FROM, after the model's training cutoff) is orthogonal: a flag on a month, never a
+ * mechanical role of its own. So is flow coverage (FLOW_COVERAGE, the schedule's data.flowCoverage): it limits which
+ * months carry flow, never a month's role. An attempt of a policy with a flow branch is covered when its start day
+ * plus `sessions` sessions is covered (attemptFlowCovered), decided at the start. Which looks at these months are
+ * allowed and which count against a budget: prop/looks.js.
  *
- * A date string ('YYYY-MM[-DD]') is a trading-session date (the day a
- * session counts for); a Date or a millisecond timestamp (a bar's time) is
- * converted to its session first (18:00 ET rollover, clock.tradingDayKey),
- * so an evening bar belongs to the next session's block. Every block starts
- * on the first of a month.
+ * A date string ('YYYY-MM[-DD]') is a trading-session date (the day a session counts for); a Date or a millisecond
+ * timestamp (a bar's time) is converted to its session first (18:00 ET rollover, clock.tradingDayKey), so an evening
+ * bar belongs to the next session's block. Every block starts on the first of a month. The schedule's values are read
+ * when used, not when this module loads: hasSession and attemptSessions need no schedule.
  */
 
 const { tradingDayKey } = require('../trading/clock');
 const { CLOSED, cmeHolidays } = require('../trading/exchange-calendar');
 
-const SPLITS = Object.freeze({
-  train: Object.freeze(['2021-01-01', '2023-07-01']),
-  select: Object.freeze(['2023-07-01', '2024-07-01']),
-  oos: Object.freeze(['2024-07-01', '2025-07-01']),
-});
+const schedule = require('../schedule');
 
-/** Recent: reserved for the next out-of-sample window. [from, to). */
-const RECENT = Object.freeze(['2025-07-01', '2026-07-01']);
-/** The schedule's first month; earlier dates have no role. */
-const SCHEDULE_START = SPLITS.train[0];
-/** New months (half-year blocks) start here; 2026-H2 is walk-forward. */
-const NEW_MONTHS_FROM = RECENT[1];
-/** Months after the model's training cutoff: the LLM may be measured on them. */
-const LLM_FROM = '2026-06-01';
-/** A reserve becomes an out-of-sample window once it holds this many months. */
-const RESERVE_MIN_MONTHS = 12;
-/**
- * The replay server's flow coverage (section 4): [from, to), session dates, `to` exclusive, so 2021-05 through
- * 2025-11. Coverage limits which months carry flow, never which role a month has.
- */
-const FLOW_COVERAGE = Object.freeze(['2021-05-01', '2025-12-01']);
+/** The schedule's prop part (config/schedule.json `prop`, `data`): a refused schedule throws, so nothing has a role. */
+const P = () => schedule.current().prop;
 const ROLES = Object.freeze(['train', 'select', 'oos', 'recent', 'walk-forward', 'reserve']);
 const PARTS = Object.freeze(['tuning', 'held-out']);
 
-/** Looks already taken at held-out or reserved months, kept so the ledger starts true. */
-const RECORDED_LOOKS = Object.freeze([
-  Object.freeze({
-    block: 'recent', from: '2026-06-01', to: '2026-06-06',
-    what: 'LLM replay, June 1-5 2026', use: 'adherence only, no candidate claims (R22)',
-  }),
-  // The flow parity check: Mar 4-22, Apr 8-19, May 20-24 and Jun 6-21, 2024 (select), Aug 1-9, 2024 (oos).
-  Object.freeze({
-    block: 'select', from: '2024-03-04', to: '2024-06-22',
-    what: 'flow parity check', use: 'decided recalibration only, no threshold value',
-  }),
-  Object.freeze({
-    block: 'oos', from: '2024-08-01', to: '2024-08-10',
-    what: 'flow parity check', use: 'decided recalibration only, no threshold value',
-  }),
-]);
-
 /** A window as ms: { from, to } (to exclusive). */
 function windowMs(name) {
-  const w = SPLITS[name];
-  if (!w) throw new Error(`no split window "${name}" (${Object.keys(SPLITS).join(', ')})`);
+  const splits = P().splits;
+  const w = Object.hasOwn(splits, name) ? splits[name] : null;
+  if (!w) throw new Error(`no split window "${name}" (${Object.keys(splits).join(', ')})`);
   return { from: Date.parse(`${w[0]}T00:00:00Z`), to: Date.parse(`${w[1]}T00:00:00Z`) };
 }
 
@@ -141,22 +98,34 @@ function parseEnd(to) {
 }
 const isoOfMonth = m => `${String(Math.floor(m / 12)).padStart(4, '0')}-${String((m % 12) + 1).padStart(2, '0')}-01`;
 
-const START = monthOf(SCHEDULE_START);
-const NEW_START = monthOf(NEW_MONTHS_FROM);
-const LLM_START = monthOf(LLM_FROM);
-
 function makeBlock(role, name, fromM, toM, parts) {
   const block = { role, block: name, from: isoOfMonth(fromM), to: isoOfMonth(toM), months: toM - fromM };
   if (parts) block.parts = Object.freeze(parts.map(p => Object.freeze(p)));
   return Object.freeze(block);
 }
 
-const FIXED_BLOCKS = Object.freeze([
-  makeBlock('train', 'train', monthOf(SPLITS.train[0]), monthOf(SPLITS.train[1])),
-  makeBlock('select', 'select', monthOf(SPLITS.select[0]), monthOf(SPLITS.select[1])),
-  makeBlock('oos', 'oos', monthOf(SPLITS.oos[0]), monthOf(SPLITS.oos[1])),
-  makeBlock('recent', 'recent', monthOf(RECENT[0]), monthOf(RECENT[1])),
-]);
+/**
+ * The schedule's month indexes and fixed blocks, derived once per schedule (the schedule object is loaded once per
+ * process): START (its first month), NEW_START (the half-year blocks start where Recent ends), LLM_START, FIXED.
+ */
+const derivedFor = new WeakMap();
+function D() {
+  const p = P();
+  if (!derivedFor.has(p)) {
+    derivedFor.set(p, Object.freeze({
+      START: monthOf(p.splits.train[0]),
+      NEW_START: monthOf(p.recent[1]),
+      LLM_START: monthOf(p.llmFrom),
+      FIXED: Object.freeze([
+        makeBlock('train', 'train', monthOf(p.splits.train[0]), monthOf(p.splits.train[1])),
+        makeBlock('select', 'select', monthOf(p.splits.select[0]), monthOf(p.splits.select[1])),
+        makeBlock('oos', 'oos', monthOf(p.splits.oos[0]), monthOf(p.splits.oos[1])),
+        makeBlock('recent', 'recent', monthOf(p.recent[0]), monthOf(p.recent[1])),
+      ]),
+    }));
+  }
+  return derivedFor.get(p);
+}
 
 /** The half-year block (from NEW_MONTHS_FROM on) holding month index m. */
 function halfYearBlock(m) {
@@ -164,8 +133,8 @@ function halfYearBlock(m) {
   const h2 = m % 12 >= 6;
   const fromM = year * 12 + (h2 ? 6 : 0);
   const name = `${year}-H${h2 ? 2 : 1}`;
-  // The rule: alternate by half-year from 2026-H2 (index 0) = walk-forward.
-  const index = (fromM - NEW_START) / 6;
+  // The rule: alternate by half-year from NEW_MONTHS_FROM's (index 0) = walk-forward.
+  const index = (fromM - D().NEW_START) / 6;
   if (index % 2 === 0) {
     return makeBlock('walk-forward', name, fromM, fromM + 6, [
       { part: 'tuning', from: isoOfMonth(fromM), to: isoOfMonth(fromM + 3), months: 3 },
@@ -176,9 +145,13 @@ function halfYearBlock(m) {
 }
 
 function blockAtMonth(m) {
-  if (m < START) throw new Error(`${isoOfMonth(m)} is before the schedule (${SCHEDULE_START})`);
+  const { START, NEW_START, FIXED } = D();
+  if (m < START) throw new Error(`${isoOfMonth(m)} is before the schedule (${isoOfMonth(START)}, config/schedule.json)`);
   if (m >= NEW_START) return halfYearBlock(m);
-  return FIXED_BLOCKS.find(b => m >= monthOf(b.from) && m < monthOf(b.to));
+  const b = FIXED.find(x => m >= monthOf(x.from) && m < monthOf(x.to));
+  // A gap between two fixed blocks (the schedule allows one) has no role.
+  if (!b) throw new Error(`${isoOfMonth(m)} has no block in the schedule (config/schedule.json)`);
+  return b;
 }
 
 /**
@@ -192,21 +165,21 @@ function roleOf(date) {
   const b = blockAtMonth(m);
   const part = b.parts ? b.parts.find(p => m < monthOf(p.to)) : null;
   return Object.freeze({
-    role: b.role, block: b.block, part: part ? part.part : null, llm: m >= LLM_START,
+    role: b.role, block: b.block, part: part ? part.part : null, llm: m >= D().LLM_START,
     from: part ? part.from : b.from, to: part ? part.to : b.to,
   });
 }
 
 /** Whether a date falls in the LLM's months (after the model's cutoff). */
-const isLlmMonth = date => parse(date).month >= LLM_START;
+const isLlmMonth = date => parse(date).month >= D().LLM_START;
 
 /** A block by name ('train', 'recent', '2027-H1', ...). */
 function blockByName(name) {
-  const fixed = FIXED_BLOCKS.find(b => b.block === name);
+  const fixed = D().FIXED.find(b => b.block === name);
   if (fixed) return fixed;
   const m = /^(\d{4})-H([12])$/.exec(String(name));
   const fromM = m ? Number(m[1]) * 12 + (m[2] === '2' ? 6 : 0) : NaN;
-  if (!(fromM >= NEW_START)) throw new Error(`no schedule block "${name}"`);
+  if (!(fromM >= D().NEW_START)) throw new Error(`no schedule block "${name}"`);
   return halfYearBlock(fromM);
 }
 
@@ -249,7 +222,8 @@ function unitContaining(from, to) {
 function oosQueue(asOf) {
   const until = parse(asOf).ms;
   const ended = blk => Date.parse(`${blk.to}T00:00:00Z`) <= until;
-  const recent = FIXED_BLOCKS.find(b => b.role === 'recent');
+  const { FIXED, NEW_START } = D();
+  const recent = FIXED.find(b => b.role === 'recent');
   const out = [];
   if (!ended(recent)) return out;
   out.push(Object.freeze({ blocks: Object.freeze([recent.block]), months: recent.months, readyAt: recent.to }));
@@ -261,7 +235,7 @@ function oosQueue(asOf) {
     if (blk.role !== 'reserve') continue;
     group.push(blk.block);
     months += blk.months;
-    if (months >= RESERVE_MIN_MONTHS) {
+    if (months >= P().reserveMinMonths) {
       out.push(Object.freeze({ blocks: Object.freeze(group), months, readyAt: blk.to }));
       group = [];
       months = 0;
@@ -313,13 +287,11 @@ function attemptSessions(start, sessions) {
   return Object.freeze({ first: isoOfMs(first), last: isoOfMs(last), bound: isoOfMs(t) });
 }
 
-const FLOW_FROM = parse(FLOW_COVERAGE[0]).ms;
-const FLOW_TO = parse(FLOW_COVERAGE[1]).ms;
-
 /** Whether a date's session carries flow (FLOW_COVERAGE). A timestamp is read as its session first. */
 function isFlowCovered(date) {
   const t = parse(date).ms;
-  return t >= FLOW_FROM && t < FLOW_TO;
+  const [from, to] = schedule.current().data.flowCoverage;
+  return t >= parse(from).ms && t < parse(to).ms;
 }
 
 /**
@@ -333,8 +305,16 @@ function attemptFlowCovered(start, sessions) {
 }
 
 module.exports = {
-  SPLITS, windowMs, overlaps,
-  RECENT, SCHEDULE_START, NEW_MONTHS_FROM, LLM_FROM, RESERVE_MIN_MONTHS, ROLES, PARTS, RECORDED_LOOKS, FLOW_COVERAGE,
+  // The schedule's values, read when used (config/schedule.json): a refused schedule throws here, never a default.
+  get SPLITS() { return P().splits; },
+  get RECENT() { return P().recent; },
+  get SCHEDULE_START() { return P().splits.train[0]; },
+  get NEW_MONTHS_FROM() { return P().recent[1]; },
+  get LLM_FROM() { return P().llmFrom; },
+  get RESERVE_MIN_MONTHS() { return P().reserveMinMonths; },
+  get RECORDED_LOOKS() { return P().recordedLooks; },
+  get FLOW_COVERAGE() { return schedule.current().data.flowCoverage; },
+  windowMs, overlaps, ROLES, PARTS,
   roleOf, isLlmMonth, blockByName, blocksBetween, unitContaining, oosQueue,
   hasSession, attemptSessions, isFlowCovered, attemptFlowCovered,
 };
