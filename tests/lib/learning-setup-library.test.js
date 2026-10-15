@@ -302,7 +302,7 @@ test('one briefing, one context key: the library\'s cells and experience_lookup\
   const home = tmpHome();
   fs.mkdirSync(path.join(home, 'trade-lifecycle'));
   fs.writeFileSync(path.join(home, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(raw)}\n`);
-  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), doc));
+  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), doc), { display: true });
   const text = H.experienceLookup({ symbol: 'MNQ' }, { env: { FTH_HOME: home }, now: () => new Date('2023-03-15T14:01:00.000Z') }).text;
   assert.match(text, /- read signature, this context: n 24 \(12 days/);
 });
