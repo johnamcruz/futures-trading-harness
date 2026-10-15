@@ -100,6 +100,7 @@ const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
+const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -356,7 +357,11 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   ];
   // The fair value gaps' edges as of a base bar (a candle's open), once per bar: the candles' fvgRelations.
   const zones = new Map();
-  const zonesOf = k => { if (!zones.has(k)) zones.set(k, fvgEdgesAt({ bars, base: minutes, fine, at: k })); return zones.get(k); };
+  const zonesOf = (k, until) => {
+    const key = `${k}:${until}`;
+    if (!zones.has(key)) zones.set(key, fvgEdgesAt({ bars, base: minutes, fine, at: k, until }));
+    return zones.get(key);
+  };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -832,6 +837,21 @@ const EVENT_FRAMES = { '4h': 60 };
 const eventShown = (tf, c, closedAt) => (!(tf in EVENT_FRAMES) || !(Date.parse(closedAt) - Date.parse(c.closedAt) > EVENT_FRAMES[tf] * 60000) ? 'full'
   : c.sweep && c.sweep.closedBack ? 'sweep' : null);
 
+const GAP_REL_RANK = { rejected: 0, broke: 1, touched: 2 };
+const GAP_TF_RANK = { '1h': 0, '15m': 1, '5m': 2 };
+/**
+ * A candle line's fair value gap relation (candle-facts.js fvgRelations), only when it met a gap's edge: the single
+ * strongest, rejected before broke before touched, the higher timeframe's gap first, in the read's word order with the
+ * price after it ("; rejected 15m fvg high up (103)": the read `<line's tf> rejected 15m fvg high up`).
+ */
+function gapText(c) {
+  const list = (Array.isArray(c.fvgRelations) ? c.fvgRelations : []).filter(r => r && GAP_REL_RANK[r.rel] !== undefined);
+  if (!list.length) return '';
+  const tfRank = r => { const k = GAP_TF_RANK[String(r.name).split(' ')[0]]; return k === undefined ? 9 : k; };
+  const r = [...list].sort((x, y) => (GAP_REL_RANK[x.rel] - GAP_REL_RANK[y.rel]) || (tfRank(x) - tfRank(y)))[0];
+  return `; ${r.rel} ${r.name}${r.dir ? ` ${r.dir}` : ''} (${r.price})`;
+}
+
 /** The summary's completed-candle lines: one per timeframe (EVENT_FRAMES only on an event), then the next swing targets. */
 function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null) {
   if (typeof m3.candles === 'string') return [`- Completed candles and swing targets: ${m3.candles}.`];
@@ -846,10 +866,15 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
+    // The entry reads' extras (the net move, the gap relation): on the lines the entry reads from, not the
+    // event-driven ones (4h), which keep their own byte budget.
+    const extras = !(tf in EVENT_FRAMES);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
+      // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
+      extras && c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
       c.momentum === 'up' || c.momentum === 'down' ? `momentum ${c.momentum}` : null].filter(Boolean).join(', ');
-    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}.`);
+    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
@@ -1028,4 +1053,5 @@ function removeFrameBriefing(home, root, minutes) {
 module.exports = {
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
+  gapText,
 };

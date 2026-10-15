@@ -212,12 +212,12 @@ and one comparison.
 | setup | `<tf> pattern <name>` | `m3.candles.<tf>.pattern(s)` | Field exists; form new |
 | setup | `<tf> cisd up\|down`, `[<tf>] in ote` | `m3.cisd` (`briefing.js:415`): a live CISD only (a `void`, `expired` or `weak` one is false); the OTE zone points its CISD's way | Field exists; form new |
 | setup | `swept <level name>` | `m3.sweeps` (`structure-events.js:71`) | Field exists; form new |
-| bias | `regime <name>`, `day type <name>` | `m3.regime.primary`, `m3.today.dayType`; a hyphenated name reads as written (`regime trend-up` is `regime trend up`) | Exists |
+| bias | `regime <name>`, `day type <name>` | `m3.regime.primary`, `m3.today.dayType`; a hyphenated name reads as written (`regime trend-up` is `regime trend up`); trend-up points long, trend-down short | Exists |
 | location | `at <tf> fvg` (5m, 15m, 1h) | `m3.fvgs.<tf>`, what is left of each unfilled gap: it overlaps the trigger bar, or the base or next candle overlapped it and it lies within one ATR(14) of price (inside it: 0). No direction | Exists |
-| setup | `<tf> rejected\|broke <tf> fvg low\|high up\|down`, `<tf> touched <tf> fvg low\|high` | `m3.candles.<tf>.fvgRelations`: the completed candle against each gap's edge as the gap stood at the candle's open (an open gap's low and high, a partly filled one's unfilled part; `fvg-frames.js` `fvgEdgesAt`), the same relation rule as the key levels. A bounce is a rejection (traded into the edge, closed back away), a failure a break (closed beyond): a gap the candle fills still counts, so a failed gap is never a bounce. Uncapped and never rendered; not a key level (no `levels` text) | Exists |
+| setup | `<tf> rejected\|broke <tf> fvg low\|high up\|down`, `<tf> touched <tf> fvg low\|high` | `m3.candles.<tf>.fvgRelations`: the completed candle against each gap's edge as the gap stood at the candle's open (an open gap's low and high, a partly filled one's unfilled part; `fvg-frames.js` `fvgEdgesAt`), the same relation rule as the key levels, read through the gap's side (`candle-facts.js` `gapRelation`): a bullish gap is rejected only up (the bounce) and broken only down through its low (the failure: a close beyond its far edge), a bearish gap the mirror; a close inside the gap is touched. A gap the candle fills still counts, so a failed gap is never a bounce. Uncapped; not a key level (no `levels` text, and no 4h rejection for D2's 4h tier); the candle line (not the event-driven 4h one) says its single strongest one in the read's word order (`; rejected 15m fvg high up (103)`) | Exists |
 | entry | `<tf> close top\|middle\|bottom` | `m3.candles.<tf>.closeLocation` | Field exists; form new |
 | entry | `<tf> momentum up\|down` | a shared momentum read | Missing (definition: owner decision D4) |
-| entry | `<tf> pattern hammer\|shooting star\|bullish engulfing\|bearish engulfing` | the confirming candle: `m3.candles.<tf>.pattern(s)`; a hammer or bullish engulfing points long, a shooting star or bearish engulfing short. Other patterns are setup reads only; the same pattern read in setup and entry counts once | Exists |
+| entry | `<tf> pattern hammer\|shooting star\|bullish engulfing\|bearish engulfing` | the confirming candle: `m3.candles.<tf>.pattern(s)`; a hammer or bullish engulfing points long, a shooting star or bearish engulfing short (in the setup too). Other patterns are setup reads only; the same pattern read in setup and entry counts once | Exists |
 | entry | `<tf> volume high` | `m3.candles.<tf>.volRatio` at least 1.5 (the snapshot's own scale: under 1.0 thin, 1.5+ strong; the absorption skill's "about 1.5 times"; momentum asks only for the average). No direction | Exists |
 | entry | `participation high` | `m3.participation.relVolLast3VsPrior20` at least 1.5: the last 3 base bars against the 20 before. No direction | Exists |
 | entry | `<tf> absorption at <level name> up\|down` | the absorption skill's read on a completed candle: it met the level without closing beyond (rejected the read's way, or touched with its open and close on the read's side), volume at least 1.5x its average, and net move \|close - open\| at most 0.5 ATR(14) (range / `rangeAtr`). A gap edge reads `fvgRelations`. Up long (a push down held at support), down short | Exists |
@@ -260,9 +260,16 @@ form within a step stay the model's choice.
 
 **When it stands.** A read is true, false or unchecked, as FACTS claims are
 (`fact-claims.js:26`). The combination stands only when every read is true
-and agrees with the side, the required steps are covered (D7), and the stop
-and target reads are present. Any false, unchecked or disagreeing read
-refuses it, naming the read.
+and agrees with the side, the required steps are covered (D7), the setup and
+the entry each hold a true read pointing to the side (the reaction and its
+confirmation; reads without a direction, such as `touched`, `at`, `swept`,
+`volume high` or `participation high`, and a setup `in ote`, only support
+them), the confirmation comes after the reaction (when the setup's pointing
+reads are candle reads, an entry read pointing the side is on a candle that
+closed after the last of them: the 3m after the 15m rejection, never the 15m
+candle itself or the last 3m inside it; a setup candle without a close time
+refuses), and the stop and target reads are present. Any false, unchecked or
+disagreeing read refuses it, naming the read.
 
 ### 3.3 The composed record
 
