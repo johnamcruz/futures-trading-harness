@@ -2859,6 +2859,55 @@ test('trade_lifecycle, D2 ("CHoCH at or above the trend"): each tier on the gate
   assert.deepStrictEqual(lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' }).violations, []);
 });
 
+test('trade_lifecycle, D2\'s 4h tier: the honest record naming the 4h trend it fades stands on the checker and the gate alike; without the 4h rejection, or on a gap edge, both refuse', () => {
+  const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
+  const { checkReads } = require('../../scripts/lib/trading/composed-reads');
+  const H4 = { 240: -1, 60: -1, 15: -1 };
+  // 4h down, the 1h CHoCH up, and a 4h candle that rejected the previous 4h low and a 15m gap's low, up.
+  const b = LC.briefing();
+  b.sections.h1.data.h4.trend = 'down';
+  b.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
+  b.sections.m3.data.candles['4h'] = { closedAt: '2026-10-07T10:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
+    relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }],
+    fvgRelations: [{ name: '15m fvg low', price: 21472, side: 'bullish', rel: 'rejected', dir: 'up' }] };
+  const reads = extra => [{ step: 'bias', skill: 'multi-timeframe-analysis', read: '4h down' }, { step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' },
+    ...LC.READS.filter(x => x.step !== 'bias'), ...extra.map(read => ({ step: 'setup', skill: 'rejection', read }))];
+  const cases = [
+    ['the honest record', ['4h rejected previous 4h low up'], true],
+    ['the 1h CHoCH alone', [], false],
+    ['a gap edge\'s 4h rejection', ['4h rejected 15m fvg low up'], false],
+  ];
+  for (const [what, extra, stands] of cases) {
+    const checked = checkReads({ reads: reads(extra), side: 'long', briefing: b });
+    assert.strictEqual(checked.ok, stands, `${what}, the checker: ${checked.problems.join('; ')}`);
+    assert.strictEqual(checked.reads.find(x => x.read === '4h down').agrees, stands, what);
+    const home = trendHome(require('../helpers').tmpDir(), { biases: H4 });
+    LC.writeScenario(home, { reads: reads(extra), b });
+    // The gate: refused by the record's re-checked reads and by the trend rule, or neither.
+    assert.deepStrictEqual(checks(lcEval(home)), stands ? [] : ['composed-reads', 'mtf-trend'], what);
+    // The trend rule's tier on the same reads, as the checker read them (its ok set aside): the same answer.
+    assert.strictEqual(reversalAllowed({ home, root: 'MNQ', side: 'long', check: { ...checked, ok: true }, now: LC_NOW, maxAgeMin: 15 }).ok, stands, what);
+  }
+  // An exit against the same trend always goes.
+  const home = trendHome(require('../helpers').tmpDir(), { biases: H4 });
+  assert.deepStrictEqual(lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' }).violations, []);
+});
+
+test('trade_lifecycle: a CISD setup is timed on its confirming candle; an entry read on that same candle is refused ([composed-reads]), a later one goes', () => {
+  const reads = LC.READS.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m cisd up' } : x));
+  const run = confirmedClose => {
+    const home = trendHome();
+    LC.writeScenario(home, { reads, b: LC.briefing({ m3: { cisd: { '15m': { dir: 'bullish', level: 21520, confirmedClose, status: 'touched', priceInOte: false } } } }) });
+    return lcEval(home);
+  };
+  // Confirmed 13:45: the 3m closing 14:00 is the next candle.
+  assert.deepStrictEqual(run('2026-10-07T13:45:00.000Z').violations, []);
+  // Confirmed 14:00, with the 3m the entry reads: the same candle, refused.
+  const same = run(LC.CLOSE);
+  assert.deepStrictEqual(checks(same), ['composed-reads']);
+  assert.match(same.violations[0].message, /no entry read pointing long is on a candle that closed after the setup's/);
+});
+
 const LCP_NOW_D2 = new Date('2026-10-07T14:00:02Z');
 test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-checked reads)', () => {
   const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
