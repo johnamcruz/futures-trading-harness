@@ -274,6 +274,129 @@ better.
 
 **A skill edit needs the owner's OK** before it is made or kept.
 
+### Propose–Probe–Compose
+
+Stage-1 tuning, inside the training loop (section 6): find good skill
+edits faster without loosening the bar for keeping one. A cheap screen
+first, then the strict test. The LLM proposes; code judges every step.
+It is on when the loop config has a `probe` block
+(`scripts/lib/train/probe-config.js`), and it needs `modelScore`:
+
+```json
+"probe": {
+  "replay": "s1-practice.json",
+  "windows": [{ "from": "2022-03-01", "to": "2022-04-01" }],
+  "k": 4,
+  "parallel": 1
+}
+```
+
+`replay` is a stage-1 practice config with a curated practice list (as in
+"A practice run" above), and `windows` lie in practice-train. Its
+`autotrader` must be the loop's (leave it out to use the loop's), so the
+probes and the keep rule run the same model and runner config. Each
+iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
+
+0. **Split.** The curated moments are split by session date, by a seeded
+   hash (the loop's `seed`), into a probe half and a confirm half, both in
+   practice-train. The iteration's `probe-report.json` records the seed and
+   each half's dates. Give the windows enough session dates for both
+   halves (a half with too few decisions shows no gain).
+1. **Findings.** The champion replays the windows' curated moments. Its
+   skill-usage report and scorecard on the probe half give the skills with
+   the most misreads, misses and wrong-reason refusals
+   (`scripts/lib/train/findings.js`). A refusal is credited to the skills
+   whose reads the model composed at that bar.
+2. **Propose.** One proposer call (the `design-self-review` skill's probe
+   prompt) writes up to `k` small, independent skill edits. Each targets
+   one finding and carries a tag: the skill, the finding and the edit's
+   kind (rewording, example, rule or removal). Code checks every edit
+   (`scripts/lib/train/probe-edit.js`): one skill's file, no new numbers
+   (in digits or words, such as "three bars" or "half"), condition → action
+   lines of at most 120 characters, a removal that removes, the frontmatter
+   untouched, and the skill's byte cap (`scripts/lib/skill-caps.js`, the
+   same caps the basics-skills test enforces). An edit probed before is
+   not run again.
+3. **Probe.** Each edit's tree replays the same curated moments with the
+   same replay config and seed as the champion. Code pairs the two runs
+   decision by decision on the probe half only
+   (`scripts/lib/train/screen.js`), under one exit plan (two runs whose
+   exit plans differ are refused): the correct-read rate per decision,
+   process adherence, R per decision, and the target. The target rewards
+   reading better, never claiming more: for a misread, only the decisions
+   where the champion claimed the skill; for a miss, only those where the
+   skill was relevant at the bar (a TRUE read of it pointed the side's
+   way); for a wrong-reason refusal, the refusals fixed. A fix counts only
+   when the decision's scorecard result got no worse. The targeted skill's
+   used, correct and missed counts are shown beside them. The verdict is
+   `helped`, `no effect` or `hurt`.
+   Probing uses practice-train only and spends no looks: its tuning look
+   is logged in the loop's ledger, as every loop look is, and counts
+   against no budget.
+4. **Compose.** Code combines every edit that helped into one change
+   (`scripts/lib/train/compose.js`). Two edits that touch the same lines:
+   the larger paired gain stays and the conflict is reported. An edit that
+   would break the proposal's limits (3 edits, the diff size, a byte cap)
+   is left out, with the reason. The combined change is probed once more
+   and judged on the confirm half only, which no edit was chosen on: no
+   measure may be worse and every part's target must still gain there, so
+   its parts can't cancel and a gain found by chance on the probe half
+   doesn't carry it.
+5. **Keep.** The combined change is the iteration's one proposal and goes
+   through the full keep rule (section 6), unchanged: the challenger's
+   full-day tuning windows, zero blows, the pooled interval, then held-out
+   judging as its own step. A kept change is a local branch and a PR body
+   that lists its parts. Nothing merges, and no skill is edited on main:
+   edits exist only in the probe trees and the PR.
+
+**The screen's thresholds** are `SCREEN` in `scripts/lib/train/screen.js`,
+the one place:
+
+| Setting | Value | Meaning |
+| --- | --- | --- |
+| `gainAlpha` | 0.1 | a gain on the target: one-sided McNemar p at most this |
+| `harmAlpha` | 0.2 | a harm on any measure: p at most this (quick to call a harm) |
+| `minDiscordant` | 4 | the discordant decisions a gain or a harm needs |
+| `minPairs` | 10 | the paired decisions R per decision needs before it can show a harm |
+| `minEffect` | 0.10 | a gain's size: fixed minus broken, as a share of the target's paired decisions |
+
+A gain needs a practical size (`minEffect`: at least a tenth of the target's
+paired decisions improved, net) and significance (`gainAlpha`, with at
+least `minDiscordant` changed decisions). Noise at small n is the test's to
+catch: 3 fixed and 0 broken never passes (under `minDiscordant`), 4 and 0
+on 30 pairs does (p 0.0625, effect 0.13), 8 and 0 on 80 does (p about
+0.004), and 5 fixed and 1 broken on 40 has the size (0.10) but not the
+significance (p about 0.22). The screen requires both a practical size and
+significance, and the strict keep rule is the real gate.
+
+The screen is permissive: it only filters noise. Passing it keeps nothing.
+The keep rule stays strict and unchanged.
+
+**The lessons record** (`<loop dir>/lessons.jsonl`,
+`scripts/lib/train/lessons.js`) is append-only and written by code. Each
+probed edit (and each combined change) gets one line: the skill, the
+edit's kind, the finding, the paired measures, the verdict, n, the split
+seed and the half it was judged on. A combined change that went to the
+keep rule gets one more line with the keep rule's verdict (its tuning
+windows are practice-train), so a screen `helped` that the keep rule
+rejected shows as such in the summary, on the change and on its parts. The
+proposer reads a short, capped summary of it in the next round, for
+example "a, rewording (misread): helped 3 of 4, no effect 1, hurt 0 (n per
+probe: 12, 9, 15, 20)". It is evidence only, labelled with its sample
+sizes. It holds practice-train lines only: a line on any other window is
+refused, and no validate, test or final outcome is ever in it.
+
+**Cost.** K probes multiply model time. The champion replays the probe
+windows once per loop. Each round then replays them k + 1 times: each of
+the k edits and the combined change. That is about k + 1 times the model
+time of one practice run a round, on top of the keep rule's runs. Probes
+run one after another by default (`parallel: 1`). `parallel` above 1 is
+refused unless `probe.replay` sets `latency: false`: a replay that
+charges each cycle's real time would charge probes queued at the model
+server more than the champion's probe run, which runs alone. Raise it only
+when your local model server serves that many prompts at once (its own
+concurrency setting, in your local config).
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:
@@ -562,6 +685,33 @@ merged, and no document is edited outside the candidate's own tree.
   budget doesn't come back.
 - **Reasoning-fix looks.** `--reasoning-fix` takes a free look whose outcomes
   are hidden.
+
+## Tuning plan (stages 1 and 2)
+
+Stage 1 tunes setup decisions. Stage 2 tunes risk decisions by account
+state, also scored by the 30-day Monte Carlo. Both follow the same plan:
+
+1. Run Propose–Probe–Compose rounds until the correct-decision rate stops
+   rising. Stopped: two rounds in a row with no significant paired gain on
+   the same moments.
+2. A skill that doesn't move after rounds of wording edits → switch
+   levers: make the fact clearer in the briefing (code), or rely on LoRA.
+3. Train LoRA on correct decisions made under the settled skills only
+   (the same skills and prompt digest). Validate base against adapted
+   with the keep rule.
+4. Run more Propose–Probe–Compose rounds with the adapter, on the
+   remaining errors only.
+5. Retrain the adapter only when the skills change meaningfully. The
+   preflight refuses a stale adapter.
+6. Done: stage 1 when its exit test passes (pooled validate runs); stage 2
+   when the promotion gate passes on validate. Then the sealed 2025 test,
+   then 2026.
+
+Track per round: the correct-decision rate overall and per skill, with
+correct passes and correct entries reported apart.
+
+The LoRA steps are the LoRA section's (branch `feat/lora-ready`, not merged
+yet).
 
 ## 8. Rules that keep it honest
 
