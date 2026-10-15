@@ -11,15 +11,20 @@
  * Input (one of):
  *   rates     { <list>: { candidatesPerDay } }: for each list, the candidates per trading day the curated scan found
  *             over the history it scanned (its candidate count over its trading days). A list's candidates in the
- *             run are its composed decisions (entered, passed, refused); a plain pass composed nothing, so it is no
- *             candidate. Each trade of list L stands for candidatesPerDay(L) / candidates(L) occurrences per natural
- *             day, so a day holds, per list, the model's own take rate on that list's candidates times the natural
+ *             run are the curated moments of that list the run stepped (the pinned windows that hold one of its
+ *             cycles, momentOf), whatever the model did there: a moment it composed nothing on (only plain passes,
+ *             `none`) is still a candidate it saw and let go. Its entries are the distinct moments with an entry: a
+ *             moment composed twice, or entered twice, is one candidate taken once (its trades share the moment's
+ *             rate). So a day holds, per list, the model's own take rate on that list's moments times the natural
  *             candidate rate. Every list the run's decisions name must have a rate (else refused: its frequency is
- *             unknown); a list with a rate and no candidate in the run is reported `unsampled`.
+ *             unknown), and every composed decision a moment (else refused: its candidate can't be counted); a plain
+ *             pass outside every moment (a cycle between windows) is no candidate. A list with a rate and no moment
+ *             stepped is reported `unsampled`.
  *   weights   { <decision id>: w }: each trade's natural occurrences per occurrence in the run (1: as often as the run
  *             had it; 0.2: a fifth as often). A trade without a weight is refused.
- * A decision's list: listOf(decision), by default its `list`; with a single list in `rates`, every composed decision
- * without one is that list's.
+ * A decision's list: listOf(decision), by default its `list`; with a single list in `rates`, every decision without
+ * one is that list's. Its moment: momentOf(decision), a moment id or the ids of every moment whose window holds it
+ * (each one stepped; its entry credited to the last), by default its `moment`.
  * A run whose days started from drawn account states (prop/account-states.js) gives stateWeightOf(decision): its day's
  * sampling weight (the natural share of its state's bucket over its share of the run's days). A list's candidates are
  * then counted weighted (each decision stands for stateWeightOf of them), so the model's take rate is the one it would
@@ -29,7 +34,8 @@
  * scanDays }) gives each list's candidatesPerDay as its scan candidates (coverage[list].candidates) over the trading
  * days the scan covered, and listOf: the list of the moment whose window (from, to] holds the decision's bar close (its
  * cycle less the runner's poll delay, `delayMs`, as curated-lists.js curatedPoints reads it), among the moments the run
- * stepped (the mix's own ids, or the one list's); a decision two lists' windows both hold is refused. The
+ * stepped (the mix's own ids, or the one list's); a decision two lists' windows both hold is refused; and momentOf:
+ * the ids of the moments whose windows hold it, by their window's start. The
  * document doesn't record the scan's span, so scanDays is, unless given, the exchange's sessions from the first to the
  * last selected moment's day (the selection is balanced across the scan's years, so it spans it; an estimate, said
  * so in `scanDaysFrom`). A run of one list (not the mix) puts every decision in that list.
@@ -40,8 +46,10 @@
  * (not session dates: there is no calendar to hold them to), their regime 'normal'.
  *
  *   validateRates(rates)   problems (empty = valid)
- *   naturalRates(stream, decisions, { rates, weights, listOf })   { perTrade: Map id -> rate, tradesPerDay, lists, unsampled }
- *   reweightStream(stream, decisions, { rates, weights, listOf, days, seed })   the reweighted stream (`reweighted` set)
+ *   naturalRates(stream, decisions, { rates, weights, listOf, momentOf, stateWeightOf })   { perTrade: Map id -> rate,
+ *       tradesPerDay, lists: { <list>: { candidatesPerDay, moments (stepped), candidates, entered (moments, weighted),
+ *       tradesPerDay } }, unsampled }
+ *   reweightStream(stream, decisions, { rates, weights, listOf, momentOf, days, seed })   the reweighted stream (`reweighted` set)
  */
 
 const { streamFor } = require('./stats');
@@ -61,7 +69,7 @@ function validateRates(rates) {
   return out;
 }
 
-function naturalRates(stream, decisions, { rates = null, weights = null, listOf = d => d.list ?? null, stateWeightOf = null } = {}) {
+function naturalRates(stream, decisions, { rates = null, weights = null, listOf = d => d.list ?? null, momentOf = d => d.moment ?? null, stateWeightOf = null } = {}) {
   const sw = d => {
     if (!stateWeightOf) return 1;
     const w = Number(stateWeightOf(d));
@@ -87,22 +95,45 @@ function naturalRates(stream, decisions, { rates = null, weights = null, listOf 
   const names = Object.keys(rates);
   const only = names.length === 1 ? names[0] : null;
   const listOfD = d => listOf(d) ?? only;
-  const composed = decisions.filter(d => d && d.decision !== 'none');
-  const unknown = [...new Set(composed.map(listOfD).filter(l => !Object.hasOwn(rates, l)))];
+  // Every line of the run, plain passes included: the candidates are the moments the run stepped, not what was composed.
+  const lines = (decisions || []).filter(Boolean);
+  const composed = d => d.decision !== 'none';
+  const unknown = [...new Set(lines.filter(d => composed(d) || listOfD(d) !== null).map(listOfD).filter(l => !Object.hasOwn(rates, l)))];
   if (unknown.length) throw new Error(`natural rates: no rate for ${unknown.map(String).join(', ')} (every list the run's decisions name needs its candidatesPerDay)`);
-  const lists = {};
-  const sum = xs => xs.reduce((a, d) => a + sw(d), 0);
-  for (const L of names) {
-    const cands = composed.filter(d => listOfD(d) === L);
-    // Weighted by the account state each decision met (1 each without states): the counts at the natural mix.
-    lists[L] = { candidatesPerDay: rates[L].candidatesPerDay, candidates: sum(cands), entered: sum(cands.filter(d => d.decision === 'entered')) };
-  }
-  const byId = new Map(composed.map(d => [d.id, d]));
-  for (const t of stream.trades) {
-    const d = byId.get(t.id);
-    if (!d) throw new Error(`natural rates: trade ${t.id} has no decision in the run`);
+  const moments = new Map(); // `${list}|${id}` -> { list, weight, entered }
+  const creditOf = new Map(); // decision id -> the moment its entry is credited to
+  for (const d of lines) {
     const L = listOfD(d);
-    perTrade.set(t.id, lists[L].candidates > 0 ? (lists[L].candidatesPerDay * sw(d)) / lists[L].candidates : 0);
+    const raw = momentOf(d);
+    const ids = (Array.isArray(raw) ? raw : [raw]).filter(x => x !== null && x !== undefined);
+    if (L === null || !ids.length) {
+      if (composed(d)) throw new Error(`natural rates: decision ${d.id}${d.cycleAt ? ` at ${d.cycleAt}` : ''} lies in no curated moment the run stepped: its candidate can't be counted`);
+      continue; // a cycle between the run's moments: no candidate
+    }
+    // Weighted by the account state its day met (1 without states): the counts at the natural mix of states.
+    for (const id of ids) if (!moments.has(`${L}|${id}`)) moments.set(`${L}|${id}`, { list: L, weight: sw(d), entered: false });
+    const credit = `${L}|${ids[ids.length - 1]}`;
+    creditOf.set(d.id, credit);
+    if (d.decision === 'entered') moments.get(credit).entered = true;
+  }
+  const lists = {};
+  const sum = ms => ms.reduce((a, m) => a + m.weight, 0);
+  for (const L of names) {
+    const ms = [...moments.values()].filter(m => m.list === L);
+    lists[L] = { candidatesPerDay: rates[L].candidatesPerDay, moments: ms.length, candidates: sum(ms), entered: sum(ms.filter(m => m.entered)) };
+  }
+  // A moment's trades share its rate: entered twice, it is still one candidate taken.
+  const tradesOf = new Map();
+  for (const t of stream.trades) {
+    const d = byIdAll.get(t.id);
+    if (!d || !composed(d) || !creditOf.has(t.id)) throw new Error(`natural rates: trade ${t.id} has no decision in the run`);
+    tradesOf.set(creditOf.get(t.id), (tradesOf.get(creditOf.get(t.id)) || 0) + 1);
+  }
+  for (const t of stream.trades) {
+    const k = creditOf.get(t.id);
+    const m = moments.get(k);
+    const L = lists[m.list];
+    perTrade.set(t.id, L.candidates > 0 && m.entered ? (L.candidatesPerDay * m.weight) / L.candidates / tradesOf.get(k) : 0);
   }
   for (const v of Object.values(lists)) v.tradesPerDay = v.candidates ? Math.round((v.candidatesPerDay * v.entered / v.candidates) * 1e6) / 1e6 : 0;
   return {
@@ -126,10 +157,10 @@ function poisson(rand, mean) {
   return n;
 }
 
-function reweightStream(stream, decisions, { rates = null, weights = null, listOf, stateWeightOf = null, days = 252, seed = 1 } = {}) {
+function reweightStream(stream, decisions, { rates = null, weights = null, listOf, momentOf, stateWeightOf = null, days = 252, seed = 1 } = {}) {
   if (!(Number.isInteger(days) && days >= 1)) throw new Error('days: a whole number of rebuilt days, 1 or more');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
-  const nat = naturalRates(stream, decisions, { rates, weights, stateWeightOf, ...(listOf ? { listOf } : {}) });
+  const nat = naturalRates(stream, decisions, { rates, weights, stateWeightOf, ...(listOf ? { listOf } : {}), ...(momentOf ? { momentOf } : {}) });
   const pool = stream.trades.filter(t => nat.perTrade.get(t.id) > 0);
   const cum = [];
   let total = 0;
@@ -178,15 +209,18 @@ function curatedRates(doc, { list = 'mix', scanDays = null, delayMs = 0 } = {}) 
   // The windows the run stepped: the mix's own moments (a moment of another list is not the mix's), or the one list's.
   const inMix = new Set(Array.isArray(doc.mix) ? doc.mix : []);
   const windows = moments.filter(m => wanted.includes(m.list) && m.window && (list !== 'mix' || inMix.has(m.id)))
-    .map(m => ({ list: m.list, from: Date.parse(m.window.from), to: Date.parse(m.window.to) }));
+    .map(m => ({ id: m.id, list: m.list, from: Date.parse(m.window.from), to: Date.parse(m.window.to) }))
+    .sort((a, b) => a.from - b.from || String(a.id).localeCompare(String(b.id)));
+  const hits = d => { const at = Date.parse(d.cycleAt) - delayMs; return windows.filter(x => at > x.from && at <= x.to); };
   const listOf = d => {
     if (list !== 'mix') return list;
-    const at = Date.parse(d.cycleAt) - delayMs;
-    const hit = [...new Set(windows.filter(x => at > x.from && at <= x.to).map(x => x.list))];
+    const hit = [...new Set(hits(d).map(x => x.list))];
     if (hit.length > 1) throw new Error(`natural rates: the decision at ${d.cycleAt} lies in windows of ${hit.join(' and ')}: its list is ambiguous`);
     return hit[0] || null;
   };
-  return { rates, listOf, scanDays: days, scanDaysFrom: from };
+  // Every moment whose window holds the decision (each one stepped), by its window's start.
+  const momentOf = d => hits(d).map(x => x.id);
+  return { rates, listOf, momentOf, scanDays: days, scanDaysFrom: from };
 }
 
 module.exports = { validateRates, naturalRates, reweightStream, curatedRates, poisson };

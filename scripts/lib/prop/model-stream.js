@@ -38,8 +38,10 @@
  *                     by bar, side and market; sizeFraction the share), `early-exit` (closed before its stop, its target and
  *                     end of day; `hold` is the same position held to its bracket: the real fill's price and time, the
  *                     stop and target placed from that price, walked on the run's bars by experience-log.js bracketExit,
- *                     the fill's own bar read after the fill by the worse-is-taken rule). An exit the runner's trail made
- *                     is counted as early too: nothing recorded tells a trailed stop from a tightened one or a manual close.
+ *                     the fill's own bar read after the fill by the worse-is-taken rule). An exit the runner made is the
+ *                     policy's, never an early exit (`exitBy`, runnerExit: the runner's event log shows it closed the
+ *                     position, or the trade filled at the stop the runner last trailed it to); a stop the model tightened
+ *                     and a manual close are one action (nothing recorded tells those two apart).
  * Each day also lists the model's passes on valid composed setups as the trades they would have been (`passed`: the
  * limitOutcome counterfactual the experience log keeps; `day-stop` when an entry of that day had already closed at a loss
  * before fees (a scratch is none), and the model entered nothing later that day; else `pass`); the score never takes them.
@@ -62,6 +64,8 @@
  *                                                  practice, ledger } } from a finished run
  */
 
+const fs = require('fs');
+const path = require('path');
 const { SLIPPAGE_TICKS } = require('../replay/counterfactual');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { noStopPath, dayRegimes, pricePath, pathEnds, swingPath } = require('./trade-stream');
@@ -159,7 +163,65 @@ const grossLoss = t => t.moveTicks < 0;
 const entryMsOf = e => { const f = Date.parse(e.outcome && e.outcome.entryTime); return Number.isFinite(f) ? f : Date.parse(e.cycleAt); };
 
 
-function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
+/**
+ * What the runner did to a trade, from its event log (logs/events-<day>.jsonl, runner.js): runnerExit(events) gives
+ * policyExitOf(decision, { entryTime, exitTime, exitPrice, tick }) -> 'runner-close' when the runner closed the position
+ * (`position_closed`: its trail or time stop) between the fill and the exit, 'runner-trail' when the exit filled at
+ * (within a tick of) the last stop the runner moved it to (`stop_moved`), else null (the bracket's own, or the model's).
+ * Matched by market (the event's symbol and the decision's root, one family). A live-recorded close can be stamped after
+ * the broker's fill time, so the runner's own recorded exits (`exits`: state.runnerExits, { contractId, openedAt, at, r },
+ * readRunnerExits) match too: the same position (its opening within RUNNER_CLOSE_TOLERANCE_MS of the entry fill, its
+ * market by the contract id of the close event, else the decision's own contract) closed from the fill to the exit plus
+ * that tolerance. Nothing else is the runner's: a close outside it is the model's.
+ */
+const RUNNER_CLOSE_TOLERANCE_MS = 60000;
+
+function runnerExit(events = [], exits = []) {
+  const symbolOf = new Map((events || []).filter(e => e && e.kind === 'position_closed' && e.contractId !== undefined).map(e => [String(e.contractId), e.symbol]));
+  const recorded = (Array.isArray(exits) ? exits : []).filter(x => x && typeof x === 'object' && Number.isFinite(Date.parse(x.at)) && Number.isFinite(Date.parse(x.openedAt)));
+  const list = (events || []).filter(e => e && ['position_closed', 'stop_moved'].includes(e.kind) && Number.isFinite(Date.parse(e.at)));
+  return (d, { entryTime, exitTime, exitPrice, tick }) => {
+    const from = Date.parse(entryTime);
+    const to = Date.parse(exitTime);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+    const fam = familyRoot(d.root) || d.root;
+    const mine = list.filter(e => (familyRoot(e.symbol) || e.symbol) === fam && Date.parse(e.at) >= from && Date.parse(e.at) <= to);
+    if (mine.some(e => e.kind === 'position_closed')) return 'runner-close';
+    const own = recorded.some(x => {
+      const sym = symbolOf.get(String(x.contractId));
+      const sameMarket = sym !== undefined ? (familyRoot(sym) || sym) === fam : d.contract !== undefined && String(d.contract) === String(x.contractId);
+      return sameMarket && Math.abs(Date.parse(x.openedAt) - from) <= RUNNER_CLOSE_TOLERANCE_MS && Date.parse(x.at) >= from && Date.parse(x.at) <= to + RUNNER_CLOSE_TOLERANCE_MS;
+    });
+    if (own) return 'runner-close';
+    const moved = mine.filter(e => e.kind === 'stop_moved').pop();
+    return moved && Number.isFinite(Number(moved.to)) && Math.abs(Number(moved.to) - exitPrice) <= (tick || 0) + 1e-9 ? 'runner-trail' : null;
+  };
+}
+
+/** The runner's own recorded exits of a run home (its state's runnerExits), [] without a readable state. */
+function readRunnerExits(home) {
+  try {
+    const st = JSON.parse(fs.readFileSync(path.join(home, 'autotrader-state.json'), 'utf8'));
+    return Array.isArray(st && st.runnerExits) ? st.runnerExits : [];
+  } catch (_err) { return []; }
+}
+
+/** The runner's event log of a run home (logs/events-<day>.jsonl): every line, [] without one (a torn line skipped). */
+function readEvents(home) {
+  const dir = path.join(home, 'logs');
+  let names;
+  try { names = fs.readdirSync(dir).filter(n => /^events-.*\.jsonl$/.test(n)).sort(); } catch (_err) { return []; }
+  const out = [];
+  for (const n of names) {
+    for (const line of fs.readFileSync(path.join(dir, n), 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { out.push(JSON.parse(line)); } catch (_err) { /* a torn line */ }
+    }
+  }
+  return out;
+}
+
+function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf, policyExitOf = () => null }) {
   const o = d.outcome || {};
   const spec = specOf(familyRoot(d.root) || d.root);
   const risk = d.plan && Number.isFinite(d.plan.entry) && Number.isFinite(d.plan.stop) ? Math.abs(d.plan.entry - d.plan.stop) : NaN;
@@ -182,7 +244,10 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
   const atTarget = dist !== null && s * (o.exitPrice - (o.entryPrice + s * dist)) >= -1e-9;
   const eodMs = Number.isFinite(p.entryMs) ? eodOf(p.entryMs) : Infinity;
   let hold = null;
-  if (!p.stopped && !atTarget && Number.isFinite(p.exitMs) && p.exitMs + tfMs < eodMs && Number.isFinite(p.entryMs) && bars.length) {
+  // An exit the runner made (its trail or time stop closed the position, or the trade stopped out at a stop the runner
+  // trailed) is the policy's, never the model's risk action.
+  const policyExit = policyExitOf(d, { ...o, tick });
+  if (!policyExit && !p.stopped && !atTarget && Number.isFinite(p.exitMs) && p.exitMs + tfMs < eodMs && Number.isFinite(p.entryMs) && bars.length) {
     // The same position held: from the real fill (its price and time), the bracket placed from that price (bracketExit;
     // the fill's own bar read after the fill by the worse-is-taken rule), never a re-fill at another price.
     const i = bars.findIndex(b => b.ms + tfMs > p.entryMs);
@@ -202,7 +267,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
       id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, contract: d.contract || null, strategy: 'trade_lifecycle', direction: d.side,
       bar: d.bar, entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason || 'closed',
       tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37, ...path, ...paths, r: o.R,
-      facts: factsOf(d), actions, sizeFraction, hold, entryMs, exitMs,
+      facts: factsOf(d), actions, sizeFraction, hold, entryMs, exitMs, ...(policyExit ? { exitBy: policyExit } : {}),
     },
   };
 }
@@ -236,7 +301,7 @@ function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
  * of day (autotrader parseAt), or null (to the trading day's end); specOf(root): the contract spec (tickSize,
  * tickValue, feesPerSide).
  */
-function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null, eodOf = () => Infinity, verdictOf = () => null }) {
+function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null, eodOf = () => Infinity, verdictOf = () => null, policyExitOf = () => null }) {
   const started = Date.now();
   if (!(tfMs > 0)) throw new Error('tfMs: the run\'s bar length in ms');
   if (decisions.some(d => d && d.hidden)) throw new Error('the run\'s outcomes are hidden (a reasoning-fix look): no trade stream');
@@ -244,7 +309,7 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   const excluded = [];
   for (const d of decisions) {
     if (!d || d.decision !== 'entered') continue;
-    const r = tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf });
+    const r = tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf, policyExitOf });
     if (r.excluded) excluded.push(r.excluded);
     else trades.push(r.trade);
   }
@@ -324,7 +389,7 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const verdicts = readVerdicts(r.home).filter(v => v && v.action === 'full');
   const verdictOf = d => verdicts.filter(v => v.bar === d.bar && v.direction === d.side && (familyRoot(v.symbol) || v.symbol) === (familyRoot(d.root) || d.root)).pop() || null;
   const stream = modelStream({
-    decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf,
+    decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf, policyExitOf: runnerExit(readEvents(r.home), readRunnerExits(r.home)),
   });
   return {
     stream,
@@ -336,4 +401,4 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   };
 }
 
-module.exports = { modelStream, readModelStream, adversePath, exitPaths };
+module.exports = { modelStream, readModelStream, adversePath, exitPaths, runnerExit, readEvents, readRunnerExits, RUNNER_CLOSE_TOLERANCE_MS };

@@ -27,7 +27,8 @@
  *   modelScore      the model-scoring verifier (train/model-verifier.js): { account, paths, reps, faults }: the challenger's
  *                   own replays of every window, judged against the champion's by the keep rule (the paired 30-day Monte
  *                   Carlo and the paired decision measures). With it, tuningWindows lie in practice-train and heldOutWindows
- *                   each in one held-back learning window (practice-validate, test, final), read through learning looks
+ *                   each in one held-back learning window (practice-validate, test, final), read through learning looks,
+ *                   and the replay config names no curated list (the keep rule pairs full-day windows only)
  *
  *   resolveLoop(raw, { baseDir, env, root })   the resolved config, with `hash` (limits left out: they may be raised on resume)
  *   windowRange(w)                             { start, end } Dates: session `from`'s start to session `to`'s start
@@ -116,6 +117,8 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     errors.push(...MV.windowErrors(Array.isArray(r.tuningWindows) ? r.tuningWindows : [], Array.isArray(r.heldOutWindows) ? r.heldOutWindows : []));
     // Held-out runs take learning looks (learning/run-gate.js), which need the evaluation id their arms share.
     if (r.heldOutWindows && !(learning && learning.evaluation)) errors.push('learning.evaluation: the model-scored loop judges held out through learning looks, which need an evaluation id');
+    // The keep rule never pairs a curated run (prop/model-score.js refuseCurated): refused before any replay is spent.
+    if (replay && replay.curatedList) errors.push('replay.curatedList: the model-scored loop judges full-day windows; a curated run never judges a change (its moments are outcome-balanced and its rebuilt days drawn, so nothing pairs): remove it');
   }
   if (errors.length) throw new Error(`invalid training-loop config:\n- ${errors.join('\n- ')}`);
   // A replay config's autotrader given as a path resolves against this file's folder.
