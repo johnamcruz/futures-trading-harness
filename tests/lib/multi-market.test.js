@@ -1,14 +1,14 @@
 'use strict';
 
-// Several markets, one prop account: the simulator's trading days and the engine's
+// Several markets, one prop account: the trade stream's trading days and the engine's
 // one-position-at-a-time rule.
 
 const test = require('node:test');
 const assert = require('node:assert');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { runEngine } = require('../../scripts/lib/backtest/engine');
-const envlib = require('../../scripts/lib/prop/challenge');
+const { runEngine, prepare } = require('../../scripts/lib/backtest/engine');
+const { tradingDays } = require('../../scripts/lib/prop/trade-stream');
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -107,15 +107,16 @@ test('engine: bars closing together settle on every market before any entry, so 
   }
 });
 
-test('prop simulator: trading days are every market\'s, not the first market\'s', () => {
+test('trade stream: trading days are every market\'s, not the first market\'s', () => {
   const early = { symbol: 'MNQ', bars: series(8, 5), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 };
   const late = { symbol: 'MES', bars: series(8, 9, 5000, 14), tickSize: 0.25, tickValue: 1.25, feesPerSide: 0.37 };
-  const one = envlib.createEnv({ markets: [early], strategies: [strategy], account, engine });
-  const both = envlib.createEnv({ markets: [early, late], strategies: [strategy], account, engine });
+  const daysOf = markets => ({ days: tradingDays(prepare(markets, [strategy], engine).books) });
+  const one = daysOf([early]);
+  const both = daysOf([early, late]);
   assert.ok(both.days.length > one.days.length);
   assert.deepStrictEqual(both.days, [...both.days].sort((a, b) => a - b), 'in order');
   assert.strictEqual(new Set(both.days).size, both.days.length, 'no day twice');
   assert.ok(both.days[both.days.length - 1] > one.days[one.days.length - 1], 'the later market\'s days are in');
   // Overlapping markets add no duplicates.
-  assert.deepStrictEqual(envlib.tradingDays([{ bars: early.bars.map(b => ({ ms: Date.parse(b.t) })) }, { bars: early.bars.map(b => ({ ms: Date.parse(b.t) })) }]), one.days);
+  assert.deepStrictEqual(tradingDays([{ bars: early.bars.map(b => ({ ms: Date.parse(b.t) })) }, { bars: early.bars.map(b => ({ ms: Date.parse(b.t) })) }]), one.days);
 });
