@@ -56,6 +56,8 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       curatedDoc: () => ({ fingerprint: 'f1', use: 'practice', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, lists: { 'trend-up': [MOMENT], 'trend-down': [{}] }, coverage: { mix: { under: [] } } }),
       index: () => ({ hash: 'b'.repeat(64), walkForward: true, roles: ['practice-train'], months: { from: '2020-01-06', to: '2024-06-28' } }),
       learningGate: () => ({ learning: true, role: 'practice-train', look: null }),
+      riskRecord: () => ({ hash: 'c'.repeat(64), walkForward: true, roles: ['practice-train'], days: 3, entries: [{ day: '2022-03-01', role: 'practice-train', cells: {} }] }),
+      riskPin: () => null,
       rulebook: name => (name === 'acct' ? rulebook : null),
       sizingKeys: () => ['cushion_frac', 'cap_usd'],
       features: () => ({ scorecardComposed: true, lossStreakStop: true, exitMode: true, skillUsage: true, accountFacts: true, monteCarlo: true }),
@@ -83,13 +85,13 @@ function attemptLineOf(s) {
   return ` Account 1 at 10:00 ET: balance $${st.balance}; flat; 0 working orders. acct attempt (active): floor $48,000, cushion $2,500, profit +$500 of $3,000, day $${st.dayPnl}, 27 sessions left; day ${st.sessionsDone + 1}, needs $2,500, daily room $600, soft stop $1,000 (room $600), today ${st.tradesToday} trade${st.tradesToday === 1 ? '' : 's'}, ${st.lossesToday} loss${st.lossesToday === 1 ? '' : 'es'}, losing streak ${st.lossStreak}; prop_portfolio size budget $500.`;
 }
 
-test('the good fixture: every check passes (every feature merged)', () => {
+test('the good fixture: every check passes (every feature merged); the risk record, off, is N/A', () => {
   // A stage-2 practice run, its days from drawn account states: every check judged and passing.
   const two = P.runChecks(ctx({ run: { stage: 2, accountStates: STATES_RUN } }));
-  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS), [], P.formatReport(two));
+  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA]], P.formatReport(two));
   // A stage-1 run: the same, but for the account states it has none of (N/A, never a FAIL).
   const res = P.runChecks(ctx());
-  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['account-states', P.NA]], P.formatReport(res));
+  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['account-states', P.NA]], P.formatReport(res));
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.results.length, P.CHECKS.length);
   assert.deepStrictEqual(res.results.find(x => x.check === 'curated-source'), { check: 'curated-source', status: P.PASS, detail: '1 list moment(s) closed at their entry in the bars given: one source' });
@@ -219,9 +221,11 @@ test('N/A never fails: a feature not merged reports "not available (needs <branc
   const c = ctx({ read: { features: () => none } });
   const res = P.runChecks(c);
   assert.strictEqual(res.ok, true, P.formatReport(res));
-  const na = res.results.filter(x => x.status === P.NA).map(x => x.check);
-  assert.deepStrictEqual(na.sort(), ['account-facts', 'account-states', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
-  for (const x of res.results.filter(y => y.status === P.NA && y.check !== 'account-states')) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);
+  // The risk record's check is N/A when the display is off (it doesn't wait for a branch); so are account-states on a stage-1 run.
+  const own = ['risk-record', 'account-states'];
+  const na = res.results.filter(x => x.status === P.NA && !own.includes(x.check)).map(x => x.check);
+  assert.deepStrictEqual(na.sort(), ['account-facts', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
+  for (const x of res.results.filter(y => y.status === P.NA && !own.includes(y.check))) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);
   // The merged features' checks judge them on the good fixture.
   for (const name of ['strategy-valid-bars', 'head-composed-reads', 'curated-list', 'latency', 'library-display', 'stage']) assert.strictEqual(res.results.find(x => x.check === name).status, P.PASS, name);
   assert.ok(!Object.keys(P.NEEDS).some(k => ['validBars', 'latency', 'libraryDisplay', 'curatedList', 'composedReads'].includes(k)), 'no merged feature waits');
@@ -395,4 +399,50 @@ test('scripts/training-preflight.js: 0 on a pass, 1 on a FAIL, 2 on a usage erro
   assert.strictEqual(run([]).status, 2);
   assert.strictEqual(run(['--config', write({ stage: 1, learning: false })]).status, 2, 'a stage contradiction is a config error');
   assert.ok(!fs.existsSync(path.join(user, 'replays')), 'nothing seeded');
+});
+
+test('risk-record: N/A when off; on, it needs a pinned practice-train-built record on a practice-train run', () => {
+  const on = { riskRecordDisplay: true, riskRecord: 'rr.json', comparisonArm: true, stage: 2 };
+  assert.strictEqual(P.riskRecord(ctx()).status, P.NA, 'off by default');
+  assert.strictEqual(P.riskRecord(ctx({ run: { riskRecord: 'rr.json' } })).status, P.NA, 'pinned alone, not shown: N/A');
+  const good = P.riskRecord(ctx({ run: on }));
+  assert.strictEqual(good.status, P.PASS, good.detail);
+  assert.match(good.detail, /^cccccccccccc: walk-forward, practice-train-built, 3 day\(s\); pinned at the run's start, shown$/);
+  const pinned = { file: 'risk-record-cccccccccccccccc.json', hash: 'c'.repeat(64), display: true, comparisonArm: true };
+  assert.strictEqual(P.riskRecord(ctx({ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => pinned } })).status, P.PASS, 'a resume of the same shown record');
+  const rec = ctx().read.riskRecord();
+  const cases = [
+    [{ run: { ...on, riskRecord: null } }, /without a risk record to pin/],
+    [{ run: on, read: { riskRecord: () => { throw new Error('rr.json: its content doesn\'t match its hash'); } } }, /doesn't match its hash/],
+    [{ run: on, read: { riskRecord: () => ({ ...rec, walkForward: false }) } }, /not walk-forward/],
+    [{ run: on, read: { riskRecord: () => ({ ...rec, roles: ['practice-train', 'practice-validate'] }) } }, /not practice-train only/],
+    [{ run: on, read: { riskRecord: () => ({ ...rec, entries: [{ day: '2024-08-05', role: 'practice-validate', cells: {} }] }) } }, /an entry not of practice-train/],
+    [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, hash: 'd'.repeat(64) }) } }, /pinned risk record dddddddddddd, not this one/],
+    [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, display: false }) } }, /pinned its risk record with the display off/],
+    // The comparison arm is pinned with the record: a resume whose config says otherwise is refused.
+    [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, comparisonArm: false }) } }, /pinned its risk record not as a declared comparison arm/],
+    [{ run: { ...on, comparisonArm: false, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, comparisonArm: true }) } }, /pinned its risk record as a declared comparison arm/],
+    // Test, final (and a window spanning two roles) are never shown it.
+    [{ run: on, gate: { from: D('2025-03-03T14:30:00Z'), to: D('2025-03-03T15:00:00Z') } }, /on a test run: the risk record is shown on practice-train and practice-validate only/],
+    [{ run: on, gate: { from: D('2024-06-28T00:00:00Z'), to: D('2024-07-03T00:00:00Z') } }, /on a no-role run/],
+  ];
+  // Train-derived evidence may be shown on practice-validate (the record holds practice-train days only).
+  const validate = P.riskRecord(ctx({ run: on, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } }));
+  assert.strictEqual(validate.status, P.PASS, JSON.stringify(validate));
+  for (const [over, why] of cases) {
+    const res = P.riskRecord(ctx(over));
+    assert.strictEqual(res.status, P.FAIL, `${why}: ${JSON.stringify(res)}`);
+    assert.match(res.detail, why);
+    assert.strictEqual(P.runChecks(ctx(over)).ok, false, `${why}: a FAIL fails the preflight`);
+  }
+});
+
+test('stage: stage 1 keeps the risk record hidden; stage 2 shows it only on a declared comparison arm', () => {
+  const on = { riskRecordDisplay: true, riskRecord: 'rr.json' };
+  assert.match(P.stage(ctx({ run: { ...on, comparisonArm: true } })).detail, /stage 1: the risk record stays hidden/);
+  assert.strictEqual(P.stage(ctx({ run: { ...on, comparisonArm: true } })).status, P.FAIL);
+  const two = P.stage(ctx({ run: { ...on, stage: 2 } }));
+  assert.deepStrictEqual([two.status, /shown only on a run declared a comparison arm \(comparisonArm\)/.test(two.detail)], [P.FAIL, true]);
+  assert.strictEqual(P.stage(ctx({ run: { ...on, stage: 2, comparisonArm: true, accountStates: STATES_RUN } })).status, P.PASS, 'stage 2 on a comparison arm, from account states: holds');
+  assert.strictEqual(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN } })).status, P.PASS, 'off: nothing to declare');
 });
