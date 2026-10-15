@@ -134,7 +134,7 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
       record, attempts: recs.length, riskUsd,
       account: attempt ? accountCall(attempt, riskUsd) : null,
       stage, accountState: state ? state.bucket : null, skill: (setupRead && setupRead.skill) || 'none', year: String(r.day || '').slice(0, 4),
-      sample, turns: roleTurns(doc, { systemPrompts }),
+      sample, cycle: cycleFile || null, turns: roleTurns(doc, { systemPrompts }),
     });
   }
   return out;

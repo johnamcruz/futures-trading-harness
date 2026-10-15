@@ -281,7 +281,8 @@ test('skill usage: never shown to the model: only the replay report (and the sta
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'model-verifier.js'), 'utf8'), /skillRows|skill-usage|learning-report/);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'proposer.js'), 'utf8'), /model-verifier|ab-compare/);
   const pinUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /run-pins'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));
-  assert.deepStrictEqual(pinUsers, ['scripts/replay.js']);
+  // And the decision sampler's base run (learning/decision-sampler.js runBase), started as scripts/replay.js run starts one.
+  assert.deepStrictEqual(pinUsers.sort(), ['scripts/lib/learning/decision-sampler.js', 'scripts/replay.js']);
 });
 
 test('skill usage: the A/B comparison reads the real report: per-skill rows, not N/A', () => {

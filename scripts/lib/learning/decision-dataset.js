@@ -13,6 +13,7 @@
  *
  * Built (buildDataset), deterministic for the same sources, spec and seed:
  *   1. label every decision; keep the correct ones (stage 1: no account state; stage 2: account state plus risk action)
+ *      whose cycle holds no other decision that isn't (a cycle's turns speak for every symbol it decided on)
  *   2. their faithful role turns as examples ({ messages }: the exact prompts the role saw, then its response), each
  *      with its id (sha256 of its messages); duplicates dropped (the first kept), and a decision whose examples are all
  *      duplicates with it
@@ -148,11 +149,16 @@ function correctOf(sources, set, rules) {
   const labels = { correct: 0, incorrect: 0, unverifiable: 0 };
   for (const s of sources) {
     checkSource(s, set);
-    for (const d of s.decisions) {
+    const labelled = s.decisions.map(d => {
       if (REFUSED_ROLES.includes(roleOf(d.day)) || roleOf(d.day) !== (set === 'train' ? 'practice-train' : 'practice-validate')) throw new Error(`run ${s.runId}: decision ${d.key} on ${d.day} is outside the ${set} set's window`);
-      const l = labelDecision(d, rules);
+      return [d, labelDecision(d, rules)];
+    });
+    // A cycle's turns speak for every decision in it (one prompt, every symbol): trained on only when all are correct.
+    const cycleOf = d => (d.cycle ? `${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.cycle}` : null);
+    const mixed = new Set(labelled.filter(([d, l]) => l.label !== 'correct' && cycleOf(d)).map(([d]) => cycleOf(d)));
+    for (const [d, l] of labelled) {
       labels[l.label] += 1;
-      if (l.label === 'correct') out.push({ ...d, uid: `${s.runId}|${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.key}`, source: s.runId, label: l });
+      if (l.label === 'correct' && !mixed.has(cycleOf(d))) out.push({ ...d, uid: `${s.runId}|${d.sample ? `${d.sample.t}|${d.sample.repeat}` : 'run'}|${d.key}`, source: s.runId, label: l });
     }
   }
   const all = out.flatMap(d => examplesOf(d).map(x => ({ ...x, decision: d })));

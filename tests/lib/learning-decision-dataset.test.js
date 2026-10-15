@@ -137,6 +137,27 @@ test('one prompt set per dataset: train sources from two harness versions, or wi
   assert.throws(() => DS.buildDataset({ train: [a], spec: { ...SPEC, steps: [] }, rules: RULES }), /spec is invalid/);
 });
 
+test('a cycle that decided wrongly on one symbol gives no example for its other symbol (one prompt speaks for both)', () => {
+  const home = tmpDir();
+  const src = sourceOf(trainRun(path.join(home, 'a')));
+  const [first, , wrong] = src.decisions;
+  assert.ok(first.cycle && wrong.cycle, 'decisions name their cycle');
+  // The wrong-winner's decision recorded in the first decision's cycle, as another symbol of it.
+  const shared = { ...src, decisions: src.decisions.map(d => (d === wrong ? { ...d, key: `${first.t}|MES`, cycle: first.cycle } : d)) };
+  const built = DS.buildDataset({ train: [shared], spec: SPEC, rules: RULES });
+  const text = JSON.stringify(built.files);
+  assert.ok(!text.includes('RM-A'), 'the shared cycle\'s turns are out');
+  assert.ok(text.includes('TAKE-LOSER'), 'other cycles are not');
+});
+
+test('only correct decisions, even without a cycle to group them by', () => {
+  const src = sourceOf(trainRun(path.join(tmpDir(), 'a')));
+  const loose = { ...src, decisions: src.decisions.map(d => ({ ...d, cycle: null })) };
+  const text = JSON.stringify(DS.buildDataset({ train: [loose], spec: SPEC, rules: RULES }).files);
+  for (const gone of ['TAKE-WRONG', 'PASS-UNKNOWN']) assert.ok(!text.includes(gone), gone);
+  assert.ok(text.includes('TAKE-LOSER'));
+});
+
 test('dedupe: the first of identical examples is kept, by the id of its exact messages', () => {
   const m = [{ role: 'user', content: 'a' }];
   const ex = DS.examplesOf({ turns: [{ role: 'x', faithful: true, messages: m }, { role: 'x', faithful: false, messages: null }] });
