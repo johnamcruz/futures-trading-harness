@@ -213,6 +213,8 @@ test('tunables: a run, replay, training run, preflight or backtest refuses to st
     const r = cli(name, ...args);
     assert.notStrictEqual(r.status, 0, name);
     assert.match(r.stderr, /CRITICAL config error.*\n?.*the runner config \(.*runner\.json\) is refused: gate\.minConfluence: a whole number from 1 to Infinity, not 0/, `${name}: ${r.stderr.slice(0, 300)}`);
+    // Thrown by the entry point itself (its own prefix, or the uncaught error), not only said on load by tunables.js ([fth]).
+    assert.match(r.stderr, /(\[(replay|train-loop|preflight|backtest|autotrader)\] |CriticalConfigError: )CRITICAL config error/, `${name}: ${r.stderr.slice(0, 300)}`);
   }
   // End of day is not refused (it flattens): it goes on to its own checks.
   assert.doesNotMatch(cli('autotrader.js', '--once', 'eod', '--config', 'none.json').stderr.replace(/\[fth\][^\n]*\n/g, ''), /CRITICAL config error/);

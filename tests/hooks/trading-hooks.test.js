@@ -798,7 +798,7 @@ test('MCP gateway: a refused config file still starts the gateway; entries are r
   assert.strictEqual(s.byId[1].result.content[0].text, 'forwarded:initialize');
   assert.strictEqual(s.byId[2].result.isError, true);
   assert.match(s.byId[2].result.content[0].text, /- \[config-critical\] CRITICAL config error .*\n?.*the runner config \(.*runner\.json\) is refused: not JSON/);
-  assert.doesNotMatch(s.byId[2].result.content[0].text, /\[plan-required\]/, 'refused on the config, before any account read');
+  assert.doesNotMatch(s.byId[2].result.content[0].text, /\[position-open\]/, 'refused on the config, before any account read (the open long would add position-open)');
   assert.strictEqual(s.byId[3].result.content[0].text, 'forwarded:tools/call:place_order', '[protect]');
   assert.strictEqual((await session('exit')).byId[4].result.content[0].text, 'forwarded:tools/call:place_order', '[exit]');
   assert.strictEqual(s.byId[5].result.content[0].text, 'forwarded:tools/call:close_position');
