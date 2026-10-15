@@ -159,6 +159,10 @@ test('the shards: every family read with root null; an older single file read wi
   fs.writeFileSync(TL.recordFile(big, 'MNQ', '2026-10-07'), '');
   fs.truncateSync(TL.recordFile(big, 'MNQ', '2026-10-07'), TL.MAX_BYTES + 1);
   assert.throws(() => TL.readRecords(big, 'MNQ', { days: ['2026-10-07'] }), /is over 67108864 bytes/);
+  // An older home's single file over the cap: refused, saying what it is and what to do.
+  fs.writeFileSync(TL.legacyFile(big, 'MES'), '');
+  fs.truncateSync(TL.legacyFile(big, 'MES'), TL.MAX_BYTES + 1);
+  assert.throws(() => TL.readRecords(big, 'MES', { days: ['2026-10-07'] }), /MES\.jsonl, an older home's single file from before the day shards, is over 67108864 bytes: [^]*continue in a new run home/);
 });
 
 test('R:R is compared unrounded: 231/111 ticks (2.0811) meets a min of 2.0805 though it shows 2.08, and fails 2.0812', () => {

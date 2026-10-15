@@ -12,7 +12,8 @@
  *
  * An older home's single file (<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl, before the shards) is still read, never
  * written: a day's read takes its records of that day, a full read all of them. A file over MAX_BYTES, or one that
- * exists and can't be read, throws (never read as no records): the gate refuses the entry on it.
+ * exists and can't be read, throws (never read as no records): the gate refuses the entry on it. An older file over
+ * MAX_BYTES (the run that outgrew it) refuses every composed entry in that home, saying so: continue in a new home.
  *
  * The plan, in code, never the model's arithmetic:
  *   entry    a limit at the reference price (the briefing's last close), valid until the record expires (expiresAt:
@@ -185,11 +186,14 @@ function appendRecord(home, record) {
 const unreadable = (what, err) => new Error(`the compose record ${what} can't be read (${err.code || err.message})`);
 
 /** A record file's records (an unreadable line is skipped; no file, none); over MAX_BYTES or unreadable, throws. */
-function readFile(file) {
+function readFile(file, { legacy = false } = {}) {
   let size;
   try { size = fs.statSync(file).size; } catch (err) {
     if (err.code === 'ENOENT') return [];
     throw unreadable(file, err);
+  }
+  if (size > MAX_BYTES && legacy) {
+    throw new Error(`the compose record ${file}, an older home's single file from before the day shards, is over ${MAX_BYTES} bytes: nothing reads it, so no entry is judged on it; continue in a new run home (this one's record stays where it is for review)`);
   }
   if (size > MAX_BYTES) throw new Error(`the compose record ${file} is over ${MAX_BYTES} bytes`);
   let text;
@@ -225,7 +229,7 @@ function readRecords(home, root = null, { days = null } = {}) {
   if (days !== null && (!Array.isArray(days) || !days.every(d => DAY.test(String(d))))) throw new Error(`not trading days: ${JSON.stringify(days)}`);
   const roots = root === null ? families(home) : [familyRoot(root)];
   return roots.flatMap(r => {
-    const old = readFile(legacyFile(home, r)).filter(x => days === null || days.includes(shardDay(x)));
+    const old = readFile(legacyFile(home, r), { legacy: true }).filter(x => days === null || days.includes(shardDay(x)));
     const names = days !== null ? [...new Set(days)].sort() : shardDays(home, r);
     return [...old, ...names.flatMap(d => readFile(recordFile(home, r, d)))];
   });
