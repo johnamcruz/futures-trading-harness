@@ -49,7 +49,7 @@ const { latestVerdict } = require('./prop-state');
 const { briefingFor } = require('./fact-claims');
 const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
 const { RULE_FRAMES, trendRule } = require('./mtf');
-const { checkReads } = require('./composed-reads');
+const { checkReads, D2_TIERS, d2TierMet } = require('./composed-reads');
 const { STRATEGY, readRecords, planOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -110,9 +110,6 @@ function limitRefusal({ side, type, limitPrice, reference, tick } = {}) {
 
 const quote = r => `"${r.read}"`;
 
-// What each prevailing frame needs to be faded (D2): the CHoCH frames that suffice, and whether a 4h rejection must join.
-const D2_TIERS = { 15: { choch: ['15m', '1h'], rejection4h: false }, 60: { choch: ['1h'], rejection4h: false }, 240: { choch: ['1h'], rejection4h: true } };
-
 function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
   const no = (why, against = null) => ({ ok: false, against, why });
   try {
@@ -129,13 +126,8 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
     if (r.allowed || !r.prevailing) return no('not against the trend');
     const tier = D2_TIERS[r.prevailing.minutes];
     if (!tier) return no(`no D2 tier for ${r.prevailing.label}`, r.prevailing.label);
-    const good = x => x.check === true && x.agrees === true && x.dir === side;
-    const chochs = check.reads.filter(x => good(x) && x.kind === 'break' && /^(15m|1h) choch (up|down)$/.test(String(x.form || ''))).map(x => String(x.form).split(' ')[0]);
-    const hasChoch = tier.choch.some(tf => chochs.includes(tf));
-    // A 4h candle that rejected a key level: a fair value gap's edge ('<tf> fvg low|high') is not one.
-    const has4h = !tier.rejection4h || check.reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || ''))
-      && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
-    if (hasChoch && has4h) return { ok: true, against: r.prevailing.label, why: null };
+    // The tier, read by the same definition the reads' agreement uses (composed-reads.js D2_TIERS, d2TierMet).
+    if (d2TierMet(tier, check.reads, side)) return { ok: true, against: r.prevailing.label, why: null };
     return no(`against the ${r.prevailing.label} trend a verified ${tier.choch.join(' or ')} CHoCH${tier.rejection4h ? ' and a 4h candle that rejected a level' : ''} the trade's way is needed`, r.prevailing.label);
   } catch (err) {
     return no(`the check failed (${err.message})`);
