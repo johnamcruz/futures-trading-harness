@@ -10,11 +10,14 @@
  *   a line-ending change is the same file and any change of a value is another. Runs and ledgers record it
  *   (fingerprintOf), so what each run and each look was taken under is on the record.
  * - Tighten only: a spec may mark keys (dotted paths) whose value may only tighten: 'down' (a ceiling, e.g. a look
- *   budget: lower is tighter), 'up' (a floor: higher is tighter) or 'true' (a guard that stays on). A test pins each
+ *   budget: lower is tighter), 'up' (a floor: higher is tighter), 'true' (a guard that stays on) or 'exact' (pinned:
+ *   a value whose stricter direction differs by user, e.g. the gate's timing, may not change at all). A test pins each
  *   key's loosest value ever committed and refuses one past it (loosened), as tests/lib/prop-promotion.test.js
  *   pins the promotion gate's numbers.
+ * - Shapes: shapeErrors(shape, value) checks a document against a declared shape (every key present, none unknown,
+ *   each leaf its type and range), so a spec's validate can be one line (the `shapes` leaf builders).
  *
- * A spec: { name, validate(value) -> [error], tightenOnly: { 'a.b': 'down' | 'up' | 'true' } }.
+ * A spec: { name, validate(value) -> [error], tightenOnly: { 'a.b': 'down' | 'up' | 'true' | 'exact' } }.
  *
  *   CONFIG_DIR                          the repository's config/ directory
  *   canonicalJson(value)                the value as canonical JSON (keys sorted)
@@ -23,6 +26,9 @@
  *   fingerprintOf(loaded)               { name, version (the file's own `version`, or null), hash }
  *   valueAt(value, dotted)              the value at a dotted path (undefined when absent)
  *   loosened(spec, pinned, value)       [error] for each tighten-only key past its pinned value (or missing)
+ *   shapes                              leaf builders: num({ min, max, int }), bool(), str(oneOf), list(item, { min, max }),
+ *                                       record(item) (any keys, each an item), custom(check)
+ *   shapeErrors(shape, value)           [error] for each key missing, unknown or out of its leaf's type or range
  */
 
 const crypto = require('crypto');
@@ -30,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CONFIG_DIR = path.resolve(__dirname, '..', '..', 'config');
-const DIRECTIONS = Object.freeze(['down', 'up', 'true']);
+const DIRECTIONS = Object.freeze(['down', 'up', 'true', 'exact']);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -102,6 +108,10 @@ function loosened(spec, pinned, value) {
       if (v !== true) out.push(`${spec.name}: ${k} is ${JSON.stringify(v)}; it is a guard that stays true`);
       continue;
     }
+    if (dir === 'exact') {
+      if (canonicalJson(v) !== canonicalJson(pin)) out.push(`${spec.name}: ${k} is ${JSON.stringify(v)}, not its pinned ${JSON.stringify(pin)}; it is pinned exactly`);
+      continue;
+    }
     if (typeof v !== 'number' || !Number.isFinite(v)) { out.push(`${spec.name}: ${k} is ${JSON.stringify(v)}, not a number`); continue; }
     if (dir === 'down' && v > pin) out.push(`${spec.name}: ${k} is ${v}, above its pinned ${pin}; it may only go down (tighten)`);
     if (dir === 'up' && v < pin) out.push(`${spec.name}: ${k} is ${v}, under its pinned ${pin}; it may only go up (tighten)`);
@@ -110,4 +120,58 @@ function loosened(spec, pinned, value) {
   return out;
 }
 
-module.exports = { CONFIG_DIR, DIRECTIONS, canonicalJson, hashOf, loadConfigFile, fingerprintOf, valueAt, loosened };
+// ---- Shapes: a document's declared keys and leaf types ----
+
+const isPlain = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+const LEAF = Symbol('leaf');
+const leaf = check => Object.assign(check, { [LEAF]: true });
+
+const shapes = Object.freeze({
+  /** A finite number, optionally whole, within [min, max]. */
+  num: ({ min = -Infinity, max = Infinity, int = false } = {}) => leaf(v => {
+    if (typeof v !== 'number' || !Number.isFinite(v) || (int && !Number.isInteger(v))) return `a ${int ? 'whole number' : 'number'}`;
+    if (v < min || v > max) return `from ${min} to ${max}`;
+    return null;
+  }),
+  bool: () => leaf(v => (typeof v === 'boolean' ? null : 'true or false')),
+  /** A string, one of oneOf when given. */
+  str: oneOf => leaf(v => {
+    if (typeof v !== 'string' || !v) return 'a string';
+    return oneOf && !oneOf.includes(v) ? `one of ${oneOf.join(', ')}` : null;
+  }),
+  /** A list of items (each a leaf or a shape), min to max long. */
+  list: (item, { min = 0, max = Infinity } = {}) => leaf((v, where) => {
+    if (!Array.isArray(v) || v.length < min || v.length > max) return `a list of ${min}${max === Infinity ? ' or more' : ` to ${max}`}`;
+    const errs = v.flatMap((x, i) => shapeErrors(item, x, `${where}[${i}]`));
+    return errs.length ? errs : null;
+  }),
+  /** A leaf of its own: check(value) -> null (fits) or what it should be. */
+  custom: check => leaf(v => check(v)),
+  /** An object with any keys, each value an item. */
+  record: item => leaf((v, where) => {
+    if (!isPlain(v)) return 'an object';
+    const errs = Object.keys(v).flatMap(k => shapeErrors(item, v[k], `${where}.${k}`));
+    return errs.length ? errs : null;
+  }),
+});
+
+/** Every reason value doesn't fit shape (a leaf builder's check, or an object of shapes with exactly those keys). */
+function shapeErrors(shape, value, where = '') {
+  const at = where || '(root)';
+  if (typeof shape === 'function' && shape[LEAF]) {
+    const r = shape(value, at);
+    if (r === null) return [];
+    return Array.isArray(r) ? r : [`${at}: ${r}, not ${JSON.stringify(value)}`];
+  }
+  if (!isPlain(shape)) throw new Error(`${at}: a shape is a leaf builder or an object of shapes`);
+  if (!isPlain(value)) return [`${at}: an object with ${Object.keys(shape).join(', ')}`];
+  const out = [];
+  for (const k of Object.keys(shape)) {
+    if (!Object.prototype.hasOwnProperty.call(value, k)) out.push(`${where ? `${where}.` : ''}${k}: missing`);
+    else out.push(...shapeErrors(shape[k], value[k], `${where ? `${where}.` : ''}${k}`));
+  }
+  for (const k of Object.keys(value)) if (!Object.prototype.hasOwnProperty.call(shape, k)) out.push(`${where ? `${where}.` : ''}${k}: not a known key`);
+  return out;
+}
+
+module.exports = { CONFIG_DIR, DIRECTIONS, canonicalJson, hashOf, loadConfigFile, fingerprintOf, valueAt, loosened, shapes, shapeErrors };

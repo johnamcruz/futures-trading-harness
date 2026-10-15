@@ -1,0 +1,69 @@
+{
+  "version": "v1",
+  "indicators": {
+    "atrPeriod": 14,
+    "stopAtrPeriod": 20,
+    "adxPeriod": 14,
+    "supertrendPeriod": 10,
+    "supertrendMult": 3,
+    "keltnerLen": 20,
+    "keltnerMult": 1.5,
+    "keltnerAtr": 20,
+    "swingK": 2,
+    "openingRangeMinutes": 15
+  },
+  "snapshot": {
+    "emaFast": 9,
+    "emaSlow": 20,
+    "adxSlopeBars": 5,
+    "stopAtrMult": 0.5,
+    "vpLookback": 360
+  },
+  "regime": {
+    "trendAdx": 20,
+    "rangeAdx": 18,
+    "slopeBars": 5,
+    "slopeAtr": 0.3,
+    "crossBars": 30,
+    "maxTrendCrosses": 3,
+    "rangeCrosses": 5,
+    "volLookback": 100,
+    "highVol": 1.4,
+    "lowVol": 0.7,
+    "minBars": 60,
+    "minBarsOverSlope": 30
+  },
+  "cisd": { "minRun": 2, "maxWait": 6, "expiry": 12, "voidTol": 0.05, "bufferAtr": 0.1, "minBody": 0.6, "minRangeAtr": 1 },
+  "crt": { "sweepBars": 10, "shiftBars": 5, "maxDepth": 0.5, "minRangeAtr": 2, "bufferAtr": 0.25, "minRR": 2 },
+  "volumeProfile": { "vpRows": 100, "vpRowSize": 0, "vpValueArea": 70, "vpNodePct": 9, "vpTroughPct": 7, "vpThreshold": 1 },
+  "candles": {
+    "dojiBody": 0.1,
+    "wickBody": 2,
+    "wickRange": 0.6,
+    "otherWick": 0.15,
+    "dispBody": 0.7,
+    "dispAtr": 1.5,
+    "volLen": 20,
+    "volMin": 5,
+    "maxActive": 50,
+    "maxLevels": 4,
+    "timeframes": [3, 5, 15, 60, 240],
+    "rangeFrames": [60, 240]
+  },
+  "mtf": {
+    "fast": 20,
+    "slow": 50,
+    "rangeLen": 20,
+    "maxCandles": 300,
+    "historyHours": 240,
+    "historyMarginHours": 10,
+    "ruleFrames": [240, 60, 15]
+  },
+  "dayContext": { "ibMinutes": 60, "openMinutes": 30, "adrDays": 10 },
+  "levelCloses": { "maxCloses": 20 },
+  "structure": { "sweepBars": 10, "swingLevels": 3, "m5Recent": 3 },
+  "momentum": { "rangeAtr": 1, "volRatio": 1 },
+  "composedReads": { "volumeHigh": 1.5, "absorptionProgressAtr": 0.5 },
+  "fvg": { "frames": [5, 15, 60], "window": 60, "max": 3 },
+  "briefing": { "equalK": 2, "cisdFrames": [3, 5, 15, 60] }
+}

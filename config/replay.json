@@ -1,0 +1,45 @@
+{
+  "version": "v1",
+  "latency": { "tickMs": 1000 },
+  "stages": {
+    "1": {
+      "name": "learn to trade",
+      "defaults": { "latency": true, "libraryDisplay": false, "riskRecordDisplay": false },
+      "refused": { "learning": false, "latency": false, "libraryDisplay": true, "riskRecordDisplay": true, "prop": "set", "accountStates": "set" },
+      "comparisonOnly": []
+    },
+    "2": {
+      "name": "pass prop",
+      "defaults": { "latency": true, "libraryDisplay": false, "riskRecordDisplay": false },
+      "refused": { "learning": false, "latency": false, "libraryDisplay": true },
+      "comparisonOnly": ["riskRecordDisplay"]
+    }
+  },
+  "curatedLists": {
+    "total": 200,
+    "mix": { "trend-up": 0.35, "trend-down": 0.35, "trend-end": 0.1, "chop": 0.1, "counter-trend": 0.1 },
+    "minSkill": 3,
+    "passShare": { "trend-end": 0.6, "chop": 0.7, "counter-trend": 0.7 },
+    "seed": 1,
+    "yearCap": 1.5
+  },
+  "curatedMoments": { "leadSetup": 2, "firstBar": 300 },
+  "windowBars": 700,
+  "setupLibrary": { "minRR": 2 },
+  "setupMoments": { "setupTf": 15, "quietSample": 0.15, "seed": 0, "levels": "key", "setupTfs": [5, 15, 60] },
+  "accountStates": {
+    "seed": 1,
+    "count": 200,
+    "meanBlock": 7,
+    "perBucket": 5,
+    "oversample": { "fresh": 1, "mid": 1, "near-target": 1, "near-mll": 3, "after-losses": 3 },
+    "cutoffs": { "nearMll": 0.35, "nearTarget": 0.7 }
+  },
+  "driver": { "eodRetries": 5 },
+  "labels": {
+    "stopAtrMultiples": [0.5, 0.75, 1, 1.5, 2, 3],
+    "stopAtrRange": [0.375, 4.5],
+    "sizeSteps": [0.25, 0.5, 0.75, 1],
+    "pairMs": 1000
+  }
+}
