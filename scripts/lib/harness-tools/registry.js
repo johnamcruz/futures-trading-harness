@@ -228,6 +228,17 @@ const TOOLS = [
     args: i => ({ symbol: i.symbol, side: i.side, reads: i.reads, size: i.size }),
     narrow: 'state fewer reads',
   },
+  {
+    name: 'experience_lookup', op: 'experience_lookup', script: 'experience-lookup',
+    description: 'Your own record for the candidate compose_check just verified: past decisions of these skills in this context, with counts and intervals. Read-only; at most 2 calls a bar.',
+    inputSchema: object({
+      symbol: SYMBOL,
+      alternative: { type: 'array', maxItems: 2, items: object({ step: { type: 'string', pattern: '^[a-z][a-z-]{0,31}$' }, skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' } }, ['step', 'skill']), description: 'Swap one step\'s skill.' },
+      role: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' },
+    }, ['symbol']),
+    args: i => ({ ...pick(i, { symbol: 'symbol', role: 'role' }), alternative: Array.isArray(i.alternative) ? i.alternative : [] }),
+    narrow: 'the record is too large to return',
+  },
 ];
 
 const BY_NAME = new Map(TOOLS.map(t => [t.name, t]));
