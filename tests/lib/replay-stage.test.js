@@ -164,7 +164,7 @@ test('stageReport: stage 2 adds the 30-day Monte Carlo, and the promotion gate o
 });
 
 test('stageRequirements: what the preflight checks for each preset', () => {
-  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, prop: 'none', phase2: false });
+  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: 'off', prop: 'none', phase2: false });
   assert.strictEqual(S.stageRequirements(2).prop, 'allowed');
   assert.strictEqual(S.stageRequirements(2).phase2, true);
   assert.strictEqual(S.stageRequirements(3), null);
@@ -210,4 +210,29 @@ test('scripts/replay.js run: a finished stage-1 validate run prints its stage re
   assert.match(r.stdout, /\[replay\] done: /);
   assert.match(r.stdout, /\[replay\] stage 1 \(learn to trade\) report:\n/);
   assert.match(r.stdout, /\[replay\] stage-1 exit test: FAIL\n\[replay\] {3}INSUFFICIENT planned-rr: insufficient sample \(0; at least 20\)/);
+});
+
+test('the risk record: stage 1 refuses its display; stage 2 takes it only on a run declared a comparison arm', () => {
+  assert.strictEqual(S.applyStage({ stage: 1 }).raw.riskRecordDisplay, false, 'stage 1: hidden by default');
+  assert.strictEqual(S.applyStage({ stage: 2 }).raw.riskRecordDisplay, false, 'stage 2: hidden by default');
+  for (const over of [{}, { comparisonArm: true }]) assert.match(S.applyStage({ stage: 1, riskRecordDisplay: true, ...over }).errors.join('\n'), /riskRecordDisplay: true contradicts stage 1/);
+  assert.deepStrictEqual(S.applyStage({ stage: 1, riskRecordDisplay: false }).errors, []);
+  assert.match(S.applyStage({ stage: 2, riskRecordDisplay: true }).errors[0], /riskRecordDisplay: true in stage 2 .* only on a run declared a comparison arm \(comparisonArm: true\)/);
+  assert.match(S.applyStage({ stage: 2, riskRecordDisplay: true, comparisonArm: 'yes' }).errors[0], /comparison arm/, 'only a literal true declares it');
+  assert.deepStrictEqual(S.applyStage({ stage: 2, riskRecordDisplay: true, comparisonArm: true }).errors, []);
+  assert.deepStrictEqual(S.stageRequirements(1).riskRecordDisplay, 'off');
+  assert.deepStrictEqual(S.stageRequirements(2).riskRecordDisplay, 'comparison-arm');
+});
+
+test('resolveReplay: comparisonArm is a boolean declaration, in no hash; stage 2 refuses the display without it', () => {
+  const a = raw();
+  fs.mkdirSync(path.join(a.user, 'live'));
+  fs.writeFileSync(path.join(a.user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+  const res = over => resolveReplay({ ...a.raw, ...over }, { baseDir: a.user, env: env(a.user), root: ROOT });
+  assert.strictEqual(res({}).comparisonArm, false);
+  assert.strictEqual(res({ comparisonArm: true }).comparisonArm, true);
+  assert.throws(() => res({ comparisonArm: 'yes' }), /comparisonArm: true or false/);
+  assert.strictEqual(setupHash(res({ stage: 2, comparisonArm: true })), setupHash(res({ stage: 2 })), 'a declaration, not a setup');
+  assert.throws(() => res({ stage: 2, riskRecord: 'rr.json', riskRecordDisplay: true }), /only on a run declared a comparison arm/);
+  assert.throws(() => res({ stage: 1, riskRecord: 'rr.json', riskRecordDisplay: true, comparisonArm: true }), /riskRecordDisplay: true contradicts stage 1/);
 });

@@ -34,6 +34,8 @@
  *                  and outcomes of its own risk decisions by account state, practice-train days before the bar's session);
  *                  needs riskRecord; part of the setup (setupHash) only when on, so existing hashes are unchanged; an arm
  *                  dimension of its own (learning/looks.js `+risk:`), and a resume can't change it (default: false)
+ *   comparisonArm  true declares the run one arm of a with/without comparison (two replays, the paired test): stage 2
+ *                  shows the risk record only on one (replay/stage.js); a declaration only, in no hash (default: false)
  *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
  *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
  *                  on for a learning run, off for one declared not learning)
@@ -182,6 +184,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (r.riskRecord !== undefined && !(typeof r.riskRecord === 'string' && r.riskRecord.trim())) errors.push('riskRecord: a risk record index file (learning/risk-record-index.js)');
   if (r.riskRecordDisplay !== undefined && typeof r.riskRecordDisplay !== 'boolean') errors.push('riskRecordDisplay: true or false');
   else if (r.riskRecordDisplay === true && r.riskRecord === undefined) errors.push('riskRecordDisplay: shows the pinned risk record; name it (riskRecord)');
+  if (r.comparisonArm !== undefined && typeof r.comparisonArm !== 'boolean') errors.push('comparisonArm: true or false');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -256,6 +259,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // The risk record index the run pins at its start (learning/risk-record-index.js pinRiskRecord), or null, and whether it is shown.
     riskRecord: r.riskRecord ? path.resolve(baseDir, expandHome(r.riskRecord, home)) : null,
     riskRecordDisplay: r.riskRecordDisplay === true,
+    // Whether the run is declared one arm of a with/without comparison (replay/stage.js); in no hash.
+    comparisonArm: r.comparisonArm === true,
     prop: r.prop || null,
     // The training stage preset (replay/stage.js), or null.
     stage: staged.stage,

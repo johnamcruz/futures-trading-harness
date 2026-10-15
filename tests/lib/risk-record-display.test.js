@@ -236,3 +236,12 @@ test('run pins: the record is pinned with its display; a resume can\'t add, drop
   assert.throws(() => pinForRun(run(tmp(), { riskRecord: file, riskRecordDisplay: true }), { fresh: true, arm: `without+risk:${'0'.repeat(16)}` }), /the risk record pinned .* is not the one its look names/);
   assert.throws(() => pinForRun(run(tmp(), { riskRecord: file }), { fresh: true, arm: `without+risk:${h16}` }), /does not show one/);
 });
+
+test('the trade-lifecycle skill teaches reading the risk record: n, too few, evidence not forecast, code overrides; no numbers', () => {
+  const text = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'trade-lifecycle', 'SKILL.md'), 'utf8');
+  const start = text.indexOf('**Your risk record**');
+  assert.ok(start > 0, 'taught');
+  const para = text.slice(start, text.indexOf('\n\n', start)).replace(/\s+/g, ' ');
+  for (const must of ['`riskRecordDisplay`', 'n is the paths it changed', '"Too few" is no reading yet', 'never a forecast for this trade', 'A rule from code always overrides it', 'standing-down habits in that account state']) assert.ok(para.includes(must), must);
+  assert.doesNotMatch(para, /\d/, 'names no numbers');
+});

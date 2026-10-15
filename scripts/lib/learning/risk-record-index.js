@@ -15,8 +15,10 @@
  * riskShown; pinning alone shows nothing). A cell under minN paths reads "too few", never a count of outcomes.
  *
  *   riskDayEntry(day, result, { role })          the entry of one day's scoreRiskActions result
- *   buildRiskIndex(entries, { minN, now })       the index document, with its hash
+ *   buildRiskIndex(entries, { minN, now, sources })   the index document, with its hash (sources, when given: the runs
+ *                                                and settings it was built from, learning/risk-record-build.js; hashed)
  *   readRiskIndex(file), writeRiskIndex(dir, doc), pinRiskRecord(runHome, file, { display }), loadPinnedRiskRecord(home)
+ *   riskPin(home)                                the run's pin { file, hash, display }, or null
  *   riskShown(home)                              whether the run's pin enables the display
  *   riskCellAt(doc, kind, state, before)         the summed cell for days before `before`, or { n, enough: false }
  *   riskRecordLines(doc, before)                 the section's lines (the heading first)
@@ -81,11 +83,12 @@ function checkEntries(entries) {
   }
 }
 
-function buildRiskIndex(entries, { minN = MIN_N, now = new Date() } = {}) {
+function buildRiskIndex(entries, { minN = MIN_N, now = new Date(), sources = null } = {}) {
   if (!(Number.isInteger(minN) && minN >= 1)) throw new Error('minN: a whole number from 1');
+  if (sources !== null && !isObj(sources)) throw new Error('sources: what the record was built from, an object');
   checkEntries(entries);
   const sorted = [...entries].sort((a, b) => (a.day < b.day ? -1 : 1)).map(e => ({ day: e.day, role: 'practice-train', cells: Object.fromEntries(Object.entries(e.cells).sort(([a], [b]) => a.localeCompare(b))) }));
-  const doc = { v: VERSION, kind: KIND, builtAt: now.toISOString(), counterfactual: true, walkForward: true, roles: ['practice-train'], minN, days: sorted.length, entries: sorted };
+  const doc = { v: VERSION, kind: KIND, builtAt: now.toISOString(), counterfactual: true, walkForward: true, roles: ['practice-train'], minN, days: sorted.length, ...(sources ? { sources } : {}), entries: sorted };
   return { ...doc, hash: indexHash(doc) };
 }
 
@@ -121,9 +124,15 @@ function pinRiskRecord(runHome, file, { display = false } = {}) {
   return { file: copy, hash: doc.hash, display };
 }
 
+/** The run's pin ({ file, hash, display }), or null when none is pinned (or it can't be read). */
+function riskPin(home) {
+  try { return JSON.parse(fs.readFileSync(path.join(home, 'experience', PINNED), 'utf8')); } catch (_err) { return null; }
+}
+
 /** Whether the run's pin enables the display: only an explicit `display: true` does. */
 function riskShown(home) {
-  try { return JSON.parse(fs.readFileSync(path.join(home, 'experience', PINNED), 'utf8')).display === true; } catch (_err) { return false; }
+  const pin = riskPin(home);
+  return Boolean(pin) && pin.display === true;
 }
 
 /** The run's pinned index (hash checked), or null when none is pinned. */
@@ -169,4 +178,4 @@ function riskRecordLines(doc, before) {
   })];
 }
 
-module.exports = { VERSION, KIND, MIN_N, riskDayEntry, buildRiskIndex, readRiskIndex, writeRiskIndex, pinRiskRecord, loadPinnedRiskRecord, riskShown, riskCellAt, riskRecordLines };
+module.exports = { VERSION, KIND, MIN_N, riskDayEntry, buildRiskIndex, readRiskIndex, writeRiskIndex, pinRiskRecord, loadPinnedRiskRecord, riskPin, riskShown, riskCellAt, riskRecordLines };

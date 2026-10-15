@@ -70,6 +70,15 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED and with or against your side, then the plan in code; recorded for this bar, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
 | `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
+**Your risk record**, last in `experience_lookup` when the run shows it
+(`riskRecordDisplay`): a line per account state and risk decision of yours
+(standing down, sizing under the ceiling, exiting early, stopping for the day
+after losses), counting what reverting it did over the same Monte Carlo paths:
+n is the paths it changed, then the blows it saved or caused and the passes it
+cost or gained. "Too few" is no reading yet. Read it as a prop trader reads a
+journal: evidence about your own standing-down habits in that account state,
+never a forecast for this trade. A rule from code always overrides it.
+
 ## Examples
 
 ```text
