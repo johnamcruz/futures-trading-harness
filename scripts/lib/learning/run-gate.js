@@ -13,10 +13,11 @@
  *
  * Refused: a run spanning two windows or reaching outside the split; a learning run without its end of day
  * (`endOfDay: false`: a position carried into the next session would settle a decision on another day than its
- * own); and `"learning": false` on any test or final day, so the sealed windows have no way around their look
+ * own); and `"learning": false` on any practice-validate, test or final day, so the held-back windows have no way
+ * around their look
  * (a replay outside the split, after 2026, declares itself not learning).
  *
- * One ledger: every look goes to the canonical ledger (looks.js ledgerPath, the user's FTH_HOME), never one named
+ * One ledger: every look goes to the canonical ledger (looks.js ledgerPath, the default home's, whatever FTH_HOME), never one named
  * per run, so no run starts a budget of its own; the run keeps the ledger's path and a resume under another is
  * refused. What was decided is kept with the run's own record (<run dir>/learning-run.json, with a copy in the run
  * home for the tools a cycle calls) and checked again on every resume: a resumed run keeps its role and its look,
@@ -24,7 +25,9 @@
  * experience log, the index, the pinned record) refuse it, so it never teaches and is never shown a record.
  *
  *   checkLearningRun(opts)      the gate's answer, nothing recorded (before the run home is seeded); throws when refused
- *   startLearningRun(runHome, { runDir, from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix, env, now })
+ *   startLearningRun(runHome, { runDir, from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix,
+ *       arm, config, env, now })   arm: the experience index the run is shown (with:<hash>, shuffled:<hash>; none:
+ *       without); config: the run setup's hash (replay/config.js configHash), so the arms differ in their index only
  *       { learning, role, look, hideOutcomes, taken }; throws when refused
  *   readLearningRun(dir)        the decision kept in a run dir or a run home, or null (a run started before the gate)
  */
@@ -32,7 +35,7 @@
 const fs = require('fs');
 const path = require('path');
 const { writeJsonAtomic } = require('../harness-run');
-const { rolesBetween, assertUse, touchesSealed, SEALED } = require('./splits');
+const { rolesBetween, assertUse, touchesHeldBack, SEALED } = require('./splits');
 const { recordLook, checkLook, ledgerPath } = require('./looks');
 const { readLedger } = require('../prop/ledger-file');
 
@@ -51,7 +54,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function decide({ from, to, runId, learning, endOfDay, candidate, evaluation, validate, reasoningFix }) {
   if (learning === false) {
     if (candidate || evaluation || validate || reasoningFix) throw new Error('a run declared "learning": false takes no candidate, evaluation, validate or reasoning-fix flag');
-    if (touchesSealed(from, to)) throw new Error('learning run refused: "learning": false on a test or final day; the sealed windows are judged only through their look (--candidate, --evaluation)');
+    if (touchesHeldBack(from, to)) throw new Error('learning run refused: "learning": false on a practice-validate, test or final day; the held-back windows are seen only through their look (--validate, or --candidate and --evaluation)');
     return { learning: false, role: null, look: null, hideOutcomes: false };
   }
   if (endOfDay === false) throw new Error('learning run refused: a learning run keeps its end of day (endOfDay: false would carry a position into the next session, and its decision would settle on another day)');
@@ -87,7 +90,7 @@ function checkLearningRun(opts = {}) {
   if (d.look) {
     const file = ledgerPath(opts.env || process.env);
     const ledger = fs.existsSync(file) ? readLedger(file) : [];
-    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to }, ledger);
+    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null }, ledger);
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
   }
   return d;
@@ -106,8 +109,8 @@ function startLearningRun(runHome, opts = {}) {
   let taken = null;
   if (d.look) {
     ledger = ledgerPath(env);
-    if (before && before.ledger && before.ledger !== ledger) throw new Error(`learning run refused: this run's look is in ${before.ledger}, not ${ledger}: one ledger (the same FTH_HOME) for a run and its resumes`);
-    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to }, { create: true, now });
+    if (before && before.ledger && before.ledger !== ledger) throw new Error(`learning run refused: this run's look is in ${before.ledger}, not ${ledger}: one ledger (the same home) for a run and its resumes`);
+    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null }, { create: true, now });
   }
   if (!before) for (const dir of homes) writeJsonAtomic(path.join(dir, FILE), { ...kept, ledger, startedAt: now.toISOString() });
   return { ...kept, taken };

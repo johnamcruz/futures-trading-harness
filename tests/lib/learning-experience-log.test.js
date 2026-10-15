@@ -106,6 +106,9 @@ test('frame: default with a 1h bias, a 15m reaction and a 3m confirmation read; 
   const base = [R('bias', '1h bos up'), R('setup', '15m rejected prior VAH up'), R('entry', '3m close top'), R('stop', 'stop 15m low 98')];
   assert.strictEqual(E.frameOf(base), 'default');
   assert.strictEqual(E.frameOf([R('bias', '60m up'), ...base.slice(1)]), 'default', '60m is 1h');
+  // The checker's spellings: the normalized form decides, never the raw word.
+  assert.strictEqual(E.frameOf([R('bias', '60 min up'), R('setup', '15-min rejected prior VAH up'), R('entry', '3-minute close top')]), 'default');
+  assert.strictEqual(E.frameOf([{ ...R('bias', 'whatever'), form: '1h up' }, ...base.slice(1)]), 'default', 'the record\'s own form first');
   assert.strictEqual(E.frameOf([R('bias', '4h up'), ...base.slice(1)]), 'other');
   assert.strictEqual(E.frameOf([base[0], R('setup', '5m rejected prior VAH up'), base[2]]), 'other');
   assert.strictEqual(E.frameOf([base[0], base[1], R('entry', '1m close top')]), 'other');

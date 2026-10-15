@@ -85,7 +85,7 @@ test('following the record: both the context cell and the any-context cell, befo
 
 test('frame: the owner\'s default frame against the others, overall and by context, in the report', () => {
   const other = { ...base.context, regime: 'range' };
-  const oth = base.reads.map(r => (r.step === 'bias' ? { ...r, read: '4h up' } : r));
+  const oth = base.reads.map(r => (r.step === 'bias' ? { ...r, read: '4h up', form: '4h up' } : r));
   const decisions = [
     d('2022-03-01', 'entered', 2), d('2022-03-01', 'passed', -1, { i: 1 }),
     { ...d('2022-03-01', 'entered', -1, { i: 2, reads: oth }), context: other },

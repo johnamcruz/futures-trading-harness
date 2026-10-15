@@ -45,6 +45,7 @@ const { SLIPPAGE_TICKS } = require('../replay/counterfactual');
 const { tradingDayKey } = require('../trading/clock');
 const { familyRoot } = require('../trading/contracts');
 const { roleOf } = require('./splits');
+const { formOf } = require('./lifecycle-record');
 
 const VERSION = 1;
 const round = (x, d = 4) => (x === null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
@@ -104,14 +105,16 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
 /**
  * The owner's default frame (the scorecard tag `frame`): a 1h bias read, a 15m reaction read at the setup step and a
  * 3m confirmation read at the entry step. A composed decision with all three is `default`; any other is `other`.
- * A read's timeframe is its first word (`1h up`, `15m rejected prior VAH up`, `3m close top`; 60m is 1h).
+ * A read's timeframe is the first word of its normalized form (lifecycle-record.js formOf: the checker's, so `15-min ...`
+ * is 15m and `60 min up` is 1h). Reaction then confirmation (the entry's candle closing after the setup's) is part of
+ * the checker's ok since #176, and only ok records are decisions; a record written before it can't be told apart.
  */
 const FRAME = Object.freeze([['bias', '1h'], ['setup', '15m'], ['entry', '3m']]);
 const tfOf = read => {
   const w = String(read || '').trim().toLowerCase().split(/\s+/)[0];
   return w === '60m' ? '1h' : w;
 };
-const frameOf = reads => (FRAME.every(([step, tf]) => (reads || []).some(r => r.step === step && tfOf(r.read) === tf)) ? 'default' : 'other');
+const frameOf = reads => (FRAME.every(([step, tf]) => (reads || []).some(r => r && r.step === step && tfOf(formOf(r)) === tf)) ? 'default' : 'other');
 
 /**
  * A round trip split by its opening fills: one leg per fill (its own time and price, the trip's exit), so an add

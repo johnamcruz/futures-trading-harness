@@ -20,13 +20,18 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | Step | Read forms | The skill for the fact |
    | --- | --- | --- |
    | bias | trend, bos/choch, prior RTH range, trend rule, read, regime, day type | `multi-timeframe-analysis`, `daily-bias`, `bos-vs-choch`, `trend-vs-range` |
-   | location | at a level, vwap, value | `levels-and-reactions`, `vwap-volume-profile` |
-   | setup | rejected/broke/touched a level, pattern, cisd, ote, swept | `rejection`, `breakout`, `breakout-vs-fakeout`, `pullback-vs-reversal`, `cisd`, `candle-reading` |
-   | entry | close location, momentum | `candle-reading`, `momentum-and-volume` |
+   | location | at a level, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
+   | setup | rejected/broke/touched a level or gap edge (a bullish gap holds `rejected 15m fvg low up`, fails `broke 15m fvg low down`, a close inside is touched; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `breakout-vs-fakeout`, `pullback-vs-reversal`, `cisd`, `candle-reading`, `fair-value-gaps` |
+   | entry | close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `volume high`, `participation high`, absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | stop at a level | `invalidation` |
    | target | target at a level | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled | `manage-position` |
+
+   The setup is the reaction on a closed candle (often 15m); an entry read
+   your way must be on a candle that closed after it (often the next 3m).
+   Each needs a true read your way; `at`, `touched`, `swept`, volume,
+   participation and a setup `in ote` only support it.
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
@@ -35,25 +40,23 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 2. **Then read** with `skill_lookup`: `confluence-counting` and
    `invalidation` whenever you composed on the bar; `rejection` when a read
    says a candle rejected a level; `breakout` when one says it broke one.
-   The gate requires them for a composed entry, as it requires the journal
-   plan (`[plan-required]`), `setup-judgment` and `trade-plan`
-   (`[skills-at-entry]`) and the full role round (`[roles-ran]`).
-3. **Send it as the record says**: `place_order` type `limit` at the
-   record's entry price (or better), `stopLossBracket.ticks` and
-   `takeProfitBracket.ticks` the record's, the size the record states, on
-   the record's contract, rationale `setup:trade_lifecycle long|short ...`
-   (in an attempt, `setup:prop_portfolio`); `order_plan` gives these for
-   the strategy trade_lifecycle and refuses a size over the ceiling. The
-   ceilings are code's (the strategy's $300 cap, the broker's max size, in
-   an attempt also the verdict): at or below, never above. No priority
-   order halves a composed trade: its size is yours under the caps.
+   The gate requires them, the journal plan (`[plan-required]`),
+   `setup-judgment` and `trade-plan` (`[skills-at-entry]`) and the role
+   round (`[roles-ran]`).
+3. **Send it as the record says**: `place_order` `limit` at the record's
+   entry (or better), with its `stopLossBracket.ticks`,
+   `takeProfitBracket.ticks`, size and contract, rationale
+   `setup:trade_lifecycle long|short ...`
+   (in an attempt, `setup:prop_portfolio`); `order_plan` gives these and
+   refuses a size over code's caps ($300, the broker's max, in an attempt
+   the verdict). No priority order halves a composed trade.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
    (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level>` your
-   way); else the trend rule refuses it.
+   way, a key level, not a gap edge); else the trend rule refuses it.
 5. **`[composed-reads]` refusals**: no record for this bar and side, or
    expired (compose again); an entry already placed on this bar and side;
    another contract; a read false, unverifiable or against your side now
-   (drop it or pass); the plan, ticks, limit or size not the record's. The
+   (drop it or pass), or no setup or entry read your way; the plan, ticks, limit or size not the record's. The
    stop is never widened: name a farther level or pass. Exits and
    protective orders are never held.
 

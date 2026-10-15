@@ -2819,7 +2819,7 @@ test('trade_lifecycle, D2 ("CHoCH at or above the trend"): each tier on the gate
     const b = LC.briefing({ m3: { lastBreak: B.kind(m3) } });
     b.sections.m15.data.lastBreak = B.kind(m15);
     b.sections.h1.data.lastBreak = B.kind(h1);
-    b.sections.m3.data.candles['4h'] = { o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top', relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }] };
+    b.sections.m3.data.candles['4h'] = { closedAt: '2026-10-07T10:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top', relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }] };
     return b;
   };
   const reads = (bias, extraSetup = []) => [
@@ -2883,6 +2883,9 @@ test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-ch
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h rejected previous 4h high down')]), true);
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '15m rejected previous 4h high down')]), false, 'a 15m rejection');
   assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', '4h broke previous 4h high down')]), false, 'a break, not a rejection');
+  for (const gap of ['5m', '15m', '1h']) {
+    assert.strictEqual(at(UP4H, [read('break', '1h choch down'), read('relation', `4h rejected ${gap} fvg low down`)]), false, `a ${gap} gap's edge is no key level`);
+  }
   // Not against the trend, no record, or no standing check: no reversal (the trend rule as before).
   assert.strictEqual(at({ 240: -1, 60: -1, 15: -1 }, [read('break', '1h choch down')]), false);
   assert.strictEqual(reversalAllowed({ home: require('../helpers').tmpDir(), root: 'MNQ', side: 'short', check: { ok: true, reads: [] } }).ok, false);

@@ -468,7 +468,7 @@ test('the learning gate: each window run checks it as replay.js run does, before
   // With its evaluation, the final look needs a test pass of the candidate first.
   const evald = world({ proposals: [], loop: { tuningWindows: Q3, learning: { evaluation: 'ev1' } } });
   await assert.rejects(run(evald), /no test pass/);
-  const ledger = path.join(evald.env.FTH_HOME, 'learning', 'looks.jsonl');
+  const ledger = path.join(evald.env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl');
   fs.mkdirSync(path.dirname(ledger), { recursive: true });
   fs.writeFileSync(ledger, `${JSON.stringify({ kind: 'look', evaluation: 't1', candidate: 'l1/champion', purpose: 'judging', runId: 't1', from: '2025-02-03', to: '2025-02-04', role: 'test' })}\n${JSON.stringify({ kind: 'result', evaluation: 't1', candidate: 'l1/champion', role: 'test', result: 'pass' })}\n`);
   await run(evald);
@@ -477,13 +477,19 @@ test('the learning gate: each window run checks it as replay.js run does, before
   assert.deepStrictEqual(looks.slice(-1).map(l => [l.role, l.evaluation, l.candidate, l.runId]), [['final', 'ev1.champion-t0', 'l1/champion', 'l1-champion-t0']]);
   // On a test or final day a replay cannot declare itself not learning.
   const fresh = world().loop.replay;
-  await assert.rejects(run(world({ proposals: [], loop: { tuningWindows: Q3, replay: { ...fresh, learning: false } } })), /"learning": false on a test or final day/);
+  await assert.rejects(run(world({ proposals: [], loop: { tuningWindows: Q3, replay: { ...fresh, learning: false } } })), /"learning": false on a practice-validate, test or final day/);
   // After the split (2027-H2's tuning quarter), a replay declared not learning runs, and never teaches.
   const off = world({ proposals: [], loop: { tuningWindows: [{ from: '2027-07-06', to: '2027-07-07' }], replay: { ...fresh, learning: false } } });
   await run(off);
   assert.strictEqual(off.calls.replay, 1);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(off.loop.workDir, 'runs', 'l1-champion-t0', 'learning-run.json'), 'utf8')).learning, false);
   assert.throws(() => resolveLoop({ loopId: 'x', learning: { evaluation: 'ev', bogus: 1 } }), /learning.bogus: not a setting/);
+  // A reasoning-fix look hides outcomes, and the loop reads them: refused in its config, and refused if a gate ever returned one.
+  assert.throws(() => resolveLoop({ loopId: 'x', learning: { evaluation: 'ev', reasoningFix: true } }), /learning.reasoningFix: refused in the training loop/);
+  const hidden = world({ proposals: [] });
+  hidden.steps.startLearningRun = () => ({ learning: true, role: 'test', look: { purpose: 'reasoning-fix' }, hideOutcomes: true });
+  await assert.rejects(run(hidden), /a reasoning-fix look hides its outcomes, and the training loop reads them: refused/);
+  assert.strictEqual(hidden.calls.replay, 0);
   // The same run home started as another (here practice-train, now declared not learning): a resume keeps what it was.
   const again = world({ proposals: [], loop: { replay: { ...w.loop.replay, learning: false } } });
   await assert.rejects(run(again), /a resume keeps it/);
