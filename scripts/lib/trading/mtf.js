@@ -41,15 +41,18 @@
 
 const ind = require('./indicators');
 const { zonedParts } = require('./clock');
+const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 // maxCandles: a read uses at most the last 300 completed candles (enough for EMA50 to settle),
 // so a per-bar series over a long backtest stays linear.
 // historyHours: every read uses only the candles of the last 240 hours (about 60 4-hour candles,
 // enough for EMA50), so the live read (the runner keeps 250 hours of bars, HISTORY_HOURS) and the
 // backtest's per-bar read see exactly the same candles.
-const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: 14, swingK: 2, rangeLen: 20, maxCandles: 300, historyHours: 240 };
-// What the live runner and bars.js keep: the read's window plus margin.
-const HISTORY_HOURS = 250;
+const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: ind.ATR_PERIOD, swingK: 2, rangeLen: 20, maxCandles: 300, historyHours: 240 };
+// What the live runner and bars.js keep: the read's window (DEFAULTS.historyHours, its one home) plus a margin, so the
+// two can't disagree (live: 240 hours read, 250 kept).
+const HISTORY_MARGIN_HOURS = 10;
+const HISTORY_HOURS = DEFAULTS.historyHours + HISTORY_MARGIN_HOURS;
 // The frames the trend rule reads, highest first.
 const RULE_FRAMES = [240, 60, 15];
 const STYLES = ['trend', 'reversal'];
@@ -103,7 +106,7 @@ function candles(bars, minutes) {
 function startsOnOpen(bar, minutes) {
   const ms = Date.parse(bar.t);
   const p = zonedParts(new Date(ms), 'America/New_York');
-  const sinceOpen = (p.hour * 60 + p.minute - 18 * 60 + 1440) % 1440;
+  const sinceOpen = (p.hour * 60 + p.minute - GLOBEX_OPEN_MIN + 1440) % 1440;
   return sinceOpen % minutes === 0 && ms % 60000 === 0;
 }
 

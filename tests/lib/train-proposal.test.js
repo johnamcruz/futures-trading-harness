@@ -60,7 +60,9 @@ test('validateProposal: never code, accounts, the loop\'s own skills, a path out
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'paper', replace: 'active' }), /status is the owner's/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nregime_gate: false\n' }), /regime_gate is the owner's/);
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: '---\n# ORB', replace: '# ORB' }), /frontmatter no longer parses/);
-  assert.ok(['account', 'sizing', 'contracts', 'exit', 'strategies'].every(k => LOCKED_KEYS.includes(k)));
+  assert.ok(['account', 'sizing', 'contracts', 'exit', 'strategies', 'risk'].every(k => LOCKED_KEYS.includes(k)));
+  // A strategy's risk block (max_risk_usd, min_rr, stop) is the owner's, however worded.
+  assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nrisk:\n  max_risk_usd: 900\n' }), /risk is the owner's/);
   // A policy's exit (CLAUDE.md: account, sizing, contracts, exit), however worded.
   assert.match(edit({ file: 'strategies/orb/STRATEGY.md', find: 'stop_atr: 1.0\n', replace: 'stop_atr: 1.0\nexit:\n  trail_r: 1\n' }), /exit is the owner's/);
   // A symbolic link out of the tree is refused.

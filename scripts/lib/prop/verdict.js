@@ -16,7 +16,8 @@ const { normalizeBars } = require('../trading/indicators');
 const { timeframeMs } = require('../trading/evaluator');
 const { roundHalfEven } = require('../backtest/engine');
 const { legsFor } = require('../trading/prop-state');
-const { specFor } = require('../trading/contracts');
+const { specFor, familyOf } = require('../trading/contracts');
+const { feePerSide } = require('../trading/accounts');
 const { ceiling } = require('../trading/rulebook');
 
 /**
@@ -30,7 +31,7 @@ function setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf 
   const tf = timeframeMs(strategy.timeframe) || 60000;
   const closeAt = new Date(Date.parse(bars[i].t) + tf);
   const stopTicks = Math.max(1, roundHalfEven(scan.stopDistance / spec.tickSize)); // as the engine
-  const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
+  const z = strategy.sizing || {}; // the rulebook's, every key (combine.sizingErrors): an incomplete one sizes nothing
   const { legs, ratio, mode } = legsFor(account, symbol, specOf, selected);
   const plan = fraction => combine.contractPlan({
     dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,
@@ -54,6 +55,11 @@ function decideSetup({ account, cs, strategy, component, symbol, contractId, raw
     bar: bars[i].t, direction: scan.direction, stopTicks, account: account.name, combine: combine.summary(cs),
   };
   const skip = reason => ({ ...base, action: 'skip', multiplier: 0, maxSize: 0, contract: null, reason });
+  const bad = combine.sizingErrors(z);
+  if (bad.length) return skip(`${strategy.name} has no whole sizing from its account's rulebook (${bad.join('; ')}): no size`);
+  const fam = familyOf(symbol);
+  const noFee = [fam ? fam.micro : symbol, ...(fam ? [fam.mini] : [])].find(x => account.max_contracts && account.max_contracts[x] > 0 && feePerSide(account, x) === null);
+  if (noFee) return skip(`no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size`);
   if (!cp) return skip(combine.entryBlock(cs) || `the size budget ($${combine.budget(cs, z)}) is below one contract at this stop; with a cushion of $${Math.round(combine.cushion(cs))} the attempt can only trade setups with tighter stops`);
   const { multiplier, why } = ceiling(strategy.multipliers, facts, now);
   if (!(multiplier > 0)) return skip(`the rulebook's enforced items allow no size (${why.join('; ') || 'multiplier 0'})`);

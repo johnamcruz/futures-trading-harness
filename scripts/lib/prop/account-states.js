@@ -62,6 +62,7 @@ const path = require('path');
 const combine = require('../trading/combine');
 const at = require('./attempts');
 const stats = require('./stats');
+const { MC_SIZE, checkSize } = require('./mc-size');
 const { STATES, stateOf } = require('./risk-attribution');
 const { tradingDayKey } = require('../trading/clock');
 
@@ -70,7 +71,7 @@ const VERSION = 1;
 const PRACTICE_BUCKETS = Object.freeze(['fresh', 'mid', 'near-target', 'near-mll', 'after-losses']);
 /** Practice dwells on the states near the limits: these buckets are drawn this many times their natural share. */
 const DEFAULT_OVERSAMPLE = Object.freeze({ fresh: 1, mid: 1, 'near-target': 1, 'near-mll': 3, 'after-losses': 3 });
-const DEFAULTS = Object.freeze({ seed: 1, paths: 500, count: 200, meanBlock: 7 });
+const DEFAULTS = Object.freeze({ seed: 1, paths: MC_SIZE.paths, count: 200, meanBlock: 7 }); // paths: the Monte Carlo's one default (mc-size.js)
 
 const r2 = x => Math.round(x * 100) / 100;
 const r6 = x => Math.round(x * 1e6) / 1e6;
@@ -86,11 +87,11 @@ function stateRecord(cs, account, days) {
 }
 
 /** The attempt simulator's context for an account on a stream (the evaluator's legs and sizing). */
-function attemptContext(account, { sizing = {}, contracts = 'auto', gate = undefined }) {
+function attemptContext(account, { sizing = null, contracts = 'auto', gate = undefined }) {
   const legs = new Map();
   return {
-    account, sizing: { ...combine.DEFAULT_SIZING, ...sizing }, mode: contracts, gate: gate === undefined ? at.gateLimits() : gate,
-    legsOf: t => { if (!legs.has(t.symbol)) legs.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) })); return legs.get(t.symbol); },
+    account, sizing: combine.requireSizing(sizing, `${account.name}: account states size from a policy's rulebook entry`), mode: contracts, gate: gate === undefined ? at.gateLimits() : gate,
+    legsOf: t => { if (!legs.has(t.symbol)) legs.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue })); return legs.get(t.symbol); },
   };
 }
 
@@ -104,10 +105,11 @@ function* attemptPaths(stream, account, { seed, paths, meanBlock, label }) {
   for (let p = 0; p < paths; p += 1) yield stats.stationaryPath(days.length, account.sessions, { meanBlock, rand: prand, regimes, byRegime }).map(k => days[k]);
 }
 
-function sampleAccountStates(stream, { account, sizing = {}, contracts = 'auto', seed = 1, paths = 500, perBucket = 5, meanBlock = 7 } = {}) {
+function sampleAccountStates(stream, { account, sizing = null, contracts = 'auto', seed = 1, paths = MC_SIZE.paths, perBucket = 5, meanBlock = 7 } = {}) {
   if (!account || !Number.isInteger(account.sessions)) throw new Error('account: an account profile with sessions');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
   if (!(Number.isInteger(perBucket) && perBucket >= 1)) throw new Error('perBucket: 1 or more');
+  checkSize({ paths });
   const ctx = attemptContext(account, { sizing, contracts });
   const pool = Object.fromEntries(STATES.map(s => [s, []]));
   for (const list of attemptPaths(stream, account, { seed, paths, meanBlock, label: 'account-states:paths' })) {
@@ -187,10 +189,11 @@ const compact = (cs, counters) => ({
   tradesToday: counters.tradesToday || 0, lossesToday: counters.lossesToday || 0, lossStreak: cs.lossStreak || 0,
 });
 
-function drawPracticeStates(stream, { account, sizing = {}, contracts = 'auto', seed = DEFAULTS.seed, paths = DEFAULTS.paths, count = DEFAULTS.count, meanBlock = DEFAULTS.meanBlock, oversample = null, gate = undefined } = {}) {
+function drawPracticeStates(stream, { account, sizing = null, contracts = 'auto', seed = DEFAULTS.seed, paths = DEFAULTS.paths, count = DEFAULTS.count, meanBlock = DEFAULTS.meanBlock, oversample = null, gate = undefined } = {}) {
   if (!account || !Number.isInteger(account.sessions)) throw new Error('account: an account profile with sessions');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
   if (!(Number.isInteger(paths) && paths >= 1)) throw new Error('paths: 1 or more');
+  checkSize({ paths });
   const o = checkOversample(oversample);
   const ctx = attemptContext(account, { sizing, contracts, gate });
   const maxLosses = ctx.gate ? ctx.gate.maxDailyLosses : Infinity;

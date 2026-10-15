@@ -58,9 +58,9 @@ const NEEDS = Object.freeze({
 
 const LIFECYCLE = 'trade_lifecycle';
 const POLICY = 'prop_portfolio';
-const MAX_RISK_USD = 300;
-const MIN_RR = 2;
-const MAX_VALID_BARS = 3;
+// The strategy's risk numbers and its valid_bars ceiling are read from the strategy and its schema (trading/strategies.js
+// MAX_VALID_BARS), never restated here: the preflight checks they are stated and reports them.
+const { MAX_VALID_BARS } = require('../trading/strategies');
 const FRAMES = Object.freeze(['3m', '5m', '15m', '1h', '4h']);
 const FVG_FRAMES = Object.freeze(['5m', '15m', '1h']);
 const STEPS = Object.freeze(['bias', 'location', 'setup', 'entry', 'stop', 'target']);
@@ -97,8 +97,8 @@ function strategy(ctx) {
   const bad = [];
   if (s.status !== 'active') bad.push(`status ${s.status}, not active`);
   if (s.signal !== 'composed') bad.push(`signal ${s.signal}, not composed`);
-  if (!(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0 && risk.max_risk_usd <= MAX_RISK_USD)) bad.push(`risk.max_risk_usd ${risk.max_risk_usd}, not above 0 and at most ${MAX_RISK_USD}`);
-  if (!(typeof risk.min_rr === 'number' && risk.min_rr >= MIN_RR)) bad.push(`risk.min_rr ${risk.min_rr}, under ${MIN_RR}`);
+  if (!(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0)) bad.push(`risk.max_risk_usd ${risk.max_risk_usd}, not a dollar cap above 0 (the strategy states it)`);
+  if (!(typeof risk.min_rr === 'number' && risk.min_rr > 0)) bad.push(`risk.min_rr ${risk.min_rr}, not a reward:risk above 0 (the strategy states it)`);
   if (risk.stop !== 'structure') bad.push(`risk.stop ${JSON.stringify(risk.stop)}, not structure`);
   if (bad.length) return r('strategy', FAIL, `${LIFECYCLE}: ${bad.join('; ')}`);
   return r('strategy', PASS, `${LIFECYCLE} active, composed, max risk $${risk.max_risk_usd}, min R:R ${risk.min_rr}, stop structure`);

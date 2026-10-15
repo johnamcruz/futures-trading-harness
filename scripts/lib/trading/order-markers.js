@@ -24,7 +24,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { harnessHome } = require('../paths');
 
-const GRACE_MS = 120000;
+const { ORDER_GRACE_MS: GRACE_MS } = require('./gate-timing');
 const LOOKBACK_MS = 60000;
 // Interface order statuses (broker/interface.js ENUMS.orderStatus) of an order that never worked or no longer does.
 const DEAD = new Set([3, 4, 5]); // cancelled, expired, rejected

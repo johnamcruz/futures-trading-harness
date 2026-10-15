@@ -23,11 +23,9 @@ const mtf = require('./mtf');
 const tfMinutes = tf => { const m = /^(\d+)(m|h)$/.exec(String(tf || '')); return m ? Number(m[1]) * (m[2] === 'h' ? 60 : 1) : null; };
 
 const { SWING_TFS } = require('./exit-trail');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const DEFAULT_WINDOW = 500; // bars per evaluation, as the original bot's BARS_WINDOW
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
-const GLOBEX_OPEN = 18 * 60;
 
 function timeframeMs(tf) {
   const m = /^(\d+)(m|h|d)$/.exec(String(tf || ''));
@@ -135,9 +133,9 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   const extra = () => {
     if (!extras) {
       extras = {
-        atr14: ind.atr(bars, 14),
-        vwapRth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE),
-        vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN),
+        atr14: ind.atr(bars, ind.ATR_PERIOD),
+        vwapRth: ind.anchoredVwap(bars, RTH_OPEN_MIN, RTH_CLOSE_MIN),
+        vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN_MIN),
       };
     }
     return extras;

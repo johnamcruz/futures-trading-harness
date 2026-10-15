@@ -98,7 +98,7 @@ const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'ti
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
-const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks'];
+const { SIZING_KEYS } = require('./combine'); // the sizing keys' one home (a policy's values: its account's rulebook)
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
 // A composed record's validity in base bars after its bar's close: at most the gate's default briefing age (3 bars,
 // FTH_SIGNAL_MAX_AGE_BARS), which refuses an entry past it anyway.
@@ -635,6 +635,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
 
 module.exports = {
   RETIRED,
+  MAX_VALID_BARS,
   retiredNote,
   retiredCopies,
   componentsNote,

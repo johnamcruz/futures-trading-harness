@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { createMcpClient } = require('../broker/mcp-client');
 const { listTools } = require('./registry');
+const { CALL_TIMEOUT_MS } = require('../trading/gate-timing');
 
 /** What differs between a server's tools/list and the registry's tools: [problem], empty when they match. */
 function compareTools(got, want = listTools()) {
@@ -62,7 +63,7 @@ function roleSkillsMismatch(root, env = {}, harness = null) {
   return bad ? `${path.join(env.PWD, 'opencode.json')} is not the one generated for FTH_ROLE_SKILLS=${mode}: run FTH_ROLE_SKILLS=${mode} node scripts/sync-harness.js (the committed file is index)` : null;
 }
 
-async function checkToolsServer({ root, env = process.env, harness = null, timeoutMs = 15000, command = process.execPath, args = null } = {}) {
+async function checkToolsServer({ root, env = process.env, harness = null, timeoutMs = CALL_TIMEOUT_MS, command = process.execPath, args = null } = {}) {
   const script = path.join(root, 'scripts', 'harness-tools-mcp.js');
   const client = createMcpClient({ command, args: args || [script], env, timeoutMs, clientName: 'fth-runner-preflight' });
   let tools;

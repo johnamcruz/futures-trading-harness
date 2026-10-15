@@ -43,16 +43,15 @@ function validSpec(c) {
   return { tickSize, tickValue };
 }
 
-/** The broker's recorded spec of a root (fees from the static table), or null. */
+/** The broker's recorded spec of a root (tick size and value; a fee is the account's, accounts.js feePerSide), or null. */
 function brokerSpecFor(file, root) {
   if (!file) return null;
   const r = String(root || '').toUpperCase();
   const rec = require('../broker/translator').readCache(file).specs[r]; // lazy: the translator requires this module
   const v = validSpec(rec);
   if (!v) return null;
-  const fees = (specFor(r) || {}).feesPerSide;
   return {
-    ...v, ...(fees !== undefined ? { feesPerSide: fees } : {}),
+    ...v,
     name: rec.name || null, description: rec.description || null, id: rec.id || null, readAt: rec.readAt || null, source: 'broker',
   };
 }

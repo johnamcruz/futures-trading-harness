@@ -6,21 +6,22 @@
  * replay trading take tick specs from the broker (broker-specs.js); a broker
  * spec that differs from this table is reported, since training would then
  * not equal live. Silver per CME's contract specs: SI 5,000 oz and SIL (Micro
- * Silver) 1,000 oz, both $0.005/oz, so $25.00 and $5.00 a tick.
+ * Silver) 1,000 oz, both $0.005/oz, so $25.00 and $5.00 a tick. No fee: a fee is the
+ * account's (ACCOUNT.md fees_per_side, accounts.js feePerSide), never the table's.
  */
 const CONTRACT_SPECS = {
-  MNQ: { tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 },
-  MES: { tickSize: 0.25, tickValue: 1.25, feesPerSide: 0.37 },
-  MYM: { tickSize: 1, tickValue: 0.5, feesPerSide: 0.37 },
-  M2K: { tickSize: 0.1, tickValue: 0.5, feesPerSide: 0.37 },
-  MGC: { tickSize: 0.1, tickValue: 1, feesPerSide: 0.37 },
-  SIL: { tickSize: 0.005, tickValue: 5, feesPerSide: 0.37 },
-  NQ: { tickSize: 0.25, tickValue: 5, feesPerSide: 1.4 },
-  ES: { tickSize: 0.25, tickValue: 12.5, feesPerSide: 1.4 },
-  YM: { tickSize: 1, tickValue: 5, feesPerSide: 1.4 },
-  RTY: { tickSize: 0.1, tickValue: 5, feesPerSide: 1.4 },
-  GC: { tickSize: 0.1, tickValue: 10, feesPerSide: 1.4 },
-  SI: { tickSize: 0.005, tickValue: 25, feesPerSide: 1.4 },
+  MNQ: { tickSize: 0.25, tickValue: 0.5 },
+  MES: { tickSize: 0.25, tickValue: 1.25 },
+  MYM: { tickSize: 1, tickValue: 0.5 },
+  M2K: { tickSize: 0.1, tickValue: 0.5 },
+  MGC: { tickSize: 0.1, tickValue: 1 },
+  SIL: { tickSize: 0.005, tickValue: 5 },
+  NQ: { tickSize: 0.25, tickValue: 5 },
+  ES: { tickSize: 0.25, tickValue: 12.5 },
+  YM: { tickSize: 1, tickValue: 5 },
+  RTY: { tickSize: 0.1, tickValue: 5 },
+  GC: { tickSize: 0.1, tickValue: 10 },
+  SI: { tickSize: 0.005, tickValue: 25 },
 };
 
 /** The spec for a contract root (MNQ), or null. */

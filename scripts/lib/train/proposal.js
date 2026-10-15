@@ -43,8 +43,8 @@ const ALLOWED = Object.freeze([
 ]);
 const LOCKED_KEY = /^\s*(name|status)\s*:/m;
 // A strategy's keys a proposal never changes: its identity, status and kind, and a policy's account, sizing,
-// contracts, exit, markets, timeframe and component list, and the regime gate (the owner's, or the rulebook's, R1).
-const LOCKED_KEYS = Object.freeze(['name', 'status', 'signal', 'account', 'sizing', 'contracts', 'exit', 'instruments', 'timeframe', 'strategies', 'regime_gate']);
+// contracts, exit, markets, timeframe and component list, the regime gate and the risk block (the owner's, or the rulebook's, R1).
+const LOCKED_KEYS = Object.freeze(['name', 'status', 'signal', 'account', 'sizing', 'contracts', 'exit', 'instruments', 'timeframe', 'strategies', 'regime_gate', 'risk']);
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const str = (x, max) => typeof x === 'string' && x.trim().length > 0 && x.length <= max;

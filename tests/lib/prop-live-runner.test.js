@@ -7,7 +7,7 @@ const { createPropHooks } = require('../../scripts/lib/prop/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
 const { main: combineCli } = require('../../scripts/combine');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, TEST_SIZING } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CONTRACT = 'MNQ';
@@ -31,6 +31,7 @@ function setup({ start = true, contracts = 'micro', specs = true, paper = false,
   const strategy = {
     name: 'prop_x', valid: true, status: 'active', instruments: ['MNQ', 'NQ'], timeframe: '3m', signal: 'policy', strategies: COMPONENTS,
     account: 'topstep_50k', contracts, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 },
+    sizing: TEST_SIZING,
   };
   // Its strategies, as loadStrategies reads them: a policy trades only the active ones (status set per test).
   const components = COMPONENTS.map(name => ({ name, valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m' }));
@@ -62,7 +63,7 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.deepStrictEqual(balances, ['7', '7']);
   assert.strictEqual(prop.combineBlock(home, account.name, now), null);
   assert.strictEqual(prop.readAttempt(home, account.name).snapshot.balance, 50250);
-  // The state the cycle prompt shows: 0.2 x ($50,250 - $48,000 floor) = $450 for prop_x (default sizing).
+  // The state the cycle prompt shows: 0.2 x ($50,250 - $48,000 floor) = $450 for prop_x (the test sizing: cushion_frac 0.2).
   const [sum] = hooks.summaries(now);
   assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
     { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });

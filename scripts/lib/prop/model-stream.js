@@ -266,7 +266,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf, policyExitOf
     trade: {
       id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, contract: d.contract || null, strategy: 'trade_lifecycle', direction: d.side,
       bar: d.bar, entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason || 'closed',
-      tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37, ...path, ...paths, r: o.R,
+      tickSize: tick, tickValue: spec.tickValue, ...path, ...paths, r: o.R,
       facts: factsOf(d), actions, sizeFraction, hold, entryMs, exitMs, ...(policyExit ? { exitBy: policyExit } : {}),
     },
   };
@@ -291,7 +291,7 @@ function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
   return {
     id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, strategy: 'trade_lifecycle', direction: d.side, bar: d.bar,
     entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason, tickSize: spec.tickSize, tickValue: spec.tickValue,
-    feesPerSide: spec.feesPerSide ?? 0.37, ...path, ...paths, r: o.R, facts: factsOf(d), actions: [lossBefore ? 'day-stop' : 'pass'], counterfactual: true,
+    ...path, ...paths, r: o.R, facts: factsOf(d), actions: [lossBefore ? 'day-stop' : 'pass'], counterfactual: true,
   };
 }
 
@@ -299,7 +299,7 @@ function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
  * The stream from a run's decisions (experience-log.js buildDecisions lines). dayKeys: every session day the run
  * replayed; barsFor(root): the run's bars ({ ms, o, h, l, c }, sorted); tfMs: the bar length; eod: the runner's end
  * of day (autotrader parseAt), or null (to the trading day's end); specOf(root): the contract spec (tickSize,
- * tickValue, feesPerSide).
+ * tickValue; a fee is the account's, layer 2 prices it).
  */
 function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null, eodOf = () => Infinity, verdictOf = () => null, policyExitOf = () => null }) {
   const started = Date.now();

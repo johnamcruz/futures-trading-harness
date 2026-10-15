@@ -13,9 +13,8 @@ const { checkWindow, scoreStream, sessionStart } = require('../../scripts/lib/pr
 const { tradeStream, tradingDays, delayFromCycles, dayRegimes } = require('../../scripts/lib/prop/trade-stream');
 const { readLedger, appendLook, withLedgerLock, runEvaluation } = require('../../scripts/lib/prop/evaluate-run');
 const at = require('../../scripts/lib/prop/attempts');
-const combine = require('../../scripts/lib/trading/combine');
 const { rng, wilson } = require('../../scripts/lib/prop/stats');
-const { tmpDir } = require('../helpers');
+const { tmpDir, TEST_SIZING, testSizing } = require('../helpers');
 
 // ---- Synthetic streams (layer 2 and the statistics) ----
 
@@ -43,7 +42,7 @@ function streamOf(dayList, tradesFor, fieldBranch = []) {
   return { days, trades: days.flatMap(d => d.trades), fieldBranch, entryDelayMs: 0, runtimeMs: 1 };
 }
 const nextDay = iso => new Date(Date.parse(`${iso}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
-const opts = (pass, extra = {}) => ({ pass, account: account(), size: ten, contracts: 'micro', paths: 200, reps: 300, seed: 4, ...extra });
+const opts = (pass, extra = {}) => ({ pass, account: account(), size: ten, contracts: 'micro', paths: 200, reps: 300, seed: 4, ...extra, rulebook: { sizing: TEST_SIZING, ...(extra.rulebook || {}) } });
 const strip = r => JSON.parse(JSON.stringify({ ...r, runtimeMs: null, look: r.look ? { ...r.look, at: null } : null }));
 
 test('evaluator: train runs freely; the result has pass, blow and timeout rates with intervals and the effective sample size', () => {
@@ -347,7 +346,7 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars', GAPPY]]) test
 for (const [label, bars] of [['plain bars', BARS], ['gapped bars: blows and daily limits', GAPPY]]) test(`trade stream: layer 2 on the stream reproduces the engine's own attempts, start by start (${label})`, () => {
   const acct = account({ profit_target: 250, max_loss: 500, daily_loss_limit: 300, daily_loss_soft: 250, consistency_pct: 50, sessions: 6, max_contracts: { MNQ: 20 } });
   const prop = { strategy: strategy(), components: ['trendy'], contracts: 'micro' };
-  const sizing = { cushion_frac: 0.9 };
+  const sizing = testSizing({ cushion_frac: 0.9 });
   // The reference: the engine's own account mode, one attempt from each start (as the retired prop/challenge.js ran it).
   const prepared = prepare([market(bars)], [strategy()], { ...engine, prop });
   const starts = tradingDays(prepared.books).filter(d => d >= Date.parse('2022-01-10T00:00:00Z'));
@@ -363,7 +362,8 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars: blows and dail
   assert.ok(s.trades.every(t => t.noStop && t.noStop.worstTicks <= Math.min(0, ...t.troughTicks) + 1));
   assert.ok(s.trades.every(t => t.facts.error));
   assert.deepStrictEqual(s.fieldBranch, []);
-  const ctx = { account: acct, sizing: { ...combine.DEFAULT_SIZING, ...sizing }, mode: 'micro', maxDailyLoss: 500, legsOf: t => at.legsFor(acct, t.symbol, { tickValue: 0.5 }) };
+  // maxDailyLoss 0: an account run's daily limits are the account's own (the engine never applies its backtest-only one to it).
+  const ctx = { account: acct, sizing, mode: 'micro', maxDailyLoss: 0, legsOf: t => at.legsFor(acct, t.symbol, { tickValue: 0.5 }) };
   let n = 0;
   const statuses = new Set();
   const reasons = new Set();

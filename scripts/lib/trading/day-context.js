@@ -28,9 +28,8 @@
 
 const ind = require('./indicators');
 const { profileSeries, optionsFromParams } = require('./volume-profile');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
 const DEFAULTS = { ibMinutes: 60, openMinutes: 30, adrDays: 10 };
 
 /** The bar step in minutes (the smallest gap between bars). */
@@ -101,13 +100,13 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
     const { day, minute } = ind.etInfo(b.t);
-    const inRth = minute >= RTH_OPEN && minute < RTH_CLOSE;
+    const inRth = minute >= RTH_OPEN_MIN && minute < RTH_CLOSE_MIN;
     if (cur && (cur.date !== day || !inRth)) finish();
     const adr = ranges.length >= adrDays ? ranges.slice(-adrDays).reduce((a, x) => a + x, 0) / adrDays : NaN;
-    const sk = ind.sessionKey(b.t, 18 * 60);
-    if (sk !== on.key) on = { key: sk, high: -Infinity, low: Infinity, whole: i > 0 || minute === 18 * 60 };
+    const sk = ind.sessionKey(b.t, GLOBEX_OPEN_MIN);
+    if (sk !== on.key) on = { key: sk, high: -Infinity, low: Infinity, whole: i > 0 || minute === GLOBEX_OPEN_MIN };
     if (!inRth) {
-      if (minute < RTH_OPEN || minute >= 18 * 60) { on.high = Math.max(on.high, b.h); on.low = Math.min(on.low, b.l); }
+      if (minute < RTH_OPEN_MIN || minute >= GLOBEX_OPEN_MIN) { on.high = Math.max(on.high, b.h); on.low = Math.min(on.low, b.l); }
       continue;
     }
     if (!cur) {
@@ -116,7 +115,7 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
       cur = {
         priorLevels: last ? { high: last.high, low: last.low, close: last.close, ...(pp ? { val: pp.val, poc: pp.poc, vah: pp.vah } : {}) } : null,
         overnight: on.whole && on.key === sk && Number.isFinite(on.high) ? { high: on.high, low: on.low } : null,
-        date: day, whole: i > 0 && minute === RTH_OPEN, open: b.o, high: b.h, low: b.l, close: b.c, oh: b.h, ol: b.l, oc: b.c, oth: i, otl: i, ibh: b.h, ibl: b.l, ib: null, openType: null, prior: last };
+        date: day, whole: i > 0 && minute === RTH_OPEN_MIN, open: b.o, high: b.h, low: b.l, close: b.c, oh: b.h, ol: b.l, oc: b.c, oth: i, otl: i, ibh: b.h, ibl: b.l, ib: null, openType: null, prior: last };
       const p = prior.profile[i];
       cur.openVs = !last ? null
         : p && b.o >= p.val && b.o <= p.vah ? 'inside the prior value area'
@@ -129,15 +128,15 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
     const end = minute + step;
     // The opening window: its extremes and when they came. It completes on the bar that ends it,
     // or (a missing bar) on the first bar after it, from the window's own bars.
-    if (minute < RTH_OPEN + openMinutes) {
+    if (minute < RTH_OPEN_MIN + openMinutes) {
       if (b.h > cur.oh) { cur.oh = b.h; cur.oth = i; }
       if (b.l < cur.ol) { cur.ol = b.l; cur.otl = i; }
       cur.oc = b.c;
     }
-    if (cur.openType === null && end >= RTH_OPEN + openMinutes) cur.openType = openingType({ o: cur.open, h: cur.oh, l: cur.ol, c: cur.oc, th: cur.oth, tl: cur.otl });
+    if (cur.openType === null && end >= RTH_OPEN_MIN + openMinutes) cur.openType = openingType({ o: cur.open, h: cur.oh, l: cur.ol, c: cur.oc, th: cur.oth, tl: cur.otl });
     // The initial balance, likewise, from the first hour's bars only.
-    if (minute < RTH_OPEN + ibMinutes) { cur.ibh = Math.max(cur.ibh, b.h); cur.ibl = Math.min(cur.ibl, b.l); }
-    if (!cur.ib && end >= RTH_OPEN + ibMinutes) cur.ib = { high: cur.ibh, low: cur.ibl };
+    if (minute < RTH_OPEN_MIN + ibMinutes) { cur.ibh = Math.max(cur.ibh, b.h); cur.ibl = Math.min(cur.ibl, b.l); }
+    if (!cur.ib && end >= RTH_OPEN_MIN + ibMinutes) cur.ib = { high: cur.ibh, low: cur.ibl };
     const ib = cur.ib;
     if (ib) { out.ib_high[i] = ib.high; out.ib_low[i] = ib.low; }
     out.adr[i] = adr;
@@ -174,7 +173,6 @@ function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100, l
   return `${symbol ? `${symbol} day: ` : ''}${parts.join('; ')}.`;
 }
 
-const GLOBEX_OPEN = 18 * 60;
 
 /**
  * Outside RTH (the Globex session, 18:00-09:30 ET), one line in place of the
@@ -189,19 +187,19 @@ function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100)
   if (!n) return null;
   const last = bars[n - 1];
   const { minute } = ind.etInfo(last.t);
-  if (minute >= RTH_OPEN && minute < RTH_CLOSE) return null;
-  const key = ind.sessionKey(last.t, GLOBEX_OPEN);
+  if (minute >= RTH_OPEN_MIN && minute < RTH_CLOSE_MIN) return null;
+  const key = ind.sessionKey(last.t, GLOBEX_OPEN_MIN);
   let s = n - 1;
-  while (s > 0 && ind.sessionKey(bars[s - 1].t, GLOBEX_OPEN) === key) s -= 1;
-  if (s === 0 && ind.etInfo(bars[0].t).minute !== GLOBEX_OPEN) return null; // the session started before the data
+  while (s > 0 && ind.sessionKey(bars[s - 1].t, GLOBEX_OPEN_MIN) === key) s -= 1;
+  if (s === 0 && ind.etInfo(bars[0].t).minute !== GLOBEX_OPEN_MIN) return null; // the session started before the data
   // The prior complete RTH day (its 09:30 bar in the data, with bars before it).
   let day = null; let prior = null;
   for (let i = 0; i < s; i += 1) {
     const e = ind.etInfo(bars[i].t);
-    const inRth = e.minute >= RTH_OPEN && e.minute < RTH_CLOSE;
+    const inRth = e.minute >= RTH_OPEN_MIN && e.minute < RTH_CLOSE_MIN;
     if (day && (e.day !== day.date || !inRth)) { if (day.whole) prior = day; day = null; }
     if (!inRth) continue;
-    if (!day) day = { date: e.day, whole: i > 0 && e.minute === RTH_OPEN, high: bars[i].h, low: bars[i].l, close: bars[i].c };
+    if (!day) day = { date: e.day, whole: i > 0 && e.minute === RTH_OPEN_MIN, high: bars[i].h, low: bars[i].l, close: bars[i].c };
     day.high = Math.max(day.high, bars[i].h); day.low = Math.min(day.low, bars[i].l); day.close = bars[i].c;
   }
   if (day && day.whole) prior = day;
@@ -213,8 +211,8 @@ function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100)
   // From the bar's close (this cycle runs then), not its open.
   const close = (minute + stepMinutes(bars)) % (24 * 60);
   // After the 16:00 ET close the harness's market is closed until the 18:00 ET open (the daily break).
-  const closed = close >= RTH_CLOSE && close < GLOBEX_OPEN;
-  const toOpen = close >= RTH_CLOSE ? 24 * 60 - close + RTH_OPEN : Math.max(0, RTH_OPEN - close);
+  const closed = close >= RTH_CLOSE_MIN && close < GLOBEX_OPEN_MIN;
+  const toOpen = close >= RTH_CLOSE_MIN ? 24 * 60 - close + RTH_OPEN_MIN : Math.max(0, RTH_OPEN_MIN - close);
   const where = !p ? '' : last.c > p.vah ? ': price above the prior value area' : last.c < p.val ? ': price below the prior value area' : ': price inside the prior value area';
   // The session's state stated with it: the market has been open since 18:00 ET; 09:30 ET is only the RTH (cash) open.
   return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET; ${closed ? 'market closed now, daily break until 18:00 ET' : 'market open now'}): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${level(p.val)}-${level(p.vah)} (POC ${level(p.poc)})` : ''}${where}; ${toOpen === 0 ? 'RTH opens now (09:30 ET)' : `RTH (the 09:30 ET cash open, not the market open) in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min`}.`;

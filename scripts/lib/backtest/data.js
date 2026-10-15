@@ -24,9 +24,9 @@ const path = require('path');
 const { normalizeBars, sessionKey } = require('../trading/indicators');
 const { readParquet } = require('./parquet');
 const { readXlsx, excelSerialToMs } = require('./xlsx');
+const { GLOBEX_OPEN_MIN } = require('../trading/clock'); // the session boundaries' one home
 
 const MINUTE = 60000;
-const GLOBEX_OPEN_MIN = 18 * 60;
 const TIME_NAMES = ['t', 'time', 'timestamp', 'datetime', 'date', 'ts', 'date_time', '__index_level_0__'];
 const FIELD_NAMES = {
   o: ['o', 'open'], h: ['h', 'high'], l: ['l', 'low'], c: ['c', 'close', 'last'], v: ['v', 'volume', 'vol'],
@@ -236,9 +236,9 @@ function readBarsArg(file) {
  */
 function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
   const { inMarketHours, tradingDayKey } = require('../trading/clock');
-  const { atr } = require('../trading/indicators');
+  const { atr, STOP_ATR_PERIOD } = require('../trading/indicators');
   const step = timeframe * MINUTE;
-  const a = atr(bars, 20);
+  const a = atr(bars, STOP_ATR_PERIOD);
   const gaps = [];
   const jumps = [];
   let missing = 0;

@@ -46,7 +46,7 @@ function run(days = DAYS, over = {}) {
   fs.writeFileSync(path.join(r.home, 'policy-verdicts.jsonl'), `${JSON.stringify({ bar: record({ at: d1 }).bar, direction: 'long', symbol: 'MNQ', action: 'full', maxSize: 4 })}\n`);
   return r;
 }
-const OPTS = { account: ACCOUNT, paths: 60, reps: 60, seed: 3, now: NOW };
+const OPTS = { account: ACCOUNT, policy: { name: 'fx_policy', sizing: require('../helpers').TEST_SIZING }, paths: 60, reps: 60, seed: 3, now: NOW };
 
 test('dayStream: the days through the day, only that day\'s risk actions kept', () => {
   const { stream } = readModelStream(run().dir);
@@ -114,7 +114,7 @@ test('buildFromRuns: an entry per acted day, the day\'s actions only, walk-forwa
   assert.deepStrictEqual(Object.keys(doc.entries[0].cells).map(k => k.split('|')[0]).filter((k, i, a) => a.indexOf(k) === i).sort(), ['early-exit', 'size-down']);
   assert.ok(Object.keys(doc.entries[1].cells).every(k => k.startsWith('day-stop|') || k.startsWith('pass|')), JSON.stringify(doc.entries[1].cells));
   assert.ok(Object.keys(doc.entries[2].cells).every(k => k.startsWith('pass|')), JSON.stringify(doc.entries[2].cells));
-  assert.deepStrictEqual({ ...doc.sources, runs: doc.sources.runs.map(r => [r.runId, r.acted]) }, { runs: [['run1', 3]], account: ACCOUNT.name, policy: null, seed: 3, paths: 60, reps: 60 });
+  assert.deepStrictEqual({ ...doc.sources, runs: doc.sources.runs.map(r => [r.runId, r.acted]) }, { runs: [['run1', 3]], account: ACCOUNT.name, policy: 'fx_policy', seed: 3, paths: 60, reps: 60 });
   // Walk-forward: a day's entry is the same when the run had ended that day (no later day reaches it).
   const first = B.buildFromRuns([run(DAYS.slice(0, 1)).dir], OPTS);
   assert.deepStrictEqual(first.entries[0].cells, doc.entries[0].cells);
@@ -152,14 +152,20 @@ test('scripts/risk-record.js: builds and shows a fingerprinted record; refuses w
   const env = { ...process.env, FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS, FTH_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'fth-rr-home-')) };
   const cli = args => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env });
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-rr-out-'));
-  const ok = cli(['build', run().home, '--account', 'test_50k', '--out', out, '--paths', '40', '--reps', '40']);
+  // An account no policy strategy trades has no sizing (a policy's rulebook entry is its one home): refused.
+  const none = cli(['build', run().home, '--account', 'test_50k', '--out', out, '--paths', '40', '--reps', '40']);
+  assert.strictEqual(none.status, 1);
+  assert.match(none.stderr, /the Monte Carlo sizes from a policy's rulebook entry: no sizing/);
+  // The shipped policy's account: its rulebook's sizing.
+  const acct = require('../../scripts/lib/trading/strategies').loadStrategies(path.resolve(__dirname, '..', '..'), {}).strategies.find(x => x.name === 'prop_portfolio').account;
+  const ok = cli(['build', run().home, '--account', acct, '--out', out, '--paths', '40', '--reps', '40']);
   assert.strictEqual(ok.status, 0, ok.stderr);
-  assert.match(ok.stdout, /3 day\(s\) with a risk action from 1 run\(s\) .* test_50k, 40 paths, seed 1, minN 10; fingerprint [0-9a-f]{64}/);
+  assert.match(ok.stdout, new RegExp(`3 day\\(s\\) with a risk action from 1 run\\(s\\) .* ${acct}, 40 paths, seed 1, minN 10; fingerprint [0-9a-f]{64}`));
   const file = /wrote (.+)\n/.exec(ok.stdout)[1];
   assert.match(path.basename(file), /^risk-record-[0-9a-f]{16}\.json$/);
   const shown = cli(['show', file]);
   assert.strictEqual(shown.status, 0, shown.stderr);
-  assert.match(shown.stdout, /^risk record [0-9a-f]{64}: 3 day\(s\), 2023-03-15 to 2023-03-17, minN 10; from run1; test_50k/);
+  assert.match(shown.stdout, new RegExp(`^risk record [0-9a-f]{64}: 3 day\\(s\\), 2023-03-15 to 2023-03-17, minN 10; from run1; ${acct}`));
   assert.match(shown.stdout, /\nYour risk record \(counterfactual, practice-train days before 2023-03-18 only/);
   assert.match(cli(['build', run().dir]).stderr, /--account: the account profile/);
   assert.match(cli(['build', run().dir, '--account', 'test_50k', '--bogus']).stderr, /unknown flag --bogus/);

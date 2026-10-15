@@ -18,6 +18,7 @@ const { stateOf } = require('../../scripts/lib/prop/risk-attribution');
 const { naturalRates } = require('../../scripts/lib/prop/natural-rate');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
 const { ACCOUNT, weekdays, modelTrade, modelStreamOf } = require('../fixtures/prop-model');
+const { TEST_SIZING } = require('../helpers');
 
 const REPO = path.join(__dirname, '..', '..');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-states-'));
@@ -26,7 +27,7 @@ const DAYS = weekdays('2022-01-03', 60);
 // Two trades a day: a mixed stream (three losing days in ten, wins and losses on the rest), so every bucket occurs on the
 // paths, near the floor included.
 const mixed = () => modelStreamOf(DAYS, (d, k) => (k % 10 < 3 ? [modelTrade(`${d}-0`, -44), modelTrade(`${d}-1`, -44)] : [modelTrade(`${d}-0`, 70), modelTrade(`${d}-1`, k % 3 === 2 ? -44 : 30)]));
-const draw = (stream = mixed(), o = {}) => S.drawDocument(stream, { account: ACCOUNT, contracts: 'micro', paths: 150, count: 60, seed: 3, gate: GATE, source: [{ runId: 's', role: 'practice-train' }], ...o });
+const draw = (stream = mixed(), o = {}) => S.drawDocument(stream, { account: ACCOUNT, sizing: TEST_SIZING, contracts: 'micro', paths: 150, count: 60, seed: 3, gate: GATE, source: [{ runId: 's', role: 'practice-train' }], ...o });
 
 test('the draws come from the Monte Carlo paths of the model\'s own trades: their buckets and states are the paths\', never uniform', () => {
   const doc = draw();
@@ -232,7 +233,7 @@ function statesWorld({ count = 5 } = {}) {
   const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'tests', 'fixtures', 'accounts') };
   const lists = C.writeLists(path.join(dir, 'lists'), C.buildLists([moment('a', '2022-03-01', '15:00'), moment('b', '2022-03-03', '15:00'), moment('c', '2022-03-03', '18:00', 'chop')], { use: 'practice', total: 10, seed: 1 }));
   const account = accountNamed(REPO, 'test_50k', env);
-  const docOf = (o = {}) => S.writeDocument(path.join(dir, 'states'), S.drawDocument(mixed(), { account, contracts: 'micro', paths: 100, count, seed: 3, gate: GATE, source: [{ runId: 's', role: 'practice-train' }], ...o }));
+  const docOf = (o = {}) => S.writeDocument(path.join(dir, 'states'), S.drawDocument(mixed(), { account, sizing: TEST_SIZING, contracts: 'micro', paths: 100, count, seed: 3, gate: GATE, source: [{ runId: 's', role: 'practice-train' }], ...o }));
   const file = docOf();
   const raw = o => ({
     runId: 'st1', workDir: path.join(dir, 'replays'), broker: 'sim', start: '2022-03-01T00:00:00Z', end: '2022-03-05T00:00:00Z', premarket: false, stage: 2,

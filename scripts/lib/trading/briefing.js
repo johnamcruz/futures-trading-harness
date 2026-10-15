@@ -102,6 +102,7 @@ const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
 const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
+const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -112,9 +113,9 @@ const ET = 'America/New_York';
 // daily break is the market closed: the harness stops at 16:00 ET (inside the Topstep trading day, before its 16:10 ET
 // flatten) until the 18:00 ET open.
 const WINDOWS = [
-  [-360, 180, 'asia'], [180, 570, 'london'], [570, 575, 'opening print'], [575, 660, 'opening drive'],
-  [660, 690, 'late morning'], [690, 810, 'lunch lull'], [810, 945, 'afternoon'], [945, 960, 'into the close'],
-  [960, 1080, 'daily break'], [1080, 1620, 'asia'],
+  [-360, 180, 'asia'], [180, RTH_OPEN_MIN, 'london'], [RTH_OPEN_MIN, 575, 'opening print'], [575, 660, 'opening drive'],
+  [660, 690, 'late morning'], [690, 810, 'lunch lull'], [810, 945, 'afternoon'], [945, RTH_CLOSE_MIN, 'into the close'],
+  [RTH_CLOSE_MIN, GLOBEX_OPEN_MIN, 'daily break'], [GLOBEX_OPEN_MIN, 1620, 'asia'],
 ];
 const MARKET_CLOSED_WINDOW = 'daily break';
 const DEFAULT_ENTRY_CLOCK = { entryHours: DEFAULT_ENTRY_HOURS, noEntryWindows: DEFAULT_NO_ENTRY_WINDOWS };
@@ -137,7 +138,7 @@ function nextClose(at, minutes) {
 function sessionWindow(at, clock = DEFAULT_ENTRY_CLOCK) {
   const m = minutesOfDay(at, ET);
   // Asia runs 18:00-03:00 across midnight: before 03:00 it is the window that started at 18:00 the evening before.
-  const [, end, name] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= 1080));
+  const [, end, name] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= GLOBEX_OPEN_MIN));
   const start = at.getTime() - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds());
   let until = new Date(start + (end - m) * 60000);
   const marketOpen = name !== MARKET_CLOSED_WINDOW;
@@ -163,7 +164,7 @@ function sessionWindow(at, clock = DEFAULT_ENTRY_CLOCK) {
  */
 function nextRthRoll(barOpen, minutes) {
   const m = minutesOfDay(barOpen, ET);
-  const ahead = (960 - m + 1440) % 1440 || 1440;
+  const ahead = (RTH_CLOSE_MIN - m + 1440) % 1440 || 1440;
   return new Date(barOpen.getTime() + (ahead + minutes) * 60000 - (barOpen.getUTCSeconds() * 1000 + barOpen.getUTCMilliseconds()));
 }
 
@@ -348,7 +349,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   // At a new session's first candle (18:00 ET, Sunday's open) the last session's overnight range and IB are stale: no
   // level (the opening range reads the candle's own first bar, so it is the new session's; the prior RTH day is the
   // day that just closed). The rules language does the same (candle-facts.js relationSeries, `session`).
-  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, 18 * 60) === sessionKey(bars[b].t, 18 * 60);
+  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, GLOBEX_OPEN_MIN) === sessionKey(bars[b].t, GLOBEX_OPEN_MIN);
   const levelsAt = (idx, openIdx, firstIdx) => [
     ...(sameSession(openIdx, firstIdx) ? named(openIdx).filter(([name]) => AT_OPEN.test(name)) : []),
     ...named(firstIdx).filter(([name]) => !AT_OPEN.test(name) && !MOVING.test(name)),

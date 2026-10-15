@@ -8,9 +8,9 @@ const { accountNamed } = require('../../scripts/lib/trading/accounts');
 const { decideSetup, setupPlan } = require('../../scripts/lib/prop/verdict');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const { TEST_ACCOUNTS } = require('../helpers');
+const { TEST_ACCOUNTS, TEST_SIZING, testSizing } = require('../helpers');
 const account = accountNamed(ROOT, 'test_50k', { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS }); // a fixture: the same rules as a 50K combine
-const strategy = { name: 'prop_x', timeframe: '3m', contracts: 'micro', strategies: ['trendy'] };
+const strategy = { name: 'prop_x', timeframe: '3m', contracts: 'micro', strategies: ['trendy'], sizing: TEST_SIZING };
 const spec = { tickSize: 0.25, tickValue: 0.5 };
 const now = new Date('2026-10-07T15:30:00Z');
 const bars = Array.from({ length: 50 }, (_, k) => ({ t: new Date(Date.parse('2026-10-07T13:00:00Z') + k * 180000).toISOString(), o: 21500, h: 21502, l: 21498, c: 21500, v: 100 }));
@@ -30,7 +30,7 @@ test('the sizing verdict: full at the largest size the budget allows at the setu
 
 test('the sizing verdict counts the policy strategy\'s own stop_slippage_ticks', () => {
   // As above with sizing.stop_slippage_ticks 3: 43 x $0.50 = $21.50 + $0.74 = $22.24 a micro, so 17 MNQ ($378.08).
-  const v = decideSetup(args({ strategy: { ...strategy, sizing: { stop_slippage_ticks: 3 } } }));
+  const v = decideSetup(args({ strategy: { ...strategy, sizing: testSizing({ stop_slippage_ticks: 3 }) } }));
   assert.deepStrictEqual([v.action, v.contract, v.maxSize, v.riskPerContract], ['full', 'MNQ', 17, 22.24]);
 });
 
@@ -50,7 +50,7 @@ test('setupPlan: the stop in ticks (half to even, as the engine) and a plan per 
   assert.strictEqual(p.cp.size, p.plan(1).size);
   assert.ok(p.plan(0.5).size <= Math.ceil(p.cp.size / 2));
   assert.strictEqual(p.i, bars.length - 1);
-  assert.deepStrictEqual(p.sizing, { ...combine.DEFAULT_SIZING });
+  assert.deepStrictEqual(p.sizing, TEST_SIZING, 'the policy sizing, never a code default');
 });
 
 test('the verdict\'s multiplier (R4): 1 for a full verdict and 0 for a skip while the rulebook has no multiplier items', () => {
