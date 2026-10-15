@@ -419,7 +419,9 @@ function pairedRunner({ ctx, rates, seed, pools }) {
  * decides as the model did; each arm reverts one kind of action in one account state (decided on the path, as the
  * state stands when the item comes up). Resampled paths only (each a stationary block bootstrap path of the stream's
  * days, as scoreStream's). opts: { pass (checkModelWindow), account, rulebook, size, contracts, maxDailyLoss, seed,
- * paths, meanBlock, reps, level, faults, base, arms: { name: decide } }. Returns { base, arms: { name: { resampled,
+ * paths, meanBlock, reps, level, faults, base, arms: { name: decide }, sized }. sized: 'own' keeps a trade the model exited itself
+ * (ownExit) on that exit, as scorePaired's does, so the base isn't re-exited under the policy exit; 'ceiling' (the default)
+ * re-exits every trade. Returns { base, arms: { name: { resampled,
  * diff: { passRate, blowRate } (base minus arm, paired), applied, saved, caused, costPasses, gainedPasses } } }:
  * applied, the paths the arm changed anything on; saved, the paths where the arm blew and the model didn't (the model's
  * action saved a blow); caused, the reverse; costPasses, the arm passed and the model didn't; gainedPasses, the reverse.
@@ -427,13 +429,14 @@ function pairedRunner({ ctx, rates, seed, pools }) {
 function scoreArms(stream, opts) {
   const {
     pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 1000,
-    meanBlock = 7, reps = 1000, level = 0.9, faults = {}, base, arms = {},
+    meanBlock = 7, reps = 1000, level = 0.9, faults = {}, base, arms = {}, sized = 'ceiling',
   } = opts || {};
+  if (!SIZED.includes(sized)) throw new Error(`scoreArms: sized is one of ${SIZED.join(', ')}, not ${String(sized)}`);
   const pass = takePass(given);
   if (!pass.model || pass.synthetic) throw new Error('scoreArms: a model run\'s own days (a checkModelWindow pass, not a reweighted stream)');
   if (typeof base !== 'function') throw new Error('scoreArms: base, the model\'s own decisions');
   const rates = checkOptions({ account, seed, paths, every: 1, meanBlock, faults });
-  const days = daysFor(stream, pass, rulebook).map(d => {
+  const days = daysFor(stream, pass, rulebook, { keepOwnExits: sized === 'own' }).map(d => {
     const items = [...d.trades, ...(d.passed || [])].sort((a, b) => (Date.parse(a.entryTime) || 0) - (Date.parse(b.entryTime) || 0) || String(a.id).localeCompare(String(b.id)));
     return { ...d, trades: items.map((t, seq) => ({ ...t, seq })) };
   });

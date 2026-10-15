@@ -253,13 +253,17 @@ function recordScore(file, entry) {
  * A candidate's validate runs, in the order their looks were taken: the runs the stage-1 exit test pools
  * (replay/stage.js), the first VALIDATE_RUNS_PER_CANDIDATE of them only. { counted, beyond, all: { runs, candidates } }:
  * counted, the run ids the test reads; beyond, the later ones it never reads (a retry past the cap can't move it);
- * all, every validate run and candidate the ledger holds (the family of tests the exit test is one of).
+ * all, every validate run and candidate the ledger holds (the family of tests the exit test is one of); windows, each
+ * counted run's look window { runId, from, to } (runs over the same days overlap: the pooled test counts a day and a
+ * moment once).
  */
 function validateRuns(ledger, candidate) {
   const validate = looksOf(Array.isArray(ledger) ? ledger : []).filter(e => e.purpose === 'validate' && roleOfLook(e) === 'practice-validate');
   const ids = [...new Set(validate.filter(e => e.candidate === candidate).map(e => e.runId))];
+  const counted = ids.slice(0, VALIDATE_RUNS_PER_CANDIDATE);
+  const windows = counted.map(id => { const l = validate.find(e => e.runId === id); return { runId: id, from: l.from, to: l.to }; });
   return {
-    counted: ids.slice(0, VALIDATE_RUNS_PER_CANDIDATE), beyond: ids.slice(VALIDATE_RUNS_PER_CANDIDATE),
+    counted, windows, beyond: ids.slice(VALIDATE_RUNS_PER_CANDIDATE),
     all: { runs: new Set(validate.map(e => e.runId)).size, candidates: new Set(validate.map(e => e.candidate)).size },
   };
 }

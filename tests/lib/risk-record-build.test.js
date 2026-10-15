@@ -82,6 +82,31 @@ test('an exit the runner made (its trail or time stop, from its event log) is th
   }
 });
 
+test('a close the runner stamped after the broker\'s fill is still its own, by its recorded exit; one outside the tolerance or of another position is the model\'s', () => {
+  const { RUNNER_CLOSE_TOLERANCE_MS } = require('../../scripts/lib/prop/model-stream');
+  const first = (() => { const r = run(); return readModelStream(r.dir).stream.days[0].trades[0]; })();
+  const opened = first.entryTime;
+  const exited = first.exitTime;
+  const at = ms => new Date(Date.parse(exited) + ms).toISOString();
+  const trade = (events, runnerExits) => {
+    const r = run();
+    fs.mkdirSync(path.join(r.home, 'logs'), { recursive: true });
+    fs.writeFileSync(path.join(r.home, 'logs', 'events-2023-03-15.jsonl'), events.map(e => `${JSON.stringify(e)}\n`).join(''));
+    if (runnerExits) fs.writeFileSync(path.join(r.home, 'autotrader-state.json'), JSON.stringify({ runnerExits }));
+    return readModelStream(r.dir).stream.days[0].trades[0];
+  };
+  const late = ms => ({ kind: 'position_closed', symbol: 'MNQ', contractId: 'x', at: at(ms), why: 'trail' });
+  const rec = (ms, over = {}) => ({ contractId: 'x', side: 'long', openedAt: opened, at: at(ms), r: 1, ...over });
+  assert.deepStrictEqual(trade([late(20000)]).actions, ['size-down', 'early-exit'], 'the event alone, after the fill, matches nothing');
+  const own = trade([late(20000)], [rec(20000)]);
+  assert.deepStrictEqual([own.actions, own.exitBy], [['size-down'], 'runner-close']);
+  for (const [label, events, exits] of [
+    ['past the tolerance', [late(RUNNER_CLOSE_TOLERANCE_MS + 5000)], [rec(RUNNER_CLOSE_TOLERANCE_MS + 5000)]],
+    ['another position (opened an hour before)', [late(20000)], [rec(20000, { openedAt: new Date(Date.parse(opened) - 3600000).toISOString() })]],
+    ['another market', [{ ...late(20000), symbol: 'MES' }], [rec(20000)]],
+  ]) assert.deepStrictEqual(trade(events, exits).actions, ['size-down', 'early-exit'], label);
+});
+
 test('buildFromRuns: an entry per acted day, the day\'s actions only, walk-forward, fingerprinted with its sources', () => {
   const doc = B.buildFromRuns([run().dir], OPTS);
   assert.deepStrictEqual(doc.entries.map(e => e.day), ['2023-03-15', '2023-03-16', '2023-03-17']);

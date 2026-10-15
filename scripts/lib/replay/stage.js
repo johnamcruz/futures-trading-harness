@@ -58,7 +58,7 @@ const STAGES = Object.freeze({
  * threshold reports PASS only over at least `minN` samples (the experience index's MIN_N, 20, the same rule a cell
  * needs before it shows a rate); under it, "insufficient sample (n)". avgWinnerR needs minN winners: at the
  * thresholds' own profile (winners 1.8R, losers -1R, +0.3R a trade: a 46% win rate) that is about 43 entries on
- * average and 52 for nine pools in ten (61 at a 40% win rate). The expectancy's interval is the experience index's
+ * average and 53 for nine pools in ten (61 at a 40% win rate). The expectancy's interval is the experience index's
  * day bootstrap (cellStats: 90%, whole trading days resampled), which also needs MIN_DAYS (10) distinct days.
  *   plannedRR          a sanity line, never a criterion: the entries under this planned reward:risk (min_rr enforces it)
  *   avgWinnerR         the realized mean R of the winning entries, at least this
@@ -145,11 +145,37 @@ function exitTest({ decisions = [], adherence = null }) {
   return out;
 }
 
+/** A decision's moment: its day, contract root, bar, side and opening fill. Without a bar (no record of it) each is its own. */
+const momentKey = (d, i) => (d && d.bar ? [d.day || d.settledDay, d.root, d.bar, d.side, d.outcome && d.outcome.entryTime].join('|') : `#${i}`);
+
+/**
+ * The pool's decisions with each (day, moment) once, the first run's: validate runs of one candidate over the same days
+ * (their windows overlap) replay the same moments, so a repeat adds no sample. { decisions, repeats, overlap }.
+ */
+function distinctDecisions(pool) {
+  const seen = new Set();
+  const decisions = [];
+  let repeats = 0;
+  let n = 0;
+  for (const r of pool.counted) {
+    for (const d of r.decisions || []) {
+      const k = momentKey(d, n++);
+      if (seen.has(k)) { repeats += 1; continue; }
+      seen.add(k);
+      decisions.push(d);
+    }
+  }
+  const w = (pool.windows || []).filter(x => x && x.from && x.to);
+  const pairs = [];
+  for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) if (w[i].from <= w[j].to && w[j].from <= w[i].to) pairs.push(`${w[i].runId}/${w[j].runId}`);
+  return { decisions, repeats, overlap: pairs.join(', ') };
+}
+
 /**
  * The stage-1 exit test on a candidate's pooled validate runs (learning/looks.js validateRuns: its first
  * VALIDATE_RUNS_PER_CANDIDATE, in the order their looks were taken). pool: { candidate, named (the run named its
  * candidate, --candidate: an unnamed run is its own candidate, so its retries would never pool), runId (this run),
- * counted: [{ runId, decisions, adherence }], missing (counted runs whose log wasn't found), beyond (later runs, never
+ * counted: [{ runId, decisions, adherence }], windows ([{ runId, from, to }]: the counted looks' windows), missing (counted runs whose log wasn't found), beyond (later runs, never
  * read), all: { runs, candidates } }. A pool that isn't whole (unnamed, a run missing) can't pass. scorecardComposed:
  * false makes process adherence N/A. Returns { pass, tests, head }: pass only when the pool is whole and every
  * criterion (not the sanity line) passes.
@@ -164,7 +190,10 @@ function pooledExitTest(pool, { scorecardComposed = true } = {}) {
   const adherence = !scorecardComposed ? { unavailable: 'needs fix/scorecard-composed (the scorecard doesn\'t score composed setups yet)' }
     : errored ? { unavailable: `run ${errored.runId}'s scorecard not scored (${errored.adherence.error})` }
       : pool.counted.reduce((a, r) => ({ agree: a.agree + Number((r.adherence && r.adherence.agree) || 0), disagree: a.disagree + Number((r.adherence && r.adherence.disagree) || 0) }), { agree: 0, disagree: 0 });
-  const tests = [poolLine, ...exitTest({ decisions: pool.counted.flatMap(r => r.decisions || []), adherence })];
+  const { decisions, repeats, overlap } = distinctDecisions(pool);
+  const overlapLine = repeats || overlap
+    ? [{ test: 'pool-overlap', status: 'SANITY', detail: `overlapping validate windows: counted once (${repeats} repeated decision(s) of the same day and moment dropped${overlap ? `; windows ${overlap} overlap` : ''}); ${new Set(decisions.map(d => d.day || d.settledDay)).size} distinct day(s)` }] : [];
+  const tests = [poolLine, ...overlapLine, ...exitTest({ decisions, adherence })];
   const pass = tests.every(x => x.status === 'PASS' || x.status === 'SANITY');
   const past = pool.beyond.includes(pool.runId) ? `; this run is past the cap: it is not read, and can't move the verdict of ${ids.join(', ')}` : '';
   const head = `stage-1 exit test: ${pass ? 'PASS' : 'FAIL'} (pooled over ${ids.length} validate run(s) of ${pool.candidate || pool.runId}${past}; the ledger holds ${pool.all.runs} validate run(s) over ${pool.all.candidates} candidate(s))`;
@@ -214,7 +243,7 @@ function readPool(run, { env = process.env, scoreOf }) {
     try { adherence = scoreOf(path.join(home, 'replay', id)); } catch (e) { adherence = { error: String(e.message).split('\n')[0] }; }
     counted.push({ runId: id, decisions: l.decisions, adherence });
   }
-  return { candidate, named: Boolean(candidate) && candidate !== run.runId, runId: run.runId, counted, missing, beyond: v.beyond, all: v.all };
+  return { candidate, named: Boolean(candidate) && candidate !== run.runId, runId: run.runId, counted, missing, windows: v.windows, beyond: v.beyond, all: v.all };
 }
 
 /** The default readers of a finished run: its learning log, its scorecard, its role, its candidate's validate pool, the merged features. */

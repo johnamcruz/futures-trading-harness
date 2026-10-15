@@ -67,7 +67,7 @@ const effectOf = i => (i.lo > 0 ? 'raised' : i.hi < 0 ? 'lowered' : 'no signific
 
 function scoreRiskActions(stream, opts = {}) {
   const { base, arms } = riskActionArms();
-  const r = scoreArms(stream, { ...opts, base, arms });
+  const r = scoreArms(stream, { ...opts, base, arms, sized: 'own' });
   const all = stream.days.flatMap(d => [...d.trades, ...(d.passed || [])]);
   const actions = {};
   for (const kind of KINDS) {

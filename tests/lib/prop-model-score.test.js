@@ -287,6 +287,21 @@ test('scorePaired sized "own": a challenger that cuts its losers early scores ap
   assert.throws(() => pair(hold, cut, { ...opts, sized: 'model' }), /sized is one of ceiling, own/);
 });
 
+test('scoreArms sized "own": the model\'s early exits aren\'t re-exited under the policy exit in the base', () => {
+  const { scoreArms, ownShare } = require('../../scripts/lib/prop/evaluator');
+  const { hold, cut, opts } = riskRuns();
+  const go = (stream, sized) => scoreArms(stream, { ...opts, base: ownShare, ...(sized ? { sized } : {}), pass: checkModelWindow({ run: run({ runId: 'arms' }) }) });
+  assert.deepStrictEqual(go(cut).base, go(hold).base, 'at the ceiling every exit is the bracket\'s: the cut is erased');
+  assert.deepStrictEqual(go(hold, 'own').base, go(hold).base, 'no early-exit action: unchanged');
+  const own = go(cut, 'own').base;
+  assert.notDeepStrictEqual(own, go(cut).base, 'the model\'s own exits stand in the base');
+  assert.ok(own.blowRate < go(hold, 'own').base.blowRate, 'cutting the losers before the gap blows less');
+  assert.throws(() => go(cut, 'model'), /sized is one of ceiling, own/);
+  // The risk-action scoring uses it: its base is the model as it traded.
+  const sr = require('../../scripts/lib/prop/risk-actions').scoreRiskActions(cut, { ...opts, pass: checkModelWindow({ run: run({ runId: 'ra' }) }) });
+  assert.deepStrictEqual(sr.base, own);
+});
+
 test('scorePaired sized "own": a challenger that sizes up is penalized for it; a policy-exited trade keeps the policy exit', () => {
   const { size, opts } = riskRuns();
   // The champion sized a tenth of the ceiling, the challenger the whole of it: only the challenger blows.

@@ -243,9 +243,11 @@ Each threshold reports PASS only over at least 20 samples. That is the
 experience index's `MIN_N`, the same rule a cell needs before it shows a rate.
 Below 20 it reports "insufficient sample (n)", never PASS. The average winner
 needs 20 winners. At the thresholds' own profile (winners 1.8R, losers 1R,
-+0.3R a trade: a 46% win rate) that is about 43 entries on average and 52 to
++0.3R a trade: a 46% win rate) that is about 43 entries on average and 53 to
 reach it nine times in ten (61 at a 40% win rate). Plan for 50 to 60 entries
-across the pooled runs. The expectancy's
+across the pooled runs, and they must be distinct: runs over the same days replay the same
+moments, so each (day, moment) counts once (the report says "overlapping validate windows:
+counted once"). The expectancy's
 interval is the experience index's day bootstrap (90%, whole trading days
 resampled), so it also needs 10 distinct days (`MIN_DAYS`). Process adherence
 is N/A until the scorecard scores composed setups

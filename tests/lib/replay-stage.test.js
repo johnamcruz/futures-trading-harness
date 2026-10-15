@@ -146,6 +146,23 @@ test('pooledExitTest: a candidate\'s validate runs pooled (none alone passes); u
   assert.deepStrictEqual([bad.pass, bad.tests.find(x => x.test === 'process-adherence').detail], [false, 'run v2\'s scorecard not scored (look refused)']);
 });
 
+test('pooledExitTest: runs over the same days count each (day, moment) once; 3 runs of 7 winners are 7 winners', () => {
+  const moment = (i, R) => ({ ...entry(`2024-08-${String(1 + i).padStart(2, '0')}`, R), root: 'MNQ', bar: `2024-08-${String(1 + i).padStart(2, '0')}T15:00:00Z`, side: 'long' });
+  const same = Array.from({ length: 14 }, (_x, i) => moment(i, i % 2 ? -1 : 2.5));
+  const runs = [0, 1, 2].map(k => ({ runId: `v${k}`, decisions: same.map(d => ({ ...d })), adherence: agreement(15, 2) }));
+  const windows = runs.map(r => ({ runId: r.runId, from: '2024-08-01', to: '2024-09-01' }));
+  const r = S.pooledExitTest(poolOf(runs, { windows }));
+  assert.strictEqual(r.pass, false);
+  assert.strictEqual(r.tests.find(x => x.test === 'avg-winner').status, 'INSUFFICIENT');
+  assert.match(r.tests.find(x => x.test === 'avg-winner').detail, /\(7;/, 'seven distinct winners, not 21');
+  assert.match(r.tests.find(x => x.test === 'pool-overlap').detail, /overlapping validate windows: counted once \(28 repeated/);
+  // Disjoint days: nothing dropped, no overlap line.
+  const shift = (d, m) => ({ ...d, bar: d.bar.replace('2024-08', m), day: d.day.replace('2024-08', m), settledDay: d.day.replace('2024-08', m) });
+  const apart = [0, 1, 2].map(k => ({ runId: `v${k}`, decisions: same.map(d => shift(d, `2024-${9 + k}`)), adherence: agreement(15, 2) }));
+  assert.ok(!S.pooledExitTest(poolOf(apart)).tests.some(x => x.test === 'pool-overlap'));
+  assert.strictEqual(S.pooledExitTest(poolOf(apart)).tests.find(x => x.test === 'avg-winner').status, 'PASS');
+});
+
 test('validateRuns and readPool: a candidate\'s first validate runs from the ledger, read from the run homes beside this one', () => {
   const looks = require('../../scripts/lib/learning/looks');
   const { readLedger } = require('../../scripts/lib/prop/ledger-file');
@@ -154,7 +171,7 @@ test('validateRuns and readPool: a candidate\'s first validate runs from the led
   const look = (runId, candidate) => looks.recordLook(ledger, { evaluation: runId, candidate, purpose: 'validate', runId, from: '2024-08-01', to: '2024-09-01' }, { create: true });
   for (const [id, c] of [['v0', 'c1'], ['w0', 'c2'], ['v1', 'c1'], ['v2', 'c1'], ['v3', 'c1']]) look(id, c);
   assert.strictEqual(looks.VALIDATE_RUNS_PER_CANDIDATE, 3);
-  assert.deepStrictEqual(looks.validateRuns(readLedger(ledger), 'c1'), { counted: ['v0', 'v1', 'v2'], beyond: ['v3'], all: { runs: 5, candidates: 2 } });
+  assert.deepStrictEqual(looks.validateRuns(readLedger(ledger), 'c1'), { counted: ['v0', 'v1', 'v2'], windows: ['v0', 'v1', 'v2'].map(runId => ({ runId, from: '2024-08-01', to: '2024-09-01' })), beyond: ['v3'], all: { runs: 5, candidates: 2 } });
   // Run homes <work>/<runId>: v0 and v1 finished with their logs, v2 never wrote one; this run is v3.
   const home = id => {
     const h = path.join(work, id);

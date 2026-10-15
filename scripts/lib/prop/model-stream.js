@@ -168,9 +168,17 @@ const entryMsOf = e => { const f = Date.parse(e.outcome && e.outcome.entryTime);
  * policyExitOf(decision, { entryTime, exitTime, exitPrice, tick }) -> 'runner-close' when the runner closed the position
  * (`position_closed`: its trail or time stop) between the fill and the exit, 'runner-trail' when the exit filled at
  * (within a tick of) the last stop the runner moved it to (`stop_moved`), else null (the bracket's own, or the model's).
- * Matched by market (the event's symbol and the decision's root, one family).
+ * Matched by market (the event's symbol and the decision's root, one family). A live-recorded close can be stamped after
+ * the broker's fill time, so the runner's own recorded exits (`exits`: state.runnerExits, { contractId, openedAt, at, r },
+ * readRunnerExits) match too: the same position (its opening within RUNNER_CLOSE_TOLERANCE_MS of the entry fill, its
+ * market by the contract id of the close event, else the decision's own contract) closed from the fill to the exit plus
+ * that tolerance. Nothing else is the runner's: a close outside it is the model's.
  */
-function runnerExit(events = []) {
+const RUNNER_CLOSE_TOLERANCE_MS = 60000;
+
+function runnerExit(events = [], exits = []) {
+  const symbolOf = new Map((events || []).filter(e => e && e.kind === 'position_closed' && e.contractId !== undefined).map(e => [String(e.contractId), e.symbol]));
+  const recorded = (Array.isArray(exits) ? exits : []).filter(x => x && typeof x === 'object' && Number.isFinite(Date.parse(x.at)) && Number.isFinite(Date.parse(x.openedAt)));
   const list = (events || []).filter(e => e && ['position_closed', 'stop_moved'].includes(e.kind) && Number.isFinite(Date.parse(e.at)));
   return (d, { entryTime, exitTime, exitPrice, tick }) => {
     const from = Date.parse(entryTime);
@@ -179,9 +187,23 @@ function runnerExit(events = []) {
     const fam = familyRoot(d.root) || d.root;
     const mine = list.filter(e => (familyRoot(e.symbol) || e.symbol) === fam && Date.parse(e.at) >= from && Date.parse(e.at) <= to);
     if (mine.some(e => e.kind === 'position_closed')) return 'runner-close';
+    const own = recorded.some(x => {
+      const sym = symbolOf.get(String(x.contractId));
+      const sameMarket = sym !== undefined ? (familyRoot(sym) || sym) === fam : d.contract !== undefined && String(d.contract) === String(x.contractId);
+      return sameMarket && Math.abs(Date.parse(x.openedAt) - from) <= RUNNER_CLOSE_TOLERANCE_MS && Date.parse(x.at) >= from && Date.parse(x.at) <= to + RUNNER_CLOSE_TOLERANCE_MS;
+    });
+    if (own) return 'runner-close';
     const moved = mine.filter(e => e.kind === 'stop_moved').pop();
     return moved && Number.isFinite(Number(moved.to)) && Math.abs(Number(moved.to) - exitPrice) <= (tick || 0) + 1e-9 ? 'runner-trail' : null;
   };
+}
+
+/** The runner's own recorded exits of a run home (its state's runnerExits), [] without a readable state. */
+function readRunnerExits(home) {
+  try {
+    const st = JSON.parse(fs.readFileSync(path.join(home, 'autotrader-state.json'), 'utf8'));
+    return Array.isArray(st && st.runnerExits) ? st.runnerExits : [];
+  } catch (_err) { return []; }
 }
 
 /** The runner's event log of a run home (logs/events-<day>.jsonl): every line, [] without one (a torn line skipped). */
@@ -367,7 +389,7 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const verdicts = readVerdicts(r.home).filter(v => v && v.action === 'full');
   const verdictOf = d => verdicts.filter(v => v.bar === d.bar && v.direction === d.side && (familyRoot(v.symbol) || v.symbol) === (familyRoot(d.root) || d.root)).pop() || null;
   const stream = modelStream({
-    decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf, policyExitOf: runnerExit(readEvents(r.home)),
+    decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf, policyExitOf: runnerExit(readEvents(r.home), readRunnerExits(r.home)),
   });
   return {
     stream,
@@ -379,4 +401,4 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   };
 }
 
-module.exports = { modelStream, readModelStream, adversePath, exitPaths, runnerExit, readEvents };
+module.exports = { modelStream, readModelStream, adversePath, exitPaths, runnerExit, readEvents, readRunnerExits, RUNNER_CLOSE_TOLERANCE_MS };
