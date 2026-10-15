@@ -24,7 +24,7 @@
 
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
-const { requireFee } = require('../trading/accounts');
+const { requireFee, feePerSide } = require('../trading/accounts');
 const { pick } = require('./stats');
 const { loadConfig } = require('../trading/config');
 const { tradingDayStart } = require('../trading/clock');
@@ -53,8 +53,9 @@ function legsFor(account, symbol, { tickValue } = {}) {
   const fam = familyOf(symbol);
   const leg = root => {
     const spec = { ...(specFor(root) || {}), ...(root === symbol && tickValue ? { tickValue } : {}) };
-    const fee = requireFee(account, root);
-    return { root, tickValue: spec.tickValue, fee, max: (account.max_contracts && account.max_contracts[root]) || 0 };
+    const max = (account.max_contracts && account.max_contracts[root]) || 0;
+    // A leg the account may trade needs its fee; one it may not (max 0) is never sized, so it needs none.
+    return { root, tickValue: spec.tickValue, fee: max > 0 ? requireFee(account, root) : feePerSide(account, root), max };
   };
   return fam ? { legs: { micro: leg(fam.micro), mini: leg(fam.mini) }, ratio: fam.ratio } : { legs: { micro: leg(symbol), mini: null }, ratio: 10 };
 }

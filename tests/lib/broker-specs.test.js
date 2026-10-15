@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const specs = require('../../scripts/lib/trading/broker-specs');
 const { specFor, familyOf } = require('../../scripts/lib/trading/contracts');
-const { FAKE_BROKERS, tmpDir, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, recordBrokerSpecs, TEST_SIZING } = require('../helpers');
 
 test('validSpec: both numbers sane, else nothing (a zero, a negative, a huge value, a non-number)', () => {
   assert.deepStrictEqual(specs.validSpec({ tickSize: 0.25, tickValue: 0.5 }), { tickSize: 0.25, tickValue: 0.5 });
@@ -30,7 +30,8 @@ test('brokerSpecFor: the recorded spec of a root, read locally; an old file, a m
   assert.strictEqual(specs.brokerSpecFor(file, 'MNQ'), null);
   recordBrokerSpecs(home, { roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0 } } });
   const mnq = specs.brokerSpecFor(file, 'mnq');
-  assert.deepStrictEqual([mnq.tickSize, mnq.tickValue, mnq.feesPerSide, mnq.source, mnq.id, mnq.name], [0.25, 0.5, 0.37, 'broker', 'fake:MNQ:Z26', 'MNQZ6']);
+  // No fee: a fee is the account's (ACCOUNT.md fees_per_side), never the broker spec's or the table's.
+  assert.deepStrictEqual([mnq.tickSize, mnq.tickValue, mnq.feesPerSide, mnq.source, mnq.id, mnq.name], [0.25, 0.5, undefined, 'broker', 'fake:MNQ:Z26', 'MNQZ6']);
   assert.strictEqual(specs.brokerSpecFor(file, 'NQ'), null, 'a malformed record (tick value 0) is none');
   assert.strictEqual(specs.brokerSpecFor(file, 'ES'), null, 'another root');
   // A root the static table lacks still gets the broker's spec (no fee estimate).
@@ -102,12 +103,12 @@ test('brokerSpecs: a recorded spec unlike the static table is no spec (fail clos
   assert.match(specs.whyNoSpec(() => null, 'ES'), /^no tick specs from the broker for ES yet/);
   // A family whose contracts report different tick sizes can't share one stop in ticks.
   const prop = require('../../scripts/lib/trading/prop-state');
-  const account = { name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod', daily_loss_limit: 1000, daily_loss_soft: 500, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50, NQ: 5 } };
+  const account = { name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod', daily_loss_limit: 1000, daily_loss_soft: 500, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const now = new Date('2026-10-07T14:00:00Z');
   prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
   prop.snapshot(home, account, 50000, new Date(now.getTime() - 60000));
   const odd = r => ({ MNQ: { tickSize: 0.25, tickValue: 0.5 }, NQ: { tickSize: 0.5, tickValue: 10 } }[r] || null);
-  assert.match(prop.budgetPlan(home, account, { sizing: {}, contracts: 'auto' }, 'MNQ', 40, 1, odd).error, /MNQ and NQ have different tick sizes \(0\.25, 0\.5\)/);
+  assert.match(prop.budgetPlan(home, account, { sizing: TEST_SIZING, contracts: 'auto' }, 'MNQ', 40, 1, odd).error, /MNQ and NQ have different tick sizes \(0\.25, 0\.5\)/);
   // $400 budget; 40 ticks plus a tick of expected slippage: 41 x $0.50 + $0.74 fees = $21.24 a micro, 18 MNQ.
-  assert.strictEqual(prop.budgetPlan(home, account, { sizing: {}, contracts: 'micro' }, 'MNQ', 40, 1, specs.brokerSpecs(recordBrokerSpecs(home, { roots: ['NQ'] }))).size, 18);
+  assert.strictEqual(prop.budgetPlan(home, account, { sizing: TEST_SIZING, contracts: 'micro' }, 'MNQ', 40, 1, specs.brokerSpecs(recordBrokerSpecs(home, { roots: ['NQ'] }))).size, 18);
 });

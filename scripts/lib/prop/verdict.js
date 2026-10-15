@@ -58,7 +58,7 @@ function decideSetup({ account, cs, strategy, component, symbol, contractId, raw
   const bad = combine.sizingErrors(z);
   if (bad.length) return skip(`${strategy.name} has no whole sizing from its account's rulebook (${bad.join('; ')}): no size`);
   const fam = familyOf(symbol);
-  const noFee = [fam ? fam.micro : symbol, ...(fam ? [fam.mini] : [])].find(x => feePerSide(account, x) === null);
+  const noFee = [fam ? fam.micro : symbol, ...(fam ? [fam.mini] : [])].find(x => account.max_contracts && account.max_contracts[x] > 0 && feePerSide(account, x) === null);
   if (noFee) return skip(`no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size`);
   if (!cp) return skip(combine.entryBlock(cs) || `the size budget ($${combine.budget(cs, z)}) is below one contract at this stop; with a cushion of $${Math.round(combine.cushion(cs))} the attempt can only trade setups with tighter stops`);
   const { multiplier, why } = ceiling(strategy.multipliers, facts, now);

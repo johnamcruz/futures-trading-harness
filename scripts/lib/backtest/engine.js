@@ -63,7 +63,7 @@ const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
 const { ceiling } = require('../trading/rulebook');
 const { familyOf, specFor } = require('../trading/contracts');
-const { requireFee } = require('../trading/accounts');
+const { requireFee, feePerSide } = require('../trading/accounts');
 
 const { normalizeBars } = ind;
 
@@ -259,14 +259,22 @@ function runEngine(markets, strategies, opts = {}) {
     if (!(typeof f === 'number' && Number.isFinite(f) && f >= 0)) throw new Error(`${book.symbol}: no fee per side (the market's feesPerSide, or the run's); a fee is never assumed`);
     return f;
   };
-  const feeOf = book => (account ? requireFee(account, book.symbol) : plainFee(book));
-  // A contract of the book's micro/mini family, priced with the account's fee.
+  // A contract of the book's micro/mini family, priced with the account's fee: one the account may trade (max above
+  // 0) without a fee is refused; one it may not trade needs none (contractPlan never sizes an unpriced leg).
   const legOf = (book, root) => {
     const spec = { ...(specFor(root) || {}), ...(root === book.symbol ? { tickValue: book.tickValue } : {}) };
-    return { root, tickValue: spec.tickValue, fee: requireFee(account, root), max: (account && account.max_contracts && account.max_contracts[root]) || 0 };
+    const max = (account && account.max_contracts && account.max_contracts[root]) || 0;
+    return { root, tickValue: spec.tickValue, fee: max > 0 ? requireFee(account, root) : feePerSide(account, root), max };
   };
-  // Refused up front, not at the first setup: every market's fee, and an account run's sizing (the rulebook's).
-  for (const b of books) feeOf(b);
+  const legsOf = book => {
+    const fam = familyOf(book.symbol);
+    return fam ? { micro: legOf(book, fam.micro), mini: legOf(book, fam.mini) } : { micro: legOf(book, book.symbol), mini: null };
+  };
+  // An account run's trades are priced by its legs; a plain run's by the market's fee.
+  const feeOf = book => (account ? null : plainFee(book));
+  // Refused up front, not at the first setup: every market's fee (a plain run's, or each tradable leg's), and an
+  // account run's sizing (the rulebook's).
+  for (const b of books) { if (account) legsOf(b); else plainFee(b); }
   const sizing = account ? combine.requireSizing(o.sizing || (o.prop && o.prop.strategy && o.prop.strategy.sizing), `${account.name}: an account run sizes from a policy's rulebook entry`) : null;
   // The day's realized-loss stop: a plain run's maxDailyLoss (backtest-only); an account's own limits instead
   // (combine.js: the firm's daily_loss_limit and the rulebook's daily_loss_soft), never the backtest default.
@@ -402,7 +410,7 @@ function runEngine(markets, strategies, opts = {}) {
       // Prop challenge: the size from the account's cushion and clock, in micros
       // or minis (contracts mode), within its limits. Same as live (combine.contractPlan).
       const fam = familyOf(book.symbol);
-      const legs = fam ? { micro: legOf(book, fam.micro), mini: legOf(book, fam.mini) } : { micro: legOf(book, book.symbol), mini: null };
+      const legs = legsOf(book);
       const sizeFor = fraction => combine.contractPlan({
         dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
         guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks,

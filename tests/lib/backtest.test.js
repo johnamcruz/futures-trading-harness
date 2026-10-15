@@ -13,7 +13,7 @@ const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN, TEST_SIZING, testSizing, TEST_FEE } = require('../helpers');
 
 /** The fixture rules strategies fx_break and fx_cross (tests/fixtures/strategies-fx), loaded beside the shipped ones. */
 const FX = { FTH_STRATEGIES_DIRS: FX_STRATEGIES };
@@ -153,19 +153,19 @@ test('report: R stats as the original bot reports them, plus dollars and drawdow
 
 test('config: data, symbols and limits are validated', () => {
   assert.throws(() => validateBacktestConfig({ symbols: ['MNQ'] }, ROOT), /data:/);
-  assert.throws(() => validateBacktestConfig({ symbols: ['XYZ'], data: { XYZ: 'a.csv' } }, ROOT), /tickSize and tickValue/);
+  assert.throws(() => validateBacktestConfig({ symbols: ['XYZ'], feesPerSide: TEST_FEE, data: { XYZ: 'a.csv' } }, ROOT), /tickSize and tickValue/);
   // One contract per index, as the runner selects: MNQ or NQ, never both.
-  assert.throws(() => validateBacktestConfig({ symbols: ['MNQ', 'NQ'], data: { MNQ: 'a.csv', NQ: 'a.csv' } }, ROOT), /symbols: one contract per index \(MNQ or NQ, not both\)/);
-  assert.strictEqual(validateBacktestConfig({ symbols: ['NQ', 'MES'], data: { NQ: 'a.csv', MES: 'a.csv' } }, ROOT).markets.length, 2);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, start: '2025-02-01', end: '2025-01-01' }, ROOT), /end must be after start/);
-  const ok = validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT);
+  assert.throws(() => validateBacktestConfig({ symbols: ['MNQ', 'NQ'], feesPerSide: TEST_FEE, data: { MNQ: 'a.csv', NQ: 'a.csv' } }, ROOT), /symbols: one contract per index \(MNQ or NQ, not both\)/);
+  assert.strictEqual(validateBacktestConfig({ symbols: ['NQ', 'MES'], feesPerSide: TEST_FEE, data: { NQ: 'a.csv', MES: 'a.csv' } }, ROOT).markets.length, 2);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, start: '2025-02-01', end: '2025-01-01' }, ROOT), /end must be after start/);
+  const ok = validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' } }, ROOT);
   assert.deepStrictEqual([ok.markets[0].tickSize, ok.markets[0].tickValue], [0.25, 0.5]);
 });
 
 test('a backtest run on the parity data writes a report; trades match the live evaluator', () => {
   const dir = tmpDir();
   const { report, runDir } = runBacktest({
-    symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') },
+    symbols: ['MNQ'], timeframe: 3, feesPerSide: TEST_FEE, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') },
     strategies: ['fx_cross', 'fx_break'], gate: false, outDir: dir,
   }, { root: ROOT, outRoot: dir, env: FX });
   assert.ok(report.summary.trades > 10);
@@ -205,9 +205,9 @@ test('engine: stops and targets on a 0.1 tick are exact (no float misses)', () =
 });
 
 test('config: bad sessions or eodAt are refused, not ignored; sizing is one or the other', () => {
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['9:35-15:00'] }, ROOT), /sessions:/);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: '3:50pm ET' }, ROOT), /eodAt:/);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, size: 2, riskPerTrade: 100 }, ROOT), /use one/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, sessions: ['9:35-15:00'] }, ROOT), /sessions:/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, eodAt: '3:50pm ET' }, ROOT), /eodAt:/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, size: 2, riskPerTrade: 100 }, ROOT), /use one/);
   const fees = validateBacktestConfig({ symbols: ['ES'], data: { ES: { file: 'a.csv', feesPerSide: 2.5 } }, feesPerSide: 0.37 }, ROOT);
   assert.strictEqual(fees.markets[0].feesPerSide, 2.5, 'the symbol\'s own fee wins');
 });
@@ -222,7 +222,7 @@ test('data: empty price cells drop the row instead of reading as 0; epoch number
 
 test('the gate limits come from the environment, as live', () => {
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_break'], outDir: dir };
+  const base = { symbols: ['MNQ'], timeframe: 3, feesPerSide: TEST_FEE, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_break'], outDir: dir };
   const loose = runBacktest(base, { root: ROOT, outRoot: dir, env: { ...FX, FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' } }).report.summary.trades;
   const capped = runBacktest(base, { root: ROOT, outRoot: dir, env: { ...FX, FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_MAX_ENTRIES_PER_DAY: '1' } }).report.trades;
   const perDay = new Map();
@@ -247,7 +247,7 @@ test('engine: losses are counted from P&L before fees, as the live gate counts t
 });
 
 test('config: gate must be a boolean', () => {
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, gate: 'false' }, ROOT), /gate: true or false/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, gate: 'false' }, ROOT), /gate: true or false/);
 });
 
 test('market hours are a hard rule in backtests too: no entries outside them, no trade held overnight', () => {
@@ -264,14 +264,14 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   rows.push({ t: new Date(Date.parse('2025-03-11T14:00:00Z')).toISOString(), o: 90, h: 91, l: 89, c: 90, v: 1 });
   const held = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } })], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0 }).trades;
   assert.deepStrictEqual(held.map(t => [t.reason, t.exit]), [['eod', 101]], 'not carried into the next day');
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: null }, ROOT), /eodAt/);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, eodAt: null }, ROOT), /eodAt/);
+  assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
 });
 
 test('strategies whose stop is an expression (fx_cisd_ote: cisd_risk(15)) are backtested', () => {
   // fx_cisd_ote (the retired cisd_ote's rules) is paper; the backtester runs any strategy that isn't disabled.
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_cisd_ote'], outDir: dir, gate: false };
+  const base = { symbols: ['MNQ'], timeframe: 3, feesPerSide: TEST_FEE, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_cisd_ote'], outDir: dir, gate: false };
   const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: GOLD });
   assert.deepStrictEqual(report.skipped || {}, {});
   assert.ok(report.summary.trades > 0, 'fx_cisd_ote trades');
@@ -319,7 +319,7 @@ test('the backtester has no prop runs: a config naming prop, every, account, siz
   // The mechanical prop runs retired (docs/research/mechanical-prop-backtester.md); the policy's parts are elsewhere.
   for (const [k, v, msg] of [['prop', 'prop_portfolio', /prop: the backtester's prop runs are retired/], ['every', 5, /every: the backtester's prop runs are retired/],
     ['account', 'tiny', /comes from a policy strategy/], ['sizing', {}, /comes from a policy strategy/], ['bundle', 'p', /bundle: trained policy bundles are retired/]]) {
-    assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, [k]: v }, ROOT), msg, k);
+    assert.throws(() => validateBacktestConfig({ feesPerSide: TEST_FEE, data: { MNQ: 'a.csv' }, [k]: v }, ROOT), msg, k);
   }
 });
 
@@ -364,7 +364,7 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   // GC: the same prices under a root fx_value_area doesn't list (it trades the equity index micros).
   const va = loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area');
   assert.ok(!va.instruments.includes('GC') && !va.instruments.includes('MGC'));
-  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: dir },
+  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, feesPerSide: TEST_FEE, data: { MNQ: csv, GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: dir },
     { root: ROOT, outRoot: dir, env: GOLD, log: m => logs.push(m) });
   const [p] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(va);
   const n = report.fieldCoverage[0].coverage.MNQ.bars;
@@ -382,7 +382,7 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   assert.deepStrictEqual(logs.filter(l => /reads field\(/.test(l)).length, 1, logs.join('\n'));
   // Only GC: fx_value_area trades none of it, so nothing is said.
   const gcLogs = [];
-  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, env: GOLD, log: m => gcLogs.push(m) });
+  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, feesPerSide: TEST_FEE, data: { GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, env: GOLD, log: m => gcLogs.push(m) });
   assert.strictEqual(gc.report.missingFields, undefined);
   assert.strictEqual(gc.report.fieldCoverage, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
@@ -609,7 +609,7 @@ const propAccount = (extra = {}) => ({
   daily_loss_soft: 400, consistency_pct: 0, sessions: 4, max_contracts: { MNQ: 20 }, fees_per_side: { MNQ: 0.37 }, ...extra,
 });
 const propMarket = bars => ({ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 });
-const propEngine = { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, gateConfig: loadConfig({}), window: 160 };
+const propEngine = { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, gateConfig: loadConfig({}), window: 160, sizing: TEST_SIZING };
 
 test('a run with an account is a prop challenge: sized from the cushion, ends on pass, blow, or timeout', () => {
   const bars = propSeries(30);
@@ -619,7 +619,7 @@ test('a run with an account is a prop challenge: sized from the cushion, ends on
   // 0.2 x cushion 1000 = $200 budget per trade.
   for (const t of res.trades.slice(0, 3)) assert.ok(t.size * (t.risk / 0.25) * 0.5 <= 200 * 1.5 + 1e-9, `size ${t.size} risk ${t.risk}`);
   // Sizing to the whole cushion still leaves a planned stop short of the floor.
-  const whole = { ...propEngine, account: propAccount({ max_loss: 200, daily_loss_soft: 0, max_contracts: { MNQ: 1000 } }), sizing: { cushion_frac: 1, min_size_guard: 10 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const whole = { ...propEngine, account: propAccount({ max_loss: 200, daily_loss_soft: 0, max_contracts: { MNQ: 1000 } }), sizing: testSizing({ cushion_frac: 1, min_size_guard: 10 }), start: Date.parse('2026-01-08T00:00:00Z') };
   const sized = runEngine([propMarket(bars)], [propStrategy()], whole);
   assert.notStrictEqual(sized.combine.status, 'blown');
   const first = sized.trades[0];
@@ -643,8 +643,8 @@ test('a prop run sizes with the policy strategy\'s own stop_slippage_ticks, as l
     const t = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: acct, sizing, start }).trades[0];
     return [t.size, Math.round(t.risk / 0.25)];
   };
-  assert.deepStrictEqual(first(null), [24, 14]);
-  assert.deepStrictEqual(first({ stop_slippage_ticks: 3 }), [21, 14]);
+  assert.deepStrictEqual(first(TEST_SIZING), [24, 14]);
+  assert.deepStrictEqual(first(testSizing({ stop_slippage_ticks: 3 })), [21, 14]);
 });
 
 test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {
@@ -682,7 +682,7 @@ test('micros and minis: a policy strategy run sizes in micros, trades minis by i
   const acct = propAccount({ max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } });
   const wide = propStrategy({ exit: { trail_activate_r: 2, trail_giveback_r: 2 } });
   const prop = contracts => ({ strategy: { exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }, components: ['trendy'], contracts });
-  const opts = { ...propEngine, account: acct, sizing: { cushion_frac: 1 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const opts = { ...propEngine, account: acct, sizing: testSizing({ cushion_frac: 1 }), start: Date.parse('2026-01-08T00:00:00Z') };
   const micro = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('micro') });
   const auto = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('auto') });
   const mini = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('mini') });
@@ -703,7 +703,7 @@ test('micros and minis: a policy strategy run sizes in micros, trades minis by i
 
 test('a policy\'s exit mode: target trades each setup on its strategy\'s own exit (a trail on top only when set); trail replaces it', () => {
   const bars = propSeries(30);
-  const opts = { ...propEngine, account: propAccount(), sizing: { cushion_frac: 1 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const opts = { ...propEngine, account: propAccount(), sizing: testSizing({ cushion_frac: 1 }), start: Date.parse('2026-01-08T00:00:00Z') };
   // The component's own exit: a 3R target, no trail.
   const own = propStrategy({ exit: { target_r: 3 } });
   const run = exit => runEngine([propMarket(bars)], [own], { ...opts, prop: { strategy: { exit }, components: ['trendy'], contracts: 'micro' } }).trades;
@@ -740,7 +740,7 @@ test('a prop run\'s loss streak counts each trade\'s P&L before fees: a scratch 
   for (let k = 0; k < 5; k += 1) bar(100, 100.5, 99.5, 100);
   const rules = { long: ['close > open'] };
   const s = propStrategy({ rules, mtf: 'reversal', compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:5', min_rr: 2 }, exit: { target_r: 20, max_bars: 1 } });
-  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 20, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: { cushion_frac: 0.2 } }).trades;
+  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 20, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: testSizing({ cushion_frac: 0.2 }) }).trades;
   const all = run(0);
   assert.deepStrictEqual(all.map(t => Math.sign(t.pnl)), [-1, 0, -1, 0], 'a loss, a scratch, a loss, a scratch (off: every setup)');
   assert.ok(all[1].net < 0, 'the scratch lost its fees');
@@ -750,7 +750,7 @@ test('a prop run\'s loss streak counts each trade\'s P&L before fees: a scratch 
 
 test('a prop run stops the session after the account\'s loss_streak_stop losing trades in a row, as the gate does', () => {
   const bars = propSeries(30);
-  const opts = { ...propEngine, sizing: { cushion_frac: 0.2 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const opts = { ...propEngine, sizing: testSizing({ cushion_frac: 0.2 }), start: Date.parse('2026-01-08T00:00:00Z') };
   const off = runEngine([propMarket(bars)], [propStrategy()], { ...opts, account: propAccount({ daily_loss_soft: 0 }) }).trades;
   const on = runEngine([propMarket(bars)], [propStrategy()], { ...opts, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: 1 }) }).trades;
   // With a stop of 1, no trade follows a loss on the same trading day.
@@ -791,4 +791,55 @@ test('backtest: a level target the fill leaves under min_rr is not traded (fx_va
   const run = extra => runEngine([{ symbol: 'MNQ', bars: [...bars, ...extra], tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, window: 100 }).trades; // a short warm-up: these bars start a day before
   assert.strictEqual(run([bar(DAY2 + 2 * S, gapTo, gapTo)]).length, 0, 'gapped under 2R: skipped');
   assert.strictEqual(run([bar(DAY2 + 2 * S, v + 2, v + 2.5), bar(DAY2 + 3 * S, v + 2.5, p.vah + 1)]).length, 1, 'a normal fill trades');
+});
+
+test('one home: an account run takes its limits from the account (the backtest-only maxDailyLoss and maxContracts never apply), a plain run its own', () => {
+  const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+  const bars = propSeries(30);
+  const start = Date.parse('2026-01-08T00:00:00Z');
+  const gated = { ...propEngine, gate: true, gateConfig: { ...loadConfig({}), maxDailyLosses: 99, maxConsecutiveLosses: 99, lossCooldownMin: 0, maxEntriesPerDay: 0, noEntryWindows: '' }, start };
+  const dayOf = t => tradingDayKey(new Date(t.entryTime));
+  // Entries taken with the day already down $1 or more (net, closed trades before it).
+  const afterLoss = ts => ts.filter((t, i) => ts.slice(0, i).filter(p => dayOf(p) === dayOf(t)).reduce((a, p) => a + p.net, 0) <= -1).length;
+  // A $1 realized-loss stop: a plain run ends each day at its first net loss.
+  const plain = runEngine([propMarket(bars)], [propStrategy()], { ...gated, maxDailyLoss: 1 }).trades;
+  assert.ok(plain.length > 0);
+  assert.strictEqual(afterLoss(plain), 0, 'a plain run stops the day at its maxDailyLoss');
+  assert.ok(afterLoss(runEngine([propMarket(bars)], [propStrategy()], { ...gated, maxDailyLoss: 0 }).trades) > 0, 'the fixture has days that trade on after a loss');
+  // The same stop never reaches an account run: its daily limits are the account's (soft stop off, no firm limit here).
+  const acct = propAccount({ daily_loss_soft: 0, daily_loss_limit: 0, max_loss: 100000, loss_streak_stop: 0 });
+  const withAccount = runEngine([propMarket(bars)], [propStrategy()], { ...gated, maxDailyLoss: 1, account: acct }).trades;
+  assert.ok(afterLoss(withAccount) > 0, 'an account run trades on after a loss: the backtest-only stop is not its limit');
+  // maxContracts (backtest-only) never caps an account run: its size is the account's max_contracts and budget.
+  const big = runEngine([propMarket(bars)], [propStrategy()], { ...gated, maxContracts: 1, account: acct, sizing: testSizing({ cushion_frac: 0.5 }) }).trades;
+  assert.ok(big.some(t => t.size > 1), 'sized past the backtest-only maxContracts');
+});
+
+test('one home: a fee is never assumed: a plain run states it, an account run takes its profile\'s, a missing one is refused', () => {
+  const bars = propSeries(10);
+  const market = { ...propMarket(bars), feesPerSide: undefined };
+  assert.throws(() => runEngine([market], [propStrategy()], propEngine), /MNQ: no fee per side .* a fee is never assumed/);
+  assert.ok(Array.isArray(runEngine([market], [propStrategy()], { ...propEngine, feesPerSide: 0.5 }).trades), 'the run-wide fee prices it');
+  assert.throws(() => runEngine([market], [propStrategy()], { ...propEngine, account: propAccount({ fees_per_side: {} }) }), /mini: no fees_per_side\.MNQ in its ACCOUNT\.md; a fee is never assumed/);
+  // The account's fee prices the trade, never the market's own.
+  const t = runEngine([{ ...market, feesPerSide: 9 }], [propStrategy()], { ...propEngine, account: propAccount({ fees_per_side: { MNQ: 0.6 } }), start: Date.parse('2026-01-08T00:00:00Z') }).trades[0];
+  assert.strictEqual(t.fees, Math.round(2 * 0.6 * t.size * 100) / 100);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT), /feesPerSide: no fee for MNQ; .* a fee is never assumed/);
+  const acct = propAccount();
+  assert.strictEqual(validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT, { account: acct }).markets[0].feesPerSide, 0.37, 'a policy run is priced with its account\'s fee');
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, feesPerSide: 0.1 }, ROOT, { account: acct }), /a policy run's fees are its account's/);
+  for (const k of ['maxDailyLoss', 'maxContracts']) assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, [k]: 5 }, ROOT, { account: acct }), new RegExp(`${k}: a policy run's limits are its account's`));
+});
+
+test('one home: an account run without a whole sizing is refused, never sized by a code default', () => {
+  const bars = propSeries(10);
+  const EXIT1 = { trail_activate_r: 2, trail_giveback_r: 0.5 };
+  const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
+  for (const sizing of [null, {}, { cushion_frac: 0.2 }]) {
+    assert.throws(() => runEngine([propMarket(bars)], [propStrategy()], { ...opts, sizing }), /mini: an account run sizes from a policy's rulebook entry/);
+  }
+  // The policy strategy's own sizing (the strategy loader's, from the rulebook) when the run states none.
+  const viaPolicy = runEngine([propMarket(bars)], [propStrategy()], { ...opts, sizing: null, prop: { strategy: { sizing: TEST_SIZING, exit: EXIT1 }, components: ['trendy'], contracts: 'micro' } });
+  assert.ok(viaPolicy.trades.length > 0);
+  assert.deepStrictEqual(viaPolicy.trades.map(t => t.size), runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop: { strategy: { exit: EXIT1 }, components: ['trendy'], contracts: 'micro' } }).trades.map(t => t.size));
 });

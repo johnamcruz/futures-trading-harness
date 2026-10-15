@@ -18,6 +18,7 @@
   "riskPerTrade": null,
   "maxContracts": 5,
   "slippageTicks": 1,
+  "feesPerSide": null,
   "maxDailyLoss": 500,
   "outDir": null
 }

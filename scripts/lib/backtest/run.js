@@ -159,7 +159,7 @@ function validateBacktestConfig(raw, baseDir, { account = null } = {}) {
       fee = feePerSide(account, symbol);
       if (fee === null) { errors.push(`data.${symbol}: no fees_per_side.${symbol} in the ${account.name} profile (ACCOUNT.md); a fee is never assumed`); continue; }
     } else if (!(typeof fee === 'number' && Number.isFinite(fee) && fee >= 0)) {
-      errors.push(`feesPerSide: no fee for ${symbol}; state the fee per contract per side (run-wide feesPerSide, or data.${symbol}.feesPerSide): a fee is never assumed`);
+      errors.push(`feesPerSide: no fee for ${symbol}; state the fee per contract per side (--fees, the run-wide feesPerSide, or data.${symbol}.feesPerSide): a fee is never assumed`);
       continue;
     }
     markets.push({ symbol, file: path.resolve(baseDir, file), sheet: spec.sheet || null, tickSize: spec.tickSize, tickValue: spec.tickValue, feesPerSide: fee });

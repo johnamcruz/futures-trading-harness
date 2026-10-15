@@ -552,12 +552,12 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   const fam = familyOf(root);
   const missing = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => !specOf(x));
   if (missing) return { error: specOf === specFor ? `no tick specs for ${missing}` : whyNoSpec(specOf, missing) };
-  const noFee = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => feeOf(account, x) === null);
-  if (noFee) return { error: `no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size` };
   // One stop in ticks sizes both legs: the family's contracts must agree on the tick size.
   if (fam && Math.abs(specOf(fam.micro).tickSize - specOf(fam.mini).tickSize) > 1e-12) {
     return { error: `${fam.micro} and ${fam.mini} have different tick sizes (${specOf(fam.micro).tickSize}, ${specOf(fam.mini).tickSize}): no size can be worked out` };
   }
+  const noFee = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => account.max_contracts && account.max_contracts[x] > 0 && feeOf(account, x) === null);
+  if (noFee) return { error: `no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size` };
   if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return { error: 'a combine entry needs stopLossBracket.ticks (the gate sizes the trade from its stop)' };
   const z = strategy.sizing || {}; // the rulebook's, every key (combine.sizingErrors): an incomplete one sizes nothing
   const bad = combine.sizingErrors(z);

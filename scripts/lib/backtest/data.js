@@ -236,9 +236,9 @@ function readBarsArg(file) {
  */
 function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
   const { inMarketHours, tradingDayKey } = require('../trading/clock');
-  const { atr } = require('../trading/indicators');
+  const { atr, STOP_ATR_PERIOD } = require('../trading/indicators');
   const step = timeframe * MINUTE;
-  const a = atr(bars, 20);
+  const a = atr(bars, STOP_ATR_PERIOD);
   const gaps = [];
   const jumps = [];
   let missing = 0;
