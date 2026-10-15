@@ -36,10 +36,19 @@ test('the gateway\'s stamp on a composed entry: the gate\'s own (handed over, or
   const args = (o = {}) => ({ contractId: 'MNQ', side: 'buy', rationale: 'setup:trade_lifecycle long ...', ...o });
   const gate = { record: 'r1', expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' };
   assert.deepStrictEqual(LR.entryStamp(env, args(), gate), gate);
-  // Written before sending, keyed by the order's customTag: an order found placed later (no reply) carries it.
-  LR.writePendingStamp(env, 'tag-1', gate);
-  assert.deepStrictEqual(LR.pendingStamp(env, 'tag-1'), gate);
-  assert.deepStrictEqual(LR.entryStamp(env, args(), null, 'tag-1'), gate);
+  // Written before sending, keyed by the account and the order's customTag: an order found placed later (no reply)
+  // carries it, once; the stamp goes when it is used, and another account's same tag never reads it.
+  const key = LR.pendingKey('7', 'tag-1');
+  assert.strictEqual(key, '7:tag-1');
+  LR.writePendingStamp(env, key, gate);
+  assert.deepStrictEqual(LR.pendingStamp(env, key), gate);
+  assert.strictEqual(LR.pendingStamp(env, LR.pendingKey('8', 'tag-1')), null, 'another account');
+  assert.deepStrictEqual(LR.entryStamp(env, args(), null, key), gate);
+  assert.strictEqual(LR.pendingStamp(env, key), null, 'used: deleted');
+  assert.deepStrictEqual(LR.entryStamp(env, args(), null, key), { record: null, expiresAt: null }, 'never used twice');
+  LR.writePendingStamp(env, key, gate);
+  LR.clearPendingStamp(env, key);
+  assert.strictEqual(LR.pendingStamp(env, key), null, 'cleared');
   // A composed entry with no stamp (the gate's lost): no record, no expiry, so due at once; a policy's tag too.
   assert.deepStrictEqual(LR.entryStamp(env, args(), null, 'other'), { record: null, expiresAt: null });
   assert.deepStrictEqual(LR.entryStamp(env, args({ rationale: 'setup:prop_portfolio long trade_lifecycle ...' })), { record: null, expiresAt: null });
@@ -81,6 +90,15 @@ test('unrecorded working entry limits (a lane of composed strategies only): flat
   assert.deepStrictEqual(ids([]), [2, 3], 'flat: every unrecorded limit');
   assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 1, size: 1 }]), [2], 'long: a buy limit adds; the sell limit is its target');
   assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 2, size: 1 }]), [3]);
+  // A position whose side can't be read (size not a number, size missing, type missing or unknown): it may be open on
+  // either side, so nothing is taken for an entry and nothing is cancelled (positions.js isOpen, signedSize).
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 1, size: 'x' }]), [], 'size "x"');
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 1 }]), [], 'size missing');
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', size: 1 }]), [], 'type missing');
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 9, size: 1 }]), [], 'type unknown');
+  // Another root's unreadable position doesn't matter here; a flat (size 0) one reads as flat.
+  assert.deepStrictEqual(ids([{ contractId: 'MES:2026-12', type: 1, size: 'x' }]), [2, 3]);
+  assert.deepStrictEqual(ids([{ contractId: 'MNQ:2026-12', type: 1, size: 0 }]), [2, 3]);
 });
 
 test('a record as the history and the cycle log keep it; a cycle\'s own compose_check calls by its id', () => {
@@ -93,4 +111,18 @@ test('a record as the history and the cycle log keep it; a cycle\'s own compose_
   assert.strictEqual(s.signature, rec.signature);
   assert.deepStrictEqual(LR.cycleComposed(home, 'abc', ['MNQ', 'NQ']).map(x => x.id), [rec.id]);
   assert.deepStrictEqual([LR.cycleComposed(home, null, ['MNQ']), LR.cycleComposed(home, 'other', ['MNQ']), LR.recordSummary(null)], [[], [], null]);
+});
+
+test('a composed entry that may still be working in a cycle: its expiry not passed at the cycle\'s start, or none stamped and sent since then', () => {
+  const since = Date.parse('2026-10-07T14:00:00Z');
+  const live = (e, roots = ['MNQ']) => LR.liveComposed({ entries: [{ orderId: 1, contractId: 'MNQ:2026-12', at: '2026-10-07T13:50:00.000Z', ...e }], roots, since });
+  assert.strictEqual(live({ composed: { record: 'r', expiresAt: '2026-10-07T14:03:00.000Z' } }), true);
+  assert.strictEqual(live({ composed: { record: 'r', expiresAt: '2026-10-07T14:00:00.000Z' } }), true, 'at the start');
+  assert.strictEqual(live({ composed: { record: 'r', expiresAt: '2026-10-07T13:57:00.000Z' } }), false, 'expired before the cycle (cancelled then)');
+  assert.strictEqual(live({ composed: { record: null, expiresAt: null } }), false, 'no expiry, sent before the cycle (cancelled then)');
+  assert.strictEqual(live({ composed: { record: null, expiresAt: null }, at: '2026-10-07T14:00:30.000Z' }), true, 'no expiry, sent in the cycle');
+  assert.strictEqual(live({ composed: { record: null, expiresAt: null }, at: 'garbled' }), true, 'no readable time: may be working');
+  assert.strictEqual(live({}), false, 'not composed');
+  assert.strictEqual(live({ composed: { record: 'r', expiresAt: '2026-10-07T14:03:00.000Z' } }, ['MES']), false, 'another root');
+  assert.strictEqual(live({ contractId: 'NQ:2026-12', composed: { record: 'r', expiresAt: '2026-10-07T14:03:00.000Z' } }), true, 'the family');
 });

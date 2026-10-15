@@ -10,10 +10,12 @@
  *   runsComposed(strategies, timeframe)   an active composed strategy trades this timeframe (the journal instincts are
  *                                     off for such a run: the experience record replaces them)
  *   isComposedEntry(env, args, root)  an entry (place_order arguments) of a composed setup (its tag), by the registry
- *   writePendingStamp(env, tag, stamp) / pendingStamp(env, tag)   the gate's stamp on a composed entry (the record it
- *                                     judged, the expiry it computed, the entry price, the side), written before the
- *                                     order goes (keyed by its customTag) so an order found placed later carries it
- *   entryStamp(env, args, stamp, tag)  the stamp entry-orders.json keeps: the gate's (given, or pending by tag); a
+ *   pendingKey(accountId, tag)        an order's key among the pending stamps: its account and its customTag
+ *   writePendingStamp(env, key, stamp) / takePendingStamp(env, key) / clearPendingStamp(env, key)   the gate's stamp
+ *                                     on a composed entry (the record it judged, the expiry it computed, the entry
+ *                                     price, the side), written before the order goes so an order found placed later
+ *                                     carries it; taken (read and removed) once used; cleared when its reply settles it
+ *   entryStamp(env, args, stamp, key)  the stamp entry-orders.json keeps: the gate's (given, or taken from pending); a
  *                                     composed entry without one gets { record: null, expiresAt: null } (due at once);
  *                                     another setup's: null. Never re-looked-up at reply time
  *   dueComposed({ entries, orders, composed, now })   the working orders that are composed entries (their gateway
@@ -22,6 +24,7 @@
  *   unrecordedEntries({ entries, orders, positions, root })   on a lane that runs only composed strategies: the
  *                                     working limit orders on the root the gateway never recorded as entries, flat or
  *                                     adding to the position's side (a bracket's target, the other side, stays)
+ *   liveComposed({ entries, roots, since })   a composed entry on the roots that may still be working in a cycle
  *   recordSummary(record)             a record as the decision history and the cycle log keep it: id, side, ok, the
  *                                     signatures, the stated size, the stop and target, each read with its check
  *   cycleComposed(home, cycleId, symbols)   the records the cycle's compose_check calls wrote (their cycleId)
@@ -34,6 +37,7 @@ const path = require('path');
 const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
 const { readRecords } = require('./trade-lifecycle');
+const { isOpen, signedSize } = require('./positions');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -73,23 +77,41 @@ function isComposedEntry(env, args, root = path.resolve(__dirname, '..', '..', '
   }
 }
 
-function writePendingStamp(env, tag, stamp) {
+const pendingKey = (accountId, tag) => `${String(accountId)}:${String(tag)}`;
+
+function writePending(env, fn) {
   const { readJson, writeJsonAtomic } = require('../harness-run');
   const file = pendingFile(env);
   const all = readJson(file, {});
-  const next = { ...(isObj(all) ? all : {}), [String(tag)]: stamp };
+  const next = fn({ ...(isObj(all) ? all : {}) });
   const keys = Object.keys(next);
   writeJsonAtomic(file, Object.fromEntries(keys.slice(-PENDING_KEPT).map(k => [k, next[k]])));
 }
 
-function pendingStamp(env, tag) {
-  if (tag === undefined || tag === null) return null;
-  const all = require('../harness-run').readJson(pendingFile(env), {});
-  return isObj(all) && isObj(all[String(tag)]) ? all[String(tag)] : null;
+function writePendingStamp(env, key, stamp) {
+  writePending(env, all => ({ ...all, [String(key)]: stamp }));
 }
 
-function entryStamp(env, args, stamp = null, tag = null) {
-  const given = isObj(stamp) ? stamp : pendingStamp(env, tag);
+function clearPendingStamp(env, key) {
+  const all = require('../harness-run').readJson(pendingFile(env), {});
+  if (!isObj(all) || !Object.hasOwn(all, String(key))) return;
+  writePending(env, x => { const { [String(key)]: _gone, ...rest } = x; return rest; });
+}
+
+function pendingStamp(env, key) {
+  if (key === undefined || key === null) return null;
+  const all = require('../harness-run').readJson(pendingFile(env), {});
+  return isObj(all) && isObj(all[String(key)]) ? all[String(key)] : null;
+}
+
+function takePendingStamp(env, key) {
+  const got = pendingStamp(env, key);
+  if (got) clearPendingStamp(env, key);
+  return got;
+}
+
+function entryStamp(env, args, stamp = null, key = null) {
+  const given = isObj(stamp) ? stamp : key !== null ? takePendingStamp(env, key) : null;
   if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...(Number.isFinite(given.entry) ? { entry: given.entry } : {}), ...(given.side ? { side: given.side } : {}) };
   return isComposedEntry(env, args) ? { record: null, expiresAt: null } : null;
 }
@@ -112,10 +134,28 @@ const LIMIT = new Set([1, '1', 'limit', 'Limit', 'LIMIT']);
 function unrecordedEntries({ entries = [], orders = [], positions = [], root }) {
   const known = new Set((entries || []).map(e => String(e.orderId)));
   const fam = r => familyRoot(contractRoot(String(r || '')));
-  const open = (positions || []).filter(p => p && fam(p.contractId) === fam(root) && Number(p.size) > 0);
-  const posSign = open.length ? (Number(open[0].type) === 2 ? -1 : 1) : 0;
+  // The positions as the runner reads them (positions.js): an unknown size is open, never flat; a side that can't be
+  // read (an unknown size or type) cancels nothing, since a take-profit can't be told from an added entry.
+  const open = (positions || []).filter(p => p && fam(p.contractId) === fam(root) && isOpen(p));
+  let posSign = 0;
+  for (const p of open) {
+    let signed;
+    try { signed = signedSize(p); } catch (_err) { return []; }
+    const sign = Math.sign(signed);
+    if (!sign || (posSign && sign !== posSign)) return [];
+    posSign = sign;
+  }
   return (orders || []).filter(o => o && LIMIT.has(o.type) && fam(o.contractId) === fam(root) && !known.has(String(o.id))
-    && (!posSign || orderSign(o) === posSign));
+    && orderSign(o) !== 0 && (!posSign || orderSign(o) === posSign));
+}
+
+// A composed entry on these roots that may still be working during a cycle begun at `since` (ms): its stamped expiry
+// not passed then, or no expiry stamped and sent since then. None: the runner's watch skips its account read.
+function liveComposed({ entries = [], roots = [], since }) {
+  const fam = r => familyRoot(contractRoot(String(r || '')));
+  const fams = new Set((roots || []).map(fam));
+  return (entries || []).some(e => e && isObj(e.composed) && fams.has(fam(e.contractId)) && (Number.isFinite(Date.parse(e.composed.expiresAt))
+    ? Date.parse(e.composed.expiresAt) >= since : !(Date.parse(e.at) < since)));
 }
 
 function recordSummary(r) {
@@ -138,4 +178,4 @@ function cycleComposed(home, cycleId, symbols = []) {
   return roots.flatMap(root => readRecords(home, root).filter(r => r.cycleId === cycleId)).map(recordSummary);
 }
 
-module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, writePendingStamp, pendingStamp, entryStamp, dueComposed, unrecordedEntries, recordSummary, cycleComposed };
+module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, pendingKey, writePendingStamp, pendingStamp, takePendingStamp, clearPendingStamp, entryStamp, dueComposed, unrecordedEntries, liveComposed, recordSummary, cycleComposed };

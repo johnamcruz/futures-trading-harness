@@ -640,7 +640,8 @@ test('decision path, trade_lifecycle: a cycle outlasting its record\'s expiry ha
   // cycle goes on long enough for the runner's watch to see it.
   const late = { act: async () => {
     const file = path.join(w.home, 'entry-orders.json');
-    fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: '2026-04-28T04:00:00.000Z' } } : e))));
+    // (The replay clock stands still at the decision time: the expiry is moved onto it, as if reached mid-cycle.)
+    fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: decisionAt(FIRED_BAR) } } : e))));
     await new Promise(r => setTimeout(r, 600));
     during = D.working(w).filter(o => o.type === 1).length;
   } };

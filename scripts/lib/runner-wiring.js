@@ -497,6 +497,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The trade lifecycle's composed limits: stamped with their record's expiry after a cycle, cancelled at it.
     composed: {
       due: (orders, at) => LR.dueComposed({ entries: entryOrders(home), orders, composed: LR.composedSetups(strategies()), now: at }),
+      // A composed entry on these roots that may still be working: its expiry not passed when the cycle began, or no
+      // expiry stamped and sent since then (an older one without an expiry was cancelled before the cycle).
+      stamped: (roots, since) => LR.liveComposed({ entries: entryOrders(home), roots, since }),
       onlyComposed: () => { const tags = LR.composedSetups(strategies()); const on = strategies().filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name)); },
       unrecorded: (orders, positions, contractId) => LR.unrecordedEntries({ entries: entryOrders(home), orders, positions, root: contractId }),
       forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),

@@ -142,7 +142,8 @@ function createRunner(deps) {
     coalesceHoldMs = COALESCE_HOLD_MS,
     // The trade lifecycle's composed limits (trading/lifecycle-runner.js, wired by runner-wiring.js): due(orders, now)
     // the working composed entries whose record expired (the gateway stamped each at placement; one with no readable
-    // expiry is due at once), onlyComposed() the lane runs composed strategies only, unrecorded(orders, positions,
+    // expiry is due at once), stamped(roots, sinceMs) a composed entry on these roots that could still be working in a
+    // cycle begun at sinceMs (lifecycle-runner.js liveComposed), onlyComposed() the lane runs composed strategies only, unrecorded(orders, positions,
     // contractId) the working entry limits the gateway never recorded, forItem(item) the compose records on an item's
     // bar, byOrder() order id -> its record id. null: none.
     composed = null,
@@ -382,8 +383,13 @@ function createRunner(deps) {
   function watchComposed(items) {
     if (!composed || !cfg.account || cfg.paper || typeof client.accountState !== 'function' || !(composedWatchMs > 0)) return () => {};
     let busy = false;
+    const since = clock.now().getTime();
+    const roots = items.map(x => x.contractId || x.symbol);
     const timer = setInterval(async () => {
       if (busy) return;
+      // No account read unless a composed entry stamped for these roots could still be working (one placed this cycle,
+      // or one whose stamp has no expiry): most cycles place none.
+      if (!composed.stamped(roots, since)) return;
       busy = true;
       try {
         for (const item of items) await expireComposed(item, await client.accountState(cfg.account));
