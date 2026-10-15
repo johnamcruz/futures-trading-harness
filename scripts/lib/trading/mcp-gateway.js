@@ -277,4 +277,14 @@ function closeRefused(response) {
   return Boolean(body) && body.success === false;
 }
 
-module.exports = { CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS, canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * At the gateway's start: a refused config file (tunables.js critical()) is logged to the gate log (tunables.js already
+ * said it on stderr). The gateway starts anyway: exits are never held; checkOrder refuses every entry. Returns the error.
+ */
+function sayCritical(env = process.env) {
+  const critical = require('../tunables').critical();
+  if (critical) require('./check-order').logDecision({ source: 'gateway', decision: 'config-critical', message: critical.message }, env);
+  return critical;
+}
+
+module.exports = { sayCritical, CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS, canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

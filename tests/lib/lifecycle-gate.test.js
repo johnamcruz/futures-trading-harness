@@ -176,7 +176,7 @@ test('composed-reads: the minimum stop, min_rr and the specs fail closed; a chec
   const { home } = world({ b: near, reads: F.READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop 15m low 21535.25' } : x)) });
   assert.match(judge(home).message, /21 ticks, under the minimum 24 .* never widened/);
   const ok = world();
-  assert.match(judge(ok.home, { strategy: null }).message, /states no risk.max_risk_usd/, 'no strategy document: refused, never planned');
+  assert.match(judge(ok.home, { strategy: null }).message, /states no whole stop rule/, 'no strategy document: refused, never planned');
   assert.match(judge(ok.home, { specOf: () => null }).message, /no tick specs/);
   assert.match(judge(ok.home, { specOf: () => { throw new Error('boom'); } }).message, /the check failed \(boom\): no entry \(fails closed\)/);
 });

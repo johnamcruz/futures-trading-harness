@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
-const { DEFAULT_LANE_TIMEOUT_MS, handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
+const { DEFAULT_LANE_TIMEOUT_MS, sayCritical, handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
 const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
@@ -86,10 +86,7 @@ function main(argv) {
     }
   }
 
-  // A refused config file: the gateway still starts (exits are never held), says it (stderr, by tunables.js) and logs it.
-  const critical = require('./lib/tunables').critical();
-  if (critical) logDecision({ source: 'gateway', decision: 'config-critical', message: critical.message }, process.env);
-
+  sayCritical(process.env); // a refused config file: the gateway still starts (exits are never held), says it and logs it
   const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'inherit'], env: process.env });
   // EPIPE after the server exits must not crash the gateway; 'close' handles the exit.
   child.stdin.on('error', err => process.stderr.write(`[mcp-gateway] server stdin: ${err.message}\n`));
@@ -287,10 +284,7 @@ function main(argv) {
     queue = queue.then(() => child.stdin.end());
   });
 
-  child.on('error', err => {
-    process.stderr.write(`[mcp-gateway] could not start the MCP server: ${err.message}\n`);
-    process.exit(1);
-  });
+  child.on('error', err => { process.stderr.write(`[mcp-gateway] could not start the MCP server: ${err.message}\n`); process.exit(1); });
   // 'close' fires after the child's stdio has drained; exit once our stdout is flushed.
   child.on('close', (code, signal) => {
     fromServer.flush();
