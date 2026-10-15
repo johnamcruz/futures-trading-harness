@@ -274,10 +274,9 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
   const lines = [`stage ${run.stage} (${STAGES[run.stage].name}) report:`];
   const f = rd.features();
   lines.push(...skillUsageLines(f.skillUsage, rd));
-  let adherence = null;
   try {
+    // This run's own scorecard; the exit test reads every pooled run's (the composed grading, SCORES_COMPOSED).
     const a = rd.adherence();
-    adherence = f.scorecardComposed ? a : { unavailable: 'needs fix/scorecard-composed (the scorecard doesn\'t score composed setups yet)' };
     lines.push(`scorecard: ${a.decisions} decisions, ${a.agree} agree, ${a.disagree} disagree, ${a.unchecked} unchecked${a.rate === null || a.rate === undefined ? '' : ` (agreement ${fmt(a.rate)})`}`);
   } catch (e) {
     lines.push(`scorecard: not scored (${String(e.message).split('\n')[0]})`);
