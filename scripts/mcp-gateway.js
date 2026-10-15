@@ -43,20 +43,20 @@ const LEDGER_TTL_MS = 30000;
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
 
 async function accountViolations(args, caller, now, ledger, extraOrders = []) {
-  const facts = await accountFacts(args, caller);
+  const entry = !isRiskReducing(args.rationale); // an [exit] / [protect] never reads fills, prop attempts or strategies
+  const facts = await accountFacts(args, caller, entry);
   const { positions, trades } = facts;
   // Orders of unknown outcome that would rest (limits, stops) count as working orders.
   const orders = Array.isArray(facts.orders) ? [...facts.orders, ...extraOrders] : facts.orders;
-  // An order still resting keeps its ledger entry alive: when it fills later,
-  // the fill is counted until the account shows it.
+  // An order still resting keeps its ledger entry alive: counted when it fills, until the account shows it.
   if (Array.isArray(orders)) {
     const resting = new Set(orders.map(o => String(o.id)));
     for (const e of ledger) if (e.orderId && resting.has(e.orderId)) e.at = now.getTime();
   }
   const config = loadConfig(process.env);
-  const running = runningAttempts(config.home);
+  const running = entry ? runningAttempts(config.home) : [];
   const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null });
-  const gated = regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies);
+  const gated = entry ? regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies) : null;
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);
     if (!req) throw new Error(`cannot fetch bars for timeframe ${gated.timeframe}`);
