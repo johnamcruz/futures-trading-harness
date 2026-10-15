@@ -260,19 +260,18 @@ found, and what a model-trade Monte Carlo keeps from them:
 
 ### The two-layer evaluator
 
-`node scripts/evaluate.js` scores a policy strategy for the learned rulebook
-(`docs/LEARNED-RULEBOOK.md` R6-R9): the learning loop's scoring function.
+The two-layer evaluator scores a policy strategy for the learned rulebook
+(`docs/LEARNED-RULEBOOK.md` R6-R9): the learning loop's scoring function. It
+has no command line now (`scripts/evaluate.js` was deleted); a replay run's
+prop score is `node scripts/replay.js report` (`scripts/lib/prop/model-score.js`).
 Its logic is in `scripts/lib/prop/` (`trade-stream.js`, `attempts.js`,
 `evaluator.js`, `stats.js`, `evaluate-run.js`). Layer 1 takes only setups
 with a mechanical stop distance, so it finds none in `trade_lifecycle`, the
 one strategy `prop_portfolio` lists today
 (`docs/research/mechanical-prop-backtester.md`).
 
-```bash
-node scripts/evaluate.js --prop prop_portfolio --data MNQ=data/MNQ-3m.jsonl \
-  --from 2021-06-01 --to 2021-09-01 [--seed 1] [--paths 2000] [--mean-block 7] \
-  [--entry-delay-ms 0] [--stop-fault-rate 0] [--outage-rate 0] [--no-facts] [--out result.json]
-```
+The settings below keep their old flag spellings (`--seed`, `--paths`, `--mean-block`, `--entry-delay-ms`, the fault rates,
+`--no-facts`); they are the options of `runEvaluation` (`prop/evaluate-run.js`).
 
 - **Layer 1, trade generation.** The backtest engine runs the policy's
   strategies over the bars once, with no account, one position at a time

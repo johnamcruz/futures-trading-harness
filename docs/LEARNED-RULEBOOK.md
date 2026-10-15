@@ -354,8 +354,9 @@ Learning must see the broker fields a decision was made on, so:
 **Status of R6-R9 (step 9): built.** The code is `scripts/lib/prop/`
 (`trade-stream.js` is layer 1, `attempts.js` layer 2, `evaluator.js` the
 scoring and the window and look checks, `stats.js` the statistics,
-`evaluate-run.js` the run). The CLI is `scripts/evaluate.js`, and
-`docs/BACKTESTING.md` ("The two-layer evaluator") describes its use. Built
+`evaluate-run.js` the run). The CLI `scripts/evaluate.js` was deleted; a replay run is scored by
+`scripts/lib/prop/model-score.js`, and `docs/BACKTESTING.md` ("The two-layer
+evaluator") describes the layers. Built
 as written, with these readings and inputs:
 
 - **Inputs, not defaults.** The rulebook's values (`rulebook.sizing`, and
@@ -1190,7 +1191,7 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
 9. The two-layer evaluator and the attempt simulation (R6-R9). Built
-   (`scripts/lib/prop/`, `scripts/evaluate.js`; section 5 says how it reads
+   (`scripts/lib/prop/`; section 5 says how it reads
    R6-R9, and what it still takes as inputs).
 10. Calibration: the registry, the measurements and the reports (R11-R13),
    the flow strategies' thresholds among them, on covered months (R34).

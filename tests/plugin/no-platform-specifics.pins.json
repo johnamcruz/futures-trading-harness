@@ -109,20 +109,12 @@
   "scripts/lib/trading/report-cache.js|account": [
     "f1e5d8c2c56574d9"
   ],
-  "skills/replay/SKILL.md|firm": [
-    "c37cddfe2ff5f33d"
-  ],
   "skills/replay/SKILL.md|account": [
     "011e6f9022668405",
-    "103538f464e03d58",
-    "51c2d5d664e4da9a",
     "614560bc8894c9f9",
     "75375c8d03e5a15a",
     "7f3069fdbe555e49",
     "ddd42fa57f89439b"
-  ],
-  "skills/replay/SKILL.md|firm-time": [
-    "06165f7a4af4cd73"
   ],
   "strategies/README.md|account": [
     "5eeca293b452b47e"

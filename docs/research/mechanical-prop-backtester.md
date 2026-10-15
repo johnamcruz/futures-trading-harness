@@ -12,7 +12,7 @@ note keeps what they taught.
 | --- | --- |
 | `prop/challenge.js`, the backtester's prop runs (`backtest.js --prop`, `run.js` `runCombine`), their tests | Deleted |
 | `prop/trade-stream.js`, `prop/evaluate-run.js`, `run.js` `policyStrategy`/`barsAt`, `backtest/engine.js` | Kept: the training loop's verifier (`train/evaluator.js`) runs them |
-| `scripts/evaluate.js` | Kept: no code calls it, but the `prop-evaluator` and `training-verdict` skills name it |
+| `scripts/evaluate.js` | Deleted: no code called it, and the `prop-evaluator` and `training-verdict` skills now name the replay report and `pairRuns` |
 
 ## What was built
 
@@ -40,8 +40,8 @@ rules:
 - R is net (d6298c69): net dollars over the dollars at risk, the same basis
   that counts a trade as a win or a loss.
 
-**`prop/trade-stream.js` (layer 1), `prop/evaluate-run.js` and
-`scripts/evaluate.js`** (kept; d763c0ee, 2026-10-13;
+**`prop/trade-stream.js` (layer 1), and `prop/evaluate-run.js`**
+(kept; `scripts/evaluate.js` deleted; d763c0ee, 2026-10-13;
 `docs/LEARNED-RULEBOOK.md` section 5, R6-R9). The engine runs once, with no
 account, one position at a time. Every setup becomes a trade in ticks and R
 for layer 2 (`prop/attempts.js`) to size and replay. Each trade records:
