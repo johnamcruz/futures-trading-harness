@@ -158,8 +158,9 @@ function main(argv) {
     waiting.set(id, msg => {
       clearTimeout(timer);
       tracker.onReply(id, msg);
-      if (overdue.delete(id)) recordSent(id, msg);
-      else resolve(msg);
+      overdue.delete(id);
+      try { recordSent(id, msg); } catch (err) { logErr(`could not record reply ${id}: ${err.message}`); } // before the client sees it
+      resolve(msg);
     });
   });
   // Client request ids forwarded to the server and not yet answered.
@@ -206,8 +207,7 @@ function main(argv) {
   // Server → client: whole lines only; responses to the gateway's own calls are consumed.
   const fromServer = lineSplitter(line => {
     if (caller.consume(line)) return;
-    write(line);
-    noteResponse(line);
+    try { noteResponse(line); } finally { write(line); } // bookkeeping never hides a broker reply
   });
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', chunk => fromServer.push(chunk));
@@ -269,7 +269,7 @@ function main(argv) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }
       }
-      const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
+      const replies = lane.map(m => awaitResponse(m.id));
       toChild(line2);
       // Hold the lane until the server has answered every order-changing call.
       await Promise.all(replies);

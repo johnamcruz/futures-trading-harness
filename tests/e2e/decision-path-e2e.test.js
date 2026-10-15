@@ -668,12 +668,24 @@ test('decision path, trade_lifecycle: a cycle outlasting its record\'s expiry ha
   // cycle goes on long enough for the runner's watch to see it.
   const late = { act: async () => {
     const file = path.join(w.home, 'entry-orders.json');
+    const until = async (read, ok) => {
+      for (const end = Date.now() + 5000; ; await new Promise(r => setTimeout(r, 20))) {
+        const v = read();
+        if (ok(v) || Date.now() > end) return v;
+      }
+    };
+    const readList = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return []; } };
+    // The gateway records the composed entry before the executor sees "placed"; the bound only guards a slow machine.
+    const list = await until(readList, l => l.some(e => e.composed));
+    assert.ok(list.some(e => e.composed), 'the composed entry is recorded');
     // (The replay clock stands still at the decision time: the expiry is moved onto it, as if reached mid-cycle.)
-    fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: decisionAt(FIRED_BAR) } } : e))));
-    await new Promise(r => setTimeout(r, 600));
-    during = D.working(w).filter(o => o.type === 1).length;
+    fs.writeFileSync(file, JSON.stringify(list.map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: decisionAt(FIRED_BAR) } } : e))));
+    // The broker shows the cancel a moment before the runner's cancel call returns and it emits composed_expired: wait for both.
+    await until(() => events.some(e => e.kind === 'composed_expired'), Boolean);
+    during = await until(() => D.working(w).filter(o => o.type === 1).length, n => n === 0);
   } };
-  const r = await D.pass(w, decisionAt(FIRED_BAR), [...steps.slice(0, -1), late, steps.at(-1)]);
+  const events = [];
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [...steps.slice(0, -1), late, steps.at(-1)], { events });
   assert.strictEqual(during, 0, 'cancelled while the cycle still ran');
   const kinds = r.events.map(e => e.kind);
   assert.ok(kinds.indexOf('composed_expired') !== -1 && kinds.indexOf('composed_expired') < kinds.lastIndexOf('cycle_end'), JSON.stringify(kinds));
