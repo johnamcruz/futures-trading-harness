@@ -74,7 +74,7 @@ async function simulate({ from, to, ...opts }) {
   const runner = runnerFor({ ...opts, clockRef, cycles });
   let guard = 0;
   while (clockRef.t < to) {
-    clockRef.t += await runner.step();
+    { const ms = await runner.step(); clockRef.t += ms; }
     guard += 1;
     if (guard > 200000) throw new Error('runaway loop');
   }
@@ -405,7 +405,7 @@ test('lanes: the trailing stop counts only the first lane\'s bars: a 1m bar\'s r
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
     event: e => { if (e.kind === 'position_managed') managed.push(e); },
   });
-  while (clockRef.t < et(10, 8)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 8)) { const ms = await runner.step(); clockRef.t += ms; }
   assert.ok(managed.length >= 1, 'the trade is managed (from the 3m bars)');
   assert.deepStrictEqual(modified, [], 'the 1m bars\' +3R never moved the stop');
   assert.deepStrictEqual(closed, [], 'nor closed the trade through a stop the 1m bars would have trailed');
@@ -422,7 +422,7 @@ test('lanes: the trailing stop counts only the first lane\'s bars: a 1m bar\'s r
       strategyNamed: () => null, exitStrategy,
       event: e => { if (e.kind === 'position_managed') managed.push(e); },
     });
-    while (clockRef.t < et(10, 8)) clockRef.t += await again.step();
+    while (clockRef.t < et(10, 8)) { const ms = await again.step(); clockRef.t += ms; }
     assert.strictEqual(managed.length >= 1, want, label);
   }
 });
@@ -620,7 +620,7 @@ test('lanes: the prompt\'s decision history: 20 1m cycles never push the 15m dec
       isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => state.value, saveState: s => { state.value = JSON.parse(JSON.stringify(s)); },
       writeBars: sym => `/bars/${sym.symbol}-${sym.minutes}m.json`, scanFor: () => [],
     });
-    while (clockRef.t < to) clockRef.t += await runner.step();
+    while (clockRef.t < to) { const ms = await runner.step(); clockRef.t += ms; }
   };
   await runTo(START, et(10, 20, 30));
   // A restart (a new process, the state from the file): the history is kept, tagged by lane.
@@ -661,7 +661,7 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
     journalEntries: () => [{ ts: iso(et(9, 59, 50)), kind: 'order_placed', contractId: 'MNQ', text: 'setup:slowpol long, stop 21490', data: { result: { success: true } } }],
     strategyNamed: n => (n === 'slowpol' ? { name: 'slowpol', timeframe: '15m' } : null),
   });
-  while (clockRef.t < et(10, 32, 30)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 32, 30)) { const ms = await runner.step(); clockRef.t += ms; }
   const oneMin = prompts.find(p => p.lanes.length === 1 && p.lanes[0] === '1m');
   assert.ok(oneMin, prompts.map(p => p.lanes.join('+')).join(','));
   // The 15m lane's last 3 (its third is the 10:30 cycle, a 3m and 15m close).
@@ -679,7 +679,7 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => ({ ...state, history: [...history] }), saveState: () => {}, writeBars: () => '/b.json', scanFor: () => [],
     strategyNamed: () => null,
   });
-  while (r2.t < et(10, 32, 30)) r2.t += await runner2.step();
+  while (r2.t < et(10, 32, 30)) { const ms = await runner2.step(); r2.t += ms; }
   const flat1 = flat.find(p => p.lanes.length === 1 && p.lanes[0] === '1m');
   assert.ok(flat1);
   assert.doesNotMatch(flat1.prompt, /planned: slow/);

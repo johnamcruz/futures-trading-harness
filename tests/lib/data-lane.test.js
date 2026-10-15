@@ -35,6 +35,9 @@ test('data lane: config checks: a further lane, 1m, no strategies or policies; n
   assert.match(invalid({ ...BASE, lanes: [{ timeframe: 3 }, { timeframe: 5, trigger: 'data' }] }), /lanes\[1\]\.timeframe: a data lane's bars are the briefing's 1m source/);
   for (const k of ['strategies', 'policies']) assert.match(invalid({ ...BASE, lanes: [{ timeframe: 3 }, { timeframe: 1, trigger: 'data', [k]: ['a1'] }] }), new RegExp(`lanes\\[1\\]\\.${k}: a data lane scans nothing`));
   assert.match(invalid({ ...BASE, lanes: [{ timeframe: 3 }, { timeframe: 1, trigger: 'data' }, { timeframe: 1, trigger: 'signal' }] }), /timeframe 1 appears in more than one lane/);
+  // A first lane whose own bars build the 5m facts (5m): a data lane adds nothing, refused.
+  assert.match(invalid({ ...BASE, lanes: [{ timeframe: 5 }, { timeframe: 1, trigger: 'data' }] }), /a data lane adds nothing to a 5m first lane/);
+  assert.deepStrictEqual(L.parseLanes({ timeframe: 15, trigger: 'bar' }, { lanes: [{ timeframe: 15 }, { timeframe: 1, trigger: 'data' }] }).errors, []);
   // It scans nothing (whatever strategies trade 1m), so the signal-lane and composed-lane checks never see it.
   const reg = [{ name: 'a1', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ'], timeframe: '1m' }];
   assert.deepStrictEqual(L.laneStrategies(reg, L.lanesOf(cfg)[1]), []);
@@ -85,32 +88,36 @@ function market({ publishMs = () => 1000 } = {}) {
   };
 }
 
-function runnerFor({ lanes, clockRef, mkt, cycles, seen, state, more = {} }) {
+// `cycleMs`: how long a cycle takes; `result`: its outcome; `writeBars`/`dayContext`: the wiring's (spied).
+const stepOf = bars => (bars.length > 1 ? (Date.parse(bars[1].t) - Date.parse(bars[0].t)) / 60000 : null);
+function runnerFor({ lanes, clockRef, mkt, cycles, seen, state, more = {}, cycleMs = 20000, result = () => ({ ok: true, timedOut: false }), deps = {} }) {
   const cfg = validateConfig({ ...BASE, lanes, ...more });
   return createRunner({
     cfg, root: '/r', client: mkt.client(clockRef), clock: { now: () => new Date(clockRef.t) },
     runCycle: async (action, prompt, limits = {}) => {
       cycles.push({ action, prompt, context: limits.context || null, start: clockRef.t, timeoutMs: limits.timeoutMs });
-      clockRef.t += 20000;
-      return { ok: true, timedOut: false };
+      clockRef.t += cycleMs;
+      return result();
     },
     isKillSwitchOn: () => false, createKillSwitch: () => {},
     loadState: () => state.value, saveState: s => { state.value = JSON.parse(JSON.stringify(s)); },
     writeBars: sym => `/bars/${sym.symbol}-${sym.minutes}m.json`,
-    scanFor: (symbol, bars, lane) => { seen.push(['scan', lane ? lane.timeframe : 3, bars.at(-1).t]); return []; },
-    recordFineBars: item => seen.push(['fine', item.minutes, item.bar.t]),
-    recordBriefing: item => seen.push(['brief', item.minutes, item.bar.t]),
-    barClosed: (symbol, info) => seen.push(['closed', info.minutes || 3, info.bar]),
+    // Each record names the bar size of the bars it was handed (their spacing), never a default.
+    scanFor: (symbol, bars) => { seen.push(['scan', stepOf(bars), bars.at(-1).t]); return []; },
+    recordFineBars: item => seen.push(['fine', stepOf(item.bars), item.bar.t]),
+    recordBriefing: item => seen.push(['brief', stepOf(item.bars), item.bar.t]),
+    barClosed: (symbol, info) => seen.push(['closed', stepOf(info.bars), info.bar]),
+    ...deps,
   });
 }
 
-async function simulate({ lanes, to, mkt = market(), more }) {
+async function simulate({ lanes, to, mkt = market(), more, ...opts }) {
   const clockRef = { t: START };
   const cycles = [];
   const seen = [];
   const state = { value: null };
-  const runner = runnerFor({ lanes, clockRef, mkt, cycles, seen, state, more });
-  while (clockRef.t < to) clockRef.t += await runner.step();
+  const runner = runnerFor({ lanes, clockRef, mkt, cycles, seen, state, more, ...opts });
+  while (clockRef.t < to) { const ms = await runner.step(); clockRef.t += ms; }
   return { cycles: cycles.filter(c => c.action === 'trade'), seen, state, mkt };
 }
 
@@ -183,4 +190,72 @@ test('data lane: the replay config example carries one, and resolves to a runner
   assert.deepStrictEqual(L.lanesOf(run.cfg).map(l => l.trigger), ['bar', 'data']);
   const pts = decisionPoints(run.cfg, { start: run.start, end: run.end }).filter(p => p.kind === 'trade');
   assert.ok(pts.length > 0 && pts.every(p => p.t.getUTCMinutes() % 3 === 0 && !('lanes' in p)));
+});
+
+// Every 3m briefing in `seen` comes after 1m bars reaching its close.
+function briefedWithItsClose(seen) {
+  const briefs = seen.filter(x => x[0] === 'brief');
+  assert.ok(briefs.length > 0);
+  for (const [i, x] of seen.entries()) {
+    if (x[0] !== 'brief') continue;
+    const close = Date.parse(x[2]) + 180000;
+    const fine = seen.slice(0, i).filter(y => y[0] === 'fine').at(-1);
+    // At least up to its close (the briefing reads only the 1m bars closed by then: buildBriefing's fineBars).
+    assert.ok(fine && Date.parse(fine[2]) + 60000 >= close, `${x[2]}: the latest 1m bar noted (${fine && fine[2]}) reaches its close`);
+  }
+}
+
+test('data lane: its bars count even when they closed a while ago (a long cycle, a poll delay of 30 s or more): every briefing has its close\'s 1m bar', async () => {
+  // A cycle of 3 min 40 s: the next pass finds the 3m bar 40 s old (not stale) and the 1m bar 40 s old (past half a bar).
+  const long = await simulate({ lanes: DATA, to: et(10, 20, 30), cycleMs: 220000 });
+  assert.ok(long.cycles.length >= 3, String(long.cycles.length));
+  briefedWithItsClose(long.seen);
+  const slow = await simulate({ lanes: DATA, to: et(10, 12, 30), more: { barDelaySeconds: 35 } });
+  assert.strictEqual(slow.cycles.length, 4);
+  briefedWithItsClose(slow.seen);
+});
+
+test('data lane: no bars file, no trend or day read for its bars; a bars-file failure can\'t arm the kill switch from it', async () => {
+  const wrote = [];
+  const days = [];
+  const mtf = [];
+  const deps = {
+    writeBars: sym => { wrote.push(sym.minutes); if (sym.minutes === 1) throw new Error('disk full'); return `/bars/${sym.symbol}-${sym.minutes}m.json`; },
+    dayContext: sym => { days.push(sym.minutes); return null; },
+    recordMtf: sym => { mtf.push(sym.minutes); return null; },
+    readMtf: sym => { mtf.push(sym.minutes); return null; },
+    createKillSwitch: () => assert.fail('the kill switch was armed'),
+  };
+  const r = await simulate({ lanes: DATA, to: et(10, 15, 30), deps });
+  assert.strictEqual(r.cycles.length, 6);
+  assert.ok(wrote.length > 0 && wrote.every(m => m === 3), JSON.stringify(wrote));
+  assert.ok(days.length > 0 && days.every(m => m === 3));
+  assert.ok(mtf.length > 0 && mtf.every(m => m === 3));
+});
+
+test('replay retries a failed cycle (ok, FAILED, ok): the retry of the same point cycles the same bars again, with a data lane and with two trading lanes', async () => {
+  for (const lanes of [DATA, [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }]]) {
+    const raw = { barDelaySeconds: 2, sessions: ['10:00-10:30@America/New_York'] };
+    const cfg = validateConfig({ ...BASE, lanes, ...raw });
+    const points = decisionPoints(cfg, { start: new Date(START), end: new Date(et(10, 10)) }).filter(p => p.kind === 'trade');
+    const state = { value: null };
+    const cycles = [];
+    const mkt = market();
+    const outcomes = [];
+    const runAt = async (p, ok) => {
+      const clockRef = { t: p.t.getTime() };
+      const before = cycles.length;
+      await runnerFor({ lanes, clockRef, mkt, cycles, seen: [], state, more: raw, result: () => ({ ok, timedOut: false }) }).step();
+      outcomes.push(cycles.slice(before).map(c => c.context.symbols.map(x => x.bar.t).join(',')));
+    };
+    // The driver's order: ok, FAILED (the same point queued again), then its retry ok, then the next point.
+    await runAt(points[0], true);
+    await runAt(points[1], false);
+    await runAt(points[1], true);
+    await runAt(points[2], true);
+    const label = JSON.stringify(lanes);
+    assert.ok(outcomes.every(o => o.length === 1), `${label}: one cycle per pass ${JSON.stringify(outcomes)}`);
+    assert.deepStrictEqual(outcomes[2], outcomes[1], `${label}: the retry cycles the failed point's bars`);
+    assert.notDeepStrictEqual(outcomes[3], outcomes[2], label);
+  }
 });

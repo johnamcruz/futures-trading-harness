@@ -13,7 +13,8 @@
  * nothing, triggers no cycle, runs no role, gets no housekeeping and no session-record point, and never sets a
  * cycle's budget; its bars still coalesce with the first lane's at a shared close (the 1m bar ending on a 3m close
  * completes that 5m candle). Live polls it every minute; replay polls it at the trading lanes' points (its bars up to
- * the point: causal), so its closes add no decision points.
+ * the point: causal), so its closes add no decision points. Refused when the first lane's bars divide 5m (they build
+ * the 5m facts themselves).
  *
  * Without `lanes`, the config's `timeframe` and `trigger` are its one lane, and
  * every strategy on that timeframe is in it (as before lanes existed).
@@ -121,6 +122,8 @@ function parseLanes(cfg, raw = {}) {
   // The cross-checks against the first lane, only when it parsed (else its own refusal says why).
   const first = isObject(r.lanes[0]) ? lanes[0] : null;
   if (first && 'timeframe' in r && r.timeframe !== first.timeframe) errors.push(`timeframe: with lanes, the first lane's timeframe (${first.timeframe}) is the runner's; leave timeframe out or set it equal`);
+  // A data lane is for what the first lane's bars can't build: on bars that divide 5m they build the 5m facts themselves.
+  if (first && Number.isInteger(first.timeframe) && 5 % first.timeframe === 0 && lanes.some(isDataLane)) errors.push(`lanes: a data lane adds nothing to a ${first.timeframe}m first lane (its own bars build the 5m candles, structure and FVGs); leave it out`);
   if (first && 'trigger' in r && r.trigger !== first.trigger) errors.push(`trigger: with lanes, the first lane's trigger (${first.trigger}) is the runner's; leave trigger out or set it equal`);
   return { lanes, errors };
 }

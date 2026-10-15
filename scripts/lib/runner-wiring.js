@@ -299,6 +299,8 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       const { blackouts, clock } = facts();
       const f = fine.get(item.symbol);
       const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
+      // A roll between the lanes' contract lookups: the briefing says "no 1m bars configured"; the log says why.
+      if (f && !fineBars) log(`${item.symbol}: the 1m bars are of another contract (${f.contractId}, the bar's ${item.contractId || 'none'}): no 5m facts from them this bar`, 'error');
       return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);
