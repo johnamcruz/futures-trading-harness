@@ -6,12 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { createEnv, runAttempt } = require('../../scripts/lib/prop/challenge');
-const { runEngine } = require('../../scripts/lib/backtest/engine');
+const { runEngine, prepare } = require('../../scripts/lib/backtest/engine');
 const { hasSession, RECORDED_LOOKS } = require('../../scripts/lib/prop/splits');
 const { gateFailures } = require('../../scripts/lib/prop/promotion');
 const { checkWindow, scoreStream, sessionStart } = require('../../scripts/lib/prop/evaluator');
-const { tradeStream, delayFromCycles, dayRegimes } = require('../../scripts/lib/prop/trade-stream');
+const { tradeStream, tradingDays, delayFromCycles, dayRegimes } = require('../../scripts/lib/prop/trade-stream');
 const { readLedger, appendLook, withLedgerLock, runEvaluation } = require('../../scripts/lib/prop/evaluate-run');
 const at = require('../../scripts/lib/prop/attempts');
 const combine = require('../../scripts/lib/trading/combine');
@@ -302,8 +301,14 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars: blows and dail
   const acct = account({ profit_target: 250, max_loss: 500, daily_loss_limit: 300, daily_loss_soft: 250, consistency_pct: 50, sessions: 6, max_contracts: { MNQ: 20 } });
   const prop = { strategy: strategy(), components: ['trendy'], contracts: 'micro' };
   const sizing = { cushion_frac: 0.9 };
-  const e = createEnv({ markets: [market(bars)], strategies: [strategy()], account: acct, sizing, prop, engine });
-  const starts = e.days.filter(d => d >= Date.parse('2022-01-10T00:00:00Z'));
+  // The reference: the engine's own account mode, one attempt from each start (as the retired prop/challenge.js ran it).
+  const prepared = prepare([market(bars)], [strategy()], { ...engine, prop });
+  const starts = tradingDays(prepared.books).filter(d => d >= Date.parse('2022-01-10T00:00:00Z'));
+  const span = (acct.sessions * 1.6 + 7) * 86400000;
+  const runAttempt = start => {
+    const res = runEngine([market(bars)], [strategy()], { ...engine, prepared, account: acct, sizing, prop, start, end: start + span });
+    return { status: res.combine.status, sessions: res.combine.days.length, profit: res.combine.balance - res.combine.start, trades: res.trades };
+  };
   const s = tradeStream({ markets: [market(bars)], strategies: [strategy()], prop, engine, from: starts[0], to: null, facts: false });
   assert.ok(s.trades.length > 50);
   assert.ok(s.trades.every(t => t.troughTicks.every((x, k) => x < 0 && (k === 0 || x < t.troughTicks[k - 1]))), 'each trough deeper than the last');
@@ -316,7 +321,7 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars: blows and dail
   const statuses = new Set();
   const reasons = new Set();
   for (let i = 0; i < s.days.length - acct.sessions; i += 1) {
-    const direct = runAttempt(e, starts[i], Infinity);
+    const direct = runAttempt(starts[i]);
     const replayed = at.runAttempt(s.days.slice(i), ctx);
     const cents = x => Math.round(x * 100) / 100;
     assert.deepStrictEqual([replayed.status, replayed.sessions, cents(replayed.profit)], [direct.status, direct.sessions, cents(direct.profit)], `start ${s.days[i].day}`);
