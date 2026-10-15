@@ -34,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { readModelStream } = require('./model-stream');
 const { reweightStream } = require('./natural-rate');
+const { scoreRiskActions } = require('./risk-actions');
 const { checkModelWindow, scoreStream, scorePaired } = require('./evaluator');
 const { recordScore, ledgerPath } = require('../learning/looks');
 
@@ -73,7 +74,7 @@ function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, n
   return { stream, run, diagnostic, pass };
 }
 
-function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, env = process.env, now = new Date() }) {
+function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
   if (!account) throw new Error('an account profile to score against');
   const { stream, run, diagnostic, pass } = streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now });
   let s = stream;
@@ -86,8 +87,16 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   const result = scoreStream(s, {
     pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths, reps, faults, attribution,
   });
+  // The model's risk actions against their counterfactuals (prop/risk-actions.js): on the run's own days, a scoring of
+  // its own (logged beside the run's look as every scoring is); not for a reweighted stream (its days are drawn).
+  const acted = stream.days.some(d => (d.passed || []).length || d.trades.some(t => (t.actions || []).length));
+  let risk = null;
+  if (riskActions && acted && diagnostic !== 'reweighted') {
+    const again = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(run.ledger || ledgerPath(env), entry), now });
+    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', seed, paths: Math.min(paths, 1000), reps: Math.min(reps, 1000), faults });
+  }
   return {
-    ...result, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
+    ...result, riskActions: risk, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
     sizingFrom: policy ? `${policy.name}'s rulebook` : 'the default sizing (no policy strategy trades this account)',
     trades: stream.trades.length, runDays: stream.days.length, excluded: stream.excluded, adverse: stream.adverse, reweighted: s.reweighted || null,
   };
@@ -128,6 +137,15 @@ function scoreLines(r) {
     lines.push(`By account state (resampled): ${Object.entries(a).map(([k, v]) => `${k} ${v.taken} taken / ${v.passed} passed, mean R (gross) ${num(v.meanR)}, in blown ${pct(v.blowShare)}, in passed ${pct(v.passShare)}`).join('; ')}`);
     const f = r.attribution.flagged.slice(0, 5);
     if (f.length) lines.push(`Decisions that cost attempts: ${f.map(x => `${x.kind} ${x.symbol} ${x.bar || x.id} (${x.count} path(s))`).join('; ')}`);
+  }
+  if (r.riskActions) {
+    const sign = i => `${i.diff > 0 ? '+' : ''}${pct(i.diff)} ${iv(i)}`;
+    for (const [kind, a] of Object.entries(r.riskActions.actions)) {
+      if (!a.n) continue;
+      const all = a.byState.all;
+      const states = Object.entries(a.byState).filter(([k, v]) => k !== 'all' && v.applied).map(([k, v]) => `${k} ${v.applied} paths, saved ${v.savedBlows}/caused ${v.causedBlows} blows, cost ${v.costPasses}/gained ${v.gainedPasses} passes`);
+      lines.push(`Risk action ${kind} (counterfactual: reverted on the same paths; ${a.n} decision(s)): pass rate ${sign(all.diff.passRate)} (${all.effect.pass}), blow rate ${sign(all.diff.blowRate)} (${all.effect.blow})${states.length ? `; by state: ${states.join('; ')}` : ''}`);
+    }
   }
   return lines;
 }

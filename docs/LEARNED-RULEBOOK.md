@@ -414,7 +414,12 @@ natural frequency (`prop/natural-rate.js`) and scored `diagnostic
 gate refuses both. Beside it: the paired comparison of two runs of the same
 days through the same paths, blocks and faults (`evaluator.js`
 `scorePaired`, the judge for keeping a skill change), the risk attribution by
-the account state at each decision (`prop/risk-attribution.js`), the account
+the account state at each decision (`prop/risk-attribution.js`), the model's
+risk actions inside the code's ceilings (a pass on a valid setup, a stop for
+the day after a loss, a size under the verdict's ceiling, an exit before the
+stop or target) each scored against its counterfactual on the same paths
+(`prop/risk-actions.js`, labelled counterfactual: only what the run observed
+and the experience log's limitOutcome rule), the account
 states drawn from the attempt paths for practice (`prop/account-states.js`,
 not yet shown to a replay: that needs the replay broker to start at the drawn
 balance), and the account-policy hook that scores a candidate rulebook on the

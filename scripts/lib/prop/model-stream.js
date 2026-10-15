@@ -30,6 +30,15 @@
  *                     on the same gross basis (attempts.js expectancyR: move over stop);
  *   facts             the record's context (regime, volatility, window, biasSide, alignment, dayType), its skill
  *                     signature, exploratory, frame, and its curated list when the run tagged one (`list`).
+ *   actions, sizeFraction, hold   the model's risk actions on the entry (prop/risk-actions.js): `size-down` (its
+ *                     filled size under the ceiling of the verdict it was sized under: the policy's verdicts file, matched
+ *                     by bar, side and market; sizeFraction the share), `early-exit` (closed before its stop, its target and
+ *                     end of day; `hold` is the same entry held to its bracket, by the experience log's limitOutcome rule
+ *                     on the run's bars from the fill's bar). An exit the runner's trail made is counted as early too:
+ *                     nothing recorded tells a trailed stop from a tightened one or a manual close.
+ * Each day also lists the model's passes on valid composed setups as the trades they would have been (`passed`: the
+ * limitOutcome counterfactual the experience log keeps; `pass`, or `day-stop` after a losing entry closed that day);
+ * the score never takes them.
  * Every session day the run replayed is a day of the stream: a day the model passed (passes, plain passes, refusals)
  * is a no-trade day, with its count of the model's passes (`passes`, for the risk attribution). A day's regime is
  * trade-stream.js dayRegimes on the run's bars (its range against the days before it, as the mechanical stream
@@ -44,7 +53,7 @@
  * alone against the account, so their combined drawdown is not seen, and a real score refuses them too. A run whose
  * outcomes are hidden (a reasoning-fix look) has no stream.
  *
- *   modelStream({ decisions, dayKeys, barsFor, tfMs, eod, specOf, regimes, trips })   the stream (pure)
+ *   modelStream({ decisions, dayKeys, barsFor, tfMs, eod, specOf, regimes, trips, eodOf, verdictOf })   the stream (pure)
  *   readModelStream(runDir, { root, barsFiles })   { stream, run: { runId, from, to, learning, role, look, hideOutcomes,
  *                                                  practice, ledger } } from a finished run
  */
@@ -54,6 +63,9 @@ const { specFor, familyRoot } = require('../trading/contracts');
 const { noStopPath, dayRegimes } = require('./trade-stream');
 const { runDecisions } = require('../learning/run-experience');
 const { parseAt } = require('../autotrader');
+const { limitOutcome } = require('../learning/experience-log');
+const { eodOf } = require('../replay/labels');
+const { readVerdicts } = require('../trading/prop-state');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 const CONTEXT = ['regime', 'volatility', 'window', 'biasSide', 'alignment', 'dayType'];
@@ -74,7 +86,42 @@ function adversePath(bars, { entryMs, exitMs, tfMs, side, entry, tick, floor }) 
   return seen ? out : null;
 }
 
-function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
+/**
+ * A filled trade's path in ticks (see the header): the move, the adverse path, the overshoot of a stop exit, the
+ * no-stop path. From the fill and exit prices and times given (real fills, or the limitOutcome counterfactual's).
+ */
+function pathOf({ side, entryPrice, exitPrice, entryTime, exitTime, risk, tick, bars, tfMs, eod }) {
+  const s = side === 'long' ? 1 : -1;
+  const stopTicks = Math.round(risk / tick);
+  const moveTicks = round6((s * (exitPrice - entryPrice)) / tick);
+  const stopPx = entryPrice - s * risk;
+  // The deepest a working bracket lets the trade go: its stop, filled with the expected slippage, or the exit when worse.
+  const floor = Math.min(moveTicks, -(stopTicks + SLIPPAGE_TICKS));
+  const stopped = s * (exitPrice - stopPx) <= 1e-9;
+  const entryMs = Date.parse(entryTime);
+  const exitMs = Date.parse(exitTime);
+  const fromBars = Number.isFinite(entryMs) && Number.isFinite(exitMs) && bars.length ? adversePath(bars, { entryMs, exitMs, tfMs, side, entry: entryPrice, tick, floor }) : null;
+  let troughTicks = fromBars || (floor < 0 ? [floor] : []);
+  const last = troughTicks.length ? troughTicks[troughTicks.length - 1] : 0;
+  if (moveTicks < Math.min(0, last)) troughTicks = [...troughTicks, moveTicks];
+  const path = Number.isFinite(entryMs) && bars.length ? noStopPath({ bars, tickSize: tick }, { direction: side, entryTime, entry: entryPrice }, { tfMs, eod }) : null;
+  // noStopPath starts at the first bar opening after the fill; the fill's own bar is in the adverse path: the worse.
+  const noStop = path ? { ...path, worstTicks: Math.min(path.worstTicks, ...troughTicks) } : null;
+  return {
+    stopTicks, moveTicks, troughTicks, adverse: fromBars ? 'bars' : 'bound', stopped, noStop, entryMs, exitMs,
+    overshootTicks: stopped ? Math.max(0, round6((s * (stopPx - exitPrice)) / tick - SLIPPAGE_TICKS)) : null,
+  };
+}
+
+function factsOf(d) {
+  const facts = Object.fromEntries(CONTEXT.map(k => [k, d.context ? d.context[k] ?? null : null]));
+  return { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null };
+}
+
+/** The bar a moment falls in: its open time (ms), or the moment itself without one. */
+const barOf = (bars, ms, tfMs) => { const b = bars.find(x => x.ms <= ms && ms < x.ms + tfMs); return b ? b.ms : ms; };
+
+function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
   const o = d.outcome || {};
   const spec = specOf(familyRoot(d.root) || d.root);
   const risk = d.plan && Number.isFinite(d.plan.entry) && Number.isFinite(d.plan.stop) ? Math.abs(d.plan.entry - d.plan.stop) : NaN;
@@ -83,36 +130,57 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
       : !Number.isFinite(o.entryPrice) || !Number.isFinite(o.exitPrice) ? `not closed (${o.exitReason || 'no exit'})`
         : !(risk > 0) ? 'no stop distance in the record' : null;
   if (why) return { excluded: { id: d.id, root: d.root, bar: d.bar, why } };
-  const s = d.side === 'long' ? 1 : -1;
   const tick = spec.tickSize;
-  const stopTicks = Math.round(risk / tick);
-  const moveTicks = round6((s * (o.exitPrice - o.entryPrice)) / tick);
-  const stopPx = o.entryPrice - s * risk;
-  // The deepest a working bracket lets the trade go: its stop, filled with the expected slippage, or the exit when worse.
-  const floor = Math.min(moveTicks, -(stopTicks + SLIPPAGE_TICKS));
-  const stopped = s * (o.exitPrice - stopPx) <= 1e-9;
-  const entryMs = Date.parse(o.entryTime);
-  const exitMs = Date.parse(o.exitTime);
   const bars = barsFor(d.root) || [];
-  const fromBars = Number.isFinite(entryMs) && Number.isFinite(exitMs) && bars.length ? adversePath(bars, { entryMs, exitMs, tfMs, side: d.side, entry: o.entryPrice, tick, floor }) : null;
-  let troughTicks = fromBars || (floor < 0 ? [floor] : []);
-  const last = troughTicks.length ? troughTicks[troughTicks.length - 1] : 0;
-  if (moveTicks < Math.min(0, last)) troughTicks = [...troughTicks, moveTicks];
-  const path = Number.isFinite(entryMs) && bars.length
-    ? noStopPath({ bars, tickSize: tick }, { direction: d.side, entryTime: o.entryTime, entry: o.entryPrice }, { tfMs, eod }) : null;
-  // noStopPath starts at the first bar opening after the fill; the fill's own bar is in the adverse path: the worse.
-  const noStop = path ? { ...path, worstTicks: Math.min(path.worstTicks, ...troughTicks) } : null;
-  const facts = Object.fromEntries(CONTEXT.map(k => [k, d.context ? d.context[k] ?? null : null]));
+  const p = pathOf({ side: d.side, entryPrice: o.entryPrice, exitPrice: o.exitPrice, entryTime: o.entryTime, exitTime: o.exitTime, risk, tick, bars, tfMs, eod });
+  const s = d.side === 'long' ? 1 : -1;
+  // The model's risk actions on an entry (prop/risk-actions.js): a size under the verdict's ceiling, an exit before the
+  // stop or the target (and before end of day), with the hold-to-bracket counterfactual by limitOutcome's rule.
+  const actions = [];
+  const v = verdictOf(d);
+  const sizeFraction = v && v.maxSize > 0 && o.size > 0 ? Math.min(1, o.size / v.maxSize) : null;
+  if (sizeFraction !== null && sizeFraction < 1) actions.push('size-down');
+  const dist = Number.isFinite(d.plan.target) ? Math.abs(d.plan.target - d.plan.entry) : null;
+  const atTarget = dist !== null && s * (o.exitPrice - (o.entryPrice + s * dist)) >= -1e-9;
+  const eodMs = Number.isFinite(p.entryMs) ? eodOf(p.entryMs) : Infinity;
+  let hold = null;
+  if (!p.stopped && !atTarget && Number.isFinite(p.exitMs) && p.exitMs + tfMs < eodMs && Number.isFinite(p.entryMs) && bars.length) {
+    const from = barOf(bars, p.entryMs, tfMs);
+    const cf = limitOutcome({ bars, tfMs, side: d.side, entry: o.entryPrice, stop: o.entryPrice - s * risk, target: dist !== null ? o.entryPrice + s * dist : null, fromMs: from, expiresMs: from + tfMs, eodMs, tick });
+    if (cf.filled && Number.isFinite(cf.exitPrice)) {
+      const h = pathOf({ side: d.side, entryPrice: cf.entryPrice, exitPrice: cf.exitPrice, entryTime: cf.entryTime, exitTime: cf.exitTime, risk, tick, bars, tfMs, eod });
+      const { entryMs: _e, exitMs: _x, stopped: _s, ...rest } = h;
+      hold = { ...rest, r: cf.R, exitTime: cf.exitTime, reason: `hold (${cf.exitReason})` };
+      actions.push('early-exit');
+    }
+  }
+  const { stopped, entryMs, exitMs, ...path } = p;
   return {
     trade: {
       id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, contract: d.contract || null, strategy: 'trade_lifecycle', direction: d.side,
       bar: d.bar, entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason || 'closed',
-      tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37,
-      stopTicks, moveTicks, r: o.R, troughTicks, adverse: fromBars ? 'bars' : 'bound',
-      overshootTicks: stopped ? Math.max(0, round6((s * (stopPx - o.exitPrice)) / tick - SLIPPAGE_TICKS)) : null,
-      noStop, facts: { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null },
-      entryMs, exitMs,
+      tickSize: tick, tickValue: spec.tickValue, feesPerSide: spec.feesPerSide ?? 0.37, ...path, r: o.R,
+      facts: factsOf(d), actions, sizeFraction, hold, entryMs, exitMs,
     },
+  };
+}
+
+/**
+ * A pass the model made on a valid composed setup, as the trade it would have been (the experience log's limitOutcome
+ * counterfactual: the record's limit, stop and target from the fill), never taken by the score: prop/risk-actions.js
+ * scores standing down against taking it. `day-stop` when an entry of that day had already closed at a loss before it.
+ */
+function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
+  const o = d.outcome || {};
+  const spec = specOf(familyRoot(d.root) || d.root);
+  const risk = d.plan && Number.isFinite(d.plan.entry) && Number.isFinite(d.plan.stop) ? Math.abs(d.plan.entry - d.plan.stop) : NaN;
+  if (!spec || !(spec.tickSize > 0) || !o.filled || !Number.isFinite(o.exitPrice) || !(risk > 0)) return null;
+  const p = pathOf({ side: d.side, entryPrice: o.entryPrice, exitPrice: o.exitPrice, entryTime: o.entryTime, exitTime: o.exitTime, risk, tick: spec.tickSize, bars: barsFor(d.root) || [], tfMs, eod });
+  const { stopped, entryMs: _e, exitMs: _x, ...path } = p;
+  return {
+    id: d.id, day: d.settledDay || d.day, symbol: familyRoot(d.root) || d.root, strategy: 'trade_lifecycle', direction: d.side, bar: d.bar,
+    entryTime: o.entryTime || null, exitTime: o.exitTime || null, reason: stopped ? 'stop' : o.exitReason, tickSize: spec.tickSize, tickValue: spec.tickValue,
+    feesPerSide: spec.feesPerSide ?? 0.37, ...path, r: o.R, facts: factsOf(d), actions: [lossBefore ? 'day-stop' : 'pass'], counterfactual: true,
   };
 }
 
@@ -122,7 +190,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
  * of day (autotrader parseAt), or null (to the trading day's end); specOf(root): the contract spec (tickSize,
  * tickValue, feesPerSide).
  */
-function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null }) {
+function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null, eodOf = () => Infinity, verdictOf = () => null }) {
   const started = Date.now();
   if (!(tfMs > 0)) throw new Error('tfMs: the run\'s bar length in ms');
   if (decisions.some(d => d && d.hidden)) throw new Error('the run\'s outcomes are hidden (a reasoning-fix look): no trade stream');
@@ -130,7 +198,7 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   const excluded = [];
   for (const d of decisions) {
     if (!d || d.decision !== 'entered') continue;
-    const r = tradeOf(d, { barsFor, tfMs, eod, specOf });
+    const r = tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf });
     if (r.excluded) excluded.push(r.excluded);
     else trades.push(r.trade);
   }
@@ -150,12 +218,23 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
     const open = timed.slice(0, i).filter(p => p.exitMs > timed[i].entryMs);
     for (const p of open) overlaps.push({ a: p.id, b: timed[i].id, at: timed[i].entryTime });
   }
-  const keys = [...new Set([...dayKeys, ...trades.map(t => t.day)])].sort();
+  const keys = [...new Set([...dayKeys, ...trades.map(t => t.day), ...decisions.filter(d => d && d.decision === 'passed').map(d => d.settledDay || d.day)])].sort();
   const byDay = new Map(keys.map(k => [k, []]));
   for (const t of trades) byDay.get(t.day).push(t);
   const regimeOf = new Map();
   const passesOn = new Map();
-  for (const d of decisions) if (d && d.decision === 'passed') passesOn.set(d.day, (passesOn.get(d.day) || 0) + 1);
+  const passedOn = new Map();
+  for (const d of decisions) {
+    if (!d || d.decision !== 'passed') continue;
+    passesOn.set(d.day, (passesOn.get(d.day) || 0) + 1);
+    // A pass after an entry of the day had closed at a loss: standing down for the day.
+    const cycle = Date.parse(d.cycleAt);
+    const lossBefore = trades.some(t => t.day === d.day && t.moveTicks < 0 && Number.isFinite(t.exitMs) && t.exitMs <= cycle);
+    const c = passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore);
+    if (!c) continue;
+    if (!passedOn.has(c.day)) passedOn.set(c.day, []);
+    passedOn.get(c.day).push(c);
+  }
   for (const d of decisions) {
     if (!d || d.decision === 'none' || regimeOf.has(d.day)) continue;
     const v = d.context && d.context.volatility;
@@ -163,7 +242,7 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   }
   const days = keys.map(day => {
     const list = byDay.get(day).sort((a, b) => (a.entryMs - b.entryMs) || String(a.id).localeCompare(String(b.id)));
-    return { day, regime: (regimes && regimes.get(day)) || regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, trades: list.map((t, seq) => { const { entryMs: _m, exitMs: _x, ...rest } = t; return Object.assign(rest, { seq }); }) };
+    return { day, regime: (regimes && regimes.get(day)) || regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, passed: passedOn.get(day) || [], trades: list.map((t, seq) => { const { entryMs: _m, exitMs: _x, ...rest } = t; return Object.assign(rest, { seq }); }) };
   });
   const all = days.flatMap(d => d.trades);
   return {
@@ -188,7 +267,12 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const first = (Array.isArray(r.cfg.symbols) && r.cfg.symbols[0] ? familyRoot(r.cfg.symbols[0]) : null) || roots[0] || null;
   const bars = first ? r.barsFor(first) || [] : [];
   const regimes = bars.length && r.tfMs ? dayRegimes(bars, r.tfMs) : null;
-  const stream = modelStream({ decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips });
+  // The verdict each entry was sized under (the policy's ceiling, prop-state's verdicts file): the bar, side and market.
+  const verdicts = readVerdicts(r.home).filter(v => v && v.action === 'full');
+  const verdictOf = d => verdicts.find(v => v.bar === d.bar && v.direction === d.side && (familyRoot(v.symbol) || v.symbol) === (familyRoot(d.root) || d.root)) || null;
+  const stream = modelStream({
+    decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips, eodOf: ms => eodOf(r.cfg, ms), verdictOf,
+  });
   return {
     stream,
     run: {

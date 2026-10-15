@@ -27,8 +27,8 @@
  *
  * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
- *   exitPrice, entryTime (fills only: the opening fill's time; lines written before it lack it), exitTime, exitReason,
- *   R }, grade, settledDay (the later of its bar's session and its exit's: the index
+ *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
+ *   size (fills only: the contracts opened), exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
@@ -86,8 +86,9 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   const risk = Math.abs(entry - stop);
   const stopPx = fill - s * risk;
   const targetPx = Number.isFinite(target) && s * (target - entry) > 0 ? fill + s * Math.abs(target - entry) : null;
+  const fillAt = new Date(bars[i].ms).toISOString();
   const out = (price, bar, reason) => ({
-    source: 'counterfactual', filled: true, entryPrice: fill, exitPrice: price, exitTime: new Date(bar.ms + tfMs).toISOString(), exitReason: reason,
+    source: 'counterfactual', filled: true, entryPrice: fill, entryTime: fillAt, exitPrice: price, exitTime: new Date(bar.ms + tfMs).toISOString(), exitReason: reason,
     R: round((s * (price - fill)) / risk),
   });
   const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
@@ -148,6 +149,7 @@ function tripOutcome(trip, plan, side) {
   return {
     source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
     entryTime: Number.isFinite(trip.openMs) ? new Date(trip.openMs).toISOString() : null,
+    size: trip.opens.reduce((a, f) => a + (Math.abs(Number(f.size)) || 1), 0),
     exitTime: closed ? new Date(trip.closeMs).toISOString() : null, exitReason: closed ? 'closed' : 'open',
     R: closed && risk ? round((s * (exitPrice - entryPrice)) / risk) : null,
   };

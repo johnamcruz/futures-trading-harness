@@ -350,6 +350,100 @@ function scoreStream(stream, opts) {
   return result;
 }
 
+/**
+ * One attempt over `list` on path `p`, its random draws (the day's outage, each trade's overshoot and fault, by its
+ * order within the day) from sources of their own, so two runs or two arms on the same path meet the same faults
+ * whatever else a day's trades consumed. decide(trade, { cs, counters }) (optional): an arm's choice for each item, null
+ * to skip it, or { fraction, trade } (the size share and the trade to replay in its place).
+ */
+function pairedRunner({ ctx, rates, seed, pools }) {
+  return (list, p, decide = null) => {
+    let day = 0;
+    let out = false;
+    const chosen = new Map();
+    return at.runAttempt(list, {
+      ...ctx,
+      onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },
+      outageDay: () => out,
+      ...(decide ? {
+        multiplier: (t0, info) => {
+          const c = decide(t0, info);
+          if (!c) return 0;
+          chosen.set(t0, c.trade || t0);
+          // Inside the rulebook's own ceiling: the arm's share times its multiplier.
+          return c.fraction * Number(ctx.multiplier(c.trade || t0, info));
+        },
+      } : {}),
+      variant: t0 => {
+        const base = chosen.get(t0) || t0;
+        const t = at.redrawOvershoot(base, pools.get(base.symbol), stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:overshoot`));
+        return rates.stopFault > 0 && stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:fault`)() < rates.stopFault ? at.stopFault(t) || t : t;
+      },
+    });
+  };
+}
+
+/**
+ * The model's risk actions against their counterfactuals, through the same Monte Carlo paths (prop/risk-actions.js
+ * builds the arms). Each day's items are its trades and its passed candidates (`passed`), in time order. `base`
+ * decides as the model did; each arm reverts one kind of action in one account state (decided on the path, as the
+ * state stands when the item comes up). Resampled paths only (each a stationary block bootstrap path of the stream's
+ * days, as scoreStream's). opts: { pass (checkModelWindow), account, rulebook, size, contracts, maxDailyLoss, seed,
+ * paths, meanBlock, reps, level, faults, base, arms: { name: decide } }. Returns { base, arms: { name: { resampled,
+ * diff: { passRate, blowRate } (base minus arm, paired), applied, saved, caused, costPasses, gainedPasses } } }:
+ * applied, the paths the arm changed anything on; saved, the paths where the arm blew and the model didn't (the model's
+ * action saved a blow); caused, the reverse; costPasses, the arm passed and the model didn't; gainedPasses, the reverse.
+ */
+function scoreArms(stream, opts) {
+  const {
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 1000,
+    meanBlock = 7, reps = 1000, level = 0.9, faults = {}, base, arms = {},
+  } = opts || {};
+  const pass = takePass(given);
+  if (!pass.model || pass.synthetic) throw new Error('scoreArms: a model run\'s own days (a checkModelWindow pass, not a reweighted stream)');
+  if (typeof base !== 'function') throw new Error('scoreArms: base, the model\'s own decisions');
+  const rates = checkOptions({ account, seed, paths, every: 1, meanBlock, faults });
+  const days = daysFor(stream, pass, rulebook).map(d => {
+    const items = [...d.trades, ...(d.passed || [])].sort((a, b) => (Date.parse(a.entryTime) || 0) - (Date.parse(b.entryTime) || 0) || String(a.id).localeCompare(String(b.id)));
+    return { ...d, trades: items.map((t, seq) => ({ ...t, seq })) };
+  });
+  const S = account.sessions;
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools(stream.days.flatMap(d => [...d.trades, ...(d.passed || [])])) });
+  const regimes = days.map(d => d.regime || 'normal');
+  const byRegime = stats.groupBy(regimes);
+  const prand = stats.streamFor(seed, 'paths:arms');
+  const names = Object.keys(arms);
+  const baseOut = [];
+  const armOut = Object.fromEntries(names.map(n => [n, []]));
+  const applied = Object.fromEntries(names.map(n => [n, []]));
+  for (let p = 0; p < (days.length ? paths : 0); p += 1) {
+    const list = stats.stationaryPath(days.length, S, { meanBlock, rand: prand, regimes, byRegime }).map(k => days[k]);
+    baseOut.push(runWith(list, p, base));
+    for (const n of names) {
+      let changed = false;
+      armOut[n].push(runWith(list, p, (t, info) => { const c = arms[n](t, info); if (c && c.changed) changed = true; return c; }));
+      applied[n].push(changed);
+    }
+  }
+  const sum = list => finish(list.reduce(add, blank()));
+  const is = st => o => (o.status === st ? 1 : 0);
+  const out = {};
+  for (const n of names) {
+    const pairs = baseOut.map((b, k) => ({ a: b, b: armOut[n][k] }));
+    const d = st => pairedInterval(pairs.map(x => is(st)(x.a) - is(st)(x.b)), { block: 1, reps, level, rand: stats.streamFor(seed, `arms:${n}:${st}`) });
+    out[n] = {
+      resampled: sum(armOut[n]), diff: { passRate: d('passed'), blowRate: d('blown') }, applied: applied[n].filter(Boolean).length,
+      saved: pairs.filter(x => x.b.status === 'blown' && x.a.status !== 'blown').length, caused: pairs.filter(x => x.a.status === 'blown' && x.b.status !== 'blown').length,
+      costPasses: pairs.filter(x => x.b.status === 'passed' && x.a.status !== 'passed').length, gainedPasses: pairs.filter(x => x.a.status === 'passed' && x.b.status !== 'passed').length,
+    };
+  }
+  return {
+    counterfactual: true, base: sum(baseOut), arms: out, look: pass.look,
+    inputs: { sessions: S, seed, paths, reps, level, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, days: days.length },
+  };
+}
+
 /** A paired difference's interval: the mean of per-pair differences, resampled (block 1 over paths, `block` over starts). */
 function pairedInterval(diffs, { block, reps, level, rand }) {
   const b = stats.blockBootstrap(diffs, { block, reps, level, rand });
@@ -411,22 +505,7 @@ function scorePaired(streamA, streamB, opts) {
   if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
   const S = account.sessions;
   const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
-  const pools = at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades));
-  const runWith = (list, p) => {
-    let day = 0;
-    let out = false;
-    return at.runAttempt(list, {
-      ...ctx,
-      // The day's outage and each of its trades' draws (by its order within the day) from sources of their own, so
-      // the two runs meet the same faults whatever the other trades of the day consumed.
-      onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },
-      outageDay: () => out,
-      variant: t0 => {
-        const t = at.redrawOvershoot(t0, pools.get(t0.symbol), stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:overshoot`));
-        return rates.stopFault > 0 && stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:fault`)() < rates.stopFault ? at.stopFault(t) || t : t;
-      },
-    });
-  };
+  const runWith = pairedRunner({ ctx, rates, seed, pools: at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades)) });
   const startIdx = [];
   for (let i = 0; i < daysA.length - S; i += 1) if (i % every === 0) startIdx.push(i);
   const real = startIdx.map(i => ({ a: runWith(daysA.slice(i), `real${i}`), b: runWith(daysB.slice(i), `real${i}`) }));
@@ -463,4 +542,4 @@ function scorePaired(streamA, streamB, opts) {
   };
 }
 
-module.exports = { LOOK_PURPOSES, DIAGNOSTIC, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired };
+module.exports = { LOOK_PURPOSES, DIAGNOSTIC, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired, scoreArms };
