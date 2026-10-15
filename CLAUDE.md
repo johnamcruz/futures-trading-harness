@@ -27,7 +27,9 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
 - Bars are data: fields a broker adds pass through untouched.
 - Parity goes one way: live is the truth. The replay server matches the live one, never the reverse.
 - `tests/plugin/no-platform-specifics.test.js` enforces it: no platform, firm or model names, and no
-  firm times, in the repo outside `accounts/` and `mcp-configs/brokers.json`, except the shrink-only
+  firm times, in the repo outside `accounts/` and `mcp-configs/brokers.json` (and model names only in
+  `adapters/`, the owner-approved home of fine-tuning adapters: it may name a model, never a platform or
+  firm), except the shrink-only
   exceptions (plan C; pinned in
   `tests/plugin/no-platform-specifics.pins.json`, only ever shrinking against the base branch) and the
   interface's known first-server conventions (`docs/TECH-DEBT.md`), which name no platform, so the scan
@@ -101,6 +103,11 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   (opencode's project config: roles, permissions; `scripts/lib/opencode.js`),
   `.codex/agents/*.toml`, and `qwen-extension/` (manifest, `QWEN.md`, agents,
   commands, symlinks). Run `node scripts/sync-harness.js`.
+- `adapters/`: fine-tuning adapters for the local model (`adapters/README.md`): the model-neutral
+  training spec (`spec.json`, `scripts/lib/learning/adapter.js`) and one training template per base
+  model (`<base>/train.example.sh`). The one folder that may name a model. Weights, checkpoints,
+  datasets, manifests and the runner config that selects an adapter are gitignored and stay local;
+  no harness code needs an adapter (`docs/TRAINING.md`, "Fine-tuning on verified decisions").
 - `tests/`: `node:test` files named `*.test.js`.
 
 ## Commands
