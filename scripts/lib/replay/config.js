@@ -58,6 +58,7 @@ const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
 const { latencySetting } = require('./latency');
+const { WALL_START } = require('../trading/harness-now');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -126,6 +127,11 @@ function readAutotrader(spec, baseDir) {
   return { raw: JSON.parse(fs.readFileSync(file, 'utf8')), file };
 }
 
+/** A run whose manifest exists and doesn't say it charges latency (started before the setting, or pinned). */
+function startedPinned(manifestFile) {
+  try { return JSON.parse(fs.readFileSync(manifestFile, 'utf8')).latency !== true; } catch (_err) { return false; }
+}
+
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
   const errors = [];
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -151,6 +157,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   errors.push(...practice.errors);
   const latency = latencySetting(r.latency, r.learning !== false);
   if (latency.error) errors.push(latency.error);
+  // A run started before the setting (its manifest doesn't say latency: true) keeps its pinned clock when the config
+  // doesn't name one, so it resumes under the hash it was started with.
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -194,7 +202,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
     // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
-    latency: latency.value,
+    latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
@@ -221,6 +229,8 @@ function replayEnv(base, run, { at }) {
   for (const v of live) env[v] = DISABLED;
   env.FTH_BROKER = run.broker;
   env.FTH_REPLAY_NOW = at.toISOString();
+  // Never inherited: only the driver's charged step sets it (a stale one would run a pinned run's clock).
+  delete env[WALL_START];
   const broker = activeBroker(env);
   const set = (key, value) => {
     if (!key) return;

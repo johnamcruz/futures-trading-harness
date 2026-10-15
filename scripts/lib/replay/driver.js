@@ -224,7 +224,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
-    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
+    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true },
   });
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   const recorded = store.recordedTimes(paths.runDir);
@@ -306,7 +306,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const eodStep = point.kind === 'eod' || point.kind === 'eod-retry';
     const savedBefore = manifest.eodRetry;
     if (eodStep) {
-      if (retryAfter(run, point)) manifest.eodRetry = savedForm(retryAfter(run, point));
+      if (retryAfter(run, { ...point, t: ranAt })) manifest.eodRetry = savedForm(retryAfter(run, { ...point, t: ranAt }));
       else delete manifest.eodRetry;
     }
     writeJsonAtomic(paths.manifest, manifest);
@@ -339,10 +339,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       }
       throw new Error(`the runner could not run at ${point.t.toISOString()} (exit ${res.code}${res.timedOut ? ', timed out' : ''}); see ${paths.stepsLog}: ${String(res.output || '').trim().split('\n').slice(-3).join(' | ')}`);
     }
+    // Where the step left the clock (latency charged: its fills were made up to then); pinned, the time it ran.
+    const endedAt = charged && Number.isFinite(clockMs) ? new Date(clockMs) : ranAt;
     let trades = null;
     if (cfg.account) {
       try {
-        trades = await deps.trades(env, cfg.account, since, ranAt);
+        trades = await deps.trades(env, cfg.account, since, endedAt);
       } catch (err) {
         trades = { error: err.message };
       }
@@ -359,6 +361,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     // Latency charged: when the time was due, when it ran (both only when later), and the trade times passed without a step.
     if (point.scheduled) rec.scheduled = point.scheduled.toISOString();
     if (ranAt.getTime() !== point.t.getTime()) rec.ranAt = ranAt.toISOString();
+    // Latency charged: when the step ended on the replay clock (its own scans, orders and fills are up to then).
+    if (charged) rec.endedAt = endedAt.toISOString();
     if (skipped.length) rec.skipped = skipped;
     // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
     // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist), as live records its broker's;
@@ -394,11 +398,17 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       continue;
     }
     // A failed read is retried from the same time on the next one (also after a resume).
-    if (!(trades && trades.error)) since = ranAt;
+    if (!(trades && trades.error)) since = endedAt;
     manifest.tradesSince = since.toISOString();
     delete manifest.pending;
     // Verified flat: no retry (cleared in the same write as its line).
     if (eodStep && eodVerified(run, point.day)) delete manifest.eodRetry;
+    // Latency charged: the retry a minute after the step ended (never before the clock), or none at or past the close.
+    else if (charged && eodStep && manifest.eodRetry) {
+      const again = retryAfter(run, { ...point, t: endedAt });
+      if (again) manifest.eodRetry = savedForm(again);
+      else delete manifest.eodRetry;
+    }
     store.appendRecord(paths, manifest, rec);
     skipped = [];
     cycles += 1;
@@ -411,7 +421,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || (killed !== null ? 'no cycle (kill switch on)' : 'no cycle')}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
     // End of day not verified flat: once more a minute later, as the live runner retries, before the close
     // (saved in the manifest before this step ran, so a stop here, the error limit included, keeps it).
-    const next = eodStep && manifest.eodRetry ? retryAfter(run, point) : null;
+    const next = eodStep && manifest.eodRetry ? retryAfter(run, { ...point, t: endedAt }) : null;
     if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };
     if (next) {
       queue.unshift(next);
