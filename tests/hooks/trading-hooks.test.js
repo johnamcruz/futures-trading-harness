@@ -2688,6 +2688,39 @@ test('order gate (hook): a trade_lifecycle entry is judged on its compose record
   }
 });
 
+test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = trendHome();
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, LC.briefing());
+  LC.writeScenario(home, { write: false, reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
+  const dir = tmpDir();
+  const generated = require('../../scripts/lib/harness-sync').expectedFiles(REPO)['workspace/opencode.json'];
+  const attest = (name, prompt = p => p) => {
+    const file = path.join(dir, name, 'opencode.json');
+    const json = JSON.parse(generated);
+    json.agent[H.HEAD_AGENT].prompt = prompt(json.agent[H.HEAD_AGENT].prompt);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(json));
+    return JSON.stringify(H.attestation(file, REPO));
+  };
+  // The runner's opencode cycle transcript: no skill loaded, nothing looked up.
+  const cycle = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(cycle, JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }));
+  const lc = (extra, input = LC.order()) => gate(orderPayload(input), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'index', FTH_CYCLE_TRANSCRIPT: cycle, ...extra }).env);
+  // The shipped head prompt embeds them: no [skills-loaded], no [skills-at-entry].
+  const embedded = lc({ FTH_HEAD_PROMPT: attest('index') });
+  assert.doesNotMatch(embedded.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+  // A head prompt without their blocks (attested as it is): refused for exactly them.
+  const cut = attest('cut', p => H.COMPOSED_READS.reduce((t, s) => t.replace(new RegExp(`<skill name="${s}">\n[^]*?\n</skill>\n\n?`), ''), p));
+  const refused = lc({ FTH_HEAD_PROMPT: cut });
+  assert.strictEqual(refused.code, 2);
+  assert.match(refused.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection\./);
+  // No attestation: the transcript alone decides, and they are among the missing.
+  assert.match(lc({ FTH_HEAD_PROMPT: '' }).stderr, /\[skills-loaded\][^\n]*trade-session[^\n]*confluence-counting, invalidation, rejection/);
+  // An exit goes either way.
+  assert.doesNotMatch(lc({ FTH_HEAD_PROMPT: cut }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }).stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+});
+
 test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
