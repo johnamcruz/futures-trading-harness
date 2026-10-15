@@ -146,7 +146,7 @@ test('two fills opening at one instant: one entered decision credits one of them
   assert.deepStrictEqual(s.excluded.map(x => x.why), ['a fill no record placed']);
 });
 
-test('day-stop: a pass after a net loss that day, only when no entry followed it; a scratch that pays its fees is a loss', () => {
+test('day-stop: a pass after a loss that day (gross, as the gate counts), only when no entry followed it; a scratch is no loss', () => {
   const ent = (id, entryTime, exitTime, exitPrice) => ({ id, decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: entryTime, cycleAt: entryTime, plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
     outcome: { source: 'fills', entryPrice: 100, exitPrice, entryTime, exitTime, exitReason: 'closed', R: (exitPrice - 100) / 2 } });
   const pass = { id: 'p', decision: 'passed', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T14:36:00.000Z', cycleAt: '2023-03-15T14:39:00.000Z', plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
@@ -156,9 +156,9 @@ test('day-stop: a pass after a net loss that day, only when no entry followed it
   const kind = decisions => modelStream({ decisions, dayKeys: ['2023-03-15'], tfMs: M3 }).days[0].passed[0].actions[0];
   assert.strictEqual(kind([loss, pass, later]), 'pass', 'the model entered again at 14:45: it did not stop for the day');
   assert.strictEqual(kind([loss, pass]), 'day-stop');
-  // A scratch: out at its entry price, so it loses its fees (net), as attempts.js counts a loss.
-  assert.strictEqual(kind([ent('s', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100), pass]), 'day-stop');
-  assert.strictEqual(kind([ent('w', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100.5), pass]), 'pass', 'two ticks won ($1.00) pay the $0.74 of fees: no loss');
+  // A scratch: out at its entry price. Gross 0 is no loss, as attempts.js and the live gate count one.
+  assert.strictEqual(kind([ent('s', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100), pass]), 'pass', 'a scratch is no loss');
+  assert.strictEqual(kind([ent('t', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 99.75), pass]), 'day-stop', 'one tick lost is a loss');
 });
 
 test('early-exit hold: the real fill\'s price, the bracket placed from it (a mid-bar fill at 100.00, the bar opening at 99.50)', () => {

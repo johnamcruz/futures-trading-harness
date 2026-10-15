@@ -41,8 +41,8 @@
  *                     the fill's own bar read after the fill by the worse-is-taken rule). An exit the runner's trail made
  *                     is counted as early too: nothing recorded tells a trailed stop from a tightened one or a manual close.
  * Each day also lists the model's passes on valid composed setups as the trades they would have been (`passed`: the
- * limitOutcome counterfactual the experience log keeps; `day-stop` when an entry of that day had already closed at a net
- * loss, fees included, and the model entered nothing later that day; else `pass`); the score never takes them.
+ * limitOutcome counterfactual the experience log keeps; `day-stop` when an entry of that day had already closed at a loss
+ * before fees (a scratch is none), and the model entered nothing later that day; else `pass`); the score never takes them.
  * Every session day the run replayed is a day of the stream: a day the model passed (passes, plain passes, refusals)
  * is a no-trade day, with its count of the model's passes (`passes`, for the risk attribution). A day's regime is
  * trade-stream.js dayRegimes on the run's bars (its range against the days before it, as the mechanical stream
@@ -153,8 +153,8 @@ function factsOf(d) {
   return { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null };
 }
 
-/** A trade that closed at a net loss per contract: its move in dollars less both sides' fees (attempts.js counts net). */
-const netLoss = t => t.moveTicks * t.tickValue - 2 * t.feesPerSide < 0;
+/** A trade that closed at a loss before fees (gross), as attempts.js and the live gate count one: a scratch is no loss. */
+const grossLoss = t => t.moveTicks < 0;
 /** An entered decision's fill time (ms), else its cycle's. */
 const entryMsOf = e => { const f = Date.parse(e.outcome && e.outcome.entryTime); return Number.isFinite(f) ? f : Date.parse(e.cycleAt); };
 
@@ -210,8 +210,8 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
 /**
  * A pass the model made on a valid composed setup, as the trade it would have been (the experience log's limitOutcome
  * counterfactual: the record's limit, stop and target from the fill), never taken by the score: prop/risk-actions.js
- * scores standing down against taking it. `day-stop` when an entry of that day had already closed at a net loss before it
- * and none followed it (modelStream).
+ * scores standing down against taking it. `day-stop` when an entry of that day had already closed at a loss (gross, as the
+ * gate counts) before it and none followed it (modelStream).
  */
 function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
   const o = d.outcome || {};
@@ -278,10 +278,10 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   for (const d of decisions) {
     if (!d || d.decision !== 'passed') continue;
     passesOn.set(d.day, (passesOn.get(d.day) || 0) + 1);
-    // Standing down for the day: a pass after an entry of the day closed at a net loss (fees in, as attempts.js counts a
-    // loss: a scratch that pays its fees is one), with no entry later that day. A pass followed by an entry is a pass.
+    // Standing down for the day: a pass after an entry of the day closed at a loss before fees (as attempts.js and the
+    // gate count one: a scratch is none), with no entry later that day. A pass followed by an entry is a pass.
     const cycle = Date.parse(d.cycleAt);
-    const lossBefore = trades.some(t => t.day === d.day && netLoss(t) && Number.isFinite(t.exitMs) && t.exitMs <= cycle);
+    const lossBefore = trades.some(t => t.day === d.day && grossLoss(t) && Number.isFinite(t.exitMs) && t.exitMs <= cycle);
     const enteredLater = decisions.some(e => e && e.decision === 'entered' && e.day === d.day && entryMsOf(e) > cycle);
     const c = passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore && !enteredLater);
     if (!c) continue;

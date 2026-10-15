@@ -98,7 +98,7 @@ function gateRefusal(gate, day, t) {
  * off), gate (the order gate's loss limits, gateLimits(); default the env's, as live; null only for a test that
  * isolates another rule), variant(trade, { first }) -> the trade to replay (or null to keep it), outageDay(dayIndex) -> true when
  * the runner is down that day, onDay(cs, dayIndex) -> called with the account as each day opens (read only: the
- * account states the attempt passed through, prop/account-states.js), onTrade({ before, after, trade, net, forced,
+ * account states the attempt passed through, prop/account-states.js), onTrade({ before, after, trade, net, gross, forced,
  * dayIndex, counters }) after each trade taken and onSkip({ cs, trade, dayIndex, counters, why }) for each one the
  * account layer passed over (both read only: the risk attribution, prop/evaluator.js) }. `counters`: the day's trades
  * and losing trades so far and the session's losing streak (combine's lossStreak, live's prop-state.sessionLossStreak),
@@ -168,7 +168,7 @@ function runAttempt(days, ctx) {
       if (gross < 0) { lossesToday += 1; lastLossAt = intoSession(Date.parse(t.exitTime), Date.parse(t0.entryTime)); }
       if (forced === 'blow') cs = combine.blow(cs);
       if (forced === 'daily') cs = { ...cs, dayStopped: true };
-      if (onTrade) onTrade({ before: view(before), after: view(cs), trade: t0, net, forced, dayIndex: d, counters: counted });
+      if (onTrade) onTrade({ before: view(before), after: view(cs), trade: t0, net, gross, forced, dayIndex: d, counters: counted });
       if (forced === 'blow') break;
     }
     if (cs.status === 'active') cs = combine.endDay(cs);

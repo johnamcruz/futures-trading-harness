@@ -69,9 +69,9 @@ function createAttribution() {
       return {
         onDay: (cs, d) => { states[stateOf(cs)].passed += Number(list[d] && list[d].passes) || 0; },
         onSkip: ({ cs }) => { states[stateOf(cs)].skipped += 1; },
-        onTrade: ({ before, after, trade, net, forced, counters }) => {
+        onTrade: ({ before, after, trade, net, gross, forced, counters }) => {
           const st = stateOf(before);
-          const facts = combine.attemptFacts(after, { ...counters, tradesToday: counters.tradesToday + 1, lossesToday: counters.lossesToday + (net < 0 ? 1 : 0) });
+          const facts = combine.attemptFacts(after, { ...counters, tradesToday: counters.tradesToday + 1, lossesToday: counters.lossesToday + (gross < 0 ? 1 : 0) });
           current.taken.push({ st, trade, net, forced, lossBefore: counters.lossesToday > 0, stopped: forced === 'daily' || after.dayStopped || facts.softRoom === 0 });
         },
       };
