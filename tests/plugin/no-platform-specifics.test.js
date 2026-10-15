@@ -22,7 +22,8 @@
 // recorded; take the firm name, account name or time out of it instead. Never add to the list.
 //
 // The word `qwen` alone is allowed: Qwen Code is a CLI the harness has an adapter for (qwen-extension/,
-// QWEN.md, harness "qwen"). Model names and sizes (qwen3, Qwen 2.5, Qwen3.5-9B, 9B, 3.5B) are not.
+// QWEN.md, harness "qwen"). Model names and sizes (qwen3, Qwen 2.5, Qwen3.5-9B, 9B, 3.5B) are not, except in
+// adapters/ (MODEL_ONLY, the owner's exception for fine-tuning adapters), which may name a model and nothing else.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -34,6 +35,10 @@ const REPO = path.resolve(__dirname, '..', '..');
 const PINS = path.join(__dirname, 'no-platform-specifics.pins.json');
 
 const ALLOWED = [/^accounts\//, /^mcp-configs\/brokers\.json$/, /^tests\/plugin\/no-platform-specifics\.(?:test\.js|pins\.json)$/, /^tests\/plugin\/platform-scan\.js$/];
+// adapters/ may name a model (its name or size: a LoRA adapter's base model and its training template), the owner's
+// exception (as accounts/ names firms); nothing else there: a platform or firm name, or a firm's time, is still a hit.
+// Allowed by folder, like accounts/, so it needs no pin.
+const MODEL_ONLY = [/^adapters\//];
 const PERMANENT = [
   { file: 'tests/plugin/ecc-architecture.test.js', pattern: /^\s*const BROKER = .*$/, reason: 'the no-broker-code rule: its denylist of broker endpoints and SDKs' },
 ];
@@ -99,7 +104,7 @@ const readRepo = f => fs.readFileSync(path.join(REPO, f));
 
 test('no platform, firm or model names, or a firm\'s times, outside accounts/ and mcp-configs/brokers.json (CLAUDE.md, "Separation of work")', () => {
   const { files } = S.listFiles(REPO);
-  const r = S.scan(files, readRepo, { allowed: ALLOWED, permanent: PERMANENT, entries: SHRINK_ONLY });
+  const r = S.scan(files, readRepo, { allowed: ALLOWED, permanent: PERMANENT, entries: SHRINK_ONLY, modelOnly: MODEL_ONLY });
   assert.deepStrictEqual(r.hits, [], 'platform specifics belong in the broker\'s MCP server, firm rules in accounts/, model specifics in local config');
   let pins = JSON.parse(fs.readFileSync(PINS, 'utf8'));
   if (process.env.FTH_UPDATE_PINS === '1') {
@@ -129,7 +134,7 @@ test('the scan reads every file git lists: none skipped, no directory, binaries 
     const target = path.relative(REPO, fs.realpathSync(path.join(REPO, l)));
     assert.ok(!target.startsWith('..') && (files.includes(target) || files.some(f => f.startsWith(`${target}/`))), `${l} -> ${target}`);
   }
-  const r = S.scan(files, readRepo, { allowed: ALLOWED, permanent: PERMANENT, entries: SHRINK_ONLY });
+  const r = S.scan(files, readRepo, { allowed: ALLOWED, permanent: PERMANENT, entries: SHRINK_ONLY, modelOnly: MODEL_ONLY });
   assert.strictEqual(r.scanned.length + r.binary.length, files.length, 'every file is scanned or a binary');
   assert.ok(r.binary.every(f => S.isBinary(f, readRepo(f))));
   // A text file with a NUL past the first 8 KB is still scanned whole.
@@ -170,6 +175,23 @@ test('the scan catches every term alone, look-alike spellings and a firm\'s time
     'skills/x/SKILL.md:1', 'scripts/lib/x.js:1', 'scripts/lib/x.js:2', 'tests/lib/a.test.js:1',
     'skills/topstep-rules/SKILL.md: the path names a platform, firm or model',
   ]);
+});
+
+test('adapters/ may name a model (its name, size, the MLX tools), never a platform or firm; nowhere else may', () => {
+  const opts = { allowed: ALLOWED, modelOnly: MODEL_ONLY };
+  const one = (file, text) => S.scan([file], () => Buffer.from(`${text}\n`), opts).hits;
+  for (const text of ['base model Qwen3.5-9B-4bit', 'mlx_lm.lora --model x', 'MLX LoRA', 'a 9B model', 'qwen3 base']) {
+    assert.deepStrictEqual(one('adapters/x/train.example.sh', text), [], text);
+    assert.strictEqual(one('docs/TRAINING.md', text).length, 1, `outside adapters/: ${text}`);
+  }
+  assert.deepStrictEqual(one('adapters/qwen3.5-9b-4bit/train.example.sh', 'ok'), [], 'its path may name the base model');
+  assert.strictEqual(one('scripts/qwen3.5-9b-4bit/x.js', 'ok').length, 1, 'no other path may');
+  // The reviewer's probes: a firm's time or a firm's name between a model word and a size is still caught (only the
+  // size and model tokens are stripped, never the span between them).
+  for (const text of ['model flatten 15:10 CT 9B', 'model on Topstep 9B', 'Qwen 9B model at Topstep flatten 15:10 CT 3.5B', 'a 9B model on Topstep']) assert.strictEqual(one('adapters/x/README.md', text).length, 1, `adapters/ still refuses: ${text}`);
+  for (const text of ['TopstepX', 'qwen3.5-9b-topstepx', 'PROJECTX_API_KEY', 'mlx on Topstep', 'flatten 15:10 CT', 'Qwen3-9B via DashScope']) assert.strictEqual(one('adapters/x/README.md', text).length, 1, `adapters/ still refuses: ${text}`);
+  assert.strictEqual(one('adapters/topstepx/README.md', 'ok').length, 1, 'a platform in an adapters/ path');
+  assert.ok(!ALLOWED.some(re => re.test('adapters/README.md')), 'adapters/ is model-only, never allowed whole');
 });
 
 test('an entry excuses only its kind: a firm entry never excuses a platform name, an account entry never the firm', () => {

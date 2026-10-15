@@ -96,14 +96,48 @@ function attemptLineOf(s) {
 test('the good fixture: every check passes (every feature merged); the risk record, off, is N/A', () => {
   // A stage-2 practice run, its days from drawn account states: every check judged and passing.
   const two = P.runChecks(ctx({ run: { stage: 2, accountStates: STATES_RUN } }));
-  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA]], P.formatReport(two));
+  // No adapter selected (a base run): the adapter check is N/A.
+  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['adapter', P.NA]], P.formatReport(two));
   // A stage-1 run: the same, but for the account states it has none of (N/A, never a FAIL).
   const res = P.runChecks(ctx());
-  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['account-states', P.NA]], P.formatReport(res));
+  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['account-states', P.NA], ['adapter', P.NA]], P.formatReport(res));
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.results.length, P.CHECKS.length);
   assert.deepStrictEqual(res.results.find(x => x.check === 'curated-source'), { check: 'curated-source', status: P.PASS, detail: '1 list moment(s) closed at their entry in the bars given: one source' });
   assert.ok(P.formatReport(res).split('\n').every(l => !l || /^(PASS|FAIL|WARN|N\/A) /.test(l) || /^training preflight/.test(l)));
+});
+
+test('adapter: N/A with none selected; a stale adapter (its skills or prompt digest not the harness\'s now) refuses the run', () => {
+  const now = { skills: '1'.repeat(64), prompt: '2'.repeat(64), code: '3'.repeat(64) };
+  const A = require('../../scripts/lib/learning/adapter');
+  const m = {
+    v: 1, name: 'm1', base: { model: 'b', folder: 'f' }, harness: { commit: 'c'.repeat(40), ...now }, dataset: { fingerprint: 'd'.repeat(64) },
+    training: { step: 1, method: 'lora', seed: 1, settings: { iters: 1 } },
+    validation: A.sealValidation({
+      kind: 'stage-1-exit-test', window: 'practice-validate', status: 'passed', runs: ['a', 'b'], result: { exitTest: [{ test: 't', status: 'PASS' }] },
+      evidence: { base: { runId: 'a', dir: '/no/such/run/a', setup: 'e'.repeat(64) }, adapted: { runId: 'b', dir: '/no/such/run/b', setup: 'f'.repeat(64) } },
+    }),
+  };
+  const file = path.join(tmp(), 'manifest.json');
+  fs.writeFileSync(file, JSON.stringify(m));
+  const read = d => ({ adapterManifest: f => JSON.parse(fs.readFileSync(f, 'utf8')), adapterSpec: () => JSON.parse(fs.readFileSync(path.join(ROOT, 'adapters', 'spec.json'), 'utf8')), harnessDigests: () => d });
+  const run = { cfg: { ...ctx().run.cfg, adapter: file } };
+  assert.strictEqual(one(P.adapter, ctx()).status, P.NA);
+  assert.strictEqual(one(P.adapter, ctx({ run, read: read(now) })).status, P.PASS);
+  const stale = P.runChecks(ctx({ run, read: read({ ...now, skills: '9'.repeat(64) }) }));
+  assert.strictEqual(stale.ok, false, 'a FAIL refuses the run');
+  assert.match(stale.results.find(x => x.check === 'adapter').detail, /stale: its skills digest/);
+  assert.match(one(P.adapter, ctx({ run, read: read({ ...now, code: '9'.repeat(64) }) })).detail, /stale: its code digest/);
+  fs.writeFileSync(file, JSON.stringify({ ...m, validation: { ...m.validation, result: { exitTest: [{ test: 't', status: 'PASS' }], edited: true } } }));
+  assert.match(one(P.adapter, ctx({ run, read: read(now) })).detail, /not backed by its evidence/, 'a hand-edited passed');
+  fs.writeFileSync(file, JSON.stringify({ ...m, validation: undefined }));
+  assert.match(one(P.adapter, ctx({ run, read: read(now) })).detail, /the validation result is missing/);
+  fs.rmSync(file);
+  assert.strictEqual(one(P.adapter, ctx({ run, read: read(now) })).status, P.FAIL);
+  // The real readers: the repository's spec, and the harness digests the setup record names.
+  const real = P.defaultReaders(ROOT, {});
+  assert.deepStrictEqual(real.harnessDigests(), require('../../scripts/lib/learning/adapter').currentDigests(ROOT));
+  assert.strictEqual(real.adapterSpec().v, 1);
 });
 
 test('each check fails on a broken fixture', () => {
@@ -233,8 +267,9 @@ test('N/A never fails: a feature not merged reports "not available (needs <branc
   const c = ctx({ read: { features: () => none } });
   const res = P.runChecks(c);
   assert.strictEqual(res.ok, true, P.formatReport(res));
-  // The risk record's check is N/A when the display is off (it doesn't wait for a branch); so are account-states on a stage-1 run.
-  const own = ['risk-record', 'account-states'];
+  // The risk record's check is N/A when the display is off (it doesn't wait for a branch); so are account-states on a stage-1 run,
+  // and the adapter with none selected.
+  const own = ['risk-record', 'account-states', 'adapter'];
   const na = res.results.filter(x => x.status === P.NA && !own.includes(x.check)).map(x => x.check);
   assert.deepStrictEqual(na.sort(), ['account-facts', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
   for (const x of res.results.filter(y => y.status === P.NA && !own.includes(y.check))) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);

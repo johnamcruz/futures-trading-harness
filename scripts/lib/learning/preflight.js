@@ -15,7 +15,8 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. A check of a feature
+ * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. The fine-tuning adapter
+ * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
  * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): the account states on a
  * practice-train run, the prop risk rules and the Monte Carlo.
@@ -531,10 +532,19 @@ function monteCarlo(ctx) {
   return r('monte-carlo', PASS, `the 30-day Monte Carlo scores the run at its end (prop/model-score.js)${ctx.run.accountStates ? ', each decision weighted back to the natural mix of account states' : ''}`);
 }
 
+/**
+ * The fine-tuning adapter the runner config declares (learning/adapter.js adapterCheck): N/A with none; FAIL on a
+ * missing or invalid manifest, a stale one (its skills or prompt digest not the harness's now), or no validation result.
+ */
+function adapter(ctx) {
+  const x = require('./adapter').adapterCheck({ cfg: ctx.run.cfg || {}, role: roleOf(ctx), read: ctx.read });
+  return r('adapter', x.status, x.detail);
+}
+
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, adapter,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -692,6 +702,10 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     gateLimits: () => ({ ...require('../prop/attempts').gateLimits(env) }),
     accountProfile: name => { try { return require('../trading/accounts').accountNamed(root, name, env); } catch (_err) { return null; } },
     attemptLine: (name, state, at) => attemptLine(root, env, name, state, at),
+    // The selected fine-tuning adapter's manifest, the training spec, and the harness's skills and prompt digests now.
+    adapterManifest: file => require('./adapter').readJsonFile(file),
+    adapterSpec: () => require('./adapter').readJsonFile(path.join(root, require('./adapter').SPEC_FILE)),
+    harnessDigests: once(() => require('./adapter').currentDigests(root)),
     features: once(() => {
       const rb = require('../trading/rulebook');
       // The scorecard scores composed setups when its module says so (an exported SCORES_COMPOSED: true, as the rulebook's
@@ -743,6 +757,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };
