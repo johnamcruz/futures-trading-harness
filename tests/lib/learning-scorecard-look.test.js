@@ -23,6 +23,7 @@ function makeRun(day, { learning = null, runId = 'lr1' } = {}) {
   fs.writeFileSync(path.join(runDir, `${day}.jsonl`), `${JSON.stringify({ v: 1, t: new Date(t).toISOString(), day, kind: 'eod', ran: [], cycles: [], refusals: [], errors: [], bars: [], trades: [], since: new Date(t - 180000).toISOString() })}\n`);
   fs.writeFileSync(path.join(runDir, 'broker', 'journal.jsonl'), '');
   const env = { HOME: base };
+  process.env.HOME = base; // the scorecard reads the canonical ledger of the current home
   if (learning) startLearningRun(home, { runDir, runId, env, endOfDay: true, ...learning });
   return { home, runDir, env, base };
 }
@@ -100,4 +101,16 @@ test('learningLook: null for a run with no record, the look for a practice-train
   const { runDir } = makeRun('2023-08-08', { learning: when('2023-08-08') });
   assert.strictEqual(learningLook(runDir, { manifest: { runId: 'lr1' }, days: { '2023-08-08': [] } }).role, 'practice-train');
   assert.throws(() => learningLook(runDir, { manifest: { runId: 'lr1' }, days: {} }), /no days/);
+});
+
+test('a forged record naming a forged ledger cannot free a sealed run: only the canonical ledger counts', () => {
+  const { runDir, home, base } = makeRun('2025-03-04', { learning: SEALED('2025-03-04') });
+  const forged = path.join(base, 'forged.jsonl');
+  fs.writeFileSync(forged, `${JSON.stringify({ kind: 'look', evaluation: 'e1', candidate: 'c1', purpose: 'judging', runId: 'lr1', role: 'test', from: '2025-03-04', to: '2025-03-05' })}\n`);
+  fs.writeFileSync(ledgerPath({ HOME: base }), '');
+  for (const dir of [runDir, home]) {
+    const f = path.join(dir, 'learning-run.json');
+    fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, 'utf8')), ledger: forged }));
+  }
+  assert.throws(() => score(runDir), /not the canonical learning ledger/);
 });
