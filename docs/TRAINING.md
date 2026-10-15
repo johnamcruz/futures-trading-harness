@@ -137,7 +137,11 @@ The checks:
 The 5m facts need a 1m data lane in the runner config
 (`{ "timeframe": 1, "trigger": "data" }`) and one-minute bars in `--bars`, as
 live. Each start (and each resume) appends its result to the run home's
-`preflight.jsonl`.
+`preflight.jsonl`. A resume runs the preflight again, so give it `--bars` again.
+The training loop (`scripts/train-loop.js`) runs the same preflight before each
+champion run; its facts read the loop's data source (`evaluator.data`), and are
+N/A ("no bars given to the loop") without one. A loop's replay config sets
+`practice` like any practice-train run.
 
 ## 4. Stage 1: learn to trade
 
@@ -310,6 +314,8 @@ reweighted, not a calendar of whole days.
 | `test is sealed: name the candidate it judges (--candidate) and the evaluation id its arms share (--evaluation)` | A sealed window needs a judging look. |
 | `look refused: final: candidate ... has no test pass` | Final comes only after a test pass. |
 | `a resume keeps it (start another runId to change it)` | The config changed under a started run. |
+| `FAIL facts: no bar data for MNQ` on a resume | A resume runs the preflight again: give it the bars again (`--bars MNQ=<file>`). |
+| `PASS latency: pinned: a resume of a run started before latency was charged` | A run started before the setting keeps its pinned clock on resume; a new run charges it. |
 | `index refused (leakage)` | The index was built from runs outside practice-train. |
 | `curatedList: runs through setup-focused practice; set practice too` | A curated run needs `practice`. |
 | `a validate curated list runs on practice-validate, not on this practice-train run` | You used the wrong list for the window. |

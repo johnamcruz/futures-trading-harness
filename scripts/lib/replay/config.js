@@ -206,6 +206,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
   };
+  const pinnedResume = r.latency === undefined && startedPinned(paths.manifest);
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
   if (base.practice !== undefined || overrides.practice !== undefined) throw new Error('invalid replay config:\n- practice: set in the replay config (its own field), never in the runner config or overrides');
   const holidays = holidayDates(start, end);
@@ -247,7 +248,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
     // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
-    latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
+    latency: pinnedResume ? false : latency.value,
+    // A resume of a run started before the setting (pinned, the config naming none): the preflight passes it, noted.
+    latencyPinnedResume: pinnedResume,
     // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
     curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the

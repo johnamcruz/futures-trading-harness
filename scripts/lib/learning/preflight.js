@@ -25,7 +25,9 @@
  *   defaultReaders(root, env, { barsFiles })   the readers on the repository, the bar files given and the ledger
  *   gateOptions(run, flags)                 the learning gate's options from a run and the replay CLI's flags (scripts/replay.js
  *                                           run builds its gate with it: lookArm, setupHash, setupBase, setupFixed)
- *   preflightForRun(run, gate, { root, env, barsFiles, log, read })   null for a run declared not learning; else runs
+ *   preflightForRun(run, gate, { root, env, barsFiles, noBars, log, read })   null for a run declared not learning; else runs
+ *                                           (noBars: why there are no bars to give, e.g. the training loop without a data
+ *                                           source: the facts check is N/A with it; every other check runs)
  *                                           every check, logs each line, throws on any FAIL, and returns
  *                                           { ok, results, record(runHome) } (record appends the result to
  *                                           <runHome>/preflight.jsonl)
@@ -46,7 +48,7 @@ const na = (check, needs) => r(check, NA, `not available (needs ${needs})`);
 // (valid_bars and latency, #190; libraryDisplay, #189; curatedList, #191; the head prompt's composed reads, #188 are
 // merged: their checks judge them, and a run or prompt without them FAILs.)
 const NEEDS = Object.freeze({
-  scorecardComposed: 'fix/scorecard-composed: the scorecard knows composed setups',
+  scorecardComposed: 'fix/scorecard-composed: the scorecard knows composed setups, exporting SCORES_COMPOSED',
   propMissing: 'feat/prop-portfolio-missing: loss_streak_stop and the exit mode',
   accountFacts: 'phase 2: the account facts shown',
   accountStates: 'phase 2, feat/prop-mc-model: the account states (a curated run refuses prop, so they come from it, not from a prop attempt)',
@@ -176,6 +178,8 @@ function adaptersInSync(ctx) {
 const hasMinuteLane = cfg => Array.isArray(cfg.lanes) && cfg.lanes.slice(1).some(l => Number(l.timeframe) === 1);
 
 function facts(ctx) {
+  // A caller with no bars to give (the training loop without a data source): N/A, with its reason.
+  if (ctx.noBars) return r('facts', NA, ctx.noBars);
   const cfg = ctx.run.cfg || {};
   const symbol = (cfg.symbols || [])[0];
   const tf = Number(cfg.timeframe);
@@ -258,6 +262,8 @@ function splitWindow(ctx) {
 
 function latency(ctx) {
   if (ctx.run.latency === undefined) return r('latency', FAIL, 'the resolved run has no latency setting (replay/config.js latency)');
+  // A resume of a run started before the setting keeps its pinned clock (replay/config.js startedPinned): it passes, noted.
+  if (ctx.run.latency === false && ctx.run.latencyPinnedResume === true) return r('latency', PASS, 'pinned: a resume of a run started before latency was charged keeps its clock (a new run charges it)');
   if (ctx.run.latency !== true) return r('latency', FAIL, 'a learning run charges each cycle\'s real time (latency: true), as live');
   return r('latency', PASS, 'charged');
 }
@@ -498,10 +504,12 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     sizingKeys: () => [...require('../trading/rulebook').SIZING_KEYS],
     features: once(() => {
       const rb = require('../trading/rulebook');
-      let scorecard = '';
-      try { scorecard = fs.readFileSync(path.join(root, 'scripts', 'lib', 'replay', 'scorecard.js'), 'utf8'); } catch (_err) { /* none */ }
+      // The scorecard scores composed setups when its module says so (an exported SCORES_COMPOSED: true, as the rulebook's
+      // ITEMS say loss_streak_stop exists), never from its text: a comment naming "composed" is no feature.
+      let scorecardComposed = false;
+      try { scorecardComposed = require(path.join(root, 'scripts', 'lib', 'replay', 'scorecard.js')).SCORES_COMPOSED === true; } catch (_err) { /* none */ }
       return {
-        scorecardComposed: /\bcomposed\b/.test(scorecard),
+        scorecardComposed,
         lossStreakStop: Object.hasOwn(rb.ITEMS, 'loss_streak_stop'),
         exitMode: rb.EXIT_KEYS.includes('mode'),
         skillUsage: exists(path.join('scripts', 'lib', 'learning', 'skill-usage.js')),
@@ -522,9 +530,9 @@ function gateOptions(run, { candidate = null, evaluation = null, validate = fals
 
 const RECORD = 'preflight.jsonl';
 
-function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, log = () => {}, read = null, now = () => new Date() } = {}) {
+function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, noBars = null, log = () => {}, read = null, now = () => new Date() } = {}) {
   if (!run.learning) return null;
-  const result = runChecks({ run, gate, read: read || defaultReaders(root, env, { barsFiles }) });
+  const result = runChecks({ run, gate, noBars, read: read || defaultReaders(root, env, { barsFiles }) });
   const text = formatReport(result);
   if (!result.ok) throw new Error(`training preflight refused the run:\n${text}`);
   for (const line of text.trimEnd().split('\n')) log(`preflight ${line}`);

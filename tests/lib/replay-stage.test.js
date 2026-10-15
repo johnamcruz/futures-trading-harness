@@ -171,3 +171,33 @@ test('scripts/replay.js: the preflight before the learning gate, recorded after 
   assert.ok(at('pre.record(r.paths.runHome)') > at('seedRunHome('), 'recorded after seeding');
   assert.ok(at('stageReport(r') > at('if (res.done) {'), 'the stage report once the run is done');
 });
+
+test('scripts/replay.js run: a finished stage-1 validate run prints its stage report and its exit test', { timeout: 240000 }, () => {
+  const { spawnSync } = require('child_process');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const user = tmp();
+  const live = path.join(user, 'live');
+  fs.mkdirSync(live);
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } } }));
+  // The parity week moved onto Monday 2024-08-05 (practice-validate), served by the mock exchange at 3m and 1m, and given
+  // to the preflight as one-minute bars.
+  const minute = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), '2024-08-05');
+  const one = readBarsArg(minute).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  const shift = Math.round((Date.parse('2024-08-05T00:00:00Z') - PF.PARITY_MONDAY) / (7 * 864e5)) * 7 * 864e5;
+  const three = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: new Date(Date.parse(b.t) + shift).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  const ID = 'fake:MNQ:Z26';
+  const init = { nowMs: Date.parse('2024-08-05T13:00:00Z'), prices: { [ID]: three.at(-1).c }, bars: { [ID]: three, [`${ID}@1m`]: one } };
+  const config = path.join(user, 'replay.json');
+  fs.writeFileSync(config, JSON.stringify({
+    runId: 's1', workDir: path.join(user, 'replays'), broker: 'replaymock', stage: 1, start: '2024-08-05T13:31:00Z', end: '2024-08-05T13:37:00Z', premarket: false,
+    autotrader: { ...PF.AUTOTRADER, command: [process.execPath, '-e', "process.stdout.write('CYCLE RESULT: no-trade - quiet\\n')", '{prompt}'], sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
+    brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
+  }));
+  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init) };
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', config, '--validate', '--bars', `MNQ=${minute}`], { encoding: 'utf8', env, timeout: 220000 });
+  assert.strictEqual(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /preflight PASS stage: stage 1 on practice-validate/);
+  assert.match(r.stdout, /\[replay\] done: /);
+  assert.match(r.stdout, /\[replay\] stage 1 \(learn to trade\) report:\n/);
+  assert.match(r.stdout, /\[replay\] stage-1 exit test: FAIL\n\[replay\] {3}INSUFFICIENT planned-rr: insufficient sample \(0; at least 20\)/);
+});

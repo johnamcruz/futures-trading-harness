@@ -157,6 +157,10 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   assert.strictEqual(P.libraryDisplay(ctx({ run: { libraryDisplay: true }, gate: { evaluation: 'ev1' } })).status, P.PASS);
   assert.strictEqual(P.practiceMode(ctx({ gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') }, run: { practice: null } })).status, P.PASS);
   assert.strictEqual(P.curatedList(ctx({ run: { curated: null } })).status, P.PASS);
+  // A resume of a run started before latency was charged keeps its pinned clock: PASS, noted. A new pinned run FAILs (above).
+  const resumed = P.latency(ctx({ run: { latency: false, latencyPinnedResume: true } }));
+  assert.deepStrictEqual([resumed.status, /^pinned: a resume of a run started before latency was charged/.test(resumed.detail)], [P.PASS, true]);
+  assert.strictEqual(P.latency(ctx({ run: { latency: false, latencyPinnedResume: false } })).status, P.FAIL);
   // The source check: within half a tick is one source; nothing to compare (no list, no moment in the bars, no bars) is N/A.
   assert.strictEqual(P.curatedSource(ctx({ read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [{ ...MOMENT, standard: { plan: { ...MOMENT.standard.plan, entry: BAR_CLOSE + 0.1 } } }] } }) } })).status, P.PASS);
   // The reader: the bars given aggregated to the list's timeframe; another symbol, or no timeframe, says why.
@@ -197,6 +201,23 @@ test('N/A never fails: a feature not merged reports "not available (needs <branc
   // The merged features' checks judge them on the good fixture.
   for (const name of ['strategy-valid-bars', 'head-composed-reads', 'curated-list', 'latency', 'library-display', 'stage']) assert.strictEqual(res.results.find(x => x.check === name).status, P.PASS, name);
   assert.ok(!Object.keys(P.NEEDS).some(k => ['validBars', 'latency', 'libraryDisplay', 'curatedList', 'composedReads'].includes(k)), 'no merged feature waits');
+});
+
+test('feature detection reads an exported symbol, never the source text: a comment naming "composed" doesn\'t flip it', () => {
+  const root = tmp();
+  const file = path.join(root, 'scripts', 'lib', 'replay', 'scorecard.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const features = () => P.defaultReaders(root, {}).features();
+  fs.writeFileSync(file, "'use strict';\n// The scorecard doesn't score composed setups yet.\nconst composed = null;\nmodule.exports = { composed };\n");
+  assert.strictEqual(features().scorecardComposed, false, 'the word in a comment or a name');
+  fs.writeFileSync(path.join(root, 'scripts', 'lib', 'replay', 'other.js'), '');
+  const again = path.join(tmp(), 'scripts', 'lib', 'replay');
+  fs.mkdirSync(again, { recursive: true });
+  fs.writeFileSync(path.join(again, 'scorecard.js'), "module.exports = { SCORES_COMPOSED: true };\n");
+  assert.strictEqual(P.defaultReaders(path.resolve(again, '..', '..', '..'), {}).features().scorecardComposed, true, 'the exported symbol');
+  assert.strictEqual(P.defaultReaders(tmp(), {}).features().scorecardComposed, false, 'no scorecard');
+  // On this repository (no scorecard fix merged): N/A.
+  assert.strictEqual(P.defaultReaders(ROOT, {}).features().scorecardComposed, false);
 });
 
 test('a check that throws is a FAIL with its message', () => {
