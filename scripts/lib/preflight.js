@@ -8,7 +8,9 @@
  * it (behind the contract translator) and asked read-only questions only. Each check
  * gives { check, status: 'ok' | 'warn' | 'fail', detail }; any fail fails it.
  *
- *   configChecks(raw)                         { cfg, results }: the runner config, eodAt, a live run's account
+ *   configChecks(raw, { root, read })         { cfg, results }: the runner config, eodAt, a live run's account, and
+ *                                             the fine-tuning adapter it declares (learning/adapter.js adapterCheck, as
+ *                                             a live run: a pending, failed, stale or invalid one is refused)
  *   allowListChecks(cfg, broker, env)         a live run's allow-list holds its account
  *   harnessChecks(cfg, root, env, deps)       the CLI harness command resolves (and answers --version)
  *   conformanceChecks(mcp, opts)              the broker MCP interface, through the translator (conformance.js)
@@ -49,7 +51,13 @@ const { resolveClock, SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-no
 const r = (check, status, detail = '') => ({ check, status, detail });
 const SAMPLE_BARS = 20;
 
-function configChecks(raw) {
+/** The adapter check's readers (learning/adapter.js): the manifest, the spec, the harness's digests now. */
+function adapterReaders(root) {
+  const A = require('./learning/adapter');
+  return { adapterManifest: A.readJsonFile, adapterSpec: () => A.readJsonFile(path.join(root, A.SPEC_FILE)), harnessDigests: () => A.currentDigests(root) };
+}
+
+function configChecks(raw, { root = path.resolve(__dirname, '..', '..'), read = null } = {}) {
   let cfg;
   try {
     cfg = validateConfig(raw);
@@ -60,6 +68,11 @@ function configChecks(raw) {
   // validateConfig refuses a missing eodAt, sessions outside market hours, and sessions past eodAt.
   results.push(r('eodAt and sessions', 'ok', `end of day ${cfg.eodAt} (early closes ${cfg.earlyCloseEodAt}); sessions ${cfg.sessions.join(', ')} end by it`));
   if (!cfg.paper && !String(cfg.account || '').trim()) results.push(r('account', 'fail', 'a live run (paper: false) names its account ("account" in the runner config)'));
+  // A declared fine-tuning adapter: a session outside the replay splits runs only a validated, current one.
+  if (cfg.adapter) {
+    const x = require('./learning/adapter').adapterCheck({ cfg, role: 'live', read: read || adapterReaders(root) });
+    results.push(r('adapter', x.status === 'PASS' ? 'ok' : 'fail', x.detail));
+  }
   return { cfg, results };
 }
 
@@ -248,7 +261,7 @@ function openReadOnly({ broker, root, env, createClient = createMcpClient }) {
 
 async function runPreflight({ raw, root, env = process.env, home = loadConfig(env).home, deps = {} }) {
   const results = [];
-  const { cfg, results: cfgResults } = configChecks(raw);
+  const { cfg, results: cfgResults } = configChecks(raw, { root, read: deps.adapterRead || null });
   results.push(...cfgResults);
   if (!cfg) return finish(results);
   let broker;
