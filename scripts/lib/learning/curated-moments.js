@@ -52,7 +52,9 @@
  * expected: take when the standard traded and the gate would allow it (the trend rule, or D2), else pass.
  *
  * The window (windowOf): from LEAD_SETUP setup candles before the reaction candle opened (so the facts build) to the
- * standard's exit when filled, else the end of the reaction's confirmation window, never past end of day.
+ * end of the reaction's confirmation window (or the decision close, if later), never past end of day. Never the
+ * standard's exit: the pinned windows sit in the run home, and an end at the exit would tell the model the outcome
+ * (what is open after a window is managed bar by bar until flat: curated-lists.js curatedPoints).
  *
  *   USES                                    the uses a scan takes: practice (practice-train), validate (practice-validate)
  *   scanMoments({ bars, root, minutes, tick, from, to, use, setupTf, eodOf, inSession, windowBars, stats })   [moment]
@@ -246,12 +248,11 @@ function gateView({ home, root, bars, side, b, standard, nowMs, tick }) {
 }
 
 /** The window to replay (see the header): { from, to } ISO. */
-function windowOf({ reactionAt, setupTf, outcome, eodMs, decisionClose }) {
+function windowOf({ reactionAt, setupTf, eodMs, decisionClose }) {
   const step = setupTf * 60000;
   const reactionClose = Date.parse(reactionAt);
   const from = reactionClose - step - LEAD_SETUP * step;
   let to = Math.max(reactionClose + step, decisionClose);
-  if (outcome && outcome.filled && outcome.exitTime) to = Math.max(to, Date.parse(outcome.exitTime));
   if (Number.isFinite(eodMs)) to = Math.min(to, eodMs);
   return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
 }
@@ -335,7 +336,7 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
         standard: { status: at.status, why: at.why, setupKey: at.standard ? setupKeyOf(at.standard.reads) : null, plan: at.standard ? { entry: at.standard.plan.entry.price, stop: at.standard.plan.stop.price, target: at.standard.plan.target.price, rr: at.standard.plan.rr } : null },
         outcome: at.status === 'traded' ? { result: resultOf(outcome), R: outcome && outcome.filled ? outcome.R : null, exitReason: outcome ? outcome.exitReason : null } : { result: at.status, R: null, exitReason: null },
         gate, expected: at.status === 'traded' && (gate.trendAllowed || (gate.d2 && gate.d2.allowed)) ? 'take' : 'pass',
-        window: windowOf({ reactionAt: m.candle.closedAt, setupTf, outcome, eodMs: eodOf(decisionClose), decisionClose: Math.max(decisionClose, list[recordBar].ms + tfMs) }),
+        window: windowOf({ reactionAt: m.candle.closedAt, setupTf, eodMs: eodOf(decisionClose), decisionClose: Math.max(decisionClose, list[recordBar].ms + tfMs) }),
       });
     }
   } finally {

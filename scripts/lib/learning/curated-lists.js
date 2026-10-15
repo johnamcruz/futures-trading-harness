@@ -27,19 +27,23 @@
  * The mix is every list's moments in time order: a replay plays its windows in time order (its clock moves forward only,
  * and the experience index is walk-forward by day, so another order would leak); the selection balances it across years.
  *
- *   DEFAULTS                                  { total, mix, minSkill, passShare, seed, manageTailMin }
+ *   DEFAULTS                                  { total, mix, minSkill, passShare, seed }
+ *   listSizes(total, mix)                    each list's share of total, whole numbers adding up to total exactly
+ *   accountOpen({ positions, orders })       whether the account holds a position (any listed; a size that can't be
+ *                                            read is open) or a working order
  *   buildLists(moments, { use, seed, total, mix, minSkill, passShare, sources })   the document, fingerprinted
  *   selectList(candidates, { name, size, seed, minSkill, passShare })   [moment]
  *   coverageOf(selected, candidates, { minSkill })   per skill (count, available, combinations, under), outcomes, years,
  *                                            and per reaction kind (rejection, breakout, at a level or a gap's edge)
  *   coverageText(doc)                        the coverage report, as text
  *   fingerprintOf(doc), writeLists(dir, doc), readLists(file)
- *   validateCuratedConfig(raw)               a replay config's `curatedList`: { file, list, manageTailMin }
- *   curatedForRun({ file, list, start, end, manageTailMin, symbols, timeframe, setupTf })
- *                                            { file, list, fingerprint, use, role, market, windows, manageTailMin }
- *   curatedPoints(points, curated, delayMs)  the decision times a curated run steps: its windows' (and their tails'),
- *                                            the rest of those days' trade times marked `manage` (stepped only while
- *                                            something is open: replay/driver.js), and those days' premarket and end of day
+ *   validateCuratedConfig(raw)               a replay config's `curatedList`: { file, list }
+ *   curatedForRun({ file, list, start, end, symbols, timeframe, setupTf })
+ *                                            { file, list, fingerprint, use, role, market, windows }
+ *   curatedPoints(points, curated, delayMs)  the decision times a curated run steps: from the first window on, the
+ *                                            trade times in a window and the window days' premarket and end of day;
+ *                                            every other time marked `manage` (stepped only while something is open:
+ *                                            replay/driver.js), so a position carried past a window or a day is managed
  *   emptyWindows(points, curated, delayMs)   the windows no decision time falls in (the run's sessions miss them)
  *   pinCurated(runHome, curated), loadPinnedCurated(home)   the run's copy: its windows only, never the outcomes
  *   dayChunks(from, to, n)                   [from, to) split into n runs of whole session dates (a parallel scan)
@@ -64,7 +68,6 @@ const DEFAULTS = Object.freeze({
   minSkill: 3,
   passShare: Object.freeze({ 'trend-end': 0.6, chop: 0.7, 'counter-trend': 0.7 }),
   seed: 1,
-  manageTailMin: 0,
 });
 /** Every skill a read maps to (curated-moments.js READ_SKILL, the crosswalk's). */
 const skillsOf = () => [...new Set([...Object.values(momentsLib().READ_SKILL).flatMap(Object.values), momentsLib().SHAPE_SKILL])].sort();
@@ -157,6 +160,25 @@ function coverageOf(selected, candidates, { minSkill = DEFAULTS.minSkill } = {})
   };
 }
 
+/** Each list's share of total: whole numbers that add up to total (largest remainders, ties in list order). */
+function listSizes(total, mix) {
+  const raw = LISTS.map(n => total * (mix[n] || 0));
+  const out = raw.map(Math.floor);
+  const order = LISTS.map((_n, i) => i).sort((a, b) => (raw[b] - out[b]) - (raw[a] - out[a]) || a - b);
+  for (let k = 0, left = total - out.reduce((a, b) => a + b, 0); k < order.length && left > 0; k += 1, left -= 1) {
+    if (raw[order[k]] > 0) out[order[k]] += 1;
+    else left += 1;
+  }
+  return Object.fromEntries(LISTS.map((n, i) => [n, out[i]]));
+}
+
+/** Whether an account state holds a position (any listed one: a size that can't be read is open) or a working order. */
+function accountOpen(state) {
+  const s = state && typeof state === 'object' ? state : {};
+  const flat = p => p && (p.size === 0 || p.size === '0');
+  return (Array.isArray(s.positions) ? s.positions : []).some(p => !flat(p)) || (Array.isArray(s.orders) ? s.orders : []).length > 0;
+}
+
 function fingerprintOf(doc) {
   const { builtAt: _b, fingerprint: _f, ...rest } = doc;
   return hashOf(JSON.stringify(rest));
@@ -185,8 +207,9 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
   const lists = {};
   const coverage = {};
   const short = {};
+  const sizes = listSizes(total, mix);
   for (const name of LISTS) {
-    const size = Math.round(total * (mix[name] || 0));
+    const size = sizes[name];
     const cands = all.filter(m => m.list === name);
     lists[name] = size > 0 ? selectList(cands, { name, size, seed, minSkill, passShare: passShare[name] ?? null }) : [];
     coverage[name] = coverageOf(lists[name], cands, { minSkill });
@@ -243,14 +266,12 @@ function readLists(file) {
 function validateCuratedConfig(raw) {
   if (raw === undefined || raw === null) return { curated: null, errors: [] };
   const errors = [];
-  if (!isObj(raw)) return { curated: null, errors: ['curatedList: { "file": "<curated lists>", "list": "mix", "manageTailMin": 0 }'] };
-  for (const k of Object.keys(raw)) if (!['file', 'list', 'manageTailMin'].includes(k)) errors.push(`curatedList.${k}: unknown (file, list, manageTailMin)`);
+  if (!isObj(raw)) return { curated: null, errors: ['curatedList: { "file": "<curated lists>", "list": "mix" }'] };
+  for (const k of Object.keys(raw)) if (!['file', 'list'].includes(k)) errors.push(`curatedList.${k}: unknown (file, list)`);
   if (!(typeof raw.file === 'string' && raw.file.trim())) errors.push('curatedList.file: a curated lists document (scripts/curated-lists.js build)');
   const list = raw.list === undefined ? 'mix' : raw.list;
   if (!['mix', ...LISTS].includes(list)) errors.push(`curatedList.list: mix or one of ${LISTS.join(', ')}`);
-  const tail = raw.manageTailMin === undefined ? DEFAULTS.manageTailMin : raw.manageTailMin;
-  if (!(Number.isInteger(tail) && tail >= 0 && tail <= 1440)) errors.push('curatedList.manageTailMin: whole minutes from 0 to 1440');
-  return errors.length ? { curated: null, errors } : { curated: { file: raw.file, list, manageTailMin: tail }, errors };
+  return errors.length ? { curated: null, errors } : { curated: { file: raw.file, list }, errors };
 }
 
 /** The windows of a document's list, merged and sorted: [{ from, to }] (ms). */
@@ -268,7 +289,7 @@ function windowsOf(doc, list) {
 }
 
 /** A replay's curated list, checked against its window: the document's use must be the run's (assertUse). */
-function curatedForRun({ file, list = 'mix', start, end, manageTailMin = DEFAULTS.manageTailMin, symbols = null, timeframe = null, setupTf = null }) {
+function curatedForRun({ file, list = 'mix', start, end, symbols = null, timeframe = null, setupTf = null }) {
   const doc = readLists(file);
   // The run's market is the list's: its root among the run's symbols, the same bar and setup timeframes.
   const mk = doc.market || {};
@@ -283,28 +304,26 @@ function curatedForRun({ file, list = 'mix', start, end, manageTailMin = DEFAULT
   const e = end.getTime();
   assertUse(doc.use, s, e);
   if (windows[0].from < s || windows[windows.length - 1].to > e) throw new Error(`curatedList: its windows (${new Date(windows[0].from).toISOString()} to ${new Date(windows[windows.length - 1].to).toISOString()}) lie outside the run's ${start.toISOString()} to ${end.toISOString()}`);
-  return { file, list, fingerprint: doc.fingerprint, use: doc.use, role: doc.role, market: mk, manageTailMin, windows };
+  return { file, list, fingerprint: doc.fingerprint, use: doc.use, role: doc.role, market: mk, windows };
 }
 
-const inside = (windows, ms, tailMs = 0) => windows.some(w => ms > w.from && ms <= w.to + tailMs);
+const inside = (windows, ms) => windows.some(w => ms > w.from && ms <= w.to);
 
 /**
- * The decision times a curated run steps (a time is its bar's close plus the runner's poll delay, delayMs): the trade
- * times whose bar closed in a window or its management tail; the rest of those days' trade times after the day's first
- * window, marked `manage` (the driver steps one only while a position or working order is open, as practice manages
- * every bar with something open); and those days' premarket and end of day.
+ * The decision times a curated run steps (a time is its bar's close plus the runner's poll delay, delayMs), from the
+ * first window's opening on: the trade times whose bar closed in a window, and the window days' premarket and end of
+ * day; every other time (the rest of a window's day, and every time of the days after, end of day included) marked
+ * `manage`: the driver steps one only while a position or working order is open, as practice manages every bar with
+ * something open, so a position the model carries past its window, or past an end of day that didn't flatten it, is
+ * still managed.
  */
 function curatedPoints(points, curated, delayMs = 0) {
-  const tail = curated.manageTailMin * 60000;
+  if (!curated.windows.length) return [];
   const close = p => p.t.getTime() - delayMs;
-  const kept = p => p.kind === 'trade' && inside(curated.windows, close(p), tail);
-  const firstOfDay = new Map();
-  for (const p of points) if (kept(p) && !firstOfDay.has(p.day)) firstOfDay.set(p.day, close(p));
-  return points.flatMap(p => {
-    if (!firstOfDay.has(p.day)) return [];
-    if (p.kind !== 'trade' || kept(p)) return [p];
-    return close(p) > firstOfDay.get(p.day) ? [{ ...p, manage: true }] : [];
-  });
+  const kept = p => p.kind === 'trade' && inside(curated.windows, close(p));
+  const days = new Set(points.filter(kept).map(p => p.day));
+  const first = curated.windows[0].from;
+  return points.filter(p => p.t.getTime() > first).map(p => (kept(p) || (p.kind !== 'trade' && days.has(p.day)) ? p : { ...p, manage: true }));
 }
 
 /** The windows no trade decision time falls in (the run's sessions or end of day miss them). */
@@ -326,7 +345,7 @@ function dayChunks(from, to, n) {
 
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return null; } };
 
-const pinHash = pin => hashOf(JSON.stringify({ fingerprint: pin.fingerprint, list: pin.list, manageTailMin: pin.manageTailMin, windows: pin.windows }));
+const pinHash = pin => hashOf(JSON.stringify({ fingerprint: pin.fingerprint, list: pin.list, windows: pin.windows }));
 
 /**
  * Pin the run's curated list: the list the config resolved (its fingerprint, the file read again must be it), as the
@@ -343,8 +362,8 @@ function pinCurated(runHome, curated) {
   const dir = path.join(runHome, 'experience');
   const file = path.join(dir, PINNED);
   const pinned = readJson(file);
-  const mine = { fingerprint: doc.fingerprint, list: curated.list, manageTailMin: curated.manageTailMin };
-  if (pinned && JSON.stringify({ fingerprint: pinned.fingerprint, list: pinned.list, manageTailMin: pinned.manageTailMin }) !== JSON.stringify(mine)) {
+  const mine = { fingerprint: doc.fingerprint, list: curated.list };
+  if (pinned && JSON.stringify({ fingerprint: pinned.fingerprint, list: pinned.list }) !== JSON.stringify(mine)) {
     throw new Error(`this run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}); a run keeps its list (start another runId)`);
   }
   const pin = { kind: 'curated-pin', ...mine, windows: windowsOf(doc, curated.list) };
@@ -353,12 +372,12 @@ function pinCurated(runHome, curated) {
   return { file, fingerprint: doc.fingerprint, list: curated.list, windows: pin.windows.length };
 }
 
-/** The run's pinned curated windows ({ fingerprint, list, windows, manageTailMin }), or null when none is pinned. */
+/** The run's pinned curated windows ({ fingerprint, list, windows }), or null when none is pinned. */
 function loadPinnedCurated(home) {
   const pin = readJson(path.join(home, 'experience', PINNED));
   if (!pin) return null;
   if (pin.kind !== 'curated-pin' || !Array.isArray(pin.windows) || pinHash(pin) !== pin.hash) throw new Error('the pinned curated list doesn\'t match its hash (changed after it was pinned)');
-  return { fingerprint: pin.fingerprint, list: pin.list, manageTailMin: pin.manageTailMin, windows: pin.windows };
+  return { fingerprint: pin.fingerprint, list: pin.list, windows: pin.windows };
 }
 
 /** Setup-focused practice inside the list's windows: a bar outside them runs only to manage what is open. */
@@ -369,6 +388,6 @@ function curatedSelect({ windows, barClose, open, select }) {
 
 module.exports = {
   VERSION, KIND, DEFAULTS, LISTS, OUTCOMES, ROLE, YEAR_CAP, skillsOf,
-  buildLists, selectList, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
+  buildLists, selectList, listSizes, accountOpen, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
   validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, emptyWindows, dayChunks, pinCurated, loadPinnedCurated, curatedSelect,
 };

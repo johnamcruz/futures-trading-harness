@@ -58,13 +58,18 @@ async function scanJobs(argv, from, to, out, jobs) {
     const child = spawn(process.execPath, [__filename, ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     child.stderr.on('data', d => { err += d; });
-    child.on('close', code => resolve({ file, code, err }));
+    child.on('error', e => resolve({ file, code: null, err: `the scan of ${a}..${b} could not start (${e.message})` }));
+    child.on('close', (code, signal) => resolve({ file, code, err: signal ? `the scan of ${a}..${b} was stopped by ${signal}` : err }));
   }));
   const done = await Promise.all(runs);
-  const bad = done.find(r => r.code !== 0);
-  const text = bad ? null : done.map(r => fs.readFileSync(r.file, 'utf8')).join('');
-  for (const r of done) fs.rmSync(r.file, { force: true });
-  if (bad) throw new Error(bad.err.trim().replace(/^\[curated-lists\] /, ''));
+  let text;
+  try {
+    const bad = done.find(r => r.code !== 0);
+    if (bad) throw new Error(String(bad.err).trim().replace(/^\[curated-lists\] /, '') || `the scan of a part failed (exit ${bad.code})`);
+    text = done.map(r => fs.readFileSync(r.file, 'utf8')).join('');
+  } finally {
+    for (const r of done) fs.rmSync(r.file, { force: true });
+  }
   fs.writeFileSync(path.resolve(out), text);
   return text.split('\n').filter(Boolean).map(l => JSON.parse(l));
 }
@@ -73,7 +78,7 @@ async function scan(argv) {
   const [file, root, from, to, use, out] = ['--bars', '--root', '--from', '--to', '--use', '--out'].map(f => opt(argv, f));
   if (!file || !root || !from || !to || !use || !out) throw new Error(USAGE);
   if (!/^[A-Z0-9]{1,8}$/.test(root)) throw new Error('--root: a contract root, e.g. MNQ');
-  const minutes = numberOpt(argv, '--minutes', 3, { min: 1 });
+  const minutes = numberOpt(argv, '--minutes', 3, { integer: true, min: 1 });
   const setupTf = numberOpt(argv, '--setup-tf', 15, { integer: true, min: 1 });
   const tick = numberOpt(argv, '--tick', 0.25, { min: 1e-9 });
   const windowBars = opt(argv, '--window-bars') === undefined ? undefined : numberOpt(argv, '--window-bars', 0, { integer: true, min: 1 });

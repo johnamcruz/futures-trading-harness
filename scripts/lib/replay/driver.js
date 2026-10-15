@@ -48,7 +48,7 @@ const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
-const { curatedPoints } = require('../learning/curated-lists');
+const { curatedPoints, accountOpen } = require('../learning/curated-lists');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
@@ -128,8 +128,7 @@ function defaultDeps(run, root) {
     },
     // Whether the account holds a position or a working order (a curated run manages what is open after a window).
     async open(env, account) {
-      const { positions, orders } = await withAdapter({ root, env }, a => a.accountState(account));
-      return (positions || []).some(p => Number(p.size) !== 0) || (orders || []).length > 0;
+      return accountOpen(await withAdapter({ root, env }, a => a.accountState(account)));
     },
     async trades(env, account, since, until) {
       // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).
@@ -224,9 +223,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     runId: run.runId, hash,
     info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
-  // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; the
-  // rest of a window's day is stepped only while a position or working order is open (managed every bar, as practice
-  // does), and skipped once flat until the next window; the broker's fills and brackets work through the gaps.
+  // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
+  // other time from the first window on (later days included) is stepped only while a position or working order is
+  // open (managed every bar, as practice does), checked at each day's first, and skipped once flat until the next
+  // window; the broker's fills and brackets work through the gaps.
   const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : all;
   const recorded = store.recordedTimes(paths.runDir);
@@ -265,8 +265,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   let credentialWarned = false;
   const timeoutMs = (cfg.cycleTimeoutMinutes * Math.max(1, cfg.symbols.length) + 2) * 60000;
   const queue = [...todo];
-  // A curated run's management after a window: checked at its first time, then while something stays open.
+  // A curated run's management after a window: checked at its first time (and each day's first), then while something
+  // stays open.
   let managing = true;
+  let managingDay = null;
   while (queue.length) {
     if (cycles >= maxCycles) return { cycles, stopped: `stopped after ${cycles} decision times (--max-cycles)`, done: false };
     const env = replayEnv(baseEnv, run, { at: queue[0].t });
@@ -280,13 +282,17 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     if (killed !== null && !dayUnderWay) return { cycles, stopped: `the run's kill switch is on (${env.FTH_KILL_SWITCH_FILE}${killed ? `: ${killed}` : ''}); review it, then remove the file`, done: false };
     const point = queue.shift();
     writeClock(point.t);
+    if (point.day !== managingDay) {
+      managingDay = point.day;
+      managing = true;
+    }
     if (point.manage) {
       if (!managing) continue;
       // A check that fails manages the bar (never leaves a position alone).
       const open = await Promise.resolve().then(() => deps.open(env, cfg.account)).then(Boolean, () => true);
       if (!open) {
         managing = false;
-        log(`${point.t.toISOString()}: flat after the curated window; the clock advances to the next window`);
+        log(`${point.t.toISOString()}: flat outside the curated windows; the clock advances to the next window`);
         continue;
       }
     } else if (point.kind === 'trade') managing = true;

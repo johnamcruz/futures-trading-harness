@@ -101,6 +101,8 @@ test('the document: the lists at their mix shares, the mix in time order, seeded
   const doc = C.buildLists(world(), { use: 'practice', total: 100, seed: 7, minSkill: 2, now: new Date('2026-10-14T00:00:00Z') });
   assert.deepStrictEqual(Object.fromEntries(Object.entries(doc.lists).map(([k, v]) => [k, v.length])), { 'trend-up': 35, 'trend-down': 35, 'trend-end': 10, chop: 10, 'counter-trend': 10 });
   assert.deepStrictEqual(doc.short, {});
+  const ten = C.buildLists(world(), { use: 'practice', total: 10, seed: 7 });
+  assert.strictEqual(Object.values(ten.lists).flat().length, 10, 'the list sizes add up to the total');
   assert.strictEqual(doc.mix.length, 100);
   assert.deepStrictEqual(new Set(doc.mix), new Set(Object.values(doc.lists).flat().map(m => m.id)));
   const when = id => Object.values(doc.lists).flat().find(m => m.id === id).reactionAt;
@@ -180,10 +182,10 @@ test('curatedForRun: the list\'s windows inside the run, the document\'s use the
   // Merged: overlapping windows are one.
   const two = { lists: { 'trend-up': [moment({ id: 'a', time: '15:00' }), moment({ id: 'b', time: '15:30' })], 'trend-down': [], 'trend-end': [], chop: [], 'counter-trend': [] }, mix: ['a', 'b'] };
   assert.deepStrictEqual(C.windowsOf(two, 'mix'), [{ from: Date.parse('2022-03-01T14:15:00Z'), to: Date.parse('2022-03-01T16:30:00Z') }]);
-  for (const [raw, why] of [[{ list: 'mix' }, /curatedList.file/], [{ file: 'x', list: 'sideways' }, /curatedList.list/], [{ file: 'x', manageTailMin: -1 }, /manageTailMin/], [{ file: 'x', extra: 1 }, /curatedList.extra: unknown/], ['x', /curatedList: \{/]]) {
+  for (const [raw, why] of [[{ list: 'mix' }, /curatedList.file/], [{ file: 'x', list: 'sideways' }, /curatedList.list/],  [{ file: 'x', manageTailMin: 60 }, /curatedList.manageTailMin: unknown/], [{ file: 'x', extra: 1 }, /curatedList.extra: unknown/], ['x', /curatedList: \{/]]) {
     assert.match(C.validateCuratedConfig(raw).errors.join(), why);
   }
-  assert.deepStrictEqual(C.validateCuratedConfig({ file: 'x' }).curated, { file: 'x', list: 'mix', manageTailMin: 0 });
+  assert.deepStrictEqual(C.validateCuratedConfig({ file: 'x' }).curated, { file: 'x', list: 'mix' });
   // The run's market is the list's.
   const at = { file: train, list: 'mix', start: new Date('2020-01-01T00:00:00Z'), end: new Date('2024-06-28T00:00:00Z') };
   assert.throws(() => C.curatedForRun({ ...at, ...MARKET, symbols: ['MES'] }), /its moments are MNQ; the run trades MES/);
@@ -192,24 +194,28 @@ test('curatedForRun: the list\'s windows inside the run, the document\'s use the
   assert.strictEqual(C.curatedForRun({ ...at, ...MARKET, symbols: ['MES', 'mnq'] }).market.minutes, 3);
 });
 
-test('curatedPoints: a curated run steps only its windows (and their management tails) and those days\' premarket and end of day', () => {
+test('curatedPoints: from the first window on, the windows\' trade times and their days\' premarket and end of day; every other time a management time', () => {
   const { validateConfig } = require('../../scripts/lib/autotrader');
   const { decisionPoints } = require('../../scripts/lib/replay/schedule');
   const cfg = validateConfig({ harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, premarketAt: '09:00@America/New_York', eodAt: '15:50@America/New_York', sessions: ['09:30-15:50@America/New_York'] });
-  const all = decisionPoints(cfg, { start: new Date('2022-03-01T00:00:00Z'), end: new Date('2022-03-05T00:00:00Z') });
+  const all = decisionPoints(cfg, { start: new Date('2022-02-28T00:00:00Z'), end: new Date('2022-03-05T00:00:00Z') });
   const windows = [{ from: Date.parse('2022-03-01T15:00:00Z'), to: Date.parse('2022-03-01T15:30:00Z') }, { from: Date.parse('2022-03-03T18:00:00Z'), to: Date.parse('2022-03-03T18:12:00Z') }];
   const delay = (cfg.barDelaySeconds || 0) * 1000;
-  const kept = C.curatedPoints(all, { windows, manageTailMin: 6 }, delay);
+  const kept = C.curatedPoints(all, { windows }, delay);
   const trade = kept.filter(p => p.kind === 'trade' && !p.manage).map(p => p.t.toISOString().slice(5, 16));
-  assert.deepStrictEqual(trade, ['03-01T15:03', '03-01T15:06', '03-01T15:09', '03-01T15:12', '03-01T15:15', '03-01T15:18', '03-01T15:21', '03-01T15:24', '03-01T15:27', '03-01T15:30', '03-01T15:33', '03-01T15:36', '03-03T18:03', '03-03T18:06', '03-03T18:09', '03-03T18:12', '03-03T18:15', '03-03T18:18']);
-  assert.deepStrictEqual(kept.filter(p => p.kind !== 'trade').map(p => `${p.kind}@${p.day}`), ['premarket@2022-03-01', 'eod@2022-03-01', 'premarket@2022-03-03', 'eod@2022-03-03']);
-  // The rest of a window's day after its first window: management times (stepped only while something is open).
+  assert.deepStrictEqual(trade, ['03-01T15:03', '03-01T15:06', '03-01T15:09', '03-01T15:12', '03-01T15:15', '03-01T15:18', '03-01T15:21', '03-01T15:24', '03-01T15:27', '03-01T15:30', '03-03T18:03', '03-03T18:06', '03-03T18:09', '03-03T18:12']);
+  assert.deepStrictEqual(kept.filter(p => p.kind !== 'trade' && !p.manage).map(p => `${p.kind}@${p.day}`), ['eod@2022-03-01', 'premarket@2022-03-03', 'eod@2022-03-03']);
+  // Every other time from the first window's opening on is a management time: the rest of a window's day, the time
+  // before a later window, and the days without one (their premarket and end of day too).
   const manage = kept.filter(p => p.manage);
-  assert.ok(manage.every(p => p.kind === 'trade' && (p.day === '2022-03-01' || p.day === '2022-03-03')));
-  assert.strictEqual(manage[0].t.toISOString().slice(5, 16), '03-01T15:39');
-  assert.strictEqual(manage.filter(p => p.day === '2022-03-01').at(-1).t.toISOString().slice(5, 16), '03-01T20:48', 'to end of day');
-  assert.ok(!manage.some(p => p.day === '2022-03-03' && p.t.getTime() - delay <= windows[1].from), 'never before the day\'s first window');
-  assert.ok(!kept.some(p => ['2022-03-02', '2022-03-04'].includes(p.day)), 'days without a window are not stepped');
+  assert.strictEqual(manage[0].t.toISOString().slice(5, 16), '03-01T15:00', 'the first window\'s opening close itself is not in it');
+  assert.strictEqual(manage.find(p => p.t.toISOString() > '2022-03-01T15:30:59Z').t.toISOString().slice(5, 16), '03-01T15:33');
+  assert.ok(manage.some(p => p.day === '2022-03-01' && p.t.toISOString().slice(11, 16) === '20:48'), 'to end of day');
+  assert.deepStrictEqual([...new Set(manage.filter(p => p.kind !== 'trade').map(p => `${p.kind}@${p.day}`))], ['premarket@2022-03-02', 'eod@2022-03-02', 'premarket@2022-03-04', 'eod@2022-03-04']);
+  assert.ok(manage.some(p => p.day === '2022-03-03' && p.t.getTime() - delay <= windows[1].from), 'before a later window too (a carried position)');
+  assert.ok(!kept.some(p => p.t.getTime() <= windows[0].from), 'nothing before the first window');
+  assert.strictEqual(kept.length, all.filter(p => p.t.getTime() > windows[0].from).length, 'every later time, stepped or managed');
+  assert.deepStrictEqual(C.curatedPoints(all, { windows: [] }), []);
   assert.deepStrictEqual(C.emptyWindows(all, { windows: [...windows, { from: Date.parse('2022-03-02T23:00:00Z'), to: Date.parse('2022-03-02T23:30:00Z') }] }, delay).length, 1, 'a window outside the sessions holds no time');
   assert.deepStrictEqual(C.dayChunks('2022-03-01', '2022-03-08', 3), [['2022-03-01', '2022-03-04'], ['2022-03-04', '2022-03-07'], ['2022-03-07', '2022-03-08']]);
   assert.deepStrictEqual(C.dayChunks('2022-03-01', '2022-03-02', 4), [['2022-03-01', '2022-03-02']]);
@@ -227,7 +233,7 @@ test('curatedSelect: inside the windows setup-focused practice decides; outside,
 test('pin: only a learning practice run of the document\'s role; a run keeps its list; the pinned copy is checked when loaded', () => {
   const dir = tmp();
   const file = C.writeLists(dir, C.buildLists(world(), { use: 'practice', total: 20, seed: 1 }));
-  const curated = { file, list: 'mix', manageTailMin: 0, fingerprint: C.readLists(file).fingerprint };
+  const curated = { file, list: 'mix', fingerprint: C.readLists(file).fingerprint };
   const home = tmp();
   assert.throws(() => C.pinCurated(home, curated), /no learning-run.json/);
   const run = o => fs.writeFileSync(path.join(home, 'learning-run.json'), JSON.stringify({ learning: true, role: 'practice-train', practice: { mode: 'setup-focus' }, ...o }));
@@ -269,7 +275,7 @@ function curatedWorld() {
   const raw = o => ({
     runId: 'c1', workDir: path.join(dir, 'replays'), broker: 'sim', start: '2022-03-01T00:00:00Z', end: '2022-03-05T00:00:00Z', premarket: false,
     autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
-    practice: { seed: 1 }, curatedList: { file: lists(1), list: 'mix', manageTailMin: 0 }, ...o,
+    practice: { seed: 1 }, curatedList: { file: lists(1), list: 'mix' }, ...o,
   });
   return { dir, env, lists, raw, resolve: o => resolveReplay(raw(o), { baseDir: dir, env, home: dir, root: null }) };
 }
@@ -286,7 +292,6 @@ test('setupHash: the curated list is part of the run\'s setup, by its fingerprin
   assert.notStrictEqual(h({ curatedList: { file: a } }), h({ curatedList: { file: b } }), 'another list: another setup');
   assert.notStrictEqual(h({ curatedList: { file: a } }), h({ curatedList: { file: a, list: 'chop' } }));
   assert.notStrictEqual(h({ curatedList: { file: a } }), h({ curatedList: undefined }));
-  assert.notStrictEqual(h({ curatedList: { file: a } }), h({ curatedList: { file: a, manageTailMin: 30 } }));
   assert.strictEqual(w.resolve({ curatedList: { file: a } }).curated.fingerprint, C.readLists(a).fingerprint);
   // And the run's own hash (a resume under another list is another run).
   const { configHash } = require('../../scripts/lib/replay/config');
@@ -295,7 +300,6 @@ test('setupHash: the curated list is part of the run\'s setup, by its fingerprin
   assert.strictEqual(ch({ curatedList: { file: a } }), ch({ curatedList: { file: copy } }));
   assert.notStrictEqual(ch({ curatedList: { file: a } }), ch({ curatedList: { file: b } }));
   assert.notStrictEqual(ch({ curatedList: { file: a } }), ch({ curatedList: { file: a, list: 'chop' } }));
-  assert.notStrictEqual(ch({ curatedList: { file: a } }), ch({ curatedList: { file: a, manageTailMin: 30 } }));
   assert.throws(() => w.resolve({ practice: undefined }), /curatedList: runs through setup-focused practice/);
   assert.throws(() => w.resolve({ start: '2022-03-02T00:00:00Z' }), /lie outside the run's/);
   // The run's market, every bar, and its sessions holding every window.
@@ -303,42 +307,54 @@ test('setupHash: the curated list is part of the run\'s setup, by its fingerprin
   assert.throws(() => w.resolve({ autotrader: { ...auto, symbols: ['MES'] } }), /its moments are MNQ; the run trades MES/);
   assert.throws(() => w.resolve({ practice: { seed: 1, setupTf: 60 } }), /15m setups, the run's practice.setupTf is 60/);
   assert.throws(() => w.resolve({ everyNthBar: 2 }), /every bar of its windows runs/);
+  assert.throws(() => w.resolve({ prop: 'any_account' }), /curatedList: not with prop/);
   assert.throws(() => w.resolve({ autotrader: { ...auto, sessions: ['09:30-10:30@America/New_York'] } }), /window\(s\) hold no decision time of the run's sessions/);
 });
 
-test('a curated practice replay steps the list\'s windows, manages an open position bar by bar after one until flat, and pins the list', async () => {
+/** A curated run to its end: the steps, the broker checks, the result. */
+async function curatedRun(w, { open, maxCycles = Infinity, run = null } = {}) {
   const { seedRunHome, runReplay } = require('../../scripts/lib/replay/driver');
   const { startLearningRun } = require('../../scripts/lib/learning/run-gate');
-  const w = curatedWorld();
-  const run = w.resolve({});
-  seedRunHome(run, { root: path.join(__dirname, '..', '..'), userEnv: w.env });
-  startLearningRun(run.paths.runHome, { from: run.start, to: run.end, runId: run.runId, practice: run.practice, runDir: run.paths.runDir, env: w.env });
-  C.pinCurated(run.paths.runHome, run.curated);
+  const r = run || w.resolve({});
+  if (!run) {
+    seedRunHome(r, { root: path.join(__dirname, '..', '..'), userEnv: w.env });
+    startLearningRun(r.paths.runHome, { from: r.start, to: r.end, runId: r.runId, practice: r.practice, runDir: r.paths.runDir, env: w.env });
+    C.pinCurated(r.paths.runHome, r.curated);
+  }
   const steps = [];
+  const opens = [];
   const deps = {
     serverCheck: async () => null,
     async step(point) {
       steps.push(`${point.kind}@${point.t.toISOString().slice(5, 16)}`);
-      if (point.kind === 'eod') fs.writeFileSync(path.join(run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      if (point.kind === 'eod') fs.writeFileSync(path.join(r.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
       return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [] })}\n` };
     },
     async trades() { return []; },
-    // A position opened in the first window stays open to 16:30; the account is flat after.
-    async open(env) { opens.push(env.FTH_REPLAY_NOW.slice(5, 16)); return env.FTH_REPLAY_NOW <= '2022-03-01T16:30:59Z'; },
+    async open(env) { opens.push(env.FTH_REPLAY_NOW.slice(5, 16)); return open(env.FTH_REPLAY_NOW); },
   };
-  const opens = [];
-  const res = await runReplay({ run, baseEnv: w.env, root: path.join(__dirname, '..', '..'), deps });
+  const res = await runReplay({ run: r, baseEnv: w.env, root: path.join(__dirname, '..', '..'), deps, maxCycles });
+  return { run: r, steps, opens, res };
+}
+
+// A position opened in the first window stays open to 16:30; the account is flat after.
+const OPEN_TO_1630 = now => now <= '2022-03-01T16:30:59Z';
+
+test('a curated practice replay steps the list\'s windows, manages an open position bar by bar after one until flat, and pins the list', async () => {
+  const w = curatedWorld();
+  const { run, steps, opens, res } = await curatedRun(w, { open: OPEN_TO_1630 });
   assert.strictEqual(res.done, true);
   const trade = steps.filter(s => s.startsWith('trade@'));
-  // Window a: 14:15 to 16:00 (its exit); window b: 17:15 to 19:00. Steps are the closes inside them.
+  // Window a: 14:15 to 16:00; window b: 17:15 to 19:00 (the fixture moments' windows). Steps are the closes inside them.
   assert.strictEqual(trade[0], 'trade@03-01T14:30', 'the session opens after the window does');
   // After window a: managed every bar while open (16:03 to 16:30), then flat at 16:33 and skipped to end of day.
   assert.strictEqual(trade.filter(s => s.includes('03-01T')).at(-1), 'trade@03-01T16:30');
   assert.deepStrictEqual(opens.filter(t => t.startsWith('03-01')), ['03-01T16:03', '03-01T16:06', '03-01T16:09', '03-01T16:12', '03-01T16:15', '03-01T16:18', '03-01T16:21', '03-01T16:24', '03-01T16:27', '03-01T16:30', '03-01T16:33']);
-  assert.deepStrictEqual(opens.filter(t => t.startsWith('03-03')), ['03-03T19:03'], 'flat after window b: one check');
+  // Each later day is checked once at its first time (flat: skipped); a window day before its window too.
+  assert.deepStrictEqual(opens.filter(t => !t.startsWith('03-01')), ['03-02T14:30', '03-03T14:30', '03-03T19:03', '03-04T14:30']);
   assert.strictEqual(trade.filter(s => s.includes('03-03T'))[0], 'trade@03-03T17:18');
   assert.strictEqual(trade.at(-1), 'trade@03-03T19:00');
-  assert.ok(!steps.some(s => /03-0[24]T/.test(s)), 'days without a window are not stepped');
+  assert.ok(!steps.some(s => /03-0[24]T/.test(s)), 'flat days are not stepped');
   assert.deepStrictEqual(steps.filter(s => s.startsWith('eod')), ['eod@03-01T20:50', 'eod@03-03T20:50']);
   assert.strictEqual(trade.length, 31 + 10 + 35, 'the closes 14:30 to 16:00, the managed 16:03 to 16:30, and 17:18 to 19:00');
   // The runner's practice selector reads the pinned list: inside a window practice decides, outside nothing runs.
@@ -348,4 +364,40 @@ test('a curated practice replay steps the list\'s windows, manages an open posit
   assert.strictEqual(select(item('2022-03-01T15:00:00.000Z'), false).why, 'unavailable', 'inside: setup-focused practice (no briefing here: the bar runs)');
   assert.deepStrictEqual(select(item('2022-03-02T15:00:00.000Z'), false), { run: false, why: 'none', moment: null, reason: 'practice: outside the curated list\'s windows; the clock advances' });
   assert.strictEqual(select(item('2022-03-02T15:00:00.000Z'), true).why, 'manage');
+});
+
+test('curated management: a position carried past end of day is managed the next day; a failed check manages the bar; a resume carries on', async () => {
+  // Open until the next day's 15:00: 03-01's end of day runs (a window day), 03-02 is managed from its first time to 15:00.
+  const carried = await curatedRun(curatedWorld(), { open: now => now <= '2022-03-02T15:00:59Z' });
+  const day2 = carried.steps.filter(s => s.includes('03-02T'));
+  assert.strictEqual(day2[0], 'trade@03-02T14:30');
+  assert.strictEqual(day2.at(-1), 'trade@03-02T15:00');
+  assert.strictEqual(carried.opens.filter(t => t.startsWith('03-02')).at(-1), '03-02T15:03', 'flat at 15:03: the rest of the day skipped');
+  // A check that throws: the bar is stepped (never a position left alone), then flat.
+  const thrown = await curatedRun(curatedWorld(), { open: now => { if (now.startsWith('2022-03-01T16:03')) throw new Error('broker down'); return false; } });
+  assert.strictEqual(thrown.steps.filter(s => s.startsWith('trade@03-01T')).at(-1), 'trade@03-01T16:03', 'the failed check stepped its bar');
+  assert.deepStrictEqual(thrown.opens.filter(t => t.startsWith('03-01')), ['03-01T16:03', '03-01T16:06'], 'and the next one checked again (flat)');
+  // Stopped during management (--max-cycles) and resumed: the same steps as one run.
+  const whole = await curatedRun(curatedWorld(), { open: OPEN_TO_1630 });
+  const w = curatedWorld();
+  const first = await curatedRun(w, { open: OPEN_TO_1630, maxCycles: 35 });
+  assert.strictEqual(first.res.done, false);
+  assert.strictEqual(first.steps.at(-1), 'trade@03-01T16:12', 'stopped while managing');
+  const rest = await curatedRun(w, { open: OPEN_TO_1630, run: first.run });
+  assert.strictEqual(rest.res.done, true);
+  assert.deepStrictEqual([...first.steps, ...rest.steps], whole.steps);
+});
+
+test('accountOpen and listSizes: an unreadable size is open; a size of 0 flat; list sizes add up to the total', () => {
+  assert.strictEqual(C.accountOpen({ positions: [{ size: null }], orders: [] }), true, 'a size that can\'t be read is open');
+  for (const size of ['', false, undefined, 'x', -1, 2]) assert.strictEqual(C.accountOpen({ positions: [{ size }], orders: [] }), true, JSON.stringify(size));
+  assert.strictEqual(C.accountOpen({ positions: [{ size: 0 }, { size: '0' }], orders: [] }), false);
+  assert.strictEqual(C.accountOpen({ positions: [], orders: [{ id: 1 }] }), true);
+  assert.strictEqual(C.accountOpen({}), false);
+  for (const total of [1, 7, 10, 33, 101, 200]) {
+    const sizes = C.listSizes(total, C.DEFAULTS.mix);
+    assert.strictEqual(Object.values(sizes).reduce((a, b) => a + b, 0), total, `total ${total}: ${JSON.stringify(sizes)}`);
+  }
+  assert.deepStrictEqual(C.listSizes(10, C.DEFAULTS.mix), { 'trend-up': 4, 'trend-down': 3, 'trend-end': 1, chop: 1, 'counter-trend': 1 });
+  assert.deepStrictEqual(C.listSizes(5, { 'trend-up': 0.5, 'trend-down': 0.5 }), { 'trend-up': 3, 'trend-down': 2, 'trend-end': 0, chop: 0, 'counter-trend': 0 });
 });

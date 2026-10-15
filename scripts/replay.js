@@ -58,7 +58,7 @@ const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/l
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinIndex, armOf } = require('./lib/learning/experience-index');
 const { pinLibrary } = require('./lib/learning/setup-library');
-const { pinCurated } = require('./lib/learning/curated-lists');
+const { pinCurated, curatedPoints } = require('./lib/learning/curated-lists');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
@@ -80,13 +80,14 @@ function load(argv) {
 const say = msg => process.stdout.write(`[replay] ${msg}\n`);
 
 function points(run) {
-  const list = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const all = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const list = run.curated ? curatedPoints(all, run.curated, (run.cfg.barDelaySeconds || 0) * 1000).filter(p => !p.manage) : all;
   for (const d of tradingDays(run.cfg, run)) {
     const mine = list.filter(p => p.day === d.day);
     const kinds = ['premarket', 'trade', 'eod'].map(k => `${mine.filter(p => p.kind === k).length} ${k}`).join(', ');
     process.stdout.write(`${d.day}  ${d.skipped ? `skipped: ${d.skipped}` : `${kinds}${mine.length ? ` (${mine[0].t.toISOString()} .. ${mine[mine.length - 1].t.toISOString()})` : ''}`}\n`);
   }
-  process.stdout.write(`${list.length} decision times; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
+  process.stdout.write(`${list.length} decision times${run.curated ? ' of the curated windows (plus management times, stepped only while something is open: not counted)' : ''}; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
   return 0;
 }
 

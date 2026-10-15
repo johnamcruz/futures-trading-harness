@@ -193,17 +193,18 @@ test('the gate\'s view: take only when the standard traded and the trend rule (o
   }
 });
 
-test('the window: from two setup candles before the reaction candle to the standard\'s exit (or the confirmation window), never past end of day', () => {
+test('the window: from two setup candles before the reaction candle to the end of its confirmation window, never the standard\'s exit, never past end of day', () => {
   for (const m of MOMENTS) {
     const from = Date.parse(m.window.from);
     const to = Date.parse(m.window.to);
     assert.strictEqual(from, Date.parse(m.reactionAt) - 3 * 15 * 60000, m.id);
     assert.ok(to >= Date.parse(m.bar) + 180000 || to === CLOCK.eodOf(Date.parse(m.bar) + 180000), m.id);
     assert.ok(to <= CLOCK.eodOf(Date.parse(m.bar) + 180000), m.id);
+    assert.strictEqual(to, Math.min(Math.max(Date.parse(m.reactionAt) + 15 * 60000, Date.parse(m.bar) + 180000), CLOCK.eodOf(Date.parse(m.bar) + 180000)), `${m.id}: the window says nothing of the outcome`);
   }
-  const w = M.windowOf({ reactionAt: '2022-03-01T15:00:00.000Z', setupTf: 15, outcome: { filled: true, exitTime: '2022-03-01T16:30:00.000Z' }, eodMs: Date.parse('2022-03-01T20:50:00Z'), decisionClose: Date.parse('2022-03-01T15:06:00Z') });
-  assert.deepStrictEqual(w, { from: '2022-03-01T14:15:00.000Z', to: '2022-03-01T16:30:00.000Z' });
-  assert.strictEqual(M.windowOf({ reactionAt: '2022-03-01T15:00:00.000Z', setupTf: 15, outcome: null, eodMs: Infinity, decisionClose: Date.parse('2022-03-01T15:06:00Z') }).to, '2022-03-01T15:15:00.000Z');
+  const w = M.windowOf({ reactionAt: '2022-03-01T15:00:00.000Z', setupTf: 15, eodMs: Date.parse('2022-03-01T20:50:00Z'), decisionClose: Date.parse('2022-03-01T15:06:00Z') });
+  assert.deepStrictEqual(w, { from: '2022-03-01T14:15:00.000Z', to: '2022-03-01T15:15:00.000Z' });
+  assert.strictEqual(M.windowOf({ reactionAt: '2022-03-01T20:45:00.000Z', setupTf: 15, eodMs: Date.parse('2022-03-01T20:50:00Z'), decisionClose: Date.parse('2022-03-01T20:48:00Z') }).to, '2022-03-01T20:50:00.000Z', 'capped at end of day');
 });
 
 test('causal: changing the bars after a moment\'s decision changes nothing known at it (only its outcome and window look ahead)', () => {

@@ -25,11 +25,11 @@
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
  *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
  *                  experience_lookup's code-measured section (default: none)
- *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list>,
- *                  manageTailMin: 0 }, the run's market (symbol, bar and setup timeframes) the list's, every bar (no
- *                  everyNthBar), each window holding a decision time; with `practice` only: the run steps the list's
- *                  windows, manages what is open after one bar by bar until flat, and runs those days' premarket
- *                  and end of day; pinned at its start (learning/curated-lists.js) (default: none)
+ *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list> },
+ *                  the run's market (symbol, bar and setup timeframes) the list's, every bar (no everyNthBar), no
+ *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
+ *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
+ *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -156,6 +156,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   errors.push(...curatedCfg.errors);
   if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
   if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
+  if (curatedCfg.curated && r.prop !== undefined) errors.push('curatedList: not with prop (a combine attempt is judged over whole days; curated runs are scored apart)');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -302,7 +303,7 @@ function configHash(run, base = process.env) {
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
     // The curated list a run replays (its decision times are the list's): named only when there is one.
-    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list, manageTailMin: run.curated.manageTailMin } } : {}),
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -324,7 +325,7 @@ function setupHash(run) {
     // the hash it had (its looks in the ledger stay its own).
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
     // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
-    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list, manageTailMin: run.curated.manageTailMin } } : {}),
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
