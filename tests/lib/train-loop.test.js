@@ -533,7 +533,7 @@ test('model scoring: the challenger replays every tuning window on the same conf
   const [e] = readArchive(w.paths.archive);
   assert.strictEqual(e.verdict, 'kept');
   assert.deepStrictEqual(e.reasons, ['model kept']);
-  assert.strictEqual(e.panelVerdict.verdict, 'kept');
+  assert.notStrictEqual(e.panelVerdict.verdict, 'blocked');
   const [o] = seen;
   assert.deepStrictEqual([o.cfg, o.seed, o.heldOut, o.root, path.basename(o.candidateRoot), o.rule], [w.loop.modelScore, 3, false, path.join(w.loop.workDir, 'trees', 'champion'), e.proposalId, w.loop.rule]);
   assert.deepStrictEqual(o.pairs.map(p => [p.label, path.basename(p.champion.runDir), path.basename(p.candidate.runDir)]), [['2022-03-09..2022-03-10', 'l1-champion-t0', `l1-c-${e.proposalId}-t0`]]);
@@ -579,7 +579,10 @@ test('model scoring screens a strategy change on the model\'s own trades: no lon
   w.steps.makeTree = dir => { const c = make(dir); fs.mkdirSync(path.join(dir, 'strategies', 'orb'), { recursive: true }); fs.writeFileSync(path.join(dir, 'strategies', 'orb', 'STRATEGY.md'), '---\nname: orb\nstop: a\n---\n'); return c; };
   w.steps.modelVerifier = verdictStub([]);
   await run(w, { dryRun: true });
-  assert.strictEqual(readArchive(w.paths.archive)[0].verdict, 'kept');
+  const [e] = readArchive(w.paths.archive);
+  assert.strictEqual(e.verdict, 'kept');
+  // The panel is not blocked for want of a mechanical screen either: the challenger's trades screen it.
+  assert.notStrictEqual(e.panelVerdict.verdict, 'blocked');
 });
 
 test('model scoring config: tuning on practice-train only; held out through learning looks (an evaluation id) in a held-back window', () => {

@@ -124,6 +124,12 @@ test('a curated (diagnostic) score keeps on tuning only, labelled; it never judg
   assert.strictEqual(h.verdict, 'inconclusive');
   assert.match(h.reasons.join(';'), /diagnostic score .* never judges held-out months/);
   assert.strictEqual(MV.decide([win(mc(BETTER))], { heldOut: true }).verdict, 'kept');
+  // Either side diagnostic makes the comparison diagnostic.
+  for (const side of ['a', 'b']) {
+    const m = mc(BETTER);
+    m[side] = { ...m[side], score: 'diagnostic (setup-focused)' };
+    assert.strictEqual(MV.decide([win(m)], { heldOut: true }).verdict, 'inconclusive', side);
+  }
 });
 
 test('splits: tuning on practice-train only; held out inside one held-back learning window', () => {
@@ -163,7 +169,7 @@ test('verify: each window\'s two runs through one paired Monte Carlo on the loop
   const seen = [];
   const v = MV.verify({ cfg: CFG, pairs: PAIRS, seed: 3, root: '/champ', candidateRoot: '/cand', deps: deps({ seen }) });
   assert.strictEqual(v.verdict, 'kept', v.reasons.join(';'));
-  assert.deepStrictEqual([seen[0].a, seen[0].b, seen[0].opts.seed, seen[0].opts.paths, seen[0].opts.reps, seen[0].opts.root, seen[0].opts.account.name, seen[0].opts.policy.name], ['/c0', '/x0', 3, 500, 400, '/champ', 'acct_a', 'pol']);
+  assert.deepStrictEqual([seen[0].a, seen[0].b, seen[0].opts.seed, seen[0].opts.paths, seen[0].opts.reps, seen[0].opts.root, seen[0].opts.rootB, seen[0].opts.account.name, seen[0].opts.policy.name], ['/c0', '/x0', 3, 500, 400, '/champ', '/cand', 'acct_a', 'pol']);
   assert.strictEqual(v.windows[0].blows.b, 0);
   assert.strictEqual(v.promotion, undefined, 'tuning reports no promotion');
   assert.strictEqual(MV.verify({ cfg: CFG, pairs: PAIRS, seed: 3, root: '/c', deps: deps({ result: mc({ ...BETTER, blowsB: 1 }) }) }).verdict, 'rejected');
@@ -216,6 +222,10 @@ test('combine: the keep rule decides; the panel\'s blows and harms and the evalu
   assert.strictEqual(MV.combine({ panel: quiet, model: kept, evaluator: { available: false } }).verdict, 'kept');
   assert.strictEqual(MV.combine({ panel: quiet, model: { available: true, verdict: 'blocked', reasons: ['b'] } }).verdict, 'blocked');
   assert.strictEqual(MV.combine({ panel: quiet, model: null }).verdict, 'blocked');
+  assert.strictEqual(MV.combine({ panel: quiet, model: { available: false, verdict: 'kept', reasons: [] } }).verdict, 'blocked');
+  assert.strictEqual(MV.combine({ panel: harmed, model: { available: true, verdict: 'blocked', reasons: ['b'] } }).verdict, 'blocked');
+  const both = MV.combine({ panel: harmed, model: { available: true, verdict: 'rejected', reasons: ['(a) blow'] } });
+  assert.deepStrictEqual([both.verdict, both.reasons[both.reasons.length - 1]], ['rejected', '(a) blow']);
   assert.strictEqual(MV.combine({ panel: null, model: kept }).verdict, 'rejected');
   const rej = MV.combine({ panel: quiet, model: { available: true, verdict: 'rejected', reasons: ['(a) blow'] } });
   assert.deepStrictEqual(rej, { verdict: 'rejected', reasons: ['(a) blow'] });

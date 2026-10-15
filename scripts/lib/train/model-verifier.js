@@ -45,6 +45,7 @@
 
 const { DECISION_RULE, pairUp, tally, harmReasons } = require('./paired');
 const { rolesBetween } = require('../learning/splits');
+const { decisionsByKey } = require('./ab-compare');
 
 const KEEP_RULE = Object.freeze({ maxChallengerBlows: 0, level: 0.9 });
 const HELD_BACK = Object.freeze(['practice-validate', 'test', 'final']);
@@ -89,7 +90,7 @@ function adherence(base, cand) {
 /** The correct-read rate: on the decisions both sides read on, each read all true or not. base, cand: Map key -> reads. */
 function reads(base, cand) {
   const ok = rs => rs.every(r => r && (r.check === true || r.check === 'true'));
-  const keys = [...base.keys()].filter(k => cand.has(k) && (base.get(k) || []).length && (cand.get(k) || []).length);
+  const keys = [...base.keys()].filter(k => (base.get(k) || []).length && (cand.get(k) || []).length);
   const side = m => keys.map(k => ({ key: k, repeat: 0, category: ok(m.get(k)) ? 'right' : 'false read' }));
   return { ...tally(pairUp(side(base), side(cand)), r => r.category !== 'right'), decisions: keys.length };
 }
@@ -138,15 +139,10 @@ function decide(windows, { rule = DECISION_RULE, heldOut = false } = {}) {
   return { verdict: 'kept', reasons: [`zero challenger blows; a significant gain in every window (${gains.map(g => `${g.label}: pass rate ${span(g.d.passRate)}, median days ${span(g.d.medianDaysToPass)}`).join('; ')}); adherence and reads not worse${diagnostic ? '; a diagnostic score: never a promotion' : ''}`], diagnostic };
 }
 
-/** The run's decisions' reads by key (root|bar): ab-compare.js decisionsByKey when on this branch, else the same key here. */
+/** The run's decisions' reads by key (root|bar), as the A/B comparison keys them (ab-compare.js decisionsByKey). */
 function readsByKey(runDir, { root }) {
   const { decisions } = require('../learning/run-experience').runDecisions(runDir, { root });
-  let byKey = null;
-  try { byKey = require('./ab-compare').decisionsByKey; } catch (_err) { /* not merged here */ }
-  if (typeof byKey === 'function') return new Map([...byKey(decisions)].filter(([, x]) => x.reads).map(([k, x]) => [k, x.reads]));
-  const m = new Map();
-  for (const d of decisions || []) if (d && d.root && d.bar && Array.isArray(d.reads) && d.reads.length && !m.has(`${d.root}|${d.bar}`)) m.set(`${d.root}|${d.bar}`, d.reads);
-  return m;
+  return new Map([...decisionsByKey(decisions)].filter(([, x]) => x.reads).map(([k, x]) => [k, x.reads]));
 }
 
 /** The account and the sizing both sides are scored with: one rulebook for both, so a tree whose sizing differs is blocked. */
@@ -185,7 +181,7 @@ function verify({ cfg, pairs, seed, root, candidateRoot = null, env = process.en
     if (sides.differ) return { available: true, verdict: 'blocked', reasons: ['the challenger changes the account or the policy\'s sizing: the paired Monte Carlo scores both runs with one rulebook, so it can\'t judge this change'], windows: [] };
     const opts = { root, env, account: sides.account, policy: sides.policy, seed, paths: cfg.paths, reps: cfg.reps, faults: cfg.faults };
     const windows = pairs.map(p => {
-      const mc = d.pair(p.champion.runDir, p.candidate.runDir, opts);
+      const mc = d.pair(p.champion.runDir, p.candidate.runDir, { ...opts, rootB: candidateRoot || root });
       let r = null;
       let readsWhy = null;
       try { r = reads(d.reads(p.champion.runDir, { root, env }), d.reads(p.candidate.runDir, { root: candidateRoot || root, env })); } catch (err) { readsWhy = err.message; }
@@ -222,7 +218,7 @@ function combine({ panel, model, evaluator = null, rule = DECISION_RULE }) {
     if ((evaluator.blows || 0) > 0) out.push(`evaluator: ${evaluator.blows} blow(s)`);
     out.push(...(evaluator.failures || []).map(f => `evaluator: ${f}`));
   }
-  if (out.length || model.verdict === 'rejected') return { verdict: 'rejected', reasons: [...out, ...(model.verdict === 'rejected' ? model.reasons : [])] };
+  if (out.length) return { verdict: 'rejected', reasons: [...out, ...(model.verdict === 'rejected' ? model.reasons : [])] };
   return { verdict: model.verdict, reasons: model.reasons };
 }
 
