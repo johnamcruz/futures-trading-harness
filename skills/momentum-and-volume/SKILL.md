@@ -26,8 +26,7 @@ candle line's `close top|middle|bottom third`.
   over the mean of the bars before them (the code takes 21);
 - `m3.participation.relVolLastVsOpeningRange`,
   `m3.participation.relVolLast3VsOpeningRange`: over today's opening-range
-  bar average (null before it closes, and overnight; orb's skip rule reads
-  the first);
+  bar average (null before it closes, and overnight);
 - `m3.participation.relVolVsSameTimePriorDay`: over the same ET minute's
   bar the previous trading day; `m3.participation.lastBarVolume`.
 
@@ -66,9 +65,9 @@ did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
 
 ```text
 Take: bar H 21510.00 L 21499.75 C 21509.25: close top third; rangeAtr 1.40; vol 1.8x: momentum up.
-  Trend: adxSlope +3.2. orb long. Priority order: aligned, room -> take.
-Skip: close middle third, rangeAtr 0.60, relVolLast3VsPrior20 0.7, adxFallingBars 6. Read: fading.
-  vwap_reclaim long; a skip rule of its STRATEGY.md held (priority order, step 5): skip.
-Loser: momentum up; orb long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 on 1 MNQ);
+  Trend: adxSlope +3.2. Reads: 3m momentum up, 3m close top. Priority order: aligned, room -> take.
+Skip: close middle third, rangeAtr 0.60, relVolLast3VsPrior20 0.7, adxFallingBars 6. Read: fading,
+  no close or momentum read its way; the priority order leaves it to judgement: skip.
+Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 on 1 MNQ);
   the next bar reversed on the day's top volume. -18 ticks, -$9.00.
 ```

@@ -80,6 +80,35 @@ const ALLOWED = [
     copies: 0,
     reason: "crt_1h and crt_4h are retired (strategies/retired.json)" },
 ];
+
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "**Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`, `ofi_absorption`, `value_area_reentry`): may fade it.",
+    to: "**Reversal strategies** (`mtf: reversal`): may fade it.",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "`strategies/orb_mtf/`) and compare the two with `scripts/backtest.js`.",
+    to: "`strategies/<name>_mtf/`) and compare the two with `scripts/backtest.js`.",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "-> Longs are a pullback: wait for a 3m shift up (a BOS up, then a long setup such as vwap_reclaim), target the 1h swing high.",
+    to: "-> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "Shorts are counter: a 3m orb short is refused (scan and gate); only a",
+    to: "Shorts are counter: a trend strategy's short is refused (scan and gate); a composed",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
+  { from: "crt_1h raid of the 1h high could short (the priority order, step 2, decides it:",
+    to: "short needs a 1h CHoCH down and a 4h rejection (`trade-lifecycle`).",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
+  { from: "level, size, target).",
+    to: null,
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
 // The units dropped outright (copies 0, no new text): no home holds them.
 const DROPPED = new Set(ALLOWED.filter(a => a.copies === 0 && !a.now).map(a => a.old));
 
@@ -227,4 +256,8 @@ test('multi-timeframe-analysis split: the market-structure analyst loads what it
   // In setup-judgment since the trade-session split (trade-session-split.test.js).
   assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /the alignment table in `htf-to-ltf`/);
   assert.match(read('skills/pullback-vs-reversal/SKILL.md'), /shift or reclaim of `htf-to-ltf`/);
+});
+
+test('multi-timeframe-analysis-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

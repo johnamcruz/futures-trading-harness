@@ -63,10 +63,10 @@ No call until the close; wicks are information, not signals.
 ## Examples
 
 ```text
-Take: m3.vwap.rth 21520.50; lows 21520.75, 21519.50, 21521.00, closes back above. Read: rejection.
-  vwap_reclaim long; candidate.inTheWay session VAH at 2.6R. Priority order: room -> take.
-Skip: crt_1h short at 21481.25, prior VAL 21480.00 5 ticks below, inTheWay 0.3R.
+Take: m3.vwap.rth 21520.50; lows 21520.75, 21519.50, 21521.00, closes back above. Read: rejection,
+  3m rejected vwap rth up; the session VAH 2.6R in the way. Priority order: room -> take.
+Skip: short at 21481.25, prior VAL 21480.00 5 ticks below, inTheWay 0.3R.
   Priority order (step 3, room): skip.
-Loser: rejection at prior RTH low 21402.00 (wick 21401.25); crt_1h long at 21408.50, stop 21399.75
+Loser: rejection at prior RTH low 21402.00 (wick 21401.25); long at 21408.50, stop 21399.75
   (8.75 pts = 35 ticks, $17.50 on 1 MNQ); a close at 21398.00, acceptance below. -35 ticks, -$17.50.
 ```

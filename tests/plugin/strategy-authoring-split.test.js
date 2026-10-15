@@ -49,6 +49,15 @@ const LATE = [
   { from: "See `strategies/vwap_reclaim/STRATEGY.md` for a complete rules strategy.",
     to: "See `strategies/_template/STRATEGY.md` for a rules strategy's skeleton.",
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit; moved into fix/skills-composed-process so strategy-library's composed clauses grow no prompt); the template is the skeleton that ships" },
+  { from: "Every item in a side must hold (AND); an item can be a group, `any: [...]` (one of them holds, OR) or `all: [...]` (every one), nested three deep, so one strategy can take two setups or two confirmations (see `value_area`: a POC rejection or breakout, confirmed by a broker field or expansion).",
+    to: "Every item in a side must hold (AND); an item can be a group, `any: [...]` (one of them holds, OR) or `all: [...]` (every one), nested three deep, so one strategy can take two setups or two confirmations (a POC rejection or breakout, confirmed by a broker field or expansion).",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "`crt_dir(m) crt_risk(m) crt_target(m)` are the Candle Range Theory sweep detector on m-minute candles (one setup per candle, tuned by the `crt*` params; see `crt_1h`).",
+    to: "`crt_dir(m) crt_risk(m) crt_target(m)` are the Candle Range Theory sweep detector on m-minute candles (one setup per candle, tuned by the `crt*` params).",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "Only a pattern the rules can't express (multi-bar zone logic like cisd_ote's) needs `manual` or a new series in `scripts/lib/trading/rules.js` (with tests), used from the rules like `cisd_entry(15)`.",
+    to: "Only a pattern the rules can't express (multi-bar zone logic) needs `manual` or a new series in `scripts/lib/trading/rules.js` (with tests), used from the rules like `cisd_entry(15)`.",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

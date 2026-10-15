@@ -25,11 +25,11 @@ description: Use when calling a strategies_* harness tool.
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ"}
 → Scan of MNQ on the last closed bar (opened 2026-10-07T13:57:00.000Z): 9 strategies, 1 candidate. Regime trend-up. Trend 4h up, 1h up, 15m up, prevailing 4h up.
   Candidates:
-    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none
+    <name> long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none
   Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
   Every strategy (name | status | timeframe | direction | candidate | why not):
-    cisd_ote | paper | 3m | - | no | no rule set fired (long: cisd_entry(15) > 0; short: cisd_entry(15) < 0)
+    <other> | paper | 3m | - | no | no rule set fired
     ...
-strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}
-→ orb's full result as JSON
+strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "<name>"}
+→ its full result as JSON
 ```

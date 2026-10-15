@@ -57,8 +57,7 @@ description: Use weekly (/setup-scorecard), before raising size or adding a setu
 ## Examples
 
 ```text
-setup:vwap_reclaim         n=34  p=0.41  W=2.1R  L=1.0R  E=+0.27R  sd=1.4  band ±0.48 → unproven
-setup:orb                  n=41  p=0.46  W=1.9R  L=1.0R  E=+0.33R  sd=1.3  band ±0.41 → unproven
-setup:value_area_breakout  n=22  p=0.27  W=1.8R  L=1.0R  E=-0.24R → restricted to ADX>25 mornings
-  by regime: trend n=12 E=+0.21R | transition n=10 E=-0.78R → propose regimes: [trend]
+setup:trade_lifecycle  n=34  p=0.41  W=2.1R  L=1.0R  E=+0.27R  sd=1.4  band ±0.48 → unproven
+setup:prop_portfolio   n=41  p=0.46  W=1.9R  L=1.0R  E=+0.33R  sd=1.3  band ±0.41 → unproven
+  trade_lifecycle by regime: trend n=22 E=+0.61R | transition n=12 E=-0.36R → a lesson: weak in transition
 ```

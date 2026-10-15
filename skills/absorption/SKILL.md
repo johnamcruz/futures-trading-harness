@@ -41,9 +41,10 @@ them): `broker-bar-fields`. Never derive one from OHLCV; without them,
 
 ```text
 Take: three bars into prior VAL 21480.00 on V 2,400 / 2,650 / 2,900 (about 1,100 before);
-  (c-o) -1.25 / +0.50 / +0.75, no close below. Read: absorption, longs. value_area_reentry long.
-  Priority order: room -> take.
-Skip: the same read, but no strategy fired. No setup without a fired strategy (trader-process): wait.
-Loser: absorption at 21480.50; crt_1h long at 21480.75, stop 21474.25 (6.50 pts = 26 ticks,
+  (c-o) -1.25 / +0.50 / +0.75, no close below. Read: absorption, longs, beside
+  at prior val, 3m rejected prior val up. Priority order: room -> take.
+Skip: the same read alone (no read form, so no setup read): compose_check refuses.
+  Priority order (step 1): skip.
+Loser: absorption at 21480.50; long at 21480.75, stop 21474.25 (6.50 pts = 26 ticks,
   $13.00 on 1 MNQ); closes through on rising volume. -26 ticks, -$13.00.
 ```

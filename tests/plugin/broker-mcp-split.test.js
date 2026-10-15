@@ -89,6 +89,32 @@ const ALLOWED = [
   { old: 'Do', copies: 5, reason: 'the table header, in the four gate-refusals pieces and broker-refusals' },
 ];
 
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "place_order {accountId, contractId:\"MNQ\", side:\"buy\", type:\"market\", size:1,",
+    to: "place_order {accountId, contractId:\"MNQ\", side:\"buy\", type:\"limit\", limitPrice:21540.25,",
+    reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+  { from: "stopLossBracket:{ticks:40, type:\"stop\"}, takeProfitBracket:{ticks:80, type:\"limit\"},",
+    to: "size:1, stopLossBracket:{ticks:111, type:\"stop\"}, takeProfitBracket:{ticks:231, type:\"limit\"},",
+    reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+  { from: "rationale:\"setup:orb long close above OR high 21500.00, stop 21490.00, target 21520.00, risk $20\"}",
+    to: "rationale:\"setup:trade_lifecycle long, stop 21512.50, target 21598.00, risk $55.50\"}",
+    reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+  { from: "place_order {..., side:\"sell\", type:\"stop\", size:1, stopPrice:21490.00,",
+    to: "place_order {..., side:\"sell\", type:\"stop\", size:1, stopPrice:21512.50,",
+    reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+  { from: "rationale:\"[protect] stop for ORB long filled at 21500.25\"}",
+    to: "rationale:\"[protect] long filled at 21540.25\"}",
+    reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
+
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
 function differences(beforeText, homeTexts) {
   const before = count(units(beforeText));
@@ -163,4 +189,8 @@ test('broker-mcp split: each new skill answers one question in a short index lin
   assert.match(bm, /### Session loop/);
   assert.match(bm, /### Tools/);
   assert.doesNotMatch(bm, /### (Order mechanics|Failures and limits|Journal|Errors)|stopLossBracket|errorCode/);
+});
+
+test('broker-mcp-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

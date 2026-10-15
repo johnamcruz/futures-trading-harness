@@ -152,7 +152,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `autonomous-trading` (skills/autonomous-trading/SKILL.md): Use when a prompt says it is an autonomous or scheduled cycle - one bounded cycle per bar, the CYCLE RESULT line.
 - `bar-briefing` (skills/bar-briefing/SKILL.md): Use when reading this bar's briefing or bars.
 - `bos-vs-choch` (skills/bos-vs-choch/SKILL.md): Structure breaks as computed - confirmed swings, BOS (continuation), CHoCH (a possible reversal) - and what each means by timeframe, for PLAN steps 1, 4 and 9.
-- `breakout` (skills/breakout/SKILL.md): Use when a strategy fired at a key level and a completed candle, on any timeframe, may have closed beyond it. A read, never an entry by itself.
+- `breakout` (skills/breakout/SKILL.md): Use when a completed candle, on any timeframe, may have closed beyond a key level - the setup read. A read, never an entry by itself.
 - `breakout-vs-fakeout` (skills/breakout-vs-fakeout/SKILL.md): Trader-process step 3, price through or at a level - accepted (closes hold, a retest holds) or a fakeout (a sweep closed back inside). A read, never a veto.
 - `broker-bar-fields` (skills/broker-bar-fields/SKILL.md): Use when a briefing has broker bar fields. Confirmation only.
 - `broker-mcp` (skills/broker-mcp/SKILL.md): The broker MCP server - its tools (mcp__broker__<tool>), what each is for, and the session loop that calls them. Use before calling any mcp__broker__ tool.
@@ -201,7 +201,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `prop-pacing-judgment` (skills/prop-pacing-judgment/SKILL.md): Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
 - `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4, price moving against the higher-timeframe trend - a pullback (trend intact) or a reversal (a higher-frame CHoCH). A read, never a veto.
 - `reason-check` (skills/reason-check/SKILL.md): Use when checking stated reasons vs the facts.
-- `rejection` (skills/rejection/SKILL.md): Use when a strategy fired at a key level and a completed candle, on any timeframe, may have rejected it. A read, never an entry by itself.
+- `rejection` (skills/rejection/SKILL.md): Use when a completed candle, on any timeframe, may have rejected a key level - the setup read. A read, never an entry by itself.
 - `replay` (skills/replay/SKILL.md): Use when the user wants to set up, run or read a replay of the trader on history. User-run.
 - `replay-labels` (skills/replay-labels/SKILL.md): Use when turning a finished replay or live session into labels. User-run.
 - `replay-resume` (skills/replay-resume/SKILL.md): Use when a replay run stopped or must resume - retries, the error limit, the kill switch. User-run.

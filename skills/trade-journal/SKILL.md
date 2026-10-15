@@ -32,7 +32,7 @@ drops them. Filter by `kind` / `tag` and read `contractId` in the results.
 ## Examples
 
 ```text
-journal_add {kind:"plan", contractId:"MNQ", tags:["setup:orb", "MNQ"], text:"..."}
-journal_read {kind:"order_placed"}            by kind, never by contractId
-journal_add {kind:"review", contractId:"MNQ", orderId:812, tags:["setup:orb", "result:nofill"], text:"..."}
+journal_add {kind:"plan", contractId:"MNQ", tags:["setup:<name>", "MNQ"], text:"..."}
+journal_read {kind:"order_placed"}   by kind, never by contractId
+journal_add {kind:"review", contractId:"MNQ", orderId:812, tags:["setup:<name>", "result:nofill"], text:"..."}
 ```

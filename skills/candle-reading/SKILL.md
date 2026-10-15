@@ -70,11 +70,11 @@ general, none measured in our data yet.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close (`m3.candles`) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
-  crt_1h short. Priority order -> take.
-Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); the 15m still forming.
-  orb long; candidate.inTheWay session VAH at 0.4R. Priority order (step 3, room): skip.
+  on the 1h close a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing. Priority order -> take.
+Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming;
+  the session VAH 0.4R in the way. Priority order (step 3, room): skip.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
-  value_area_reentry long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
+  long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL. -38 ticks, -$19.00.
 ```

@@ -49,9 +49,9 @@ zero: not a finding.
 
 ```text
 Take: 15m up, BOS up; range 21480.00-21560.00, price 21521.50 = 48% retrace; V 1,840 -> 960;
-  m3 CHoCH up 0 bars ago: pullback ended. vwap_reclaim long. Priority order: aligned -> take.
+  m3 CHoCH up 0 bars ago: pullback ended. Reads: 15m up, 3m choch up. Priority order: aligned -> take.
 Skip: m3, then 15m CHoCH down; 15m swing low 21480.00 brokenAt set; wide down bars on rising V.
-  Read: reversal attempt. vwap_reclaim long; the priority order (step 4, counter) decided skip.
-Loser: read pullback; vwap_reclaim long at 21522.75, stop 21514.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
+  Read: reversal attempt. A long: read long counter; the priority order (step 4) decided skip.
+Loser: read pullback; long at 21522.75, stop 21514.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   15m CHoCH down, stopped: -34 ticks, -$17.00. The stop held it to 1R; the read never widens it.
 ```

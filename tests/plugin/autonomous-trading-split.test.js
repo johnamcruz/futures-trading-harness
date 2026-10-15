@@ -66,6 +66,23 @@ const ALLOWED = [
     reason: 'the history\'s new action word, vetoed (the risk manager\'s veto), told apart from skipped (the model\'s own pass)' },
 ];
 
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "It carries today's premarket plan (when today's premarket run failed, the \"Context unavailable\" line says \"premarket plan unavailable\": there is no plan yet, so trade from the bars and your skills; the runner retries the premarket between cycles, and once one succeeds the next cycles carry the plan; on very short bars, such as 1-minute, a retry rarely fits between cycles, so a failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the \"day:\" line; outside RTH the \"overnight\" line), each fired strategy's track record (a `paper` one is marked: plan it only), and each open trade's state (setup, initial risk, stop, target, R now, best and worst): the `trade-session` skill says how to weigh them.",
+    to: "It carries today's premarket plan (when today's premarket run failed, the \"Context unavailable\" line says \"premarket plan unavailable\": there is no plan yet, so trade from the bars and your skills; the runner retries the premarket between cycles, and once one succeeds the next cycles carry the plan; on very short bars, such as 1-minute, a retry rarely fits between cycles, so a failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the \"day:\" line; outside RTH the \"overnight\" line), each fired rules strategy's track record (a `paper` one is marked: plan it only), and each open trade's state (setup, initial risk, stop, target, R now, best and worst): the `trade-session` skill says how to weigh them.",
+    reason: "a fired strategy is a rules strategy; the composed trade fires nothing (fix/skills-stale-examples)" },
+  { from: "CYCLE RESULT: no-trade - orb fired but relative volume 0.8x (skip rule)",
+    to: "CYCLE RESULT: no-trade - compose_check: 3m momentum up false (volume 0.8x)",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
+
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction
 // the head trader must always have without loading kill-switch (that skill keeps the details).
 const ADDED = [
@@ -259,4 +276,8 @@ test('autonomous-trading split: the per-cycle load shrinks; no role and no gate 
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z'));
   assert.match(p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /Follow the autonomous-trading skill\./);
   for (const s of STRUCTURE) for (const t of homeTexts()) assert.ok(t.includes(`## ${s}`));
+});
+
+test('autonomous-trading-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

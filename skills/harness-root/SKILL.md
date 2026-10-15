@@ -30,6 +30,6 @@ Always write absolute paths (a bars file, a strategy file).
 ## Examples
 
 ```text
-The briefing says "Harness root (FTH_ROOT): /home/u/fth" → the orb strategy is /home/u/fth/strategies/orb/STRATEGY.md.
+The briefing says "Harness root (FTH_ROOT): /home/u/fth" → trade_lifecycle is /home/u/fth/strategies/trade_lifecycle/STRATEGY.md.
 No briefing, FTH_ROOT unset, started in /home/u/fth/workspace → <root> is /home/u/fth.
 ```

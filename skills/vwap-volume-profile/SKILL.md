@@ -50,9 +50,9 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    (`hvnAbove`, `lvnBelow`, ...). Strategies read the same levels as
    `prior_poc prior_vah prior_val`, `session_*`, `vp_*(n)`, and the nodes.
    - Open outside the prior value area, then back inside for two closes →
-     rotation to the far side is likely (the 80% rule, `value_area_reentry`).
-   - Two closes outside value on above-average volume → value is moving
-     (`value_area_breakout`); the next HVN is the likely stall, an LVN
+     rotation to the far side is likely (the 80% rule).
+   - Two closes outside value on above-average volume → value is moving;
+     the next HVN is the likely stall, an LVN
      beyond the entry is open air.
    - Inside value with VWAP flat → rotation: fade VAH/VAL toward the POC,
      small targets.
@@ -83,12 +83,12 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
 ```text
 10:09 ET: MNQ opened 21462.50, below the prior day's VAL 21480.00
 (volumeProfile.priorRth: POC 21522.00, VAH 21560.00). Two 3m closes back
-inside, 21486.00 and 21490.25 → value_area_reentry long, target VAH
-21560.00, 69.75 points away; the POC at 21522.00 is the halfway mark.
+inside, 21486.00 and 21490.25 → reads value inside, 3m rejected prior val
+up; target VAH 21560.00, 69.75 points away; the POC at 21522.00 is the halfway mark.
 
 09:52 ET: 3m close above OR high, v = 2,140 vs OR average 1,180 (1.8×), price
-0.6 ATR above rising RTH VWAP → participation confirmed for the orb strategy.
+0.6 ATR above rising RTH VWAP → participation confirmed: 3m momentum up.
 
-11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation; trend strategies
-off until a range break.
+11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation; trend reads
+wait for a range break.
 ```

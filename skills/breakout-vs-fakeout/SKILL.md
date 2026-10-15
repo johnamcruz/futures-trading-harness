@@ -48,9 +48,9 @@ fired too rarely to say.
 
 ```text
 Take: prior RTH high 21615.00; closes 21619.25, 21622.50, 21621.75; retest low 21615.75 held.
-  Read: acceptance. orb long. Priority order: room, aligned -> take.
-Skip: m3.sweeps: prior RTH high 21625.00, key, wick 21629.50, back in 1 bar. orb long at 21616.50.
-  candidate.inTheWay: the swept high at 0.6R. Priority order (step 3, room): skip.
-Loser: read acceptance (closes 21618.50, 21620.25); orb long at 21620.25, stop 21615.75
+  Read: acceptance, 3m broke prior rth high up. Priority order: room, aligned -> take.
+Skip: m3.sweeps: prior RTH high 21625.00, key, wick 21629.50, back in 1 bar. Long at 21616.50:
+  the swept high 0.6R in the way. Priority order (step 3, room): skip.
+Loser: read acceptance (closes 21618.50, 21620.25); long at 21620.25, stop 21615.75
   (4.50 pts = 18 ticks, $9.00 on 1 MNQ); low 21612.00, now a sweep (bars 3). -18 ticks, -$9.00.
 ```

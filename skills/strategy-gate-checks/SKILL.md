@@ -17,7 +17,7 @@ Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
 `sessions`. A rules strategy trades one leg of a micro/mini family it lists:
 the selected contract (the runner's `symbols`, or `FTH_SYMBOLS`). Listing MNQ,
-it trades NQ when NQ is selected, and then never MNQ ("setup:orb trades NQ
+it trades NQ when NQ is selected, and then never MNQ ("setup:<name> trades NQ
 (the selected contract), not MNQ"): trade the selected contract, don't switch
 legs. With no leg selected it trades exactly what it lists (listing both legs
 of a family, neither until one is selected). A policy strategy trades the
@@ -27,8 +27,7 @@ mode picks the leg only when none is selected. Every other check
 uses the contract ordered: its broker tick specs, and its size and
 `risk.max_risk_usd` in its own dollars (one NQ at a 40-tick stop risks
 $200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded.
-A retired strategy (`bos`, `keltner`, `ema_cross`, `supertrend`;
-strategies/README.md, "Retired strategies") is no setup: its tag is refused,
+A retired strategy (strategies/retired.json) is no setup: its tag is refused,
 saying so, and a position it opened is still exited and protected with
 `[exit]` or `[protect]`. While the runner's lane on a timeframe lists one, no
 entry on that timeframe goes, under any tag (`retired-lane`): that lane only
@@ -43,7 +42,7 @@ autonomous runner is running, which records the symbols it trades). The gate doe
 **not** judge a manual strategy's trigger, the skip rules, or that the order
 is the plan's: those are yours and risk-manager's. It does refuse an order that contradicts its
 own rationale (`order-consistency`): write the side right after the tag
-(`setup:orb long ...`), the stop and target as prices on the tick, and
+(`setup:trade_lifecycle long ...`), the stop and target as prices on the tick, and
 brackets the same distance as those prices.
 While a prop attempt runs, only its policy strategy's verdict can enter.
 A policy trades only its `active` strategies: a `paper` one stays paper
@@ -58,5 +57,5 @@ against the recorded prevailing trend, or without a fresh record, is refused.
 ## Examples
 
 ```text
-Last recorded 3m bar 2 min old, orb long on it → fresh; 12 min old, or orb not on it → refused.
+Last recorded 3m bar 2 min old, <name> long on it → fresh; 12 min old, or <name> not on it → refused.
 ```

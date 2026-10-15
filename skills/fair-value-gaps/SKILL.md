@@ -37,7 +37,7 @@ each kind; a filled gap is in neither list. Never mark one by eye.
 **The read.** A location, never a trigger. The source: price back in the
 zone tends to reverse its way; gaps form fast and are less accurate;
 intraday (3m to 15m) suits them. Ours: a completed candle reacting there
-(`candle-reading`), momentum (`momentum-and-volume`) and a fired strategy;
+(`candle-reading`), momentum (`momentum-and-volume`) and the other reads;
 a 15m gap outweighs a 3m one; gaps are among `levels-and-reactions`' levels. After a sweep (`breakout-vs-fakeout`) and
 displacement (`cisd`), the retest of its gap is the liquidity-grab
 entry read: it lives here.
@@ -54,9 +54,9 @@ briefing does not rank gaps among the levels in a setup's way
 
 ```text
 Take: bullish gap partly filled, unfilled 21512.00-21515.25; a 3m close back above: held.
-  vwap_reclaim long at 21520.50. Priority order: room -> take.
-Skip: crt_1h short at 21481.25, stopPoints 8.00; open gap edge 21477.50 = 0.47R,
+  Reads: 3m close top (no read form names a gap). Priority order -> take.
+Skip: short at 21481.25, stop 8.00 points; open gap edge 21477.50 = 0.47R,
   inTheWay at 0.6R. Priority order (step 3, room): skip.
-Loser: orb long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); gap edge
+Loser: long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); gap edge
   21509.50 = 1.47R ahead; it stalled: -17 ticks, -$8.50.
 ```

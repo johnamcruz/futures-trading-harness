@@ -1,22 +1,19 @@
 ---
 name: rejection
-description: Use when a strategy fired at a key level and a completed candle, on any timeframe, may have rejected it. A read, never an entry by itself.
+description: Use when a completed candle, on any timeframe, may have rejected a key level - the setup read. A read, never an entry by itself.
 ---
 
 # Rejection
 
 ## When to Use
 
-- A strategy fired at a key level, and the plan asks whether a completed
-  candle rejected that level, on any timeframe (trader-process step 4).
+- Price is at a key level, and the plan asks whether a completed candle
+  rejected it, on any timeframe (trader-process step 4).
 
 ## How It Works
 
-**Today it is a read, not a trigger.** The order gate allows an entry
-only when a strategy fired on the bar. This setup supports, or argues
-against, a strategy that fired at the level (`crt_1h`, `crt_4h`,
-`value_area_reentry`, `vwap_reclaim`, `orb`); a dedicated detector strategy
-for it is coming. It is never a reason to enter without a fired strategy.
+**A setup read, not an entry by itself.** It is stated with the other
+steps' reads and `compose_check` verifies them (`trade_lifecycle`).
 
 A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are
@@ -56,11 +53,9 @@ By PLAN step:
 - **6 Entry**: after a 15m or 1h rejection, a completed 3m or 5m candle
    confirms the same way: a displacement candle, or a break of the small
    pullback structure (`m3.lastBreak.last`). Never anticipate it.
-- **7 Risk**: the idea is wrong beyond the rejection wick; the stop is the
-   strategy's (`candidate.stopPoints`, `order_plan`): check it sits beyond
-   the wick (`invalidation`). Aim for the next swing (`m3.swingTargets`); the room to
-   the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3's;
-   the target and exit stay the strategy's.
+- **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
+   names it (`invalidation`). Aim for the next swing (`m3.swingTargets`);
+   the room to the next level (`inTheWay`) is step 3's.
 - **9 Manage**: invalidation is a close back through the level against the
    trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 
@@ -73,11 +68,12 @@ evidence in general.
 ## Examples
 
 ```text
-Take: at the RTH VWAP 21520.50, 1h and 15m up: on the 15m close a wick to 21517.25, close 21523.00
-  (top third); then on the 3m close a displacement up. vwap_reclaim long fired. Priority order -> take.
+Take: at the prior VAH 21535.00, 1h and 15m up: on the 15m close a wick to 21512.75, close 21538.50
+  (top third), then on the 3m close a momentum bar. Reads: 1h up, at prior vah, 15m rejected prior vah up,
+  3m close top, 3m momentum up, stop 15m low 21512.75, target 1h swing 21598.00. Priority order -> take.
 Skip: at the swing high 21588.25 (3m, a minor level), 1h and 15m up: on the 3m close a shooting star
-  (H 21590.75, C 21585.50). ofi_absorption short fired. Priority order (step 2, a fade only at an HTF level): skip.
-Loser: at the prior RTH low 21402.00: on the 1h close a rejection (L 21396.75, C 21405.50), on the
-  3m close a displacement. crt_1h long at 21407.25, stop 21396.25 (11.00 pts = 44 ticks,
-  $22.00 on 1 MNQ); the next 15m closed back below 21402.00. -44 ticks, -$22.00.
+  (H 21590.75, C 21585.50): 3m rejected last 3m swing high down, against the 1h trend, no 1h CHoCH
+  down. Priority order (step 2, the trend rule): skip.
+Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50
+  (27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.
 ```

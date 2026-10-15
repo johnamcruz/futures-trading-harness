@@ -135,9 +135,8 @@ const PINS = {
     'standalone candlestick patterns have weak evidence in general',
   ],
   rejection: [
-    'The order gate allows an entry only when a strategy fired on the bar.',
-    'It is never a reason to enter without a fired strategy.',
-    'a dedicated detector strategy for it is coming.',
+    // A setup read of the composed trade (no fired strategy since the rules strategies retired).
+    '**A setup read, not an entry by itself.** It is stated with the other steps\' reads and `compose_check` verifies them (`trade_lifecycle`).',
     // A rejection is the briefing's relation; the wick, the close third and an engulfing grade it (candle-facts.js).
     '**4 Setup**: a completed candle rejects the level: the briefing\'s relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).',
     'A long wick, the close in the opposite third or an engulfing grade its strength (`candle-reading`)',
@@ -147,7 +146,7 @@ const PINS = {
     '**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
     'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
     'Never anticipate it.',
-    'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
+    'the stop read names it (`invalidation`).',
     '**Paired with `breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
     'After an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`), it is a continuation.',
     'A reversal rejection reads strongest with an HTF CHoCH its way (`bos-vs-choch`).',
@@ -158,7 +157,7 @@ const PINS = {
     'The level: the OPEN of the run\'s first candle (`level`).',
     'Confirmed when a completed candle CLOSES above that level, within 6 candles of the run',
     'The CISD usually comes first: an early sign, not yet a change of structure.',
-    'It is evidence for a fired strategy\'s side, never a setup of its own',
+    'It is a setup read (`<tf> cisd up|down`), never a trade of its own',
     'A CISD after a sweep of a key level is stronger confluence; one without is still a CISD.',
     'A doji, a small body or a mid-range close is weak: no zone, no fib',
     'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; the OTE bounce is the entry.',
@@ -173,9 +172,8 @@ const PINS = {
     'Never anticipate it: a touch is not a bounce.',
   ],
   breakout: [
-    'The order gate allows an entry only when a strategy fired on the bar.',
-    'It is never a reason to enter without a fired strategy.',
-    'a dedicated detector strategy for it is coming.',
+    // A setup read of the composed trade (no fired strategy since the rules strategies retired).
+    '**A setup read, not an entry by itself.** It is stated with the other steps\' reads and `compose_check` verifies them (`trade_lifecycle`).',
     '**4 Setup**: a completed candle closes beyond the level with acceptance',
     'not just a wick',
     '| 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |',
@@ -184,7 +182,7 @@ const PINS = {
     '**Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
     'a retest of the broken level that holds (a pullback: `pullback-vs-reversal`), with a rejection candle there (preferred), or a continuation displacement.',
     'Never anticipate it.',
-    'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
+    'the stop read names it (`invalidation`).',
     'a close back inside the level means the breakout failed: invalidation.',
     '**Paired with `rejection`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
     'A close beyond a level that is also a BOS on that timeframe (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure',
@@ -404,7 +402,8 @@ test('basics skills: examples name existing active strategies (or ones retired o
   for (const s of SKILLS) {
     const text = read(file(s));
     // As strategies: a briefing field named for the indicator (`m3.trend.supertrend`) is data.
-    assert.doesNotMatch(text.replace(/bos-vs-choch/g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
+    // A read in compose_check's form (`1h bos up`) is a structure break, not the retired strategy.
+    assert.doesNotMatch(text.replace(/bos-vs-choch/g, '').replace(/\b\d+[mh] (?:bos|choch) (?:up|down)\b/g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
     for (const m of text.split('## Examples')[1].matchAll(/\b([a-z]+_[a-z0-9_]+|orb)\b (?:long|short)/g)) {
       assert.ok(namedStrategyOk(m[1]), `${s}: ${m[1]}`);
     }
@@ -436,8 +435,9 @@ test('basics skills: the two setups, on any timeframe, follow the PLAN steps, on
     }
     assert.ok(t.includes('Completed candles only, on 3m, 5m, 15m, 1h and 4h (`candle-reading`).'), s);
     // The strategies it names exist and are active (or retired on 2026-10-14: the skills are kept as they are).
-    const names = [...t.slice(0, t.indexOf('A read, never a veto')).matchAll(/`([a-z0-9_]+)`/g)].map(m => m[1]);
-    assert.ok(names.length >= 3, s);
+    // It is a setup read of the one strategy, trade_lifecycle, which compose_check verifies: every strategy it names is active.
+    const names = [...t.slice(0, t.indexOf('A read, never a veto')).matchAll(/`([a-z0-9_]+)`/g)].map(m => m[1]).filter(n => n !== 'compose_check');
+    assert.deepStrictEqual(names, ['trade_lifecycle'], s);
     for (const n of names) assert.ok(namedStrategyOk(n), `${s}: ${n}`);
     // Generic: the setup is defined on any completed candle, not on one timeframe; its timeframe table has three rows.
     assert.doesNotMatch(t, /\*\*4 Setup\*\*: a completed (?:3m|5m|15m|1h|4h)/, s);
