@@ -63,6 +63,10 @@ test('skill minimums: a rare skill reaches its minimum where the data has it; co
   const picked = C.selectList(cands, { name: 'trend-up', size: 10, seed: 3, minSkill: 3 });
   assert.strictEqual(picked.filter(m => m.skills.includes('absorption')).length, 3, 'the rare skill at its minimum, not more');
   assert.ok(picked.some(m => m.id === 'once'), 'a skill the data has once is taken once');
+  // The scarcest skill first: one moment with a rare skill and few others beats the ones with many common skills.
+  const many = series('chop', 2021, 20, { skills: [...BASE_SKILLS, 'cisd', 'momentum-and-volume', 'vwap-volume-profile'] });
+  const gap = moment({ id: 'gap', day: '2021-05-03', list: 'chop', skills: ['fair-value-gaps', 'rejection'] });
+  assert.ok(C.selectList([...many, gap], { name: 'chop', size: 2, seed: 1, minSkill: 1 }).some(m => m.id === 'gap'), 'the rare skill is in a list of two');
   const cov = C.coverageOf(picked, cands, { minSkill: 3 });
   assert.deepStrictEqual([cov.skills.absorption.count, cov.skills.absorption.under, cov.skills.cisd.under, cov.skills.cisd.dataShort], [3, false, true, true]);
   assert.ok(cov.under.includes('cisd') && !cov.under.includes('absorption'));

@@ -15,7 +15,8 @@
  * runs' experience logs, learning/experience-index.js).
  *
  * Selection (selectList), per list, of its share of `total` (mix), one moment at a time, the best candidate by, in order:
- *   - the skills it exercises that are still under minSkill (where the data has them);
+ *   - the skills it exercises that are still under minSkill (where the data has them), the scarcest weighing most
+ *     (each counts one over the number of candidates that have it);
  *   - the list's pass share (a list with one takes passes until it holds its share, then takes: D2 reversals);
  *   - balanced by year: the year with the fewest moments so far first, and no year past YEAR_CAP times its even share
  *     of the years that have candidates (the list is short rather than one year filling it);
@@ -82,7 +83,8 @@ function checkOptions({ total, mix, minSkill, passShare }) {
 
 /** A candidate's place in the selection's order (see the header): compared in turn, higher first. */
 function keyOf(state, c) {
-  const gain = c.skills.filter(s => (state.count[s] || 0) < state.minSkill).length;
+  // The scarcest first: each skill under its minimum counts one over the candidates that have it.
+  const gain = c.skills.filter(s => (state.count[s] || 0) < state.minSkill).reduce((a, s) => a + 1 / state.avail[s], 0);
   let balance = 0;
   if (state.passTarget !== null) balance = state.pass < state.passTarget ? Number(c.expected === 'pass') : Number(c.expected === 'take');
   const level = c.outcome.result === 'win' ? Number(state.win <= state.loss) : c.outcome.result === 'loss' ? Number(state.loss <= state.win) : 0;
@@ -105,7 +107,9 @@ function selectList(candidates, { name, size, seed = DEFAULTS.seed, minSkill = D
   const pool = [...candidates];
   const yearsWith = new Set(pool.map(c => c.year)).size;
   const cap = yearsWith ? Math.ceil((YEAR_CAP * size) / yearsWith) : 0;
-  const state = { seed, name, minSkill, count: {}, years: new Map(), pass: 0, win: 0, loss: 0, passTarget: typeof passShare === 'number' ? Math.ceil(size * passShare) : null };
+  const avail = {};
+  for (const c of pool) for (const sk of c.skills) avail[sk] = (avail[sk] || 0) + 1;
+  const state = { seed, name, minSkill, avail, count: {}, years: new Map(), pass: 0, win: 0, loss: 0, passTarget: typeof passShare === 'number' ? Math.ceil(size * passShare) : null };
   const picked = [];
   while (picked.length < size) {
     let best = -1;
