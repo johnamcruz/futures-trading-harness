@@ -2743,10 +2743,11 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
   b.sections.m3.data.candles['4h'] = { closedAt: '2026-10-07T10:00:00.000Z', o: 21480, h: 21560, l: 21470, c: 21540, closeLocation: 'top',
     relations: [{ name: 'previous 4h low', price: 21475, rel: 'rejected', dir: 'up' }],
     fvgRelations: [{ name: '15m fvg low', price: 21472, side: 'bullish', rel: 'rejected', dir: 'up' }] };
-  const run = rejection => {
+  const run = (rejection, { bias4h = false } = {}) => {
     const home = trendHome(tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
     const reads = [{ step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' }, ...LC.READS.filter(x => x.step !== 'bias'),
-      { step: 'setup', skill: 'rejection', read: rejection }];
+      ...(rejection ? [{ step: 'setup', skill: 'rejection', read: rejection }] : []),
+      ...(bias4h ? [{ step: 'bias', skill: 'multi-timeframe-analysis', read: '4h down' }] : [])];
     LC.writeScenario(home, { reads, b });
     return gate(orderPayload(LC.order()), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env);
   };
@@ -2758,6 +2759,17 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
   // A real 4h rejection of a key level with the 1h CHoCH: it goes.
   const level = run('4h rejected previous 4h low up');
   assert.strictEqual(level.code, 0, level.stderr);
+  // The honest record also names the 4h trend it fades (D2's 4h tier, one definition for the reads and the trend
+  // rule): it goes. Without the 4h rejection, or on the gap edge, the 4h read is against the long: both refuse.
+  b.sections.h1.data.h4.trend = 'down';
+  const honest = run('4h rejected previous 4h low up', { bias4h: true });
+  assert.strictEqual(honest.code, 0, honest.stderr);
+  for (const rejection of [null, '4h rejected 15m fvg low up']) {
+    const r = run(rejection, { bias4h: true });
+    assert.strictEqual(r.code, 2, String(rejection));
+    assert.match(r.stderr, /\[composed-reads\] setup:trade_lifecycle: .*"4h down"/);
+    assert.match(r.stderr, /\[mtf-trend\]/);
+  }
   // An exit against the same trend always goes.
   const home = trendHome(tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
   const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }),
