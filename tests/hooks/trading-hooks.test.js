@@ -2009,7 +2009,7 @@ function simHome(dir, { replay = true, journalEntries = [] } = {}) {
 }
 
 /** The gateway as registered (no server command: the configured broker). Items: messages, or functions run between them. */
-async function gatewayCfg(extraEnv, items, { dir }) {
+async function gatewayCfg(extraEnv, items, { dir, onOut = null, stderr = null }) {
   const { spawn } = require('child_process');
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
@@ -2017,7 +2017,8 @@ async function gatewayCfg(extraEnv, items, { dir }) {
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env });
   let out = '';
-  gw.stdout.on('data', c => { out += c; });
+  gw.stdout.on('data', c => { out += c; if (onOut) onOut(out); });
+  if (stderr) gw.stderr.on('data', c => { stderr.text = (stderr.text || '') + c; });
   const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
   for (const item of items) {
     if (typeof item === 'function') { await item(); continue; }
@@ -2128,6 +2129,38 @@ test('MCP gateway with a replay broker: an allowed entry is recorded at the repl
   assert.match(textOf(byId[1]), /"orderId":\s*5/, textOf(byId[1]));
   const entries = JSON.parse(fs.readFileSync(path.join(home, 'entry-orders.json'), 'utf8'));
   assert.deepStrictEqual(entries.map(e => [e.orderId, e.at]), [[5, TEST_NOW]]);
+});
+
+const placedEntry = async (extraEnv, opts = {}) => {
+  const dir = tmpDir();
+  const { home } = simHome(dir, { journalEntries: [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }] });
+  trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z' });
+  const file = path.join(home, 'entry-orders.json');
+  const byId = await gatewayCfg({
+    FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW), FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'),
+    FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }), ...extraEnv,
+  }, [call(0, 'search_contracts', { searchText: 'MNQ' }), call(1, 'place_order', ORDER), call(2, 'list_open_orders', { accountId: 1 })],
+  { dir, stderr: opts.stderr, onOut: opts.onOut && (out => opts.onOut(out, file)) });
+  return { byId, file };
+};
+
+test('MCP gateway wiring: an entry is recorded before the client receives its placed reply', async () => {
+  let atReply = null;
+  const { byId } = await placedEntry({}, { onOut: (out, file) => {
+    if (atReply === null && /"id":1,/.test(out)) atReply = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).map(e => e.orderId) : [];
+  } });
+  assert.match(textOf(byId[1]), /"orderId":\s*5/, textOf(byId[1]));
+  assert.deepStrictEqual(atReply, [5], 'the record was on disk when the reply reached the client');
+});
+
+test('MCP gateway wiring: a failure to record an entry still forwards the broker\'s reply and frees the order lane', async () => {
+  const stderr = {};
+  // Fault injection: recording the entry throws (tests/fixtures/record-entry-throws.js).
+  const { byId, file } = await placedEntry({ NODE_OPTIONS: `--require "${path.join(REPO, 'tests', 'fixtures', 'record-entry-throws.js')}"` }, { stderr });
+  assert.match(textOf(byId[1]), /"orderId":\s*5/, 'the placed reply is forwarded');
+  assert.ok(byId[2] && !byId[2].error, 'the next call is answered: the gateway lives and the lane is free');
+  assert.match(stderr.text || '', /could not record reply 1: injected record failure/);
+  assert.ok(!fs.existsSync(file));
 });
 
 test('order gate wiring: without the broker\'s tick specs the hook and the gateway refuse an entry, never an exit or a stop; looking the contract up records them', async () => {
