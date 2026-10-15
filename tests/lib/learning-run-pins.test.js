@@ -52,14 +52,16 @@ test('pinForRun: a fresh run pins what its config names; a resume keeps its pins
   const pinFile = path.join(old, 'experience', 'library-pinned.json');
   const { display: _d, ...preFlag } = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
   fs.writeFileSync(pinFile, JSON.stringify(preFlag));
-  assert.throws(() => pinForRun(run(old, { setupLibrary: lib }), { fresh: false }), /pinned its history library before libraryDisplay/);
-  assert.throws(() => pinForRun(run(old, { setupLibrary: lib, libraryDisplay: true }), { fresh: false }), /before libraryDisplay/);
+  assert.throws(() => pinForRun(run(old, { setupLibrary: lib }), { fresh: false }), /pinned its history library before the display was recorded/);
+  assert.throws(() => pinForRun(run(old, { setupLibrary: lib, libraryDisplay: true }), { fresh: false }), /before the display was recorded/);
 
   // What is pinned is what the arm names (a file replaced at its path after the look was taken is refused).
   const ih = X.armOf(idx).slice(-16);
   const lh = L.readLibrary(lib).hash.slice(0, 16);
   assert.strictEqual(pinForRun(run(tmp(), { experienceIndex: idx, setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `with:${ih}+library:${lh}` }).length, 2);
-  assert.throws(() => pinForRun(run(tmp(), { experienceIndex: idx }), { fresh: true, arm: `with:${'0'.repeat(16)}` }), /the experience index pinned \([0-9a-f]{16}\) is not the one its look names \(0{16}\)/);
+  const mismatched = tmp();
+  assert.throws(() => pinForRun(run(mismatched, { experienceIndex: idx }), { fresh: true, arm: `with:${'0'.repeat(16)}` }), /the experience index pinned \([0-9a-f]{16}\) is not the one its look names \(0{16}\)/);
+  assert.strictEqual(fs.existsSync(path.join(mismatched, 'experience')), false, 'checked before anything is pinned');
   assert.throws(() => pinForRun(run(tmp(), { setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `without+library:${'0'.repeat(16)}` }), /the history library pinned .* is not the one its look names/);
   assert.throws(() => pinForRun(run(tmp(), { experienceIndex: idx }), { fresh: true, arm: 'without' }), /is not the one its look names \(none\)/);
   assert.strictEqual(pinForRun(run(tmp(), { setupLibrary: lib }), { fresh: true, arm: 'without' }).length, 1, 'a hidden library is in no arm');

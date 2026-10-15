@@ -50,6 +50,9 @@ test('validate needs its flag and is counted; sealed windows need a candidate an
   const t = G.startLearningRun(home, { ...sealed, candidate: 'champ', evaluation: 'ev1' });
   assert.deepStrictEqual([t.role, t.look.purpose, t.taken.appended, t.hideOutcomes], ['test', 'judging', true, false]);
   assert.strictEqual(G.startLearningRun(home, { ...sealed, candidate: 'champ', evaluation: 'ev1' }).taken.appended, false, 'a resume spends nothing');
+  // A home without the run's record (deleted, or another workDir) under a runId that took its look is no resume.
+  assert.throws(() => G.startLearningRun(tmp(), { ...sealed, candidate: 'champ', evaluation: 'ev1' }), /run t1 took its judging look in evaluation ev1 already, and this run home has no record of it .*start another runId/);
+  assert.strictEqual(fs.readFileSync(ledger, 'utf8').trim().split('\n').length, 2, 'nothing spent by the refusal');
   const fix = G.startLearningRun(tmp(), { ...sealed, runId: 'f1', candidate: 'champ', evaluation: 'fx', reasoningFix: true });
   assert.deepStrictEqual([fix.look.purpose, fix.hideOutcomes], ['reasoning-fix', true]);
   // Final: refused before anything is written without a test pass.

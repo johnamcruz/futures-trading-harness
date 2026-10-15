@@ -113,7 +113,7 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
     refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} as another arm (${l.arm || 'without'}, not ${prior.arm}): a resume keeps its arm (start another runId)`);
   }
   if (prior && prior.setup != null && prior.setup !== (l.setup || null)) {
-    refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} with another setup (${String(l.setup).slice(0, 12)}, not ${String(prior.setup).slice(0, 12)}: its runner config, window, documents or library changed): a resume keeps its setup (start another runId)`);
+    refusals.push(`run ${l.runId} took its look in evaluation ${l.evaluation} with another setup (${String(l.setup).slice(0, 12)}, not ${String(prior.setup).slice(0, 12)}: its runner config, documents, library or its display changed): a resume keeps its setup (start another runId)`);
   }
   // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
   const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);
