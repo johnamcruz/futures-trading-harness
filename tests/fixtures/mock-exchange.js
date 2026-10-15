@@ -166,7 +166,9 @@ function bars(s, a, env = {}) {
   const start = a.startTime ? Date.parse(a.startTime) : end - step * (a.limit || 100);
   // Real bars when the test set them (s.bars[contractId], the bar size the test uses): closed ones up to now, so the
   // gate reads the same market the scan did (e.g. its regime check).
-  const real = (s.bars || {})[a.contractId];
+  // A bar size of its own (s.bars["<contractId>@1m"], e.g. a data lane's 1m bars) when the test set one.
+  const sized = (s.bars || {})[`${a.contractId}@${step / 60000}m`];
+  const real = Array.isArray(sized) ? sized : (s.bars || {})[a.contractId];
   if (Array.isArray(real)) {
     // As a broker does: with no startTime, the last `limit` closed bars by count (across breaks), else from startTime.
     // MOCK_LEAK_BARS=1: a non-conforming replay server that serves the bars after its clock too (look-ahead).

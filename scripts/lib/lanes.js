@@ -8,6 +8,14 @@
  *   "lanes": [{ "timeframe": 3, "trigger": "bar", "policies": ["prop_portfolio"] },
  *             { "timeframe": 1, "trigger": "signal", "strategies": ["..."] }]
  *
+ * A data lane (`"trigger": "data"`, a further lane on 1m bars, no strategies or policies) only fetches its bars: the
+ * first lane's bar briefing builds what its own bars can't from them (5m candles, 5m structure, 5m FVGs). It scans
+ * nothing, triggers no cycle, runs no role, gets no housekeeping and no session-record point, and never sets a
+ * cycle's budget; its bars still coalesce with the first lane's at a shared close (the 1m bar ending on a 3m close
+ * completes that 5m candle). Live polls it every minute; replay polls it at the trading lanes' points (its bars up to
+ * the point: causal), so its closes add no decision points. Refused when the first lane's bars divide 5m (they build
+ * the 5m facts themselves).
+ *
  * Without `lanes`, the config's `timeframe` and `trigger` are its one lane, and
  * every strategy on that timeframe is in it (as before lanes existed).
  *
@@ -19,6 +27,8 @@
  *   laneStrategyErrors(lanes, strategies) every listed name exists, is of its list's kind, and is on its lane's timeframe
  *   signalLaneErrors(lanes, strategies)  a trigger "signal" lane with no mechanical strategy (only positions would cycle)
  *   describeLane(lane, strategies)       one line for the preflight report
+ *   isDataLane(lane)                     a lane on trigger "data" (bars only)
+ *   tradingLanes(cfg)                    the config's lanes that trade (every lane but its data lanes)
  *
  * Each agent role may name its own timeframe: `timeframe` in its agents/<role>.md frontmatter (none: the first
  * lane's), and the runner config's `agents: { "<role>": { "timeframe": "15m" } }` overrides it. Only the analysts
@@ -59,7 +69,10 @@ const { familyRoot } = require('./trading/contracts');
 const { ANALYSTS } = require('./trading/roles-ran');
 
 const LANE_KEYS = ['timeframe', 'trigger', 'strategies', 'policies'];
-const TRIGGERS = ['bar', 'signal'];
+const TRIGGERS = ['bar', 'signal', 'data'];
+// A data lane's bars: the first lane's briefing reads 1m bars only (its 5m candles, 5m structure, 5m FVGs).
+const DATA_MINUTES = 1;
+const isDataLane = lane => Boolean(lane) && lane.trigger === 'data';
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 const TIMEFRAME = /^([1-9]\d*)(m|h|d)$/;
@@ -89,7 +102,12 @@ function parseLanes(cfg, raw = {}) {
     for (const k of Object.keys(l)) if (!LANE_KEYS.includes(k)) errors.push(`${at}: unknown key "${k}" (${LANE_KEYS.join(', ')})`);
     if (!(Number.isInteger(l.timeframe) && l.timeframe >= 1 && l.timeframe <= 60)) errors.push(`${at}.timeframe: minutes per bar, 1 to 60`);
     const trigger = l.trigger === undefined ? 'bar' : l.trigger;
-    if (!TRIGGERS.includes(trigger)) errors.push(`${at}.trigger: "bar" or "signal"`);
+    if (!TRIGGERS.includes(trigger)) errors.push(`${at}.trigger: "bar", "signal" or "data"`);
+    if (trigger === 'data') {
+      if (i === 0) errors.push(`${at}.trigger: "data" only on a further lane (the first lane is the runner's own and trades)`);
+      for (const k of ['strategies', 'policies']) if (l[k] !== undefined) errors.push(`${at}.${k}: a data lane scans nothing (bars only); leave ${k} out`);
+      if (l.timeframe !== DATA_MINUTES) errors.push(`${at}.timeframe: a data lane's bars are the briefing's ${DATA_MINUTES}m source (5m candles, 5m structure, 5m FVGs): timeframe ${DATA_MINUTES}`);
+    }
     for (const k of ['strategies', 'policies']) {
       if (l[k] !== undefined && !nameList(l[k])) errors.push(`${at}.${k}: a non-empty list of strategy names, each once`);
     }
@@ -104,9 +122,14 @@ function parseLanes(cfg, raw = {}) {
   // The cross-checks against the first lane, only when it parsed (else its own refusal says why).
   const first = isObject(r.lanes[0]) ? lanes[0] : null;
   if (first && 'timeframe' in r && r.timeframe !== first.timeframe) errors.push(`timeframe: with lanes, the first lane's timeframe (${first.timeframe}) is the runner's; leave timeframe out or set it equal`);
+  // A data lane is for what the first lane's bars can't build: on bars that divide 5m they build the 5m facts themselves.
+  if (first && Number.isInteger(first.timeframe) && 5 % first.timeframe === 0 && lanes.some(isDataLane)) errors.push(`lanes: a data lane adds nothing to a ${first.timeframe}m first lane (its own bars build the 5m candles, structure and FVGs); leave it out`);
   if (first && 'trigger' in r && r.trigger !== first.trigger) errors.push(`trigger: with lanes, the first lane's trigger (${first.trigger}) is the runner's; leave trigger out or set it equal`);
   return { lanes, errors };
 }
+
+/** The config's lanes that trade: every lane but its data lanes (the first lane always trades). */
+const tradingLanes = cfg => lanesOf(cfg).filter(l => !isDataLane(l));
 
 /** A validated config's lanes: its `lanes`, or the one lane its `timeframe` and `trigger` make. */
 function lanesOf(cfg) {
@@ -121,7 +144,7 @@ function lanesOf(cfg) {
  * policies' setups). A list left out takes every one of its kind.
  */
 function laneStrategies(strategies, lane) {
-  if (lane.retired) return [];
+  if (lane.retired || isDataLane(lane)) return [];
   const on = onTimeframe(strategies, tfOf(lane));
   const policies = on.filter(s => s.signal === 'policy' && (!lane.policies || lane.policies.includes(s.name)));
   const traded = new Set(policies.flatMap(p => (Array.isArray(p.strategies) ? p.strategies : [])));
@@ -181,6 +204,7 @@ function omittedPolicyErrors(cfg, strategies, attemptRunning = () => false) {
 /** One line on a lane: its bar, trigger, and the strategies and policies it scans. */
 function describeLane(lane, strategies) {
   if (lane.retired) return `${tfOf(lane)} bars, trigger ${lane.trigger}; ${retiredLaneText(lane)}`;
+  if (isDataLane(lane)) return `${tfOf(lane)} bars, trigger data: bars only, for the first lane's briefing (5m candles, 5m structure, 5m FVGs); no strategy, no cycle, no role`;
   const list = laneStrategies(strategies, lane).filter(s => s.valid && s.status !== 'disabled');
   const names = kind => list.filter(s => (kind === 'policy') === (s.signal === 'policy')).map(s => s.name);
   const show = a => (a.length ? a.join(', ') : 'none');
@@ -231,10 +255,12 @@ function agentTimeframes(cfg, agents) {
  * or whole bars of the first lane that divide the hour (15m and 1h from 3m bars), built from the first lane's bars.
  */
 function frameError(minutes, lanes) {
-  if (lanes.some(l => l.timeframe === minutes)) return null;
+  // A data lane's bars feed the first lane's briefing only: never an analyst's own timeframe.
+  const trading = lanes.filter(l => !isDataLane(l));
+  if (trading.some(l => l.timeframe === minutes)) return null;
   const first = lanes[0].timeframe;
   if (Number.isInteger(minutes) && minutes <= 60 && 60 % minutes === 0 && minutes % first === 0) return null;
-  return `an analyst's timeframe is a lane's (${lanes.map(tfOf).join(', ')}) or whole ${first}m bars that divide the hour (built from the first lane's bars), not ${minutes}m`;
+  return `an analyst's timeframe is a lane's (${trading.map(tfOf).join(', ')}) or whole ${first}m bars that divide the hour (built from the first lane's bars), not ${minutes}m`;
 }
 
 /** The roles the config names exist; every role's timeframe is valid, and off the first lane's only for an analyst that can read it. */
@@ -264,7 +290,7 @@ function analystFrames(cfg, agents) {
   const lanes = lanesOf(cfg);
   return agentTimeframes(cfg, agents).filter(t => ANALYSTS.includes(t.role)).map(t => ({ role: t.role, minutes: tfMinutes(t.timeframe) }))
     .filter(t => t.minutes !== null && t.minutes !== lanes[0].timeframe && !frameError(t.minutes, lanes))
-    .map(t => ({ ...t, lane: lanes.findIndex(l => l.timeframe === t.minutes) }));
+    .map(t => ({ ...t, lane: lanes.findIndex(l => l.timeframe === t.minutes && !isDataLane(l)) }));
 }
 
 /** What a retired lane does, for the runner's log and preflight. */
@@ -295,6 +321,6 @@ const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => (
 ]);
 
 module.exports = {
-  LANE_KEYS, TRIGGERS, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
+  LANE_KEYS, TRIGGERS, DATA_MINUTES, isDataLane, tradingLanes, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
   tfMinutes, tfLabel, agentOverrideErrors, agentErrors, agentTimeframes, frameError, analystFrames, omittedPolicyErrors, retiredLaneText, retireLanes, startErrors,
 };

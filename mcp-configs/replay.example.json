@@ -11,6 +11,16 @@
     "paper": false,
     "timeframe": 3,
     "trigger": "bar",
+    "lanes": [
+      {
+        "timeframe": 3,
+        "trigger": "bar"
+      },
+      {
+        "timeframe": 1,
+        "trigger": "data"
+      }
+    ],
     "cycle": "lean",
     "sessions": [
       "09:30-15:50@America/New_York"

@@ -371,6 +371,36 @@ cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,
 refuses to start unless the server lists every interface tool, has trading
 enabled, and allows the account.
 
+**Runner lanes** (`scripts/lib/lanes.js`, `scripts/lib/lane-cycle.js`). The
+runner config's optional `lanes` lists timeframe lanes, each with a bar clock
+per symbol; the first is the runner's own `timeframe` and `trigger`. A lane's
+`trigger` is `bar` (a cycle every bar), `signal` (a cycle only when one of its
+strategies fires or something is open), or `data`. A data lane, a further lane
+on 1m bars that lists no strategies or policies, only fetches its bars: the
+first lane's bar briefing builds from them what its own bars can't (the 5m
+candles, the 5m structure, the 5m FVGs, from completed 1m bars up to the
+decision time only). It scans nothing, starts no cycle, runs no role, gets no
+housekeeping, writes no bars file, reads no trend or day context, adds no
+session-record point, and never sets a cycle's time budget, so with one
+trading lane the cycles, their prompts, the decision history and the time
+budget are the one-lane runner's. What differs is the runner state: with
+more than one lane, each lane's last bar is kept there (a replay pass is a
+new process), saved at the end of a pass and only when no cycle in it
+failed, so a failed cycle's retry (replay) or a restart (live) finds its
+bars still new. Its bar of a shared close still coalesces with the first
+lane's (the cycle waits a few seconds for it, so that close's 5m candle is
+complete), and its bars count even when they closed a while ago (after a
+long cycle, or a poll delay of 30 s or more), because they are closed bars
+only. Live polls it every minute; replay adds no decision time for it and
+polls it at the trading lanes' times, through the replay broker's 1m bars,
+cut at the replay clock. A data lane is refused when the first lane's bars
+divide 5m (they build the 5m facts themselves). Preflight lists it as "bars
+only". An analyst can't take a data lane's timeframe as its own.
+
+```json
+"lanes": [{ "timeframe": 3, "trigger": "bar" }, { "timeframe": 1, "trigger": "data" }]
+```
+
 Further safeguards:
 
 - **Workspace fingerprint.** The runner fingerprints the workspace's
