@@ -68,7 +68,7 @@ test('skill usage: available counts only TRUE reads, missed only those agreeing 
   // The short at 16:24: the 15m trend is up (TRUE, against the short): multi-timeframe-analysis is available there, but
   // its reads there don't agree with the short unless one does.
   const shortOnly = U.skillUsage({ records: [RECORDS[2]], briefingAt: at });
-  const avail = require('../../scripts/lib/learning/available-reads').availableSkills(at('MNQ', R_BAR), 'short');
+  const avail = U.availableAt(at('MNQ', R_BAR), 'short');
   for (const s of shortOnly.skills) {
     const a = avail.get(s.skill);
     assert.strictEqual(s.available, a && a.reads.length ? 1 : 0, s.skill);
@@ -78,6 +78,29 @@ test('skill usage: available counts only TRUE reads, missed only those agreeing 
   assert.strictEqual(none.briefings, 0);
   assert.ok(none.skills.every(s => s.available === 0 && s.missed === 0 && s.relevant === 0));
   assert.strictEqual(of(none, 'multi-timeframe-analysis').correct, 1, 'correct and wrong come from the records alone');
+});
+
+test('skill usage: available is the curated scanner\'s readsAt over every reaction the bar shows, once each; a bar with none still counts its other reads', () => {
+  const { readsAt } = require('../../scripts/lib/learning/curated-moments');
+  const b = at('MNQ', A_BAR);
+  const avail = U.availableAt(b, 'long');
+  const forms = new Set([...avail.values()].flatMap(a => a.reads.map(r => r.form)));
+  // The 4h candle broke the 15m gap's high up (a reaction): the scanner's reads on it are all here.
+  for (const r of readsAt(b, { side: 'long', reaction: { name: '15m fvg high', kind: 'fvg', rel: 'broke', dir: 'up' }, setupTf: 240 })) assert.ok(forms.has(require('../../scripts/lib/trading/composed-reads').parseRead(r.read).form), r.read);
+  assert.ok(avail.get('fair-value-gaps').agreeing.some(r => r.form === '4h broke 15m fvg high up'));
+  // Every read kept is TRUE (the scanner keeps the checker's TRUE ones), once each.
+  const all = [...avail.entries()].filter(([s]) => s !== 'pullback-vs-reversal').flatMap(([, a]) => a.reads);
+  assert.strictEqual(new Set(all.map(r => r.form)).size, all.length);
+  for (const r of all) assert.strictEqual(checkReads({ reads: [{ step: r.step, skill: r.skill, read: r.read }], side: 'long', briefing: b }).reads[0].check, true, r.read);
+  // A TRUE read against the side is available, not relevant: the 15m trend up for a short.
+  const mtfShort = U.availableAt(b, 'short').get('multi-timeframe-analysis');
+  assert.ok(mtfShort.reads.some(r => r.form === '15m up') && !mtfShort.agreeing.some(r => r.form === '15m up'));
+  // No reaction on any candle: the bias and location reads still count.
+  const bare = JSON.parse(JSON.stringify(b));
+  for (const c of Object.values(bare.sections.m3.data.candles)) if (c && !c.unavailable) { c.relations = []; c.fvgRelations = []; }
+  const none = U.availableAt(bare, 'long');
+  assert.ok(none.get('multi-timeframe-analysis').agreeing.some(r => r.form === '15m up'));
+  assert.ok(!none.has('fair-value-gaps') || !none.get('fair-value-gaps').reads.some(r => r.step === 'setup'));
 });
 
 test('skill usage: the briefing at a bar reads no later bar: changing every bar after it changes nothing', () => {
@@ -205,7 +228,7 @@ test('skill usage: in the learning report (Markdown and text), and as the CLI pr
 
 test('skill usage: never shown to the model: only the replay report and its own CLI reach it, no harness tool, prompt or runner code', () => {
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
-  const users = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /(learning-report|skill-usage|available-reads)'\)/.test(fs.readFileSync(f, 'utf8')))
+  const users = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /(learning-report|skill-usage)'\)/.test(fs.readFileSync(f, 'utf8')))
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
-  assert.deepStrictEqual(users, ['scripts/lib/learning/learning-report.js', 'scripts/lib/learning/skill-usage.js', 'scripts/replay.js', 'scripts/skill-usage.js']);
+  assert.deepStrictEqual(users, ['scripts/lib/learning/learning-report.js', 'scripts/replay.js', 'scripts/skill-usage.js']);
 });

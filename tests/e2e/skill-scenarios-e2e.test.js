@@ -6,8 +6,9 @@
  * replayed time, the scripted model (tests/fixtures/scripted-model.js) calling the real compose_check, and its orders
  * through the real order gateway to the mock exchange. For each skill, on a bar where its read is true:
  *
- *   true     the skill's read is TRUE in the bar briefing the runner wrote (available-reads.js, the checker's own
- *            check), and the whole combination holding it passes compose_check (an ok record);
+ *   true     the skill's read is TRUE in the bar briefing the runner wrote and agrees with the side (the checker's own
+ *            check), it is that skill's by the crosswalk (curated-moments.js skillOfRead), and the whole combination
+ *            holding it passes compose_check (an ok record);
  *   trade    the trade goes end to end: the gate allows the limit entry, it fills at the reference, and the broker's
  *            stop and target legs sit at the stop level one tick beyond (D3) and at the target level, with the size;
  *   false    a FALSE read of the same form at the same bar (one word changed) is refused by the checker (FALSE, not
@@ -28,12 +29,13 @@ const TL = require('../../scripts/lib/trading/trade-lifecycle');
 const { readBriefing } = require('../../scripts/lib/trading/briefing');
 const { checkReads, parseRead } = require('../../scripts/lib/trading/composed-reads');
 const { requiredFor, needed } = require('../../scripts/lib/trading/skill-lookups');
-const { availableSkills, skillOfRead, READ_SKILL, SHAPE_SKILL, NO_READ_SKILLS } = require('../../scripts/lib/learning/available-reads');
+const { skillOfRead, shapeOf, READ_SKILL, SHAPE_SKILL } = require('../../scripts/lib/learning/curated-moments');
+const { NO_READ_SKILLS } = require('../../scripts/lib/learning/skill-usage');
 
 const TICK = 0.25;
 const BLOCKED = 'CYCLE RESULT: blocked - the order gate refused the entry';
 
-// The combinations, from the bars (each read TRUE at its bar, found with available-reads.js): A on the 14:00 UTC bar of
+// The combinations, from the bars (each read TRUE at its bar, checked by the checker): A on the 14:00 UTC bar of
 // 2026-04-23 (long: the 4h candle broke the 15m gap's high, the 3m bar closed at its top), the others where the skill's
 // own read is true. `read` is the skill's read in the combination; `false` the same form, one word changed, FALSE there.
 const A_BAR = '2026-04-23T14:00:00.000Z';
@@ -169,13 +171,14 @@ for (const s of SCENARIOS) {
     const r = await D.pass(w, D.decisionAt(s.bar), composedCycle(w, s));
     const b = readBriefing(w.home, 'MNQ');
     assert.strictEqual(b.asOf, s.bar);
-    // TRUE in the briefing the runner wrote, as the skill's (available-reads.js: the crosswalk's skill of the read).
-    const avail = availableSkills(b, s.side, { tick: TICK }).get(s.skill);
-    assert.ok(avail && avail.agreeing.length, `${s.skill} has no true read agreeing with the ${s.side}`);
-    if (s.skill !== SHAPE_SKILL) assert.ok(avail.agreeing.some(x => x.form === parseRead(s.read).form), `"${s.read}" is not among ${s.skill}'s true reads: ${avail.agreeing.map(x => x.read).join('; ')}`);
+    // TRUE in the briefing the runner wrote and agreeing with the side, the skill's by the crosswalk (the shape skill:
+    // the reads show its shape).
     const checked = checkReads({ reads: asReads(s.reads), side: s.side, briefing: b, tick: TICK });
     assert.ok(checked.ok, checked.problems.join('; '));
-    assert.ok(checked.reads.find(x => x.read === s.read).check === true);
+    const own = checked.reads.find(x => x.read === s.read);
+    assert.deepStrictEqual([own.check, own.agrees], [true, true], own.fact);
+    if (s.skill === SHAPE_SKILL) assert.strictEqual(shapeOf(checked.reads, s.side), 'reversal');
+    else assert.strictEqual(skillOfRead(own.step, s.read), s.skill);
     assert.match(r.ctx.results.compose_check, new RegExp(`^compose_check MNQ ${s.side}[\\s\\S]*\\nOK: every read verified`));
     assertTrade(w, s, expectedPlan(s.reads, s.side, b.sections.m3.data.price), 1);
     assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
@@ -262,7 +265,7 @@ test('skill scenarios: every skill the trade-lifecycle crosswalk names has a sce
   assert.deepStrictEqual(missing, [], `crosswalk skills with no scenario and no todo: ${missing.join(', ')}`);
   for (const s of [...COVERED, ...Object.keys(TODO)]) assert.ok(all.includes(s), `${s} is not in the crosswalk`);
   for (const [s, why] of Object.entries(TODO)) assert.ok(!COVERED.has(s) && why.length > 40, `${s}: a todo states why`);
-  // The read skills (available-reads.js READ_SKILL, the report's table) are each in their step's row; the no-read
+  // The read skills (curated-moments.js READ_SKILL, the report's table) are each in their step's row; the no-read
   // skills are the size and management rows; the shape skill a setup skill.
   for (const [step, kinds] of Object.entries(READ_SKILL)) for (const skill of Object.values(kinds)) assert.ok(steps[step].includes(skill), `${skill} (${step})`);
   assert.deepStrictEqual(NO_READ_SKILLS, { size: steps.size, management: steps.management });

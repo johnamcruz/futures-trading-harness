@@ -11,8 +11,11 @@
  *   - be in a runner's cycle on a bar (FTH_CYCLE_BARS) whose bar briefing is the one on disk (fact-claims briefingFor);
  *   - have a compose record for that bar, its root and its side (the latest such record is the one judged);
  *   - be on the record's own contract (its symbol: a size stated for MNQ is not one for NQ);
- *   - be before the record's expiry (the next base-bar close) and the first entry on the family and side since the
- *     cycle bar opened (one entry per bar and side, whichever record it came from);
+ *   - be before the record's expiry (the strategy's valid_bars base bars after the bar's close, worked out again from
+ *     the bar's briefing; 1 when the strategy can't be read; never past the record's own) and the first entry on the
+ *     family and side since the cycle bar opened (one entry per bar and side, whichever record it came from). The
+ *     cycle's bar and its briefing don't move while the cycle runs (the runner awaits it), so an entry after the next
+ *     close is judged on the facts of the record's own bar; a later cycle has a later bar and composes on it;
  *   - pass the reads checker (composed-reads.js) run again on the record's reads against that briefing (the record's
  *     own `ok` and checks are never read): every read true, agreeing with the side, every step stated;
  *   - match the plan worked out again from the re-checked reads (trade-lifecycle.js planOf: the D3 buffer, the D13
@@ -24,12 +27,15 @@
  * Anything missing, unreadable or throwing refuses (fails closed).
  *
  *   isComposed(strategy)            a strategy (or a name) of signal composed, or trade_lifecycle
- *   recordsAt(home, root, bar)      the root's trade_lifecycle records for the bar opened at `bar` (same instant)
+ *   recordsAt(home, root, bar)      the root's trade_lifecycle records for the bar opened at `bar` (same instant), read
+ *                                   from that bar's day shard alone (trade-lifecycle.js: a record is filed under its
+ *                                   bar's trading day); a shard that can't be read throws (the entry refused)
  *   readsOf(record)                 the reads as the model stated them: [{ step, skill, read, why }]
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot })
- *                                   { message: why it is refused | null, check, record, plan, room }
+ *                                   { message: why it is refused | null, check, record, plan, room, expiresAt }
+ *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
  *   reversalAllowed({ home, root, side, check, now, maxAgeMin })   D2 (the owner's "CHoCH at or above the trend"): whether a composed
  *                                   entry against the prevailing trend (mtf-state's record) stands on the re-checked
  *                                   reads: against 15m, a true agreeing 15m or 1h CHoCH; against 1h, a 1h CHoCH;
@@ -50,7 +56,7 @@ const { briefingFor } = require('./fact-claims');
 const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
 const { RULE_FRAMES, trendRule } = require('./mtf');
 const { checkReads, D2_TIERS, d2TierMet } = require('./composed-reads');
-const { STRATEGY, readRecords, planOf } = require('./trade-lifecycle');
+const { STRATEGY, readRecords, planOf, dayOf, expiryOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const SIGNAL = 'composed';
@@ -61,7 +67,8 @@ const fmt = (x, tick) => Number(x).toFixed((String(tick).split('.')[1] || '').le
 
 const isComposed = s => (typeof s === 'string' ? s === STRATEGY : Boolean(s) && (s.signal === SIGNAL || s.name === STRATEGY));
 const sameInstant = (a, b) => Number.isFinite(Date.parse(a)) && Date.parse(a) === Date.parse(b);
-const recordsAt = (home, root, bar) => readRecords(home, root).filter(r => r.strategy === STRATEGY && sameInstant(r.bar, bar));
+const recordsAt = (home, root, bar) => (dayOf(bar) === null ? []
+  : readRecords(home, root, { days: [dayOf(bar)] }).filter(r => r.strategy === STRATEGY && sameInstant(r.bar, bar)));
 const readsOf = record => (isObj(record) && Array.isArray(record.reads) ? record.reads : [])
   .map(r => (isObj(r) ? { step: r.step, skill: r.skill, read: r.read, why: r.why } : {}));
 
@@ -153,10 +160,13 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     // The stated size is a number of the record's own contract (its symbol): never another leg of the family.
     const recSymbol = String(rec.symbol || rec.contract || '').toUpperCase();
     if (recSymbol !== String(contractRoot(input.contractId) || '').toUpperCase()) return say(`the compose record is for ${recSymbol || 'no named contract'}, not ${contractRoot(input.contractId)}: its size is a number of its own contract; compose on the contract you trade`);
-    const expiries = [rec.expiresAt, b.sections.m3 && b.sections.m3.validUntil].map(x => Date.parse(x)).filter(Number.isFinite);
-    if (!expiries.length) return say('the compose record has no expiry');
+    // Valid `valid_bars` base bars after its bar's close (the strategy's; 1, the next close, when it can't be read),
+    // worked out again from the bar's own briefing, and never past the record's own stamp.
+    const bars = strategy && Number.isInteger(strategy.valid_bars) && strategy.valid_bars >= 1 ? strategy.valid_bars : 1;
+    const expiries = [rec.expiresAt, expiryOf(b, bars)].map(x => (typeof x === 'number' ? x : Date.parse(x)));
+    if (!expiries.every(Number.isFinite)) return say('the compose record or its bar has no readable expiry');
     const expiry = Math.min(...expiries);
-    if (!(now.getTime() < expiry)) return say(`the compose record expired at ${new Date(expiry).toISOString()} (the next bar's close): compose again on the new bar`);
+    if (!(now.getTime() < expiry)) return { ...say(`the compose record expired at ${new Date(expiry).toISOString()} (${bars} base bar${bars === 1 ? '' : 's'} after its bar's close): compose again on the new bar`), expired: true };
     if (recordUsed(entries, { since: cycleBar, side }, root)) return say(`a ${side} entry on ${familyRoot(root)} was already placed since this bar opened (${cycleBar}): one entry per bar and side`);
     const spec = specOf(contractRoot(input.contractId));
     const tick = spec && spec.tickSize > 0 ? spec.tickSize : null;

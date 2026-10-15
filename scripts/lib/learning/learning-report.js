@@ -34,11 +34,12 @@
  *                    setup-focused run ran cycles only at selected bars, so its measures are said to be from one (a
  *                    later full-day evaluation is the comparable one)
  *
- *   library          the run's pinned history library (learning/setup-library.js): its hash only. Code's measurements, never
- *                    the model's decisions: nothing above reads it (the record is the experience index's alone)
  *   skillUsage       the run's skill-usage report (learning/skill-usage.js, skillUsageFor), when given: whether the model
  *                    used each skill where its read was true, correctly, what it missed, and the outcomes by skill;
  *                    an operator report, never shown to the model
+ *   library          the run's pinned history library (learning/setup-library.js): its hash, and whether the run showed it
+ *                    to the model (`shown`, the run's libraryDisplay). Code's measurements, never the model's decisions:
+ *                    nothing above reads it (the record is the experience index's alone)
  *
  *   learningMeasures({ decisions, records, lookups, index, practice, library, skillUsage })   the measures
  *   skillUsageFor(runDir, { barsFiles })   the run's skill usage, { error } when it can't be read, null with no records
@@ -54,7 +55,7 @@ const { readRecords, STEPS, CONTEXT_KEYS } = require('./lifecycle-record');
 const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
 const { readLearningRun } = require('./run-gate');
 const { practiceLine } = require('./setup-moments');
-const { loadPinnedLibrary } = require('./setup-library');
+const { loadPinnedLibrary, libraryShown } = require('./setup-library');
 const { readSkillUsage, skillUsageMarkdown, skillUsageText } = require('./skill-usage');
 
 const ROLLING_DAYS = 5;
@@ -196,7 +197,7 @@ function readLearning(home) {
   try { index = loadPinned(home); } catch (err) { indexError = err.message; }
   const run = readLearningRun(home);
   let library;
-  try { const lib = loadPinnedLibrary(home); library = lib ? { hash: lib.hash.slice(0, 16) } : null; } catch (err) { library = { error: err.message }; }
+  try { const lib = loadPinnedLibrary(home); library = lib ? { hash: lib.hash.slice(0, 16), shown: libraryShown(home) } : null; } catch (err) { library = { error: err.message, shown: libraryShown(home) }; }
   return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError, practice: (run && run.practice) || null, library };
 }
 
@@ -228,7 +229,7 @@ function learningMarkdown(m) {
   return [
     '## Learning', '',
     ...(m.practice ? [`- This run was ${practiceLine(m.practice)}.`] : []),
-    ...(m.library ? [`- History library ${m.library.hash || `unreadable (${m.library.error})`} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record.`] : []),
+    ...(m.library ? [`- History library ${m.library.hash || `unreadable (${m.library.error})`} pinned: code-measured, ${m.library.shown ? 'shown in experience_lookup apart' : 'not shown to the model (its display off)'}; never counted below or as the model's record.`] : []),
     `- Decisions: ${d.total} (${d.composed} composed: ${d.entered} entered, ${d.passed} passed, ${d.refused} refused; ${d.none} plain passes)`,
     `- Steps covered per composed decision: ${f2(m.steps.mean)} (${m.steps.allSix} cover all six); distinct skills per trade: ${f2(m.skillsPerTrade)}`,
     `- Reads verified: ${m.reads.verified} of ${m.reads.reads} (${f2(m.reads.rate)}); records ok: ${m.reads.recordsOk} of ${m.reads.records}`,

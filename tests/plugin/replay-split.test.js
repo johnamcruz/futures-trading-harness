@@ -57,6 +57,10 @@ const ALLOWED = [
   { old: '2024-03 2520 2541 0 91.3% 38 44.7% 0.21 (38) $9.42 $357.96 -0.48 1.12 plan-required 6, mtf-trend 3',
     now: '2024-03 2520 2541 0 91.3% 38 44.7% 0.21 (38) $9.42 $357.96 -0.48 1.12 plan-required 6, mtf-trend 3 0',
     reason: 'the month row carries its replay-clock count' },
+  // A truth fix: with the run's latency on (replay/latency.js) the replay clock runs during a step (the owner's sentence).
+  { old: '**The loop**, one process per decision time (the replay clock is frozen per process): the broker\'s clock moves to the time (fills in between happen in the broker), then `autotrader.js --once` runs one pass of the live loop there with `FTH_REPLAY_NOW`.',
+    now: '**The loop**, one process per decision time (the replay clock is frozen per process, or, with the run\'s `latency` on, the default for a learning run, runs with the wall clock from each decision time, so the cycle\'s own time is charged as live): the broker\'s clock moves to the time (fills in between happen in the broker), then `autotrader.js --once` runs one pass of the live loop there with `FTH_REPLAY_NOW`.',
+    reason: 'a latency-charged replay runs its clock during a step' },
 ];
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));

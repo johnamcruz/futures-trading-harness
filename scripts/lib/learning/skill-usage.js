@@ -5,18 +5,22 @@
  * a run. An operator report, for the replay report and the CLI (scripts/skill-usage.js): never in a prompt, a tool's
  * reply or anything a cycle reads (no harness tool requires this module).
  *
- * Read from what the run recorded, nothing else: the compose_check records (<run home>/trade-lifecycle, the single
- * file per family or its day shards, readComposeRecords), the cycle log's summary lines (logs/cycles-<day>.jsonl),
- * the run's own bars (its bars files, or the data it replayed, as the experience log reads them), and the experience
- * log (experience/decisions.jsonl) for the outcomes the run itself filled. The briefing at a decision bar is rebuilt
- * from the bars closed by that bar's close (briefing.js buildBriefing, the runner's history window), never a later bar.
+ * Read from what the run recorded, nothing else: the compose_check records (<run home>/trade-lifecycle, the day shards
+ * and any older single file, through trade-lifecycle.js readRecords), the cycle log's summary lines
+ * (logs/cycles-<day>.jsonl), the run's own bars (its bars files, or the data it replayed, as the experience log reads
+ * them), and the experience log (experience/decisions.jsonl) for the outcomes the run itself filled. The briefing at a
+ * decision bar is rebuilt from the bars closed by that bar's close (briefing.js buildBriefing, the runner's history
+ * window, the run home's round-number steps), never a later bar.
  *
  * A decision point is a bar and side the model composed on (a compose_check record for that root, bar and side; the
- * sides it considered). Each read the model stated is the skill's the crosswalk gives its form (available-reads.js
- * READ_SKILL; a form with none, the skill it named), once per point (a read stated again on the bar counts once).
- * Per skill:
+ * sides it considered). Each read the model stated is the skill's the crosswalk gives its form (curated-moments.js
+ * skillOfRead, READ_SKILL; a form with none, the skill it named), once per point (a read stated again counts once).
+ * The reads available at a bar are the curated scanner's own enumeration (curated-moments.js readsAt: every read of
+ * compose_check's vocabulary the briefing states for the side, checked by the checker, kept when TRUE), taken for each
+ * reaction the bar's candles show (every candle's rejection or break of a level or a gap's edge, its timeframe the
+ * setup's), their union once each. Per skill:
  *   used       the points where the model claimed one of its reads, of the points where a read of it was TRUE at
- *              the bar (available: available-reads.js, the checker's own check of every read the briefing can state)
+ *              the bar (available)
  *   correct    claimed reads the checker verified (TRUE and agreeing with the side)
  *   wrong      claimed reads refused (FALSE, unverifiable, against the side, or refused by the checker's rules), with
  *              the top reasons
@@ -24,8 +28,9 @@
  *              model claimed none of its reads, with the reads it missed most
  *   mislabeled claimed reads the model filed under another skill (the checker records the label, never checks it)
  * pullback-vs-reversal (the shape skill) is claimed when the model names it, and available when the true agreeing
- * reads show the shape (available-reads.js shapeOf). The size and management skills have no read (NO_READ_SKILLS):
- * listed, not measured.
+ * reads show the shape (curated-moments.js shapeOf). The stop and target skills (invalidation, take-profit) are
+ * measured on their claims only: the scanner states a stop and target only for its own standard trade, so their
+ * availability is not counted. The size and management skills have no read (NO_READ_SKILLS): listed, not measured.
  *
  * Outcome (the experience log's composed decisions, the run's own fills and counterfactuals): R and win rate by skill
  * (a decision counts for each skill with a verified read in it) and by skill combination (its skill signature, the
@@ -38,7 +43,8 @@
  * held-back window is seen only through its look.
  *
  *   skillUsage({ records, briefingAt, decisions, cycles, hideOutcomes, tick })   the report
- *   readComposeRecords(home)            every compose record under a home, oldest first (both layouts)
+ *   readComposeRecords(home)            every compose record under a home, oldest first, once each (by id)
+ *   availableAt(briefing, side, { tick })   Map skill -> { reads: the TRUE ones, agreeing: those agreeing }
  *   readSkillUsage(runDir, { barsFiles })   the report of a replay run (its run dir, as `replay.js report` takes it)
  *   skillUsageMarkdown(u), skillUsageText(u)
  */
@@ -47,12 +53,15 @@ const fs = require('fs');
 const path = require('path');
 const { parseRead } = require('../trading/composed-reads');
 const { tradingDayKey } = require('../trading/clock');
-const { availableSkills, skillOfRead, READ_SKILL, SHAPE_SKILL, NO_READ_SKILLS } = require('./available-reads');
+const { readRecords } = require('../trading/trade-lifecycle');
+const { readsAt, skillOfRead, shapeOf, READ_SKILL, SHAPE_SKILL } = require('./curated-moments');
 const { cellStats, knownDay } = require('./experience-index');
 
-const DIR = 'trade-lifecycle';
 const MAX_BYTES = 64 * 1024 * 1024;
 const TOP = 3;
+/** The crosswalk's skills with no read form: the size step's and the management step's (no compose read states them). */
+const NO_READ_SKILLS = Object.freeze({ size: Object.freeze(['position-sizing', 'prop-challenge-pacing', 'prop-pacing-judgment']), management: Object.freeze(['manage-position']) });
+const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
 const ORDER = [...new Set([...Object.values(READ_SKILL).flatMap(k => Object.values(k)), SHAPE_SKILL])];
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -68,32 +77,56 @@ function readLines(file) {
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { const x = JSON.parse(l); return isObj(x) ? [x] : []; } catch (_err) { return []; } });
 }
 
-/**
- * Every compose record under the home, oldest first: each family's single file (<home>/trade-lifecycle/<ROOT>.jsonl)
- * and its day shards (<home>/trade-lifecycle/<ROOT>/<day>.jsonl), whichever the run wrote; a record in both, once.
- */
+/** Every compose record under the home (trade-lifecycle.js readRecords: every family, its shards and older file), once each, oldest first. */
 function readComposeRecords(home) {
-  const dir = path.join(home, DIR);
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (err) { if (err.code === 'ENOENT') return []; throw err; }
-  const files = [];
-  for (const e of entries) {
-    if (e.isFile() && /^[A-Z0-9]{1,8}\.jsonl$/.test(e.name)) files.push(path.join(dir, e.name));
-    if (e.isDirectory() && /^[A-Z0-9]{1,8}$/.test(e.name)) {
-      for (const n of fs.readdirSync(path.join(dir, e.name)).filter(x => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(x)).sort()) files.push(path.join(dir, e.name, n));
-    }
-  }
   const seen = new Set();
+  return readRecords(home, null).filter(r => {
+    const key = r.id ? String(r.id) : JSON.stringify(r);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((x, y) => (Date.parse(x.at) || 0) - (Date.parse(y.at) || 0));
+}
+
+/** Every reaction the bar's candles show (a rejection or break of a level or a gap's edge), as the scanner takes one. */
+function reactionsOf(b) {
+  const m3 = isObj(b) && isObj(b.sections) && isObj(b.sections.m3) && isObj(b.sections.m3.data) ? b.sections.m3.data : {};
   const out = [];
-  for (const f of files.sort()) {
-    for (const r of readLines(f)) {
-      const key = r.id ? String(r.id) : JSON.stringify(r);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(r);
+  for (const [tf, c] of Object.entries(isObj(m3.candles) ? m3.candles : {})) {
+    if (!isObj(c) || c.unavailable || !TF_MIN[tf]) continue;
+    for (const [list, kind] of [[c.relations, 'level'], [c.fvgRelations, 'fvg']]) {
+      for (const r of Array.isArray(list) ? list : []) if (isObj(r) && r.name && ['rejected', 'broke'].includes(r.rel) && ['up', 'down'].includes(r.dir)) out.push({ reaction: { name: r.name, kind, rel: r.rel, dir: r.dir }, setupTf: TF_MIN[tf] });
     }
   }
-  return out.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  return out;
+}
+
+/**
+ * The reads TRUE at the bar for the side, by skill: the scanner's readsAt for each reaction the bar shows (none: once,
+ * on a reaction at no level, so the bar's other reads still count), their union once each; the shape skill from them.
+ */
+function availableAt(b, side, { tick = 0.25 } = {}) {
+  const seen = new Set();
+  const reads = [];
+  const list = reactionsOf(b);
+  for (const { reaction, setupTf } of list.length ? list : [{ reaction: { name: 'none', kind: 'level', rel: 'rejected', dir: side === 'long' ? 'up' : 'down' }, setupTf: 15 }]) {
+    for (const r of readsAt(b, { side, reaction, setupTf, tick })) {
+      const form = parseRead(r.read).form;
+      if (seen.has(form)) continue;
+      seen.add(form);
+      reads.push({ ...r, form });
+    }
+  }
+  const out = new Map();
+  const add = (skill, r) => {
+    if (!out.has(skill)) out.set(skill, { reads: [], agreeing: [] });
+    out.get(skill).reads.push(r);
+    if (r.agrees) out.get(skill).agreeing.push(r);
+  };
+  for (const r of reads) add(r.skill, r);
+  const shape = shapeOf(reads, side);
+  if (shape) add(SHAPE_SKILL, { step: 'bias', skill: SHAPE_SKILL, read: shape, form: shape, agrees: true });
+  return out;
 }
 
 /** Why a claimed read was refused, as a reason to count: the kind of refusal and the read without its prices. */
@@ -151,7 +184,7 @@ function usageOf(points, briefingAt, tick) {
     try { b = briefingAt ? briefingAt(p.root, p.bar) : null; } catch (_err) { b = null; }
     if (!b) continue;
     withBriefing += 1;
-    const avail = availableSkills(b, p.side, { tick });
+    const avail = availableAt(b, p.side, { tick });
     for (const [skill, a] of avail) {
       const s = at(skill);
       if (a.reads.length) { s.available += 1; if (claimed.has(skill)) s.used += 1; }
@@ -324,4 +357,4 @@ function skillUsageMarkdown(u) {
   ].join('\n');
 }
 
-module.exports = { skillUsage, readComposeRecords, readSkillUsage, readCycleLines, briefingFrom, checkLedger, skillUsageMarkdown, skillUsageText };
+module.exports = { NO_READ_SKILLS, skillUsage, readComposeRecords, availableAt, readSkillUsage, readCycleLines, briefingFrom, checkLedger, skillUsageMarkdown, skillUsageText };

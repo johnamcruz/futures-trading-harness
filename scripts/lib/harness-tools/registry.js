@@ -230,7 +230,7 @@ const TOOLS = [
   },
   {
     name: 'experience_lookup', op: 'experience_lookup', script: 'experience-lookup',
-    description: 'Your own record for the candidate compose_check just verified: past decisions of these skills in this context, with counts and intervals; then, apart, the code-measured history library (not your decisions). Read-only; at most 2 calls a bar.',
+    description: 'Your own record for the candidate compose_check just verified: past decisions of these skills in this context, with counts and intervals; then, when the run shows it, the code-measured history library apart (not your decisions). Read-only; at most 2 calls a bar.',
     inputSchema: object({
       symbol: SYMBOL,
       alternative: { type: 'array', maxItems: 2, items: object({ step: { type: 'string', pattern: '^[a-z][a-z-]{0,31}$' }, skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' } }, ['step', 'skill']), description: 'Swap one step\'s skill.' },

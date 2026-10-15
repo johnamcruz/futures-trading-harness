@@ -17,8 +17,10 @@
  * (practice-report.js), and that it isn't comparable bar for bar with a full-day run.
  * Setup timing (cycle-timing.js timingReport, from each cycle's `timing`): bar close to decision and to order (median,
  * p90), overruns (decided after the next bar closed), setups decided in time, entered in time or missed, each role's
- * median time; all bar cycles, setup bars and quiet bars. Shown when a cycle carries timing. In a replay the latency is
- * the projected live latency (the replay clock pinned at the decision time plus the run's own time; fills at the bar).
+ * median time, and entries lost to expiry (the gate refused them: their compose record's time had run out); all bar
+ * cycles, setup bars and quiet bars. Shown when a cycle carries timing. In a replay with its latency charged (the replay
+ * config's `latency`) the latency is the run's own, as live; with a pinned replay clock it is projected (the clock at
+ * the decision time plus the run's own time; fills at the bar).
  *
  *   summarize(days)            { months: [row], total: row, timing }
  *   toMarkdown(summary, manifest)   report.md
@@ -126,12 +128,19 @@ const HEAD = ['month', 'times', 'cycles', 'failed', 'stand-aside', 'trades', 'wi
 const cells = r => [r.key, r.points, r.cycles, r.failed, pct(r.standAsideRate), r.trades, pct(r.winRate), `${fix(r.meanR)} (${r.tradesWithR})`, usd(r.expectancy), usd(r.net), fix(r.meanMaeR), fix(r.meanMfeR), refusalText(r), r.replayClockRefusals];
 
 const secs = ms => (ms === null || ms === undefined ? '-' : `${(ms / 1000).toFixed(1)}s`);
-const TIMING_HEAD = ['bars', 'cycles', 'close to decision p50 / p90', 'close to order p50 / p90 (n)', 'overran', 'decided in time', 'entered in time', 'missed (why)', 'no next bar'];
+const TIMING_HEAD = ['bars', 'cycles', 'close to decision p50 / p90', 'close to order p50 / p90 (n)', 'overran', 'decided in time', 'entered in time', 'missed (why)', 'no next bar', 'lost to expiry'];
 const missedText = g => Object.entries(g.missedBy).map(([k, n]) => `${k} ${n}`).join(', ');
-const timingCells = (name, g) => [name, g.cycles, `${secs(g.decision.median)} / ${secs(g.decision.p90)}`, `${secs(g.order.median)} / ${secs(g.order.p90)} (${g.order.n})`, g.overran, g.decidedInTime, g.enteredInTime, `${g.missed}${g.missed ? ` (${missedText(g)})` : ''}`, g.noDeadline];
+const timingCells = (name, g) => [name, g.cycles, `${secs(g.decision.median)} / ${secs(g.decision.p90)}`, `${secs(g.order.median)} / ${secs(g.order.p90)} (${g.order.n})`, g.overran, g.decidedInTime, g.enteredInTime, `${g.missed}${g.missed ? ` (${missedText(g)})` : ''}`, g.noDeadline, g.expired || 0];
 const timingRows = t => [['all', t.all], ['setup bars', t.setup], ['quiet bars', t.quiet]].map(([n, g]) => timingCells(n, g).map(String));
 const roleText = t => Object.entries(t.all.roleMedianMs).map(([r, ms]) => `${r} ${secs(ms)}`).join(', ') || 'none timed';
 const hasTiming = summary => Boolean(summary.timing && summary.timing.all.cycles);
+// Every replay cycle ran on a running replay clock (latency charged), or none did (projected); a mix says so.
+const clockKind = a => (!a.replay ? null : a.charged === a.replay ? 'charged' : a.charged ? 'mixed' : 'projected');
+const CLOCK_TEXT = {
+  charged: 'In this replay the latency is CHARGED, as live: the replay clock ran with the wall clock from each decision time, so orders went, and compose records expired, at the bar close plus the cycle\'s own time.',
+  projected: 'In this replay it is the PROJECTED live latency: the replay clock is pinned at the decision time, the run\'s own time is added, and the replay broker fills at the bar.',
+  mixed: 'This replay has cycles with the latency charged (the replay clock ran with the wall clock) and cycles with it projected (the clock pinned at the decision time): the run changed its latency setting.',
+};
 
 /** The setup-timing block, as Markdown lines (none without timed cycles). */
 function timingMarkdown(summary) {
@@ -141,7 +150,7 @@ function timingMarkdown(summary) {
     '## Setup timing', '',
     `| ${TIMING_HEAD.join(' | ')} |`, `| ${TIMING_HEAD.map(() => '---').join(' | ')} |`, ...timingRows(t).map(r => `| ${r.join(' | ')} |`), '',
     `Role median: ${roleText(t)}.`, '',
-    'Latency on the cycle\'s clock. In a replay it is the PROJECTED live latency: the replay clock is pinned at the decision time, the run\'s own time is added, and the replay broker fills at the bar. Overran: decided after the next bar closed. A setup (a candidate on the bar) is decided in time when an entry order or the decision line came before its bar was superseded, entered in time when the gate allowed an entry before then. No next bar: the next bar falls outside the session, so neither is counted.', '',
+    `Latency on the cycle's clock.${clockKind(t.all) ? ` ${CLOCK_TEXT[clockKind(t.all)]}` : ''} Overran: decided after the next bar closed. A setup (a candidate on the bar) is decided in time when an entry order or the decision line came before its bar was superseded, entered in time when the gate allowed an entry before then. No next bar: the next bar falls outside the session, so neither is counted. Lost to expiry: entry orders the gate refused because their compose record had expired (with the latency charged: lost to it).`, '',
   ];
 }
 
@@ -168,8 +177,9 @@ function toMarkdown(summary, manifest = {}) {
 function toText(summary) {
   const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null);
   if (!hasTiming(summary)) return main;
-  const projected = summary.timing.all.replay ? ' (replay: projected live latency)' : '';
-  return `${main}\nsetup timing${projected}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
+  const kind = clockKind(summary.timing.all);
+  const note = kind === 'charged' ? ' (replay: latency charged, as live)' : kind === 'mixed' ? ' (replay: latency charged on some cycles, projected on others)' : kind ? ' (replay: projected live latency)' : '';
+  return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
 module.exports = { summarize, tradesOf, toMarkdown, toText };
