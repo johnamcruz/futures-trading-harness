@@ -317,13 +317,15 @@ function makeRun({ withBars = true, finished = true, steps = STEPS } = {}) {
       // A verdict stamped on a running clock, after the line's time (latency charged).
       if (s.lag) verdicts[verdicts.length - 1].at = iso(t + s.lag);
     }
+    // A policy's verdict on a compose record (prop/composed-verdict.js), written at the record's bar.
+    for (const pv of s.policyVerdict ? [s.policyVerdict] : s.policyVerdicts || []) verdicts.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: barT, direction: 'long', action: 'full', maxSize: 3, contract: 'MNQ', ...pv });
     if (s.cycle) {
       const c = s.cycle;
       const file = path.join(home, 'logs', 'cycles', '2026-10-11', `${String(i).padStart(6, '0')}-trade.json`);
       const transcript = (c.orders || []).map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${i}-${j}`, name: `mcp__broker__${o.tool}`, input: o.input }] } })).join('\n');
       const account = { id: 7, balance: 100000, positions: c.positions || [], workingOrders: 0 };
       const openTrades = (c.positions || []).map(p => ({ contractId: p.contractId, side: p.side, stop: p.averagePrice - 10 }));
-      fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: [{ symbol: 'MNQ', bar: { t: barT, c: 0 } }], account, openTrades, attempts: [ATTEMPT] }, transcript }));
+      fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: [{ symbol: 'MNQ', bar: { t: barT, c: 0 } }], account, openTrades, attempts: [ATTEMPT] }, transcript, ...(c.composed ? { composed: c.composed } : {}) }));
       rec.ran.push({ action: 'trade', ok: c.ok !== false, timedOut: false, result: c.result, symbols: ['MNQ'] });
       rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: false, durationMs: 30000, result: c.result, promptHash: `h${i}`, file });
       for (const [j, o] of (c.orders || []).entries()) {
@@ -663,4 +665,172 @@ test('scoreRun: the news at each decision is a fact, so a true "no entries until
   assert.deepStrictEqual([f.news.inBlackout, f.news.reason], [true, 'CPI']);
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - no entries until the CPI blackout ends', f), 'no-entry-window'), undefined, 'no time: not a window claim');
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - in a news blackout', f), 'no-entry-window').check, true);
+});
+
+// ------------------------------------------------------------------------------------------------
+// A composed setup (trade_lifecycle): judged on its own compose record, never the strategy priority order
+
+/** A compose record as the cycle log keeps it (lifecycle-runner.js recordSummary): MNQ long, 111-tick stop, 231-tick target, size 1. */
+const composedRec = (over = {}) => ({
+  id: 'rec1', side: 'long', bar: iso(barOf(0)), ok: true, signature: 'bias:1h-bos-up', skillSignature: 'bias:bos-vs-choch', symbol: 'MNQ', contract: 'MNQ', lane: '3m', context: null,
+  entry: 20540.25, tick: 0.25, tickValue: 0.5, size: 1, stop: 20512.5, target: 20598, rr: 2.08, inTheWay: null,
+  reads: [{ step: 'bias', skill: 'bos-vs-choch', read: '1h bos up', check: true, agrees: true }], problems: 0, ...over,
+});
+
+test('the scorecard says it grades composed setups (the training preflight reads it)', () => {
+  assert.strictEqual(require('../../scripts/lib/replay/scorecard').SCORES_COMPOSED, true);
+});
+
+test('a composed entry is graded on its own record: right at its size, bad size over it, no setup without an OK record', () => {
+  const { composedSetup, composedSetupsFrom } = require('../../scripts/lib/trading/reasons');
+  const s = composedSetup(composedRec(), { window: WINDOW.drive });
+  const f = facts({ setups: [s] });
+  const enter = (side, size, fx = f, tag = 'trade_lifecycle') => classify(entry(side, size, undefined, tag), fx, expectedForEntry(fx, tag, side), checkReasons('CYCLE RESULT: executed', fx));
+  const e = expectedForEntry(f, 'trade_lifecycle', 'long');
+  assert.deepStrictEqual([e.decision, e.ceiling, e.decidedBy, e.composed, e.couldSkip], ['take', 1, 'take', 'rec1', []]);
+  assert.deepStrictEqual(e.steps.map(x => x.name), ['hard stops', 'bos-vs-choch', 'plan'], 'its reads and plan, no strategy priority step');
+  assert.deepStrictEqual(enter('long', 1), { category: 'right', agrees: true, why: [] });
+  assert.deepStrictEqual(enter('long', 2), { category: 'bad size', agrees: false, why: ['2 over the ceiling 1'] });
+  assert.strictEqual(enter('short', 1).category, 'wrong-side entry');
+  // Judged on its record though the scan was not logged; a no-entry window is step 1's no trade.
+  assert.strictEqual(enter('long', 1, facts({ scanned: false, setups: [s] })).category, 'right');
+  const opening = facts({ window: WINDOW.opening, setups: [composedSetup(composedRec(), { window: WINDOW.opening })] });
+  assert.deepStrictEqual([enter('long', 1, opening).category, enter('long', 1, opening).why], ['bad size', ['the order says no trade (step 1)']]);
+  // A record that is not OK is no setup: an entry on it is a bad size, a pass right.
+  assert.strictEqual(composedSetup(composedRec({ ok: false })), null);
+  const none = facts({ setups: [] });
+  assert.deepStrictEqual([enter('long', 1, none).category, enter('long', 1, none).why], ['bad size', ['the order says no trade (no setup)']]);
+  // An entry tagged with a policy that lists it is on it: its own setup, so a scan's trend rule for the policy's style
+  // never makes it a wrong side (the gate judges a composed entry against the trend by its reads).
+  const viaPolicy = facts({ trendRule: { prevailing: '15m down', long: false, short: true }, styleOf: n => (n === 'prop_composed' ? 'trend' : null), setups: [composedSetup(composedRec(), { window: WINDOW.drive, aliases: ['prop_composed'] })] });
+  assert.deepStrictEqual(enter('long', 1, viaPolicy, 'prop_composed'), { category: 'right', agrees: true, why: [] });
+  assert.strictEqual(enter('short', 1, viaPolicy, 'prop_composed').category, 'wrong-side entry');
+  // A rules entry beside a compose record is judged on the scan's setups alone: no scan, unchecked; none fired, no setup
+  // (never the record's side or size).
+  assert.deepStrictEqual([expectedForEntry(facts({ scanned: false, setups: [s] }), 'orb', 'long').decidedBy, expectedForEntry(f, 'orb', 'long').decidedBy], ['no scan', 'no setup']);
+  assert.deepStrictEqual(enter('short', 1, f, 'orb').why, ['the order says no trade (no setup)']);
+  // A pass beside a rules take a judgment step can turn down is judged on that take first (unchecked), not made right
+  // by the record.
+  const pull = facts({ setups: [setup({ alignment: 'pullback' }), s] });
+  assert.strictEqual(expectedDecision(pull).setup, 'prop_portfolio');
+  // A policy verdict that sized the record lowers the ceiling to its size.
+  const sized = facts({ setups: [{ ...composedSetup(composedRec({ size: 3 })), verdict: { action: 'full', maxSize: 2 } }] });
+  assert.strictEqual(expectedForEntry(sized, 'trade_lifecycle', 'long').ceiling, 2);
+  // An entry under a composed tag with no OK record on its side has no setup, whatever rules setups the scan has.
+  const rulesOnly = facts({ setups: [setup({ name: 'orb', component: null, policy: false, verdict: null, direction: 'short' })], composedTags: ['trade_lifecycle', 'prop_composed'] });
+  assert.deepStrictEqual(enter('long', 1, rulesOnly).why, ['the order says no trade (no setup)']);
+  assert.deepStrictEqual(enter('short', 1, rulesOnly, 'prop_composed').why, ['the order says no trade (no setup)']);
+  // A rules setup named after a policy the entry's tag maps to the composed setup is not its own: on the other side it
+  // never makes the entry a wrong side (nor throws), on its side its trend rule is not the entry's.
+  const policyRules = over => setup({ name: 'prop_composed', component: 'keltner', ...over });
+  const crossed = facts({ composedTags: ['trade_lifecycle', 'prop_composed'], setups: [policyRules({ direction: 'short' })] });
+  assert.deepStrictEqual(enter('long', 1, crossed, 'prop_composed').why, ['the order says no trade (no setup)']);
+  const beside = facts({ composedTags: ['trade_lifecycle', 'prop_composed'], setups: [policyRules({ direction: 'long', trendAllows: false }), composedSetup(composedRec(), { aliases: ['prop_composed'] })] });
+  assert.deepStrictEqual(enter('long', 1, beside, 'prop_composed'), { category: 'right', agrees: true, why: [] });
+  // The scan's trend rule is not a composed entry's (the gate judges it by its reads): with no record, no setup.
+  const trendDown = facts({ trendRule: { prevailing: '15m down', long: false, short: true }, styleOf: () => 'trend', setups: [] });
+  assert.deepStrictEqual(enter('long', 1, trendDown).why, ['the order says no trade (no setup)']);
+  // A record naming no contract is on none.
+  assert.deepStrictEqual(composedSetupsFrom([composedRec({ symbol: null, contract: null })], { root: 'MNQ' }), []);
+  // A composed setup is no confluence against a rules setup on the other side.
+  const both = facts({ setups: [setup(), s] });
+  assert.strictEqual(expectedForEntry(both, 'prop_portfolio', 'short').decision, 'take');
+});
+
+test('a composed pass: right with no OK record, right on one (a good decision by default), a wrong stated reason when false', () => {
+  const { composedSetup, composedSetupsFrom } = require('../../scripts/lib/trading/reasons');
+  // The latest record per side is the one that counts (the gate judges it): an OK one then a failed one is no setup.
+  assert.deepStrictEqual(composedSetupsFrom([composedRec(), composedRec({ id: 'rec2', ok: false })]), []);
+  assert.deepStrictEqual(composedSetupsFrom([composedRec({ ok: false }), composedRec({ id: 'rec2' })]).map(x => x.composed.record), ['rec2']);
+  // Its room is the record's: the first level in the way against the plan's R:R (an older record without it: unknown).
+  assert.deepStrictEqual(composedSetup(composedRec({ inTheWay: { name: 'prior 1h high', price: 20560, R: 0.71 } })).room, { inTheWay: { name: 'prior 1h high', R: 0.71 }, needR: 2.08 });
+  const { inTheWay: _w, ...older } = composedRec();
+  assert.strictEqual(composedSetup(older).room, null);
+  const none = facts();
+  assert.deepStrictEqual(run(label(), none, 'CYCLE RESULT: no-trade - compose record not OK'), { category: 'right', agrees: true, why: [] });
+  const f = facts({ setups: [composedSetup(composedRec(), { window: WINDOW.drive })] });
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the reads are thin, passing'), { category: 'right', agrees: true, why: ['a pass on the verified compose record rec1: passing is the model\'s call'] });
+  assert.strictEqual(run(label(), f, 'CYCLE RESULT: no-trade - opening print window until 10:00 ET').category, 'wrong stated reason');
+  // "No rules strategy fired" (the runner's own words) stays true beside a composed setup: it is no strategy that fired.
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - no rules strategy fired, passing').category, 'right');
+  assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - no candidate strategies', f), 'nothing-fired').check, true);
+  // No scan logged: the rules setups are unknown, so a pass beside a record is not judged (an entry on it still is).
+  assert.deepStrictEqual(run(label(), facts({ scanned: false, setups: f.setups }), 'CYCLE RESULT: no-trade - passing').category, 'unchecked');
+  // An unknown rules setup ranks before the record: the pass is not made right by knowing less.
+  assert.strictEqual(run(label(), facts({ setups: [setup({ room: null }), ...f.setups] }), 'CYCLE RESULT: no-trade - passing').category, 'unchecked');
+  assert.strictEqual(run(label(), facts({ scanned: false }), 'CYCLE RESULT: no-trade - passing').category, 'unchecked');
+  // News that can't be read blocks it as it blocks a candidate; a record on another contract (by its contract when it
+  // names no symbol) is no setup for this one.
+  assert.match(composedSetup(composedRec(), { news: { inBlackout: null, error: 'the blackouts file can\'t be read' } }).blocked, /^news unknown/);
+  assert.strictEqual(composedSetup(composedRec(), { news: { inBlackout: false } }).blocked, null);
+  assert.deepStrictEqual(composedSetupsFrom([composedRec({ symbol: null, contract: 'NQ' })], { root: 'MNQ' }), []);
+  assert.strictEqual(composedSetupsFrom([composedRec({ symbol: null, contract: 'MNQ' })], { root: 'MNQ' }).length, 1);
+});
+
+test('scoreRun and labels: a composed limit entry at its record is right with no clone reason; over its size is bad size; a pass without an OK record is right', () => {
+  const { labelRun } = require('../../scripts/lib/replay/labels');
+  const order = (limitPrice, size, tag = 'trade_lifecycle') => ({ tool: 'place_order', input: { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice, size, stopLossBracket: { ticks: 111, type: 'stop' }, takeProfitBracket: { ticks: 231, type: 'limit' }, rationale: `setup:${tag} long composed` } });
+  const steps = [
+    { k: 0, scan: quietScan, cycle: { composed: [composedRec()], orders: [order(20540.25, 1)], result: 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ' } },
+    { k: 1, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec2', bar: iso(barOf(1)) })], orders: [order(20541, 2)], result: 'CYCLE RESULT: executed - trade_lifecycle long 2 MNQ' } },
+    { k: 2, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec3', bar: iso(barOf(2)), ok: false })], result: 'CYCLE RESULT: no-trade - compose record not OK' } },
+    { k: 3, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec4', bar: iso(barOf(3)) })], result: 'CYCLE RESULT: no-trade - passing' } },
+    // Another bar's record is not this bar's setup.
+    { k: 4, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec5', bar: iso(barOf(3)) })], result: 'CYCLE RESULT: no-trade - passing' } },
+    // In an attempt the entry is tagged with the policy that lists trade_lifecycle: the composed setup, by the policy's own list.
+    { k: 5, scan: quietScan, policyVerdict: { strategy: 'prop_composed', component: 'trade_lifecycle', record: 'rec6' }, cycle: { composed: [composedRec({ id: 'rec6', bar: iso(barOf(5)) })], orders: [order(20540.25, 1, 'prop_composed')], result: 'CYCLE RESULT: executed - prop_composed long 1 MNQ' } },
+    { k: 6, scan: quietScan, policyVerdict: { strategy: 'prop_composed', component: 'trade_lifecycle', record: 'rec7' }, cycle: { composed: [composedRec({ id: 'rec7', bar: iso(barOf(6)) })], orders: [order(20540.25, 2, 'prop_composed')], result: 'CYCLE RESULT: executed - prop_composed long 2 MNQ' } },
+    // A policy that doesn't list it is no tag of it.
+    { k: 7, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec8', bar: iso(barOf(7)) })], orders: [order(20540.25, 1, 'prop_portfolio')], result: 'CYCLE RESULT: executed - prop_portfolio long 1 MNQ' } },
+    // Another family's later record is not this one's; another contract of the family's later record is the latest (the
+    // gate's), on another contract: no setup. A limit better than the record's entry is the plan's own order type.
+    { k: 8, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec9', bar: iso(barOf(8)) }), composedRec({ id: 'mes', symbol: 'MES', contract: 'MES', bar: iso(barOf(8)) })], orders: [order(20540.25, 1)], result: 'CYCLE RESULT: executed' } },
+    { k: 9, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec10', bar: iso(barOf(9)) }), composedRec({ id: 'nq', symbol: 'NQ', contract: 'NQ', bar: iso(barOf(9)) })], orders: [order(20540.25, 1)], result: 'CYCLE RESULT: executed' } },
+    { k: 10, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec11', bar: iso(barOf(10)) })], orders: [order(20539.5, 1)], result: 'CYCLE RESULT: executed' } },
+    // The policy's verdict on this bar trades another component: its entry is not the composed one (the gate's rule).
+    { k: 11, scan: quietScan, policyVerdict: { strategy: 'prop_composed', component: 'orb' }, cycle: { composed: [composedRec({ id: 'rec12', bar: iso(barOf(11)) })], orders: [order(20540.25, 1, 'prop_composed')], result: 'CYCLE RESULT: executed' } },
+    // A refused compose call (no bar) after the OK record is on no bar: the OK record still stands.
+    { k: 12, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec13', bar: iso(barOf(12)) }), composedRec({ id: 'refused', bar: null, ok: false })], orders: [order(20540.25, 1)], result: 'CYCLE RESULT: executed' } },
+    // An entry on another contract of the family, on its own record: graded on it (the gate checks the order's contract).
+    { k: 14, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec15', symbol: 'NQ', contract: 'NQ', bar: iso(barOf(14)) })], orders: [{ ...order(20540.25, 1), input: { ...order(20540.25, 1).input, contractId: 'NQ' } }], result: 'CYCLE RESULT: executed' } },
+    // The policy's verdict on the record skips it: a hard stop, so the entry is a bad size.
+    { k: 15, scan: quietScan, policyVerdict: { strategy: 'prop_composed', component: 'trade_lifecycle', record: 'rec16', action: 'skip', maxSize: 0 }, cycle: { composed: [composedRec({ id: 'rec16', bar: iso(barOf(15)) })], orders: [order(20540.25, 1, 'prop_composed')], result: 'CYCLE RESULT: executed' } },
+    // A refused try (on another contract, or under another tag) before the allowed entry: the counted entry is the one graded.
+    { k: 16, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec17', bar: iso(barOf(16)) })], orders: [{ ...order(20540.25, 1), input: { ...order(20540.25, 1).input, contractId: 'NQ' }, gate: { decision: 'blocked', violations: [{ check: 'composed-reads', message: 'the record is for MNQ' }] } }, order(20540.25, 1)], result: 'CYCLE RESULT: executed' } },
+    { k: 17, scan: [{ name: 'orb', candidate: true, direction: 'short', stopDistance: 10, mtf: MTF }], cycle: { composed: [composedRec({ id: 'rec18', bar: iso(barOf(17)) })], orders: [{ ...order(20540.25, 1, 'orb'), gate: { decision: 'blocked', violations: [{ check: 'trigger-fired', message: 'no' }] } }, order(20540.25, 1)], result: 'CYCLE RESULT: executed' } },
+    // The latest of the policy's verdicts on the bar and family, in the order written (MNQ, NQ, MNQ again): composed.
+    { k: 18, scan: quietScan, policyVerdicts: [{ strategy: 'prop_composed', component: 'trade_lifecycle', record: 'rec19' }, { strategy: 'prop_composed', component: 'orb', symbol: 'NQ', contractId: 'NQ', contract: 'NQ' }, { strategy: 'prop_composed', component: 'trade_lifecycle', record: 'rec19' }], cycle: { composed: [composedRec({ id: 'rec19', bar: iso(barOf(18)) })], orders: [order(20540.25, 1, 'prop_composed')], result: 'CYCLE RESULT: executed' } },
+    // A limit off the tick and worse than the record's entry (the gate refuses it) is no plan's own order type.
+    { k: 13, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec14', bar: iso(barOf(13)) })], orders: [order(20540.3, 1)], result: 'CYCLE RESULT: executed' } },
+    { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
+  ];
+  const strategies = [...STRATS, { name: 'trade_lifecycle', valid: true, signal: 'composed', status: 'active', timeframe: '3m', risk: { min_rr: 2, max_risk_usd: 200 } },
+    { name: 'prop_composed', valid: true, signal: 'policy', status: 'active', timeframe: '3m', strategies: ['trade_lifecycle'] }];
+  const { runDir } = makeRun({ steps });
+  const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
+  assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'right', 'right', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
+  assert.deepStrictEqual(records[18].expected.composed, 'rec19');
+  assert.deepStrictEqual([records[16].expected.composed, records[17].expected.composed], ['rec17', 'rec18']);
+  assert.deepStrictEqual([records[14].expected.composed, records[15].expected.decidedBy, records[15].why], ['rec15', 1, ['the order says no trade (step 1)']]);
+  assert.deepStrictEqual([records[11].expected.decidedBy, records[12].expected.composed], ['no setup', 'rec13']);
+  assert.deepStrictEqual([records[8].expected.composed, records[9].expected.decidedBy], ['rec9', 'no setup']);
+  // A bar whose only setup is composed needs no rebuilt briefing.
+  assert.strictEqual(records[0].data.rebuilt, null);
+  assert.deepStrictEqual([records[5].expected.composed, records[6].why, records[7].expected.decidedBy], ['rec6', ['2 over the ceiling 1'], 'no setup']);
+  // Without the policy's list nothing maps it.
+  const bare = scoreRun(runDir, { strategies: strategies.filter(x => x.name !== 'prop_composed'), accounts: ACCOUNTS }).records;
+  assert.deepStrictEqual([bare[5].category, bare[5].expected.decidedBy], ['bad size', 'no setup']);
+  assert.deepStrictEqual([records[0].expected.composed, records[0].expected.ceiling, records[0].facts.setups.map(s => `${s.name} ${s.direction}`)], ['rec1', 1, ['trade_lifecycle long']]);
+  assert.deepStrictEqual(records[1].why, ['2 over the ceiling 1']);
+  assert.deepStrictEqual([records[2].expected.decidedBy, records[4].expected.decidedBy], ['no setup', 'no setup']);
+  // The labels: the record's limit and target are the plan's own; a limit off the record's entry still is a reason.
+  const { labels } = labelRun(runDir, { strategies });
+  const flat = labels.filter(l => l.decision === 'flat');
+  const trade = flat.slice(0, 2);
+  assert.deepStrictEqual([flat[5].teacher.setup, flat[5].teacher.target], ['prop_composed', { ticks: 231, from: 'record' }]);
+  assert.ok(!flat[5].clone.reasons.includes('limit entry'), flat[5].clone.reasons.join(', '));
+  assert.deepStrictEqual([8, 9, 10, 11, 12, 13].map(i => flat[i].clone.reasons.includes('limit entry')), [false, true, false, true, false, true]);
+  assert.deepStrictEqual(trade[0].teacher.target, { ticks: 231, from: 'record' });
+  assert.ok(!trade[0].clone.reasons.includes('limit entry') && !trade[0].clone.reasons.includes('explicit target'), trade[0].clone.reasons.join(', '));
+  assert.ok(trade[1].clone.reasons.includes('limit entry'), trade[1].clone.reasons.join(', '));
 });

@@ -4,7 +4,8 @@
  * The reason check (scripts/reason-check.js; trading/reasons.js): the reasons a role states for a decision, each
  * checked against the facts of the bar it decides, before it approves, vetoes or skips. Read-only; it decides
  * nothing. The facts: this cycle's bar briefing (as bar_briefing serves it: never an older bar's), the policy
- * verdicts recorded for that bar, and the started prop attempts (as combine_status lists them).
+ * verdicts recorded for that bar, the started prop attempts (as combine_status lists them), and the bar's compose
+ * records (a composed setup: its own reads and plan, not a strategy's priority order).
  *
  *   reason_check { symbol, reasons, json }   symbol: a contract root; reasons: the stated decision (a CYCLE RESULT
  *                                            line, a VERDICT line, or the reasons alone), with phase 2's FACTS line
@@ -20,6 +21,8 @@ const { loadAccounts } = require('../trading/accounts');
 const { loadStrategies } = require('../trading/strategies');
 const { factsFromBriefing, reasonCheck, renderCheck } = require('../trading/reasons');
 const { factsLines, withoutFacts, checkFacts, renderFacts } = require('../trading/fact-claims');
+const { recordsAt } = require('../trading/lifecycle-gate');
+const { recordSummary } = require('../trading/lifecycle-runner');
 const { harnessHome } = require('../paths');
 const { cycleBarOf } = require('./briefing');
 const { statusOf } = require('./combine');
@@ -59,6 +62,19 @@ function verdictsFor(home, b, now) {
   return [...latest.values()];
 }
 
+/**
+ * The compose records on the briefing's bar for this contract's family (compose_check's, as the gate reads them:
+ * lifecycle-gate.js recordsAt), as the cycle log keeps them; the latest per side counts only when it is this contract's
+ * (reasons.js composedSetupsFrom). A composed setup is judged on its own record's reads and plan.
+ */
+function composedFor(home, root, b) {
+  try {
+    return recordsAt(home, root, b.asOf).map(recordSummary);
+  } catch (_err) {
+    return [];
+  }
+}
+
 function check({ symbol = null, reasons = null, json = false } = {}, ctx) {
   const c = context(ctx);
   const root = /^([A-Z0-9]{1,8})$/.exec(String(symbol || ''));
@@ -75,7 +91,7 @@ function check({ symbol = null, reasons = null, json = false } = {}, ctx) {
   const { strategies } = loadStrategies(c.root, c.env);
   const accounts = loadAccounts(c.root, c.env).accounts.filter(a => a.valid);
   const attempts = accounts.map(a => statusOf(home, a, now, strategies));
-  const r = reasonCheck(stated ? withoutFacts(text) : text, factsFromBriefing(b, { attempts, verdicts: verdictsFor(home, b, now) }));
+  const r = reasonCheck(stated ? withoutFacts(text) : text, factsFromBriefing(b, { attempts, verdicts: verdictsFor(home, b, now), composed: composedFor(home, root[1], b), root: root[1] }));
   const f = stated ? checkFacts(text, b) : null;
   if (json) return { text: `${JSON.stringify(f ? { ...r, factsLine: f } : r)}\n` };
   return { text: `${renderCheck(r)}${f ? renderFacts(f) : ''}` };
@@ -96,4 +112,4 @@ function parseArgv(argv) {
 
 const OPS = { reason_check: check };
 
-module.exports = { OPS, USAGE, check, parseArgv, briefingNow, verdictsFor };
+module.exports = { OPS, USAGE, check, parseArgv, briefingNow, verdictsFor, composedFor };

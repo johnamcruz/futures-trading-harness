@@ -251,8 +251,8 @@ test('feature detection reads an exported symbol, never the source text: a comme
   fs.writeFileSync(path.join(again, 'scorecard.js'), "module.exports = { SCORES_COMPOSED: true };\n");
   assert.strictEqual(P.defaultReaders(path.resolve(again, '..', '..', '..'), {}).features().scorecardComposed, true, 'the exported symbol');
   assert.strictEqual(P.defaultReaders(tmp(), {}).features().scorecardComposed, false, 'no scorecard');
-  // On this repository (no scorecard fix merged): N/A.
-  assert.strictEqual(P.defaultReaders(ROOT, {}).features().scorecardComposed, false);
+  // On this repository: the scorecard grades composed setups (it exports SCORES_COMPOSED).
+  assert.strictEqual(P.defaultReaders(ROOT, {}).features().scorecardComposed, true);
   // The skill-usage report: merged when its module exports readSkillUsage, not when a file merely exists.
   const su = path.join(tmp(), 'scripts', 'lib', 'learning');
   fs.mkdirSync(su, { recursive: true });
