@@ -62,7 +62,9 @@ test('pinForRun: a fresh run pins what its config names; a resume keeps its pins
   const mismatched = tmp();
   assert.throws(() => pinForRun(run(mismatched, { experienceIndex: idx }), { fresh: true, arm: `with:${'0'.repeat(16)}` }), /the experience index pinned \([0-9a-f]{16}\) is not the one its look names \(0{16}\)/);
   assert.strictEqual(fs.existsSync(path.join(mismatched, 'experience')), false, 'checked before anything is pinned');
-  assert.throws(() => pinForRun(run(tmp(), { setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `without+library:${'0'.repeat(16)}` }), /the history library pinned .* is not the one its look names/);
+  const libMismatch = tmp();
+  assert.throws(() => pinForRun(run(libMismatch, { experienceIndex: idx, setupLibrary: lib, libraryDisplay: true }), { fresh: true, arm: `with:${ih}+library:${'0'.repeat(16)}` }), /the history library pinned .* is not the one its look names/);
+  assert.strictEqual(fs.existsSync(path.join(libMismatch, 'experience')), false, 'the index is not pinned either');
   assert.throws(() => pinForRun(run(tmp(), { experienceIndex: idx }), { fresh: true, arm: 'without' }), /is not the one its look names \(none\)/);
   assert.strictEqual(pinForRun(run(tmp(), { setupLibrary: lib }), { fresh: true, arm: 'without' }).length, 1, 'a hidden library is in no arm');
 
