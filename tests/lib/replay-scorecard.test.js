@@ -653,6 +653,10 @@ const composedRec = (over = {}) => ({
   reads: [{ step: 'bias', skill: 'bos-vs-choch', read: '1h bos up', check: true, agrees: true }], problems: 0, ...over,
 });
 
+test('the scorecard says it grades composed setups (the training preflight reads it)', () => {
+  assert.strictEqual(require('../../scripts/lib/replay/scorecard').SCORES_COMPOSED, true);
+});
+
 test('a composed entry is graded on its own record: right at its size, bad size over it, no setup without an OK record', () => {
   const { composedSetup, composedSetupsFrom } = require('../../scripts/lib/trading/reasons');
   const s = composedSetup(composedRec(), { window: WINDOW.drive });

@@ -68,6 +68,7 @@
  *
  * Deterministic: the same files give the same scorecard.
  *
+ *   SCORES_COMPOSED                      true: composed setups are graded on their record (the training preflight reads it)
  *   scoreRun(runDir, { strategies, accounts, outcomeBars, unfinished })   { records, summary }
  *   writeScorecard(runDir, { root, strategies, accounts, barsFiles, outDir })  scorecard.jsonl, scorecard-summary.json, scorecard.md,
  *                                                                             flagged.jsonl, flagged.md
@@ -95,6 +96,8 @@ const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file'
 const { roleOf } = require('../prop/splits');
 
 const VERSION = 1;
+// This scorecard grades composed setups on their own compose record (the training preflight checks for it).
+const SCORES_COMPOSED = true;
 const CATEGORIES = ['right', 'wrong-side entry', 'bad size', 'early close', 'excessive abstention', 'wrong stated reason', 'risk-rule rejection', 'unchecked'];
 // Labels whose flat silence is no skip (labels.js NOT_A_SKIP): the model touched an order, or what it did is unknown.
 const NOT_A_DECISION = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out', 'working order', 'manage-only', 'paper mode', 'policy screen failed']);
@@ -672,4 +675,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
     : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };
+module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };
