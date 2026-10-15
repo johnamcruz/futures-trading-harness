@@ -184,7 +184,7 @@ test('scripts/replay.js run: a finished stage-1 validate run prints its stage re
   const user = tmp();
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
-  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } } }));
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE'] } } }));
   // The parity week moved onto Monday 2024-08-05 (practice-validate), served by the mock exchange at 3m and 1m, and given
   // to the preflight as one-minute bars.
   const minute = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), '2024-08-05');
@@ -199,8 +199,12 @@ test('scripts/replay.js run: a finished stage-1 validate run prints its stage re
     autotrader: { ...PF.AUTOTRADER, command: [process.execPath, '-e', "process.stdout.write('CYCLE RESULT: no-trade - quiet\\n')", '{prompt}'], sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
   }));
-  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init) };
+  // The state goes by file: it is over 500 KB, and one env string past ~128 KB fails to spawn on Linux (E2BIG, status null).
+  const initFile = path.join(user, 'init.json');
+  fs.writeFileSync(initFile, JSON.stringify(init));
+  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT_FILE: initFile };
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', config, '--validate', '--bars', `MNQ=${minute}`], { encoding: 'utf8', env, timeout: 220000 });
+  assert.strictEqual(r.error, undefined, String(r.error));
   assert.strictEqual(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stdout, /preflight PASS stage: stage 1 on practice-validate/);
   assert.match(r.stdout, /\[replay\] done: /);
