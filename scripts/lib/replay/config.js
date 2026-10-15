@@ -36,8 +36,14 @@
  *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
  *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
  *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
- *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
- *                  maxDailyLoss is the account's daily_loss_limit
+ *   accountStates  a stage-2 curated run's account states (prop/account-states.js, scripts/account-states.js draw):
+ *                  { file }. Each window day starts from a drawn state (assignStates): the run seeds its attempt record
+ *                  (prop-state seedAttempt) and the replay broker's balance (the balance schedule, brokerEnv
+ *                  balanceSchedule) from it before the day's first step (replay/driver.js). Needs curatedList, never
+ *                  prop; the document's account must still be the profile it was drawn on; part of both hashes
+ *                  (default: none)
+ *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop` or
+ *                  `accountStates`, its maxDailyLoss is the account's daily_loss_limit
  *   stage          a training preset (replay/stage.js; docs/TRAINING.md): 1 learn to trade, 2 pass prop. It sets
  *                  defaults and requirements only: an explicit value contradicting it is refused, never overridden;
  *                  the training preflight (learning/preflight.js) checks the rest; part of both hashes (default: none).
@@ -83,7 +89,8 @@ const { applyStage } = require('./stage');
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
 // Backtester-mcp's variables (its README); another replay broker names its own.
-const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END', maxDailyLoss: 'BACKTESTER_MAX_DAILY_LOSS' };
+// balanceSchedule: the replay-only balance schedule (a run with account states: the balance each practice day starts at).
+const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END', maxDailyLoss: 'BACKTESTER_MAX_DAILY_LOSS', balanceSchedule: 'BACKTESTER_BALANCE_SCHEDULE' };
 // Overrides that could send a child's records, gate log, kill switch or settings outside the run home,
 // or change how it runs. Each is set explicitly (never just removed: a child's .env load fills a missing
 // or empty variable from <FTH_HOME>/.env and the repo's .env).
@@ -188,6 +195,13 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
   if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
   if (curatedCfg.curated && r.prop !== undefined) errors.push('curatedList: not with prop (a combine attempt is judged over whole days; curated runs are scored apart)');
+  const statesCfg = r.accountStates;
+  if (statesCfg !== undefined) {
+    if (!(statesCfg && typeof statesCfg === 'object' && !Array.isArray(statesCfg) && typeof statesCfg.file === 'string' && statesCfg.file.trim())) errors.push('accountStates: { "file": "<account states>" } (scripts/account-states.js draw)');
+    else if (Object.keys(statesCfg).some(k => k !== 'file')) errors.push(`accountStates.${Object.keys(statesCfg).find(k => k !== 'file')}: unknown (file)`);
+    if (!curatedCfg.curated) errors.push('accountStates: each curated window day starts from a drawn state; set curatedList too');
+    if (r.prop !== undefined) errors.push('accountStates: not with prop (the run\'s attempt is seeded from the drawn states)');
+  }
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -205,6 +219,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     runHome, runDir, workspace: path.join(runHome, 'workspace'), bars: path.join(runHome, 'bars'),
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
+    // A run with account states: the balance each day starts at (read by the replay broker), and what each day was given.
+    balanceSchedule: path.join(runDir, 'broker', 'balance-schedule.json'), statesLog: path.join(runDir, 'account-states.jsonl'),
   };
   const pinnedResume = r.latency === undefined && startedPinned(paths.manifest);
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
@@ -232,6 +248,22 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
       throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
     }
   }
+  // The account states: the document (its hash checked), its account still the profile it was drawn on, its draws
+  // assigned to the curated window days.
+  let accountStates = null;
+  let statesAccount = null;
+  if (statesCfg !== undefined) {
+    try {
+      const S = require('../prop/account-states');
+      const file = path.resolve(baseDir, expandHome(statesCfg.file, home));
+      const doc = S.readDocument(file);
+      statesAccount = require('../trading/accounts').accountNamed(root, doc.account, env);
+      if (S.accountDigest(statesAccount) !== doc.accountDigest) throw new Error(`accountStates: ${doc.account}'s rules changed since the states were drawn: draw them again`);
+      accountStates = { file, hash: doc.hash, account: doc.account, assignment: S.assignStates(doc, curated.windows) };
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -255,7 +287,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
-    propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
+    propDailyLoss: propAccount || statesAccount ? Number((propAccount || statesAccount).daily_loss_limit) || 0 : null,
+    // The account states the run's window days start from (prop/account-states.js), or null.
+    accountStates,
     brokerEnv, paths, derived, cfg, autotraderFile, root,
   };
 }
@@ -293,6 +327,9 @@ function replayEnv(base, run, { at }) {
   set(run.brokerEnv.start, run.start.toISOString());
   set(run.brokerEnv.end, run.end.toISOString());
   if (run.propDailyLoss !== null && run.propDailyLoss !== undefined) set(run.brokerEnv.maxDailyLoss, String(run.propDailyLoss));
+  // The balance schedule is the driver's alone: set for a run with account states, never inherited by any other run.
+  if (run.accountStates) set(run.brokerEnv.balanceSchedule, run.paths.balanceSchedule);
+  else if (run.brokerEnv.balanceSchedule) delete env[run.brokerEnv.balanceSchedule];
   if (broker.replay === true) set(broker.journalEnv, run.paths.journal); // a live broker is refused by brokerErrors
   return env;
 }
@@ -350,9 +387,14 @@ function configHash(run, base = process.env) {
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
     // The curated list a run replays (its decision times are the list's): named only when there is one.
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    // The account states its days start from (the draw and its assignment): named only when there are some.
+    ...statesPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
+
+/** A run's account states in its hashes: the document's hash (seed, weights, buckets, draws) and the days' assignment. */
+const statesPart = run => (run.accountStates ? { accountStates: { hash: run.accountStates.hash, assignment: run.accountStates.assignment.hash } } : {});
 
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
 /**
@@ -378,6 +420,8 @@ function setupHash(run, { code = true } = {}) {
     ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
     // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    // The account states its days start from: named only when there are some.
+    ...statesPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }

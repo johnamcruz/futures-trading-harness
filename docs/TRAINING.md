@@ -14,7 +14,8 @@ One replay, two presets: the replay config's `stage`.
   (`trade_lifecycle`) from its skills on curated setup moments, and is checked
   on held-back months.
 - **Stage 2, pass prop.** The same runs, plus the account layer: account
-  states, account facts and prop risk rules (phase 2, not merged yet).
+  states (each practice day starts from a state drawn from the model's own
+  30-day Monte Carlo paths), account facts and prop risk rules.
 
 Stage 2 starts only after stage 1's exit test passes on a validate run.
 Both stages use the same curated lists throughout.
@@ -106,12 +107,11 @@ Each check prints one line:
 - **FAIL**: the check doesn't hold. The run is refused, and the line says why.
 - **WARN**: something to look at (a skill under its minimum in the curated
   list). Never refuses.
-- **N/A**: the feature is phase 2's, or on a branch not merged yet ("not
-  available (needs <branch>)": the composed scorecard, the rulebook's
-  `loss_streak_stop` and exit mode, the account facts, the Monte Carlo), or
-  the check doesn't apply to this run (the head prompt on a harness other than
-  opencode, or full role-skills mode; stage 2's own requirements). Never
-  refuses. Every other feature is merged and judged: a run without it FAILs.
+- **N/A**: the feature is on a branch not merged yet ("not available (needs
+  <branch>)": the composed scorecard), or the check doesn't apply to this run
+  (the head prompt on a harness other than opencode, or full role-skills mode;
+  the account states on a run without them). Never refuses. Every other
+  feature is merged and judged: a run without it FAILs.
 
 The checks:
 
@@ -129,10 +129,20 @@ The checks:
 - the library display (shown only on an evaluation's arm, `--evaluation`)
 - the experience index
 - the ledger look
-- the stage (stage 2's own requirements: N/A until phase 2)
+- the stage (stage 2's own requirements: the account states on a
+  practice-train run, the prop risk rules and the Monte Carlo)
 - the composed scorecard (N/A until `fix/scorecard-composed`)
-- `prop_portfolio` and its rulebook; the rulebook's missing keys, the account
-  facts and the Monte Carlo (N/A until phase 2)
+- `prop_portfolio` and its rulebook, and the rulebook's missing keys
+- the account states (N/A on a run without them): the document the config
+  resolved, drawn on the account `prop_portfolio` trades, from practice-train
+  runs only, under the gate's loss limits now, every bucket the paths have
+  given a day of the run
+- the account facts: the attempt line the runner shows (from a real attempt
+  record and snapshot, on the run's after-losses draw when it has one) holds
+  the balance, floor, cushion, profit, the day of the attempt, the profit
+  needed, the daily and soft room, today's trades, losses and streak, and
+  nothing that says the state was drawn
+- the Monte Carlo
 
 The 5m facts need a 1m data lane in the runner config
 (`{ "timeframe": 1, "trigger": "data" }`) and one-minute bars in `--bars`, as
@@ -232,27 +242,75 @@ better.
 
 The `stage: 2` preset is stage 1 plus:
 
-- account states (phase 2, `feat/prop-mc-model`, not merged yet);
-- account facts (phase 2, not merged yet);
-- the prop risk rules: `loss_streak_stop` and the exit mode (phase 2,
-  `feat/prop-portfolio-missing`, not merged yet).
+- account states (`accountStates`; required on a practice-train run);
+- account facts (the attempt line);
+- the prop risk rules: `loss_streak_stop` and the exit mode.
 
 `prop` is allowed in stage 2, but a curated list can't be combined with
 `prop` (the replay config refuses it), so a curated stage-2 run gets its
-account from the account states (phase 2). Until they are merged, the
-preflight's stage check reports stage 2's own requirements as N/A with that
-reason (its stage-1 part is still judged).
+account from the account states.
 
-**Practice with account states:** the stage-1 practice config with
-`"stage": 2`. The account-state settings come with `feat/prop-mc-model`
-(phase 2, not merged yet).
+**Practice with account states.** Stage 2 teaches the model to pass the
+combine: grow the balance to the target, never touch the max loss limit, in 30
+days or fewer. So each practice day starts from an account state, not always a
+fresh account:
+
+1. **Draw the states** from practice-train runs of the model (its own trades):
+
+   ```bash
+   node scripts/account-states.js draw --run <run dir> [--run <run dir> ...] --account <prop_portfolio's account> \
+     [--lists <curated lists of those runs>] [--seed 1] [--paths 500] [--count 200] [--oversample near-mll=3,after-losses=3]
+   node scripts/account-states.js show <FTH_HOME>/experience/account-states-<hash>.json
+   ```
+
+   The draw runs the 30-day Monte Carlo of those trades (a curated run's at
+   its lists' natural rates) and takes every decision moment on its paths: the
+   account as each day opened, and after each trade while a new entry was
+   still allowed. Each moment falls in a bucket: near the max loss limit
+   (`near-mll`), after a loss today (`after-losses`), near the target, the
+   first session (`fresh`), or `mid`. The draw is stratified: near-limit
+   states are oversampled (3x by default), and each draw records its sampling
+   weight, the bucket's natural share over its share of the draws. The
+   document is hashed.
+
+2. **Name it in the practice config:** the stage-1 practice config with
+   `"stage": 2` and `"accountStates": { "file": "<the document>" }`. The run
+   needs its runner config's `account` (the replay broker's account). The draw
+   and its assignment to the run's days are in both run hashes, so a resume
+   can't change them; the replay broker stops the day at the account's daily
+   loss limit.
+
+3. **What the run does.** Day k of the curated windows (in time order) takes
+   draw k. Before the day's first step, with the account flat, the driver
+   appends the day's balance and today's P&L to the run's balance schedule
+   (the replay broker reads it: the replay-only setting
+   `BACKTESTER_BALANCE_SCHEDULE`), seeds the attempt record (closed days on
+   the sessions before it, the peak, today's trades, losses and streak), and
+   checks the broker now reports the drawn balance. A broker that doesn't
+   apply the schedule refuses the run. A day that opens with a position still
+   open goes on from the attempt it has. The runner, the gate and the attempt
+   line then work as live from that state: the soft stop, the loss streak
+   stop and the gate's daily loss count include the losses carried into the
+   day.
+
+4. **What the model sees.** Its normal attempt line: balance, floor and
+   cushion, profit against the target, the day of the attempt, the profit
+   still needed, the room to the daily limit and the soft stop, today's
+   trades, losses and streak, and the consistency headroom. Nothing says the
+   state was drawn, and no outcome is shown.
+
+5. **The scores are reweighted.** At the end, the stage report prints the
+   practice by account state: each day's attempt as it ended (blown, stopped
+   for the day, at the target, its P&L), as practised and reweighted to the
+   natural mix of states. The prop Monte Carlo weights each decision by its
+   day's state weight, so the model's take rate counts at the natural mix.
+   Read the reweighted numbers; the raw ones are the oversampled practice.
 
 **Validate with the promotion gate:** the stage-1 validate config with
 `"stage": 2` and `--validate`. At the end, the run prints the promotion gate
 (`scripts/lib/prop/promotion.js`, frozen: 0 blows in every out-of-sample
 month, a pass rate of at least 40% over at least 20 independent attempts and
-2 months). It is judged on the Monte Carlo's attempts, so it prints N/A until
-`feat/prop-mc-model` is merged.
+2 months). It is judged on the Monte Carlo's attempts (see the prop report).
 
 **An A/B of a risk-skill or rulebook change:** as in stage 1. Two runs with
 the same stage, seed and list, judged with the paired test. A rulebook change
@@ -263,8 +321,7 @@ screen finds no trades and the change stays blocked until a model-trade Monte
 Carlo exists. The backtester's own prop runs are retired
 (`docs/research/mechanical-prop-backtester.md`).
 
-**The 30-day Monte Carlo** (phase 2, not merged yet) is printed at the end of
-a stage-2 run. Read it in this order:
+**The 30-day Monte Carlo** is printed at the end of a stage-2 run. Read it in this order:
 
 1. **0 blows.** This is a hard rule: any blow fails.
 2. **Passes within 30 days.**

@@ -32,7 +32,7 @@ const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/ord
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
-const { runningAttempts } = require('./lib/trading/prop-state');
+const { runningAttempts, carriedLossState } = require('./lib/trading/prop-state');
 const { activeBroker, translatedCommand } = require('./lib/broker/config');
 const { createServerAttestation } = require('./lib/broker/allow-list');
 const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/trading/order-tracker');
@@ -55,7 +55,7 @@ async function accountViolations(args, caller, now, ledger, extraOrders = []) {
   }
   const config = loadConfig(process.env);
   const running = entry ? runningAttempts(config.home) : [];
-  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null });
+  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null, carried: entry ? carriedLossState(config.home, now) : null });
   const gated = entry ? regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies) : null;
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);

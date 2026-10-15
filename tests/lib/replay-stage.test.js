@@ -117,13 +117,14 @@ test('rBySetup: composed decisions with an R, by their setup step\'s skills', ()
 });
 
 /** A stage report's readers: a finished run's log, measures, scorecard and role, and the merged features. */
-function read({ role = 'practice-validate', decisions = sample(), features = {} } = {}) {
+function read({ role = 'practice-validate', decisions = sample(), features = {}, statesLog = [] } = {}) {
   return {
     learning: () => ({ decisions }),
     measures: () => measures(100, 95),
     adherence: () => agreement(45, 5),
     role: () => role,
     features: () => ({ skillUsage: false, scorecardComposed: true, monteCarlo: false, ...features }),
+    statesLog: () => statesLog,
   };
 }
 
@@ -159,14 +160,32 @@ test('stageReport: stage 2 adds the 30-day Monte Carlo, and the promotion gate o
   assert.match(v, /promotion gate \(prop\/promotion.js\): N\/A/);
   assert.doesNotMatch(v, /stage-1 exit test/);
   assert.doesNotMatch(S.stageReport({ stage: 2 }, { read: read({ role: 'practice-train' }) }).join('\n'), /promotion gate/);
+  assert.match(v, /practice by account state: no day started from a drawn state/);
+  assert.match(S.stageReport({ stage: 2 }, { read: read({ features: { monteCarlo: true } }) }).join('\n'), /30-day Monte Carlo by account state: see the prop report\npromotion gate: see the prop report/);
   const bad = { ...read(), learning: () => { throw new Error('unreadable log'); } };
   assert.deepStrictEqual(S.stageReport({ stage: 1 }, { read: bad }), ['stage 1 report not written: unreadable log']);
 });
 
+test('stageReport: stage 2 prints the practice by account state, each attempt\'s end as practised and reweighted to the natural mix', () => {
+  // Three near-mll days (oversampled: weight 1/3), one blown; one mid day (weight 3), not blown. As practised: 1 of 4
+  // blown (25%); reweighted: (1/3) / (3 x 1/3 + 3) = 1/12 (8.3%), the natural mix's.
+  const day = (d, bucket, weight, outcome, balance, end) => [
+    { kind: 'start', day: d, draw: d, bucket, weight, balance },
+    { kind: 'end', day: d, draw: d, bucket, weight, end: { balance: end, outcome } },
+  ];
+  const log = [...day('2022-01-03', 'near-mll', 1 / 3, 'blown', 48700, 48000), ...day('2022-01-04', 'near-mll', 1 / 3, 'open', 48700, 48800),
+    ...day('2022-01-05', 'near-mll', 1 / 3, 'open', 48700, 48600), ...day('2022-01-06', 'mid', 3, 'target', 50500, 51000)];
+  const v = S.stageReport({ stage: 2 }, { read: read({ role: 'practice-train', statesLog: log }) }).join('\n');
+  assert.match(v, /practice by account state: 4 day\(s\) from drawn states, 4 ended/);
+  assert.match(v, / {2}all: 4 attempt\(s\); blown 25\.0% as practised, 8\.3% reweighted; stopped for the day 0\.0% as practised, 0\.0% reweighted; at the target 25\.0% as practised, 75\.0% reweighted/);
+  assert.match(v, / {2}near-mll: 3 attempt\(s\); blown 33\.3% as practised, 33\.3% reweighted/);
+});
+
 test('stageRequirements: what the preflight checks for each preset', () => {
-  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, prop: 'none', phase2: false });
+  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, prop: 'none', accountStates: 'none', phase2: false });
   assert.strictEqual(S.stageRequirements(2).prop, 'allowed');
-  assert.strictEqual(S.stageRequirements(2).phase2, true);
+  assert.strictEqual(S.stageRequirements(2).accountStates, 'practice-train');
+  assert.strictEqual(S.stageRequirements(2).phase2, false);
   assert.strictEqual(S.stageRequirements(3), null);
 });
 

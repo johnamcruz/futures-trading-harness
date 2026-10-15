@@ -59,6 +59,10 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       rulebook: name => (name === 'acct' ? rulebook : null),
       sizingKeys: () => ['cushion_frac', 'cap_usd'],
       features: () => ({ scorecardComposed: true, lossStreakStop: true, exitMode: true, skillUsage: true, accountFacts: true, monteCarlo: true }),
+      statesDoc: () => STATES_DOC,
+      gateLimits: () => ({ maxDailyLosses: 3, maxConsecutiveLosses: 2, lossCooldownMin: 30 }),
+      accountProfile: () => ({ name: 'acct', daily_loss_limit: 2000, daily_loss_soft: 1000 }),
+      attemptLine: (_name, state) => attemptLineOf(state),
       ...read,
     },
   };
@@ -66,9 +70,26 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
 
 const one = (fn, c) => fn(c);
 
+/** A drawn account-states document (prop/account-states.js), as the preflight reads it: two draws, one after losses. */
+const AFTER = { sessionsDone: 3, balance: 50500, peak: 51000, dayPnl: -400, days: [300, 200, 400], tradesToday: 2, lossesToday: 1, lossStreak: 1 };
+const STATES_DOC = {
+  kind: 'account-states', v: 1, hash: 'd'.repeat(64), account: 'acct', gate: { maxDailyLosses: 3, maxConsecutiveLosses: 2, lossCooldownMin: 30 }, source: [{ runId: 's', role: 'practice-train' }],
+  draws: [{ id: 0, bucket: 'mid', weight: 2, state: { ...AFTER, dayPnl: 0, balance: 50900, tradesToday: 0, lossesToday: 0, lossStreak: 0 } }, { id: 1, bucket: 'after-losses', weight: 0.5, state: AFTER }],
+};
+const STATES_RUN = { file: 's.json', hash: 'd'.repeat(64), account: 'acct', assignment: { days: [{ day: '2022-03-07', draw: 1 }], weights: { 'after-losses': 0.5 }, sampledDays: { 'after-losses': 1 }, unsampled: [] } };
+/** The runner's attempt line for a state (or a fresh attempt), as autotrader.js accountText words it. */
+function attemptLineOf(s) {
+  const st = s || { sessionsDone: 0, balance: 50000, tradesToday: 0, lossesToday: 0, lossStreak: 0, dayPnl: 0 };
+  return ` Account 1 at 10:00 ET: balance $${st.balance}; flat; 0 working orders. acct attempt (active): floor $48,000, cushion $2,500, profit +$500 of $3,000, day $${st.dayPnl}, 27 sessions left; day ${st.sessionsDone + 1}, needs $2,500, daily room $600, soft stop $1,000 (room $600), today ${st.tradesToday} trade${st.tradesToday === 1 ? '' : 's'}, ${st.lossesToday} loss${st.lossesToday === 1 ? '' : 'es'}, losing streak ${st.lossStreak}; prop_portfolio size budget $500.`;
+}
+
 test('the good fixture: every check passes (every feature merged)', () => {
+  // A stage-2 practice run, its days from drawn account states: every check judged and passing.
+  const two = P.runChecks(ctx({ run: { stage: 2, accountStates: STATES_RUN } }));
+  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS), [], P.formatReport(two));
+  // A stage-1 run: the same, but for the account states it has none of (N/A, never a FAIL).
   const res = P.runChecks(ctx());
-  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS), [], P.formatReport(res));
+  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['account-states', P.NA]], P.formatReport(res));
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.results.length, P.CHECKS.length);
   assert.deepStrictEqual(res.results.find(x => x.check === 'curated-source'), { check: 'curated-source', status: P.PASS, detail: '1 list moment(s) closed at their entry in the bars given: one source' });
@@ -169,13 +190,16 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   assert.match(REAL.barCloses('MNQ', null).error, /no bar timeframe/);
   for (const c of [ctx({ run: { curated: null } }), ctx({ read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [{ ...MOMENT, bar: '2023-01-03T15:00:00.000Z' }] } }) } }), ctx({ read: { barCloses: () => ({ error: 'no MNQ bars given (--bars)' }) } })]) assert.strictEqual(P.curatedSource(c).status, P.NA);
   assert.strictEqual(P.experienceIndex(ctx({ run: { experienceIndex: null } })).status, P.PASS);
-  // Stage 2's own requirements are phase 2's: N/A with the reason (a curated run refuses prop: the account states come
-  // from feat/prop-mc-model), never a FAIL.
+  // Stage 2's own requirements are real checks now: a practice run without account states FAILs; with them it passes;
+  // a validate run doesn't need them; the prop risk rules and the Monte Carlo must be there.
   const two = P.stage(ctx({ run: { stage: 2 } }));
-  assert.strictEqual(two.status, P.NA);
-  assert.match(two.detail, /stage 2 on practice-train: its stage-1 part holds; .*feat\/prop-mc-model: the account states \(a curated run refuses prop/);
-  assert.strictEqual(P.runChecks(ctx({ run: { stage: 2 } })).ok, true, 'N/A never fails');
-  assert.strictEqual(P.stage(ctx({ run: { stage: 2, prop: 'acct', curated: null }, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } })).status, P.NA);
+  assert.strictEqual(two.status, P.FAIL);
+  assert.match(two.detail, /stage 2: a stage 2 practice run starts its days from drawn account states/);
+  assert.match(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN } })).detail, /stage 2 on practice-train: .*days from account states dddddddddddd, the prop risk rules and the Monte Carlo/);
+  assert.strictEqual(P.stage(ctx({ run: { stage: 2, prop: 'acct', curated: null }, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } })).status, P.PASS);
+  assert.match(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { features: () => ({ ...ctx().read.features(), lossStreakStop: false }) } })).detail, /prop risk rules are needed/);
+  assert.match(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { features: () => ({ ...ctx().read.features(), monteCarlo: false }) } })).detail, /the Monte Carlo is needed/);
+  assert.match(P.stage(ctx({ run: { stage: 1, accountStates: STATES_RUN } })).detail, /no account states in stage 1/);
   assert.strictEqual(P.stage(ctx({ run: { stage: null, curated: null, prop: 'acct' } })).status, P.PASS);
   const validate = ctx({ read: { learningGate: () => ({ learning: true, role: 'practice-validate', look: { purpose: 'validate', evaluation: 'r' } }) } });
   assert.strictEqual(P.ledgerLook(validate).status, P.PASS);
@@ -196,8 +220,8 @@ test('N/A never fails: a feature not merged reports "not available (needs <branc
   const res = P.runChecks(c);
   assert.strictEqual(res.ok, true, P.formatReport(res));
   const na = res.results.filter(x => x.status === P.NA).map(x => x.check);
-  assert.deepStrictEqual(na.sort(), ['account-facts', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
-  for (const x of res.results.filter(y => y.status === P.NA)) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);
+  assert.deepStrictEqual(na.sort(), ['account-facts', 'account-states', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
+  for (const x of res.results.filter(y => y.status === P.NA && y.check !== 'account-states')) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);
   // The merged features' checks judge them on the good fixture.
   for (const name of ['strategy-valid-bars', 'head-composed-reads', 'curated-list', 'latency', 'library-display', 'stage']) assert.strictEqual(res.results.find(x => x.check === name).status, P.PASS, name);
   assert.ok(!Object.keys(P.NEEDS).some(k => ['validBars', 'latency', 'libraryDisplay', 'curatedList', 'composedReads'].includes(k)), 'no merged feature waits');
@@ -229,6 +253,43 @@ test('feature detection reads an exported symbol, never the source text: a comme
   fs.writeFileSync(path.join(merged, 'skill-usage.js'), 'module.exports = { readSkillUsage() {} };\n');
   assert.strictEqual(P.defaultReaders(path.resolve(merged, '..', '..', '..'), {}).features().skillUsage, true, 'the exported function');
   assert.strictEqual(P.defaultReaders(ROOT, {}).features().skillUsage, true, 'this repository');
+});
+
+test('account-states and account-facts: real checks of the run\'s draw and of the attempt line the model is shown', () => {
+  const states = o => ctx({ run: { stage: 2, accountStates: { ...STATES_RUN, ...o } } });
+  assert.strictEqual(P.accountStates(ctx()).status, P.NA);
+  assert.match(P.accountStates(states({})).detail, /dddddddddddd on acct: 1 day\(s\): after-losses 1 \(weight 0.5\)/);
+  const fails = [
+    [states({ hash: 'e'.repeat(64) }), /its hash dddddddddddd is not the config's eeeeeeeeeeee/],
+    [ctx({ run: { stage: 2, accountStates: STATES_RUN }, policy: { account: 'other' } }), /drawn on acct, but prop_portfolio trades other/],
+    [ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { statesDoc: () => ({ ...STATES_DOC, source: [{ runId: 'v', role: 'practice-validate' }] }) } }), /not practice-train only/],
+    [ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { gateLimits: () => ({ maxDailyLosses: 4, maxConsecutiveLosses: 2, lossCooldownMin: 30 }) } }), /drawn under the gate's loss limits/],
+    [states({ assignment: { ...STATES_RUN.assignment, unsampled: ['near-mll'] } }), /no day of the run starts in near-mll: the reweighting can't restore the natural rates/],
+    [ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { statesDoc: () => { throw new Error('s.json: its content doesn\'t match its hash'); } } }), /doesn't match its hash/],
+  ];
+  for (const [c, re] of fails) {
+    const x = P.accountStates(c);
+    assert.strictEqual(x.status, P.FAIL, x.detail);
+    assert.match(x.detail, re);
+  }
+  // The attempt line: from the run's after-losses draw, every fact shown and nothing saying it was drawn.
+  const good = P.accountFacts(states({}));
+  assert.strictEqual(good.status, P.PASS, good.detail);
+  assert.match(good.detail, /from a drawn after-losses state/);
+  const line = fn => P.accountFacts(ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { attemptLine: (_n, st) => fn(attemptLineOf(st)) } }));
+  assert.match(line(l => l.replace(/, losing streak \d+/, '')).detail, /misses losing streak/);
+  assert.match(line(l => l.replace(/daily room \$\d+, /, '')).detail, /misses daily room/);
+  assert.match(line(l => `${l} (a drawn practice state)`).detail, /says the state was drawn \("drawn"\)/);
+  assert.match(line(l => l.replace('today 2 trades, 1 loss', 'today 0 trades, 0 losses')).detail, /doesn't show its state \(today 2 trade, 1 loss\)/);
+  assert.strictEqual(P.accountFacts(ctx({ policy: { account: undefined } })).status, P.FAIL);
+  // The real reader on this repository: the live path renders the seeded line.
+  const real = P.defaultReaders(ROOT, {});
+  const acct = require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, {}).strategies.find(x => x.name === 'prop_portfolio').account;
+  const prof = real.accountProfile(acct);
+  const st = { sessionsDone: 2, days: [300, -100], peak: prof.starting_balance + 300, dayPnl: -150, balance: prof.starting_balance + 50, tradesToday: 2, lossesToday: 1, lossStreak: 1 };
+  const shown = real.attemptLine(acct, st, D('2022-03-08T15:00:00Z'));
+  for (const want of ['day 3,', 'today 2 trades, 1 loss', 'losing streak 1', 'daily room $', 'soft stop $']) assert.ok(shown.includes(want), `${want}: ${shown}`);
+  assert.doesNotMatch(shown, /drawn|sampl|bucket|weight|seed/i);
 });
 
 test('a check that throws is a FAIL with its message', () => {
@@ -326,7 +387,8 @@ test('scripts/training-preflight.js: 0 on a pass, 1 on a FAIL, 2 on a usage erro
   const ok = run(['--config', write({}), '--bars', `MNQ=${bars}`]);
   assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
   assert.match(ok.stdout, /^PASS strategy: /m);
-  assert.match(ok.stdout, /^N\/A {2}monte-carlo: not available/m);
+  assert.match(ok.stdout, /^PASS monte-carlo: the 30-day Monte Carlo scores the run/m);
+  assert.match(ok.stdout, /^PASS account-facts: .*a fresh attempt: balance, floor, cushion/m);
   const bad = run(['--config', write({ practice: undefined }), '--bars', `MNQ=${bars}`]);
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stdout, /^FAIL practice-mode/m);

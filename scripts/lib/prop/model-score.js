@@ -16,7 +16,9 @@
  * reweighted to its lists' natural rates (prop/natural-rate.js curatedRates, from the curated scan's candidate counts in
  * its lists document, which the replay config names; or rates given by hand) and scored `diagnostic (reweighted)`; a
  * curated run without its document is not scored. A setup-focused run is `diagnostic (setup-focused)`. Neither is ever
- * a promotion score.
+ * a promotion score. A curated run whose days started from drawn account states (prop/account-states.js) is reweighted
+ * by each decision's state weight too (natural-rate.js stateWeightOf), so its oversampled states count at their
+ * natural share.
  * A real score refuses a stream with an entry it couldn't settle (a dropped loss would flatter it).
  *
  * The account: --account; else the run's own attempt (its home's combine/<account>.json); else the runner config's
@@ -85,7 +87,10 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   if (diagnostic === 'reweighted') {
     const { runDecisions } = require('../learning/run-experience');
     const { decisions } = runDecisions(runDir, { root, barsFiles });
-    s = reweightStream(stream, decisions, { rates, weights, listOf, seed });
+    // A run whose days started from drawn account states: each decision weighted back to the natural mix of states.
+    const states = require('./account-states').readStatesLog(runDir);
+    const stateWeightOf = states.some(x => x.kind === 'start') ? require('./account-states').decisionWeight(states) : null;
+    s = reweightStream(stream, decisions, { rates, weights, listOf, seed, stateWeightOf });
   }
   const sizing = policy ? policy.sizing || null : null;
   const result = scoreStream(s, {
@@ -161,7 +166,7 @@ function scoreLines(r) {
     ['test', 'final'].includes(r.window.role)
       ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
       : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,
-    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.ratesFrom ? `, from ${r.ratesFrom}` : ''}${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); ${faultsText(r.inputs.faults, rs.faults)}`,
+    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.ratesFrom ? `, from ${r.ratesFrom}` : ''}${r.reweighted.accountStates ? ', each decision weighted back to the natural mix of account states' : ''}${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); ${faultsText(r.inputs.faults, rs.faults)}`,
   ];
   if (r.attribution) {
     const a = r.attribution.states;
@@ -251,4 +256,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { resolveAccount, policyFor, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { ratesFor, resolveAccount, policyFor, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

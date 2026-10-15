@@ -22,7 +22,7 @@ const { tradingDayStart, entryClock, inMarketHours, tradingDayKey, EARLY_CLOSE_M
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
-const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
+const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
@@ -254,24 +254,32 @@ function checkBlackouts(now, blackouts) {
   return hit ? `News blackout until ${hit.end}${hit.reason ? ` (${hit.reason})` : ''}.` : null;
 }
 
-function lossState(dayEntries) {
+/**
+ * The day's losing trades and losing streak from its reviews, on top of `carried` (prop-state.js carriedLossState: the
+ * losses and streak an attempt carried into the day from before its first snapshot; null: none). lastLossMs: the last
+ * loss's time (a review's, else the carried one's), from which the cooldown runs. Carried counts only ever add.
+ */
+function lossState(dayEntries, carried = null) {
   const reviews = liveReviews(dayEntries)
     .filter(e => reviewResult(e) !== null)
     .sort((a, b) => entryTime(a) - entryTime(b));
-  let streak = 0;
+  const n = x => (Number.isInteger(x) && x > 0 ? x : 0);
+  let streak = carried ? n(carried.streak) : 0;
   let lastLoss = null;
-  let losses = 0;
+  let lastLossMs = carried && Number.isFinite(carried.lastLossMs) ? carried.lastLossMs : null;
+  let losses = carried ? n(carried.losses) : 0;
   for (const r of reviews) {
     const result = reviewResult(r);
     if (result === 'loss') {
       streak += 1;
       losses += 1;
       lastLoss = r;
+      lastLossMs = entryTime(r);
     } else if (result === 'win') {
       streak = 0;
     }
   }
-  return { streak, losses, lastLoss };
+  return { streak, losses, lastLoss, lastLossMs };
 }
 
 /**
@@ -442,9 +450,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   add('time-window', checkWindows(now, config));
   add('blackout', checkBlackouts(now, blackouts));
 
-  const { streak, losses, lastLoss } = lossState(dayEntries);
-  if (streak >= config.maxConsecutiveLosses && lastLoss) {
-    const remaining = entryTime(lastLoss) + config.lossCooldownMin * 60000 - now.getTime();
+  // With the losses a running attempt carried into the day (prop-state.js carriedLossState): they only add.
+  const { streak, losses, lastLossMs } = lossState(dayEntries, carriedLossState(config.home, now));
+  if (streak >= config.maxConsecutiveLosses && lastLossMs !== null) {
+    const remaining = lastLossMs + config.lossCooldownMin * 60000 - now.getTime();
     add('loss-streak', remaining > 0
       ? `${streak} losses in a row. Cooling down for ${fmtMin(remaining)} more; use the time to write a lesson.`
       : null);

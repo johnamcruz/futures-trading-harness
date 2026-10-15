@@ -37,6 +37,15 @@
  * or at once when a step can't run (the broker won't start, the clock is
  * refused).
  *
+ * A run with account states (replay/config.js accountStates, prop/account-states.js) starts each assigned window day
+ * from its drawn state, before the day's first step (seedDay): with the account flat, the balance schedule the replay
+ * broker reads gets the day's balance and today's P&L (once per day), the run's attempt record is seeded from the state
+ * (prop-state seedAttempt), and the broker's balance must then read the drawn balance, or the run is refused (a broker
+ * that doesn't apply the schedule never runs a practice day on the wrong account). A day whose first step finds a
+ * position or working order still open keeps the attempt it has (carried: as live, the day goes on from it). Each
+ * day's draw and each attempt's end are logged in the run's account-states.jsonl (its scores, stage.js), never shown
+ * to the model.
+ *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
  *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
  *                                                clock a charged step's replay clock runs with, Date.now)
@@ -60,7 +69,8 @@ const { curatedPoints, accountOpen } = require('../learning/curated-lists');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
-const { readAttempt, startAttempt } = require('../trading/prop-state');
+const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../trading/prop-state');
+const combine = require('../trading/combine');
 const { accountNamed } = require('../trading/accounts');
 
 const EOD_RETRIES = 5;
@@ -138,11 +148,68 @@ function defaultDeps(run, root) {
     async open(env, account) {
       return accountOpen(await withAdapter({ root, env }, a => a.accountState(account)));
     },
+    // The account's balance as the broker reports it (a run with account states checks the drawn one took).
+    async balance(env, account) {
+      return withAdapter({ root, env }, a => a.accountBalance(account));
+    },
     async trades(env, account, since, until) {
       // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).
       return withAdapter({ root, env }, a => fillsBetween(a, account, since, until, { entries: entryOrders(run.paths.runHome), specOf: liveSpecs(env) }));
     },
   };
+}
+
+const readLines = file => {
+  try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch (_err) { return []; }
+};
+
+/** An attempt's state as it ended (its record now): { balance, floor, profit, dayPnl, status, block, outcome }. */
+function attemptEnd(home, account) {
+  const r = readAttempt(home, account.name);
+  if (!r) return null;
+  const cs = stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
+  const block = combine.entryBlock(cs);
+  const outcome = cs.status === 'blown' ? 'blown' : cs.status === 'passed' || combine.profit(cs) >= cs.target ? 'target'
+    : block && /daily loss limit|soft daily limit|loss streak stop/.test(block) ? 'stopped' : 'open';
+  return { balance: cs.balance, floor: cs.floor, profit: Math.round(combine.profit(cs) * 100) / 100, dayPnl: cs.dayPnl, status: cs.status, block, outcome };
+}
+
+/** The last attempt's end, once (before the next day's draw, and when the run finishes). */
+function endEpisode(run, account) {
+  const lines = readLines(run.paths.statesLog);
+  const last = [...lines].reverse().find(x => x.kind === 'start');
+  if (!last || lines.some(x => x.kind === 'end' && x.draw === last.draw && x.day === last.day)) return;
+  fs.appendFileSync(run.paths.statesLog, `${JSON.stringify({ kind: 'end', day: last.day, draw: last.draw, bucket: last.bucket, weight: last.weight, end: attemptEnd(run.paths.runHome, account) })}\n`);
+}
+
+/** Seed the day's drawn account state before its first step (see the header); once per day, a resume included. */
+async function seedDay(run, point, ranAt, env, deps, root, log) {
+  const a = run.accountStates.assignment.days.find(d => d.day === point.day);
+  if (!a || readLines(run.paths.statesLog).some(x => x.day === point.day && ['start', 'carried'].includes(x.kind))) return;
+  if (!run.cfg.account) throw new Error('replay refused: a run with account states needs the replay broker\'s account (the runner config\'s account)');
+  const account = accountNamed(root || run.root, run.accountStates.account, env);
+  const open = await Promise.resolve().then(() => deps.open(env, run.cfg.account)).then(Boolean, () => true);
+  if (open) {
+    fs.appendFileSync(run.paths.statesLog, `${JSON.stringify({ kind: 'carried', day: point.day, at: ranAt.toISOString() })}\n`);
+    log(`${point.day}: a position or working order is still open; the day goes on from the attempt it has`);
+    return;
+  }
+  endEpisode(run, account);
+  const doc = require('../prop/account-states').readDocument(run.accountStates.file);
+  if (doc.hash !== run.accountStates.hash) throw new Error(`replay refused: ${run.accountStates.file} is not the account states the run was started with`);
+  const draw = doc.draws.find(d => d.id === a.draw);
+  const schedule = readJson(run.paths.balanceSchedule, []) || [];
+  if (!schedule.some(e => e.day === point.day)) {
+    schedule.push({ at: ranAt.toISOString(), day: point.day, balance: draw.state.balance, dayPnl: draw.state.dayPnl });
+    writeJsonAtomic(run.paths.balanceSchedule, schedule);
+  }
+  seedAttempt(run.paths.runHome, account, { day: point.day, at: ranAt.toISOString(), state: draw.state });
+  const balance = Number(await deps.balance(env, run.cfg.account));
+  if (!(Math.abs(balance - draw.state.balance) <= 0.01)) {
+    throw new Error(`replay refused: the replay broker reports a balance of ${balance}, not the day's ${draw.state.balance}: it doesn't apply the balance schedule (${run.brokerEnv.balanceSchedule || 'brokerEnv.balanceSchedule'})`);
+  }
+  fs.appendFileSync(run.paths.statesLog, `${JSON.stringify({ kind: 'start', day: point.day, at: ranAt.toISOString(), draw: a.draw, bucket: a.bucket, weight: a.weight, balance: draw.state.balance })}\n`);
+  log(`${point.day}: the attempt starts the day at its drawn state`);
 }
 
 /** The run's end of day for `day` verified flat (the runner's state says so). */
@@ -326,6 +393,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
         continue;
       }
     } else if (point.kind === 'trade') managing = true;
+    // A run with account states: the day's drawn state, before its first step.
+    if (run.accountStates && !point.manage) await seedDay(run, point, ranAt, env, deps, root, log);
     const started = Date.now();
     // Marked before it runs: a driver stopped before its line is written never runs this time twice.
     manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
@@ -458,6 +527,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const nextPoint = queue[0];
     if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
   }
+  if (run.accountStates) endEpisode(run, accountNamed(root || run.root, run.accountStates.account, startEnv));
   return finished(paths, manifest, cycles, points);
 }
 
@@ -473,4 +543,4 @@ function finished(paths, manifest, cycles, points) {
   return { cycles, stopped: null, done: true };
 }
 
-module.exports = { seedRunHome, runReplay, defaultDeps, withEntry, EOD_RETRIES };
+module.exports = { seedRunHome, runReplay, defaultDeps, withEntry, seedDay, endEpisode, EOD_RETRIES };

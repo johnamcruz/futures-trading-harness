@@ -69,6 +69,68 @@ function startAttempt(home, account, now = new Date()) {
   return r;
 }
 
+const DAY_MS = 86400000;
+const r2 = x => Math.round(x * 100) / 100;
+
+/**
+ * Start an attempt part way through, from an account state (a practice run's drawn state, prop/account-states.js): the
+ * attempt's closed days on the exchange sessions before `day` (their closing balances from the starting balance and
+ * each day's P&L), its peak, and the counts carried into `day` from before its anchor (`carried`: today's trades,
+ * losing trades and losing streak; the last loss at `at` when the streak holds one). The broker's balance must be
+ * `state.balance` (the last close plus today's P&L): the runner's first snapshot reads today's P&L from it, as live.
+ * The record is what a live attempt started that many sessions ago would hold; nothing in it says it was drawn.
+ *   state: { days (each closed day's P&L), peak, dayPnl, balance, tradesToday, lossesToday, lossStreak }
+ * Returns { record, balance }; throws on a state whose balance isn't its days plus today's P&L.
+ */
+function seedAttempt(home, account, { day, at, state }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day)) || !Number.isFinite(Date.parse(at))) throw new Error('seedAttempt: a trading day (YYYY-MM-DD) and a time');
+  const s = state || {};
+  if (!Array.isArray(s.days) || !s.days.every(Number.isFinite) || ![s.balance, s.peak, s.dayPnl].every(Number.isFinite)) throw new Error('seedAttempt: a state with days, balance, peak and dayPnl');
+  // Lazily: the calendar is the driver's, never the gate's.
+  const { hasSession } = require('../prop/splits');
+  const dates = [];
+  for (let t = Date.parse(`${day}T00:00:00Z`) - DAY_MS; dates.length < s.days.length; t -= DAY_MS) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (hasSession(d)) dates.unshift(d);
+  }
+  let bal = account.starting_balance;
+  const days = s.days.map((pnl, k) => { bal = r2(bal + pnl); return { day: dates[k], balance: bal, pnl: r2(pnl) }; });
+  if (Math.abs(r2(bal + s.dayPnl) - s.balance) > 0.011) throw new Error(`seedAttempt: the state's balance $${s.balance} is not its last close $${bal} plus today's $${s.dayPnl}`);
+  const startDay = dates[0] || day;
+  const count = x => (Number.isInteger(x) && x >= 0 ? x : 0);
+  const streak = count(s.lossStreak);
+  const lastLossAt = streak > 0 && count(s.lossesToday) > 0 ? new Date(at).toISOString() : null;
+  const record = {
+    account: account.name, startedAt: tradingDayStart(new Date(`${startDay}T12:00:00Z`)).toISOString(), startDay, days,
+    peak: r2(Math.max(account.starting_balance, s.peak, s.balance, ...days.map(d => d.balance))), snapshot: null, missedClose: null, missedCloses: [], anchor: null,
+    lossStreak: { day, count: streak, at: lastLossAt },
+    carried: { day, at: new Date(at).toISOString(), trades: count(s.tradesToday), losses: count(s.lossesToday), streak, lastLossAt },
+  };
+  writeJson(combineFile(home, account.name), record);
+  return { record, balance: r2(s.balance) };
+}
+
+/**
+ * The losing trades and streak carried into today by the running attempts (carriedOf), for the order gate's daily
+ * loss count and loss cooldown, which count the day's own closes on top of them: { losses, streak, lastLossMs } (the
+ * most of any attempt), or null when none carries any. It only ever adds to what the gate counts (never fails open).
+ */
+function carriedLossState(home, now = new Date()) {
+  const day = tradingDayKey(now);
+  let out = null;
+  for (const name of runningAttempts(home)) {
+    const c = carriedOf(readAttempt(home, name), day);
+    if (!c || (!c.losses && !c.streak)) continue;
+    const ms = Date.parse(c.lastLossAt);
+    const last = out ? out.lastLossMs : null;
+    out = {
+      losses: Math.max(out ? out.losses : 0, c.losses), streak: Math.max(out ? out.streak : 0, c.streak),
+      lastLossMs: Number.isFinite(ms) ? Math.max(last === null ? -Infinity : last, ms) : last,
+    };
+  }
+  return out;
+}
+
 /** End an attempt (passed, blown, or abandoned): its record is kept, renamed. */
 function endAttempt(home, accountName, now = new Date()) {
   const file = combineFile(home, accountName);
@@ -116,8 +178,23 @@ function tradesFromFills(fills) {
   return trades;
 }
 
-/** The loss streak after these closed trades (combine.streakAfter: a loss extends it, a win ends it, a scratch neither). */
-const streakOf = trades => trades.reduce((n, t) => combine.streakAfter(n, t.gross), 0);
+/**
+ * The loss streak after these closed trades (combine.streakAfter: a loss extends it, a win ends it, a scratch neither),
+ * from `start` (the streak carried into the day's anchor, carriedOf; 0 without one).
+ */
+const streakOf = (trades, start = 0) => trades.reduce((n, t) => combine.streakAfter(n, t.gross), start);
+
+/**
+ * The counts carried into trading day `day` from before its anchor (the attempt record's `carried`, written when an
+ * attempt is started from a state part way through a day: seedAttempt): { day, at, trades, losses, streak, lastLossAt },
+ * or null (none, or another day's). The day's fills since the anchor add to them.
+ */
+function carriedOf(record, day) {
+  const c = record && record.carried;
+  if (!c || c.day !== day) return null;
+  const n = x => (Number.isInteger(x) && x >= 0 ? x : 0);
+  return { day: c.day, at: c.at || null, trades: n(c.trades), losses: n(c.losses), streak: n(c.streak), lastLossAt: c.lastLossAt || null };
+}
 
 /** The record's loss streak for its snapshot's session (0 when it has none for that day). */
 const recordStreak = record => (record && record.lossStreak && record.snapshot && record.lossStreak.day === record.snapshot.day
@@ -195,13 +272,15 @@ const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math
  */
 function dayCounts(record, day, fills, fresh, open, unchanged = false) {
   const prev = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === day ? record.snapshot.counts : null;
+  // The counts carried into the day from before its anchor (carriedOf): the fills since the anchor add to them.
+  const c = carriedOf(record, day) || { trades: 0, losses: 0 };
   let today = null;
   if (Array.isArray(fills)) {
     // Lazily: the account gate reads this module's state, so it can't be loaded with it.
     const { closingFills, fillLossState } = require('./account-gate');
-    today = { trades: closingFills(fills).length, losses: fillLossState(fills).losses };
+    today = { trades: c.trades + closingFills(fills).length, losses: c.losses + fillLossState(fills).losses };
   } else if (prev && unchanged) today = prev;
-  else if (fresh && open === 0) today = { trades: 0, losses: 0 };
+  else if (fresh && open === 0) today = { trades: c.trades, losses: c.losses };
   if (!today) return null;
   return { day, trades: today.trades, losses: today.losses };
 }
@@ -277,7 +356,9 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
   if (!fresh && open === 0 && !fillsError && !unchanged && fills !== undefined) {
     try {
       const trades = tradesFromFills((fills || []).filter(f => !(Date.parse(f && f.creationTimestamp) < Date.parse(anchor.at))));
-      lossStreak = { day, count: streakOf(trades), at: trades.length ? trades[trades.length - 1].at : null };
+      // From the streak carried into the day (an attempt started part way through it), else 0.
+      const carried = carriedOf(record, day);
+      lossStreak = { day, count: streakOf(trades, carried ? carried.streak : 0), at: trades.length ? trades[trades.length - 1].at : carried ? carried.lastLossAt : null };
     } catch (_err) {
       lossStreak = kept; // an unreadable fill: the balance check above refuses entries on it
     }
@@ -648,6 +729,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };
