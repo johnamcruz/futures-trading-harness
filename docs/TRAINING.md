@@ -119,6 +119,9 @@ The checks:
 - the skills crosswalk
 - the head prompt and its four composed reads (opencode, index mode)
 - generated adapters in sync
+- no web in the replay (`no-web-in-replay`): the replay step's permissions let
+  no agent search or fetch the web, and the news analyst is not launched (a
+  replayed date's news is on the web); a custom command WARNs, codex FAILs
 - the facts (a sample briefing on the bars you give: 1h, 4h, 15m, 3m and 5m,
   VWAP, FVGs, briefing age)
 - the curated list (its fingerprint, market, use and lists), and its source
