@@ -92,6 +92,10 @@ test('refused: an unfinished run, a held-out or non-learning run, a day two runs
     [{ learning: false, role: null }, /is not a learning run, not practice-train/],
   ]) assert.throws(() => B.buildFromRuns([run(DAYS, { gate }).dir], OPTS), why);
   assert.throws(() => B.buildFromRuns([run().dir, run(DAYS, { runId: 'run2' }).dir], OPTS), /2023-03-15 twice/);
+  // Full-day runs only: a setup-focused or curated run's actions come at practice density (raw curated input refused).
+  const practice = { learning: true, role: 'practice-train', look: null, hideOutcomes: false, practice: { mode: 'setup-focus', setupTf: 15 } };
+  assert.throws(() => B.buildFromRuns([run(DAYS, { gate: practice }).dir], OPTS), /is a setup-focused practice run: .* full-day practice-train runs only/);
+  assert.throws(() => B.buildFromRuns(['x'], { ...OPTS, readRun: () => ({ stream, run: { ...r, curated: true }, finished: true }) }), /is a curated practice run/);
   assert.throws(() => B.buildFromRuns([run().dir], { ...OPTS, account: null }), /an account profile/);
   assert.throws(() => B.buildFromRuns([], OPTS), /one or more finished practice-train runs/);
   assert.throws(() => B.buildFromRuns([run().dir], { ...OPTS, paths: 0 }), /paths and reps/);

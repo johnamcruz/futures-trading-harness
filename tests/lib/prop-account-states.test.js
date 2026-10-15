@@ -163,7 +163,7 @@ test('a seeded day\'s later fills add to the carried counts: the streak goes on 
 test('natural rates: each decision weighted by its day\'s account-state weight (the take rate at the natural mix of states)', () => {
   const stream = modelStreamOf(['2022-03-01', '2022-03-02'], d => (d === '2022-03-01' ? [modelTrade('a', 40)] : []));
   // Two candidates: one entered on a near-mll day (weight 1/3), one passed on a mid day (weight 3).
-  const decisions = [{ id: 'a', decision: 'entered', list: 'L', cycleAt: '2022-03-01T15:00:00Z' }, { id: 'b', decision: 'passed', list: 'L', cycleAt: '2022-03-02T15:00:00Z' }];
+  const decisions = [{ id: 'a', decision: 'entered', list: 'L', moment: 'm1', cycleAt: '2022-03-01T15:00:00Z' }, { id: 'b', decision: 'passed', list: 'L', moment: 'm2', cycleAt: '2022-03-02T15:00:00Z' }];
   const rates = { L: { candidatesPerDay: 2 } };
   const plain = naturalRates(stream, decisions, { rates });
   assert.strictEqual(plain.lists.L.tradesPerDay, 1, 'unweighted: half the candidates taken');
@@ -175,6 +175,36 @@ test('natural rates: each decision weighted by its day\'s account-state weight (
   assert.throws(() => naturalRates(stream, decisions, { rates, stateWeightOf: () => undefined }), /no account-state weight/);
   // A carried day takes its attempt's weight.
   assert.strictEqual(S.dayWeights([...log, { kind: 'carried', day: '2022-03-03' }]).get('2022-03-03').weight, 3);
+});
+
+test('sourceStream: a curated run\'s trades come at the score\'s natural rate: every moment stepped a candidate, plain passes included', () => {
+  const CL = require('../../scripts/lib/learning/curated-lists');
+  const { multiDayRun, record, tmpHome } = require('../fixtures/prop-model');
+  const home = tmpHome('fth-states-src-');
+  const t0 = '2023-03-15T14:00:02.000Z';
+  const gate = { learning: true, role: 'practice-train', look: null, hideOutcomes: false, practice: { mode: 'setup-focus', setupTf: 15 } };
+  const { dir } = multiDayRun({
+    home, gate,
+    days: [
+      { day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]],
+        fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null }, { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:05:00Z', price: 104, size: 1, side: 1, profitAndLoss: 8 }] },
+      { day: '2023-03-16', times: ['2023-03-16T14:00:02.000Z'], rows: [] },
+    ],
+  });
+  // Two moments: the first entered, the second a plain pass (no compose record).
+  const w = d => ({ from: `${d}T13:30:00.000Z`, to: `${d}T14:00:00.000Z` });
+  const lists = Object.fromEntries(CL.LISTS.map(n => [n, n === 'trend-up' ? [{ id: 'm1', list: n, day: '2023-03-15', window: w('2023-03-15') }, { id: 'm2', list: n, day: '2023-03-16', window: w('2023-03-16') }] : []]));
+  const coverage = Object.fromEntries([...CL.LISTS.map(n => [n, { candidates: n === 'trend-up' ? 60 : 0 }]), ['mix', { candidates: 60 }]]);
+  const body = { v: CL.VERSION, kind: CL.KIND, builtAt: 'x', use: 'practice', role: 'practice-train', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, seed: 1, options: {}, sources: [], lists, mix: ['m1', 'm2'], short: {}, coverage };
+  const doc = { ...body, fingerprint: CL.fingerprintOf(body) };
+  const file = path.join(home, 'curated.json');
+  fs.writeFileSync(file, JSON.stringify(doc));
+  CL.pinCurated(home, { file, list: 'mix', fingerprint: doc.fingerprint });
+  // 60 candidates over the 2 sessions the moments span: 30 a day, half of them taken: 15 trades a day (not 30).
+  const { stream, source } = S.sourceStream([dir], { root: REPO, lists: file, seed: 2 });
+  assert.deepStrictEqual([source[0].reweighted, stream.days.length], [true, 252]);
+  const perDay = stream.trades.length / stream.days.length;
+  assert.ok(Math.abs(perDay - 15) < 1.5, `${perDay} trades a day`);
 });
 
 // --- A curated replay with account states ------------------------------------------------------------------------

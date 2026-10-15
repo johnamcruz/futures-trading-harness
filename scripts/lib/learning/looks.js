@@ -12,7 +12,8 @@
  *   final (2026)         judging: LOOK_BUDGETS.final look, and only for a candidate with a test pass in the ledger
  *                        (recordResult)
  *   reasoning-fix        at test or final: free, and the run's outcomes are hidden (hideOutcomes)
- *   practice-validate    purpose validate: no budget, but every run is logged and counted
+ *   practice-validate    purpose validate: no budget, but every run is logged and counted; the stage-1 exit test
+ *                        pools a candidate's first VALIDATE_RUNS_PER_CANDIDATE runs (validateRuns) and reads no more
  *   practice-train       no look: practice
  *
  * An evaluation id belongs to its first look: another candidate, purpose or window under it is refused, and it holds
@@ -46,6 +47,7 @@
  *   recordResult(file, result, { now })     a test evaluation's result (pass lets its candidate take the final look)
  *   recordScore(file, entry)                a Monte Carlo score of a run, beside its look (refused without it)
  *   scoresOf(ledger)                        the scores logged
+ *   validateRuns(ledger, candidate)         { counted, beyond, all }: the validate runs the stage-1 exit test pools
  *   lookUsage(ledger)                       per role: looks, runs, evaluations spent
  *   ledgerPath(env)
  */
@@ -61,6 +63,13 @@ const LOOK_BUDGETS = Object.freeze({ test: 3, final: 1 });
 const FINAL_NEEDS_TEST_PASS = true;
 /** Runs one evaluation may hold: its arms (with experience, without, shuffled). */
 const MAX_ARMS = 3;
+/**
+ * The validate runs of one candidate the stage-1 exit test pools (validateRuns), the one place this number lives. Each
+ * run judged alone would be a fresh chance at a false pass (about 1 to 2% a run at zero edge), so retries compound; the
+ * test reads the candidate's runs pooled, and only its first VALIDATE_RUNS_PER_CANDIDATE: at most that many looks at
+ * one candidate's exit test, and a later run can't move it. A new candidate (another skill version) starts its own.
+ */
+const VALIDATE_RUNS_PER_CANDIDATE = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** An arm: the experience index it was shown (with:<hash>, shuffled:<hash>) or none (without), and `+library:<hash>` when shown the history library. */
@@ -240,6 +249,21 @@ function recordScore(file, entry) {
   });
 }
 
+/**
+ * A candidate's validate runs, in the order their looks were taken: the runs the stage-1 exit test pools
+ * (replay/stage.js), the first VALIDATE_RUNS_PER_CANDIDATE of them only. { counted, beyond, all: { runs, candidates } }:
+ * counted, the run ids the test reads; beyond, the later ones it never reads (a retry past the cap can't move it);
+ * all, every validate run and candidate the ledger holds (the family of tests the exit test is one of).
+ */
+function validateRuns(ledger, candidate) {
+  const validate = looksOf(Array.isArray(ledger) ? ledger : []).filter(e => e.purpose === 'validate' && roleOfLook(e) === 'practice-validate');
+  const ids = [...new Set(validate.filter(e => e.candidate === candidate).map(e => e.runId))];
+  return {
+    counted: ids.slice(0, VALIDATE_RUNS_PER_CANDIDATE), beyond: ids.slice(VALIDATE_RUNS_PER_CANDIDATE),
+    all: { runs: new Set(validate.map(e => e.runId)).size, candidates: new Set(validate.map(e => e.candidate)).size },
+  };
+}
+
 /** The scores in the ledger (recordScore), oldest first. */
 const scoresOf = ledger => (Array.isArray(ledger) ? ledger.filter(e => e && e.kind === 'score') : []);
 
@@ -263,4 +287,4 @@ function lookUsage(ledger) {
  */
 const ledgerPath = (env = process.env) => path.join(harnessHome({}, String(env.HOME || '').trim() || os.homedir()), 'learning', 'looks.jsonl');
 
-module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, recordScore, scoresOf, lookUsage, ledgerPath };
+module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, VALIDATE_RUNS_PER_CANDIDATE, PURPOSES, RECORDED_LOOKS, ARM, checkLook, recordLook, recordResult, recordScore, scoresOf, validateRuns, lookUsage, ledgerPath };

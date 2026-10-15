@@ -174,8 +174,17 @@ function checkOptions({ account, seed, paths, every, meanBlock, faults }) {
   return rates;
 }
 
-/** The stream's days, held to the pass (a model stream to a model pass, a reweighted one to a diagnostic one). */
-function daysFor(stream, pass, rulebook) {
+/** A trade's own exit: the model closed it before its stop, its target and end of day (a tightened stop, a manual close). */
+const ownExit = t => (t.actions || []).includes('early-exit');
+/** The model's own share of the ceiling (its filled size over the verdict's); a share that rounds to no contract takes one. */
+const ownShare = t => ({ fraction: t.sizeFraction ?? 1, keepOne: true });
+
+/**
+ * The stream's days, held to the pass (a model stream to a model pass, a reweighted one to a diagnostic one), each
+ * trade re-exited under the policy's exit. keepOwnExits: a trade the model exited itself (ownExit) keeps that exit; the
+ * policy's exit replaces only the bracket's.
+ */
+function daysFor(stream, pass, rulebook, { keepOwnExits = false } = {}) {
   const model = stream.source === 'model';
   if (model !== Boolean(pass.model)) throw new Error(model ? 'a model stream is scored on a pass from checkModelWindow (its run\'s look), never checkWindow' : 'a mechanical stream is scored on a pass from checkWindow, never checkModelWindow');
   if (Boolean(stream.reweighted) !== Boolean(pass.synthetic)) throw new Error(stream.reweighted ? 'a reweighted stream is scored only as a diagnostic (reweighted) score' : 'a diagnostic (reweighted) score needs the reweighted stream (prop/natural-rate.js)');
@@ -184,7 +193,7 @@ function daysFor(stream, pass, rulebook) {
   const held = pass.synthetic ? stream.days : stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
   // The policy's exit mode first (attempts.js exitAs): every trade re-exited from its recorded path; none, as recorded.
   const slip = Number.isFinite(stream.slippageTicks) ? stream.slippageTicks : 1;
-  const days = rulebook.exit ? held.map(d => ({ ...d, trades: d.trades.map(t => at.exitAs(t, rulebook.exit, slip)) })) : held;
+  const days = rulebook.exit ? held.map(d => ({ ...d, trades: d.trades.map(t => (keepOwnExits && ownExit(t) ? t : at.exitAs(t, rulebook.exit, slip))) })) : held;
   if (days.length !== stream.days.length) throw new Error(`the stream has days outside the window ${pass.from}..${pass.to}`);
   const bad = days.find(d => d.trades.some(t => t.day !== d.day));
   if (bad) throw new Error(`the stream's day ${bad.day} holds a trade of another day`);
@@ -507,6 +516,14 @@ function medianDiff(pairs, { reps, level, rand }) {
  * their accounts the same sessions. The runs must hold the same days; reweighted (curated) streams are refused
  * (their days are each run's own draw, not shared).
  *
+ * sized: 'ceiling' (the default) sizes every entry at the code's ceiling (the verdict's size times the rulebook's
+ * multiplier) and re-exits every trade under the policy's exit. 'own' scores the model as it traded: each entry at its
+ * own filled share of that ceiling (sizeFraction, ownShare: risk-actions.js's base; never fewer than one contract when it
+ * filled one), and a trade it took out itself (ownExit: an early exit, a tightened stop) at that exit, the policy's exit
+ * re-exiting only the trades its bracket closed; the ceiling-sized result is then reported beside it as `ceiling`
+ * ({ sizedAs, label, a, b, diff, verdict, blows }), labelled, never judged. A judge of the model's risk decisions
+ * (sizing down, cutting a loser near the limit) reads 'own': at the ceiling they are erased.
+ *
  * Returns { a, b (each: pass, blow and timeout rates, median and p90 days to pass, on the real and the resampled
  * paths), starts (each real start day: { start, a, b } statuses, aDays, bDays: the raw pairs a pooled test stacks),
  * diff: { real, resampled } (each: passRate, blowRate, timeoutRate and medianDaysToPass, A minus B, with a
@@ -519,18 +536,38 @@ function medianDiff(pairs, { reps, level, rand }) {
 function scorePaired(streamA, streamB, opts) {
   const {
     passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, gate = undefined, seed = 1, paths = 2000,
-    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {}, accountB = account, rulebookB = rulebook, contractsB = contracts,
+    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {}, accountB = account, rulebookB = rulebook, contractsB = contracts, sized = 'ceiling',
   } = opts || {};
   if (givenA === givenB) throw new Error('scorePaired: one pass per run (passA, passB)');
+  if (!SIZED.includes(sized)) throw new Error(`scorePaired: sized is one of ${SIZED.join(', ')}, not ${String(sized)}`);
   const passA = takePass(givenA);
   const passB = takePass(givenB);
   if (!passA.model || !passB.model) throw new Error('scorePaired compares two model runs (checkModelWindow passes)');
   if (passA.synthetic || passB.synthetic) throw new Error('scorePaired: a reweighted (curated) stream draws its own days; compare full-day or setup-focused runs of the same days');
   const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
   if (!accountB || accountB.sessions !== account.sessions) throw new Error('scorePaired: the two sides\' accounts must have the same sessions (one attempt length, the same start days)');
-  const daysA = daysFor(streamA, passA, rulebook);
-  const daysB = daysFor(streamB, passB, rulebookB);
-  if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
+  const own = sized === 'own';
+  const both = keepOwnExits => {
+    const daysA = daysFor(streamA, passA, rulebook, { keepOwnExits });
+    const daysB = daysFor(streamB, passB, rulebookB, { keepOwnExits });
+    if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
+    return [daysA, daysB];
+  };
+  const shared = { account, rulebook, size, contracts, maxDailyLoss, gate, seed, paths, meanBlock, reps, level, every, rates, faults, accountB, rulebookB, contractsB, passA, passB };
+  // The model's own: each entry at its own filled share of the ceiling, out where it took itself out.
+  const main = pairedScore(...both(own), { ...shared, decide: own ? ownShare : null });
+  main.sizedAs = sized;
+  // Beside it, labelled and never judged: every entry at the code's ceiling under the policy's exit.
+  if (own) main.ceiling = { sizedAs: 'ceiling', label: CEILING_LABEL, ...pick(pairedScore(...both(false), { ...shared, decide: null }), ['a', 'b', 'diff', 'verdict', 'blows']) };
+  return main;
+}
+
+const SIZED = Object.freeze(['ceiling', 'own']);
+const CEILING_LABEL = 'every entry at the code\'s ceiling (the verdict\'s size) under the policy\'s exit, not the model\'s own size or exits: reported beside, never judged';
+const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k]]));
+
+/** One paired scoring of two runs' days (scorePaired's body); decide: each trade's share (ownShare), or null for the ceiling. */
+function pairedScore(daysA, daysB, { account, rulebook, size, contracts, maxDailyLoss, gate, seed, paths, meanBlock, reps, level, every, rates, faults, accountB, rulebookB, contractsB, passA, passB, decide }) {
   const S = account.sessions;
   // One context per side (its own sizing, exit, multiplier and contracts); one overshoot pool and the same seeded draws.
   const pools = at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades));
@@ -538,7 +575,7 @@ function scorePaired(streamA, streamB, opts) {
   const runB = pairedRunner({ ctx: contextFor({ account: accountB, rulebook: rulebookB, size, contracts: contractsB, maxDailyLoss, gate }), rates, seed, pools });
   const startIdx = [];
   for (let i = 0; i < daysA.length - S; i += 1) if (i % every === 0) startIdx.push(i);
-  const real = startIdx.map(i => ({ a: runA(daysA.slice(i), `real${i}`), b: runB(daysB.slice(i), `real${i}`) }));
+  const real = startIdx.map(i => ({ a: runA(daysA.slice(i), `real${i}`, decide), b: runB(daysB.slice(i), `real${i}`, decide) }));
   const regimes = daysA.map(d => d.regime || 'normal');
   const byRegime = stats.groupBy(regimes);
   const prand = stats.streamFor(seed, 'paths:paired');
@@ -546,7 +583,7 @@ function scorePaired(streamA, streamB, opts) {
   if (daysA.length) {
     for (let p = 0; p < paths; p += 1) {
       const idx = stats.stationaryPath(daysA.length, S, { meanBlock, rand: prand, regimes, byRegime });
-      resampled.push({ a: runA(idx.map(k => daysA[k]), p), b: runB(idx.map(k => daysB[k]), p) });
+      resampled.push({ a: runA(idx.map(k => daysA[k]), p, decide), b: runB(idx.map(k => daysB[k]), p, decide) });
     }
   }
   const side = (pairs, k) => finish(pairs.map(x => x[k]).reduce(add, blank()));
@@ -573,4 +610,4 @@ function scorePaired(streamA, streamB, opts) {
   };
 }
 
-module.exports = { LOOK_PURPOSES, DIAGNOSTIC, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired, scoreArms };
+module.exports = { LOOK_PURPOSES, DIAGNOSTIC, SIZED, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired, scoreArms, ownShare, ownExit };

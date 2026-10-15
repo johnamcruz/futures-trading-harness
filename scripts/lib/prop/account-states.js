@@ -367,8 +367,7 @@ function practiceByState(lines) {
 function sourceStream(runDirs, { root = null, barsFiles = {}, lists = null, seed = 1 } = {}) {
   if (!Array.isArray(runDirs) || !runDirs.length) throw new Error('the runs whose trades the states are drawn from (--run)');
   const { readModelStream } = require('./model-stream');
-  const { ratesFor } = require('./model-score');
-  const { reweightStream } = require('./natural-rate');
+  const { ratesFor, reweightRun } = require('./model-score');
   const { readLearningRun } = require('../learning/run-gate');
   const { loadPinnedCurated } = require('../learning/curated-lists');
   const days = [];
@@ -383,10 +382,9 @@ function sourceStream(runDirs, { root = null, barsFiles = {}, lists = null, seed
     const pinned = loadPinnedCurated(home);
     if (pinned) {
       if (!lists) throw new Error(`${dir} is a curated run: give its curated lists document (--lists), so its trades come at their natural rates`);
+      // The score's own reweighting (model-score.js reweightRun): every moment stepped a candidate, each state weighted back.
       const nat = ratesFor(dir, { curated: { file: lists, list: pinned.list } });
-      const { decisions } = require('../learning/run-experience').runDecisions(dir, { root, barsFiles });
-      const log = readStatesLog(dir);
-      s = reweightStream(stream, decisions, { rates: nat.rates, listOf: nat.listOf, seed, stateWeightOf: log.some(x => x.kind === 'start') ? decisionWeight(log) : null });
+      s = reweightRun(dir, stream, { root, barsFiles, rates: nat.rates, listOf: nat.listOf, momentOf: nat.momentOf, seed });
     }
     for (const d of s.days) days.push({ ...d, day: `${k + 1}:${d.day}` });
     source.push({ runId: run.runId, role: l.role, days: s.days.length, trades: s.trades.length, reweighted: Boolean(s.reweighted) });

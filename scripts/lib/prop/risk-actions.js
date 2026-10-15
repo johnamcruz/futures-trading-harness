@@ -36,15 +36,12 @@
  *   riskActionRecord(result, { minN, maxBytes })   { kind, cells, text } at most 4 KB, each line with its sample size
  */
 
-const { scoreArms } = require('./evaluator');
+const { scoreArms, ownShare: own } = require('./evaluator');
 const { STATES: STATE_LIST, stateOf, HELD_OUT } = require('./risk-attribution');
 
 const KINDS = Object.freeze(['pass', 'day-stop', 'size-down', 'early-exit']);
 const STATES = Object.freeze([...STATE_LIST, 'all']);
 const MAX_BYTES = 4096;
-
-// The model's own share of the ceiling; a share that rounds to no contract still takes one (the model filled one).
-const own = t => ({ fraction: t.sizeFraction ?? 1, keepOne: true });
 
 /** The model's own decisions (base) and one arm per kind of action and state that reverts it there. */
 function riskActionArms() {

@@ -390,6 +390,8 @@ test('W3 verify end to end with its default parts: real trees, real replay runs,
   assert.notStrictEqual(v.verdict, 'blocked', v.reasons.join(';'));
   const w = v.windows[0];
   assert.deepStrictEqual([w.attempts, w.days, w.blows.b, w.reads.decisions, w.reads.overlap, w.adherence.decisions], [65, 95, 0, 95, 1, 95]);
+  assert.deepStrictEqual([w.sizedAs, w.ceiling.blows.b], ['own', 0], 'judged as the model traded; the ceiling line beside it');
+  assert.match(w.ceiling.label, /never judged/);
   // The same trades on both sides: no gain on the pooled start days, so not kept.
   assert.deepStrictEqual([v.verdict, v.pooled.diff, v.pairing], ['rejected', 0, 'one rulebook']);
   assert.match(v.reasons[0], /no significant gain/);
