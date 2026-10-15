@@ -180,7 +180,7 @@ test('a symbol whose first poll returns no bars still resyncs and re-checks its 
     cfg: { timeframe: 3 }, clockRef,
     client: { async activeContract() { lookups += 1; return { id: 'MNQ' }; }, async closedBars() { return []; } },
   });
-  while (clockRef.t < et(10, 30)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 30)) { const ms = await runner.step(); clockRef.t += ms; }
   assert.ok(lookups >= 2, `contract re-checked after repeated resyncs (lookups ${lookups})`);
 });
 
@@ -205,13 +205,13 @@ test('a failed contract lookup keeps the known contract trading and retries slow
     client: { ...base, async activeContract(s) { lookups += 1; if (failing) throw new Error('HTTP 500'); return base.activeContract(s); } },
     runCycle: async () => { cycles.push(clockRef.t); return { ok: true, timedOut: false }; },
   });
-  while (clockRef.t < et(9, 45)) clockRef.t += await runner.step();
+  while (clockRef.t < et(9, 45)) { const ms = await runner.step(); clockRef.t += ms; }
   // The next trading day starts with the lookup failing for 10 minutes.
   clockRef.t = et(9, 35) + 864e5;
   failing = true;
   lookups = 0;
   const before = cycles.length;
-  while (clockRef.t < et(9, 45) + 864e5) clockRef.t += await runner.step();
+  while (clockRef.t < et(9, 45) + 864e5) { const ms = await runner.step(); clockRef.t += ms; }
   assert.ok(lookups <= 25, `${lookups} lookups in 10 minutes`);
   assert.ok(cycles.length - before >= 2, 'bars on the known contract still start cycles');
 });
@@ -281,13 +281,13 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => [{ orderId: 2, contractId: 'MNQ', setup: 'orb', side: 'buy' }],
   });
-  while (clockRef.t < et(10, 2)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 2)) { const ms = await runner.step(); clockRef.t += ms; }
   assert.deepStrictEqual(cancelled, [1]);
   // With a position open nothing is cancelled.
   positions = [{ contractId: 'MNQ', type: 1, size: 1 }];
   cancelled.length = 0;
   orders.push({ id: 4, contractId: 'MNQ', type: 4, side: 1, size: 1 });
-  while (clockRef.t < et(10, 8)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 8)) { const ms = await runner.step(); clockRef.t += ms; }
   assert.deepStrictEqual(cancelled, []);
 });
 
@@ -328,7 +328,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
     entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(et(10, 0) + 3000).toISOString() }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
-  while (clockRef.t < et(10, 15)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 15)) { const ms = await runner.step(); clockRef.t += ms; }
   // Bar 2: peak 21525 = 2.5R -> stop 21520 (2R). Bar 3: peak 3.5R -> 21530.
   // Bar 4: peak 4R -> 21535, but its low 21534 is already through it -> closed at market.
   assert.deepStrictEqual(modified, [21520, 21530]);
@@ -404,7 +404,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   if (keepCycleTime) while (clockRef.t < until) { const ms = await runner.step(); clockRef.t += Math.max(0, ms); }
   while (clockRef.t < until) {
     if (beforeStep) await beforeStep(clockRef.t);
-    clockRef.t += await runner.step();
+    { const ms = await runner.step(); clockRef.t += ms; }
   }
   return { ...calls, runner, cycles };
 }
@@ -1023,7 +1023,7 @@ test('the broker\'s tick specs at the contract lookup: the family\'s other contr
     cfg: { timeframe: 3, symbols: ['MNQ', 'MES'] }, clockRef, logs,
     client: { async activeContract(s) { asked.push(s); if (s === 'ES') throw new Error('HTTP 500'); return { id: s, ...SPECS[s] }; }, async closedBars() { return []; } },
   });
-  while (clockRef.t < et(10, 30)) clockRef.t += await runner.step();
+  while (clockRef.t < et(10, 30)) { const ms = await runner.step(); clockRef.t += ms; }
   assert.ok(asked.includes('NQ') && asked.includes('ES'), `the partners are looked up (${asked.join(', ')})`);
   const said = logs.filter(m => /^MNQ: the broker's tick spec \(0\.25 = \$2\.00\) differs from the static table .*training does not equal live/.test(m));
   assert.strictEqual(said.length, 1, logs.join('\n'));
