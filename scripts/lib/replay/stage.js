@@ -7,7 +7,7 @@
  *   stage 1, learn to trade   a learning run on practice-train or practice-validate; a curated list on practice; latency
  *                             charged; the history library hidden (libraryDisplay off); no prop attempt (account states
  *                             are stage 2's); the risk record hidden (riskRecordDisplay off). At its end: the skill-usage report, the scorecard summary and R by setup;
- *                             on a validate run, the stage-1 exit test (EXIT_TEST).
+ *                             on a validate run, the stage-1 exit test (EXIT_TEST) on the candidate's pooled validate runs.
  *   stage 2, pass prop        stage 1's, plus the account states (accountStates: each curated practice day starts from a
  *                             state drawn from the model's own 30-day Monte Carlo paths, prop/account-states.js; required
  *                             on practice-train), the account facts and the prop risk rules;
@@ -25,12 +25,17 @@
  *   EXIT_TEST                   the stage-1 exit test's thresholds (owner-confirmed), the one place for them
  *   applyStage(raw)             { raw (the preset's defaults under the config's own values), stage, errors }
  *   stageRequirements(stage)    what the preflight checks for it
- *   exitTest({ decisions, measures, adherence })   [{ test, status: PASS | FAIL | INSUFFICIENT | N/A, detail }]
+ *   exitTest({ decisions, adherence })   [{ test, status: PASS | FAIL | INSUFFICIENT | N/A | SANITY, detail }]
+ *   pooledExitTest(pool, { scorecardComposed })   { pass, tests, head }: the exit test on a candidate's pooled validate runs
+ *   readPool(run, { env, scoreOf })   that pool from the run's ledger and the run homes beside it
  *   rBySetup(decisions)         [{ setup, n, entered, meanR }]: composed decisions with an R, by their setup step's skills
  *   stageReport(run, { root, env, read })   the end-of-run lines (scripts/replay.js run, when the run is done)
  */
 
+const fs = require('fs');
+const path = require('path');
 const { MIN_N, MIN_DAYS, cellStats } = require('../learning/experience-index');
+const { VALIDATE_RUNS_PER_CANDIDATE } = require('../learning/looks');
 
 const STAGES = Object.freeze({
   1: Object.freeze({
@@ -48,14 +53,18 @@ const STAGES = Object.freeze({
 });
 
 /**
- * The stage-1 exit test, judged on a practice-validate run (owner-confirmed, 2026-10-14). Every threshold reports
- * PASS only over at least `minN` samples (the experience index's MIN_N, 20, the same rule a cell needs before it
- * shows a rate); under it, "insufficient sample (n)". The expectancy's interval is the experience index's day
- * bootstrap (cellStats: 90%, whole trading days resampled), which also needs MIN_DAYS (10) distinct days.
- *   plannedRR          every entry's planned reward:risk at least this (min_rr enforces it; the test checks none fell under)
+ * The stage-1 exit test (owner-confirmed, 2026-10-14), judged on a candidate's pooled practice-validate runs (its
+ * first VALIDATE_RUNS_PER_CANDIDATE, learning/looks.js validateRuns; pooledExitTest), never one run alone. Every
+ * threshold reports PASS only over at least `minN` samples (the experience index's MIN_N, 20, the same rule a cell
+ * needs before it shows a rate); under it, "insufficient sample (n)". avgWinnerR needs minN winners: at the
+ * thresholds' own profile (winners 1.8R, losers -1R, +0.3R a trade: a 46% win rate) that is about 43 entries on
+ * average and 53 for nine pools in ten (61 at a 40% win rate). The expectancy's interval is the experience index's
+ * day bootstrap (cellStats: 90%, whole trading days resampled), which also needs MIN_DAYS (10) distinct days.
+ *   plannedRR          a sanity line, never a criterion: the entries under this planned reward:risk (min_rr enforces it)
  *   avgWinnerR         the realized mean R of the winning entries, at least this
  *   expectancyR        the mean R per entry, at least this, and its interval's lower bound above expectancyLoAbove
- *   correctReadRate    the share of the compose records' reads verified true, at least this
+ *   correctReadRate    the share of composed decisions whose reads were all verified true, at least this (per
+ *                      decision, so trivially true reads can't carry a decision with a false one)
  *   processAdherence   the scorecard's agreement rate (agree of agree + disagree), at least this
  */
 const EXIT_TEST = Object.freeze({
@@ -96,17 +105,15 @@ function stageRequirements(stage) {
 const fmt = x => (x === null || x === undefined || !Number.isFinite(x) ? '-' : x.toFixed(2));
 const enteredWithR = ds => ds.filter(d => d.decision === 'entered' && d.outcome && Number.isFinite(d.outcome.R));
 
-function exitTest({ decisions = [], measures = null, adherence = null }) {
+function exitTest({ decisions = [], adherence = null }) {
   const T = EXIT_TEST;
   const out = [];
   const t = (test, status, detail) => out.push({ test, status, detail });
   const few = n => `insufficient sample (${n}; at least ${T.minN})`;
   const entered = decisions.filter(d => d.decision === 'entered');
-  if (entered.length < T.minN) t('planned-rr', 'INSUFFICIENT', few(entered.length));
-  else {
-    const under = entered.filter(d => !(d.plan && Number.isFinite(d.plan.rr) && d.plan.rr >= T.plannedRR));
-    t('planned-rr', under.length ? 'FAIL' : 'PASS', `${under.length} of ${entered.length} entries under ${T.plannedRR}R (or without a planned R:R)`);
-  }
+  // A sanity line, never a criterion: min_rr enforces the planned R:R, so it says the plan, not the trading.
+  const under = entered.filter(d => !(d.plan && Number.isFinite(d.plan.rr) && d.plan.rr >= T.plannedRR));
+  t('planned-rr', 'SANITY', `${under.length} of ${entered.length} entries under ${T.plannedRR}R (or without a planned R:R): a sanity line (min_rr enforces it), not an exit criterion`);
   const withR = enteredWithR(decisions);
   const winners = withR.filter(d => d.outcome.R > 0);
   if (winners.length < T.minN) t('avg-winner', 'INSUFFICIENT', few(winners.length));
@@ -121,11 +128,13 @@ function exitTest({ decisions = [], measures = null, adherence = null }) {
     const ok = cell.meanR.mean >= T.expectancyR && cell.meanR.lo > T.expectancyLoAbove;
     t('expectancy', ok ? 'PASS' : 'FAIL', `${fmt(cell.meanR.mean)}R per entry, 90% day-bootstrap interval ${fmt(cell.meanR.lo)} to ${fmt(cell.meanR.hi)} (at least ${T.expectancyR}R, lower bound above ${T.expectancyLoAbove})`);
   }
-  const reads = measures && measures.reads ? measures.reads : { reads: 0, verified: 0 };
-  if (reads.reads < T.minN) t('correct-reads', 'INSUFFICIENT', few(reads.reads));
+  // Per decision: one passes when every read it composed from is verified true, so trivial true reads can't carry it.
+  const read = decisions.filter(d => d.decision !== 'none' && Array.isArray(d.reads) && d.reads.length);
+  if (read.length < T.minN) t('correct-reads', 'INSUFFICIENT', few(read.length));
   else {
-    const rate = reads.verified / reads.reads;
-    t('correct-reads', rate >= T.correctReadRate ? 'PASS' : 'FAIL', `${fmt(rate)} of ${reads.reads} reads true (at least ${T.correctReadRate})`);
+    const right = read.filter(d => d.reads.every(r => r && (r.check === true || r.check === 'true'))).length;
+    const rate = right / read.length;
+    t('correct-reads', rate >= T.correctReadRate ? 'PASS' : 'FAIL', `${fmt(rate)} of ${read.length} decisions with every read true (at least ${T.correctReadRate})`);
   }
   if (!adherence || adherence.unavailable) t('process-adherence', 'N/A', adherence && adherence.unavailable ? adherence.unavailable : 'no scorecard');
   else {
@@ -134,6 +143,61 @@ function exitTest({ decisions = [], measures = null, adherence = null }) {
     else t('process-adherence', adherence.agree / n >= T.processAdherence ? 'PASS' : 'FAIL', `${fmt(adherence.agree / n)} agreement over ${n} scored decisions (at least ${T.processAdherence})`);
   }
   return out;
+}
+
+/** A decision's moment: its day, contract root, bar, side and opening fill. Without a bar (no record of it) each is its own. */
+const momentKey = (d, i) => (d && d.bar ? [d.day || d.settledDay, d.root, d.bar, d.side, d.outcome && d.outcome.entryTime].join('|') : `#${i}`);
+
+/**
+ * The pool's decisions with each (day, moment) once, the first run's: validate runs of one candidate over the same days
+ * (their windows overlap) replay the same moments, so a repeat adds no sample. { decisions, repeats, overlap }.
+ */
+function distinctDecisions(pool) {
+  const seen = new Set();
+  const decisions = [];
+  let repeats = 0;
+  let n = 0;
+  for (const r of pool.counted) {
+    for (const d of r.decisions || []) {
+      const k = momentKey(d, n++);
+      if (seen.has(k)) { repeats += 1; continue; }
+      seen.add(k);
+      decisions.push(d);
+    }
+  }
+  const w = (pool.windows || []).filter(x => x && x.from && x.to);
+  const pairs = [];
+  for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) if (w[i].from <= w[j].to && w[j].from <= w[i].to) pairs.push(`${w[i].runId}/${w[j].runId}`);
+  return { decisions, repeats, overlap: pairs.join(', ') };
+}
+
+/**
+ * The stage-1 exit test on a candidate's pooled validate runs (learning/looks.js validateRuns: its first
+ * VALIDATE_RUNS_PER_CANDIDATE, in the order their looks were taken). pool: { candidate, named (the run named its
+ * candidate, --candidate: an unnamed run is its own candidate, so its retries would never pool), runId (this run),
+ * counted: [{ runId, decisions, adherence }], windows ([{ runId, from, to }]: the counted looks' windows), missing (counted runs whose log wasn't found), beyond (later runs, never
+ * read), all: { runs, candidates } }. A pool that isn't whole (unnamed, a run missing) can't pass. scorecardComposed:
+ * false makes process adherence N/A. Returns { pass, tests, head }: pass only when the pool is whole and every
+ * criterion (not the sanity line) passes.
+ */
+function pooledExitTest(pool, { scorecardComposed = true } = {}) {
+  const ids = pool.counted.map(r => r.runId);
+  let poolLine;
+  if (!pool.named) poolLine = { test: 'pool', status: 'N/A', detail: `run ${pool.runId} names no candidate (--candidate <name> with --validate): an unnamed run is its own candidate, so its retries never pool and the cap never counts them` };
+  else if (pool.missing.length) poolLine = { test: 'pool', status: 'INSUFFICIENT', detail: `candidate ${pool.candidate}'s validate run(s) ${pool.missing.join(', ')} not found beside this one: a pool without them could flatter it` };
+  else poolLine = { test: 'pool', status: 'PASS', detail: `candidate ${pool.candidate}: ${ids.join(', ')} pooled (the first ${VALIDATE_RUNS_PER_CANDIDATE} validate runs at most)` };
+  const errored = pool.counted.find(r => r.adherence && r.adherence.error);
+  const adherence = !scorecardComposed ? { unavailable: 'needs fix/scorecard-composed (the scorecard doesn\'t score composed setups yet)' }
+    : errored ? { unavailable: `run ${errored.runId}'s scorecard not scored (${errored.adherence.error})` }
+      : pool.counted.reduce((a, r) => ({ agree: a.agree + Number((r.adherence && r.adherence.agree) || 0), disagree: a.disagree + Number((r.adherence && r.adherence.disagree) || 0) }), { agree: 0, disagree: 0 });
+  const { decisions, repeats, overlap } = distinctDecisions(pool);
+  const overlapLine = repeats || overlap
+    ? [{ test: 'pool-overlap', status: 'SANITY', detail: `overlapping validate windows: counted once (${repeats} repeated decision(s) of the same day and moment dropped${overlap ? `; windows ${overlap} overlap` : ''}); ${new Set(decisions.map(d => d.day || d.settledDay)).size} distinct day(s)` }] : [];
+  const tests = [poolLine, ...overlapLine, ...exitTest({ decisions, adherence })];
+  const pass = tests.every(x => x.status === 'PASS' || x.status === 'SANITY');
+  const past = pool.beyond.includes(pool.runId) ? `; this run is past the cap: it is not read, and can't move the verdict of ${ids.join(', ')}` : '';
+  const head = `stage-1 exit test: ${pass ? 'PASS' : 'FAIL'} (pooled over ${ids.length} validate run(s) of ${pool.candidate || pool.runId}${past}; the ledger holds ${pool.all.runs} validate run(s) over ${pool.all.candidates} candidate(s))`;
+  return { pass, tests, head };
 }
 
 /** The setup step's skills of a decision's skill signature ("...+setup:a,b+..."), or '-'. */
@@ -156,19 +220,47 @@ function rBySetup(decisions = []) {
   return [...g.values()].sort((a, b) => b.n - a.n || (a.setup < b.setup ? -1 : 1)).map(x => ({ setup: x.setup, n: x.n, entered: x.entered, meanR: x.sum / x.n }));
 }
 
-/** The default readers of a finished run: its learning log and measures, its scorecard, its role, the merged features. */
+/**
+ * A validate run's pool (pooledExitTest's input): its look's candidate, that candidate's counted validate runs from the
+ * run's ledger (learning/looks.js validateRuns), each read from its run home beside this one (<workDir>/<runId>: its
+ * learning log, and its scorecard by scoreOf(runDir)); a counted run without a log is `missing`.
+ */
+function readPool(run, { env = process.env, scoreOf }) {
+  const looks = require('../learning/looks');
+  const { readLedger } = require('../prop/ledger-file');
+  const { readLearning } = require('../learning/learning-report');
+  const gate = require('../learning/run-gate').readLearningRun(run.paths.runHome) || {};
+  const candidate = gate.look ? gate.look.candidate : null;
+  const file = gate.ledger || looks.ledgerPath(env);
+  const v = looks.validateRuns(fs.existsSync(file) ? readLedger(file) : [], candidate);
+  const counted = [];
+  const missing = [];
+  for (const id of v.counted) {
+    const home = path.join(path.dirname(run.paths.runHome), id);
+    const l = readLearning(home);
+    if (!l) { missing.push(id); continue; }
+    let adherence;
+    try { adherence = scoreOf(path.join(home, 'replay', id)); } catch (e) { adherence = { error: String(e.message).split('\n')[0] }; }
+    counted.push({ runId: id, decisions: l.decisions, adherence });
+  }
+  return { candidate, named: Boolean(candidate) && candidate !== run.runId, runId: run.runId, counted, missing, windows: v.windows, beyond: v.beyond, all: v.all };
+}
+
+/** The default readers of a finished run: its learning log, its scorecard, its role, its candidate's validate pool, the merged features. */
 function defaultRead(run, { root, env, barsFiles = {} }) {
   const learning = require('../learning/learning-report');
+  const scoreOf = runDir => {
+    const sc = require('./scorecard');
+    const { strategies } = require('../trading/strategies').loadStrategies(root, env);
+    const { accounts } = require('../trading/accounts').loadAccounts(root, env);
+    return sc.scoreRun(runDir, { strategies, accounts }).summary.agreement.overall;
+  };
   return {
     learning: () => learning.readLearning(run.paths.runHome),
-    measures: l => learning.learningMeasures(l),
     role: () => (require('../learning/run-gate').readLearningRun(run.paths.runHome) || {}).role || null,
-    adherence: () => {
-      const sc = require('./scorecard');
-      const { strategies } = require('../trading/strategies').loadStrategies(root, env);
-      const { accounts } = require('../trading/accounts').loadAccounts(root, env);
-      return sc.scoreRun(run.paths.runDir, { strategies, accounts }).summary.agreement.overall;
-    },
+    adherence: () => scoreOf(run.paths.runDir),
+    // The candidate's validate runs from the ledger (its run homes beside this one, <workDir>/<runId>).
+    pool: () => readPool(run, { env, scoreOf }),
     features: () => require('../learning/preflight').defaultReaders(root, env).features(),
     skillUsage: () => learning.skillUsageFor(run.paths.runDir, { barsFiles }),
   };
@@ -211,10 +303,9 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
   const lines = [`stage ${run.stage} (${STAGES[run.stage].name}) report:`];
   const f = rd.features();
   lines.push(...skillUsageLines(f.skillUsage, rd));
-  let adherence = null;
   try {
+    // This run's own scorecard; the exit test reads every pooled run's (the composed grading, SCORES_COMPOSED).
     const a = rd.adherence();
-    adherence = f.scorecardComposed ? a : { unavailable: 'needs fix/scorecard-composed (the scorecard doesn\'t score composed setups yet)' };
     lines.push(`scorecard: ${a.decisions} decisions, ${a.agree} agree, ${a.disagree} disagree, ${a.unchecked} unchecked${a.rate === null || a.rate === undefined ? '' : ` (agreement ${fmt(a.rate)})`}`);
   } catch (e) {
     lines.push(`scorecard: not scored (${String(e.message).split('\n')[0]})`);
@@ -226,9 +317,9 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
   for (const s of bySetup) lines.push(`  ${s.setup}: ${s.n} decision(s), ${s.entered} entered, mean ${fmt(s.meanR)}R`);
   const validate = rd.role() === 'practice-validate';
   if (run.stage === 1 && validate) {
-    const tests = exitTest({ decisions, measures: l ? rd.measures(l) : null, adherence });
-    const pass = tests.every(x => x.status === 'PASS');
-    lines.push(`stage-1 exit test: ${pass ? 'PASS' : 'FAIL'}`);
+    // Judged on the candidate's pooled validate runs, never this run alone (a retry would be a fresh chance at a pass).
+    const { tests, head } = pooledExitTest(rd.pool(), { scorecardComposed: f.scorecardComposed });
+    lines.push(head);
     for (const x of tests) lines.push(`  ${x.status} ${x.test}: ${x.detail}`);
   }
   if (run.stage === 2) {
@@ -239,4 +330,4 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
   return lines;
 }
 
-module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, rBySetup, stageReport, practiceLines };
+module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, pooledExitTest, readPool, rBySetup, stageReport, practiceLines };

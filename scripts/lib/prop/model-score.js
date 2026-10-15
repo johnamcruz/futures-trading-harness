@@ -27,10 +27,14 @@
  * none: combine.DEFAULT_SIZING, said so.
  *
  *   resolveAccount({ override, attempts, runnerAccount, strategies, accounts })   { name, why } (name null: none)
- *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, barsFiles, seed, paths, reps, faults, attribution, now })
+ *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, momentOf, barsFiles, seed, paths, reps, faults, attribution, now })
+ *   reweightRun(runDir, stream, { root, barsFiles, rates, weights, listOf, momentOf, seed })   a curated run's stream at natural rates
  *   pairRuns(runDirA, runDirB, { root, rootB, env, account, policy, accountB, policyB, candidateB, barsFiles, seed, paths, reps, faults, now })
  *       two runs of the same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired),
- *       each run's score logged beside its own look: the judge a skill change is kept by. With accountB or policyB,
+ *       each run's score logged beside its own look: the judge a skill change is kept by. Scored as the model traded
+ *       (scorePaired sized 'own': each entry at its own filled share of the ceiling, its own exit when it took itself
+ *       out), the ceiling-sized result beside it (`ceiling`, labelled, never judged). A curated run is refused
+ *       (refuseCurated). With accountB or policyB,
  *       each side is scored under its own policy's whole entry (policyRulebook); candidateB: B's is a candidate rulebook
  *   policyRulebook(policy, { candidate })   { sizing, exit, multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
@@ -83,18 +87,24 @@ function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, n
   return { stream, run, diagnostic, pass };
 }
 
-function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
+/**
+ * A curated run's stream rebuilt at its lists' natural rates (natural-rate.js): its decision lines (plain passes
+ * included: every moment it stepped is a candidate), each placed in its list and moment (listOf, momentOf: ratesFor's),
+ * and, for a run whose days started from drawn account states, each weighted back to the natural mix of states. The one
+ * reweighting both the run's score (scoreRun) and the account-state draw (account-states.js sourceStream) use.
+ */
+function reweightRun(runDir, stream, { root = null, barsFiles = {}, rates = null, weights = null, listOf, momentOf, seed = 1 }) {
+  const { decisions } = require('../learning/run-experience').runDecisions(runDir, { root, barsFiles });
+  const AS = require('./account-states');
+  const states = AS.readStatesLog(runDir);
+  const stateWeightOf = states.some(x => x.kind === 'start') ? AS.decisionWeight(states) : null;
+  return reweightStream(stream, decisions, { rates, weights, listOf, momentOf, seed, stateWeightOf });
+}
+
+function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, momentOf, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
   if (!account) throw new Error('an account profile to score against');
   const { stream, run, diagnostic, pass } = streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now });
-  let s = stream;
-  if (diagnostic === 'reweighted') {
-    const { runDecisions } = require('../learning/run-experience');
-    const { decisions } = runDecisions(runDir, { root, barsFiles });
-    // A run whose days started from drawn account states: each decision weighted back to the natural mix of states.
-    const states = require('./account-states').readStatesLog(runDir);
-    const stateWeightOf = states.some(x => x.kind === 'start') ? require('./account-states').decisionWeight(states) : null;
-    s = reweightStream(stream, decisions, { rates, weights, listOf, seed, stateWeightOf });
-  }
+  const s = diagnostic === 'reweighted' ? reweightRun(runDir, stream, { root, barsFiles, rates, weights, listOf, momentOf, seed }) : stream;
   const sizing = policy ? policy.sizing || null : null;
   const result = scoreStream(s, {
     pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, attribution,
@@ -130,18 +140,32 @@ function policyRulebook(policy, { candidate = false } = {}) {
   return { sizing: policy ? policy.sizing || null : null, ...(policy && policy.exit ? { exit: policy.exit } : {}), multiplier, ...(candidate ? { candidate: true } : {}) };
 }
 
+/**
+ * A curated run never judges a change: its moments are picked outcome-balanced (curated-lists.js: winners and losers
+ * kept level, a pass share per list), so even rebuilt at natural rates the outcomes it draws are the list's, not the
+ * market's; and a rebuilt stream's days are drawn, so it has no real start days to pair (scorePaired refuses one). The
+ * keep rule pairs full-day runs (or setup-focused runs of the same calendar days, labelled diagnostic).
+ */
+function refuseCurated(runDir) {
+  const { loadPinnedCurated } = require('../learning/curated-lists');
+  if (loadPinnedCurated(path.resolve(runDir, '..', '..'))) {
+    throw new Error(`${path.basename(path.resolve(runDir))} is a curated run: a paired judge never reads one (its moments are outcome-balanced, its rebuilt days drawn, not paired); replay full-day windows of at least 3 x the account's sessions`);
+  }
+}
+
 function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, accountB, policyB, candidateB = false, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
   if (!account) throw new Error('an account profile to score against');
   // Two rulebooks (accountB or policyB given: the training loop's verifier): each side its own policy's whole entry,
   // B's a candidate's when it differs (its pass refused on test and final). Else one rulebook's sizing for both, as before.
   const two = accountB !== undefined || policyB !== undefined;
+  for (const dir of [runDirA, runDirB]) refuseCurated(dir);
   const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
   // rootB: the tree run B ran on, when it is another (the training loop's challenger); its records are read with its documents.
   const b = streamAndPass(runDirB, { root: rootB || root, barsFiles, faults, env, now, candidateRulebook: two && candidateB });
   const rulebook = two ? policyRulebook(policy) : { sizing: policy ? policy.sizing || null : null };
   const pB = policyB === undefined ? policy : policyB;
   const res = scorePaired(a.stream, b.stream, {
-    passA: a.pass, passB: b.pass, account, rulebook, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults,
+    passA: a.pass, passB: b.pass, account, rulebook, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, sized: 'own',
     ...(two ? { accountB: accountB || account, rulebookB: policyRulebook(pB, { candidate: candidateB }), contractsB: (pB && pB.contracts) || 'auto' } : {}),
   });
   return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
@@ -226,9 +250,11 @@ function scoreSummary(r) {
 }
 
 /**
- * A curated run's natural rates and its decisions' lists: rates given by hand (a file), else from the run's curated lists
- * document (`curated`: { file, list }, the replay config's), checked against the list the run pinned. A run that pinned
- * none: null. A curated run with neither: refused (it is never scored as a full-day run).
+ * A curated run's natural rates and its decisions' lists and moments (natural-rate.js curatedRates: listOf, momentOf):
+ * rates given by hand (a file) or from the run's curated lists document (`curated`: { file, list }, the replay config's),
+ * the document checked against the list the run pinned and needed either way (it places each decision in its moment).
+ * A run that pinned none: null (rates by hand on it: refused). A curated run without its document: refused (it is never
+ * scored as a full-day run).
  */
 function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
   const { loadPinnedCurated, readLists } = require('../learning/curated-lists');
@@ -243,16 +269,18 @@ function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
     if (doc.fingerprint !== pinned.fingerprint || (curated.list || 'mix') !== pinned.list) throw new Error(`the run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}), not ${doc.fingerprint.slice(0, 16)} (${curated.list || 'mix'})`);
     return doc;
   };
-  // Rates by hand: the decisions' lists still from the run's document when there is one.
+  // Rates by hand: the decisions' lists and moments still from the run's document (its candidates are its moments).
   if (ratesFile) {
     const doc = docOf();
-    return { rates: JSON.parse(fs.readFileSync(ratesFile, 'utf8')), listOf: doc ? curatedRates(doc, { list: pinned.list, delayMs }).listOf : undefined, from: ratesFile };
+    if (!doc) throw new Error('rates by hand reweight a curated run: its candidates are the curated moments it stepped, placed by its lists document, so give its replay config (--config) too');
+    const c = curatedRates(doc, { list: pinned.list, delayMs });
+    return { rates: JSON.parse(fs.readFileSync(ratesFile, 'utf8')), listOf: c.listOf, momentOf: c.momentOf, from: ratesFile };
   }
   if (!pinned) return null;
   if (!curated || !curated.file) throw new Error('a curated run is scored at its lists\' natural rates: give its replay config (--config), which names its lists document, or --natural-rates');
   const doc = docOf();
   const c = curatedRates(doc, { list: pinned.list, delayMs });
-  return { rates: c.rates, listOf: c.listOf, from: `${pinned.list} of ${doc.fingerprint.slice(0, 16)}, ${c.scanDays} scan days (${c.scanDaysFrom})` };
+  return { rates: c.rates, listOf: c.listOf, momentOf: c.momentOf, from: `${pinned.list} of ${doc.fingerprint.slice(0, 16)}, ${c.scanDays} scan days (${c.scanDaysFrom})` };
 }
 
 /**
@@ -272,7 +300,7 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
     if (!pick.name) throw new Error(pick.why);
     const account = accountNamed(root, pick.name, env);
     const nat = ratesFor(dir, { ratesFile, curated });
-    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, barsFiles, faults, riskActions, now });
+    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, momentOf: nat ? nat.momentOf : undefined, barsFiles, faults, riskActions, now });
     if (nat) result.ratesFrom = nat.from;
     result.accountWhy = pick.why;
     return { result, text: `\n${scoreText(result)}`, markdown: scoreMarkdown(result), summary: scoreSummary(result) };
@@ -282,4 +310,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { ratesFor, resolveAccount, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { ratesFor, reweightRun, resolveAccount, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

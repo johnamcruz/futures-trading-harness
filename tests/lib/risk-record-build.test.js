@@ -60,6 +60,53 @@ test('dayStream: the days through the day, only that day\'s risk actions kept', 
   assert.deepStrictEqual(stream.days[0].trades[0].actions, ['size-down', 'early-exit'], 'the run\'s stream is not changed');
 });
 
+test('an exit the runner made (its trail or time stop, from its event log) is the policy\'s, never the model\'s early exit', () => {
+  const withEvents = events => {
+    const r = run();
+    fs.mkdirSync(path.join(r.home, 'logs'), { recursive: true });
+    fs.writeFileSync(path.join(r.home, 'logs', 'events-2023-03-15.jsonl'), events.map(e => `${JSON.stringify(e)}\n`).join(''));
+    return readModelStream(r.dir).stream.days[0].trades[0];
+  };
+  // Day 1's entry closed at 101 at 14:05, before its stop and target: the model's own exit when the runner did nothing.
+  const own = withEvents([]);
+  assert.deepStrictEqual([own.actions, own.exitBy], [['size-down', 'early-exit'], undefined]);
+  // The runner closed it (its trail or time stop): the policy's.
+  const closed = withEvents([{ at: '2023-03-15T14:04:30.000Z', kind: 'position_closed', symbol: 'MNQ', contractId: 'x', why: 'trail' }]);
+  assert.deepStrictEqual([closed.actions, closed.exitBy, closed.hold], [['size-down'], 'runner-close', null]);
+  // It filled at the stop the runner last trailed it to: the policy's trail.
+  const trailed = withEvents([{ at: '2023-03-15T14:03:00.000Z', kind: 'stop_moved', symbol: 'MNQ', from: 98, to: 101 }]);
+  assert.deepStrictEqual([trailed.actions, trailed.exitBy], [['size-down'], 'runner-trail']);
+  // The runner moved the stop elsewhere, another market's close, or a close outside the trade: still the model's.
+  for (const e of [{ at: '2023-03-15T14:03:00.000Z', kind: 'stop_moved', symbol: 'MNQ', to: 99.5 }, { at: '2023-03-15T14:04:30.000Z', kind: 'position_closed', symbol: 'MES' }, { at: '2023-03-15T14:30:00.000Z', kind: 'position_closed', symbol: 'MNQ' }]) {
+    assert.deepStrictEqual(withEvents([e]).actions, ['size-down', 'early-exit'], JSON.stringify(e));
+  }
+});
+
+test('a close the runner stamped after the broker\'s fill is still its own, by its recorded exit; one outside the tolerance or of another position is the model\'s', () => {
+  const { RUNNER_CLOSE_TOLERANCE_MS } = require('../../scripts/lib/prop/model-stream');
+  const first = (() => { const r = run(); return readModelStream(r.dir).stream.days[0].trades[0]; })();
+  const opened = first.entryTime;
+  const exited = first.exitTime;
+  const at = ms => new Date(Date.parse(exited) + ms).toISOString();
+  const trade = (events, runnerExits) => {
+    const r = run();
+    fs.mkdirSync(path.join(r.home, 'logs'), { recursive: true });
+    fs.writeFileSync(path.join(r.home, 'logs', 'events-2023-03-15.jsonl'), events.map(e => `${JSON.stringify(e)}\n`).join(''));
+    if (runnerExits) fs.writeFileSync(path.join(r.home, 'autotrader-state.json'), JSON.stringify({ runnerExits }));
+    return readModelStream(r.dir).stream.days[0].trades[0];
+  };
+  const late = ms => ({ kind: 'position_closed', symbol: 'MNQ', contractId: 'x', at: at(ms), why: 'trail' });
+  const rec = (ms, over = {}) => ({ contractId: 'x', side: 'long', openedAt: opened, at: at(ms), r: 1, ...over });
+  assert.deepStrictEqual(trade([late(20000)]).actions, ['size-down', 'early-exit'], 'the event alone, after the fill, matches nothing');
+  const own = trade([late(20000)], [rec(20000)]);
+  assert.deepStrictEqual([own.actions, own.exitBy], [['size-down'], 'runner-close']);
+  for (const [label, events, exits] of [
+    ['past the tolerance', [late(RUNNER_CLOSE_TOLERANCE_MS + 5000)], [rec(RUNNER_CLOSE_TOLERANCE_MS + 5000)]],
+    ['another position (opened an hour before)', [late(20000)], [rec(20000, { openedAt: new Date(Date.parse(opened) - 3600000).toISOString() })]],
+    ['another market', [{ ...late(20000), symbol: 'MES' }], [rec(20000)]],
+  ]) assert.deepStrictEqual(trade(events, exits).actions, ['size-down', 'early-exit'], label);
+});
+
 test('buildFromRuns: an entry per acted day, the day\'s actions only, walk-forward, fingerprinted with its sources', () => {
   const doc = B.buildFromRuns([run().dir], OPTS);
   assert.deepStrictEqual(doc.entries.map(e => e.day), ['2023-03-15', '2023-03-16', '2023-03-17']);
@@ -92,6 +139,10 @@ test('refused: an unfinished run, a held-out or non-learning run, a day two runs
     [{ learning: false, role: null }, /is not a learning run, not practice-train/],
   ]) assert.throws(() => B.buildFromRuns([run(DAYS, { gate }).dir], OPTS), why);
   assert.throws(() => B.buildFromRuns([run().dir, run(DAYS, { runId: 'run2' }).dir], OPTS), /2023-03-15 twice/);
+  // Full-day runs only: a setup-focused or curated run's actions come at practice density (raw curated input refused).
+  const practice = { learning: true, role: 'practice-train', look: null, hideOutcomes: false, practice: { mode: 'setup-focus', setupTf: 15 } };
+  assert.throws(() => B.buildFromRuns([run(DAYS, { gate: practice }).dir], OPTS), /is a setup-focused practice run: .* full-day practice-train runs only/);
+  assert.throws(() => B.buildFromRuns(['x'], { ...OPTS, readRun: () => ({ stream, run: { ...r, curated: true }, finished: true }) }), /is a curated practice run/);
   assert.throws(() => B.buildFromRuns([run().dir], { ...OPTS, account: null }), /an account profile/);
   assert.throws(() => B.buildFromRuns([], OPTS), /one or more finished practice-train runs/);
   assert.throws(() => B.buildFromRuns([run().dir], { ...OPTS, paths: 0 }), /paths and reps/);
