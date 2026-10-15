@@ -89,6 +89,9 @@ test('each check fails on a broken fixture', () => {
     [P.facts, { run: { cfg: { ...ctx().run.cfg, symbols: ['MES'] } } }, /no bar data for MES/],
     [P.facts, { run: { start: D('2023-03-06T14:30:00Z'), end: D('2023-03-06T15:00:00Z') } }, /no 3m bar closing in the run's window/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, barDelaySeconds: 600 } } }, /min old at its decision time \(limit 9 min\)/],
+    // The age against the gate's limit, and the briefing's own validity, each on its own.
+    [P.facts, { read: { sampleBriefing: o => { const s = ctx().read.sampleBriefing(o); return { ...s, now: new Date(Date.parse(s.briefing.closedAt) + 5 * 60000), limitMin: 3 }; } } }, /5\.0 min old at its decision time \(limit 3 min\)/],
+    [P.facts, { read: { sampleBriefing: o => ({ ...ctx().read.sampleBriefing(o), current: false }) } }, /min old at its decision time/],
     [P.curatedList, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), fingerprint: 'f2' }) } }, /fingerprint/],
     [P.curatedList, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), use: 'validate' }) } }, /a validate list on a practice-train run/],
     [P.curatedList, { read: { curatedDoc: () => ({ ...ctx().read.curatedDoc(), lists: { 'trend-up': [], 'trend-down': [{}] } }) } }, /trend-up list is empty/],
