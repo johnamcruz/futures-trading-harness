@@ -69,7 +69,7 @@ function replaySetup() {
   const live = path.join(user, 'live-home');
   fs.mkdirSync(live);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({
-    brokers: { replaymock: { command: [process.execPath, MOCK], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT', 'MOCK_LEAK_BARS'] } },
+    brokers: { replaymock: { command: [process.execPath, MOCK], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT', 'MOCK_LEAK_BARS'] } },
   }));
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({

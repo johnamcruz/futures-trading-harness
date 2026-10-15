@@ -455,7 +455,7 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   const home = path.join(dir, 'replay-home');
   fs.mkdirSync(home);
   // The replay broker: the mock exchange as a replay server (its clock starts at 2026-10-07T14:00:00Z).
-  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL' } } }));
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL' } } }));
   const replayStop = path.join(home, 'STOP');
   const replayEnv = { ...env, FTH_BROKERS_FILE: path.join(home, 'brokers.json'), FTH_HOME: home, FTH_KILL_SWITCH_FILE: replayStop, FTH_REPLAY_NOW: '2026-10-07T14:00:00Z', MOCK_REPLAY: '1', MOCK_STATE_DIR: home, MOCK_JOURNAL: path.join(home, 'journal.jsonl') };
   const step = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade'], { encoding: 'utf8', env: replayEnv, timeout: 60000 });

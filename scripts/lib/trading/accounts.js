@@ -134,4 +134,16 @@ function requireFee(account, root) {
   return f;
 }
 
-module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed, feePerSide, requireFee };
+/**
+ * The limits a replay broker is run with, from the account (the one home of a limit): { dailyLoss (the daily_loss_limit,
+ * 0 for none), maxOrderSize, maxPositionSize (the largest max_contracts among the run's symbols the account states, else
+ * null: no size is guessed), symbol (the one that cap is for) }.
+ */
+function accountLimits(account, symbols) {
+  const caps = account && account.max_contracts && typeof account.max_contracts === 'object' ? account.max_contracts : {};
+  const found = (symbols || []).map(s => [String(s).toUpperCase(), caps[String(s).toUpperCase()]]).filter(([, n]) => Number.isInteger(n) && n > 0);
+  const top = found.reduce((a, b) => (a && a[1] >= b[1] ? a : b), null);
+  return { dailyLoss: Number(account && account.daily_loss_limit) || 0, maxOrderSize: top ? top[1] : null, maxPositionSize: top ? top[1] : null, symbol: top ? top[0] : null };
+}
+
+module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed, feePerSide, requireFee, accountLimits };

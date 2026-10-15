@@ -92,7 +92,7 @@ function world({ mode = 'index', dataLane = false } = {}) {
   fs.writeFileSync(journal, '');
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({
     broker: 'replaymock',
-    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS', env: ['MOCK_STATE', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_ALLOWED_ACCOUNTS'] } },
+    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS', env: ['MOCK_STATE', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_ALLOWED_ACCOUNTS'] } },
   }));
   exchange.initState(state, { nowMs: Date.parse(decisionAt(QUIET_BAR)), prices: { [MNQ_ID]: BARS[0].c }, bars: { [MNQ_ID]: BARS, ...(dataLane ? { [`${MNQ_ID}@1m`]: MINUTE_BARS } : {}) } });
   fs.mkdirSync(path.join(home, 'no-accounts'));

@@ -283,6 +283,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
       throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
     }
   }
+  // The account whose limits the replay broker runs with: the run's own (prop, account states), else the policy
+  // strategy's (the account a learning run trades for), else none.
+  const limitsAccount = propAccount || statesAccount || policyAccount(root, env);
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -314,6 +317,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount || statesAccount ? Number((propAccount || statesAccount).daily_loss_limit) || 0 : null,
+    // The account's limits the replay broker is run with (trading/accounts.js accountLimits), passed through the env names
+    // of the broker's brokers.json `limits` (replayEnv), or null: a run with no account.
+    limits: limitsAccount ? require('../trading/accounts').accountLimits(limitsAccount, cfg.symbols) : null,
     // The account states the run's window days start from (prop/account-states.js), or null.
     accountStates,
     brokerEnv, paths, derived, cfg, autotraderFile, root,
@@ -329,6 +335,48 @@ function liveBrokerVars(env) {
     for (const v of [...(Array.isArray(b.env) ? b.env : []), b.entryEnv, b.journalEnv]) if (v) vars.add(String(v));
   }
   return vars;
+}
+
+/** The account the active policy strategy trades (its `account`), or null: none, or one that doesn't load. */
+function policyAccount(root, env) {
+  if (!root) return null;
+  try {
+    const p = require('../trading/strategies').loadStrategies(root, env).strategies.find(s => s.signal === 'policy' && s.status === 'active' && s.account);
+    return p ? require('../trading/accounts').accountNamed(root, p.account, env) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** The env variables (name -> value) that carry the account's limits to `broker`, a replay broker only; {} for a live one. */
+function limitsEnv(run, broker) {
+  const out = {};
+  if (!(broker && broker.replay === true && run.limits && broker.limits)) return out;
+  for (const key of ['dailyLoss', 'maxOrderSize', 'maxPositionSize']) {
+    if (broker.limits[key] && run.limits[key] !== null && run.limits[key] !== undefined) out[broker.limits[key]] = String(run.limits[key]);
+  }
+  return out;
+}
+
+/**
+ * Only the replay broker server's own variables, as replayEnv gives them (its clock, state, run, window, journal and the
+ * account's limits), over `base`, with its run files in `paths` ({ clockFile, brokerDir, journal }): to start the server
+ * outside a run, as the preflight does on a scratch folder. Nothing else of the run's environment is touched.
+ */
+function serverEnv(base, run, paths) {
+  const env = { ...base, FTH_BROKER: run.broker };
+  const broker = activeBroker(env);
+  if (broker.replay !== true) return env;
+  const set = (key, value) => { if (key) env[key] = value; };
+  set(run.brokerEnv.clockFile, paths.clockFile);
+  set(run.brokerEnv.stateDir, paths.brokerDir);
+  set(run.brokerEnv.runId, run.runId);
+  set(run.brokerEnv.start, run.start.toISOString());
+  set(run.brokerEnv.end, run.end.toISOString());
+  if (run.propDailyLoss !== null && run.propDailyLoss !== undefined) set(run.brokerEnv.maxDailyLoss, String(run.propDailyLoss));
+  for (const [name, value] of Object.entries(limitsEnv(run, broker))) set(name, value);
+  set(broker.journalEnv, paths.journal);
+  return env;
 }
 
 function replayEnv(base, run, { at }) {
@@ -353,6 +401,9 @@ function replayEnv(base, run, { at }) {
   set(run.brokerEnv.start, run.start.toISOString());
   set(run.brokerEnv.end, run.end.toISOString());
   if (run.propDailyLoss !== null && run.propDailyLoss !== undefined) set(run.brokerEnv.maxDailyLoss, String(run.propDailyLoss));
+  // The account's limits, for a replay broker only (a live broker keeps its own): each into the variable its brokers.json
+  // entry names (`limits`); a limit the account states none for (a size) is not set.
+  for (const [name, value] of Object.entries(limitsEnv(run, broker))) set(name, value);
   // The balance schedule is the driver's alone: set for a run with account states, never inherited by any other run.
   if (run.accountStates) set(run.brokerEnv.balanceSchedule, run.paths.balanceSchedule);
   else if (run.brokerEnv.balanceSchedule) delete env[run.brokerEnv.balanceSchedule];
@@ -399,13 +450,13 @@ function runSettings(run, base = process.env) {
   // The variables the driver sets are the run's own; maxDailyLoss is only when it sets it (a combine replay):
   // otherwise the user's value is a broker setting of the run, so a change makes it another run.
   const setsLimit = run.propDailyLoss !== null && run.propDailyLoss !== undefined;
-  const own = new Set(Object.entries(run.brokerEnv).filter(([k]) => k !== 'maxDailyLoss' || setsLimit).map(([, v]) => v).concat(b.journalEnv));
+  const own = new Set(Object.entries(run.brokerEnv).filter(([k]) => k !== 'maxDailyLoss' || setsLimit).map(([, v]) => v).concat(b.journalEnv, run.limits && b.limits ? Object.values(b.limits) : []));
   // Its settings (a credential never: a run's identity isn't its keys), the fingerprint allowlist among them (R35:
   // every allowlisted name is one of `env`).
   const names = [...new Set(b.env || [])].filter(k => !own.has(k) && !CREDENTIAL.test(k));
   const brokerSettings = Object.fromEntries(names.sort().map(k => [k, env[k] ?? null]));
   // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
-  const brokerEntry = { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
+  const brokerEntry = { ...b, limits: undefined, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
   return { gate, brokerEntry, brokerSettings };
 }
 
@@ -490,4 +541,4 @@ function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, limitsEnv, serverEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

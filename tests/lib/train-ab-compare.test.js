@@ -383,7 +383,7 @@ test('scripts/replay.js run records the setup at the run\'s start, the one its l
     // The training preflight runs first: the run's 1m bars (--bars) and a 1m data lane (tests/fixtures/preflight.js).
     flags = [...flags, '--bars', `MNQ=${PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10))}`];
     fs.mkdirSync(path.join(user, 'live'), { recursive: true });
-    fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+    fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
     return spawnSync(process.execPath, [path.join(REPO, 'scripts', 'replay.js'), 'run', '--config', path.join(user, 'replay.json'), ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') }, timeout: 60000 });
   };
   const file = path.join(user, 'replays', 'r', 'replay', 'r', AB.SETUP_FILE);

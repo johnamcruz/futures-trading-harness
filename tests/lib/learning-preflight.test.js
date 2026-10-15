@@ -66,7 +66,9 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       features: () => ({ scorecardComposed: true, lossStreakStop: true, exitMode: true, skillUsage: true, accountFacts: true, monteCarlo: true }),
       statesDoc: () => STATES_DOC,
       gateLimits: () => ({ maxDailyLosses: 3, maxConsecutiveLosses: 2, lossCooldownMin: 30 }),
-      accountProfile: () => ({ name: 'acct', daily_loss_limit: 2000, daily_loss_soft: 1000 }),
+      accountProfile: () => ({ name: 'acct', daily_loss_limit: 2000, daily_loss_soft: 1000, max_contracts: { MNQ: 100 } }),
+      brokerEntry: () => ({ name: 'sim', replay: true, limits: { dailyLoss: 'A', maxOrderSize: 'B', maxPositionSize: 'C' } }),
+      brokerConfig: () => ({ replay: true, maxOrderSize: 100, maxPositionSize: 100, maxDailyLoss: 2000 }),
       attemptLine: (_name, state) => attemptLineOf(state),
       ...read,
     },
@@ -392,7 +394,7 @@ function replayRun(start, over = {}, flags = []) {
   fs.writeFileSync(config, JSON.stringify({ runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, noWeb: true, ...over }));
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
-  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', config, '--bars', `MNQ=${bars}`, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live }, timeout: 60000 });
   return { ...r, user, home: path.join(user, 'replays', 'r'), config, bars };
 }
@@ -434,7 +436,7 @@ test('scripts/training-preflight.js: 0 on a pass, 1 on a FAIL, 2 on a usage erro
     return f;
   };
   fs.mkdirSync(path.join(user, 'live'));
-  fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+  fs.writeFileSync(path.join(user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
   const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') } });
   const ok = run(['--config', write({}), '--bars', `MNQ=${bars}`]);
   assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);

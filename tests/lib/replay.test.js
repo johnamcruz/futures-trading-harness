@@ -1379,3 +1379,35 @@ test('replay config: setup-focused practice is the replay config\'s own field, v
   const auto = { ...replayConfig(dir).autotrader, practice: {} };
   assert.throws(() => resolveReplay(replayConfig(dir, { autotrader: auto }), { env: {}, home: dir, root: ROOT }), /practice: set in the replay config/);
 });
+
+test('replay env: the account\'s limits go into the variables the replay broker\'s brokers.json entry names; a live broker and a run with no account get none', () => {
+  const at = iso('2026-10-07T13:33:02Z');
+  const ACCT = require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {}).accounts.find(a => a.valid && a.daily_loss_limit > 0).name;
+  const names = { dailyLoss: 'SIM_DAILY', maxOrderSize: 'SIM_ORDER', maxPositionSize: 'SIM_POSITION' };
+  const withLimits = w => fs.writeFileSync(path.join(w.live, 'brokers.json'), JSON.stringify({ brokers: {
+    sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL', env: ['SIM_DATA'], limits: names },
+    live: { command: [process.execPath, '/opt/live/server.js'], env: ['LIVE_API_KEY'], entryEnv: 'LIVE_ENTRY', journalEnv: 'LIVE_JOURNAL', limits: names },
+  } }));
+  const w = userWorld({ prop: ACCT });
+  withLimits(w);
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const { accountLimits, accountNamed } = require('../../scripts/lib/trading/accounts');
+  const want = accountLimits(accountNamed(ROOT, ACCT, w.env), w.run.cfg.symbols);
+  assert.ok(want.maxOrderSize > 1 && want.dailyLoss > 0, JSON.stringify(want));
+  const env = replayEnv(w.env, w.run, { at });
+  assert.deepStrictEqual([env.SIM_DAILY, env.SIM_ORDER, env.SIM_POSITION], [String(want.dailyLoss), String(want.maxOrderSize), String(want.maxPositionSize)]);
+  // No prop account: the policy strategy's account (a learning run's own) gives them.
+  const plain = userWorld();
+  withLimits(plain);
+  seedRunHome(plain.run, { root: ROOT, userEnv: plain.env });
+  const own = replayEnv(plain.env, plain.run, { at });
+  assert.ok(Number(own.SIM_DAILY) > 0 && Number(own.SIM_ORDER) > 1 && own.SIM_ORDER === own.SIM_POSITION, JSON.stringify(own));
+  // No mapping in the broker's entry: nothing is set.
+  const unmapped = userWorld({ prop: ACCT });
+  seedRunHome(unmapped.run, { root: ROOT, userEnv: unmapped.env });
+  const bare = replayEnv(unmapped.env, unmapped.run, { at });
+  assert.deepStrictEqual([bare.SIM_DAILY, bare.SIM_ORDER, bare.SIM_POSITION], [undefined, undefined, undefined]);
+  // A live broker is unaffected: the account's limits are never put into its variables (the driver refuses a live broker).
+  const liveEnv = replayEnv(w.env, { ...w.run, broker: 'live' }, { at });
+  assert.deepStrictEqual([liveEnv.SIM_DAILY, liveEnv.SIM_ORDER, liveEnv.SIM_POSITION], [undefined, undefined, undefined]);
+});
