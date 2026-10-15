@@ -27,6 +27,13 @@
  * way: counts, the win rate and the no-room days only, never an R (the library measures one fixed plan, not the
  * model's trades). The cap drops the library's lines before the model's own cells.
  *
+ * The model's risk record (learning/risk-record-index.js), only when the run pinned one AND enabled its display (the
+ * replay config's riskRecordDisplay, kept in the pin: riskShown): a section of its own, last, "your risk record": by
+ * account state, what reverting each of the model's own risk decisions (standing down, sizing under the ceiling,
+ * exiting early, stopping for the day) did to the blows and passes of the Monte Carlo, each line with its sample size,
+ * or "too few" under the minimum; practice-train days before the bar's session only. Counts and outcomes, no advice.
+ * The cap drops it before anything else, so before the model's own cells.
+ *
  * Budget (D22): at most two answered calls per cycle bar and root; a third is refused. Each answered call is
  * recorded (learning/experience-lookups.js reserveLookup: counted and appended under a lock, so two calls at once
  * can't both take the last one). Like skill_lookup's record, the budget and the record need the runner's cycle
@@ -42,6 +49,7 @@ const { loadPinned, cellAt, examplesBefore, cellKey, contextKey } = require('../
 const { sessionDate } = require('../learning/splits');
 const { MAX_PER_BAR, reserveLookup } = require('../learning/experience-lookups');
 const { loadPinnedLibrary, libraryShown, libraryCellAt, noRoomBefore, setupKeyOf } = require('../learning/setup-library');
+const { loadPinnedRiskRecord, riskShown, riskRecordLines } = require('../learning/risk-record-index');
 const { familyRoot } = require('../trading/contracts');
 const { daysNear } = require('../trading/trade-lifecycle');
 const { context } = require('./cli');
@@ -120,9 +128,19 @@ function librarySection(lib, rec, before) {
 /** The line saying the pinned library can't be read (kept in the tail: the cap never hides it), or none. */
 const libraryError = lib => (lib && lib.error ? [`History library (code-measured, not your decisions): unreadable (${lib.error}); no library numbers this lookup.`] : []);
 
-/** Text at most MAX_BYTES: whole lines from the end of each optional block are dropped first (the library's before the model's cells). */
-function capped(head, cells, similar, tail, library = []) {
-  const join = () => [...head, ...cells, ...(similar.length > 1 ? similar : []), ...tail, ...(library.length > 1 ? library : [])].join('\n') + '\n';
+/** The risk record's section for the candidate's bar (none without a shown record; an unreadable one is said in the tail). */
+function riskSection(risk, before) {
+  return risk && !risk.error ? riskRecordLines(risk, before) : [];
+}
+const riskError = risk => (risk && risk.error ? [`Your risk record: unreadable (${risk.error}); no risk record this lookup.`] : []);
+
+/**
+ * Text at most MAX_BYTES: whole lines from the end of each optional block are dropped first: the risk record's, then
+ * similar decisions, then the library's, all before the model's cells.
+ */
+function capped(head, cells, similar, tail, library = [], risk = []) {
+  const join = () => [...head, ...cells, ...(similar.length > 1 ? similar : []), ...tail, ...(library.length > 1 ? library : []), ...(risk.length > 1 ? risk : [])].join('\n') + '\n';
+  while (Buffer.byteLength(join()) > MAX_BYTES && risk.length > 1) risk.pop();
   while (Buffer.byteLength(join()) > MAX_BYTES && similar.length > 1) similar.pop();
   while (Buffer.byteLength(join()) > MAX_BYTES && library.length > 1) library.pop();
   while (Buffer.byteLength(join()) > MAX_BYTES && cells.length > 2) cells.splice(cells.length - 2, 1);
@@ -147,14 +165,16 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
   // Shown only when the run enabled the display; pinned alone, the library is code's (the scan, the training lists).
   try { library = libraryShown(home) ? loadPinnedLibrary(home) : null; } catch (err) { library = { error: err.message }; }
   // Counted and recorded together, under the lock: a third call on the bar is refused.
-  const taken = reserveLookup(c.env, { role, root: rec.root, bar: rec.bar, side: rec.side, signature: rec.signatures.read, index: index ? index.hash : null, ...(library && !library.error ? { library: library.hash } : {}) }, c.wallNow ? c.wallNow() : Date.now());
+  let risk;
+  try { risk = riskShown(home) ? loadPinnedRiskRecord(home) : null; } catch (err) { risk = { error: err.message }; }
+  const taken = reserveLookup(c.env, { role, root: rec.root, bar: rec.bar, side: rec.side, signature: rec.signatures.read, index: index ? index.hash : null, ...(library && !library.error ? { library: library.hash } : {}), ...(risk && !risk.error ? { risk: risk.hash } : {}) }, c.wallNow ? c.wallNow() : Date.now());
   if (!taken) throw new Error(`experience_lookup: ${MAX_PER_BAR} calls on this bar already (the budget); decide with what they showed`);
   const head = [
     `Experience for ${rec.root} ${rec.side}, bar ${rec.bar}:`,
     `skill signature: ${rec.signatures.skill}`, `read signature: ${rec.signatures.read}`, `context: ${contextKey(rec.context)}`,
   ];
   const before = sessionDate(Date.parse(rec.bar));
-  if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], libraryError(library), librarySection(library, rec, before)) };
+  if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], [...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
   const at = key => cellAt(index, key, before);
   const full = contextKey(rec.context);
   const cells = [
@@ -173,7 +193,7 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => exampleLines(x.e));
   const similar = ['Similar past decisions (same skills, closest context):', ...(examples.length ? examples : ['- none'])];
   const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic.`];
-  return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library)], librarySection(library, rec, before)) };
+  return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
 }
 
 /** argv to { symbol, alternative, role }. */

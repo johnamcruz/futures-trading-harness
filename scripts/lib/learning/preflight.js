@@ -14,7 +14,7 @@
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
  * adapters-in-sync, facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
- * ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
+ * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-facts, monte-carlo. A check of a feature on another branch
  * (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones (#188-#191) are judged, and a
  * run or prompt without them FAILs. Stage 2's own requirements are N/A until phase 2 (stage).
@@ -300,6 +300,30 @@ function experienceIndex(ctx) {
   return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built; pinned at the run's start`);
 }
 
+/** The model's risk record (learning/risk-record-index.js): shown only from a pinned, practice-train-built record, on practice-train or practice-validate. */
+function riskRecord(ctx) {
+  if (ctx.run.riskRecordDisplay !== true) return r('risk-record', NA, 'off: the model is shown no risk record');
+  const role = roleOf(ctx);
+  // Train-derived evidence may be shown on practice-validate (like the walk-forward experience index): the record holds
+  // practice-train days only, and validation outcomes never enter it. Test, final and no-role windows are refused.
+  if (role !== 'practice-train' && role !== 'practice-validate') return r('risk-record', FAIL, `riskRecordDisplay is on, on a ${role || 'no-role'} run: the risk record is shown on practice-train and practice-validate only (a test or final run's outcomes are judged, never shown)`);
+  if (!ctx.run.riskRecord) return r('risk-record', FAIL, 'riskRecordDisplay is on without a risk record to pin (riskRecord)');
+  let doc;
+  try { doc = ctx.read.riskRecord(ctx.run.riskRecord); } catch (e) { return r('risk-record', FAIL, errText(e)); }
+  const bad = [];
+  if (doc.walkForward !== true) bad.push('not walk-forward');
+  if (JSON.stringify(doc.roles) !== JSON.stringify(['practice-train'])) bad.push(`built from ${JSON.stringify(doc.roles)}, not practice-train only`);
+  if (!Array.isArray(doc.entries) || doc.entries.some(e => e.role !== 'practice-train')) bad.push('an entry not of practice-train');
+  // A resume keeps the record it pinned, shown: another record, or the display off in the pin, is refused.
+  const home = ctx.run.paths && ctx.run.paths.runHome;
+  const pin = home ? ctx.read.riskPin(home) : null;
+  if (pin && pin.hash !== doc.hash) bad.push(`the run pinned risk record ${String(pin.hash).slice(0, 12)}, not this one`);
+  if (pin && pin.display !== true) bad.push('the run pinned its risk record with the display off');
+  if (pin && (pin.comparisonArm === true) !== (ctx.run.comparisonArm === true)) bad.push(`the run pinned its risk record ${pin.comparisonArm === true ? 'as' : 'not as'} a declared comparison arm (comparisonArm), and the config says otherwise`);
+  if (bad.length) return r('risk-record', FAIL, `${String(doc.hash).slice(0, 12)}: ${bad.join('; ')}`);
+  return r('risk-record', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built, ${doc.days} day(s); ${pin ? 'pinned' : 'pinned at the run\'s start'}, shown`);
+}
+
 function ledgerLook(ctx) {
   let d;
   try { d = ctx.read.learningGate(ctx.gate); } catch (e) { return r('ledger-look', FAIL, errText(e)); }
@@ -320,6 +344,8 @@ function stage(ctx) {
   if (role === req.curatedOn && !ctx.run.curated) bad.push('a stage practice run replays a curated list (curatedList)');
   if (ctx.run.latency !== req.latency) bad.push('latency is charged');
   if (ctx.run.libraryDisplay !== req.libraryDisplay) bad.push('the history library stays hidden (libraryDisplay off)');
+  if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'off') bad.push('the risk record stays hidden (riskRecordDisplay off)');
+  if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'comparison-arm' && ctx.run.comparisonArm !== true) bad.push('the risk record is shown only on a run declared a comparison arm (comparisonArm)');
   if (req.prop === 'none' && ctx.run.prop) bad.push('no prop attempt in stage 1 (account states are stage 2\'s)');
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
   // Stage 2's own requirements (the account states, the prop risk rules, the Monte Carlo) are phase 2's: a curated run
@@ -391,8 +417,8 @@ function monteCarlo(ctx) {
 
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
-  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
-  propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
+  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -494,6 +520,8 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     tickOf: symbol => { const s = require('../trading/contracts').specFor(symbol); return s ? s.tickSize : null; },
     curatedDoc: file => require('./curated-lists').readLists(file),
     index: file => require('./experience-index').readIndex(file),
+    riskRecord: file => require('./risk-record-index').readRiskIndex(file),
+    riskPin: home => require('./risk-record-index').riskPin(home),
     learningGate: gate => require('./run-gate').checkLearningRun({ ...gate, env }),
     rulebook: name => {
       if (!/^[a-z0-9][a-z0-9_-]*$/.test(String(name || ''))) return null;
@@ -550,7 +578,7 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, n
 module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
-  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, ledgerLook, stage, scorecardComposed,
-  propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
+  curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountFacts, monteCarlo,
   crosswalkOf, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };
