@@ -2,7 +2,7 @@
 
 How to train the model with the replay: what to run, in what order, and how
 to read what comes out. The replay is the live harness on replayed data
-(README, "Replay"); training adds presets, a preflight and reports on top of
+(`docs/OPERATING.md`, "Replay"); training adds presets, a preflight and reports on top of
 it. Where a feature is phase 2's (not merged yet), this guide says so and
 names its branch.
 
@@ -33,7 +33,7 @@ A learning run lies inside one window. A replay outside the split declares
 
 ## 2. One-time setup
 
-Set up the harness, the replay broker and the model server as the README
+Set up the harness, the replay broker and the model server as `docs/OPERATING.md`
 describes ("Setup", "Replay") and `docs/BACKTESTING.md` (the bar data). Your
 model and machine settings stay in your own local config, never in the repo.
 
