@@ -79,7 +79,7 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   have those keys.
 - `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
   (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`, with the rulebook's multiplier), combine attempts on
-  history (`challenge.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
+  a trade stream (`attempts.js`, scored by `evaluator.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
   OOS month, >= 40% pass over >= 20 independent attempts and 2 months) in `promotion.js`, frozen code with a
   test that its numbers only rise; never lower it. No trained policy runs: the rulebook holds
   today's values, and nothing in it is learned yet.
