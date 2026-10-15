@@ -16,10 +16,12 @@ const fs = require('fs');
 const path = require('path');
 const { pinIndex, readIndex } = require('./experience-index');
 const { pinLibrary, readLibrary } = require('./setup-library');
+const { pinRiskRecord, readRiskIndex } = require('./risk-record-index');
 
 const PINS = [
   { key: 'experienceIndex', file: 'pinned.json', what: 'an experience index' },
   { key: 'setupLibrary', file: 'library-pinned.json', what: 'a history library' },
+  { key: 'riskRecord', file: 'risk-record-pinned.json', what: 'a risk record' },
 ];
 
 function pinForRun(run, { fresh, arm }) {
@@ -39,14 +41,21 @@ function pinForRun(run, { fresh, arm }) {
   // The arm's hashes (looks.js ARM: with:<index>, shuffled:<index>, +library:<library>), read when the look was taken.
   const named = re => { const m = re.exec(arm); return m ? m[1] : null; };
   const same = (what, want, got) => { if (want !== got) throw new Error(`replay refused: the ${what} pinned (${got || 'none'}) is not the one its look names (${want || 'none'}): it changed since the look was taken`); };
-  // Checked before anything is pinned.
+  // Checked before anything is pinned (a shown risk record: the arm's +risk: hash).
+  if (run.riskRecord && run.riskRecordDisplay === true) same('risk record', named(/\+risk:([0-9a-f]{16})$/), readRiskIndex(run.riskRecord).hash.slice(0, 16));
+  else if (/\+risk:/.test(arm)) throw new Error('replay refused: the look names a shown risk record, but this run does not show one (riskRecordDisplay)');
   if (run.experienceIndex) same('experience index', named(/^(?:with|shuffled):([0-9a-f]{16})/), readIndex(run.experienceIndex).hash.slice(0, 16));
-  if (run.setupLibrary && run.libraryDisplay === true) same('history library', named(/\+library:([0-9a-f]{16})$/), readLibrary(run.setupLibrary).hash.slice(0, 16));
+  if (run.setupLibrary && run.libraryDisplay === true) same('history library', named(/\+library:([0-9a-f]{16})(?:\+risk:[0-9a-f]{16})?$/), readLibrary(run.setupLibrary).hash.slice(0, 16));
   if (run.experienceIndex) lines.push(`experience index pinned: ${pinIndex(run.paths.runHome, run.experienceIndex).hash.slice(0, 16)}`);
   if (run.setupLibrary) {
     const display = run.libraryDisplay === true;
     const h = pinLibrary(run.paths.runHome, run.setupLibrary, { display }).hash.slice(0, 16);
     lines.push(`history library pinned: ${h}${display ? ', shown to the model' : ', not shown to the model (libraryDisplay off)'}`);
+  }
+  if (run.riskRecord) {
+    const display = run.riskRecordDisplay === true;
+    const h = pinRiskRecord(run.paths.runHome, run.riskRecord, { display }).hash.slice(0, 16);
+    lines.push(`risk record pinned: ${h}${display ? ', shown to the model' : ', not shown to the model (riskRecordDisplay off)'}`);
   }
   // The curated list the run replays (learning/curated-lists.js pinCurated: checked against the config's fingerprint).
   if (run.curated) lines.push(`curated list pinned: ${run.curated.list} of ${require('./curated-lists').pinCurated(run.paths.runHome, run.curated).fingerprint.slice(0, 16)}, ${run.curated.windows.length} window(s)`);
