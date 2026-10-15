@@ -13,7 +13,10 @@
  * Injected (so the rulebook and the slippage-safe sizing plug in when they land): `size` (default: today's
  * contractPlan sizing), `multiplier` (the verdict's size multiplier from the recorded facts; default 1, today's
  * `full`; 0 skips the setup) and `sizing` (the rulebook's pacing numbers; default the policy's `sizing` over
- * combine.DEFAULT_SIZING).
+ * combine.DEFAULT_SIZING; `clock_k` and `r_per_session` are the pacing a trial tunes). An exit mode is applied to the
+ * stream before any attempt (exitAs: each trade re-exited from its recorded path under the policy's exit), so the
+ * variants below cut or redraw the re-exited trade. The account's loss_streak_stop applies through combine (a
+ * trade's P&L before fees moves the streak; entryBlock skips the rest of the session).
  *
  * Trade variants for the robustness runs (R9): an expectancy cut, a resampled stop overshoot, and a stop
  * fault (a stop placed late, missing or refused: the trade runs unprotected to the end of its day).
@@ -22,6 +25,8 @@
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
 const { pick } = require('./stats');
+const { trailStep } = require('../trading/trail');
+const { SWING_TFS, afterTargetStep } = require('../trading/exit-trail');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 
@@ -91,7 +96,8 @@ function runAttempt(days, ctx) {
       }
       if (net === null) net = t.moveTicks * perTick - fees;
       net = Math.round(net * 100) / 100;
-      cs = combine.applyClose(cs, net);
+      // The loss streak counts the trade's P&L before fees, as the gate counts the broker's (a scratch moves it neither way).
+      cs = combine.applyClose(cs, net, Math.round((net + fees) * 100) / 100);
       taken += 1;
       closed += net;
       if (forced === 'blow') { cs = combine.blow(cs); break; }
@@ -103,6 +109,84 @@ function runAttempt(days, ctx) {
     status: cs.status === 'active' ? 'unfinished' : cs.status, sessions: cs.days.length,
     profit: Math.round((cs.balance - cs.start) * 100) / 100, taken, skipped,
   };
+}
+
+/**
+ * The trade exited under a policy exit (`exit`: { mode, trail_activate_r?, trail_giveback_r? }, as the strategy loader
+ * reads the rulebook's) from its recorded price path (trade-stream.js pricePath), as the engine's broker exits it:
+ * each bar the resting stop first (filled at the stop, or a worse open, less `slipTicks`), then the target (at it,
+ * or a better open), then the trail at the bar's close (trail.js trailStep, the live and backtest rule); still open
+ * at the path's end, out at its last close. Mode `target`: the trade's own target (trade.ownExit) and its own trail,
+ * or the policy's trail on top when it has one; mode `target_then_trail`: the original stop until the trade's own
+ * target, then no exit there but the lock and the swing or R trail at each close (trading/exit-trail.js
+ * afterTargetStep, the runner's and the backtester's rule, on the recorded swing levels: trade.swingPath);
+ * mode `trail`: the policy's trail, no target. moveTicks and
+ * troughTicks are worked out again (a component's time stop is not replayed). A trade without a path or a stop, or an
+ * exit without a mode, is kept as recorded.
+ */
+function exitAs(t, exit, slipTicks = 1) {
+  if (!exit || !Array.isArray(t.path) || !t.path.length || !(t.stopTicks > 0)) return t;
+  if (!['target', 'target_then_trail', 'trail'].includes(exit.mode)) return t;
+  if (exit.mode === 'target_then_trail') return afterTargetExit(t, exit, slipTicks);
+  const own = t.ownExit || {};
+  const policyTrail = exit.trail_activate_r !== undefined && exit.trail_giveback_r !== undefined ? { a: exit.trail_activate_r, g: exit.trail_giveback_r } : null;
+  const ownTrail = own.trailActivateR !== null && own.trailActivateR !== undefined ? { a: own.trailActivateR, g: own.trailGivebackR } : null;
+  const trail = exit.mode === 'target' ? policyTrail || ownTrail : policyTrail;
+  if (exit.mode === 'trail' && !trail) return t;
+  const target = exit.mode === 'target' && own.targetTicks > 0 ? own.targetTicks : null;
+  const plan = { trailActivateR: trail ? trail.a : null, trailGivebackR: trail ? trail.g : null };
+  const initial = -t.stopTicks;
+  let stop = initial;
+  let peakR = 0;
+  let low = 0;
+  const troughs = [];
+  const deeper = x => { if (x < low) { low = x; troughs.push(round6(x)); } };
+  let move = null;
+  for (const [o, adv, fav, close] of t.path) {
+    if (adv <= stop) {
+      const fill = Math.min(o, stop) - slipTicks;
+      deeper(fill);
+      move = fill;
+      break;
+    }
+    deeper(adv);
+    if (target !== null && fav >= target) { move = Math.max(o, target); break; }
+    const step = trailStep({ sign: 1, entry: 0, risk: t.stopTicks, stop, peakR }, { h: fav, l: adv, c: close }, plan, 1);
+    peakR = step.peakR;
+    stop = step.stop;
+    if (step.close) { move = close; break; }
+  }
+  if (move === null) move = t.path[t.path.length - 1][3];
+  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode };
+}
+
+/** exitAs in mode target_then_trail: in the trade's own frame (ticks its way, 1R = its stop), exit-trail.js's rule. */
+function afterTargetExit(t, exit, slipTicks) {
+  const own = t.ownExit || {};
+  const minutes = exit.trail_by === 'structure' ? SWING_TFS[exit.swing_tf] : null;
+  if (!(exit.lock_giveback_r > 0 && exit.trail_r > 0) || !['r', 'structure'].includes(exit.trail_by) || (exit.trail_by === 'structure' && !minutes)) return t;
+  const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes } };
+  const swings = minutes && t.swingPath ? t.swingPath[exit.swing_tf] || [] : [];
+  const trade = { sign: 1, entry: 0, risk: t.stopTicks, stop: -t.stopTicks, peakR: 0, armed: false, target: own.targetTicks > 0 ? own.targetTicks : null };
+  let low = 0;
+  const troughs = [];
+  const deeper = x => { if (x < low) { low = x; troughs.push(round6(x)); } };
+  let move = null;
+  for (let k = 0; k < t.path.length && move === null; k += 1) {
+    const [o, adv, fav, close] = t.path[k];
+    if (adv <= trade.stop) {
+      move = Math.min(o, trade.stop) - slipTicks;
+      deeper(move);
+      break;
+    }
+    deeper(adv);
+    const swing = swings[k] === undefined ? null : swings[k];
+    const step = afterTargetStep(trade, { h: fav, l: adv, c: close }, plan, 1, swing);
+    Object.assign(trade, { stop: step.stop, peakR: step.peakR, armed: step.armed });
+    if (step.close) move = close;
+  }
+  if (move === null) move = t.path[t.path.length - 1][3];
+  return { ...t, moveTicks: round6(move), troughTicks: troughs, exitedAs: exit.mode };
 }
 
 /** The trade with its exit moved to `move` ticks (a deeper exit becomes its last trough). */
@@ -148,4 +232,4 @@ function stopFault(t) {
   return { ...t, moveTicks: t.noStop.closeTicks, troughTicks: w < 0 ? [...t.troughTicks.filter(x => x > w), w] : t.troughTicks.filter(x => x < 0) };
 }
 
-module.exports = { fullVerdict, defaultSize, legsFor, runAttempt, withExit, expectancyR, cutTrade, overshootPools, redrawOvershoot, stopFault };
+module.exports = { fullVerdict, defaultSize, legsFor, runAttempt, exitAs, withExit, expectancyR, cutTrade, overshootPools, redrawOvershoot, stopFault };

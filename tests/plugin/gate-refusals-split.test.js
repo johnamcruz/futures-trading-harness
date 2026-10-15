@@ -38,10 +38,16 @@ const ALLOWED = [
     reason: 'the example names a row of this piece, not one that moved' },
 ];
 
+// Rows added since the split (a refusal the gate gained later), each with its reason: the only rows not in the old table.
+const ADDED_ROWS = [
+  { row: '`[combine] <account>: N losing trades in a row this session, at the loss streak stop (loss_streak_stop N): no new entries until the next session`',
+    reason: 'feat/prop-portfolio-missing (owner-approved): the account rulebook\'s loss streak stop, a new [combine] refusal' },
+];
+
 // Each piece's rows, by label (or the message's start when it has no label), in order: a row in the wrong piece fails.
 const ROWS = {
   'gate-refusals': ['Blocked by trading harness', 'order-pending', 'replay-clock', 'stop-defined', 'account-required', 'contract-specs', 'contract-specs', 'contract-specs', 'order-pending'],
-  'gate-refusals-limits': ['combine', 'combine', 'policy', 'strategy', 'strategy', 'strategy', 'strategy', 'max-order-size', 'max-order-size', 'max-risk', 'max-risk'],
+  'gate-refusals-limits': ['combine', 'combine', 'combine', 'policy', 'strategy', 'strategy', 'strategy', 'strategy', 'max-order-size', 'max-order-size', 'max-risk', 'max-risk'],
   'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run'],
   'gate-refusals-cycle': ['roles-ran', 'phase2-facts'],
 };
@@ -60,7 +66,8 @@ test('gate-refusals split: every unit of the old skill is in exactly one new hom
   // Every row of the old table is a row in exactly one piece.
   const old = rowsOf(read(BEFORE));
   const now = homeTexts().flatMap(rowsOf);
-  assert.deepStrictEqual([...now].sort(), [...old].sort());
+  assert.deepStrictEqual([...now].filter(r => !ADDED_ROWS.some(a => a.row === r)).sort(), [...old].sort());
+  for (const a of ADDED_ROWS) assert.ok(a.reason && now.filter(r => r === a.row).length === 1 && !old.includes(a.row), a.row);
   // And each row is in the piece of its family.
   const key = m => label(m) || m.replace(/^`|`.*$/g, '').replace(/ \(.*$/, '');
   for (const s of HOMES) assert.deepStrictEqual(rowsOf(skill(s)).map(key), ROWS[s], s);

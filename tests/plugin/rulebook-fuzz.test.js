@@ -93,6 +93,9 @@ function judge(root, account, shipped) {
   const looser = [];
   let stricter = a.daily_loss_soft !== shipped.account.daily_loss_soft;
   if (none(a.daily_loss_soft) > none(shipped.account.daily_loss_soft)) looser.push(`daily_loss_soft ${a.daily_loss_soft}`);
+  // The loss streak stop: more losses in a row before the session stops (or off) is looser.
+  if (a.loss_streak_stop !== shipped.account.loss_streak_stop) stricter = true;
+  if (none(a.loss_streak_stop) > none(shipped.account.loss_streak_stop)) looser.push(`loss_streak_stop ${a.loss_streak_stop}`);
   const policies = loadStrategies(root, {}).strategies.filter(s => s.signal === 'policy' && s.account === account);
   let refused = false;
   for (const old of shipped.policies) {
@@ -161,6 +164,12 @@ test('fuzz: the writer and the judge catch what they claim (a looser load is rep
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
   write(edit(data, ['daily_loss_soft'], (o, k) => { o[k] = 'off'; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
+  write(edit(data, ['loss_streak_stop'], (o, k) => { o[k] = 'off'; }));
+  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
+  write(edit(data, ['loss_streak_stop'], (o, k) => { o[k] = shipped.account.loss_streak_stop + 1; }));
+  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
+  write(edit(data, ['policies', policy.name, 'exit', 'mode'], (o, k) => { o[k] = 'trail'; }));
+  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'refused', 'mode trail without a trail in R');
   write(edit(data, ['policies', policy.name, 'sizing', 'cushion_frac'], (o, k) => { o[k] = 0.01; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'stricter');
   write(edit(data, ['policies', policy.name, 'sizing', 'cap_usd'], (o, k) => { o[k] = 0; }));
@@ -174,13 +183,18 @@ test('nothing enforced takes a code default: every enforced value the code reads
     assert.ok(raw.enforced.includes('daily_loss_soft') && raw.daily_loss_soft !== undefined, `${file}: daily_loss_soft`);
     const a = loadAccounts(ROOT, {}).accounts.find(x => x.name === account);
     assert.strictEqual(a.daily_loss_soft, RB.limit(raw.daily_loss_soft), `${account}: the soft stop is the rulebook's`);
+    assert.ok(raw.enforced.includes('loss_streak_stop') && raw.loss_streak_stop !== undefined, `${file}: loss_streak_stop`);
+    assert.strictEqual(a.loss_streak_stop, RB.limit(raw.loss_streak_stop), `${account}: the loss streak stop is the rulebook's`);
     for (const [name, entry] of Object.entries(raw.policies || {})) {
       const p = SHIPPED_POLICIES.find(x => x.name === name);
       // Every sizing key the code reads (DEFAULT_SIZING's) is written in the file: the defaults never fill a gap.
       assert.deepStrictEqual(Object.keys(entry.sizing).sort(), Object.keys(DEFAULT_SIZING).sort(), `${file}: ${name}.sizing states every key`);
       assert.deepStrictEqual(p.sizing, Object.fromEntries(Object.entries(entry.sizing).map(([k, v]) => [k, RB.limit(v)])), `${name}: loaded as written`);
       assert.deepStrictEqual({ ...DEFAULT_SIZING, ...p.sizing }, p.sizing, `${name}: the code's merge with its defaults changes nothing`);
-      assert.deepStrictEqual(p.exit, entry.exit, `${name}: the trail as written`);
+      // Every exit key written (the mode and both trail values, `off` included); loaded as the rulebook reads it.
+      assert.deepStrictEqual(Object.keys(entry.exit).sort(), [...RB.EXIT_KEYS].sort(), `${file}: ${name}.exit states every key`);
+      assert.deepStrictEqual(p.exit, RB.policyEntry(raw, name).exit, `${name}: the exit as written`);
+      assert.strictEqual(p.exit.mode, entry.exit.mode, `${name}: the exit mode as written`);
       assert.ok(Array.isArray(entry.multipliers), `${file}: ${name}.multipliers stated`);
       assert.deepStrictEqual(p.multipliers, entry.multipliers, `${name}: multipliers as written`);
     }

@@ -374,7 +374,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
             ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, ...(oddSize ? {} : { size: 1 }), averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
             ...(otherMonth && !calls.closedIds.includes(otherMonth) ? [{ id: 78, contractId: otherMonth, type: 1, size: 1, averagePrice: 21600, creationTimestamp: new Date(fillAt).toISOString() }] : []),
           ],
-          orders: calls.cancelled.length ? [] : [...(noStop ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21600 }],
+          orders: [...(noStop ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21600 }].filter(o => !calls.cancelled.includes(o.id)),
         };
       },
       async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
@@ -473,6 +473,39 @@ test('time stop: a strategy with exit.max_bars is closed at market once it has b
   // Without max_bars (a plain target), the runner leaves the trade to its bracket.
   const plain = await trailSim({ tape: {}, exit: { target_r: 2 }, until: et(10, 20) });
   assert.deepStrictEqual(plain.closedIds, []);
+});
+
+test('a policy\'s exit mode: target leaves the trade to its own stop and target brackets; a trail on top, or mode trail, trails it', async () => {
+  // The bar runs to +2.5R: a trail from 2R would move the stop; the trade's own brackets would not.
+  const tape = { 0: [21525, 21521, 21524] };
+  const own = await trailSim({ tape, exit: { mode: 'target' }, until: et(10, 12) });
+  assert.deepStrictEqual([own.modified, own.closedIds], [[], []], 'nothing moved, nothing closed: the brackets stand');
+  assert.ok(!own.events.some(e => e.kind === 'position_managed'), 'not managed');
+  for (const exit of [{ mode: 'target', trail_activate_r: 2, trail_giveback_r: 0.5 }, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 }]) {
+    const r = await trailSim({ tape, exit, until: et(10, 12) });
+    assert.deepStrictEqual(r.modified, [21520], JSON.stringify(exit));
+  }
+});
+
+test('exit mode target_then_trail, live: the target order is cancelled, the stop holds to the target, then locks and trails past it; never loosened', async () => {
+  // A long from 21500, 1R = 40 ticks (10 points); its own target (the bracket, 400 ticks) at 21600 = 10R: the lock at 9.5R = 21595.
+  const exit = { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 };
+  const tape = { 0: [21590, 21560, 21580], 3: [21605, 21598, 21603], 6: [21620, 21612, 21618], 9: [21616, 21611, 21614] };
+  const r = await trailSim({ tape, exit, record: { targetTicks: 400 }, until: et(10, 15) });
+  assert.ok(r.cancelled.includes(10) && !r.cancelled.includes(9), `the target order goes, the stop stays: ${r.cancelled}`);
+  // Under the target nothing moves (21590 is 9R); at it the lock (21595); then 1R behind the best price (12R: 21610); a pullback moves nothing.
+  assert.deepStrictEqual(r.modified, [21595, 21610]);
+  assert.deepStrictEqual(r.closedIds, [], 'not closed at the target');
+  assert.ok(r.logs.some(l => /cancelled the target order 10 at 21600: past its target trendy is trailed, not closed/.test(l)), r.logs.join('\n'));
+  // A bar through the new stop before it rests: out at market (an exit is never held).
+  const thru = await trailSim({ tape: { 3: [21605, 21590, 21600] }, exit, record: { targetTicks: 400 }, until: et(10, 9) });
+  assert.deepStrictEqual(thru.closedIds, ['MNQ']);
+  // Structure on 15m swings: these few bars confirm none, so the R trail (the fallback), and the runner says so.
+  const st = await trailSim({ tape, exit: { ...exit, trail_by: 'structure', swing_tf: '15m' }, record: { targetTicks: 400 }, until: et(10, 15) });
+  assert.deepStrictEqual(st.modified, [21595, 21610]);
+  assert.ok(st.logs.some(l => /structure trail: no 15m swing confirmed yet; trailing 1R behind the best price \(the fallback\)/.test(l)), st.logs.join('\n'));
+  const none = await trailSim({ tape, exit, until: et(10, 15) });
+  assert.deepStrictEqual([none.modified, none.cancelled.includes(10)], [[21595, 21610], true], 'no bracket recorded: the one resting limit (21600) is its target');
 });
 
 test('time stop: max_bars counts the strategy\'s bars, scaled to the runner\'s timeframe', async () => {

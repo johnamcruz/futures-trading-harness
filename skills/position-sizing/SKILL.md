@@ -51,7 +51,10 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
    `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
-   stop always working) still applies.
+   stop always working) still applies. The verdict is the most the account
+   allows, not what the moment deserves: after a loss, near
+   `daily_loss_soft` or one loss short of `loss_streak_stop`, size under it
+   or pass on anything marginal (`prop-challenge-pacing`).
 7. **Half size** wherever the priority order (strategy-library) halves a
    trade, computed as it says there. Never round a half up. A composed
    trade is never halved: its size is the one you state, under the caps.

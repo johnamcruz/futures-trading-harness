@@ -14,9 +14,9 @@ const { spawnSync } = require('child_process');
 const RB = require('../../scripts/lib/trading/rulebook');
 const combine = require('../../scripts/lib/trading/combine');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
-const { loadStrategies, exitPlan } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, exitPlan, tradeExitPlan } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
-const { tmpDir, FLOW_POLICY, FX_STRATEGIES, FX_GOLDEN, withComponents } = require('../helpers');
+const { tmpDir, FLOW_POLICY, FX_STRATEGIES, FX_GOLDEN, withComponents, withExitBlock, exitBlock } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -38,6 +38,7 @@ test('R1: every shipped account has a valid rulebook beside it, and its profile 
     const loaded = loadAccounts(ROOT, {}).accounts.find(a => a.name === account);
     assert.strictEqual(loaded.valid, true, loaded.errors.join());
     assert.strictEqual(loaded.daily_loss_soft, book.daily_loss_soft, `${account}: the loader reads daily_loss_soft from ${file}`);
+    assert.strictEqual(loaded.loss_streak_stop, RB.limit(book.loss_streak_stop), `${account}: the loader reads loss_streak_stop from ${file}`);
   }
 });
 
@@ -72,6 +73,7 @@ function values() {
   for (const group of ['sizing', 'exit']) for (const [k, v] of Object.entries(FLOW_POLICY[group])) out.push([`tests/helpers.js FLOW_POLICY (the retired prop_flow_1m).${group}`, k, v]);
   for (const { file, book } of BOOKS) {
     if (book.daily_loss_soft !== undefined) out.push([file, 'daily_loss_soft', book.daily_loss_soft]);
+    if (book.loss_streak_stop !== undefined) out.push([file, 'loss_streak_stop', book.loss_streak_stop]);
     for (const [name, p] of Object.entries(book.policies || {})) {
       for (const group of ['sizing', 'exit']) for (const [k, v] of Object.entries(p[group] || {})) out.push([`${file} policies.${name}.${group}`, k, v]);
     }
@@ -96,6 +98,7 @@ function restatements(key, v) {
   if (key === 'cap_usd') res.push(new RegExp(`(?:at most|capped at|a cap of|under the|cap) ${$}`, 'i'), new RegExp(`${$} cap\\b`));
   if (key === 'drawdown_halve_usd') res.push(new RegExp(`${$} or more below`), new RegExp(`${$} below (?:its|the) peak`));
   if (key === 'daily_loss_soft') res.push(new RegExp(`-${$} for the day`), new RegExp(`soft[^.\\n]{0,40}${$}`, 'i'));
+  if (key === 'loss_streak_stop') res.push(new RegExp(`(?:^|[^\\d.])${num} (?:losing trades|losses|losers) in a row[^\\n]{0,80}\\b(?:session|loss streak stop)`, 'i'));
   if (key === 'trail_activate_r') res.push(new RegExp(`(?:until|past|to|from) \\+${num}R\\b`));
   if (key === 'trail_giveback_r') res.push(new RegExp(`trail(?:s|ing)? ${num}R\\b`), new RegExp(`${num}R behind`));
   if (exit) res.push(new RegExp(`(?:^|[^\\d.])${num}R\\s*/`), new RegExp(`/\\s*${num}R\\b`));
@@ -157,6 +160,11 @@ test('R1: the scan catches each way a value can be restated (it would fail witho
   assert.ok(caught('cap_usd', 1000, '(under the $1,000 cap; no drawdown)'));
   assert.ok(caught('drawdown_halve_usd', 1500, 'halved while the balance is $1,500 or more below its peak'));
   assert.ok(caught('daily_loss_soft', 1000, '- **Daily**: the harness stops new entries at -$1000 for the day'));
+  assert.ok(caught('loss_streak_stop', 2, 'after 2 losing trades in a row the session stops'));
+  assert.ok(caught('loss_streak_stop', 2, 'loss_streak_stop: 2'));
+  assert.ok(!caught('loss_streak_stop', 2, 'after `loss_streak_stop` losing trades in a row the session stops'));
+  assert.ok(!caught('loss_streak_stop', 2, '- After 2 losses in a row: stop, write a review and a lesson, then wait out the cooldown'), 'the gate\'s timed cooldown is its own setting');
+  assert.ok(caught('mode', 'target', 'exit: { mode: target }'));
   assert.ok(caught('trail_activate_r', 2, 'hold the setup\'s own stop until +2R ...'));
   assert.ok(caught('trail_giveback_r', 0.5, '... then trail 0.5R behind the best price'));
   assert.ok(caught('trail_activate_r', 2, 'exits by the policy strategy\'s own trail (2R / 0.5R), not'));
@@ -223,11 +231,36 @@ const ENFORCED = {
     assert.ok(combine.budget(cs, policy(root).sizing) < before, 'the budget follows the rulebook\'s sizing');
   },
   exit: () => {
+    // The rulebook's mode and trail reach the plan every trade exits by (the runner's and the backtester's).
     const root = rootCopy();
-    const a = exitPlan(policy(root)).trailActivateR;
-    assert.strictEqual(a, POLICY.exit.trail_activate_r);
-    edit(root, t => t.replace(/^( {6}trail_activate_r: )[\d.]+/m, `$1${a + 1}`));
-    assert.strictEqual(exitPlan(policy(root)).trailActivateR, a + 1, 'the trail follows the rulebook\'s exit');
+    const mode = POLICY.exit.mode;
+    assert.ok(['target', 'target_then_trail', 'trail'].includes(mode));
+    const component = { exit: { target_r: 3 }, risk: { min_rr: 2 } };
+    const plan = () => tradeExitPlan(policy(root), component);
+    if (mode !== 'trail') assert.strictEqual(plan().targetR, 3, 'the trade\'s own target is kept');
+    if (mode === 'target_then_trail') assert.deepStrictEqual(plan().afterTarget, { lockGivebackR: POLICY.exit.lock_giveback_r, trailBy: POLICY.exit.trail_by, trailR: POLICY.exit.trail_r, swingMinutes: POLICY.exit.trail_by === 'structure' ? { '5m': 5, '15m': 15, '1h': 60 }[POLICY.exit.swing_tf] : null });
+    edit(root, t => withExitBlock(t, exitBlock({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 })));
+    assert.deepStrictEqual([plan().targetR, plan().trailActivateR, plan().trailGivebackR, plan().afterTarget], [null, 2, 1, undefined], policy(root).errors.join());
+    edit(root, t => withExitBlock(t, exitBlock({ mode: 'target', trail_activate_r: 2, trail_giveback_r: 1 })));
+    assert.deepStrictEqual([plan().targetR, plan().trailActivateR], [3, 2], 'mode target with a trail on top');
+    edit(root, t => withExitBlock(t, exitBlock({ mode: 'target_then_trail', lock_giveback_r: 0.25, trail_by: 'r', trail_r: 0.75 })));
+    assert.deepStrictEqual([plan().targetR, plan().afterTarget], [3, { lockGivebackR: 0.25, trailBy: 'r', trailR: 0.75, swingMinutes: null }], 'the lock and the trail follow the rulebook');
+    assert.strictEqual(exitPlan(policy(root)).own, true);
+  },
+  loss_streak_stop: () => {
+    // The rulebook's value stops entries after that many losses in a row; a scratch neither ends nor extends it.
+    const root = rootCopy();
+    const n = account(root).loss_streak_stop;
+    assert.ok(Number.isInteger(n) && n >= 1);
+    const after = grosses => grosses.reduce((cs, g) => combine.applyClose(cs, g - 1, g), combine.start(account(root)));
+    const losses = k => Array.from({ length: k }, () => -10);
+    assert.match(String(combine.entryBlock(after(losses(n)))), /loss streak stop/);
+    assert.strictEqual(combine.entryBlock(after(losses(n - 1))), null);
+    assert.match(String(combine.entryBlock(after([...losses(n - 1), 0, -10]))), /loss streak stop/, 'a scratch does not end it');
+    assert.strictEqual(combine.entryBlock(after([...losses(n - 1), 10, -10])), null, 'a win ends it');
+    assert.strictEqual(combine.entryBlock(combine.endDay(after(losses(n)))), null, 'the next session starts at 0');
+    edit(root, t => t.replace(/^loss_streak_stop: \S+/m, `loss_streak_stop: ${n + 1}`));
+    assert.strictEqual(combine.entryBlock(after(losses(n))), null, 'the stop follows the rulebook');
   },
   multipliers: () => {
     // An enforced multiplier item reaches the verdict; with its fact missing, the setup is skipped.

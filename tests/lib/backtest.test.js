@@ -701,6 +701,66 @@ test('micros and minis: a policy strategy run sizes in micros, trades minis by i
   assert.ok(micro.trades.every(t => ['stop', 'target', 'trail', 'eod', 'end', 'blow', 'daily_limit', 'max_bars'].includes(t.reason)), [...new Set(micro.trades.map(t => t.reason))].join());
 });
 
+test('a policy\'s exit mode: target trades each setup on its strategy\'s own exit (a trail on top only when set); trail replaces it', () => {
+  const bars = propSeries(30);
+  const opts = { ...propEngine, account: propAccount(), sizing: { cushion_frac: 1 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  // The component's own exit: a 3R target, no trail.
+  const own = propStrategy({ exit: { target_r: 3 } });
+  const run = exit => runEngine([propMarket(bars)], [own], { ...opts, prop: { strategy: { exit }, components: ['trendy'], contracts: 'micro' } }).trades;
+  const alone = runEngine([propMarket(bars)], [own], opts).trades;
+  assert.ok(alone.length > 0 && alone.some(t => t.reason === 'target'), [...new Set(alone.map(t => t.reason))].join());
+  // Mode target: the very trades the strategy makes on its own exit.
+  assert.deepStrictEqual(run({ mode: 'target' }), alone);
+  // Mode trail (and a policy with no mode, as before): the trail replaces the target.
+  const trailed = run({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 });
+  assert.deepStrictEqual(run({ trail_activate_r: 2, trail_giveback_r: 0.5 }), trailed);
+  assert.ok(!trailed.some(t => t.reason === 'target'));
+  assert.notDeepStrictEqual(trailed, alone);
+  // Mode target with a trail on top: the own target stays, the trail moves the stop.
+  const both = run({ mode: 'target', trail_activate_r: 1, trail_giveback_r: 0.5 });
+  const wanted = runEngine([propMarket(bars)], [propStrategy({ exit: { target_r: 3, trail_activate_r: 1, trail_giveback_r: 0.5 } })], opts).trades;
+  assert.deepStrictEqual(both, wanted);
+  // Mode target_then_trail: never closed at its own target; trailed past it (the stop locked at 3R - 0.5R), and a winner
+  // that reached its target makes at least the lock less a tick of slippage, or its bar's close.
+  const past = run({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 });
+  assert.ok(past.length && !past.some(t => t.reason === 'target'), [...new Set(past.map(t => t.reason))].join());
+  assert.ok(past.some(t => t.reason === 'trail' && t.r > 3), 'some ran past the target');
+  const structure = run({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' });
+  assert.ok(structure.length && !structure.some(t => t.reason === 'target'));
+});
+
+test('a prop run\'s loss streak counts each trade\'s P&L before fees: a scratch (gross 0, net the fees) neither ends nor extends it', () => {
+  // 3-minute bars from 09:30 ET: 30 flat bars (no signal), then a loss, a scratch, a loss, and a fourth setup.
+  const t0 = Date.parse('2026-01-08T14:30:00Z');
+  const bars = [];
+  const bar = (o, h, l, c) => bars.push({ t: new Date(t0 + bars.length * 180000).toISOString(), o, h, l, c, v: 100 });
+  for (let k = 0; k < 30; k += 1) bar(100, 100.5, 99.5, 100);
+  // Each setup: a bar closing up (long at its close, 101), then the trade's one bar (max_bars 1): out at its close.
+  for (const out of [100, 101, 100, 101]) { bar(100, 101.25, 99.75, 101); bar(101, 101.25, 99.75, out); }
+  for (let k = 0; k < 5; k += 1) bar(100, 100.5, 99.5, 100);
+  const rules = { long: ['close > open'] };
+  const s = propStrategy({ rules, mtf: 'reversal', compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:5', min_rr: 2 }, exit: { target_r: 20, max_bars: 1 } });
+  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 20, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: { cushion_frac: 0.2 } }).trades;
+  const all = run(0);
+  assert.deepStrictEqual(all.map(t => Math.sign(t.pnl)), [-1, 0, -1, 0], 'a loss, a scratch, a loss, a scratch (off: every setup)');
+  assert.ok(all[1].net < 0, 'the scratch lost its fees');
+  // Stop 2: loss (1), scratch (still 1), loss (2): the fourth setup is refused. Counting the net, the scratch would be the second loss.
+  assert.deepStrictEqual(run(2).map(t => Math.sign(t.pnl)), [-1, 0, -1]);
+});
+
+test('a prop run stops the session after the account\'s loss_streak_stop losing trades in a row, as the gate does', () => {
+  const bars = propSeries(30);
+  const opts = { ...propEngine, sizing: { cushion_frac: 0.2 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const off = runEngine([propMarket(bars)], [propStrategy()], { ...opts, account: propAccount({ daily_loss_soft: 0 }) }).trades;
+  const on = runEngine([propMarket(bars)], [propStrategy()], { ...opts, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: 1 }) }).trades;
+  // With a stop of 1, no trade follows a loss on the same trading day.
+  const day = t => require('../../scripts/lib/trading/clock').tradingDayKey(new Date(t.entryTime));
+  for (let i = 1; i < on.length; i += 1) assert.ok(!(day(on[i]) === day(on[i - 1]) && on[i - 1].pnl < 0), `trade ${i} follows a loss the same session`);
+  const lossThenMore = off.some((t, i) => i > 0 && day(t) === day(off[i - 1]) && off[i - 1].pnl < 0);
+  assert.ok(lossThenMore, 'the series has a session that trades on after a loss');
+  assert.ok(on.length < off.length);
+});
+
 test('backtest: a level target the fill leaves under min_rr is not traded (fx_value_area_reentry, min_rr: 2)', () => {
   // A balanced day-1 RTH session gives the prior value area; day 2 opens below it and closes back inside twice.
   const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
