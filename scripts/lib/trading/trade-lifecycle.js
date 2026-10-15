@@ -193,7 +193,7 @@ function readFile(file, { legacy = false } = {}) {
     throw unreadable(file, err);
   }
   if (size > MAX_BYTES && legacy) {
-    throw new Error(`the compose record ${file}, an older home's single file from before the day shards, is over ${MAX_BYTES} bytes: nothing reads it, so no entry is judged on it; continue in a new run home (this one's record stays where it is for review)`);
+    throw new Error(`the compose record ${file}, an older home's single file from before the day shards, is over ${MAX_BYTES} bytes: no reader can use it (no composed entry is judged on it, and the learning loop and experience_lookup refuse it too); continue in a new run home (this one's record stays where it is for review)`);
   }
   if (size > MAX_BYTES) throw new Error(`the compose record ${file} is over ${MAX_BYTES} bytes`);
   let text;
