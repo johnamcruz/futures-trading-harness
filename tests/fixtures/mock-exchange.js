@@ -34,6 +34,10 @@
  * makes get_server_config report replay: true, and MOCK_STATE_DIR (instead of
  * MOCK_STATE) holds the state, created on first use from MOCK_INIT (JSON overrides).
  * MOCK_LEAK_BARS=1 serves a test's real bars past the clock too (a replay server that leaks the future).
+ * MOCK_PRICE_FROM_BARS=1 moves each contract's price to the close of its last closed bar (s.bars[contractId], 3m) at the clock,
+ * triggering stops and limits, as a replay server's simulated fills follow its data. MOCK_BALANCE_SCHEDULE=<file> is the
+ * replay-only balance schedule the driver writes (a JSON list of { at, balance }): the balance is the latest entry's once the
+ * clock has reached its `at`, as a replay broker applies it (a run with account states).
  */
 
 const fs = require('fs');
@@ -43,6 +47,7 @@ const ACCOUNT = 7;
 const CONTRACTS = [
   { id: 'fake:MNQ:Z26', name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
   { id: 'fake:MNQ:H27', name: 'MNQH7', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: false },
+  { id: 'fake:NQ:Z26', name: 'NQZ6', description: 'E-mini Nasdaq-100', tickSize: 0.25, tickValue: 5, activeContract: true },
   { id: 'fake:MES:Z26', name: 'MESZ6', description: 'Micro E-mini S&P 500', tickSize: 0.25, tickValue: 1.25, activeContract: true },
 ];
 const TYPE = { limit: 1, market: 2, stop: 4 };
@@ -278,12 +283,38 @@ const HANDLERS = {
   },
 };
 
+/** MOCK_PRICE_FROM_BARS: the price of each contract with bars is its last closed 3m bar's close at the clock. */
+function followBars(s) {
+  for (const [id, series] of Object.entries(s.bars || {})) {
+    if (id.includes('@') || !Array.isArray(series)) continue;
+    let last = null;
+    for (const b of series) if (Date.parse(b.t) + 180000 <= s.nowMs) last = b;
+    if (last && s.prices[id] !== last.c) {
+      s.prices[id] = last.c;
+      match(s);
+    }
+  }
+}
+
+/** MOCK_BALANCE_SCHEDULE: the latest entry the clock has reached sets the balance, once (a fill after it moves it as usual). */
+function applySchedule(s, file) {
+  let schedule = [];
+  try { schedule = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { /* none written yet */ }
+  const due = schedule.filter(e => Date.parse(e.at) <= s.nowMs).at(-1);
+  if (due && s.scheduleAt !== due.at) {
+    s.balance = due.balance;
+    s.scheduleAt = due.at;
+  }
+}
+
 /** One tool call against the shared state; every call is logged in state.calls. */
 function handle(file, tool, args = {}, env = process.env) {
   let thrown = null;
   const out = update(file, s => {
     // A replay broker's clock (MOCK_CLOCK_FILE, { now }), re-read on every call as a replay server does.
     if (env.MOCK_CLOCK_FILE) s.nowMs = Date.parse(JSON.parse(fs.readFileSync(env.MOCK_CLOCK_FILE, 'utf8')).now);
+    if (env.MOCK_PRICE_FROM_BARS === '1') followBars(s);
+    if (env.MOCK_BALANCE_SCHEDULE) applySchedule(s, env.MOCK_BALANCE_SCHEDULE);
     // With whether a position was open when the call came (an order cancelled while one was, say).
     s.calls.push({ tool, args, open: s.positions.length > 0 });
     if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);
