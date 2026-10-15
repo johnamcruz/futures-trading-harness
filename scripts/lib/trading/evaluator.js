@@ -25,7 +25,7 @@ const tfMinutes = tf => { const m = /^(\d+)(m|h)$/.exec(String(tf || '')); retur
 const { SWING_TFS } = require('./exit-trail');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const DEFAULT_WINDOW = 500; // bars per evaluation, as the original bot's BARS_WINDOW
+const DEFAULT_WINDOW = require('../tunables').analysis().evaluator.windowBars; // bars per evaluation, as the original bot's BARS_WINDOW (config/analysis.json)
 
 function timeframeMs(tf) {
   const m = /^(\d+)(m|h|d)$/.exec(String(tf || ''));

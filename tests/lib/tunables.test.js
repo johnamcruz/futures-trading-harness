@@ -43,6 +43,7 @@ const PINS = {
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
+    'skillCaps.skillBytes': 3400, 'skillCaps.setupSkillBytes': 4000,
   },
   replay: {
     stages: {
@@ -55,6 +56,7 @@ const PINS = {
     'gate.planMaxAgeMin': 120, 'gate.maxConsecutiveLosses': 2, 'gate.lossCooldownMin': 30, 'gate.maxDailyLosses': 3, 'gate.maxEntriesPerDay': 6, 'gate.mtfMaxAgeMin': 15,
     'gate.signalMaxAgeBars': 3, 'gate.signalMaxAgeCeilingMin': 45, 'gate.futureToleranceMin': 1, 'gate.minConfluence': 1, 'gate.maxCorrelatedPositions': 1,
     'gate.noEntryWindows': ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], 'gate.bracketToleranceTicks': 1, 'gate.bracketSpanToleranceTicks': 2,
+    'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20,
     'lifecycle.stopBufferTicks': 1, 'lifecycle.floorTicks': 8, 'lifecycle.floorAtr': 0.25, 'lifecycle.maxSize': 100,
     'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
     'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,

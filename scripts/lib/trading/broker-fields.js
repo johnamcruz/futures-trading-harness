@@ -21,8 +21,9 @@
 // A bar's own keys (and their long names, indicators.js BAR_KEYS), and `ms`, the time stamp the harness's bar loaders
 // add (backtest/data.js): never the broker's.
 const OWN = new Set(['t', 'o', 'h', 'l', 'c', 'v', 'time', 'open', 'high', 'low', 'close', 'volume', 'ms']);
-const LAST = 3;
-const MAX_BYTES = 600;
+const BF = require('../tunables').runner().prompt; // config/runner.json prompt
+const LAST = BF.brokerFieldsKept;
+const MAX_BYTES = BF.brokerFieldsBytes;
 
 const isObject = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -58,7 +59,7 @@ function brokerFieldsAt(bars, i, { last = LAST, maxBytes = MAX_BYTES } = {}) {
   return { paths: [...paths].sort(), bars: out };
 }
 
-const TEXT_MAX = 250;
+const TEXT_MAX = BF.brokerFieldChars;
 const valueAt = (obj, p) => p.split('.').reduce((o, k) => (o && typeof o === 'object' && Object.hasOwn(o, k) ? o[k] : undefined), obj);
 const shown = v => (v === undefined || v === null ? 'null' : typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v));
 

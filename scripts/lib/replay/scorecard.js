@@ -78,6 +78,8 @@
 const fs = require('fs');
 const path = require('path');
 const { readJson, writeJsonAtomic } = require('../harness-run');
+// A close that gave back most of its best is judgment, not an early close (config/replay.json scorecard).
+const GIVE_BACK = require('../tunables').replay().scorecard;
 const { readLines, readRun } = require('./store');
 const { labelRun, composedTagsAt, countedEntry, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
 const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
@@ -207,7 +209,7 @@ function earlyClose(label, facts, why, out) {
   if (!plan || num(o.mfeR) === null || num(o.r) === null) return judged('the plan or the trade\'s excursion is unknown');
   const held = o.entryTime ? (Date.parse(facts.t) - Date.parse(o.entryTime)) / 60000 : null;
   if (plan.maxBars && held !== null && held >= plan.maxBars * plan.minutes) return judged(`past the time stop (${plan.maxBars} bars)`);
-  if (o.mfeR >= 1 && o.r <= o.mfeR / 2) return judged(`gave back most of a ${o.mfeR}R best`);
+  if (o.mfeR >= GIVE_BACK.giveBackMinMfeR && o.r <= o.mfeR * GIVE_BACK.giveBackShare) return judged(`gave back most of a ${o.mfeR}R best`);
   const reach = plan.trailActivateR ?? plan.targetR ?? plan.ownTargetR;
   if (reach === null || reach === undefined) return judged('the plan has no R exit to compare');
   if (o.mfeR >= reach) return judged(`the plan's ${reach}R was reached: managing it is judgment`);

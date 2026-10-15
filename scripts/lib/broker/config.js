@@ -240,7 +240,7 @@ const pruneWarned = new Set();
  * - a day file that can't be read is never deleted.
  * The removed paths.
  */
-function pruneReplayCaches(name, env = process.env, { keepDays = 30 } = {}) {
+function pruneReplayCaches(name, env = process.env, { keepDays = require('../tunables').runner().broker.cacheKeepDays } = {}) {
   const day = replayDay(env);
   if (!day) return []; // live: never
   const home = harnessHome(env);

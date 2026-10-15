@@ -80,7 +80,7 @@ const DEFAULTS = {
   riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like the original bot's --risk)
   // Backtest-only (a plain run, no account): contracts at most. Never used for an account, whose limit is its own
   // (ACCOUNT.md max_contracts, through combine.contractPlan).
-  maxContracts: 5,
+  maxContracts: require('../tunables').replay().backtest.maxContracts, // config/replay.json backtest
   // Per market fill (entries and stops), in ticks: the floor a prop size counts for its stop (combine.js
   // MIN_STOP_SLIPPAGE_TICKS; a policy's rulebook may state more, never less).
   slippageTicks: combine.MIN_STOP_SLIPPAGE_TICKS,
@@ -95,13 +95,13 @@ const DEFAULTS = {
   gate: true,
   // Backtest-only (a plain run, no account): $ realized loss that ends the trading day (0 = off). Never used for an
   // account, whose daily limits are its own: ACCOUNT.md daily_loss_limit and RULEBOOK.md daily_loss_soft (combine.js).
-  maxDailyLoss: 500,
+  maxDailyLoss: require('../tunables').replay().backtest.maxDailyLoss,
   sessions: [...SESSION_DEFAULTS.sessions],
   eodAt: SESSION_DEFAULTS.eodAt,
   earlyCloseDates: [], // trading days (YYYY-MM-DD they end on) closing at 13:00 ET: end of day at earlyCloseEodAt
   earlyCloseEodAt: SESSION_DEFAULTS.earlyCloseEodAt,
   closedDates: [], // holidays: no trading at all
-  window: 500,
+  window: require('../trading/evaluator').DEFAULT_WINDOW, // config/analysis.json evaluator.windowBars
   account: null, // an account profile: run as a prop challenge (combine.js)
   // An account run's sizing: a policy's rulebook entry, every key (combine.SIZING_KEYS); else the policy strategy's
   // own (prop.strategy.sizing, which the strategy loader takes from the rulebook). None is refused.

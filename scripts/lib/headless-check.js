@@ -27,6 +27,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const TUN = require('./tunables').runner(); // config/runner.json: the probe's timeout and output cap
 const { spawnSync } = require('child_process');
 const { validateConfig, buildCommand, childEnv, resolveDataDir, DEFAULTS, isReplay } = require('./autotrader');
 const { qwenWorkspaceSettings } = require('./install');
@@ -192,7 +193,7 @@ function qwenAllowlist(cfg, root, env = process.env) {
   return { file, content };
 }
 
-function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = 10 * 60000, spawn = spawnSync, writeAllowlist = false, writeFile = null, saveFile = null, now = () => new Date() }) {
+function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = TUN.runner.probeTimeoutMs, spawn = spawnSync, writeAllowlist = false, writeFile = null, saveFile = null, now = () => new Date() }) {
   const { argv, cwd, env: runEnv } = probeCommand(harness, root, env, { bin, config });
   if (harness === 'qwen') {
     // The workspace allowlist is one of the runner's watched files: changing it switches a running
@@ -206,7 +207,7 @@ function runProbe({ harness, root, env = process.env, bin = null, config = {}, t
       (writeFile || ((f, c) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, c); }))(file, content);
     }
   }
-  const r = spawn(argv[0], argv.slice(1), { cwd, env: runEnv, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+  const r = spawn(argv[0], argv.slice(1), { cwd, env: runEnv, encoding: 'utf8', timeout: timeoutMs, maxBuffer: TUN.limits.probeOutputBytes });
   if (r.error && r.error.code === 'ENOENT') return { harness, status: null, error: `${argv[0]} is not installed (not on PATH)`, analysis: null };
   const transcript = keepTranscript(harness, r, env, saveFile, now);
   if (r.error) return { harness, status: null, error: r.error.message, analysis: null, transcript };

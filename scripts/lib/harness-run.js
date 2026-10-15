@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const RUN = require('./tunables').runner().runner; // config/runner.json: the kill grace after a run
 const { spawn } = require('child_process');
 
 function readJson(file, fallback) {
@@ -78,7 +79,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       timedOut = true;
       output += `\n[autotrader] timeout after ${timeoutMs / 60000} min; killing run\n`;
       killGroup('SIGTERM');
-      setTimeout(() => killGroup('SIGKILL'), 10000).unref();
+      setTimeout(() => killGroup('SIGKILL'), RUN.killGraceMs).unref();
     }, timeoutMs);
     child.on('error', err => {
       clearTimeout(timer);
@@ -92,7 +93,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       // Anything the harness left running in its group (a background shell, a
       // sub-agent) must not keep acting after the cycle: end the group too.
       killGroup('SIGTERM');
-      setTimeout(() => killGroup('SIGKILL'), 2000).unref();
+      setTimeout(() => killGroup('SIGKILL'), RUN.exitKillGraceMs).unref();
       // Give the pipes a moment to drain, then stop waiting on them.
       setTimeout(() => {
         child.stdout.destroy();

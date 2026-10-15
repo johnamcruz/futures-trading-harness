@@ -295,6 +295,38 @@
   "fieldStudy.seed": {
    "value": 1,
    "from": "field-study.js study seed default (and field-confluence.js)"
+  },
+  "skillCaps.skillBytes": {
+   "value": 3400,
+   "from": "skill-caps.js SKILL_BYTES"
+  },
+  "skillCaps.setupSkillBytes": {
+   "value": 4000,
+   "from": "skill-caps.js SETUP_SKILL_BYTES"
+  },
+  "compose.maxExpects": {
+   "value": 300,
+   "from": "train/compose.js MAX_EXPECTS"
+  },
+  "compose.maxWhy": {
+   "value": 1000,
+   "from": "train/compose.js MAX_WHY"
+  },
+  "lessons.maxLines": {
+   "value": 8,
+   "from": "train/lessons.js MAX_LINES"
+  },
+  "lessons.maxChars": {
+   "value": 1200,
+   "from": "train/lessons.js MAX_CHARS"
+  },
+  "probeEdit.maxLine": {
+   "value": 120,
+   "from": "train/probe-edit.js MAX_LINE"
+  },
+  "skillUsage.top": {
+   "value": 3,
+   "from": "learning/skill-usage.js TOP"
   }
  },
  "replay": {
@@ -483,6 +515,46 @@
   "labels.pairMs": {
    "value": 1000,
    "from": "replay/labels.js PAIR_MS"
+  },
+  "backtest.maxContracts": {
+   "value": 5,
+   "from": "backtest/engine.js DEFAULTS.maxContracts"
+  },
+  "backtest.maxDailyLoss": {
+   "value": 500,
+   "from": "backtest/engine.js DEFAULTS.maxDailyLoss"
+  },
+  "backtest.warmupBars": {
+   "value": 2000,
+   "from": "backtest/run.js WARMUP_BARS"
+  },
+  "backtest.auditJumpAtr": {
+   "value": 8,
+   "from": "backtest/data.js auditBars jumpAtr default"
+  },
+  "backtest.auditTop": {
+   "value": 5,
+   "from": "backtest/data.js auditBars top default"
+  },
+  "backtest.walkForward.trainMonths": {
+   "value": 6,
+   "from": "backtest/walk-forward.js runWalkForward trainMonths default"
+  },
+  "backtest.walkForward.testMonths": {
+   "value": 1,
+   "from": "backtest/walk-forward.js runWalkForward testMonths default"
+  },
+  "backtest.walkForward.minTrades": {
+   "value": 20,
+   "from": "backtest/walk-forward.js runWalkForward minTrades default"
+  },
+  "scorecard.giveBackMinMfeR": {
+   "value": 1,
+   "from": "replay/scorecard.js earlyClose give-back: best at least x R"
+  },
+  "scorecard.giveBackShare": {
+   "value": 0.5,
+   "from": "replay/scorecard.js earlyClose give-back: closed at most mfeR / 2"
   }
  },
  "runner": {
@@ -925,6 +997,62 @@
   "monteCarlo.max": {
    "value": 20000,
    "from": "prop/mc-size.js MC_MAX"
+  },
+  "gate.factsMinChecked": {
+   "value": 2,
+   "from": "trading/fact-claims.js MIN_CHECKED"
+  },
+  "gate.factsMaxItems": {
+   "value": 20,
+   "from": "trading/fact-claims.js MAX_ITEMS"
+  },
+  "runner.calendarWarnDays": {
+   "value": 30,
+   "from": "trading/exchange-calendar.js WARN_DAYS"
+  },
+  "runner.killGraceMs": {
+   "value": 10000,
+   "from": "harness-run.js SIGKILL after a timed-out run's SIGTERM"
+  },
+  "runner.exitKillGraceMs": {
+   "value": 2000,
+   "from": "harness-run.js SIGKILL after an exited run's group SIGTERM"
+  },
+  "runner.probeTimeoutMs": {
+   "value": 600000,
+   "from": "headless-check.js runProbe timeoutMs default (10 * 60000)"
+  },
+  "runner.preflightSampleBars": {
+   "value": 20,
+   "from": "preflight.js SAMPLE_BARS"
+  },
+  "prompt.valuesPerStrategy": {
+   "value": 6,
+   "from": "trading/rules.js VALUES_PER_STRATEGY"
+  },
+  "prompt.brokerFieldsKept": {
+   "value": 3,
+   "from": "trading/broker-fields.js LAST"
+  },
+  "prompt.brokerFieldsBytes": {
+   "value": 600,
+   "from": "trading/broker-fields.js MAX_BYTES"
+  },
+  "prompt.brokerFieldChars": {
+   "value": 250,
+   "from": "trading/broker-fields.js TEXT_MAX"
+  },
+  "limits.probeOutputBytes": {
+   "value": 67108864,
+   "from": "headless-check.js runProbe maxBuffer (64 * 1024 * 1024)"
+  },
+  "broker.cacheKeepDays": {
+   "value": 30,
+   "from": "broker/config.js pruneReplayCaches keepDays default"
+  },
+  "broker.siblingDays": {
+   "value": 30,
+   "from": "broker/translator.js SIBLING_DAYS"
   }
  },
  "analysis": {
@@ -1227,6 +1355,10 @@
     60
    ],
    "from": "trading/briefing.js CISD_FRAMES"
+  },
+  "evaluator.windowBars": {
+   "value": 500,
+   "from": "trading/evaluator.js DEFAULT_WINDOW (and backtest/engine.js DEFAULTS.window); backtest/engine.js DEFAULTS.window"
   }
  }
 }

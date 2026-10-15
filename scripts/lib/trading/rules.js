@@ -718,7 +718,7 @@ function fieldValues(c, bars, i) {
 }
 
 // What the model is shown of a strategy's field values on a bar: at most this many (the rest counted).
-const VALUES_PER_STRATEGY = 6;
+const VALUES_PER_STRATEGY = require('../tunables').runner().prompt.valuesPerStrategy; // config/runner.json prompt
 
 /** A value as the scan shows it: 4 significant digits, 'missing' when it has none. */
 const valueText = v => (Number.isFinite(v) ? String(Number(v.toPrecision(4))) : 'missing');

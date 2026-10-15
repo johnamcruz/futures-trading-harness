@@ -21,6 +21,7 @@
 const { runEngine, prepare } = require('./engine');
 const { stats } = require('./report');
 const { PARAMS } = require('../trading/market-snapshot');
+const WF = require('../tunables').replay().backtest.walkForward; // config/replay.json
 
 const EXIT_KEYS = ['trail_activate_r', 'trail_giveback_r', 'target_r', 'max_bars'];
 const round = (x, d = 3) => (x === null || !Number.isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d);
@@ -77,7 +78,7 @@ function folds(from, to, trainMonths, testMonths) {
  * @param strategy one rules strategy
  * @param opts { grid, trainMonths, testMonths, minTrades, from, to (ms), engine (runEngine options) }
  */
-function runWalkForward(markets, strategy, { grid, trainMonths = 6, testMonths = 1, minTrades = 20, from, to, engine = {} }) {
+function runWalkForward(markets, strategy, { grid, trainMonths = WF.trainMonths, testMonths = WF.testMonths, minTrades = WF.minTrades, from, to, engine = {} }) {
   const errors = gridErrors(grid, strategy);
   if (!(Number.isInteger(trainMonths) && trainMonths >= 1)) errors.push('trainMonths: whole months, 1 or more');
   if (!(Number.isInteger(testMonths) && testMonths >= 1)) errors.push('testMonths: whole months, 1 or more');

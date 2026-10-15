@@ -29,7 +29,7 @@ const { parseFrontmatter } = require('../frontmatter');
 const { skillByteCap } = require('../skill-caps');
 
 const KINDS = Object.freeze(['rewording', 'example', 'rule', 'removal']);
-const MAX_LINE = 120;
+const MAX_LINE = require('../tunables').training().probeEdit.maxLine; // config/training.json
 // A count or a share in words is a number too ("wait three bars", "half the range"). "one" is left out: it is mostly
 // a pronoun ("the one that", "no one"), and a lone "one" adds no threshold the text did not have.
 const NUMBER_WORDS = Object.freeze(['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',

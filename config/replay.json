@@ -41,5 +41,14 @@
     "stopAtrRange": [0.375, 4.5],
     "sizeSteps": [0.25, 0.5, 0.75, 1],
     "pairMs": 1000
-  }
+  },
+  "backtest": {
+    "maxContracts": 5,
+    "maxDailyLoss": 500,
+    "warmupBars": 2000,
+    "auditJumpAtr": 8,
+    "auditTop": 5,
+    "walkForward": { "trainMonths": 6, "testMonths": 1, "minTrades": 20 }
+  },
+  "scorecard": { "giveBackMinMfeR": 1, "giveBackShare": 0.5 }
 }

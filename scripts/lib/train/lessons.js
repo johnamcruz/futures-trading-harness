@@ -33,8 +33,8 @@ const { VERDICTS } = require('./screen');
 const { KINDS } = require('./probe-edit');
 
 const FILE = 'lessons.jsonl';
-const MAX_LINES = 8;
-const MAX_CHARS = 1200;
+const MAX_LINES = require('../tunables').training().lessons.maxLines; // config/training.json lessons
+const MAX_CHARS = require('../tunables').training().lessons.maxChars;
 
 function practiceOnly(windows) {
   if (!Array.isArray(windows) || !windows.length) return false;

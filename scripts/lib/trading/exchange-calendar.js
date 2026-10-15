@@ -49,7 +49,7 @@ const EARLY_CLOSE = [
 
 /** The last trading day the table covers. */
 const COVERED_UNTIL = '2027-12-31';
-const WARN_DAYS = 30;
+const WARN_DAYS = require('../tunables').runner().runner.calendarWarnDays; // config/runner.json
 
 const { tradingDayKey } = require('./clock');
 

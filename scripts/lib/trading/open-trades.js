@@ -38,7 +38,7 @@ function entryOrder(entries, position) {
  * initialStop, risk, stop, target, last, rNow, mfeR, maeR, barsHeld, notes }].
  * `barsFor(position)`: the closed bars of its contract ({ t, o, h, l, c }), or null.
  */
-function openTrades({ positions = [], orders = [], entries = [], barsFor = () => null, stepMs = 180000 }) {
+function openTrades({ positions = [], orders = [], entries = [], barsFor = () => null, stepMs = require('../tunables').runner().bars.timeframe * 60000 }) {
   return positions.filter(p => Number(p.size) > 0 && (p.type === 1 || p.type === 2)).map(p => {
     const sign = p.type === 1 ? 1 : -1;
     const entry = Number(p.averagePrice);

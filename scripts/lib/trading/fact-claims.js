@@ -68,10 +68,10 @@ const VALUES = {
   value: ['inside', 'above', 'below'], room: ['enough', 'short'],
 };
 const TF = { '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] };
-const MAX_ITEMS = 20;
+const MAX_ITEMS = require('../tunables').runner().gate.factsMaxItems; // config/runner.json gate (only falls)
 const UNKNOWN = 'unknown';
 // The checkable claims an approval states when the briefing is current (owner's decision, 2026-10-13).
-const MIN_CHECKED = 2;
+const MIN_CHECKED = require('../tunables').runner().gate.factsMinChecked; // config/runner.json gate (only rises)
 const FORMS = 'window <name>, entries allowed|none, news clear|blackout, trend <long|short> allowed|blocked, read <long|short> <aligned|mixed|pullback|counter>, 15m|1h|4h <up|down|range>, vwap above|below|at, value inside|above|below, room <long|short> enough|short';
 
 // The FACTS line, sound by construction: exactly one canonical line whose first token, after optional whitespace,

@@ -20,7 +20,9 @@
     "maxCorrelatedPositions": 1,
     "noEntryWindows": ["09:30-09:35@America/New_York", "15:45-16:00@America/New_York"],
     "bracketToleranceTicks": 1,
-    "bracketSpanToleranceTicks": 2
+    "bracketSpanToleranceTicks": 2,
+    "factsMinChecked": 2,
+    "factsMaxItems": 20
   },
   "lifecycle": { "stopBufferTicks": 1, "floorTicks": 8, "floorAtr": 0.25, "maxSize": 100 },
   "account": {
@@ -70,7 +72,12 @@
     "composedWatchMs": 5000,
     "wakeEarlyMs": 5000,
     "minManagedRiskTicks": 4,
-    "runnerCloseToleranceMs": 60000
+    "runnerCloseToleranceMs": 60000,
+    "calendarWarnDays": 30,
+    "killGraceMs": 10000,
+    "exitKillGraceMs": 2000,
+    "probeTimeoutMs": 600000,
+    "preflightSampleBars": 20
   },
   "prompt": {
     "recentDecisions": 10,
@@ -87,7 +94,11 @@
     "trackRecordMinSlice": 10,
     "trackRecordLiveSlice": 5,
     "instinctsMinSetupTrades": 3,
-    "instinctsRecentReviews": 30
+    "instinctsRecentReviews": 30,
+    "valuesPerStrategy": 6,
+    "brokerFieldsKept": 3,
+    "brokerFieldsBytes": 600,
+    "brokerFieldChars": 250
   },
   "session": {
     "fillsTimeoutMs": 10000,
@@ -116,7 +127,9 @@
     "headPromptConfigBytes": 4194304,
     "historyChunkBars": 10000,
     "entryOrdersKept": 200,
-    "pendingKept": 200
+    "pendingKept": 200,
+    "probeOutputBytes": 67108864
   },
+  "broker": { "cacheKeepDays": 30, "siblingDays": 30 },
   "monteCarlo": { "paths": 2000, "reps": 2000, "max": 20000 }
 }

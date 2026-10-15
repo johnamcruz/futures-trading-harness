@@ -10,15 +10,18 @@
  *
  *   training   the learning loop's statistics: the stage-1 exit test, the experience index, the risk record, the keep
  *              rule, the paired decision rule, the probe screen, the probe and loop settings' ranges, the A/B
- *              comparison, the proposal limits, the learning report and the field studies
+ *              comparison, the proposal, compose, lesson and probe-edit limits, the skills' byte caps, the learning
+ *              report and the field studies
  *   replay     the replay's training presets and draws: latency, the stage presets, the curated lists and moments, the
- *              setup moments, the account-state draw, the driver's retries and the decision labels
+ *              setup moments, the account-state draw, the driver's retries, the decision labels, the scorecard's
+ *              give-back rule and the backtester's plain-run defaults
  *   runner     the live runner and the order gate: the gate's limits and timing, the trade lifecycle's stop floor and
  *              size cap, the account snapshot, the replay clock, cycles, bars, the prompt's sizes, the live session,
  *              alerts, read-size caps and page sizes, and the Monte Carlo's size (prop/mc-size.js)
  *   analysis   the reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the
  *              multi-timeframe read, day context, structure, momentum, fair value gaps and the briefing's frames. A
- *              strategy's `params` still override them (market-snapshot.js PARAMS is the defaults a strategy overrides)
+ *              strategy's `params` still override them (market-snapshot.js PARAMS is the defaults a strategy overrides),
+ *              and the rules evaluator's window
  *
  * Fail closed: a missing, unreadable or refused file throws, on every call, naming the file (never a default), so a
  * module that reads one at load refuses to load, and the gate, the runner or the run that needs it refuses to start.
@@ -65,6 +68,11 @@ const TRAINING = {
   learningReport: { rollingDays: int(1), collapseShare: frac(), minCollapse: int(1) },
   looks: { maxArms: int(1) },
   fieldStudy: { quantiles: list(frac(), { min: 1 }), confluenceLevels: list(frac(), { min: 1 }), minEvents: int(1), minDays: int(1), costTicks: nonneg(), reps: int(1), seed: int() },
+  skillCaps: { skillBytes: int(1), setupSkillBytes: int(1) },
+  compose: { maxExpects: int(1), maxWhy: int(1) },
+  lessons: { maxLines: int(1), maxChars: int(1) },
+  probeEdit: { maxLine: int(1) },
+  skillUsage: { top: int(1) },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
@@ -82,6 +90,11 @@ const REPLAY = {
   accountStates: { seed: int(), count: int(1), meanBlock: int(1), perBucket: int(1), oversample: record(pos()), cutoffs: { nearMll: frac(), nearTarget: frac() } },
   driver: { eodRetries: int(1) },
   labels: { stopAtrMultiples: list(pos(), { min: 1 }), stopAtrRange: list(pos(), { min: 2, max: 2 }), sizeSteps: list(pos(1), { min: 1 }), pairMs: ms() },
+  backtest: {
+    maxContracts: int(1), maxDailyLoss: nonneg(), warmupBars: int(0), auditJumpAtr: pos(), auditTop: int(1),
+    walkForward: { trainMonths: int(1), testMonths: int(1), minTrades: int(1) },
+  },
+  scorecard: { giveBackMinMfeR: nonneg(), giveBackShare: frac() },
 };
 
 const RUNNER = {
@@ -91,6 +104,7 @@ const RUNNER = {
     planMaxAgeMin: int(1), maxConsecutiveLosses: int(1), lossCooldownMin: int(0), maxDailyLosses: int(1), maxEntriesPerDay: int(0),
     mtfMaxAgeMin: int(1), signalMaxAgeBars: int(1), signalMaxAgeCeilingMin: int(1), futureToleranceMin: nonneg(), minConfluence: int(1),
     maxCorrelatedPositions: int(1), noEntryWindows: list(str()), bracketToleranceTicks: nonneg(), bracketSpanToleranceTicks: nonneg(),
+    factsMinChecked: int(0), factsMaxItems: int(1),
   },
   lifecycle: { stopBufferTicks: int(0), floorTicks: int(1), floorAtr: nonneg(), maxSize: int(1) },
   account: { snapshotMaxAgeMs: int(1), balanceToleranceUsd: nonneg(), snapshotFutureToleranceMs: ms(), verdictsKept: int(1) },
@@ -103,12 +117,13 @@ const RUNNER = {
   runner: {
     idleMs: int(1), resyncsBeforeReroll: int(1), lookupRetryMs: ms(), maxRetryMs: int(1), closeSettleMs: ms(), fillGraceMs: ms(), accountReadMs: int(1),
     closeRetryMs: ms(), closeTries: int(1), premarketRetryMs: list(int(1), { min: 1 }), composedWatchMs: ms(), wakeEarlyMs: ms(), minManagedRiskTicks: nonneg(),
-    runnerCloseToleranceMs: ms(),
+    runnerCloseToleranceMs: ms(), calendarWarnDays: int(0), killGraceMs: ms(), exitKillGraceMs: ms(), probeTimeoutMs: int(1), preflightSampleBars: int(1),
   },
   prompt: {
     recentDecisions: int(1), historyPerLane: int(1), slowerContext: int(0), planChars: int(1), reasonChars: int(1), exitsKept: int(1), unseenReads: int(0),
     sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), phase1MaxAgeMs: ms(), trackRecordMinSlice: int(1),
-    trackRecordLiveSlice: int(1), instinctsMinSetupTrades: int(1), instinctsRecentReviews: int(1),
+    trackRecordLiveSlice: int(1), instinctsMinSetupTrades: int(1), instinctsRecentReviews: int(1), valuesPerStrategy: int(1), brokerFieldsKept: int(1),
+    brokerFieldsBytes: int(1), brokerFieldChars: int(1),
   },
   session: {
     fillsTimeoutMs: int(1), retryTimeoutMs: int(1), retryMs: int(1), retryAlertAfter: int(1), backoffMs: int(1), recentSessions: int(1), archiveDays: int(1),
@@ -118,7 +133,9 @@ const RUNNER = {
   limits: {
     gateTailBytes: int(1), rolesRanBytes: int(1), skillsLoadedBytes: int(1), skillLookupsBytes: int(1), experienceLookupsBytes: int(1), journalTailBytes: int(1),
     lifecycleBytes: int(1), skillUsageBytes: int(1), barsFileBytes: int(1), headPromptConfigBytes: int(1), historyChunkBars: int(1), entryOrdersKept: int(1), pendingKept: int(1),
+    probeOutputBytes: int(1),
   },
+  broker: { cacheKeepDays: int(1), siblingDays: int(0) },
   monteCarlo: { paths: int(0), reps: int(0), max: int(1) },
 };
 
@@ -142,6 +159,7 @@ const ANALYSIS = {
   composedReads: { volumeHigh: pos(), absorptionProgressAtr: nonneg() },
   fvg: { frames: list(int(1), { min: 1 }), window: int(1), max: int(1) },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
+  evaluator: { windowBars: int(1) },
 };
 
 const spec = (name, shape, tightenOnly) => Object.freeze({ name, validate: v => shapeErrors(shape, v), tightenOnly: Object.freeze(tightenOnly) });
@@ -158,6 +176,7 @@ const SPECS = Object.freeze({
     'loop.limits.maxIterations.max': 'down', 'loop.limits.maxModelCalls.max': 'down', 'loop.limits.maxWallMinutes.max': 'down',
     'proposal.maxEdits': 'down', 'proposal.maxText': 'down', 'proposal.maxChanged': 'down',
     'looks.maxArms': 'down',
+    'skillCaps.skillBytes': 'down', 'skillCaps.setupSkillBytes': 'down',
   }),
   replay: spec('replay', REPLAY, {
     stages: 'exact',
@@ -168,6 +187,7 @@ const SPECS = Object.freeze({
     'gate.planMaxAgeMin': 'down', 'gate.maxConsecutiveLosses': 'down', 'gate.lossCooldownMin': 'up', 'gate.maxDailyLosses': 'down', 'gate.maxEntriesPerDay': 'exact',
     'gate.mtfMaxAgeMin': 'down', 'gate.signalMaxAgeBars': 'down', 'gate.signalMaxAgeCeilingMin': 'down', 'gate.futureToleranceMin': 'down', 'gate.minConfluence': 'up',
     'gate.maxCorrelatedPositions': 'down', 'gate.noEntryWindows': 'exact', 'gate.bracketToleranceTicks': 'down', 'gate.bracketSpanToleranceTicks': 'down',
+    'gate.factsMinChecked': 'up', 'gate.factsMaxItems': 'down',
     'lifecycle.stopBufferTicks': 'exact', 'lifecycle.floorTicks': 'up', 'lifecycle.floorAtr': 'up', 'lifecycle.maxSize': 'down',
     'account.snapshotMaxAgeMs': 'down', 'account.balanceToleranceUsd': 'down', 'account.snapshotFutureToleranceMs': 'down',
     'clock.serverTimeToleranceMs': 'down', 'clock.wallStartMaxAgeMs': 'down', 'clock.wallStartAheadMs': 'down',
