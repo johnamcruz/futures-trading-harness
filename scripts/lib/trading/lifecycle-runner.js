@@ -27,7 +27,8 @@
  *   liveComposed({ entries, roots, since })   a composed entry on the roots that may still be working in a cycle
  *   recordSummary(record)             a record as the decision history and the cycle log keep it: id, side, ok, the
  *                                     signatures, the stated size, the stop and target, each read with its check
- *   cycleComposed(home, cycleId, symbols)   the records the cycle's compose_check calls wrote (their cycleId)
+ *   cycleComposed(home, cycleId, symbols, at)   the records the cycle's compose_check calls wrote (their cycleId); `at`
+ *                                     (the cycle's time): only the day shards near it (trade-lifecycle.js daysNear)
  *
  * The runner cancels a due order (runner.js housekeeping): the broker interface has no time in force, so an unfilled
  * composed limit never outlives its record.
@@ -36,7 +37,7 @@
 const path = require('path');
 const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
-const { readRecords } = require('./trade-lifecycle');
+const { readRecords, daysNear } = require('./trade-lifecycle');
 const { isOpen, signedSize } = require('./positions');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -172,10 +173,11 @@ function recordSummary(r) {
   };
 }
 
-function cycleComposed(home, cycleId, symbols = []) {
+function cycleComposed(home, cycleId, symbols = [], at = null) {
   if (!cycleId) return [];
   const roots = [...new Set((symbols || []).map(s => familyRoot(String(s).toUpperCase())))];
-  return roots.flatMap(root => readRecords(home, root).filter(r => r.cycleId === cycleId)).map(recordSummary);
+  const days = at === null ? null : daysNear(at);
+  return roots.flatMap(root => readRecords(home, root, { days }).filter(r => r.cycleId === cycleId)).map(recordSummary);
 }
 
 module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, pendingKey, writePendingStamp, pendingStamp, takePendingStamp, clearPendingStamp, entryStamp, dueComposed, unrecordedEntries, liveComposed, recordSummary, cycleComposed };

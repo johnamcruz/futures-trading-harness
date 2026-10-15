@@ -22,11 +22,12 @@ test('validatePractice: defaults filled, every field checked, unknown keys refus
   }
 });
 
-test('reactionsOf: fixed key levels and gap edges by default; moving, previous-candle and sweeps only with levels wide', () => {
+test('reactionsOf: fixed key levels, the VWAP and gap edges by default; the developing profile, previous-candle and sweeps only with levels wide', () => {
   const c = candle({
     relations: [
       { name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' },
       { name: 'VWAP (session)', price: 99, rel: 'broke', dir: 'up' },
+      { name: 'session POC', price: 98, rel: 'rejected', dir: 'up' },
       { name: 'previous 15m high', price: 101, rel: 'rejected', dir: 'down' },
       { name: 'previous 15m low', price: 95, rel: 'broke', dir: 'down' },
       { name: 'overnight low', price: 94, rel: 'touched', dir: null },
@@ -35,9 +36,11 @@ test('reactionsOf: fixed key levels and gap edges by default; moving, previous-c
     fvgRelations: [{ name: '15m fvg low', price: 97, side: 'bull', rel: 'broke', dir: 'down' }],
     sweep: { of: 'previous 15m high', closedBack: true, closedBeyond: null },
   });
-  assert.deepStrictEqual(M.reactionsOf(c).map(r => `${r.kind}:${r.name}:${r.rel}`), ['level:prior VAH:rejected', 'fvg:15m fvg low:broke']);
-  assert.deepStrictEqual(M.reactionsOf(c, { levels: 'wide' }).map(r => `${r.kind}:${r.name}:${r.rel}`), ['level:prior VAH:rejected', 'level:VWAP (session):broke', 'previous:previous 15m high:rejected', 'fvg:15m fvg low:broke', 'sweep:previous 15m high:swept']);
-  assert.deepStrictEqual(M.reactionsOf(c, { reactions: ['broke'] }).map(r => r.name), ['15m fvg low']);
+  // The VWAP is a key level (the owner's); the developing session profile is not.
+  assert.deepStrictEqual(M.reactionsOf(c).map(r => `${r.kind}:${r.name}:${r.rel}`), ['level:prior VAH:rejected', 'level:VWAP (session):broke', 'fvg:15m fvg low:broke']);
+  assert.deepStrictEqual(M.reactionsOf(candle({ relations: [{ name: 'VWAP (rth)', price: 99, rel: 'rejected', dir: 'down' }] })).map(r => r.name), ['VWAP (rth)']);
+  assert.deepStrictEqual(M.reactionsOf(c, { levels: 'wide' }).map(r => `${r.kind}:${r.name}:${r.rel}`), ['level:prior VAH:rejected', 'level:VWAP (session):broke', 'level:session POC:rejected', 'previous:previous 15m high:rejected', 'fvg:15m fvg low:broke', 'sweep:previous 15m high:swept']);
+  assert.deepStrictEqual(M.reactionsOf(c, { reactions: ['broke'] }).map(r => r.name), ['VWAP (session)', '15m fvg low']);
   assert.strictEqual(M.reactionsOf(c, { levels: 'wide' }).at(-1).dir, 'down', 'a swept high closed back: down');
   assert.deepStrictEqual(M.reactionsOf(null), []);
 });
@@ -80,7 +83,7 @@ test('selectBar: management first, then a moment, an unreadable setup candle run
   const skip = M.selectBar({ ...base, candles: flat });
   assert.deepStrictEqual([skip.run, skip.why], [false, 'none']);
   assert.strictEqual(M.selectBar({ ...base, practice: { ...practice, quietSample: 1 }, candles: flat }).why, 'quiet');
-  assert.match(M.practiceLine(practice), /setup-focused practice: cycles only at 15m candles that rejected or broke a fixed key level/);
+  assert.match(M.practiceLine(practice), /setup-focused practice: cycles only at 15m candles that rejected or broke a fixed key level or the VWAP, and/);
 });
 
 // The fixture bars (tests/fixtures/parity NQ 3m), briefed bar by bar as the runner briefs them.

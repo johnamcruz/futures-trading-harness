@@ -302,3 +302,65 @@ test('correlated exposure: a second same-direction equity-index position is refu
   // Exits are never held by it.
   assert.deepStrictEqual(checks(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] done' }), positions: [...long1, ...mesLong], now: NOW, config })), []);
 });
+
+// accountFacts against a server whose search_trades fails: `trades` rejects (a broker error, a rate limit, the gateway's
+// call timeout), hangs (a lost reply, before that timeout), or answers null.
+const json = v => ({ content: [{ type: 'text', text: JSON.stringify(v) }] });
+const tradesFault = (fault, positions = long1) => {
+  const asked = [];
+  const caller = {
+    call(name) {
+      asked.push(name);
+      if (name === 'list_open_positions') return Promise.resolve(json(positions));
+      if (name === 'list_open_orders') return Promise.resolve(json([]));
+      if (fault === 'reject') return Promise.reject(new Error('search_trades failed: rate limited'));
+      if (fault === 'timeout') return Promise.reject(new Error('search_trades timed out'));
+      if (fault === 'hang') return new Promise(() => {});
+      return Promise.resolve(json(fault === 'null' ? null : []));
+    },
+  };
+  return { caller, asked };
+};
+const within = (p, ms = 500) => Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('accountFacts waited on a read it never uses')), ms))]);
+
+test('accountFacts: an [exit] or [protect] never asks for the fills, so a rejected, timed-out, lost or null search_trades never holds it; an entry still fails closed', async () => {
+  const { accountFacts } = require('../../scripts/lib/trading/account-gate');
+  const exit = order({ side: 'sell', rationale: '[exit] flatten' });
+  const protect = order({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' });
+  for (const fault of ['reject', 'timeout', 'hang', 'null']) {
+    for (const input of [exit, protect]) {
+      const { caller, asked } = tradesFault(fault);
+      const facts = await within(accountFacts({ ...input }, caller));
+      assert.ok(!asked.includes('search_trades'), `${fault}: ${input.rationale} asked for the fills`);
+      assert.strictEqual(facts.trades, null);
+      assert.deepStrictEqual(rawEvaluate({ input, ...facts, config, now: NOW }), [], `${fault}: ${input.rationale} goes`);
+      // Said explicitly too (the gateway passes it).
+      const again = tradesFault(fault);
+      await within(accountFacts({ ...input }, again.caller, false));
+      assert.ok(!again.asked.includes('search_trades'));
+    }
+  }
+  // An entry still reads the fills, and a fault there refuses it.
+  for (const fault of ['reject', 'timeout']) {
+    await assert.rejects(accountFacts(order(), tradesFault(fault, []).caller), /search_trades/, fault);
+    await assert.rejects(accountFacts(order(), tradesFault(fault, []).caller, true), /search_trades/, fault);
+  }
+  const nullFills = await accountFacts(order(), tradesFault('null', []).caller);
+  assert.throws(() => rawEvaluate({ input: order(), ...nullFills, config, now: NOW }), /trades from the server is not a list/);
+  // An entry's facts never come without the fills: read as an exit's (trades null), they are refused, never read as no losses.
+  const exitFacts = await accountFacts(order(), tradesFault('reject', []).caller, false);
+  assert.throws(() => rawEvaluate({ input: order(), ...exitFacts, config, now: NOW }), /trades from the server is not a list/);
+});
+
+test('evaluateAccount: a risk-reducing order is judged without the fills (null or malformed); positions and orders still must be lists', () => {
+  const protect = order({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' });
+  const exit = order({ side: 'sell', rationale: '[exit] flatten' });
+  for (const trades of [null, undefined, 'nope', {}]) {
+    assert.deepStrictEqual(rawEvaluate({ input: protect, positions: long1, orders: [], trades, config, now: NOW }), []);
+    assert.deepStrictEqual(rawEvaluate({ input: exit, positions: long1, orders: [], trades, config, now: NOW }), []);
+    assert.throws(() => rawEvaluate({ input: order(), positions: [], orders: [], trades, config, now: NOW }), /trades from the server is not a list/);
+  }
+  // Still fail closed on what an exit is judged on.
+  assert.throws(() => rawEvaluate({ input: exit, positions: null, orders: [], trades: [], config, now: NOW }), /positions from the server is not a list/);
+  assert.throws(() => rawEvaluate({ input: protect, positions: long1, orders: null, trades: [], config, now: NOW }), /orders from the server is not a list/);
+});

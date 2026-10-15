@@ -69,7 +69,7 @@ async function handleClientLine(line, check, log = () => {}) {
     try {
       result = await check(args, tool, item.id);
     } catch (err) {
-      result = { allowed: false, message: `Blocked by trading harness gateway: the order gate could not run (${err.message}). The order was not sent.`, violations: [{ check: 'gateway-error', message: err.message }] };
+      result = { allowed: false, message: `Blocked by trading harness gateway: the order gate could not run (${err.message}). The order was not sent; close_position still flattens.`, violations: [{ check: 'gateway-error', message: err.message }] };
     }
     log({ source: 'gateway', tool, decision: result.allowed ? 'allowed' : 'blocked', violations: result.violations || [], contractId: args.contractId, side: args.side, size: args.size, type: args.type, rationale: args.rationale });
     if (result.allowed) return { item };

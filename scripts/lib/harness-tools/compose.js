@@ -3,13 +3,14 @@
 /**
  * compose_check (scripts/compose-check.js; the harness tool compose_check): the head trader's trade-lifecycle
  * combination, its reads checked against this cycle's bar briefing (trading/composed-reads.js) and its plan worked out
- * in code (trading/trade-lifecycle.js), appended as one record to <FTH_HOME>/trade-lifecycle/<ROOT>.jsonl. Read-only
+ * in code (trading/trade-lifecycle.js), appended as one record to <FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl. Read-only
  * but for that record; it places nothing and decides nothing (a calculator and a checker). Every call is recorded,
  * refused ones too, so the record covers what was tried.
  *
  * The briefing is the cycle bar's (FTH_CYCLE_BRIEFING_BARS, else FTH_CYCLE_BARS, from the runner): without a cycle bar
  * the call is refused, never checked against whatever briefing is current. The strategy document
- * (strategies/trade_lifecycle) gives risk.min_rr and risk.max_risk_usd; one that is missing or invalid refuses.
+ * (strategies/trade_lifecycle) gives risk.min_rr, risk.max_risk_usd and valid_bars (how many base bars after its bar's
+ * close the record stays valid); one that is missing or invalid refuses.
  *
  *   compose_check { symbol, side, reads: [{ step, skill, read, why }], size }
  */
@@ -58,7 +59,7 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const planned = checked.stop && checked.target
     ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd })
     : null;
-  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env) });
+  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
   // A record that is not OK is an answer, not a failure: the text says what stands.
   return { text: renderRecord(record, checked) };

@@ -545,14 +545,48 @@ test('reaction, then confirmation: an entry read pointing the side must be on a 
   assert.strictEqual(timing(CR.checkReads({ reads: late, side: 'long', briefing: both })).length, 1);
 });
 
+test('reaction, then confirmation for every setup form that names a candle: a CISD read is timed on its confirming candle', () => {
+  const timing = r => r.problems.filter(p => /closed after the setup's|can't be timed/.test(p));
+  // The setup forms: a relation, a pattern and a CISD read name a candle and are timed; an OTE zone and a sweep name
+  // none and point no side as a setup. Every setup kind is one or the other.
+  assert.deepStrictEqual([...CR.SETUP_CANDLE].filter(k => CR.STEP_KINDS[k].includes('setup')).sort(), ['cisd', 'pattern', 'relation']);
+  assert.deepStrictEqual(Object.keys(CR.STEP_KINDS).filter(k => CR.STEP_KINDS[k].includes('setup') && !CR.SETUP_CANDLE.has(k)).sort(), ['ote', 'swept']);
+  // A 15m CISD up is the only setup read; the entry is the 3m candle closing 15:00.
+  const cisd = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m cisd up' } : x));
+  const at = confirmedClose => {
+    const b = scenario1();
+    b.sections.m3.data.cisd['15m'] = { dir: 'bullish', level: 21520, status: 'touched', priceInOte: false, ...(confirmedClose ? { confirmedClose } : {}) };
+    return CR.checkReads({ reads: cisd, side: 'long', briefing: b });
+  };
+  // Its confirming 15m candle closed 14:45: the 3m closing 15:00 is a later candle, it stands.
+  const later = at('2026-04-23T14:45:00.000Z');
+  assert.strictEqual(later.ok, true, CR.renderCheck(later));
+  // Confirmed on the bar the 3m closes (the displacement's own candle, the last 3m inside it): refused.
+  const same = at('2026-04-23T15:00:00.000Z');
+  assert.strictEqual(same.ok, false);
+  assert.match(timing(same)[0], /no entry read pointing long is on a candle that closed after the setup's \(2026-04-23T15:00:00.000Z\)/);
+  // No confirming candle's close in the briefing: refused, never assumed.
+  assert.match(timing(at(null))[0], /can't be timed/);
+  // A 3m CISD whose displacement is the 3m candle the entry reads: the same candle, refused.
+  const b3 = scenario1();
+  b3.sections.m3.data.cisd['3m'] = { dir: 'bullish', level: 21535, confirmedClose: '2026-04-23T15:00:00.000Z', status: 'waiting', priceInOte: false };
+  const own = CR.checkReads({ reads: SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '3m cisd up' } : x)), side: 'long', briefing: b3 });
+  assert.strictEqual(own.reads.find(x => x.read === '3m cisd up').check, true);
+  assert.strictEqual(timing(own).length, 1);
+  // Beside the 15m rejection (14:45), the entry follows the last of them: a CISD confirmed 15:00 refuses it.
+  const both = scenario1();
+  both.sections.m3.data.cisd['15m'] = { dir: 'bullish', level: 21520, confirmedClose: '2026-04-23T15:00:00.000Z', status: 'touched', priceInOte: false };
+  assert.strictEqual(timing(CR.checkReads({ reads: SCENARIO_1.concat({ step: 'setup', skill: 'cisd', read: '15m cisd up' }), side: 'long', briefing: both })).length, 1);
+});
+
 test('the setup needs a reaction: an OTE zone or a false read pointing the side is none; setup hammer and shooting star point', () => {
   const b = scenario1();
-  b.sections.m3.data.cisd['15m'] = { dir: 'bullish', level: 21520, status: 'touched', priceInOte: true };
+  b.sections.m3.data.cisd['15m'] = { dir: 'bullish', level: 21520, confirmedClose: '2026-04-23T14:45:00.000Z', status: 'touched', priceInOte: true };
   const oteOnly = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m in ote' } : x));
   const r = CR.checkReads({ reads: oteOnly, side: 'long', briefing: b });
   assert.deepStrictEqual([r.reads.find(x => x.step === 'setup').check, r.reads.find(x => x.step === 'setup').dir], [true, 'long']);
   assert.ok(r.problems.some(p => /the setup has no read pointing up \(long\)/.test(p)), r.problems.join('; '));
-  // With the CISD itself (a reaction the long's way, untimed) it stands.
+  // With the CISD itself (a reaction the long's way, its confirming 15m candle closed 14:45, before the 3m's 15:00) it stands.
   assert.strictEqual(CR.checkReads({ reads: oteOnly.concat({ step: 'setup', skill: 'cisd', read: '15m cisd up' }), side: 'long', briefing: b }).ok, true);
   // A false read pointing the side counts as none, in the setup and in the entry.
   const falseSetup = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior VAL up' } : x));

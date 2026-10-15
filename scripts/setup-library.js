@@ -6,11 +6,13 @@
  *
  *   node scripts/setup-library.js scan --bars <file> --root MNQ --from YYYY-MM-DD --to YYYY-MM-DD --out <file.jsonl>
  *       [--minutes 3] [--tick 0.25] [--setup-tf 15]
- *       every reaction moment of the bars in [from, to) (practice-train only; 1m bars are aggregated) -> one record a line
+ *       every reaction moment of the bars in [from, to) (practice-train only; 1m bars are aggregated) -> one record a line,
+ *       each limit measured over the trade_lifecycle strategy's valid_bars
  *   node scripts/setup-library.js index <library.jsonl> ... [--out dir] [--seed N]
  *       the walk-forward index of the records -> <out>/library-<hash>.json (default <FTH_HOME>/experience)
- *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy (a replay config's
- *       setupLibrary pins it at the run's start)
+ *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy, hidden from the model (a
+ *       replay config's setupLibrary pins it at the run's start; only its libraryDisplay shows it; a replay run home
+ *       pinned by hand resumes only with the same file named in its config)
  *   node scripts/setup-library.js show <index file> [--top N]    the cells with enough samples, best mean R first
  */
 
@@ -52,7 +54,9 @@ function scan(argv) {
   const tick = numberOpt(argv, '--tick', 0.25);
   const bars = L.baseBars(loadBars(path.resolve(file)), minutes);
   const clock = L.runnerClock({ from, to });
-  const records = L.scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf: clock.eodOf, inSession: clock.inSession });
+  // The limit's window: the shipped trade_lifecycle strategy's valid_bars (the plan the gate allows).
+  const validBars = L.strategyValidBars(path.resolve(__dirname, '..'), process.env);
+  const records = L.scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf: clock.eodOf, inSession: clock.inSession, validBars });
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   fs.writeFileSync(path.resolve(out), records.map(r => JSON.stringify(r)).join('\n') + (records.length ? '\n' : ''));
   const status = {};
