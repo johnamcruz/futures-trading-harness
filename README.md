@@ -548,6 +548,8 @@ node scripts/replay.js report <run home>/replay/<runId>
 node scripts/replay.js scorecard <run home>/replay/<runId>   # adherence: each decision against the priority order
 ```
 
+Training with the replay (the two stages, the training preflight, the exit test): `docs/TRAINING.md`.
+
 With `"prop": "topstep_100k"` in the config, a fresh run starts that combine
 attempt before the first decision, and its broker stops the day at that
 account's own daily loss limit ($2,000 for 100K), as the firm does.

@@ -38,6 +38,11 @@
  *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
+ *   stage          a training preset (replay/stage.js; docs/TRAINING.md): 1 learn to trade, 2 pass prop. It sets
+ *                  defaults and requirements only: an explicit value contradicting it is refused, never overridden;
+ *                  the training preflight (learning/preflight.js) checks the rest; part of both hashes (default: none).
+ *                  An A/B of a skill change is two replays with the same stage, seed and list (practice and
+ *                  curatedList), compared with the paired test (train/paired.js)
  *
  * Isolation: the run home is a fresh harness home (FTH_HOME) of its own, never
  * the default home, the caller's FTH_HOME, or inside the repository; it holds
@@ -73,6 +78,7 @@ const { latencySetting } = require('./latency');
 const { WALL_START } = require('../trading/harness-now');
 const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
 const { decisionPoints } = require('./schedule');
+const { applyStage } = require('./stage');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -147,8 +153,10 @@ function startedPinned(manifestFile) {
 }
 
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
-  const errors = [];
-  const r = raw && typeof raw === 'object' ? raw : {};
+  // A stage preset's defaults under the config's own values; a value contradicting it is refused (replay/stage.js).
+  const staged = applyStage(raw);
+  const errors = [...staged.errors];
+  const r = staged.raw;
   if (!RUN_ID.test(String(r.runId || ''))) errors.push('runId: letters, digits, ".", "_", "-" (up to 64), starting with a letter or digit');
   if (!(typeof r.workDir === 'string' && /^(\/|~\/)/.test(r.workDir))) errors.push('workDir: an absolute path or ~/...');
   if (!(typeof r.broker === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(r.broker))) errors.push('broker: the replay broker\'s name in brokers.json');
@@ -234,6 +242,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // Whether the model is shown that library (experience_lookup); off unless the config says true.
     libraryDisplay: r.libraryDisplay === true,
     prop: r.prop || null,
+    // The training stage preset (replay/stage.js), or null.
+    stage: staged.stage,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
     // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
@@ -329,6 +339,8 @@ function configHash(run, base = process.env) {
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // Named only when charged, so a run with a pinned clock keeps the hash it had before the setting existed.
     ...(run.latency ? { latency: true } : {}),
+    // The training stage, named only when set, so a run without one keeps the hash it had.
+    ...(run.stage ? { stage: run.stage } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
@@ -353,6 +365,7 @@ function setupHash(run, { code = true } = {}) {
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
     // The arms of one evaluation charge the latency alike (named only when charged, as configHash).
     ...(run.latency ? { latency: true } : {}),
+    ...(run.stage ? { stage: run.stage } : {}),
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root && code ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
