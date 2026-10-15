@@ -23,14 +23,28 @@
  *   read long|short <aligned|mixed|pullback|counter>   m15.alignment for that side         its side
  *   vwap above|below|at                     m3.vwap.side                                  none
  *   value inside|above|below                m3.location.priorValue                        none
- *   regime <name>, day type <name>          m3.regime.primary, m3.today.dayType           none
+ *   regime <name>, day type <name>          m3.regime.primary, m3.today.dayType ("trend-up" read as "trend up")   none
  *   at <level>                              the level inside the trigger bar's range (m3.bar), or met by the base
  *                                           timeframe's candle or the next one up and within one ATR(14) of price
  *                                           (m3.candles.<tf>.relations, m3.atr14)         none
+ *   at <tf> fvg                             the same with a zone: an unfilled gap (m3.fvgs, what is left of it)
+ *                                           overlapping the trigger bar, or overlapped by the base or next candle and
+ *                                           within one ATR(14) of price (inside it: 0)     none
  *   <tf> rejected|broke <level> up|down     m3.candles.<tf>.relations (every relation, uncapped)   up long, down short
  *   <tf> touched <level>                    the same                                      none
+ *   ... <tf> fvg low|high ...               a gap's edge as the <level> of the two above: m3.candles.<tf>.fvgRelations,
+ *                                           the gaps as they stood at the candle's open, the same relation rule (a
+ *                                           bounce is a rejection, a failure a break)     as above
  *   <tf> pattern <name>                     m3.candles.<tf>.patterns (or pattern)          engulfing by its colour,
- *                                                                                         displacement by its dir
+ *                                                                                         displacement by its dir; in
+ *                                           the entry step only ENTRY_PATTERNS (hammer and bullish engulfing long,
+ *                                           shooting star and bearish engulfing short)
+ *   <tf> volume high                        m3.candles.<tf>.volRatio >= VOLUME_HIGH (1.5)  none
+ *   participation high                      m3.participation.relVolLast3VsPrior20 >= 1.5   none
+ *   <tf> absorption at <level> up|down      m3.candles.<tf> relations (fvgRelations for a gap edge), volRatio,
+ *                                           rangeAtr: met the level without closing beyond (rejected the read's way,
+ *                                           or touched with open and close on its side), volume >= 1.5x, net move
+ *                                           |close - open| <= 0.5 ATR(14)                 up long, down short
  *   <tf> cisd up|down                       m3.cisd.<tf>.dir, a live one (void, expired or weak: false)   up long, down short
  *   [<tf>] in ote                           m3.cisd.<tf>.priceInOte of a live CISD (no tf: any; zones both ways:
  *                                           false)                                        the CISD's way
@@ -56,7 +70,8 @@
  * reversalAllowed, the owner's "CHoCH at or above the trend": a 15m trend faded on a 15m or 1h CHoCH, a 1h trend on a
  * 1h CHoCH, a 4h trend on a 1h CHoCH plus a 4h candle that rejected a level the trade's way). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
  * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
- * entry close and momentum), and no read is stated twice. The combination is ok when every read is true and agrees,
+ * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
+ * (the same pattern in setup and entry counts once). The combination is ok when every read is true and agrees,
  * every step is stated, and there is exactly one stop and one target read.
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
@@ -73,18 +88,30 @@ const { trendRuleOf } = require('./reasons');
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 const SIDES = ['long', 'short'];
 // The step each kind of read belongs to (the design's read vocabulary); stop and target are checked on their own.
+// A pattern is a setup read, or the entry's confirming candle (ENTRY_PATTERNS only).
 const STEP_KINDS = {
-  trend: 'bias', break: 'bias', priorRth: 'bias', trendRule: 'bias', alignment: 'bias', regime: 'bias', dayType: 'bias',
-  at: 'location', vwap: 'location', value: 'location',
-  relation: 'setup', pattern: 'setup', cisd: 'setup', ote: 'setup', swept: 'setup',
-  close: 'entry', momentum: 'entry',
+  trend: ['bias'], break: ['bias'], priorRth: ['bias'], trendRule: ['bias'], alignment: ['bias'], regime: ['bias'], dayType: ['bias'],
+  at: ['location'], vwap: ['location'], value: ['location'],
+  relation: ['setup'], pattern: ['setup', 'entry'], cisd: ['setup'], ote: ['setup'], swept: ['setup'],
+  close: ['entry'], momentum: ['entry'], volume: ['entry'], participation: ['entry'], absorption: ['entry'],
 };
+// The confirming candle patterns the entry step takes, and the side each confirms.
+const ENTRY_PATTERNS = { hammer: 'long', 'bullish engulfing': 'long', 'shooting star': 'short', 'bearish engulfing': 'short' };
 const MAX_READS = 16;
 const READ_MAX = 120;
 const WHY_MAX = 160;
 const SKILL = /^[a-z0-9][a-z0-9-]{0,63}$/;
 // D4: the momentum bar read (range at least 1 ATR(14), volume at least the 20-bar average, close in the far third).
 const MOMENTUM = { rangeAtr: 1, volRatio: 1 };
+// High volume: at least 1.5 times the average (the snapshot's own participation scale, market-snapshot.js: "under 1.0
+// is thin participation, 1.5+ strong"; the absorption skill's "about 1.5 times"). Momentum asks only for the average.
+const VOLUME_HIGH = 1.5;
+// Absorption (the absorption skill): high volume (VOLUME_HIGH) with little progress, the candle's net move |close -
+// open| at most half its timeframe's ATR(14), at a level it met without closing beyond (rejected, or touched and held).
+const ABSORPTION = { volRatio: VOLUME_HIGH, progressAtr: 0.5 };
+// A fair value gap's edge as a level name ('15m fvg low'), and a gap zone as a location ('15m fvg').
+const FVG_EDGE = /^(1m|3m|5m|15m|1h|4h) fvg (low|high)$/;
+const FVG_ZONE = /^(1m|3m|5m|15m|1h|4h) fvg$/;
 const TF_ORDER = ['1m', '3m', '5m', '15m', '1h', '4h'];
 const TFS = new Set(TF_ORDER);
 const TREND_TF = { '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] };
@@ -131,7 +158,8 @@ function parseRead(text) {
   if (a === 'read' && w.length === 3 && SIDES.includes(b) && ['aligned', 'mixed', 'pullback', 'counter'].includes(c)) return out('alignment', { side: b, value: c });
   if (a === 'vwap' && w.length === 2 && ['above', 'below', 'at'].includes(b)) return out('vwap', { value: b });
   if (a === 'value' && w.length === 2 && ['inside', 'above', 'below'].includes(b)) return out('value', { value: b });
-  if (a === 'regime' && w.length === 2) return out('regime', { value: b });
+  // A regime's name as the briefing writes it ("trend-up" reads as "trend up", as levelName spells it).
+  if (a === 'regime' && w.length >= 2 && w.length <= 3) return out('regime', { value: w.slice(1).join(' ') });
   if (a === 'day' && b === 'type' && w.length >= 3) return out('dayType', { value: w.slice(2).join(' ') });
   if (a === 'at' && w.length >= 2) return out('at', { level: w.slice(1).join(' ') });
   if (tf && ['rejected', 'broke'].includes(b) && w.length >= 4 && ['up', 'down'].includes(w[w.length - 1])) {
@@ -144,6 +172,11 @@ function parseRead(text) {
   if (a === 'swept' && w.length >= 2) return out('swept', { level: w.slice(1).join(' ') });
   if (tf && b === 'close' && w.length === 3 && ['top', 'middle', 'bottom'].includes(c)) return out('close', { tf, value: c });
   if (tf && b === 'momentum' && w.length === 3 && ['up', 'down'].includes(c)) return out('momentum', { tf, value: c });
+  if (tf && b === 'volume' && c === 'high' && w.length === 3) return out('volume', { tf, value: c });
+  if (form === 'participation high') return out('participation', { value: 'high' });
+  if (tf && b === 'absorption' && c === 'at' && w.length >= 5 && ['up', 'down'].includes(w[w.length - 1])) {
+    return out('absorption', { tf, level: w.slice(3, -1).join(' '), value: w[w.length - 1] });
+  }
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
     const source = w.slice(1, -1);
     if (source.some(isNum) && !(source.length >= 3 && source.slice(0, -1).every(x => !isNum(x)))) return unknown;
@@ -182,6 +215,9 @@ function recentFrames(m3, base) {
 
 // A CISD whose zone is gone (cisd.js DEAD): no longer a live read.
 const DEAD_CISD = new Set(['void', 'expired', 'weak']);
+
+// What is left of a gap (m3.fvgs): an open gap's low and high, a partly filled one's unfilled part; else null.
+const leftOf = g => (!isObj(g) ? null : g.state === 'open' ? [g.low, g.high] : g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null);
 
 const within = (a, b, tick) => Math.abs(a - b) <= tick + 1e-9;
 
@@ -246,12 +282,48 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
       const v = isObj(m3.fvgs) ? m3.fvgs[tf] : undefined;
       const field = `m3.fvgs.${tf}`;
       if (typeof v === 'string') return { field, prices: [], why: `the ${tf} gaps are ${v}` };
-      const left = g => (!isObj(g) ? null : g.state === 'open' ? [g.low, g.high] : g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null);
-      const prices = (Array.isArray(v) ? v : []).map(left).filter(Boolean).map(e => num(e[edge === 'low' ? 0 : 1])).filter(x => x !== null);
+      const prices = (Array.isArray(v) ? v : []).map(leftOf).filter(Boolean).map(e => num(e[edge === 'low' ? 0 : 1])).filter(x => x !== null);
       return { field, prices, ...(Array.isArray(v) && !prices.length ? { why: `no unfilled ${tf} gap in the briefing` } : {}) };
     }
   }
   return { field: 'the briefing\'s levels', prices: levelIndex(b).get(source) || [] };
+}
+
+/**
+ * At a timeframe's fair value gap now (m3.fvgs[tf], what is left of each unfilled gap): the trigger bar's range overlaps
+ * one, or the base timeframe's candle or the next one up overlapped it and it lies within one ATR(14) of price (inside
+ * it: 0). The `at <level>` rule with a zone for the level.
+ */
+function atZone(tf, m3, base, res) {
+  const v = isObj(m3.fvgs) ? m3.fvgs[tf] : undefined;
+  const field = `m3.fvgs.${tf}, m3.bar, m3.candles.<base|next>`;
+  if (typeof v === 'string') return res('unchecked', `the ${tf} gaps are ${v}`, { field });
+  if (!Array.isArray(v)) return res('unchecked', `no ${tf} gaps in the briefing`, { field });
+  const zones = v.map(leftOf).filter(z => Array.isArray(z) && z.length === 2 && z.every(x => num(x) !== null));
+  if (!zones.length) return res(false, `no unfilled ${tf} gap in the briefing`, { field });
+  const overlaps = (c, [lo, hi]) => isObj(c) && num(c.l) !== null && num(c.h) !== null && c.l <= hi && c.h >= lo;
+  const bar = isObj(m3.bar) ? m3.bar : {};
+  const price = num(m3.price);
+  const atr = num(m3.atr14);
+  const dist = ([lo, hi]) => (price === null ? null : price < lo ? lo - price : price > hi ? price - hi : 0);
+  const frames = recentFrames(m3, base);
+  const inBar = zones.find(z => overlaps(bar, z));
+  const met = zones.find(z => frames.some(t => overlaps(m3.candles[t], z)) && dist(z) !== null && atr > 0 && dist(z) <= atr);
+  const z = inBar || met;
+  const name = ([lo, hi]) => `the ${tf} gap ${lo}-${hi}`;
+  const fact = inBar ? `${name(inBar)} is inside the bar's range ${bar.l}-${bar.h}`
+    : met ? `${name(met)} was met by the ${frames.join(' or ')} candle and is ${dist(met)} from price ${price}, within one ATR(14) ${atr}`
+      : `${zones.map(name).join(', ')}: outside the bar's range ${bar.l}-${bar.h}, and not met by the ${frames.join(', ') || 'base'} candle within one ATR(14) ${atr === null ? 'unknown' : atr} of price ${price}`;
+  return res(Boolean(z), fact, { field, value: z ? z.join('-') : null });
+}
+
+/**
+ * The relations a level read is checked in: a gap edge ('<tf> fvg low|high') the candle's fvgRelations (the gaps as they
+ * stood at its open), any other level its relations. list null: the briefing doesn't hold them.
+ */
+function relationsOf(c, tf, level) {
+  const key = FVG_EDGE.test(level) ? 'fvgRelations' : 'relations';
+  return { list: Array.isArray(c[key]) ? c[key] : null, field: `m3.candles.${tf}.${key}` };
 }
 
 /**
@@ -326,6 +398,7 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
       return res(levelName(d) === p.value, `the day type is ${d}`, { field: 'm3.today.dayType', value: d });
     }
     case 'at': {
+      if (FVG_ZONE.test(p.level)) return atZone(p.level.split(' ')[0], m3, base, res);
       // At a level now: inside the trigger bar's range, or met by the base timeframe's last completed candle or the next
       // one up and still within one ATR(14) of price. A higher timeframe's candle that met it an hour ago, or a level
       // far from price, is not "at" it.
@@ -348,11 +421,48 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
     case 'relation': {
       const got = candleOf(p.tf);
       if (!got.c) return res('unchecked', got.why);
-      if (!Array.isArray(got.c.relations)) return res('unchecked', `the ${p.tf} candle's level relations are not in the briefing`);
-      const r = got.c.relations.find(x => isObj(x) && levelName(x.name) === p.level);
-      const fact = r ? `the ${p.tf} candle ${r.rel}${r.dir ? ` ${r.dir}` : ''} ${r.name}` : `the ${p.tf} candle didn't meet ${p.level}`;
+      const { list, field } = relationsOf(got.c, p.tf, p.level);
+      if (!list) return res('unchecked', `the ${p.tf} candle's ${field.endsWith('fvgRelations') ? 'gap' : 'level'} relations are not in the briefing`);
+      // A gap edge's name can stand for more than one gap: the read holds when one of them met the candle so.
+      const named = list.filter(x => isObj(x) && levelName(x.name) === p.level);
+      const r = named.find(x => x.rel === p.rel && (x.dir || null) === p.value) || named[0];
+      const fact = r ? `the ${p.tf} candle ${r.rel}${r.dir ? ` ${r.dir}` : ''} ${r.name}${FVG_EDGE.test(p.level) ? ` ${r.price}` : ''}` : `the ${p.tf} candle didn't meet ${p.level}`;
       return res(Boolean(r) && r.rel === p.rel && (r.dir || null) === p.value, fact,
-        { field: `m3.candles.${p.tf}.relations`, value: r ? `${r.rel}${r.dir ? ` ${r.dir}` : ''}` : null, dir: dirSide(p.value) });
+        { field, value: r ? `${r.rel}${r.dir ? ` ${r.dir}` : ''}` : null, dir: dirSide(p.value) });
+    }
+    case 'volume': {
+      const got = candleOf(p.tf);
+      if (!got.c) return res('unchecked', got.why);
+      const v = num(got.c.volRatio);
+      if (v === null) return res('unchecked', `the ${p.tf} candle's volume against its average is unknown`);
+      return res(v >= VOLUME_HIGH, `the ${p.tf} candle's volume is ${v}x its average (high: >= ${VOLUME_HIGH}x)`, { field: `m3.candles.${p.tf}.volRatio`, value: v });
+    }
+    case 'participation': {
+      const v = isObj(m3.participation) ? num(m3.participation.relVolLast3VsPrior20) : null;
+      if (v === null) return res('unchecked', 'the participation (the last 3 bars against the 20 before) is unknown');
+      return res(v >= VOLUME_HIGH, `the last 3 bars' volume is ${v}x the 20 before (high: >= ${VOLUME_HIGH}x)`, { field: 'm3.participation.relVolLast3VsPrior20', value: v });
+    }
+    case 'absorption': {
+      // High volume with little progress at a level the candle met without closing beyond: rejected the read's way, or
+      // touched with its open and close on the read's side (up: a push down held at support; down: up held at resistance).
+      const got = candleOf(p.tf);
+      if (!got.c) return res('unchecked', got.why);
+      const c = got.c;
+      const { list, field } = relationsOf(c, p.tf, p.level);
+      if (!list) return res('unchecked', `the ${p.tf} candle's level relations are not in the briefing`);
+      const vals = [c.o, c.h, c.l, c.c, c.rangeAtr, c.volRatio].map(num);
+      if (vals.some(x => x === null)) return res('unchecked', `the ${p.tf} candle's prices, range or volume are unknown`);
+      const [o, h, l, cl, rangeAtr, volRatio] = vals;
+      const held = x => (x.rel === 'rejected' && x.dir === p.value)
+        || (x.rel === 'touched' && num(x.price) !== null && (p.value === 'up' ? Math.min(o, cl) >= x.price : Math.max(o, cl) <= x.price));
+      const named = list.filter(x => isObj(x) && levelName(x.name) === p.level);
+      const r = named.find(held) || named[0];
+      // The net move in ATR(14): |close - open| over the ATR the range was measured against (range / rangeAtr).
+      const progress = h > l && rangeAtr > 0 ? Math.round((Math.abs(cl - o) * rangeAtr / (h - l)) * 100) / 100 : 0;
+      const ok = Boolean(r) && held(r) && volRatio >= ABSORPTION.volRatio && progress <= ABSORPTION.progressAtr;
+      const met = r ? `${r.rel}${r.dir ? ` ${r.dir}` : ''} ${r.name}` : `didn't meet ${p.level}`;
+      return res(ok, `the ${p.tf} candle ${met}, volume ${volRatio}x, net move ${progress} ATR (absorption ${p.value}: held at the level, volume >= ${ABSORPTION.volRatio}x, net move <= ${ABSORPTION.progressAtr} ATR)`,
+        { field: `${field}, m3.candles.${p.tf}`, value: `${r ? r.rel : 'none'}, ${volRatio}x, ${progress} ATR`, dir: dirSide(p.value) });
     }
     case 'pattern': {
       const got = candleOf(p.tf);
@@ -498,11 +608,14 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     const own = ['stop', 'target'].find(k => (step === k) !== (p.kind === k));
     if (own) return bad(`a ${own} read is "${own} <source> <price>", in the ${own} step only`);
     // Each step takes its own kinds of read (the skill and the form within them are the model's choice).
-    if (STEP_KINDS[p.kind] && STEP_KINDS[p.kind] !== step) return bad(`a ${p.kind} read belongs to the ${STEP_KINDS[p.kind]} step, not ${step}`);
+    if (STEP_KINDS[p.kind] && !STEP_KINDS[p.kind].includes(step)) return bad(`a ${p.kind} read belongs to the ${STEP_KINDS[p.kind].join(' or ')} step, not ${step}`);
+    // The entry's confirming candle: one of ENTRY_PATTERNS, and it points to its side.
+    const entryPattern = step === 'entry' && p.kind === 'pattern';
+    if (entryPattern && !ENTRY_PATTERNS[p.value]) return bad(`an entry pattern is one of ${Object.keys(ENTRY_PATTERNS).join(', ')}`);
     if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
     if (p.form) seen.add(p.form);
     const c = checkRead(p, briefing, { tick });
-    return { ...row, ...c, agrees: true };
+    return { ...row, ...c, ...(entryPattern ? { dir: ENTRY_PATTERNS[p.value] } : {}), agrees: true };
   });
   // Side agreement (D12), with D2's verified reversal: a true 15m or 1h CHoCH the side's way lets a trend or break read
   // against the side stand on a timeframe at or below the CHoCH's (a 15m CHoCH never excuses a 1h or 4h trend; a 3m
@@ -553,4 +666,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, MAX_READS, WHY_MAX, MOMENTUM, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, STEP_KINDS, ENTRY_PATTERNS, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

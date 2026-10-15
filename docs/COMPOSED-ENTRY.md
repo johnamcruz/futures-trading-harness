@@ -212,9 +212,15 @@ and one comparison.
 | setup | `<tf> pattern <name>` | `m3.candles.<tf>.pattern(s)` | Field exists; form new |
 | setup | `<tf> cisd up\|down`, `[<tf>] in ote` | `m3.cisd` (`briefing.js:415`): a live CISD only (a `void`, `expired` or `weak` one is false); the OTE zone points its CISD's way | Field exists; form new |
 | setup | `swept <level name>` | `m3.sweeps` (`structure-events.js:71`) | Field exists; form new |
-| setup | `<tf> fvg retest up\|down` | per-timeframe FVGs | Missing beyond the trigger bars |
+| bias | `regime <name>`, `day type <name>` | `m3.regime.primary`, `m3.today.dayType`; a hyphenated name reads as written (`regime trend-up` is `regime trend up`) | Exists |
+| location | `at <tf> fvg` (5m, 15m, 1h) | `m3.fvgs.<tf>`, what is left of each unfilled gap: it overlaps the trigger bar, or the base or next candle overlapped it and it lies within one ATR(14) of price (inside it: 0). No direction | Exists |
+| setup | `<tf> rejected\|broke <tf> fvg low\|high up\|down`, `<tf> touched <tf> fvg low\|high` | `m3.candles.<tf>.fvgRelations`: the completed candle against each gap's edge as the gap stood at the candle's open (an open gap's low and high, a partly filled one's unfilled part; `fvg-frames.js` `fvgEdgesAt`), the same relation rule as the key levels. A bounce is a rejection (traded into the edge, closed back away), a failure a break (closed beyond): a gap the candle fills still counts, so a failed gap is never a bounce. Uncapped and never rendered; not a key level (no `levels` text) | Exists |
 | entry | `<tf> close top\|middle\|bottom` | `m3.candles.<tf>.closeLocation` | Field exists; form new |
 | entry | `<tf> momentum up\|down` | a shared momentum read | Missing (definition: owner decision D4) |
+| entry | `<tf> pattern hammer\|shooting star\|bullish engulfing\|bearish engulfing` | the confirming candle: `m3.candles.<tf>.pattern(s)`; a hammer or bullish engulfing points long, a shooting star or bearish engulfing short. Other patterns are setup reads only; the same pattern read in setup and entry counts once | Exists |
+| entry | `<tf> volume high` | `m3.candles.<tf>.volRatio` at least 1.5 (the snapshot's own scale: under 1.0 thin, 1.5+ strong; the absorption skill's "about 1.5 times"; momentum asks only for the average). No direction | Exists |
+| entry | `participation high` | `m3.participation.relVolLast3VsPrior20` at least 1.5: the last 3 base bars against the 20 before. No direction | Exists |
+| entry | `<tf> absorption at <level name> up\|down` | the absorption skill's read on a completed candle: it met the level without closing beyond (rejected the read's way, or touched with its open and close on the read's side), volume at least 1.5x its average, and net move \|close - open\| at most 0.5 ATR(14) (range / `rangeAtr`). A gap edge reads `fvgRelations`. Up long (a push down held at support), down short | Exists |
 | stop | `stop <source> <price>` | the source's price (section 3.4) | Fields exist; form new |
 | target | `target <source> <price>` | the source's price (section 3.4) | Fields exist; form new |
 
@@ -232,7 +238,8 @@ and a level name is matched exactly, never against the text.
 
 **Side agreement.** Every read with a direction must agree with the order's
 side: `up`, `bos up`, `choch up`, `rejected ... up`, `cisd up`, `momentum
-up`, `close top`, `above prior RTH range`, `in ote` in a bullish CISD's zone
+up`, `close top`, `above prior RTH range`, `in ote` in a bullish CISD's zone,
+`absorption at ... up`, and an entry pattern `hammer` or `bullish engulfing`
 for a long; their mirrors for a short. A long with `1h bos down` is refused,
 even though the read is true. A read with no direction (`at prior VAH`,
 `value inside`) agrees with either side. The only exception is the verified
@@ -246,8 +253,9 @@ multi-timeframe record) is faded only on a CHoCH at or above it.
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend
 rule, alignment, regime, day type; location: `at`, `vwap`, `value`; setup:
-relations, patterns, CISD, OTE, sweeps; entry: close, momentum), and no read
-is stated twice, so one read can't fill several steps. Which skill and which
+relations, patterns, CISD, OTE, sweeps; entry: close, momentum, volume,
+participation, absorption, and the confirming pattern), and no read is stated
+twice, so one read can't fill several steps. Which skill and which
 form within a step stay the model's choice.
 
 **When it stands.** A read is true, false or unchecked, as FACTS claims are
