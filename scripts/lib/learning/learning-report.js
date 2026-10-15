@@ -34,11 +34,16 @@
  *                    setup-focused run ran cycles only at selected bars, so its measures are said to be from one (a
  *                    later full-day evaluation is the comparable one)
  *
+ *   skillUsage       the run's skill-usage report (learning/skill-usage.js, skillUsageFor), when given: whether the model
+ *                    used each skill where its read was true, correctly, what it missed, and the outcomes by skill;
+ *                    an operator report, never shown to the model
  *   library          the run's pinned history library (learning/setup-library.js): its hash, and whether the run showed it
  *                    to the model (`shown`, the run's libraryDisplay). Code's measurements, never the model's decisions:
  *                    nothing above reads it (the record is the experience index's alone)
  *
- *   learningMeasures({ decisions, records, lookups, index, practice, library })   the measures
+ *   learningMeasures({ decisions, records, lookups, index, practice, library, skillUsage })   the measures
+ *   skillUsageFor(runDir, { barsFiles })   the run's skill usage, { error } when it can't be read, null with no records
+ *   usageMarkdown(u), usageText(u)    the skill usage alone (a run without an experience log)
  *   readLearning(home)                { decisions, records, lookups, index, practice } from a run home (null without a log)
  *   learningMarkdown(m), learningText(m)
  */
@@ -51,6 +56,7 @@ const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./expe
 const { readLearningRun } = require('./run-gate');
 const { practiceLine } = require('./setup-moments');
 const { loadPinnedLibrary, libraryShown } = require('./setup-library');
+const { readSkillUsage, skillUsageMarkdown, skillUsageText } = require('./skill-usage');
 
 const ROLLING_DAYS = 5;
 const COLLAPSE_SHARE = 0.8;
@@ -84,7 +90,7 @@ function follows(list, index) {
   return out;
 }
 
-function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null, library = null } = {}) {
+function learningMeasures({ decisions = [], records = [], lookups = [], index = null, indexError = null, practice = null, library = null, skillUsage = null } = {}) {
   const composed = decisions.filter(d => d.decision !== 'none');
   const entered = composed.filter(d => d.decision === 'entered');
   const stepsOf = d => new Set((d.reads || []).map(r => r.step).filter(s => STEPS.includes(s))).size;
@@ -113,6 +119,7 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
     record: { index: index ? index.hash.slice(0, 16) : null, indexError, all: follows(composed, index), withLookup: follows(withLookup, index) },
     curve: curve(decisions, lookups, index),
     frames: framesOf(composed),
+    skillUsage: skillUsage || null,
   };
 }
 
@@ -194,13 +201,26 @@ function readLearning(home) {
   return { decisions: readDecisions(file), records: readRecords(home), lookups: cycleLookups(home), index, indexError, practice: (run && run.practice) || null, library };
 }
 
+/** The run's skill usage (skill-usage.js readSkillUsage): null when it has no compose records, { error } when refused. */
+function skillUsageFor(runDir, { barsFiles = {} } = {}) {
+  try {
+    const u = readSkillUsage(runDir, { barsFiles });
+    return u.records ? u : null;
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+const usageMarkdown = u => (!u ? '' : u.error ? `## Skill usage\n\n- Not read: ${u.error}\n` : skillUsageMarkdown(u));
+const usageText = u => (!u ? '' : u.error ? `skill usage: not read (${u.error})\n` : skillUsageText(u));
+
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
 function learningText(m) {
   const d = m.decisions;
   return `learning${m.practice ? ' (setup-focused practice)' : ''}: ${d.composed} composed (${d.entered} entered, ${d.passed} passed, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
     + `reads verified ${f2(m.reads.rate)} of ${m.reads.reads}; ${m.diversity.signatures} combinations, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed)' : ''}; `
-    + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}\n`;
+    + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}\n${usageText(m.skillUsage)}`;
 }
 
 function learningMarkdown(m) {
@@ -225,7 +245,8 @@ function learningMarkdown(m) {
     '| Day | Role | Decisions | Taken | Mean R | Win rate | Rolling mean R | Rolling win rate | Pass quality | Lookups | Followed / against |',
     '|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows, '',
+    ...(m.skillUsage ? [usageMarkdown(m.skillUsage)] : []),
   ].join('\n');
 }
 
-module.exports = { ROLLING_DAYS, COLLAPSE_SHARE, MIN_COLLAPSE, learningMeasures, followOf, readLearning, cycleLookups, learningMarkdown, learningText };
+module.exports = { ROLLING_DAYS, COLLAPSE_SHARE, MIN_COLLAPSE, learningMeasures, followOf, readLearning, cycleLookups, learningMarkdown, learningText, skillUsageFor, usageMarkdown, usageText };
