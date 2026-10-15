@@ -2826,6 +2826,55 @@ test('trade_lifecycle, index mode: the head trader\'s compose records trigger it
   assert.deepStrictEqual(loaded(entryOrder(), { ...auto, cycleLaneBars: null }), []);
 });
 
+test('trade_lifecycle, index mode: the head prompt embeds the composed bar\'s reads, so on the attestation a composed entry with no lookup goes; a prompt or attestation without them is refused for them', () => {
+  const { H, root, dir, configFile, generated, att } = headRun();
+  assert.deepStrictEqual(H.COMPOSED_READS, ['confluence-counting', 'invalidation', 'rejection', 'breakout']);
+  for (const s of H.COMPOSED_READS) assert.ok(H.CORE.includes(s) && att.skills.includes(s), `embedded and attested: ${s}`);
+  // The runner's opencode cycle transcript: no skill loaded and no skill_lookup at all.
+  const transcript = path.join(dir, 'logs', 'bare-transcript.jsonl');
+  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
+  const skillMsgs = r => r.violations.filter(v => v.check.startsWith('skills-')).map(v => `${v.check}: ${v.message.replace(/ Load each with the skill tool [^]*$/, '')}`);
+  for (const [relation, read, skills] of [['rejected', '15m rejected prior vah up', ['confluence-counting', 'invalidation', 'rejection']], ['broke', '15m broke prior vah up', ['confluence-counting', 'invalidation', 'breakout']]]) {
+    const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
+    const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
+    const run = (c, input = LC.order()) => lcEval(home, input, { config: { ...cfg, ...c } });
+    // The bar's facts trigger the composed reads (the gate requires them)...
+    const { briefingFacts } = require('../../scripts/lib/trading/skill-lookups');
+    const { situationalSkills } = require('../../scripts/lib/trading/skills-loaded');
+    assert.deepStrictEqual(situationalSkills(briefingFacts(home, 'MNQ', LC_NOW, {})).sort(), [...skills].sort(), relation);
+    // ... and the attested prompt embeds them: no lookup needed, nothing refused for a skill.
+    assert.deepStrictEqual(skillMsgs(run({})), [], relation);
+    // No attestation (the transcript alone decides): refused, naming them among the rest.
+    const none = skillMsgs(run({ headPromptAttestation: null })).join('\n');
+    for (const s of skills) assert.match(none, new RegExp(`skills-loaded: [^\n]*\\b${s}\\b`), `${relation}, no attestation: ${s}`);
+    // An attestation that leaves them out (a role or prompt that doesn't embed them): refused for exactly them.
+    const partial = { ...att, skills: att.skills.filter(s => !H.COMPOSED_READS.includes(s)) };
+    assert.deepStrictEqual(skillMsgs(run({ headPromptAttestation: JSON.stringify(partial) })), [`skills-loaded: Load the trading skills before an entry; not loaded in this session: ${skills.join(', ')}.`], relation);
+    // An exit is never held by it.
+    assert.deepStrictEqual(skillMsgs(run({ headPromptAttestation: JSON.stringify(partial) }, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }))), [], `${relation}: exit`);
+  }
+  // A prompt that doesn't embed them (their blocks cut from the run's opencode.json), attested as it is: its attestation
+  // names none of them, and the composed entry with no lookup is refused for them; looked up, it goes.
+  const json = JSON.parse(generated);
+  for (const s of H.COMPOSED_READS) json.agent[H.HEAD_AGENT].prompt = json.agent[H.HEAD_AGENT].prompt.replace(new RegExp(`<skill name="${s}">\n[^]*?\n</skill>\n\n?`), '');
+  fs.writeFileSync(configFile, JSON.stringify(json));
+  const cut = H.attestation(configFile, root);
+  assert.deepStrictEqual(cut.skills, H.CORE.filter(s => !H.COMPOSED_READS.includes(s)));
+  const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
+  const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(cut) };
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  // A forged attestation naming them for that prompt: the prompt doesn't embed them, so they still don't count.
+  assert.match(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify(att) } })).join('\n'), /skills-loaded/, 'the uncut hash no longer matches');
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify({ ...cut, skills: att.skills }) } })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  // Full mode never requires the situational reads (the head trader loads trade-lifecycle, which names them).
+  const fullMode = skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, roleSkills: 'full' } })).join('\n');
+  assert.match(fullMode, /skills-loaded: [^\n]*trade-session/);
+  assert.doesNotMatch(fullMode, /confluence-counting|invalidation|rejection/);
+  fs.appendFileSync(transcript, `\n${['confluence-counting', 'invalidation', 'rejection'].map(skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`)).join('\n')}`);
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), [], 'looked up: counted, as before');
+  fs.writeFileSync(configFile, generated);
+});
+
 test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the first level ahead in its R), never a scan candidate', () => {
   const { factsOrder } = require('../../scripts/lib/trading/order-gate');
   const { checkClaim, parseClaim } = require('../../scripts/lib/trading/fact-claims');
