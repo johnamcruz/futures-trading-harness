@@ -13,7 +13,7 @@
  * record has none, computed from the reads (section 3.8: steps in order, sorted within a step by skill then read,
  * prices dropped).
  *
- *   fromLifecycleRecord(raw, { runId })   the loop's view: { root, contract, side, bar, at, expiresAt, runId, lane, ok, reasons,
+ *   fromLifecycleRecord(raw, { runId })   the loop's view: { id (the record's, the gateway's stamp names it), root, contract, side, bar, at, expiresAt, runId, lane, ok, reasons,
  *                               reads, signatures: { skill, read }, context, plan: { entry, stop, target, size },
  *                               exploratory } or null (not a record)
  *   recordsDir(home)            where the records live (<FTH_HOME>/trade-lifecycle)
@@ -21,6 +21,8 @@
  *                               file), normalized, in time order; `root`, `days`: only that family's, those days'
  *   skillSignature(reads), readSignature(reads)
  *   CONTEXT_KEYS                the six context keys (section 4.2, D17)
+ *   contextOf({ context })      a raw record's context as the loop keys it (the one context function: the experience
+ *                               log's records and the history library's scans both go through it)
  */
 
 const path = require('path');
@@ -85,8 +87,9 @@ function sideOfTrend(v) {
   return s.toLowerCase();
 }
 
+/** The six context keys (CONTEXT_KEYS) from a record's raw context (compose_check's: `trendSide`, raw case). */
 function contextOf(raw) {
-  const c = isObj(raw.context) ? raw.context : {};
+  const c = isObj(raw && raw.context) ? raw.context : {};
   const regime = isObj(c.regime) ? c.regime : {};
   const label = v => (str(v) ? str(v).toLowerCase() : null);
   return {
@@ -119,8 +122,9 @@ function fromLifecycleRecord(raw, { runId = null } = {}) {
   const plan = isObj(raw.plan) ? raw.plan : raw;
   const ver = isObj(raw.verification) ? raw.verification : raw;
   const sigs = isObj(raw.signatures) ? raw.signatures : {};
+  const id = str(raw.id) || (Number.isFinite(raw.id) ? String(raw.id) : null);
   return {
-    root, contract: str(raw.contract), side, bar, at: iso(raw.at) || bar, expiresAt: iso(raw.expiresAt),
+    id, root, contract: str(raw.contract), side, bar, at: iso(raw.at) || bar, expiresAt: iso(raw.expiresAt),
     runId: str(raw.runId) || runId, lane: raw.lane ?? null,
     ok: ver.ok === true, reasons: (Array.isArray(ver.reasons) ? ver.reasons : Array.isArray(ver.problems) ? ver.problems : []).map(String),
     reads,
@@ -153,4 +157,4 @@ function readRecords(home, { runId = null, root = null, days = null } = {}) {
   return out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }
 
-module.exports = { STEPS, CONTEXT_KEYS, fromLifecycleRecord, recordsDir, readRecords, skillSignature, readSignature, readForm, formOf };
+module.exports = { STEPS, CONTEXT_KEYS, contextOf, fromLifecycleRecord, recordsDir, readRecords, skillSignature, readSignature, readForm, formOf };
