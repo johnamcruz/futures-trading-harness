@@ -270,6 +270,9 @@ function validateConfig(raw) {
   if (Number.isInteger(cfg.timeframe) && cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!(Number.isInteger(cfg.barDelaySeconds) && cfg.barDelaySeconds >= 0)) errors.push('barDelaySeconds: 0 or more');
   if (!['bar', 'signal'].includes(cfg.trigger)) errors.push('trigger: "bar" or "signal"');
+  // A fine-tuning adapter (learning/adapter.js): a declaration of what the local model server runs with, read only by
+  // the training preflight and a replay's hashes; the runner never needs one.
+  if (cfg.adapter !== undefined && cfg.adapter !== null && !(typeof cfg.adapter === 'string' && /^(\/|~\/)./.test(cfg.adapter))) errors.push('adapter: the adapter\'s manifest, an absolute or ~/ path (adapters/README.md), or none');
   if (cfg.trigger === 'signal' && !cfg.account) errors.push('account: required with trigger "signal" (to see open positions)');
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');

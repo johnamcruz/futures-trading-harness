@@ -95,6 +95,7 @@ const { WALL_START } = require('../trading/harness-now');
 const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
 const { decisionPoints } = require('./schedule');
 const { applyStage } = require('./stage');
+const { adapterTag } = require('../learning/adapter');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -419,12 +420,18 @@ function configHash(run, base = process.env) {
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
     // The account states its days start from (the draw and its assignment): named only when there are some.
     ...statesPart(run),
+    ...adapterPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
 
 /** A run's account states in its hashes: the document's hash (seed, weights, buckets, draws) and the days' assignment. */
 const statesPart = run => (run.accountStates ? { accountStates: { hash: run.accountStates.hash, assignment: run.accountStates.assignment.hash } } : {});
+/**
+ * The fine-tuning adapter the runner config declares (learning/adapter.js adapterTag: its manifest's digest), named only
+ * when one is, so a base run keeps its hash: a retrained adapter at the same path is another run and another setup.
+ */
+const adapterPart = run => { const tag = adapterTag(run.cfg); return tag ? { adapter: tag } : {}; };
 
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
 /**
@@ -454,6 +461,7 @@ function setupHash(run, { code = true } = {}) {
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
     // The account states its days start from: named only when there are some.
     ...statesPart(run),
+    ...adapterPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }

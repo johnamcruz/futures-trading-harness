@@ -50,3 +50,14 @@ temp/
 /workspace/.qwen/
 
 /data/
+
+# Fine-tuning adapters (adapters/README.md): only the documents are committed. Weights, checkpoints, built
+# datasets, local manifests, training scripts and the local runner config that selects an adapter stay local.
+/adapters/**
+!/adapters/**/
+!/adapters/README.md
+!/adapters/spec.json
+!/adapters/*/train.example.sh
+# A runner or replay config at the root (the one that selects an adapter among them): local.
+/autotrader*.json
+/replay*.json

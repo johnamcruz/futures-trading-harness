@@ -74,6 +74,12 @@ const EXCHANGE = /\b(?:CME|Globex)\b/i;
 /** The exchange's own day boundary (17:00, 5 pm), the only time a line naming the exchange may state; a firm's flatten (15:10, 16:10, ...) stays an offence. */
 const EXCHANGE_TIME = new RegExp(String.raw`\b(?:17:00|5(?::00)?\s*pm)${FIRM_ZONE}`, 'gi');
 const offends = line => FORBIDDEN.test(line) || MODEL_SIZE.test(line) || FIRM_TIME.test(line);
+/**
+ * A model's name or size (the model terms and MODEL_SIZE above): what a model-only folder (adapters/, the owner's
+ * exception, as accounts/ is the firms') may name. Platform and firm names and a firm's times stay offences there.
+ */
+const MODEL_TERMS = /mlx_lm|mlx|qwen[\s-]?\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?b)?(?:-\d+-?bit)?|\b9B\b/gi;
+const stripModel = line => line.replace(new RegExp(MODEL_SIZE.source, 'gi'), '').replace(MODEL_TERMS, '');
 const firstOffence = line => (line.match(FORBIDDEN) || line.match(MODEL_SIZE) || line.match(FIRM_TIME))[0];
 const GUARD = { scanner: 'tests/plugin/platform-scan.js', pins: /^tests\/(?:.*\/)?[^/]*\.pins\.json$/ };
 const key = e => `${e.file}|${e.kind}`;
@@ -103,12 +109,13 @@ function listFiles(repo) {
 }
 
 /**
- * Scan `files` with `read(file)` -> Buffer. `allowed` files are skipped whole; `permanent` lines ({ file,
- * pattern }) and shrink-only `entries` ({ file, kind }) excuse their matches. Returns the hits, what each
+ * Scan `files` with `read(file)` -> Buffer. `allowed` files are skipped whole; `modelOnly` files may name a model
+ * (its name or size), nothing else; `permanent` lines ({ file, pattern }) and shrink-only `entries` ({ file, kind })
+ * excuse their matches. Returns the hits, what each
  * entry excused ({ lines, excused, hashes }), how often each permanent one was used, and which files were
  * scanned or skipped as binary.
  */
-function scan(files, read, { allowed = [], permanent = [], entries = [] } = {}) {
+function scan(files, read, { allowed = [], permanent = [], entries = [], modelOnly = [] } = {}) {
   const hits = [];
   const actual = new Map(entries.map(e => [key(e), { lines: 0, excused: [], hashes: [] }]));
   const permanentUsed = new Map(permanent.map(p => [p, 0]));
@@ -116,7 +123,8 @@ function scan(files, read, { allowed = [], permanent = [], entries = [] } = {}) 
   const binary = [];
   for (const file of files) {
     if (allowed.some(re => re.test(file))) { scanned.push(file); continue; }
-    if (offends(normalize(file))) hits.push(`${file}: the path names a platform, firm or model`);
+    const models = modelOnly.some(re => re.test(file));
+    if (offends(models ? stripModel(normalize(file)) : normalize(file))) hits.push(`${file}: the path names a platform, firm or model`);
     const buf = read(file);
     if (isBinary(file, buf)) { binary.push(file); continue; }
     scanned.push(file);
@@ -125,6 +133,7 @@ function scan(files, read, { allowed = [], permanent = [], entries = [] } = {}) 
     normalize(buf.toString('utf8')).split('\n').forEach((text, i) => {
       // An escaped newline or tab in a string (JSON, code) separates words as the real one does.
       let line = text.replace(/\\[ntr]/g, ' ');
+      if (models) line = stripModel(line);
       if (!offends(line)) return;
       // The exchange's own hours on a line that names it are facts, never a firm's time to pin.
       if (EXCHANGE.test(line)) line = line.replace(EXCHANGE_TIME, '');
@@ -228,4 +237,4 @@ function readBasePins(repo, pinsRel, testRel, ref = 'origin/main') {
   return JSON.parse(shown.stdout);
 }
 
-module.exports = { GUARD, TERMS, FORBIDDEN, MODEL_SIZE, FIRM_TIME, EXCHANGE, EXCHANGE_TIME, KINDS, normalize, isBinary, listFiles, scan, pinVerdict, updatePins, baseVerdict, readBasePins, key, lineHash, within };
+module.exports = { GUARD, TERMS, FORBIDDEN, MODEL_SIZE, MODEL_TERMS, FIRM_TIME, EXCHANGE, EXCHANGE_TIME, KINDS, normalize, isBinary, listFiles, scan, pinVerdict, updatePins, baseVerdict, readBasePins, key, lineHash, within };
