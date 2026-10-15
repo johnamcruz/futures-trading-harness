@@ -28,7 +28,9 @@ never by outcome (`scripts/lib/learning/decision-label.js`):
   - no gate or risk rule refused it;
   - in stage 2, the account state doesn't call for standing down.
 - **A pass** is correct when no valid setup existed, or when the account
-  state or the rules call for standing down.
+  state or the rules call for standing down. The account state is read
+  alone (the entry block, the soft stop, no cushion or daily room left),
+  never with the risk of a refused plan the model didn't take.
 - **A risk action** in a trade is correct when it fits the rules for that
   account state.
 
@@ -71,12 +73,15 @@ reason, and neither is ever trained on.
      is refused.
    - **Prompts.** Each example is the exact prompts a role saw, then its
      response, as model-agnostic chat JSONL (`{"messages": [...]}`, format
-     version 2). They are byte-faithful where the run recorded them:
+     version 2). Texts are byte-faithful where the run recorded them; a
+     call's `arguments` are faithful to the parsed call (`JSON.stringify` of
+     opencode's parsed input, not its raw bytes):
      - the head trader's cycle prompt, then its whole turn in order: each
        model step an assistant message with its `tool_calls`
        (`{id, type: "function", function: {name, arguments}}`), each call's
        result a `tool` message (`{tool_call_id, content}`, `task` calls
-       included), then the final assistant text;
+       included), then the final assistant text. A repeated call id gives
+       no example (which result answers which call is ambiguous);
      - the system prompt from the run's own `workspace/opencode.json`.
 
      Only the head trader's turns are examples by default. A subagent's
@@ -148,7 +153,9 @@ node scripts/adapter.js check <manifest>
 It records:
 
 - the harness commit;
-- the skills and prompt digests (the documents the cycles read);
+- the skills, prompt and code digests (the documents the cycles read, and
+  the harness code);
+- for step 2, its parent: the step-1 manifest's tag and path;
 - the dataset fingerprint;
 - the base model;
 - the training settings;
@@ -162,8 +169,8 @@ Judge the adapter on practice-validate:
 
 - **Step 1:** the stage-1 exit test (`EXIT_TEST` in
   `scripts/lib/replay/stage.js`).
-- **Step 2:** the 30-day prop Monte Carlo keep rule (`docs/TRAINING.md`,
-  section 6).
+- **Step 2:** the training loop's full keep rule (`docs/TRAINING.md`,
+  section 6; `scripts/lib/train/model-verifier.js decide`).
 
 The evaluation is two replays of the same windows and seed:
 
@@ -185,23 +192,37 @@ node scripts/adapter.js validated <manifest> --base <base run dir> --adapted <ad
 It refuses unless both runs are finished on practice-validate, differ only
 in the adapter, and the adapted one ran this manifest. Step 1 passes when no
 measure is worse and every stage-1 exit-test criterion passes on the adapted
-run; step 2 when no measure is worse, the paired Monte Carlo pass rate is
-better and the adapted side never blows. A criterion that can't be read
-leaves the validation pending.
+run; step 2 when no measure is worse and the full keep rule keeps it, with
+the pair as one held-out window: zero blows on the adapted side in its real
+attempts and resampled paths, a pooled real-attempt pass rate better, no
+measure significantly worse. A resampled-only gain, or a window too short to
+show anything, is never a pass. A criterion that can't be read (the keep
+rule `inconclusive`) leaves the validation pending; any other verdict fails.
+
+The recorded validation holds its evidence: the two runs' ids, run dirs and
+setup record digests, and a hash over the status, runs, evidence and result.
+`check` and both preflights refuse a `passed` without consistent evidence (a
+hand edit), or whose runs' setup records, where on this machine, aren't the
+ones it read. A step-2 adapter starts only from a step-1 adapter that passed
+that way.
 
 ## 5. Use it
 
 Name the manifest in your local runner config (`"adapter"`) and serve the
 model with the adapter. The live preflight (`scripts/preflight.js`) refuses a
-declared adapter that is pending, failed, stale or invalid. The training
-preflight's `adapter` check:
+declared adapter that is pending, failed, stale, invalid or not backed by
+its evidence. The training preflight's `adapter` check:
 
 - is N/A with no adapter selected;
 - FAILs on a missing or invalid manifest;
-- FAILs on a stale adapter (its skills or prompt digest isn't the harness's
-  now: retrain it);
-- FAILs on a missing validation result, or a failed one;
+- FAILs on a stale adapter (its skills, prompt or code digest isn't the
+  harness's now: retrain it);
+- FAILs on a missing validation result, or a failed one, or a passed one not
+  backed by its evidence;
+- FAILs on a step-2 adapter whose parent manifest is missing, changed since
+  (its tag), or not passed with its evidence;
 - FAILs on a pending validation anywhere but practice-validate, its own
   evaluation.
 
-A skill change makes every adapter stale until it is retrained.
+A skill, prompt or code change makes every adapter stale until it is
+retrained.

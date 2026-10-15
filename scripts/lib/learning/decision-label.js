@@ -18,7 +18,9 @@
  *   policyExit  risk: 'runner-close' | 'runner-trail' when the runner closed the position (prop/model-stream.js
  *               runnerExit), else null
  *   riskUsd     the record's risk in dollars (|entry - stop| in ticks x tick value x size), or null
- *   account     stage 2: the account call (accountCall), or null in stage 1 (no account state)
+ *   account     stage 2: the account call (accountCall), or null in stage 1 (no account state); a pass's call takes
+ *               no risk (a refused plan is no trade the model took): only the entry block, the soft stop, or no
+ *               cushion or daily room left calls for its standing down
  *   stage       1 or 2 (a stage-2 take needs a known account room: account.standDown === false)
  *   cycleFailed why the cycle failed, timed out or was interrupted, or null: such a decision is always unverifiable
  * The rules: { minRR, maxRiskUsd } (trade_lifecycle's risk.min_rr and risk.max_risk_usd).

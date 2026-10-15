@@ -92,4 +92,22 @@ test('decision-dataset.js build and show; adapter.js init, check and validated',
   assert.match(stale.stdout, /STALE \(skills changed since it was trained\)/);
   assert.match(run('adapter.js', ['init', '--name', 'm2']).stderr, /--base-model: required/);
   assert.match(run('adapter.js', ['init', '--name', 'm2', '--base-model', 'b', '--folder', 'f', '--dataset', out, '--step', '2', '--settings', settings, '--out', path.join(dir, 'm2.json')]).stderr, /--parent: step 2 starts from a step-1 adapter/);
+  // Step 2 starts only from a step-1 adapter that passed, with its evidence; a passed written by hand is refused.
+  const step2 = parent => run('adapter.js', ['init', '--name', 'm2', '--base-model', 'b', '--folder', 'f', '--dataset', out, '--step', '2', '--settings', settings, '--parent', parent, '--out', path.join(dir, 'm2.json')]);
+  fs.writeFileSync(m, JSON.stringify(doc));
+  assert.match(step2(m).stderr, /--parent: a step-1 adapter whose validation passed/);
+  const hand = path.join(dir, 'hand.json');
+  fs.writeFileSync(hand, JSON.stringify({ ...doc, validation: { ...doc.validation, status: 'passed', runs: ['a', 'b'], result: { exitTest: [{ test: 't', status: 'PASS' }] } } }));
+  assert.match(step2(hand).stderr, /--parent: its passed validation is not backed by its evidence/);
+  const handCheck = run('adapter.js', ['check', hand]);
+  assert.strictEqual(handCheck.status, 1);
+  assert.match(handCheck.stdout, /NOT BACKED BY ITS EVIDENCE/);
+  const A = require('../../scripts/lib/learning/adapter');
+  const sealed = path.join(dir, 'sealed.json');
+  fs.writeFileSync(sealed, JSON.stringify({ ...doc, validation: A.sealValidation({ kind: doc.validation.kind, window: doc.validation.window, status: 'passed', runs: ['a', 'b'], result: { exitTest: [{ test: 't', status: 'PASS' }] }, evidence: { base: { runId: 'a', dir: path.join(dir, 'gone-a'), setup: 'e'.repeat(64) }, adapted: { runId: 'b', dir: path.join(dir, 'gone-b'), setup: 'f'.repeat(64) } } }) }));
+  assert.strictEqual(run('adapter.js', ['check', sealed]).status, 0);
+  const s2 = step2(sealed);
+  assert.strictEqual(s2.status, 0, s2.stderr);
+  const m2 = JSON.parse(fs.readFileSync(path.join(dir, 'm2.json'), 'utf8'));
+  assert.deepStrictEqual([m2.training.parent, m2.training.parentManifest], [A.adapterTag({ adapter: sealed }), sealed]);
 });

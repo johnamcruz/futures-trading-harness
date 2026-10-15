@@ -13,13 +13,15 @@
  *                  account-states.jsonl, stage 2), the year
  *   turns          the roles' prompts and responses as the cycle recorded them (roleTurns)
  *
- * The roles' turns (roleTurns), byte-faithful where recorded:
+ * The roles' turns (roleTurns), faithful to what was recorded (texts byte for byte; a call's arguments faithful to the
+ * parsed call):
  *   the head trader   user: the cycle's prompt, as given to the harness (the cycle file's `prompt`); then its whole turn
  *                     in order (headMessages), OpenAI-style: each model step an assistant message { content, tool_calls:
  *                     [{ id, type 'function', function { name, arguments } }] }, each call's result a tool message
  *                     { tool_call_id, content } (opencode's state.output, or state.error for a failed call; `task` calls
  *                     too, their content the wrapper the model read), ending in the final assistant text. `arguments`
- *                     is the call's recorded input as JSON (opencode records it parsed)
+ *                     is the call's recorded input as JSON (JSON.stringify of opencode's parsed input: faithful to the
+ *                     parsed call, not its raw bytes); a repeated call id gives no head turn
  *   each subagent     (subagent: true) user: the prompt the head trader gave it (opencode's task call input);
  *                     assistant: the text it returned (the task result inside opencode's <task_result> wrapper). Its
  *                     claims are unchecked: the dataset trains on them only by name (decision-dataset.js roles)
@@ -69,7 +71,7 @@ function chat(system, user, assistant) {
   return [...(typeof system === 'string' ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }, { role: 'assistant', content: assistant }];
 }
 
-/** A tool call as the model made it (OpenAI-style), and its result as the model read it, byte for byte. */
+/** A tool call as the model made it (OpenAI-style; its arguments faithful to the parsed call), and its result as the model read it, byte for byte. */
 function toolCall(p) {
   const st = p.state;
   const id = typeof p.callID === 'string' && p.callID ? p.callID : null;
@@ -83,10 +85,11 @@ function toolCall(p) {
  * The head trader's whole turn, in order: the opencode events walked as they came, each model step's text and tool calls
  * one assistant message ({ content, tool_calls }), then each call's result as a tool message, then the final assistant
  * text. A text after a call within one step starts the next assistant message (the order is kept, never merged). Null
- * when any part can't be read faithfully (a call without its id, name or result) or the turn doesn't end in text.
+ * when any part can't be read faithfully (a call without its id, name or result, or a call id repeated) or the turn doesn't end in text.
  */
 function headMessages(events) {
   const msgs = [];
+  const ids = new Set();
   let cur = null;
   const flush = () => {
     if (!cur) return;
@@ -104,7 +107,9 @@ function headMessages(events) {
       cur.texts.push(p.text);
     } else if (e.type === 'tool_use') {
       const c = isObj(p) ? toolCall(p) : null;
-      if (!c) return null;
+      // A call id seen before: which result answers which call is ambiguous, so the turn is not faithful.
+      if (!c || ids.has(c.call.id)) return null;
+      ids.add(c.call.id);
       cur = cur || { texts: [], calls: [] };
       cur.calls.push(c);
     }
@@ -138,14 +143,15 @@ function roleTurns(doc, { systemPrompts = {} } = {}) {
 /**
  * Why the decision's cycle can't be trusted, or null: the replay store's line for its time (replay/store.js readRun)
  * says a cycle failed or timed out, the step timed out or was interrupted, or the cycle file itself says it failed. No
- * store line for the time: unknown, so failed too (nothing is assumed clean).
+ * store line for the time, or one whose `ran` is missing or empty: unknown, so failed too (nothing is assumed clean).
  */
 function cycleHealth(line, doc) {
   if (!isObj(line)) return 'no replay record of the decision time: whether its cycle ran cleanly is unknown';
   if (line.interrupted) return 'the step was interrupted';
   if (isObj(line.step) && line.step.timedOut) return 'the step timed out';
-  const ran = Array.isArray(line.ran) ? line.ran : [];
-  if (ran.some(x => !isObj(x) || x.ok !== true || x.timedOut)) return 'a cycle failed or timed out';
+  // A clean step ran at least one cycle, and every one of them finished ok: none recorded is no evidence of a clean one.
+  if (!Array.isArray(line.ran) || !line.ran.length) return 'no cycle is recorded as run at the decision time';
+  if (line.ran.some(x => !isObj(x) || x.ok !== true || x.timedOut)) return 'a cycle failed or timed out';
   if (isObj(doc) && (doc.ok === false || doc.timedOut === true)) return 'the cycle record says it failed or timed out';
   return null;
 }
@@ -226,7 +232,9 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
       scorecard: { category: r.category, agrees: r.agrees }, expected: r.expected ? { decision: r.expected.decision, decidedBy: r.expected.decidedBy } : null,
       gate: { refused: Boolean(r.actual && r.actual.gate && r.actual.gate.decision === 'refused'), checks: (r.actual && r.actual.gate && r.actual.gate.checks) || [] },
       record, attempts: recs.length, riskUsd, policyExit,
-      account: attempt ? accountCall(attempt, riskUsd) : null,
+      // A pass is judged by the account alone (its entry block, soft stop, no cushion or daily room left), never by a
+      // plan it didn't take: a refused compose record's risk is not the model's trade.
+      account: attempt ? accountCall(attempt, kind === 'pass' ? null : riskUsd) : null,
       stage, accountState: state ? state.bucket : null, skill: (setupRead && setupRead.skill) || 'none', year: String(r.day || '').slice(0, 4),
       sample, cycle: cycleFile || null, cycleFailed, turns: cycleFailed ? turns.map(t => ({ ...t, faithful: false })) : turns,
     });

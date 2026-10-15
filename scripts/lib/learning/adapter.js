@@ -14,12 +14,18 @@
  *   validation 'prop-keep-rule' }: two-step training, stage 1 alone first, then stage 2 with stage 1 mixed back in.
  *
  * The manifest (validateManifest), one per adapter, local:
- *   v 1, name, base { model, folder (its adapters/<folder>) }, harness { commit (40 hex), skills, prompt (sha256 hex: the
- *   skills digest and the documents the cycles read, session/record.js treeDigest of HARNESS_DIRS) }, dataset
- *   { fingerprint }, training { step 1 | 2, method 'lora', seed, settings {...}, stage1Mix (step 2: the spec's),
- *   parent (step 2: the step-1 adapter's manifest digest) }, validation { kind (step 1 'stage-1-exit-test', step 2
- *   'prop-keep-rule'), window 'practice-validate', status 'pending' | 'passed' | 'failed', runs [runId] and result
- *   (when not pending), at }.
+ *   v 1, name, base { model, folder (its adapters/<folder>) }, harness { commit (40 hex), skills, prompt, code (sha256
+ *   hex: the skills digest, the documents the cycles read and the harness code, session/record.js treeDigest of
+ *   HARNESS_DIRS and CODE_DIRS) }, dataset { fingerprint }, training { step 1 | 2, method 'lora', seed, settings {...},
+ *   stage1Mix (step 2: the spec's), parent (step 2: the step-1 adapter's manifest digest), parentManifest (step 2: that
+ *   manifest's path, absolute or ~/) }, validation { kind (step 1 'stage-1-exit-test', step 2 'prop-keep-rule'),
+ *   window 'practice-validate', status 'pending' | 'passed' | 'failed', and when not pending: runs [base runId, adapted
+ *   runId], result (derived: learning/adapter-validation.js), evidence { base, adapted: { runId, dir, setup (sha256 of
+ *   the run's setup record) } }, hash (validationHash: binds the status, runs, evidence and result), at }.
+ *
+ * A `passed` validation counts only with its evidence (evidenceErrors): the hash consistent with the record, the result
+ * the derivation's pass (step 1 every exit-test criterion PASS; step 2 the keep rule's `kept`), and each run's setup
+ * record, where present on this machine, the one the validation read. A hand-edited `passed` is refused.
  *
  * Selection: the runner config's `adapter`, the manifest's path (absolute or ~/); a declaration of what the local model
  * server runs with, read only by the training preflight (`adapter`), the run's hashes and its A/B setup record
@@ -32,6 +38,10 @@
  *   currentDigests(root)                       { skills, prompt, code } of the harness tree (code: session/record.js CODE_DIRS)
  *   adapterFile(cfg, { home })                 the selected manifest's path, or null (none selected)
  *   adapterTag(cfg, { home })                  null (none), else 'sha256:<16 hex of the manifest's bytes>' or 'unreadable'
+ *   recordDigest(x)                            sha256 hex of JSON.stringify(x) (a run's setup record, as read)
+ *   validationHash(validation)                 sha256 hex of its status, kind, window, runs, evidence and result
+ *   sealValidation(validation)                 the validation with its hash
+ *   evidenceErrors(manifest, { read })         [error]: why a passed validation is not backed by its evidence
  *   adapterCheck({ cfg, role, read, home })    { status: 'PASS' | 'FAIL' | 'N/A', detail } (the preflight's `adapter`)
  */
 
@@ -47,6 +57,8 @@ const STATUSES = Object.freeze(['pending', 'passed', 'failed']);
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX40 = /^[0-9a-f]{40}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+// The harness digests an adapter is bound to: retrained when any of them changes.
+const DIGESTS = Object.freeze(['skills', 'prompt', 'code']);
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const share = x => typeof x === 'number' && Number.isFinite(x) && x > 0 && x < 1;
@@ -90,7 +102,7 @@ function validateManifest(m, { spec = null } = {}) {
   if (!NAME.test(String(m.name || ''))) e.push('name: letters, digits, ".", "_", "-" (up to 64)');
   if (!(isObj(m.base) && typeof m.base.model === 'string' && m.base.model.trim() && NAME.test(String(m.base.folder || '')))) e.push('base: { model (the base model), folder (its folder under adapters/) }');
   const h = m.harness;
-  if (!(isObj(h) && HEX40.test(String(h.commit)) && HEX64.test(String(h.skills)) && HEX64.test(String(h.prompt)))) e.push('harness: { commit (40 hex), skills and prompt (sha256 digests, 64 hex) }');
+  if (!(isObj(h) && HEX40.test(String(h.commit)) && HEX64.test(String(h.skills)) && HEX64.test(String(h.prompt)) && HEX64.test(String(h.code)))) e.push('harness: { commit (40 hex), skills, prompt and code (sha256 digests, 64 hex) }');
   if (!(isObj(m.dataset) && HEX64.test(String(m.dataset.fingerprint)))) e.push('dataset.fingerprint: the dataset\'s sha256 (64 hex)');
   const t = m.training;
   const step = isObj(t) ? t.step : null;
@@ -102,6 +114,7 @@ function validateManifest(m, { spec = null } = {}) {
     if (!isObj(t.settings) || !Object.keys(t.settings).length) e.push('training.settings: the settings it trained with');
     if (step === 2 && !share(t.stage1Mix)) e.push('training.stage1Mix: step 2\'s slice of stage-1 data (above 0, under 1)');
     if (step === 2 && !/^sha256:[0-9a-f]{16}$/.test(String(t.parent || ''))) e.push('training.parent: step 2 starts from a step-1 adapter: its manifest\'s tag (sha256:<16 hex>)');
+    if (step === 2 && !(typeof t.parentManifest === 'string' && /^(\/|~\/)/.test(t.parentManifest))) e.push('training.parentManifest: the step-1 adapter\'s manifest, an absolute or ~/ path');
     if (step === 1 && t.stage1Mix !== undefined && t.stage1Mix !== 0) e.push('training.stage1Mix: step 1 trains on stage-1 data only');
   }
   const v = m.validation;
@@ -142,11 +155,69 @@ function adapterTag(cfg, { home = os.homedir() } = {}) {
 }
 
 const res = (status, detail) => ({ status, detail });
+const sha = text => crypto.createHash('sha256').update(text).digest('hex');
+const recordDigest = x => sha(JSON.stringify(x === undefined ? null : x));
+const validationHash = v => recordDigest(isObj(v) ? { status: v.status, kind: v.kind, window: v.window, runs: v.runs, evidence: v.evidence, result: v.result } : null);
+const sealValidation = v => ({ ...v, hash: validationHash(v) });
+
+/** A run's setup record (train/ab-compare.js SETUP_FILE) in its run dir: null when the run isn't on this machine. */
+function readRunSetup(dir) {
+  let text;
+  try { text = fs.readFileSync(path.join(dir, 'setup.json'), 'utf8'); } catch (err) { if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null; throw err; }
+  return JSON.parse(text);
+}
+
+/**
+ * Why a passed validation is not backed by its evidence ([] when it is): its hash consistent with its status, runs,
+ * evidence and result; the result the derivation's pass; each run's setup record, where its run dir is on this machine,
+ * the one the validation read (by digest and run id). read.runSetup(dir): the record, or null (default: from disk).
+ */
+function evidenceErrors(m, { read = {} } = {}) {
+  const v = isObj(m) ? m.validation : null;
+  if (!isObj(v)) return ['no validation'];
+  const e = [];
+  const ev = v.evidence;
+  const sides = ['base', 'adapted'];
+  if (!(isObj(ev) && sides.every(k => isObj(ev[k]) && typeof ev[k].runId === 'string' && ev[k].runId && typeof ev[k].dir === 'string' && ev[k].dir && HEX64.test(String(ev[k].setup))))) {
+    return ['no evidence: the base and adapted runs (run id, run dir, setup record digest), as `adapter.js validated` records them'];
+  }
+  if (!(Array.isArray(v.runs) && v.runs.length === 2 && v.runs[0] === ev.base.runId && v.runs[1] === ev.adapted.runId)) e.push(`its runs ${JSON.stringify(v.runs)} are not the evidence's (${ev.base.runId}, ${ev.adapted.runId})`);
+  if (v.hash !== validationHash(v)) e.push('its hash does not match its status, runs, evidence and result (edited by hand?)');
+  const step = isObj(m.training) ? m.training.step : null;
+  const r = isObj(v.result) ? v.result : {};
+  if (step === 1 && !(Array.isArray(r.exitTest) && r.exitTest.length && r.exitTest.every(t => isObj(t) && t.status === 'PASS'))) e.push('its result is not a passed stage-1 exit test (every criterion PASS)');
+  if (step === 2 && !(isObj(r.keep) && r.keep.verdict === 'kept')) e.push('its result is not the keep rule\'s `kept` verdict');
+  const runSetup = read.runSetup || readRunSetup;
+  for (const k of sides) {
+    let s;
+    try { s = runSetup(expandHome(ev[k].dir)); } catch (err) { e.push(`the ${k} run's setup record can't be read (${err.message})`); continue; }
+    if (s === null || s === undefined) continue;
+    if (recordDigest(s) !== ev[k].setup || (isObj(s) && s.runId !== undefined && s.runId !== ev[k].runId)) e.push(`the ${k} run's setup record (${ev[k].dir}) is not the one the validation read`);
+  }
+  return e;
+}
+
+/** A step-2 adapter's parent: the step-1 manifest it names, its tag matching, valid and passed with its evidence. */
+function parentErrors(m, { read, spec }) {
+  const t = m.training;
+  const file = path.resolve(expandHome(String(t.parentManifest)));
+  let p;
+  try { p = read.adapterManifest(file); } catch (err) { return [`its parent's manifest can't be read: ${err.message}`]; }
+  const tag = read.adapterTagOf ? read.adapterTagOf(file) : adapterTag({ adapter: file });
+  if (tag !== t.parent) return [`its parent's manifest (${file}) is ${tag}, not the parent it was trained from (${t.parent})`];
+  const errors = validateManifest(p, { spec });
+  if (errors.length) return [`its parent's manifest is invalid: ${errors.join('; ')}`];
+  if (p.training.step !== 1) return ['its parent is not a step-1 adapter'];
+  if (p.validation.status !== 'passed') return [`its parent ${p.name} is not validated (${p.validation.status})`];
+  return evidenceErrors(p, { read }).map(x => `its parent ${p.name}'s validation: ${x}`);
+}
 
 /**
  * The preflight's `adapter` check: N/A with none selected; FAIL on a missing or invalid manifest, a stale one (its
- * skills or prompt digest isn't the harness's now), or a missing validation result; a pending validation runs only on
- * practice-validate (its own evaluation), a failed one never.
+ * skills, prompt or code digest isn't the harness's now), a missing validation result, a step-2 adapter whose parent
+ * (training.parentManifest) is missing, not the tag it was trained from, or not passed with its evidence, or a passed
+ * validation not backed by its evidence (evidenceErrors); a pending validation runs only on practice-validate (its own
+ * evaluation), a failed one never. read: { adapterManifest, adapterSpec, harnessDigests, runSetup?, adapterTagOf? }.
  */
 function adapterCheck({ cfg, role, read, home = os.homedir() }) {
   const file = adapterFile(cfg, { home });
@@ -160,11 +231,19 @@ function adapterCheck({ cfg, role, read, home = os.homedir() }) {
   if (errors.some(x => x.startsWith('validation: missing'))) return res('FAIL', `adapter ${m && m.name}: the validation result is missing (record it, or "status": "pending" for its practice-validate evaluation)`);
   if (errors.length) return res('FAIL', `adapter manifest invalid: ${errors.join('; ')}`);
   const now = read.harnessDigests();
-  const stale = ['skills', 'prompt'].filter(k => m.harness[k] !== now[k]);
-  if (stale.length) return res('FAIL', `adapter ${m.name} is stale: its ${stale.join(' and ')} digest${stale.length > 1 ? 's' : ''} ${stale.map(k => m.harness[k].slice(0, 12)).join(', ')} ${stale.length > 1 ? 'are' : 'is'} not the harness's now (${stale.map(k => now[k].slice(0, 12)).join(', ')}): retrain it on this harness`);
+  const stale = DIGESTS.filter(k => m.harness[k] !== (isObj(now) ? now[k] : undefined));
+  if (stale.length) return res('FAIL', `adapter ${m.name} is stale: its ${stale.join(' and ')} digest${stale.length > 1 ? 's' : ''} ${stale.map(k => m.harness[k].slice(0, 12)).join(', ')} ${stale.length > 1 ? 'are' : 'is'} not the harness's now (${stale.map(k => String(isObj(now) ? now[k] : 'unknown').slice(0, 12)).join(', ')}): retrain it on this harness`);
   if (m.validation.status === 'failed') return res('FAIL', `adapter ${m.name} failed its ${m.validation.kind} validation: never run`);
+  if (m.training.step === 2) {
+    const pe = parentErrors(m, { read, spec });
+    if (pe.length) return res('FAIL', `adapter ${m.name}: ${pe.join('; ')}`);
+  }
   if (m.validation.status === 'pending' && role !== 'practice-validate') return res('FAIL', `adapter ${m.name} is not validated yet: it runs only in its practice-validate evaluation (this run is ${role || 'outside the split'})`);
-  return res('PASS', `adapter ${m.name} (step ${m.training.step}, base ${m.base.model}): current skills and prompt, validation ${m.validation.status}`);
+  if (m.validation.status === 'passed') {
+    const ee = evidenceErrors(m, { read });
+    if (ee.length) return res('FAIL', `adapter ${m.name}: its passed validation is not backed by its evidence: ${ee.join('; ')}`);
+  }
+  return res('PASS', `adapter ${m.name} (step ${m.training.step}, base ${m.base.model}): current skills, prompt and code, validation ${m.validation.status}`);
 }
 
-module.exports = { SPEC_FILE, VALIDATIONS, STATUSES, validateSpec, validateManifest, readJsonFile, currentDigests, adapterFile, adapterTag, adapterCheck };
+module.exports = { SPEC_FILE, VALIDATIONS, STATUSES, DIGESTS, recordDigest, validationHash, sealValidation, evidenceErrors, validateSpec, validateManifest, readJsonFile, currentDigests, adapterFile, adapterTag, adapterCheck };

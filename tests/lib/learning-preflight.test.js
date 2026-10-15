@@ -107,10 +107,15 @@ test('the good fixture: every check passes (every feature merged); the risk reco
 });
 
 test('adapter: N/A with none selected; a stale adapter (its skills or prompt digest not the harness\'s now) refuses the run', () => {
-  const now = { skills: '1'.repeat(64), prompt: '2'.repeat(64) };
+  const now = { skills: '1'.repeat(64), prompt: '2'.repeat(64), code: '3'.repeat(64) };
+  const A = require('../../scripts/lib/learning/adapter');
   const m = {
     v: 1, name: 'm1', base: { model: 'b', folder: 'f' }, harness: { commit: 'c'.repeat(40), ...now }, dataset: { fingerprint: 'd'.repeat(64) },
-    training: { step: 1, method: 'lora', seed: 1, settings: { iters: 1 } }, validation: { kind: 'stage-1-exit-test', window: 'practice-validate', status: 'passed', runs: ['a', 'b'], result: { ok: true } },
+    training: { step: 1, method: 'lora', seed: 1, settings: { iters: 1 } },
+    validation: A.sealValidation({
+      kind: 'stage-1-exit-test', window: 'practice-validate', status: 'passed', runs: ['a', 'b'], result: { exitTest: [{ test: 't', status: 'PASS' }] },
+      evidence: { base: { runId: 'a', dir: '/no/such/run/a', setup: 'e'.repeat(64) }, adapted: { runId: 'b', dir: '/no/such/run/b', setup: 'f'.repeat(64) } },
+    }),
   };
   const file = path.join(tmp(), 'manifest.json');
   fs.writeFileSync(file, JSON.stringify(m));
@@ -121,6 +126,9 @@ test('adapter: N/A with none selected; a stale adapter (its skills or prompt dig
   const stale = P.runChecks(ctx({ run, read: read({ ...now, skills: '9'.repeat(64) }) }));
   assert.strictEqual(stale.ok, false, 'a FAIL refuses the run');
   assert.match(stale.results.find(x => x.check === 'adapter').detail, /stale: its skills digest/);
+  assert.match(one(P.adapter, ctx({ run, read: read({ ...now, code: '9'.repeat(64) }) })).detail, /stale: its code digest/);
+  fs.writeFileSync(file, JSON.stringify({ ...m, validation: { ...m.validation, result: { exitTest: [{ test: 't', status: 'PASS' }], edited: true } } }));
+  assert.match(one(P.adapter, ctx({ run, read: read(now) })).detail, /not backed by its evidence/, 'a hand-edited passed');
   fs.writeFileSync(file, JSON.stringify({ ...m, validation: undefined }));
   assert.match(one(P.adapter, ctx({ run, read: read(now) })).detail, /the validation result is missing/);
   fs.rmSync(file);

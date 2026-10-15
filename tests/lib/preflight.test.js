@@ -28,11 +28,16 @@ test('preflight config: valid, eodAt and sessions, a live run names its account;
 });
 
 test('preflight config: a declared adapter runs live only validated and current; pending, failed, stale or unreadable is refused', () => {
-  const H = { skills: '1'.repeat(64), prompt: '2'.repeat(64) };
+  const A = require('../../scripts/lib/learning/adapter');
+  const H = { skills: '1'.repeat(64), prompt: '2'.repeat(64), code: '3'.repeat(64) };
+  const sealed = status => A.sealValidation({
+    kind: 'stage-1-exit-test', window: 'practice-validate', status, runs: ['a', 'b'], result: { exitTest: [{ test: 't', status: 'PASS' }], why: 'x' },
+    evidence: { base: { runId: 'a', dir: '/no/such/run/a', setup: 'e'.repeat(64) }, adapted: { runId: 'b', dir: '/no/such/run/b', setup: 'f'.repeat(64) } },
+  });
   const manifest = status => ({
     v: 1, name: 'm1', base: { model: 'the-base', folder: 'base-folder' }, harness: { commit: 'c'.repeat(40), ...H }, dataset: { fingerprint: 'd'.repeat(64) },
     training: { step: 1, method: 'lora', seed: 1, settings: { iters: 600 } },
-    validation: { kind: 'stage-1-exit-test', window: 'practice-validate', status, ...(status === 'pending' ? {} : { runs: ['a', 'b'], result: { why: 'x' } }) },
+    validation: status === 'pending' ? { kind: 'stage-1-exit-test', window: 'practice-validate', status } : sealed(status),
   });
   const read = (m, now = H) => ({ adapterManifest: () => m, adapterSpec: () => { throw new Error('none'); }, harnessDigests: () => now });
   const raw = { ...RAW, adapter: '/models/m1/manifest.json' };
@@ -42,6 +47,11 @@ test('preflight config: a declared adapter runs live only validated and current;
   assert.match(one(manifest('pending')).detail, /not validated yet/);
   assert.strictEqual(one(manifest('failed')).status, 'fail');
   assert.strictEqual(one(manifest('passed'), { ...H, skills: '9'.repeat(64) }).status, 'fail', 'stale');
+  assert.strictEqual(one(manifest('passed'), { ...H, code: '9'.repeat(64) }).status, 'fail', 'stale code');
+  // A passed written by hand (no evidence, or its hash not its record's) is refused live.
+  const hand = { ...manifest('passed'), validation: { kind: 'stage-1-exit-test', window: 'practice-validate', status: 'passed', runs: ['a', 'b'], result: { why: 'x' } } };
+  assert.match(one(hand).detail, /not backed by its evidence/);
+  assert.strictEqual(one({ ...manifest('passed'), validation: { ...sealed('failed'), status: 'passed' } }).status, 'fail');
   assert.strictEqual(P.configChecks(raw, { read: { adapterManifest: () => { throw new Error('missing'); } } }).results.find(x => x.check === 'adapter').status, 'fail');
   // The default readers: the manifest from disk.
   const dir = tmpDir();

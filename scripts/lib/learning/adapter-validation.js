@@ -6,11 +6,13 @@
  * prompt or the runner.
  *
  *   onValidate(manifest)                       a run's window wholly in practice-validate
- *   deriveValidation({ manifest, tag, base, adapted, env, root, account, deps })   { status, runs, result }, or throws
- *                                              (the validation stays pending)
+ *   deriveValidation({ manifest, tag, base, adapted, env, root, account, deps })   { status, runs, result, evidence },
+ *                                              or throws (the validation stays pending)
  */
 
-const { VALIDATIONS } = require('./adapter');
+const fs = require('fs');
+const path = require('path');
+const { VALIDATIONS, recordDigest } = require('./adapter');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -27,10 +29,15 @@ function onValidate(manifest) {
  * adapter) of the base run and the adapted run, both finished replays on practice-validate (their windows and their
  * looks), differing only in the declared adapter, the adapted run's being THIS manifest (its tag) and the base's none.
  * Step 1 (the stage-1 exit test): no measure worse, and every criterion of replay/stage.js exitTest on the adapted run
- * passes (its experience log; process adherence from its scorecard). Step 2 (the prop keep rule as the A/B reads it):
- * no measure worse, the paired Monte Carlo pass rate better, and zero blows on the adapted side. Any criterion failed,
- * or no gain, is 'failed'; a criterion that can't be read (too few decisions, no Monte Carlo) throws: it stays pending.
- * Throws on any refusal (a run missing or unpaired). deps: { readSide, compareRuns, exitTest } (tests).
+ * passes (its experience log; process adherence from its scorecard). Step 2: no measure worse, and the FULL prop keep
+ * rule (train/model-verifier.js decide, the training loop's one keep rule) on the pair as one held-out window: the
+ * paired Monte Carlo (prop/model-score.js pairRuns, A the base, B the adapted), process adherence from the two
+ * scorecards and the correct-read rate. Zero blows on the adapted side in its real attempts and its resampled paths;
+ * `kept` is passed, `inconclusive` (a window too short to show anything, too few decisions) stays pending (throws),
+ * anything else is failed. A resampled-only gain is never a pass. Any criterion failed, or no gain, is 'failed'; a
+ * criterion that can't be read throws: it stays pending. Throws on any refusal (a run missing or unpaired).
+ * evidence: each run's id, run dir and setup record digest (learning/adapter.js evidenceErrors checks them).
+ * deps: { readSide, compareRuns, exitTest, pair(a, b, opts), readsOf(side, opts) } (tests).
  */
 function deriveValidation({ manifest, tag, base, adapted, env = process.env, root = null, account = null, deps = {} }) {
   const AB = require('../train/ab-compare');
@@ -55,8 +62,10 @@ function deriveValidation({ manifest, tag, base, adapted, env = process.env, roo
   if (!(r.differs.length === 1 && r.differs[0].startsWith('adapter:'))) throw new Error(`the runs differ in more than the adapter (${r.differs.join('; ')})`);
   const rows = r.rows.map(x => ({ measure: x.measure, verdict: x.verdict, a: x.a, b: x.b }));
   const result = { kind: VALIDATIONS[step], compare: { a: r.a, b: r.b, result: r.result, rows } };
+  const evidence = Object.fromEntries([['base', a], ['adapted', b]].map(([k, s]) => [k, { runId: s.runId, dir: s.runDir, setup: recordDigest(s.setup) }]));
+  const done = (status, res) => ({ status, runs: [a.runId, b.runId], result: res, evidence });
   const worse = r.rows.filter(x => x.verdict === 'B worse').map(x => x.measure);
-  if (worse.length) return { status: 'failed', runs: [a.runId, b.runId], result: { ...result, why: `worse: ${worse.join(', ')}` } };
+  if (worse.length) return done('failed', { ...result, why: `worse: ${worse.join(', ')}` });
   if (step === 1) {
     const sc = Array.isArray(b.scorecard) ? b.scorecard : null;
     const adherence = sc ? { agree: sc.filter(x => x && x.agrees === true).length, disagree: sc.filter(x => x && x.agrees === false).length } : null;
@@ -64,16 +73,50 @@ function deriveValidation({ manifest, tag, base, adapted, env = process.env, roo
     const failed = tests.filter(t => t.status === 'FAIL');
     const open = tests.filter(t => t.status !== 'PASS' && t.status !== 'FAIL');
     const out = { ...result, exitTest: tests };
-    if (failed.length) return { status: 'failed', runs: [a.runId, b.runId], result: { ...out, why: `the exit test failed: ${failed.map(t => t.test).join(', ')}` } };
+    if (failed.length) return done('failed', { ...out, why: `the exit test failed: ${failed.map(t => t.test).join(', ')}` });
     if (open.length || !tests.length) throw new Error(`the stage-1 exit test can't be read on run ${b.runId} (${open.map(t => `${t.test} ${t.status}`).join(', ') || 'no criteria'}): the validation stays pending`);
-    return { status: 'passed', runs: [a.runId, b.runId], result: { ...out, why: 'every exit-test criterion passes; no measure worse' } };
+    return done('passed', { ...out, why: 'every exit-test criterion passes; no measure worse' });
   }
-  const pass = r.rows.find(x => x.measure === 'MC pass within 30 days');
-  const blows = r.rows.find(x => x.measure === 'MC blow rate');
-  if (!pass || !blows || pass.verdict === 'N/A' || typeof blows.b !== 'number') throw new Error(`no paired Monte Carlo on the pair (${pass ? pass.test : 'no row'}): the validation stays pending`);
-  if (blows.b > 0) return { status: 'failed', runs: [a.runId, b.runId], result: { ...result, why: `the adapted run blows (rate ${blows.b}): zero blows is a hard rule` } };
-  if (pass.verdict !== 'B better') return { status: 'failed', runs: [a.runId, b.runId], result: { ...result, why: `no gain in the pass rate (${pass.verdict}): no gain is not kept` } };
-  return { status: 'passed', runs: [a.runId, b.runId], result: { ...result, why: 'pass rate better, zero blows, no measure worse' } };
+  return keepRule({ a, b, result, done, env, root, account, deps });
+}
+
+/** The scorecard's records as the keep rule's decisions (train/loop.js scorecardDecisions' key and category). */
+const scored = list => (Array.isArray(list) ? list : []).filter(x => isObj(x) && x.t && x.symbol && x.category).map(x => ({ key: `${x.t}|${x.symbol}`, category: x.category }));
+
+/** The paired Monte Carlo of the base and adapted runs, under the account the A/B resolves (ab-compare.js defaultMc's). */
+function defaultPair(a, b, { root, env, account }) {
+  const M = require('../prop/model-score');
+  const { loadAccounts, accountNamed } = require('../trading/accounts');
+  const { strategies } = require('../trading/strategies').loadStrategies(root, env);
+  let runner = {};
+  try { runner = JSON.parse(fs.readFileSync(path.join(a.runDir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { /* none */ }
+  const p = M.resolveAccount({ override: account, runnerAccount: runner.account, strategies, accounts: loadAccounts(root, env).accounts });
+  if (!p.name) throw new Error(p.why);
+  const acc = accountNamed(root, p.name, env);
+  return M.pairRuns(a.runDir, b.runDir, { root, env, account: acc, policy: M.policyFor(strategies, acc.name) });
+}
+
+/** Step 2: the full keep rule (train/model-verifier.js decide) on the pair as one held-out window. */
+function keepRule({ a, b, result, done, env, root, account, deps }) {
+  const MV = require('../train/model-verifier');
+  const pair = deps.pair || defaultPair;
+  const readsOf = deps.readsOf || ((side, o) => MV.readsByKey(side.runDir, o));
+  let mc;
+  try { mc = pair(a, b, { root, env, account }); } catch (err) { throw new Error(`the paired Monte Carlo can't be scored (${err.message}): the validation stays pending`, { cause: err }); }
+  const blows = isObj(mc) && isObj(mc.blows) ? mc.blows.b : undefined;
+  if (!(Number.isInteger(blows) && blows >= 0)) throw new Error('the paired Monte Carlo gives no blow count for the adapted run: the validation stays pending');
+  const realBlown = isObj(mc.b) && isObj(mc.b.real) && typeof mc.b.real.blown === 'number' ? mc.b.real.blown : 0;
+  let rd = null;
+  let readsWhy = null;
+  try { rd = MV.reads(readsOf(a, { root, env }), readsOf(b, { root, env })); } catch (err) { readsWhy = err.message; }
+  const window = { label: `${a.manifest.start}..${a.manifest.end}`, mc, adherence: MV.adherence(scored(a.scorecard), scored(b.scorecard)), reads: rd, readsWhy };
+  const v = MV.decide([window], { heldOut: true });
+  const out = { ...result, keep: { verdict: v.verdict, reasons: v.reasons, pooled: v.pooled, blows: { adapted: blows, adaptedReal: realBlown } } };
+  // Zero blows on the adapted side, in its real attempts and its resampled paths: a hard rule, whatever else it gains.
+  if (blows > 0 || realBlown > 0) return done('failed', { ...out, why: `the adapted run blows (${blows} over its real attempts and resampled paths): zero blows is a hard rule` });
+  if (v.verdict === 'inconclusive') throw new Error(`the keep rule is inconclusive on the pair (${v.reasons.join('; ')}): the validation stays pending`);
+  if (v.verdict !== 'kept') return done('failed', { ...out, why: `the keep rule: ${v.verdict} (${v.reasons.join('; ')})` });
+  return done('passed', { ...out, why: `the keep rule keeps it: ${v.reasons.join('; ')}` });
 }
 
 module.exports = { onValidate, deriveValidation };

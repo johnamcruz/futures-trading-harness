@@ -162,3 +162,41 @@ test('runDecisions: an exit the runner made (its trail or time stop) is marked t
   const ds = E.runDecisions(runDir, { score });
   assert.deepStrictEqual(ds.map(d => d.policyExit), [null, 'runner-close', null]);
 });
+
+test('runDecisions: a pass is judged by the account alone, never by a refused plan the model never took', () => {
+  // The reviewer's probe: cushion $1500, daily room $2000, soft headroom $900, and a refused $2000 plan (400 ticks x $0.50 x 10).
+  const home = tmpDir();
+  const refused = { symbol: 'MNQ', ok: false, side: 'long', entry: 21000, stop: 20900, target: 21200, size: 10, tick: 0.25, tickValue: 0.5, reads: [] };
+  const { runDir, score } = F.writeRun(home, {
+    start: '2022-03-07T14:00:00Z', end: '2022-03-08T00:00:00Z', stage: 2,
+    decisions: [{ t: '2022-03-07T14:33:00.000Z', kind: 'pass', composed: [refused], category: 'unchecked', expected: { decision: 'take', decidedBy: 'take' }, prompt: 'p', headText: ['no'], attempt: { status: 'active', cushion: 1500, dailyHeadroom: 2000, softHeadroom: 900 } }],
+  });
+  const [d] = E.runDecisions(runDir, { score });
+  assert.strictEqual(d.riskUsd, 2000, 'the refused plan\'s risk is recorded');
+  assert.strictEqual(d.account.standDown, false, d.account.why);
+  const L = require('../../scripts/lib/learning/decision-label');
+  assert.notStrictEqual(L.labelDecision(d, { minRR: 2, maxRiskUsd: 300 }).label, 'correct');
+  // The account alone still calls for standing down: no cushion or daily room left, or the soft stop reached.
+  for (const attempt of [{ cushion: 0, dailyHeadroom: 2000, softHeadroom: 900 }, { cushion: 1500, dailyHeadroom: -5, softHeadroom: 900 }, { cushion: 1500, dailyHeadroom: 2000, softHeadroom: 0 }]) {
+    const h = tmpDir();
+    const run = F.writeRun(h, { start: '2022-03-07T14:00:00Z', end: '2022-03-08T00:00:00Z', stage: 2, decisions: [{ t: '2022-03-07T14:33:00.000Z', kind: 'pass', composed: [refused], category: 'unchecked', expected: { decision: 'take', decidedBy: 'take' }, prompt: 'p', headText: ['no'], attempt: { status: 'active', ...attempt } }] });
+    const [x] = E.runDecisions(run.runDir, { score: run.score });
+    assert.strictEqual(L.labelDecision(x, { minRR: 2, maxRiskUsd: 300 }).label, 'correct', JSON.stringify(attempt));
+  }
+});
+
+test('cycleHealth: a store line whose ran is missing or empty is no clean cycle; every entry must be ok', () => {
+  for (const line of [{}, { ran: [] }, { ran: null }, { ran: 'x' }, { ran: [{ ok: true }, { ok: 'true' }] }, { ran: [{ ok: true }, null] }]) {
+    assert.ok(E.cycleHealth(line, { ok: true }), JSON.stringify(line));
+  }
+  assert.match(E.cycleHealth({ ran: [] }, {}), /no cycle is recorded/);
+  assert.strictEqual(E.cycleHealth({ ran: [{ ok: true }, { ok: true }] }, {}), null);
+});
+
+test('headMessages: a repeated tool-call id gives no faithful turn', () => {
+  const ev = (type, part) => ({ type, timestamp: 1, sessionID: 's', part });
+  const call = (id, out) => ev('tool_use', { tool: 'x', callID: id, state: { status: 'completed', input: {}, output: out } });
+  assert.ok(E.headMessages([call('k1', 'a'), call('k2', 'b'), ev('text', { text: 'done' })]));
+  assert.strictEqual(E.headMessages([call('k1', 'a'), call('k1', 'b'), ev('text', { text: 'done' })]), null);
+  assert.strictEqual(E.headMessages([ev('step_start', {}), call('k1', 'a'), ev('step_finish', {}), ev('step_start', {}), call('k1', 'b'), ev('text', { text: 'done' }), ev('step_finish', {})]), null, 'across steps too');
+});

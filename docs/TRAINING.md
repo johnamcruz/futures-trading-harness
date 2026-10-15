@@ -628,11 +628,15 @@ and use an adapter. In short:
    mixed back in. The template is `adapters/<base>/train.example.sh`; the
    weights stay local.
 5. **Record the manifest** (`node scripts/adapter.js init`): the harness
-   commit, the skills and prompt digests, the dataset fingerprint, the base
-   model, the training settings and the validation result.
+   commit, the skills, prompt and code digests, the dataset fingerprint, the
+   base model, the training settings, step 2's parent (the step-1 manifest's
+   tag and path) and the validation result.
 6. **Judge it on practice-validate**:
    - step 1 by the stage-1 exit test;
-   - step 2 by the 30-day prop Monte Carlo keep rule.
+   - step 2 by the full keep rule of section 6 (`model-verifier.js decide`,
+     the pair as one held-out window): `kept` passes, `inconclusive` stays
+     pending, anything else fails; zero blows on real attempts and resampled
+     paths alike, and a resampled-only gain never passes.
 
    The evaluation is two replays of the same windows and seed, base and
    adapted. The adapted run's runner config declares the adapter
@@ -641,15 +645,19 @@ and use an adapter. In short:
    with `node scripts/ab-compare.js <base> <adapted> --field adapter`, and
    record the result with `node scripts/adapter.js validated <manifest>
    --base <run dir> --adapted <run dir>`, which derives it from that
-   comparison.
+   comparison and records its evidence (the runs, their setup record
+   digests, a hash over the record).
 7. **Use it.** The live preflight refuses a declared adapter that is
-   pending, failed, stale or invalid. The training preflight's `adapter`
-   check:
+   pending, failed, stale, invalid or not backed by its evidence. The
+   training preflight's `adapter` check:
    - is N/A with no adapter selected;
    - FAILs on a missing or invalid manifest;
-   - FAILs on a stale adapter (its skills or prompt digest isn't the
+   - FAILs on a stale adapter (its skills, prompt or code digest isn't the
      harness's now);
-   - FAILs on a missing or failed validation;
+   - FAILs on a missing or failed validation, or a passed one not backed by
+     its evidence (a hand edit);
+   - FAILs on a step-2 adapter whose parent is missing, changed, or not
+     passed with its evidence;
    - FAILs on a pending validation outside practice-validate.
 
 `adapters/` is the one folder that may name a model.

@@ -49,7 +49,9 @@ function stage2Run(home) {
     runId: 'train2', start: '2022-04-04T00:00:00Z', end: '2022-04-09T00:00:00Z', stage: 2,
     states: [{ day: '2022-04-04', bucket: 'near-mll', weight: 0.3 }, { day: '2022-04-05', bucket: 'mid', weight: 1.2 }],
     decisions: [
-      { t: '2022-04-04T14:33:00.000Z', kind: 'pass', record: rec('fair-value-gaps'), attempt: { ...ROOM, cushion: 80 }, prompt: 'S2-NEAR-STANDDOWN', headText: ['STAND-DOWN'] },
+      // Near the max loss limit with the soft daily stop reached: the account alone calls for standing down (a pass is
+      // never judged by the risk of a plan it didn't take).
+      { t: '2022-04-04T14:33:00.000Z', kind: 'pass', record: rec('fair-value-gaps'), attempt: { ...ROOM, cushion: 80, softHeadroom: 0 }, prompt: 'S2-NEAR-STANDDOWN', headText: ['STAND-DOWN'] },
       { t: '2022-04-04T15:33:00.000Z', kind: 'take', record: rec('order-blocks'), attempt: { ...ROOM, cushion: 2000 }, prompt: 'S2-NEAR-TAKE', headText: ['S2-TAKE-NEAR'] },
       { t: '2022-04-05T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), attempt: ROOM, prompt: 'S2-MID-TAKE', headText: ['S2-TAKE-MID'] },
       { t: '2022-04-05T15:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), attempt: { ...ROOM, entryBlock: 'loss streak stop' }, prompt: 'S2-BLOCKED', headText: ['S2-TAKE-BLOCKED'] },
