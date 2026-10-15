@@ -317,8 +317,8 @@ test('stage 2: the paired Monte Carlo (B minus A) when the branch has it; N/A ot
   assert.strictEqual(r.rows.find(x => x.measure === 'MC blow rate').lo, 0.05);
   assert.strictEqual(r.result, AB.WORSE);
   assert.match(mcRow(compare(a, b, { metrics: ['mc'], deps: { mc: () => { throw new Error('no account'); } } })).test, /^no account$/);
-  // Skill usage: N/A without the module, descriptive rows with it.
-  assert.match(compare(a, b, { metrics: ['skills'] }).rows[0].test, /skill-usage.js is not on this branch/);
+  // Skill usage: N/A without a reader, descriptive rows with one.
+  assert.match(compare(a, b, { metrics: ['skills'] }).rows[0].test, /no skill-usage reader given/);
   const usage = dir => ({ skills: [{ skill: 'cisd', usedRate: dir === a.paths.runDir ? 0.5 : 0.75, correctRate: 0.8, missed: dir === a.paths.runDir ? 4 : 1, used: 2, available: 4, correct: 4, reads: 5 }] });
   const s = compare(a, b, { metrics: ['skills'], deps: { skillUsage: usage } });
   assert.match(s.rows[0].measure, /skill cisd: used \+0\.25, correct 0, missed -3/);

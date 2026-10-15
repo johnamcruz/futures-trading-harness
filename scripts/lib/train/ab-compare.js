@@ -349,12 +349,8 @@ function skillRows(ua, ub) {
   });
 }
 
-/** The default skill-usage reader: learning/skill-usage.js when this branch has it, else null (N/A). */
-function defaultSkillUsage() {
-  let m;
-  try { m = require('../learning/skill-usage'); } catch (_err) { return null; }
-  return typeof m.readSkillUsage === 'function' ? dir => m.readSkillUsage(dir) : null;
-}
+/** The default skill-usage reader: the run's report (learning/skill-usage.js readSkillUsage). */
+const defaultSkillUsage = () => dir => require('../learning/skill-usage').readSkillUsage(dir); // lazy: only a skills row loads it
 
 /** The default paired Monte Carlo: prop/model-score.js pairRuns when this branch has it, else null (N/A). */
 function defaultMc({ root, env, account }) {
@@ -424,7 +420,7 @@ function compareRuns(dirA, dirB, { metrics = METRICS, field = null, env = proces
   if (metrics.includes('entries')) rows.push(logs ? entriesRow(ma, mb) : na('entry rate', 'no experience log on both runs'));
   if (metrics.includes('skills')) {
     const usage = deps.skillUsage === undefined ? defaultSkillUsage() : deps.skillUsage;
-    if (!usage) rows.push(na('skill usage', 'learning/skill-usage.js is not on this branch'));
+    if (!usage) rows.push(na('skill usage', 'no skill-usage reader given'));
     else {
       try { rows.push(...skillRows(usage(a.runDir), usage(b.runDir))); } catch (err) { rows.push(na('skill usage', err.message)); }
     }
@@ -458,4 +454,4 @@ function reportText(r) {
   return `${lines.join('\n')}\n`;
 }
 
-module.exports = { SETUP_FILE, PINNED, METRICS, BETTER, WORSE, NONE, setupRecord, recordSetup, compareSetups, readSide, checkLooks, pairedInterval, decisionsByKey, compareRuns, reportText };
+module.exports = { SETUP_FILE, PINNED, METRICS, BETTER, WORSE, NONE, setupRecord, recordSetup, compareSetups, readSide, checkLooks, pairedInterval, decisionsByKey, skillRows, compareRuns, reportText };
