@@ -145,3 +145,36 @@ test('reason_check: a FACTS line (risk-manager phase 2) is checked as the order 
   assert.doesNotMatch(check({ symbol: 'MNQ', reasons: 'VERDICT: APPROVE - size 1' }, ctx(h)).text, /FACTS/);
   assert.match(check({ symbol: 'MES', reasons: 'VERDICT: APPROVE\nFACTS: entries allowed' }, ctx(h)).text, /^No current bar briefing for MES[^]*- UNCHECKED entries: "entries allowed" - no current bar briefing for MES\nThese facts can't be checked: the order gate refuses/);
 });
+
+test('reason_check: a composed setup on the bar lists its record\'s reads and plan, never a strategy\'s priority order', () => {
+  const { appendRecord } = require('../../scripts/lib/trading/trade-lifecycle');
+  const h = home();
+  const rec = (over = {}) => ({
+    schema: 1, id: 'rec-ok', at: CLOSED, strategy: 'trade_lifecycle', root: 'MNQ', symbol: 'MNQ', contract: 'MNQ', lane: '3m', side: 'long', bar: AS_OF,
+    expiresAt: '2026-06-10T14:00:00.000Z', cycleId: 'c1', exploratory: false, ok: true, problems: [], signature: 'bias:1h-bos-up', skillSignature: 'bias:bos-vs-choch',
+    reads: [{ step: 'bias', skill: 'bos-vs-choch', read: '1h bos up', check: true, agrees: true }], context: null,
+    plan: { entry: { type: 'limit', price: 21540.25 }, stop: { price: 21512.5, ticks: 111 }, target: { price: 21598, ticks: 231 }, rr: 2.08, inTheWay: null, size: 1, tick: 0.25, tickValue: 0.5 },
+    ...over,
+  });
+  // Another bar's record (written later) and a short that is not OK are no setup on this bar.
+  appendRecord(h, rec());
+  appendRecord(h, rec({ id: 'other-bar', bar: '2026-06-10T13:51:00.000Z' }));
+  appendRecord(h, rec({ id: 'bad', side: 'short', ok: false, problems: ['a read is false'] }));
+  const json = JSON.parse(check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - no candidate strategies', json: true }, ctx(h)).text);
+  const composed = json.steps.filter(s => s.setup === 'trade_lifecycle');
+  assert.deepStrictEqual(composed.map(s => [s.direction, s.composed]), [['long', 'rec-ok']]);
+  assert.deepStrictEqual(composed[0].steps.map(s => `${s.step} ${s.name} ${s.result}`), ['1 hard stops pass', 'bias bos-vs-choch pass', 'plan plan pass'], 'no strategy priority step');
+  assert.deepStrictEqual([json.claims[0].kind, json.claims[0].why], ['nothing-fired', 'fired: keltner short'], 'a composed setup is the model\'s own record, no strategy that fired');
+  const text = check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - no candidate strategies' }, ctx(h)).text;
+  // The policy's verdict on the record is the composed setup's, never a setup of its own; its skip is step 1's no trade.
+  prop.appendVerdict(h, { strategy: 'prop_portfolio', component: 'trade_lifecycle', record: 'rec-ok', direction: 'long', action: 'skip', maxSize: 0, contract: 'MNQ', reason: 'budget below one contract', bar: AS_OF, at: CLOSED, expiresAt: '2026-06-10T14:00:00.000Z' });
+  const sized = JSON.parse(check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - prop_portfolio verdict is skip', json: true }, ctx(h)).text);
+  assert.deepStrictEqual(sized.steps.map(s => `${s.setup} ${s.direction}`), ['keltner short', 'trade_lifecycle long']);
+  assert.deepStrictEqual(sized.steps[1].steps[0], { step: 1, name: 'hard stops', result: 'no-trade', why: 'the verdict is skip (budget below one contract)' });
+  assert.strictEqual(sized.claims.find(c => c.kind === 'verdict-skip').check, true);
+  // A later record for another contract of the family on the side is the one the gate judges: no MNQ setup then.
+  appendRecord(h, rec({ id: 'nq', symbol: 'NQ', contract: 'NQ' }));
+  const after = JSON.parse(check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - passing', json: true }, ctx(h)).text);
+  assert.deepStrictEqual(after.steps.filter(s => s.setup === 'trade_lifecycle'), []);
+  assert.match(text, /- trade_lifecycle long \(composed: its record's reads and plan, not a strategy's priority order\): 1 hard stops pass \(no hard stop\); bias bos-vs-choch pass \(1h bos up \(verified by compose_check\)\); plan plan pass \(record rec-ok: limit 21540\.25, stop 21512\.5, target 21598, R:R 2\.08, size 1\)\n/);
+});
