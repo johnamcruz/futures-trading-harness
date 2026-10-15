@@ -19,11 +19,13 @@
  * and the index's hash and the days it showed. With no index pinned, or no match, it says so. It never says what
  * to do.
  *
- * The history library (learning/setup-library.js), when the run pinned one: a section of its own, after the model's
- * record and apart from it, headed as code-measured and not the model's decisions: the candidate's read signature
- * (this context, any context) and its setup reaction alone (this context, any context, with the reactions that had no
- * room at 2:1) as code measured them with one fixed standard trade, walk-forward the same way. The cap drops the
- * library's lines before the model's own cells.
+ * The history library (learning/setup-library.js), only when the run pinned one AND enabled its display (the replay
+ * config's libraryDisplay, kept in the pin: setup-library.js libraryShown; pinning alone shows nothing): a section of
+ * its own, after the model's record and apart from it, headed as code-measured and not the model's decisions: the
+ * candidate's read signature (this context, any context) and its setup reaction alone (this context, any context, with
+ * the reactions that had no room at 2:1) as code measured them with one fixed standard trade, walk-forward the same
+ * way: counts, the win rate and the no-room days only, never an R (the library measures one fixed plan, not the
+ * model's trades). The cap drops the library's lines before the model's own cells.
  *
  * Budget (D22): at most two answered calls per cycle bar and root; a third is refused. Each answered call is
  * recorded (learning/experience-lookups.js reserveLookup: counted and appended under a lock, so two calls at once
@@ -39,7 +41,7 @@ const { readRecords, CONTEXT_KEYS } = require('../learning/lifecycle-record');
 const { loadPinned, cellAt, examplesBefore, cellKey, contextKey } = require('../learning/experience-index');
 const { sessionDate } = require('../learning/splits');
 const { MAX_PER_BAR, reserveLookup } = require('../learning/experience-lookups');
-const { loadPinnedLibrary, libraryCellAt, noRoomBefore, setupKeyOf } = require('../learning/setup-library');
+const { loadPinnedLibrary, libraryShown, libraryCellAt, noRoomBefore, setupKeyOf } = require('../learning/setup-library');
 const { familyRoot } = require('../trading/contracts');
 const { daysNear } = require('../trading/trade-lifecycle');
 const { context } = require('./cli');
@@ -88,12 +90,12 @@ function candidateFor(home, root, now) {
   return live.length ? live[live.length - 1] : null;
 }
 
-/** A library cell: n, days, the win rate and mean R with their intervals, last seen (no entries or passes: code's trades). */
+/** A library cell: counts and the win rate with its interval (no entries or passes: code's trades; never an R). */
 function libraryLine(label, c, noRoom = null) {
   const room = noRoom ? `; ${noRoom} more had no room at 2:1` : '';
   if (!c) return `- ${label}: no record${room}`;
   if (!c.enough) return `- ${label}: ${c.note}${room}`;
-  return `- ${label}: n ${c.n} (${c.days} days, ${c.unfilled} unfilled), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}], last ${c.lastSeen}${room}`;
+  return `- ${label}: n ${c.n} (${c.days} days, ${c.unfilled} unfilled), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}]${room}`;
 }
 
 /** The history library's section for the candidate (none without a library). */
@@ -142,7 +144,8 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
   for (const a of alts) swapStep(rec.signatures.skill, a.step, a.skill); // a step the candidate lacks is refused before the budget
   const index = loadPinned(home);
   let library;
-  try { library = loadPinnedLibrary(home); } catch (err) { library = { error: err.message }; }
+  // Shown only when the run enabled the display; pinned alone, the library is code's (the scan, the training lists).
+  try { library = libraryShown(home) ? loadPinnedLibrary(home) : null; } catch (err) { library = { error: err.message }; }
   // Counted and recorded together, under the lock: a third call on the bar is refused.
   const taken = reserveLookup(c.env, { role, root: rec.root, bar: rec.bar, side: rec.side, signature: rec.signatures.read, index: index ? index.hash : null, ...(library && !library.error ? { library: library.hash } : {}) }, c.wallNow ? c.wallNow() : Date.now());
   if (!taken) throw new Error(`experience_lookup: ${MAX_PER_BAR} calls on this bar already (the budget); decide with what they showed`);

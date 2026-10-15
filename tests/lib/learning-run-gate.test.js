@@ -50,6 +50,9 @@ test('validate needs its flag and is counted; sealed windows need a candidate an
   const t = G.startLearningRun(home, { ...sealed, candidate: 'champ', evaluation: 'ev1' });
   assert.deepStrictEqual([t.role, t.look.purpose, t.taken.appended, t.hideOutcomes], ['test', 'judging', true, false]);
   assert.strictEqual(G.startLearningRun(home, { ...sealed, candidate: 'champ', evaluation: 'ev1' }).taken.appended, false, 'a resume spends nothing');
+  // A home without the run's record (deleted, or another workDir) under a runId that took its look is no resume.
+  assert.throws(() => G.startLearningRun(tmp(), { ...sealed, candidate: 'champ', evaluation: 'ev1' }), /run t1 took its judging look in evaluation ev1 already, and this run home has no record of it .*start another runId/);
+  assert.strictEqual(fs.readFileSync(ledger, 'utf8').trim().split('\n').length, 2, 'nothing spent by the refusal');
   const fix = G.startLearningRun(tmp(), { ...sealed, runId: 'f1', candidate: 'champ', evaluation: 'fx', reasoningFix: true });
   assert.deepStrictEqual([fix.look.purpose, fix.hideOutcomes], ['reasoning-fix', true]);
   // Final: refused before anything is written without a test pass.
@@ -84,15 +87,14 @@ test('one ledger: the run keeps its ledger\'s path, and the ledger is the defaul
 });
 
 /** scripts/replay.js run on a config for [start, end), with flags: { status, stdout, stderr, user, live }. */
-function replayRun(start, end, flags = [], over = {}) {
-  const user = tmp();
+function replayRun(start, end, flags = [], over = {}, user = tmp()) {
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
     runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
     autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...over,
   }));
   const live = path.join(user, 'live');
-  fs.mkdirSync(live);
+  fs.mkdirSync(live, { recursive: true });
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'replay.js'), 'run', '--config', config, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live }, timeout: 60000 });
   return { ...r, user, live };
@@ -125,7 +127,7 @@ test('scripts/replay.js run: the gate decides before the run home is seeded', ()
   // A judging run's look names its arm and its setup (replay/config.js setupHash), from the config alone.
   const live = replayRun('2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', ['--candidate', 'champ', '--evaluation', 'ev1']);
   const [taken] = fs.readFileSync(path.join(live.user, '.futures-trading-harness', 'learning', 'looks.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepStrictEqual([taken.arm, /^[0-9a-f]{64}$/.test(taken.config), taken.role], ['without', true, 'test']);
+  assert.deepStrictEqual([taken.arm, /^[0-9a-f]{64}$/.test(taken.config), /^[0-9a-f]{64}$/.test(taken.setup), taken.setup !== taken.config, taken.role], ['without', true, true, true, 'test']);
 });
 
 test('setupHash: the same for two runs of one setup (another runId, learning flag), another for another setup', () => {
@@ -159,6 +161,119 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
   assert.ok(K.checkLook(arm('r-with', libA), ledger).ok, 'the same library: a valid arm');
 });
 
+
+test('library display: off unless the config says true, part of the setup; a paired with/without-display comparison is an arm dimension of its own', () => {
+  const crypto = require('crypto');
+  const { resolveReplay, setupHash, setupBase, lookArm } = require('../../scripts/lib/replay/config');
+  const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../../scripts/lib/session/record');
+  const L = require('../../scripts/lib/learning/setup-library');
+  const K = require('../../scripts/lib/learning/looks');
+  const ROOT = path.join(__dirname, '..', '..');
+  const user = tmp();
+  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') };
+  const raw = o => ({ runId: 'a', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2025-03-03T14:30:00Z', end: '2025-03-03T15:00:00Z', premarket: false, autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...o });
+  const run = o => resolveReplay(raw(o), { baseDir: user, env, root: ROOT });
+  const rec = day => ({ v: L.VERSION, id: day, root: 'MNQ', day, bar: `${day}T15:00:00.000Z`, status: 'traded', side: 'long', reads: [], signature: 'bias:x', setupKey: 'setup:y', context: {}, outcome: { filled: true, R: 1, exitTime: `${day}T16:00:00.000Z` } });
+  const libA = L.writeLibrary(path.join(user, 'libA'), L.buildLibraryIndex([rec('2022-03-01')], { reps: 20 }));
+  const libB = L.writeLibrary(path.join(user, 'libB'), L.buildLibraryIndex([rec('2022-03-02')], { reps: 20 }));
+  const hashA = L.readLibrary(libA).hash.slice(0, 16);
+  // Config: a boolean, off by default, and only with a library to show.
+  assert.strictEqual(run({ setupLibrary: libA }).libraryDisplay, false);
+  assert.strictEqual(run({ setupLibrary: libA, libraryDisplay: true }).libraryDisplay, true);
+  assert.throws(() => run({ setupLibrary: libA, libraryDisplay: 'yes' }), /libraryDisplay: true or false/);
+  assert.throws(() => run({ libraryDisplay: true }), /libraryDisplay: shows the pinned history library; name it \(setupLibrary\)/);
+  // The hash a setup had before the display existed (the body setupHash had), for a run without a library and one
+  // with a library and no display: their looks in the ledger stay theirs.
+  const before = r => crypto.createHash('sha256').update(JSON.stringify({
+    cfg: { ...r.cfg, dataDir: null, workdir: null }, broker: r.broker, start: r.start.toISOString(), end: r.end.toISOString(), everyNth: r.everyNth,
+    premarket: r.premarket, endOfDay: r.endOfDay, prop: r.prop || null, harness: treeDigest(ROOT, HARNESS_DIRS), code: treeDigest(ROOT, CODE_DIRS),
+    ...(r.setupLibrary ? { library: L.readLibrary(r.setupLibrary).hash } : {}),
+  })).digest('hex');
+  for (const o of [{}, { setupLibrary: libA }, { setupLibrary: libA, libraryDisplay: false }]) assert.strictEqual(setupHash(run(o)), before(run(o)), JSON.stringify(o));
+  // The display is part of the setup: shown and hidden are two setups, sharing their base.
+  const off = run({ setupLibrary: libA });
+  const on = run({ setupLibrary: libA, libraryDisplay: true });
+  assert.notStrictEqual(setupHash(on), setupHash(off));
+  assert.strictEqual(setupBase(on), setupHash(off));
+  assert.strictEqual(setupBase(off), setupHash(off));
+  assert.notStrictEqual(setupBase(run({ setupLibrary: libB, libraryDisplay: true })), setupHash(off), 'another library: another base');
+  // The arm a look names.
+  assert.strictEqual(lookArm(run({})), 'without');
+  assert.strictEqual(lookArm(off), 'without', 'pinned alone: not shown, no library arm');
+  assert.strictEqual(lookArm(on), `without+library:${hashA}`);
+  assert.ok(K.ARM.test(lookArm(on)) && !K.ARM.test(`without+library:${hashA}+library:${hashA}`) && !K.ARM.test('without+library:xyz'));
+  // A paired comparison: the hidden arm and the shown arm of one evaluation, accepted and recorded.
+  const look = (runId, r, over = {}) => ({ evaluation: 'evD', candidate: 'champ', purpose: 'judging', runId, from: '2025-03-03', to: '2025-03-04', arm: lookArm(r), config: setupHash(r), base: setupBase(r), ...over });
+  const ledgerFile = path.join(user, 'looks.jsonl');
+  K.recordLook(ledgerFile, look('r-hidden', off), { create: true });
+  const shown = K.recordLook(ledgerFile, look('r-shown', on));
+  assert.deepStrictEqual([shown.ok, shown.appended, shown.shared], [true, true, true], 'one evaluation, one look spent');
+  const lines = fs.readFileSync(ledgerFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.strictEqual('base' in lines[0], false, 'the hidden arm\'s line is the line it had (its base is its config)');
+  assert.deepStrictEqual([lines[1].arm, lines[1].config, lines[1].base], [`without+library:${hashA}`, setupHash(on), setupHash(off)]);
+  assert.strictEqual(K.lookUsage(lines).test.evaluations, 1);
+  // Refused: a shown arm of another library, or one that also changes the index; a third arm differing from one arm in
+  // both dimensions; an arm whose base contradicts it.
+  const ledger = lines;
+  const refused = (l, why) => { const r = K.checkLook(l, ledger); assert.strictEqual(r.ok, false, JSON.stringify(l)); assert.match(r.refusals.join('; '), why); };
+  const one = [lines[0]];
+  const lB = run({ setupLibrary: libB, libraryDisplay: true });
+  refused({ ...look('r-b', lB) }, /differ only in their experience index, or only in the history library's display/);
+  assert.strictEqual(K.checkLook(look('r-b', lB), one).ok, false);
+  assert.strictEqual(K.checkLook(look('r-idx', on, { arm: `with:${'a'.repeat(16)}+library:${hashA}` }), one).ok, false, 'display and index both changed');
+  assert.ok(K.checkLook(look('r-idx', off, { arm: `with:${'a'.repeat(16)}` }), one).ok, 'the index alone: an arm as before');
+  refused(look('r-idx', off, { arm: `with:${'a'.repeat(16)}` }), /not r-shown's/);
+  refused(look('r-x', on, { base: null }), /names its setup without the display \(base\)/);
+  refused(look('r-x', on, { base: setupHash(on) }), /names its setup without the display \(base\)/);
+  refused(look('r-x', off, { base: 'f'.repeat(64) }), /is not shown the history library: its base is its config/);
+  refused(look('r-y', on), /has its without\+library:[0-9a-f]{16} arm already/);
+  // A resume is the look it took (the reviewer's case: a hidden arm resumed as the shown one would be a free second arm).
+  const resumed = K.checkLook(look('r-hidden', on), ledger);
+  assert.strictEqual(resumed.ok, false);
+  assert.match(resumed.refusals.join(), /run r-hidden took its look in evaluation evD as another arm \(without\+library:[0-9a-f]{16}, not without\): a resume keeps its arm/);
+  assert.match(K.checkLook(look('r-shown', off), ledger).refusals.join(), /run r-shown took its look .* as another arm \(without, not without\+library/);
+  // A code fix between start and resume changes the config and base (they digest scripts/), not the arm: still a resume.
+  const fixed = K.checkLook(look('r-shown', on, { config: '1'.repeat(64), base: '2'.repeat(64) }), ledger);
+  assert.deepStrictEqual([fixed.ok, fixed.repeat], [true, true], fixed.refusals.join());
+  // The setup without its code (setupFixed) is kept: a run home deleted and started again with another runner config
+  // under the same runId and arm is no free repeat.
+  const { setupFixed } = require('../../scripts/lib/replay/config');
+  assert.notStrictEqual(setupFixed(on), setupHash(on));
+  assert.notStrictEqual(setupFixed(on), setupFixed(off), 'the display is part of it');
+  const withSetup = [{ ...lines[0], setup: setupFixed(off) }];
+  assert.ok(K.checkLook(look('r-hidden', off, { setup: setupFixed(off), config: '3'.repeat(64), base: '3'.repeat(64) }), withSetup).ok, 'the same setup, other code: a resume');
+  const other = run({ setupLibrary: libA, autotrader: { ...raw({}).autotrader, timeframe: 5 } });
+  const rerun = K.checkLook(look('r-hidden', off, { setup: setupFixed(other) }), withSetup);
+  assert.strictEqual(rerun.ok, false);
+  assert.match(rerun.refusals.join(), /run r-hidden took its look in evaluation evD with another setup .*: a resume keeps its setup/);
+  assert.deepStrictEqual([K.checkLook(look('r-hidden', off), ledger).ok, K.checkLook(look('r-hidden', off), ledger).repeat], [true, true], 'the same arm: a free repeat');
+  // An old line without arm or config resumes as it was.
+  const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test' }];
+  assert.ok(K.checkLook({ ...look('r-old', off), evaluation: 'evOld' }, old).ok);
+  // The same config is the same display and base: an arm claiming the shown display on the hidden arm's setup is refused.
+  const same = K.checkLook(look('r-z', off, { arm: `with:${'c'.repeat(16)}+library:${hashA}`, base: 'd'.repeat(64) }), one);
+  assert.strictEqual(same.ok, false);
+  assert.match(same.refusals.join(), /arm with:c{16}\+library:[0-9a-f]{16} has r-hidden's setup .* but not its library display or base/);
+  // Through the run gate: the base is carried into the look.
+  const genv = { HOME: tmp(), FTH_HOME: tmp() };
+  const gate = { from: D('2025-03-03T00:00:00Z'), to: D('2025-03-08T00:00:00Z'), env: genv, candidate: 'champ', evaluation: 'evG' };
+  G.startLearningRun(tmp(), { ...gate, runId: 'g-off', arm: lookArm(off), config: setupHash(off), base: setupBase(off), setup: 's'.repeat(8) });
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(genv.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl'), 'utf8').trim().split('\n')[0]).setup, 's'.repeat(8), 'the gate records the setup');
+  assert.strictEqual(G.startLearningRun(tmp(), { ...gate, runId: 'g-on', arm: lookArm(on), config: setupHash(on), base: setupBase(on) }).taken.ok, true);
+  assert.throws(() => G.startLearningRun(tmp(), { ...gate, runId: 'g-nobase', arm: `with:${'b'.repeat(16)}+library:${hashA}`, config: setupHash(on) }), /names its setup without the display/);
+  // scripts/replay.js run: the config's flag reaches the run's pin; without it the library is pinned hidden.
+  for (const [display, said] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/]]) {
+    const r = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
+    assert.match(r.stdout, said, r.stderr);
+    assert.strictEqual(L.libraryShown(path.join(r.user, 'replays', 'r')), display === true);
+  }
+  // A resume can't pin a library its run started without (its look named no display).
+  const first = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
+  const again = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, libraryDisplay: true }, first.user);
+  assert.strictEqual(again.status, 1, again.stdout);
+  assert.match(again.stderr, /this run started without a history library; a resume can't pin one/);
+  assert.strictEqual(L.libraryShown(path.join(first.user, 'replays', 'r')), false);
+});
 
 test('setup-focused practice: allowed on practice-train and practice-validate, kept on resume; refused on test, final and runs not learning', () => {
   const env = { FTH_HOME: tmp() };

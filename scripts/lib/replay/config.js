@@ -23,8 +23,11 @@
  *   practice       setup-focused practice (learning/setup-moments.js): { mode: 'setup-focus', setupTf, quietSample, seed };
  *                  cycles only at the selected bars, the clock advancing between them; a practice-train or
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
- *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
- *                  experience_lookup's code-measured section (default: none)
+ *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start (default:
+ *                  none). Pinned alone it is code's, never shown to the model
+ *   libraryDisplay true shows the pinned library to the model: experience_lookup's code-measured section (counts, the
+ *                  win rate and no-room only); needs setupLibrary; part of the setup (setupHash), so an arm with it
+ *                  and one without are two setups, paired only as a library-display arm (learning/looks.js) (default: false)
  *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
  *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
  *                  on for a learning run, off for one declared not learning)
@@ -44,6 +47,10 @@
  *   replayEnv(base, run, { at, brokers })             the environment for a process at replayed time `at`
  *   brokerErrors(env, run)                           [message]: the broker isn't a usable replay broker
  *   configHash(run)                                  sha256 of what makes a run a run
+ *   setupHash(run), setupBase(run)                   a run's setup (the arms of one evaluation share it); the same
+ *                                                    without the library display (a library-display pair shares it)
+ *   setupFixed(run)                                  the setup without its code digest (a resume keeps it)
+ *   lookArm(run)                                     the arm its look names (learning/looks.js ARM)
  */
 
 const crypto = require('crypto');
@@ -147,6 +154,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   for (const k of ['premarket', 'endOfDay', 'learning']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
   if (r.experienceIndex !== undefined && !(typeof r.experienceIndex === 'string' && r.experienceIndex.trim())) errors.push('experienceIndex: an experience index file (scripts/experience-index.js build)');
   if (r.setupLibrary !== undefined && !(typeof r.setupLibrary === 'string' && r.setupLibrary.trim())) errors.push('setupLibrary: a history library index file (scripts/setup-library.js index)');
+  if (r.libraryDisplay !== undefined && typeof r.libraryDisplay !== 'boolean') errors.push('libraryDisplay: true or false');
+  else if (r.libraryDisplay === true && r.setupLibrary === undefined) errors.push('libraryDisplay: shows the pinned history library; name it (setupLibrary)');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -198,6 +207,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     experienceIndex: r.experienceIndex ? path.resolve(baseDir, expandHome(r.experienceIndex, home)) : null,
     // The history library index the run pins at its start (learning/setup-library.js pinLibrary), or null.
     setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
+    // Whether the model is shown that library (experience_lookup); off unless the config says true.
+    libraryDisplay: r.libraryDisplay === true,
     prop: r.prop || null,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
@@ -303,27 +314,43 @@ function configHash(run, base = process.env) {
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
 /**
  * A run's setup, from its config alone (no environment, nothing seeded): the runner config, broker, window, the
- * decision times' settings and the harness's documents and code. Not its runId, learning flag or experience index:
- * the arms of one evaluation (learning/looks.js) share it and differ in their index only.
+ * decision times' settings, the harness's documents and code, its history library and whether the model is shown it.
+ * Not its runId, learning flag or experience index: the arms of one evaluation (learning/looks.js) share it and differ
+ * in their index only (a library-display pair shares setupBase instead).
  */
-function setupHash(run) {
+function setupHash(run, { code = true } = {}) {
   const body = {
     // The runner config without the run's own folders (its runId is in their paths).
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
     // The arms of one evaluation charge the latency alike (named only when charged, as configHash).
     ...(run.latency ? { latency: true } : {}),
-    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
+    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root && code ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
     // the hash it had (its looks in the ledger stay its own).
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
+    // Whether the model is shown it: named only when on, so a run without the display keeps the hash it had.
+    ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
+/** The setup without its code (setupHash's code digest): what a resumed look keeps (learning/looks.js), a code fix aside. */
+const setupFixed = run => setupHash(run, { code: false });
+
+/** The setup without the library display: the two arms of a library-display pair (learning/looks.js) share it. */
+const setupBase = run => setupHash({ ...run, libraryDisplay: false });
+
+/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library. */
+function lookArm(run) {
+  const arm = require('../learning/experience-index').armOf(run.experienceIndex);
+  if (!(run.setupLibrary && run.libraryDisplay === true)) return arm;
+  return `${arm}+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
 }
 
 function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

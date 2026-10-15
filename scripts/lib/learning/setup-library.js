@@ -2,10 +2,13 @@
 
 /**
  * The history library (the owner's "code to scan and teach it"): code scans practice-train history for the setup
- * moments the practice mode finds (setup-moments.js: the setup timeframe's completed candle reacting at a fixed key
- * level or a fair value gap's edge) and measures ONE fixed standard trade at each, the owner's way. Never the model's
- * decisions, never a learning result, never advice: experience_lookup shows its index in a section of its own,
- * "history library: code-measured, not your decisions", next to the model's own record.
+ * moments the practice mode finds (setup-moments.js: the setup timeframe's completed candle reacting at a key level
+ * or a fair value gap's edge) and measures ONE fixed standard trade at each, the owner's way. Never the model's
+ * decisions, never a learning result, never advice. Code reads it (the scan, the index, the curated training lists
+ * built from it); the model sees it only when the run enables its display (a replay config's libraryDisplay, kept in
+ * the pin): experience_lookup then shows a section of its own, "history library: code-measured, not your decisions",
+ * next to the model's own record, with counts, the win rate and the no-room days only (never an R: it measures one
+ * fixed plan, not the model's trades, and nothing yet measures what showing it does).
  *
  * Per reaction moment (scanLibrary), on the bar briefings the runner builds (briefing.js, bar by bar, causal):
  *   confirmation   the first entry-timeframe close in the reaction's window (the closes AFTER the reaction bar, while
@@ -40,6 +43,8 @@
  * cellStats: n, days, the win rate and mean R with day-clustered 90% intervals, MIN_N and MIN_DAYS), and per reaction
  * (the setup read alone), walk-forward by day (a statistic for day D counts only rows known before D), with each
  * reaction's no-room days; hashed, and pinned per run (pinLibrary) next to the experience index, never mixed with it.
+ * The pin keeps whether the model is shown it (`display`, off unless asked); a run keeps both its library and that.
+ * The CLI's pin (scripts/setup-library.js pin) pins it hidden: only a replay config's libraryDisplay shows it.
  *
  *   STANDARD                               the standard, one line (the lookup shows it)
  *   scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf, sessions, validBars })   [record], causal,
@@ -48,9 +53,10 @@
  *   composeAt(briefing, reaction, { side, tick })   { reads, checked, plan, status, why } at one confirmation bar
  *   buildLibraryIndex(records, { sources, seed, reps, now })   the index document, with its hash
  *   setupKeyOf(reads)                      'setup:<slug>' of the first setup relation read, or null
- *   readLibrary(file), writeLibrary(dir, doc), pinLibrary(runHome, file, { validBars }), loadPinnedLibrary(home)
+ *   readLibrary(file), writeLibrary(dir, doc), pinLibrary(runHome, file, { display, validBars }), loadPinnedLibrary(home)
  *                                          (pinLibrary refuses an index measured over another window than validBars,
  *                                          the shipped strategy's valid_bars by default)
+ *   libraryShown(home)                     whether the run's pin enables the display (false without a pin or the flag)
  *   baseBars(bars, minutes)                a bars file's bars as base bars (1m bars aggregated), by time
  *   runnerClock({ from, to, sessions })    { inSession(closeMs), eodOf(ms) }: the runner's decision times and end of day
  *                                          (its default sessions, the exchange calendar for those years)
@@ -330,8 +336,13 @@ function readLibrary(file) {
 
 const learningRun = home => { try { return JSON.parse(fs.readFileSync(path.join(home, 'learning-run.json'), 'utf8')); } catch (_err) { return null; } };
 
-/** Pin a library index for a run (its own copy, frozen by its hash); a run keeps the one it pinned. */
-function pinLibrary(runHome, file, { validBars = strategyValidBars(PLUGIN_ROOT) } = {}) {
+/**
+ * Pin a library index for a run (its own copy, frozen by its hash); a run keeps the one it pinned, and whether the model
+ * is shown it (`display`, written either way; off unless true; a pin from before the flag reads as off, and a replay
+ * resume refuses it: learning/run-pins.js).
+ */
+function pinLibrary(runHome, file, { display = false, validBars = strategyValidBars(PLUGIN_ROOT) } = {}) {
+  if (typeof display !== 'boolean') throw new Error('display: true or false');
   const doc = readLibrary(file);
   // Measured over the window the gate allows now (the strategy's valid_bars), or not pinned.
   if (doc.validBars !== validBars) throw new Error(`${file}: measured with limits valid ${doc.validBars ?? 'an unknown number of'} bar(s); the ${LIFECYCLE} strategy's valid_bars is ${validBars}: scan and index it again`);
@@ -341,9 +352,15 @@ function pinLibrary(runHome, file, { validBars = strategyValidBars(PLUGIN_ROOT) 
   let pinned = null;
   try { pinned = JSON.parse(fs.readFileSync(path.join(dir, PINNED), 'utf8')); } catch (_err) { /* none yet */ }
   if (pinned && pinned.hash !== doc.hash) throw new Error(`this run pinned library ${String(pinned.hash).slice(0, 16)}; a run keeps its library (start another runId for ${doc.hash.slice(0, 16)})`);
+  if (pinned && (pinned.display === true) !== display) throw new Error(`this run pinned its library with the display ${pinned.display === true ? 'on' : 'off'}; a run keeps it (start another runId to change it)`);
   const copy = writeLibrary(dir, doc);
-  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, walkForward: true })}\n`);
-  return { file: copy, hash: doc.hash };
+  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, walkForward: true, display })}\n`);
+  return { file: copy, hash: doc.hash, display };
+}
+
+/** Whether the run's pin enables the library's display to the model: only an explicit `display: true` does. */
+function libraryShown(home) {
+  try { return JSON.parse(fs.readFileSync(path.join(home, 'experience', PINNED), 'utf8')).display === true; } catch (_err) { return false; }
 }
 
 /** The run's pinned library index (hash checked), or null when none is pinned or the run is declared not learning. */
@@ -381,5 +398,5 @@ function runnerClock({ from, to, sessions = null }) {
 module.exports = { strategyValidBars,
   baseBars, runnerClock,
   VERSION, KIND, MIN_RR, STANDARD, scanLibrary, composeAt, entryRead, targetCandidates, setupKeyOf, buildLibraryIndex, libraryCellAt, noRoomBefore,
-  libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary,
+  libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary, libraryShown,
 };

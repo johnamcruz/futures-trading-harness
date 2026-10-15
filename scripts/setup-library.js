@@ -10,8 +10,9 @@
  *       each limit measured over the trade_lifecycle strategy's valid_bars
  *   node scripts/setup-library.js index <library.jsonl> ... [--out dir] [--seed N]
  *       the walk-forward index of the records -> <out>/library-<hash>.json (default <FTH_HOME>/experience)
- *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy (a replay config's
- *       setupLibrary pins it at the run's start)
+ *   node scripts/setup-library.js pin <index file> <run home>     the run's own frozen copy, hidden from the model (a
+ *       replay config's setupLibrary pins it at the run's start; only its libraryDisplay shows it; a replay run home
+ *       pinned by hand resumes only with the same file named in its config)
  *   node scripts/setup-library.js show <index file> [--top N]    the cells with enough samples, best mean R first
  */
 
