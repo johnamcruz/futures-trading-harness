@@ -11,7 +11,9 @@
  * and its look were decided before its first cycle. A run declared not learning, or started before the gate, is
  * refused, so it never teaches. A run on a reasoning-fix look keeps its decisions with their outcomes hidden.
  *
- *   runDecisions(runDir, { root, barsFiles, now })        the run's decisions and what they were read from, nothing written
+ *   runDecisions(runDir, { root, barsFiles, now })        the run's decisions and what they were read from, nothing written;
+ *                                                          each tagged with the run's exit (runExit), its passes'
+ *                                                          counterfactuals held under it
  *   writeRunExperience(runDir, { root, barsFiles, now })   { file, added, kept, decisions, role, hidden }
  *   experienceLine(result)                                 the CLI's one line
  */
@@ -22,7 +24,7 @@ const { entryOrders } = require('../harness-run');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
-const { buildDecisions, appendDecisions, logFile, legsOf } = require('./experience-log');
+const { buildDecisions, appendDecisions, logFile, legsOf, BRACKETS } = require('./experience-log');
 const { roleOf } = require('./splits');
 const { readLearningRun } = require('./run-gate');
 
@@ -35,7 +37,18 @@ const ENTRY_TOOL = /(?:^|__)place_order$/;
  * experience log and the prop Monte Carlo (prop/model-stream.js) read a run through this one function. Throws on an
  * unfinished run or one with no days.
  */
-function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
+/**
+ * The exit the run's composed trades are managed by (evaluator.js composedExit, as the runner manages them): its plan
+ * for the counterfactuals and its mode for each line's tag. Read from the harness's strategies (`root`, else this one).
+ */
+function runExit(root, env = process.env) {
+  const { loadStrategies, composedExit } = require('../trading/strategies');
+  const strategies = loadStrategies(root || path.resolve(__dirname, '..', '..', '..'), env).strategies;
+  const composed = strategies.find(s => s.valid && s.signal === 'composed');
+  return composed ? composedExit(composed, strategies) : BRACKETS;
+}
+
+function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date(), env = process.env } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
   if (root && labels.inside(home, root)) throw new Error(`${home} is inside the repository (${root}): a run's records live in its run home`);
@@ -68,7 +81,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   };
   const decisions = buildDecisions({
     cycles, records: readRecords(home, { runId: manifest.runId }), trips, stamps, gateRefusals, barsFor, tfMs,
-    tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now,
+    tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now, exit: runExit(root, env),
   });
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor, trips };
 }
@@ -89,4 +102,4 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
 
 const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
 
-module.exports = { runDecisions, writeRunExperience, experienceLine };
+module.exports = { runDecisions, writeRunExperience, experienceLine, runExit };

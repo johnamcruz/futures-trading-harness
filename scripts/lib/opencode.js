@@ -62,7 +62,8 @@
  *   sessionPermission(roles, denied, mode)  the session's and the head trader's permissions (index: skill_lookup, no skill tool)
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles a kind of cycle may
  *                                not launch (its task permission); `mode`: the run's role-skills mode (FTH_ROLE_SKILLS);
- *                                the runner's plugin, which refuses FTH_DENIED_ROLES
+ *                                the runner's plugin, which refuses FTH_DENIED_ROLES; `replay`: no web for any agent and
+ *                                no role that reaches it (webRoles)
  *   runEnv(base, { ... })        the run's environment for opencode; `refusedRoles`: this cycle's other denied roles
  *                                (FTH_DENIED_ROLES, with `deniedRoles`), refused by the plugin
  *   deniedTaskRefusal(tool, args, env)   the plugin's refusal of a task call naming a denied role, or null
@@ -226,13 +227,14 @@ function agentConfig(agent) {
  * index mode (`mode`, role-skills.js) the head trader's prompt embeds its skills (head-prompt.js): it reads any other
  * one with skill_lookup, and is denied the skill tool, whose listing of every skill opencode would put in its prompt.
  */
-function sessionPermission(roles, denied = [], mode = null) {
+function sessionPermission(roles, denied = [], mode = null, replay = false) {
   const index = mode === 'index';
   return {
     '*': 'deny',
     ...Object.fromEntries(DENIED.map(k => [k, 'deny'])),
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
-    skill: index ? 'deny' : 'allow', todowrite: 'allow', websearch: 'allow',
+    // A replay: no web search (what the market did on a replayed date is on the web).
+    skill: index ? 'deny' : 'allow', todowrite: 'allow', websearch: replay ? 'deny' : 'allow',
     // Every role by name, allowed or denied: a run config that only left a role out would keep the project's
     // `allow` for it when opencode merges the two (key by key).
     task: { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, denied.includes(r) ? 'deny' : 'allow'])) },
@@ -321,26 +323,36 @@ function deniedTaskRefusal(tool, args, env) {
   if (tool !== 'task' || !args || typeof args !== 'object') return null;
   const role = String(args.subagent_type || '').trim();
   if (!role || !deniedRolesOf(env).includes(role)) return null;
-  return `[denied-role] ${role} is not launched this cycle (the cycle prompt gives its cached report, or the role is off the desk): don't call it again; go on with the reports you have.`;
+  return `[denied-role] ${role} is not launched this cycle (the cycle prompt gives its cached report, the role is off the desk, or it reaches the web, which a replay never does): don't call it again; go on with the reports you have.`;
 }
+
+/** The web's permission keys: a replay denies both to every agent (WEB_KEYS), and launching a role that holds one. */
+const WEB_KEYS = Object.freeze(['websearch', 'webfetch']);
+/** The roles whose tools reach the web (WebSearch, WebFetch): a replay never launches them. */
+const webRoles = agents => agents.filter(a => (a.tools || []).some(t => t === 'WebSearch' || t === 'WebFetch')).map(a => a.name);
+/** A permission set with the web denied (a replay's), else as it is. */
+const noWeb = (permission, replay) => (replay ? { ...permission, ...Object.fromEntries(WEB_KEYS.map(k => [k, 'deny'])) } : permission);
 
 /**
  * The per-run config: every permission again, the session's, the head trader's and each role's (so a
  * run whose directory has no opencode.json, or another one, is still locked down: merged last, they
  * replace the project's in place), reading the runner's directories for all of them, and the runner's plugin
- * (PLUGIN_FILE under the harness root) that refuses the roles the run's FTH_DENIED_ROLES names.
+ * (PLUGIN_FILE under the harness root) that refuses the roles the run's FTH_DENIED_ROLES names. A replay (`replay`)
+ * denies web search and web fetch to every agent and the launch of every role whose tools reach the web (webRoles): on
+ * a replayed date the web holds what the market did next. A live run is as before.
  */
-function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = null }) {
+function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = null, replay = false }) {
   const external = externalDirs({ root, dataDir, stateDir });
   const roles = agents.map(a => a.name);
+  const denied = replay ? [...new Set([...deniedRoles, ...webRoles(agents)])] : deniedRoles;
   return {
     plugin: [pathToFileURL(path.join(root, ...PLUGIN_FILE)).href],
     default_agent: HEAD_AGENT,
-    permission: { ...sessionPermission(roles, deniedRoles, mode), external_directory: external },
+    permission: { ...sessionPermission(roles, denied, mode, replay), external_directory: external },
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
-      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, deniedRoles, mode), external_directory: { ...external } } },
-      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...agentPermission(a.tools, mode), external_directory: { ...external } } }])),
+      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, denied, mode, replay), external_directory: { ...external } } },
+      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...noWeb(agentPermission(a.tools, mode), replay), external_directory: { ...external } } }])),
     },
   };
 }
@@ -361,13 +373,13 @@ const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'O
  * directory from PWD before its working directory, and a PWD inherited from the runner would load
  * another project's config.
  */
-function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], refusedRoles = [], mode = null }) {
+function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], refusedRoles = [], mode = null, replay = false }) {
   const env = { ...base };
   for (const k of UNSAFE_ENV) delete env[k];
   // `deniedRoles`: denied by permission (the same for every cycle of a kind); with `refusedRoles` (this cycle's: the
   // roles served from the report cache), refused by the plugin. Never inherited: only the run's own list.
   delete env[DENIED_ROLES_ENV];
-  const refused = [...new Set([...deniedRoles, ...refusedRoles])];
+  const refused = [...new Set([...deniedRoles, ...refusedRoles, ...(replay ? webRoles(agents) : [])])];
   return {
     ...env,
     ...(refused.length ? { [DENIED_ROLES_ENV]: refused.join(',') } : {}),
@@ -378,7 +390,7 @@ function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], 
     OPENCODE_DISABLE_CLAUDE_CODE: '1',
     OPENCODE_DISABLE_EXTERNAL_SKILLS: '1',
     OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents, deniedRoles, mode })),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents, deniedRoles, mode, replay })),
   };
 }
 
@@ -413,4 +425,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal };

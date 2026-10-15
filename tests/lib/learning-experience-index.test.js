@@ -230,3 +230,13 @@ test('a decision counts once; the same log given twice is refused', () => {
   assert.strictEqual(X.buildIndex([...ds, ...ds], { reps: 50 }).decisions, 25);
   assert.throws(() => X.buildIndex(ds, { runs: [{ runId: 'a', sha256: 'h1' }, { runId: 'b', sha256: 'h1' }] }), /the same experience log given twice/);
 });
+
+test('index: decisions scored under two exits are refused; the index holds its one exit (untagged lines: none)', () => {
+  const tagged = (list, exit) => list.map(d => ({ ...d, exit }));
+  const trail = tagged(decisions(30, 15, i => (i % 2 ? 1 : -1)), 'target_then_trail');
+  assert.strictEqual(X.buildIndex(trail).exit, 'target_then_trail');
+  assert.strictEqual(X.buildIndex(decisions(30, 15, () => 1)).exit, null, 'lines written before the tag');
+  const old = decisions(10, 5, () => 1, { tag: 'o' });
+  assert.throws(() => X.buildIndex([...trail, ...old]), /index refused: its decisions were scored under different exits \(target_then_trail: 30, untagged \(written before the exit tag\): 10\)/);
+  assert.throws(() => X.buildIndex([...trail, ...tagged(old, 'brackets')]), /different exits \(target_then_trail: 30, brackets: 10\)/);
+});

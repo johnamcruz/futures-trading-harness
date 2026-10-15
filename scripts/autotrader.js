@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, childEnv, decide, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
+const { validateConfig, prompts, childEnv, decide, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv, isReplay } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/prop/live-runner');
@@ -189,7 +189,7 @@ function checkClaudeSettings(cfg) {
 function writeQwenSettings(cfg, dataDir, opts) {
   if (cfg.harness !== 'qwen' || opts.dryRun) return;
   const file = path.resolve(ROOT, cfg.workdir, '.qwen', 'settings.json');
-  const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome() }), null, 2)}\n`;
+  const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome(), replay: isReplay(process.env) }), null, 2)}\n`;
   // The same allowlist but for the $version stamp Qwen Code writes on start (fileDigest): left as it is.
   if (readJson(file, null) !== null && fileDigest('.qwen/settings.json', fs.readFileSync(file)) === fileDigest('.qwen/settings.json', content)) return;
   fs.mkdirSync(path.dirname(file), { recursive: true });

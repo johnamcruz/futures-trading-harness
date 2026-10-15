@@ -28,7 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, childEnv, resolveDataDir, DEFAULTS } = require('./autotrader');
+const { validateConfig, buildCommand, childEnv, resolveDataDir, DEFAULTS, isReplay } = require('./autotrader');
 const { qwenWorkspaceSettings } = require('./install');
 const { harnessHome } = require('./paths');
 const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
@@ -188,7 +188,7 @@ function analyze(text) {
  */
 function qwenAllowlist(cfg, root, env = process.env) {
   const file = path.resolve(root, cfg.workdir, '.qwen', 'settings.json');
-  const content = `${JSON.stringify(qwenWorkspaceSettings(root, os.homedir(), { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }), null, 2)}\n`;
+  const content = `${JSON.stringify(qwenWorkspaceSettings(root, os.homedir(), { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay: isReplay(env) }), null, 2)}\n`;
   return { file, content };
 }
 

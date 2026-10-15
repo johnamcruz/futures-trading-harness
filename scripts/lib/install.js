@@ -224,21 +224,24 @@ function mergeQwenSettings(settings, root) {
  * edits to the harness, its state, and harness configs, so a run can't loosen
  * its own limits.
  */
-function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl'), roles = loadAgents(PLUGIN_ROOT).map(a => a.name) } = {}) {
+function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl'), roles = loadAgents(PLUGIN_ROOT).map(a => a.name), replay = false } = {}) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
   const h = p => abs(path.join(home, p));
   const state = stateDir === path.join(home, '.futures-trading-harness') ? [] : [`Edit(${abs(stateDir)}/**)`];
+  // A replay: no web, and no role whose tools reach it (on a replayed date the web holds what the market did next).
+  const web = replay ? require('./opencode').webRoles(loadAgents(PLUGIN_ROOT)) : [];
   return {
     permissions: {
       allow: [
-        `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', ...roles.map(r => `Agent(${r})`), 'web_search',
-        ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
+        `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', ...roles.filter(r => !web.includes(r)).map(r => `Agent(${r})`),
+        ...(replay ? [] : ['web_search', ...NEWS_DOMAINS.map(d => `WebFetch(${d})`)]),
         `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs(scratchDir({ FTH_HOME: stateDir }))}/**)`,
         ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
         // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
         `Bash(node ${root}/scripts/combine.js status *)`,
       ],
       deny: [
+        ...(replay ? ['web_search', 'WebFetch', ...web.map(r => `Agent(${r})`)] : []),
         `Edit(${abs(`${root}/**`)})`,
         `Edit(${h('.futures-trading-harness')}/**)`,
         ...state,

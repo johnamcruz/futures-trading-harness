@@ -50,6 +50,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       roleSkillsMode: () => 'index',
       head: () => ({ prompt: 'p', core: [...CORE, ...READS], composedReads: READS, embedded: [...CORE, ...READS], attestation: { sha256: 'a'.repeat(64) }, expectedSha256: 'a'.repeat(64) }),
       syncStale: () => [],
+      replayStep: () => REPLAY_STEP,
       sampleBriefing: real.sampleBriefing,
       barCloses: real.barCloses,
       tickOf: () => 0.25,
@@ -71,6 +72,11 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
 }
 
 const one = (fn, c) => fn(c);
+
+/** A replay step whose permissions deny the web (Qwen's replay settings: the simplest to read back), and a live one. */
+const WEB_ROLES = require('../../scripts/lib/opencode').webRoles(require('../../scripts/lib/harness-sync').loadAgents(ROOT));
+const qwenStep = replay => ({ harness: 'qwen', qwenSettings: require('../../scripts/lib/install').qwenWorkspaceSettings(ROOT, os.tmpdir(), { replay }), webRoles: WEB_ROLES });
+const REPLAY_STEP = qwenStep(true);
 
 /** A drawn account-states document (prop/account-states.js), as the preflight reads it: two draws, one after losses. */
 const AFTER = { sessionsDone: 3, balance: 50500, peak: 51000, dayPnl: -400, days: [300, 200, 400], tradesToday: 2, lossesToday: 1, lossStreak: 1 };
@@ -118,6 +124,7 @@ test('each check fails on a broken fixture', () => {
     // Merged (#188): a head-prompt module without the composed reads is a FAIL, not "not available".
     [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), composedReads: null }) } }, /lists no composed reads/],
     [P.adaptersInSync, { read: { syncStale: () => ['workspace/AGENTS.md'] } }, /stale generated files: workspace\/AGENTS.md/],
+    [P.noWebInReplay, { read: { replayStep: () => qwenStep(false) } }, /the replay could reach the web: qwen: the allowlist holds .*web_search/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, lanes: undefined } } }, /5m candle .*5m structure/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, symbols: ['MES'] } } }, /no bar data for MES/],
     [P.facts, { run: { start: D('2023-03-06T14:30:00Z'), end: D('2023-03-06T15:00:00Z') } }, /no 3m bar closing in the run's window/],

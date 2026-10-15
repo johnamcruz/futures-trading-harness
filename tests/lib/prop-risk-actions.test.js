@@ -32,7 +32,7 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
         fills: [fill(3, '2023-03-16T14:01:00Z', 100, 0, null), fill(4, '2023-03-16T14:04:00Z', 97.75, 1, -4.5)],
         rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 100.5, 97.5, 97.75], [97.75, 98, 97.5, 98], [100.5, 100.75, 99.75, 100], [100, 104.5, 99.5, 104.25]],
       },
-      { // A pass on a fresh day: its counterfactual fills at 100 and reaches the 104 target.
+      { // A pass on a fresh day: its counterfactual fills at 100 and reaches the 104 target (trailed past it).
         day: '2023-03-17', times: [d3], records: [record({ at: d3 })],
         rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]],
       },
@@ -46,7 +46,9 @@ test('each risk action is detected from a fixture run: a size under the ceiling,
   assert.deepStrictEqual([a.hold.r, a.hold.reason, a.hold.moveTicks], [-1.125, 'hold (stop)', -9]);
   assert.deepStrictEqual([b.actions, b.sizeFraction, b.hold], [[], null, null], 'a stop exit is no early exit; no verdict, no size action');
   const passed = stream.days.flatMap(d => d.passed);
-  assert.deepStrictEqual(passed.map(p => [p.day, p.actions[0], p.counterfactual, p.r]), [['2023-03-16', 'day-stop', true, 2], ['2023-03-17', 'pass', true, 2]]);
+  // Held under the run's exit (the policy's target_then_trail, run-experience.js runExit): past the 104 target the stop
+  // locks at 103, and the bar's low (99.5, 100) already went through it: out at its close, 104.25: +2.125R.
+  assert.deepStrictEqual(passed.map(p => [p.day, p.actions[0], p.counterfactual, p.r]), [['2023-03-16', 'day-stop', true, 2.125], ['2023-03-17', 'pass', true, 2.125]]);
   assert.ok(stream.trades.every(t => !t.counterfactual), 'a pass is never a trade of the score');
   // Each scored against its counterfactual.
   const run = { runId: 'run1', from: '2023-03-15', to: '2023-03-18', learning: true, role: 'practice-train' };

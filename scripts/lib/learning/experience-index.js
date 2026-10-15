@@ -29,7 +29,8 @@
  * exit's session) practice-train too. Rows are dated by the later of the two (knownDay). A decision counts once (by
  * its id); the same log given twice (its sha256) is refused.
  *
- *   buildIndex(decisions, { runs, seed, reps, shuffle, now })   the index document, with its hash
+ *   buildIndex(decisions, { runs, seed, reps, shuffle, now })   the index document, with its hash and its `exit` (the one
+ *                                       exit mode its decisions were scored under; decisions under two are refused)
  *   cellStats(rows, { before, seed, reps, key })   the statistics of a cell's rows before a day (null: every row)
  *   cellAt(index, key, before)          cellStats of an index's cell, or null when the cell has no rows
  *   examplesBefore(index, skillSig, before)   the examples before a day, latest first
@@ -201,6 +202,19 @@ function indexHash(doc) {
 }
 
 /**
+ * The one exit mode the decisions were scored under (experience-log.js: each line's `exit`; null for lines written
+ * before the tag). Outcomes under two exits measure two trade streams: an index of both is refused.
+ */
+function exitOf(decisions) {
+  const modes = [...new Set(decisions.map(d => (typeof d.exit === 'string' && d.exit ? d.exit : null)))];
+  if (modes.length > 1) {
+    const n = m => decisions.filter(d => (d.exit || null) === m).length;
+    throw new Error(`index refused: its decisions were scored under different exits (${modes.map(m => `${m || 'untagged (written before the exit tag)'}: ${n(m)}`).join(', ')}); build it from runs under one exit`);
+  }
+  return modes.length ? modes[0] : null;
+}
+
+/**
  * The index of these decisions (lines of experience logs). `runs`: [{ runId, file, sha256 }] the logs read, for the
  * manifest. Plain passes (no signature) count in `plainPasses` only. `shuffle`: a seed for the shuffled arm.
  */
@@ -213,6 +227,7 @@ function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = nul
   const ids = new Set();
   decisions = decisions.filter(d => !d || !d.id || (ids.has(d.id) ? false : (ids.add(d.id), true)));
   assertPracticeTrain(decisions.filter(Boolean));
+  const exit = exitOf(decisions.filter(Boolean));
   const scored = decisions.filter(d => d && d.signatures && d.signatures.skill && d.decision !== 'none' && !d.hidden);
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
@@ -239,7 +254,7 @@ function buildIndex(decisions, { runs = [], seed = 1, reps = 2000, shuffle = nul
   } else cells = Object.fromEntries(keys.map(k => [k, cells[k]]));
   const days = [...new Set(scored.map(knownDay))].sort();
   const doc = {
-    v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true,
+    v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true, exit,
     runs: runs.map(r => ({ runId: r.runId || null, file: r.file ? path.basename(r.file) : null, sha256: r.sha256 || null })),
     roles: ['practice-train'], months: { from: days[0] || null, to: days[days.length - 1] || null },
     decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, cells, examples,
@@ -309,5 +324,5 @@ function loadPinned(home) {
 
 module.exports = {
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
-  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain,
+  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf,
 };

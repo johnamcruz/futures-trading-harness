@@ -99,7 +99,7 @@ const COALESCE_HOLD_MS = 10000;
 function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
-    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null, exitStrategy = null,
+    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null, exitStrategy = null, exitPlanOf = exitPlan,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
@@ -483,7 +483,8 @@ function createRunner(deps) {
       });
       // Exits only: a strategy that stopped loading while its position is open keeps its last exit plan (exitStrategy).
       const strategy = rec && (exitStrategy || strategyNamed)(rec.setup, { symbol: item.symbol, contractId: cid, position: key });
-      const plan = strategy ? exitPlan(strategy) : null;
+      // A composed trade: its policy's exit, in an attempt or not (runner-wiring.js: evaluator.js composedExit).
+      const plan = strategy ? exitPlanOf(strategy) : null;
       const entry = Number(p.averagePrice);
       let risk = null;
       if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;

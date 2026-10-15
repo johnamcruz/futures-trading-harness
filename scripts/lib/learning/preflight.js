@@ -13,7 +13,7 @@
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
- * adapters-in-sync, facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
+ * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
@@ -172,6 +172,19 @@ function adaptersInSync(ctx) {
   const stale = ctx.read.syncStale();
   if (stale.length) return r('adapters-in-sync', FAIL, `stale generated files: ${stale.slice(0, 5).join(', ')}${stale.length > 5 ? ', ...' : ''} (run node scripts/sync-harness.js)`);
   return r('adapters-in-sync', PASS, 'the generated adapters match their sources');
+}
+
+/**
+ * No web in a replay: the replay step's effective permissions (replay/web-access.js) let no agent search or fetch the
+ * web, nor the head trader launch a role whose tools reach it: on a replayed date the web holds what came next.
+ */
+function noWebInReplay(ctx) {
+  // A custom command is the user's own argv: no permission of the harness's to read; said, never passed.
+  if ((ctx.run.cfg || {}).harness === 'custom') return r('no-web-in-replay', WARN, 'a custom command: its web access is its own, not the harness\'s to read; keep it off the web (it runs with the replay clock, FTH_REPLAY_NOW)');
+  const step = ctx.read.replayStep(ctx.run);
+  const found = require('../replay/web-access').webFindings(step);
+  if (found.length) return r('no-web-in-replay', FAIL, `the replay could reach the web: ${found.slice(0, 4).join('; ')}${found.length > 4 ? `; and ${found.length - 4} more` : ''}`);
+  return r('no-web-in-replay', PASS, `${step.harness}: no agent may search or fetch the web${step.webRoles.length ? `, and ${step.webRoles.join(', ')} is not launched` : ''}`);
 }
 
 /** The run's 1m bars reach its briefing only through a 1m lane (lanes.js DATA_MINUTES), as the runner builds it. */
@@ -480,7 +493,7 @@ function monteCarlo(ctx) {
 }
 
 const CHECKS = Object.freeze([
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
 ]);
@@ -608,6 +621,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
         expectedSha256: hp.sha256(hp.headPrompt(hp.headPlan(root, 'index'))),
       };
     }),
+    replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),
     sampleBriefing: opts => sampleBriefing({ barsFiles, env }, opts),
     barCloses: (symbol, minutes) => barCloses({ barsFiles }, symbol, minutes),
@@ -679,6 +693,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };
