@@ -55,11 +55,11 @@ the champion is replaced only with the owner's approval.
 
 | Group | Examples (today's source) | Learned how |
 | --- | --- | --- |
-| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused, never filled from `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
+| Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused, never filled from `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); the loss streak stop (`loss_streak_stop`: losing trades in a row before the session takes no new entries); the pacing clock (`clock_k`, off until the search sets it); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. orb in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
 | Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
-| Exits | `prop_portfolio` `exit` (hold the stop, then trail) | The search, jointly with sizing (R10) |
+| Exits | `prop_portfolio` `exit`: its mode (`target`: each trade's own stop and target, a trail on top only when set; `target_then_trail`: the stop held to the trade's own target, then locked near it and trailed past it, behind swings or by R; `trail`: hold the stop, then trail in place of the target) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
 **Units.**
@@ -354,8 +354,9 @@ Learning must see the broker fields a decision was made on, so:
 **Status of R6-R9 (step 9): built.** The code is `scripts/lib/prop/`
 (`trade-stream.js` is layer 1, `attempts.js` layer 2, `evaluator.js` the
 scoring and the window and look checks, `stats.js` the statistics,
-`evaluate-run.js` the run). The CLI is `scripts/evaluate.js`, and
-`docs/BACKTESTING.md` ("The two-layer evaluator") describes its use. Built
+`evaluate-run.js` the run). The CLI `scripts/evaluate.js` was deleted; a replay run is scored by
+`scripts/lib/prop/model-score.js`, and `docs/BACKTESTING.md` ("The two-layer
+evaluator") describes the layers. Built
 as written, with these readings and inputs:
 
 - **Inputs, not defaults.** The rulebook's values (`rulebook.sizing`, and
@@ -390,6 +391,41 @@ as written, with these readings and inputs:
   engine does.
 - **Left to the search (R8, R9, step 11).** Choosing among candidates: the
   lower bound as the objective, the trade-off report, and the flat region.
+
+**The model's trades (built).** Layer 2 also scores the model's own replay
+trades (`scripts/lib/prop/model-stream.js`: R and ticks from the replay
+broker's fills, the adverse and no-stop paths from the run's own bars, each
+trade's order within its day and its record's context; a day the model passed
+is a no-trade day; each day's regime by `trade-stream.js` `dayRegimes` on the
+run's bars). Every trade carries the fields layer 2 reads (the adverse path,
+a stop exit's overshoot, the no-stop path a stop fault runs on: a real score
+with a fault rate refuses trades without one, and the result counts the
+faults fired), and its R is gross (move over stop, as the expectancy cuts'
+base; the attempts settle net dollars). Pass, blow and timeout rates are
+also given at the effective sample size. That score is the replay's report (`prop/model-score.js`,
+in the owner's order: zero blows, the pass rate within `sessions`, the median
+and 90th-percentile days to pass, the blow and timeout rates with their
+intervals). Its windows are the learning split's (`learning/splits.js`), not
+the schedule's: a run's look is taken in the learning ledger before its first
+cycle (`learning/run-gate.js`), and each score of a practice-validate, test or
+final run is logged beside that look (`learning/looks.js` `recordScore`).
+Practice-train is free. A curated practice run is rebuilt at each list's
+natural frequency (`prop/natural-rate.js`) and scored `diagnostic
+(reweighted)`, a setup-focused one `diagnostic (setup-focused)`; the promotion
+gate refuses both. Beside it: the paired comparison of two runs of the same
+days through the same paths, blocks and faults (`evaluator.js`
+`scorePaired`, the judge for keeping a skill change), the risk attribution by
+the account state at each decision (`prop/risk-attribution.js`), the model's
+risk actions inside the code's ceilings (a pass on a valid setup, a stop for
+the day after a loss, a size under the verdict's ceiling, an exit before the
+stop or target) each scored against its counterfactual on the same paths
+(`prop/risk-actions.js`, labelled counterfactual: only what the run observed
+and the experience log's limitOutcome rule), the account
+states drawn from the attempt paths for practice (`prop/account-states.js`,
+not yet shown to a replay: that needs the replay broker to start at the drawn
+balance), and the account-policy hook that scores a candidate rulebook on the
+model's trades (`prop/rulebook-score.js`, refused on test and final; no search
+built, no rulebook value changed).
 
 **R6. Evaluator, in two layers.**
 
@@ -481,7 +517,13 @@ capped the large winners a low-win-rate strategy needs, and only a joint
 search over sizing, exit and stand-down reached 0% blows at a 41.7% pass rate
 (60 overlapping 30-day episodes on 2024, about 8 independent; another
 strategy and data). That is a reason to search exits widely, not evidence
-for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`) is one candidate.
+for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`: exit
+mode `target_then_trail`, the stop held to the trade's own target, then a
+swing trail past it) is one candidate; the mode, the lock and the trail are
+searched, the attempt simulator re-exiting
+each trade from its recorded path under either (`prop/attempts.js` `exitAs`).
+The loss streak stop (`loss_streak_stop`) and the pacing clock (`clock_k`) are
+searched with them.
 The trail's range is bounded by the target and the consistency rule: one
 winner of several thousand dollars against a $6,000 target makes that day
 more than half the profit, which forces more profit before a pass, so days
@@ -1087,8 +1129,9 @@ What changes in behaviour:
   fraction path for the multiplier, rather than deleting it and adding it
   back. The priority order still halves a trade when the LLM applies it.
 - **No early close once the trail is active.** The policy's hold-or-close decision in a
-  trade goes. The trailing exit (`exit` in `prop_portfolio`) manages every
-  trade, as it does without a bundle today.
+  trade goes. The policy's exit (`exit` in `prop_portfolio`'s rulebook entry:
+  the trade's own stop and target, or a trail) manages every trade, as it
+  does without a bundle today.
 - **The verdict no longer records which policy produced it.** The check
   that pins a verdict to a bundle (prop-state, order_plan) goes. Old
   verdicts expire on their own.
@@ -1155,7 +1198,7 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
 9. The two-layer evaluator and the attempt simulation (R6-R9). Built
-   (`scripts/lib/prop/`, `scripts/evaluate.js`; section 5 says how it reads
+   (`scripts/lib/prop/`; section 5 says how it reads
    R6-R9, and what it still takes as inputs).
 10. Calibration: the registry, the measurements and the reports (R11-R13),
    the flow strategies' thresholds among them, on covered months (R34).
@@ -1204,6 +1247,19 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     it); on held-out windows the
     candidate alone, each scoring a judging look; with no `evaluator` in
     the loop config a strategy or rulebook change stays `blocked`.
+    The model-scoring verifier (`scripts/lib/train/model-verifier.js`,
+    `modelScore` in the loop config; `docs/TRAINING.md` section 6) judges
+    a change on the model's own trades: the challenger's tree replays the
+    champion's windows with the same seed, and the keep rule reads the
+    paired 30-day Monte Carlo (`pairRuns`) and the paired adherence and
+    correct-read measures: zero challenger blows, no significantly worse
+    blow rate, one pooled interval over every window's real start days
+    showing a better pass rate (the primary measure; median days to pass
+    is only reported), no window significantly worse on its real
+    attempts, and adherence and reads not significantly worse on enough
+    paired decisions. Tuning is on practice-train only, held-out judging
+    goes through learning looks, and the promotion gate stays the final
+    gate.
     Not yet: Optuna over the agent's design (R30's categorical search; the
     loop judges each proposal on its own), and the LLM-level estimate (R20)
     as a verifier. The scorecard (step 2) is read through an adapter, under
@@ -1344,8 +1400,9 @@ and trims about 700 more lines in about 30 files.
   imports.
 - `challenge-env.js`'s combine simulator (`tradingDays`, `createEnv`,
   `runAttempt`, `evaluate`, without rewards and actions; about 90 lines).
-  The backtester's prop runs use it, and the attempt simulation (R6) builds
-  on it.
+  The backtester's prop runs used it, and the attempt simulation (R6) builds
+  on it. It became `prop/challenge.js`, retired with those runs on
+  2026-10-14; its `tradingDays` moved to `prop/trade-stream.js`.
 - The promotion gate's numbers and `gateFailures`, and the split windows
   (R15).
 - The market features (section 9).

@@ -197,7 +197,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `position-sizing` (skills/position-sizing/SKILL.md): Use when sizing a trade plan - risk per contract, the budget, the caps, a policy verdict's size.
 - `premarket` (skills/premarket/SKILL.md): Read-only game plan for the day, placing no orders. Use at the start of the trading day (just after the 18:00 ET open) or when the user asks for a plan.
 - `prop-challenge-pacing` (skills/prop-challenge-pacing/SKILL.md): Use when a policy strategy trades a harness-tracked prop attempt - its state, its verdicts, the gate's refusals.
-- `prop-evaluator` (skills/prop-evaluator/SKILL.md): Use when reading or reporting a policy strategy's evaluator result (pass, blow and timeout rates on history).
+- `prop-evaluator` (skills/prop-evaluator/SKILL.md): Use when reading or reporting a replay run's prop score (pass, blow and timeout rates, days to pass).
 - `prop-pacing-judgment` (skills/prop-pacing-judgment/SKILL.md): Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
 - `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4, price moving against the higher-timeframe trend - a pullback (trend intact) or a reversal (a higher-frame CHoCH). A read, never a veto.
 - `reason-check` (skills/reason-check/SKILL.md): Use when checking stated reasons vs the facts.

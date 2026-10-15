@@ -406,14 +406,16 @@ test('the order-flow activation says what holds: one runner per broker account, 
     assert.match(t, f.startsWith('skills/') ? /the account lock refuses one/ : /a per-account lock is coming/, f);
   }
   // Without flow the flow conditions are false; value_area can still confirm by range expansion.
-  for (const f of ['README.md', 'docs/ORDER-FLOW.md', 'docs/HARNESS-DESIGN.md']) {
+  for (const f of ['docs/OPERATING.md', 'docs/ORDER-FLOW.md', 'docs/HARNESS-DESIGN.md']) {
     const t = read(f).replace(/\s+/g, ' ');
     assert.match(t, /`value_area` can (still )?confirm (only )?(through its range-expansion branch|through its other branch|by range expansion)/, f);
     assert.doesNotMatch(t, /`value_area` strategies read them with the rules' `field\("path"\)`; a bar without them gives no signal/, f);
   }
   const bt = read('docs/BACKTESTING.md').replace(/\s+/g, ' ');
-  assert.match(bt, /a `prop_portfolio` run \(`--prop`\) on CSV or built bars leaves out `value_area`'s flow branch/);
-  assert.match(bt, /a walk-forward run only logs it\. In a `--prop` run only the strategies it trades are checked/);
+  // The backtester's prop runs are retired (docs/research/mechanical-prop-backtester.md): no doc example runs one.
+  assert.match(bt, /### Prop challenges \(retired\)/);
+  assert.doesNotMatch(bt, /backtest\.js [^`\n]*--prop/);
+  assert.match(bt, /a walk-forward run only logs it\./);
   assert.doesNotMatch(bt, /promotion runs included/);
 });
 

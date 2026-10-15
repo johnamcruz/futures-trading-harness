@@ -6,11 +6,13 @@
  * backtester, the runner, and the gateway all drive the same functions.
  *
  *   start(account)                  a fresh attempt
- *   applyClose(s, net)              a closed trade's net P&L (after fees)
+ *   applyClose(s, net, gross)       a closed trade's net P&L (after fees); gross (before fees) moves the loss streak
+ *   streakAfter(streak, gross)      the session's loss streak after a closed trade
  *   touches(s, openPnl)             would equity at openPnl reach the floor?
  *   endDay(s)                       the session closed: floor, pass, timeout
  *   entryBlock(s)                   why no new entry now (or null)
  *   budget(s, sizing)               dollars a new trade may risk
+ *   attemptFacts(s, counts)         the attempt line's further facts (room to the limits, today's counts, consistency)
  *   contracts(budget, riskPerContract, max, guard, room)
  *
  * The floor (max_loss_mode trailing_eod) trails the highest end-of-day
@@ -19,7 +21,10 @@
  * profit at or above the target, and the best day at most consistency_pct of
  * the profit. A firm daily limit stops trading for the rest of the day; it
  * doesn't end the attempt. The harness's soft daily limit only stops new
- * entries.
+ * entries, and so does its loss streak stop (the rulebook's loss_streak_stop):
+ * that many losing trades in a row in a session stop new entries until the
+ * next one. A loss (gross P&L below 0, as the gate counts it) extends the
+ * streak, a win ends it, and a scratch (gross 0) does neither.
  */
 
 const DEFAULT_SIZING = {
@@ -47,6 +52,8 @@ function start(account) {
     mode: account.max_loss_mode,
     dailyLimit: account.daily_loss_limit || 0,
     dailySoft: account.daily_loss_soft || 0,
+    lossStreakStop: account.loss_streak_stop || 0, // 0: off (the rulebook's `off`)
+    lossStreak: 0, // losing trades in a row this session
     consistency: account.consistency_pct || 0,
     sessions: account.sessions,
     balance: account.starting_balance,
@@ -64,9 +71,12 @@ const profit = s => s.balance - s.start;
 const cushion = s => s.balance - s.floor;
 const sessionsLeft = s => Math.max(0, s.sessions - s.days.length);
 
-function applyClose(s, net) {
+/** The loss streak after a trade closed at `gross` (before fees): a loss extends it, a win ends it, a scratch neither. */
+const streakAfter = (streak, gross) => (gross < 0 ? (streak || 0) + 1 : gross > 0 ? 0 : streak || 0);
+
+function applyClose(s, net, gross = net) {
   if (s.status !== 'active') return s;
-  const n = { ...s, balance: round2(s.balance + net), dayPnl: round2(s.dayPnl + net) };
+  const n = { ...s, balance: round2(s.balance + net), dayPnl: round2(s.dayPnl + net), lossStreak: streakAfter(s.lossStreak, gross) };
   n.peak = Math.max(s.peak ?? s.start, n.balance);
   if (n.balance <= n.floor) return { ...n, status: 'blown' };
   if (n.dailyLimit > 0 && n.dayPnl <= -n.dailyLimit) n.dayStopped = true;
@@ -107,7 +117,7 @@ function passes(s) {
 
 function endDay(s) {
   if (s.status !== 'active') return s;
-  const n = { ...s, days: [...s.days, s.dayPnl], dayPnl: 0, dayStopped: false };
+  const n = { ...s, days: [...s.days, s.dayPnl], dayPnl: 0, dayStopped: false, lossStreak: 0 };
   if (n.mode === 'trailing_eod') {
     n.eodHigh = Math.max(n.eodHigh, n.balance);
     n.floor = Math.min(n.start, n.eodHigh - n.maxLoss);
@@ -123,6 +133,9 @@ function entryBlock(s) {
   if (s.status !== 'active') return `the attempt is over (${s.status})`;
   if (s.dayStopped) return `the daily loss limit ($${s.dailyLimit}) was hit: no trading until the next session`;
   if (s.dailySoft > 0 && s.dayPnl <= -s.dailySoft) return `down $${-s.dayPnl} today, at the soft daily limit ($${s.dailySoft}): no new entries until the next session`;
+  if (s.lossStreakStop > 0 && (s.lossStreak || 0) >= s.lossStreakStop) {
+    return `${s.lossStreak} losing trade${s.lossStreak === 1 ? '' : 's'} in a row this session, at the loss streak stop (loss_streak_stop ${s.lossStreakStop}): no new entries until the next session`;
+  }
   // At the target, stop once today's close would pass. When the best day is
   // still too large a share of the profit (consistency), the attempt has to
   // keep trading to pass at all: blocking it there would only run out the clock.
@@ -227,12 +240,41 @@ function summary(s) {
   };
 }
 
+/**
+ * The attempt line's further facts, from one function the live prompt (autotrader accountText, through
+ * prop/live-runner.js summaries), practice and the simulator (prop/attempts.js counters, the risk attribution)
+ * read, so practice and the Monte Carlo see what live shows. Facts only: nothing here blocks or sizes (entryBlock,
+ * budget and the gate do). Counts the caller knows (trades and losing trades closed today, the losing streak: from the
+ * day's fills live, from the attempt in the simulator) are passed in; null when unknown.
+ *   dailyRoom       dollars to the firm's daily limit (null without one)
+ *   softStop, softRoom   the rulebook's soft daily stop and the dollars to it (null without one)
+ *   day             the session of the attempt this is (1 on the first)
+ *   consistencyCap  with a consistency rule and profit before today: the most today may make and stay within it
+ *                   (pct x profit / (1 - pct), today counted in the profit); null otherwise
+ *   needed          profit still needed to pass, consistency included
+ */
+function attemptFacts(s, { tradesToday = null, lossesToday = null, lossStreak = null } = {}) {
+  const p = profit(s);
+  const before = p - s.dayPnl;
+  const c = s.consistency ? s.consistency / 100 : 0;
+  const count = x => (Number.isInteger(x) && x >= 0 ? x : null);
+  return {
+    dailyRoom: s.dailyLimit > 0 ? round2(Math.max(0, s.dailyLimit + s.dayPnl)) : null,
+    softStop: s.dailySoft > 0 ? s.dailySoft : null,
+    softRoom: s.dailySoft > 0 ? round2(Math.max(0, s.dailySoft + s.dayPnl)) : null,
+    tradesToday: count(tradesToday), lossesToday: count(lossesToday), lossStreak: count(lossStreak),
+    day: s.days.length + 1, sessions: s.sessions, sessionsLeft: sessionsLeft(s),
+    consistencyCap: c > 0 && c < 1 && before > 0 ? round2((c * before) / (1 - c)) : null,
+    needed: round2(Math.max(0, profitNeeded(s, [...s.days, s.dayPnl]) - p)),
+  };
+}
+
 /** A summary's sessions left; a live attempt past its training length (`sessions`) says so rather than "0 left". */
 const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
   ? `${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left`
   : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
 
 module.exports = {
-  DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary,
+  DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary, attemptFacts,
   profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

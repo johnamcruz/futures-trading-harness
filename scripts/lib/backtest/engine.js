@@ -31,8 +31,9 @@
  * while another's trade is open, so a stopped trade never reaches the floor or
  * the daily limit. A policy strategy's run (`prop`) takes every setup the
  * account's budget can size, in its contract mode, and exits every trade by
- * the policy strategy's own exit block, as the live runner does. The prop
- * challenge simulator (prop/challenge.js) runs attempts on exactly this loop.
+ * the policy strategy's own exit block, as the live runner does. This account
+ * mode is the reference layer 2 (prop/attempts.js) is tested against, attempt
+ * by attempt (tests/lib/prop-evaluator.test.js).
  *
  * Fills are the simulated broker's (sim-broker.js, one per market): by default
  * (`fill: 'next-open'`) a market entry fills at the next bar's open plus
@@ -45,7 +46,16 @@
  */
 
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
-const { exitPlan, tradesRoot } = require('../trading/strategies');
+const { exitPlan, tradeExitPlan, tradesRoot } = require('../trading/strategies');
+const { swingSeries } = require('../trading/exit-trail');
+
+/** A book's swing level at bar i on `minutes` candles: a long's latest confirmed swing low, a short's high (computed once per book). */
+function swingAt(book, minutes, sign, i) {
+  book.swings = book.swings || new Map();
+  if (!book.swings.has(minutes)) book.swings.set(minutes, swingSeries(book.bars, minutes));
+  const s = book.swings.get(minutes);
+  return (sign > 0 ? s.low : s.high)[i];
+}
 const { createSimBroker, onTick } = require('./sim-broker');
 const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
@@ -230,7 +240,7 @@ function runEngine(markets, strategies, opts = {}) {
     // The live gate counts losses from the broker's P&L (search_trades), before fees; the daily
     // dollar limit counts net.
     closesToday.push({ pnl: gross, net, ts: bar.ms + tfMs(book) });
-    if (cs) cs = combine.applyClose(cs, net);
+    if (cs) cs = combine.applyClose(cs, net, gross);
   };
   const feeOf = book => (account && account.fees_per_side && account.fees_per_side[book.symbol] !== undefined
     ? account.fees_per_side[book.symbol] : book.feesPerSide ?? 0.37);
@@ -325,7 +335,10 @@ function runEngine(markets, strategies, opts = {}) {
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
     const q = broker.position;
     if (q) {
-      const done = broker.manage(bar) || (afterEod ? broker.exit(bar.c, 'eod') : null);
+      // A structure trail past the target (exit-trail.js): the swing confirmed by this bar's close, on the trade's side.
+      const after = q.plan && q.plan.afterTarget;
+      const swing = after && after.trailBy === 'structure' ? swingAt(book, after.swingMinutes, q.sign, i) : null;
+      const done = broker.manage(bar, { swing }) || (afterEod ? broker.exit(bar.c, 'eod') : null);
       if (done) closeTrade(book, bar, done);
     }
     return { book, bar, i, closeAt, afterEod, managed: Boolean(q) };
@@ -360,8 +373,8 @@ function runEngine(markets, strategies, opts = {}) {
     const sign = pick.r.direction === 'long' ? 1 : -1;
     const stopTicks = Math.max(1, roundHalfEven(pick.r.stopDistance / book.tickSize));
     const risk = onTick(stopTicks * book.tickSize, book.tickSize);
-    // A policy strategy's trades all exit by its own exit block.
-    const plan = exitPlan(o.prop ? o.prop.strategy : pick.s);
+    // A policy strategy's trades exit by its exit (tradeExitPlan): mode trail, its trail; mode target, the setup's own.
+    const plan = o.prop ? tradeExitPlan(o.prop.strategy, pick.s) : exitPlan(pick.s);
     let size = o.riskPerTrade
       ? Math.min(o.maxContracts, Math.max(1, Math.floor(o.riskPerTrade / (stopTicks * book.tickValue))))
       : Math.min(o.maxContracts, o.size);

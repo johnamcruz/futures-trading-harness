@@ -22,8 +22,8 @@ challenge as a strategy: it trades its component's setups
 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
-`sizing` allows, or is skipped. Its numbers (the `sizing`, the trail
-`exit`, the soft daily stop, and the verdict's multiplier items) are in the
+`sizing` allows, or is skipped. Its numbers (the `sizing`, the `exit`, the
+soft daily stop, the loss streak stop, and the verdict's multiplier items) are in the
 account's rulebook, `accounts/<name>/RULEBOOK.md`, the one place for them:
 read them there, never from a strategy or this skill. A missing, incomplete or
 malformed rulebook refuses the account and its policies (every entry; exits,
@@ -39,6 +39,19 @@ it:
 - In autonomous runs the cycle prompt carries each running attempt's state
   (balance, floor, cushion, profit, the day, sessions left, the size budget,
   any entry block) and the live verdicts, from the runner's latest snapshot.
+  Its facts (attempt day, profit needed, room to the daily limit and
+  `daily_loss_soft`, today's trades and losses, the session's losing streak,
+  consistency headroom) count every trade of the day, including any closed
+  before your first cycle, as the gate counts them.
+- **Read the attempt line before the setup:**
+  - Near the floor: clearest setup only, at or under the verdict's size, or
+    pass (a pass costs a day, a blow the attempt).
+  - After a loss today: the bar rises; never trade to win it back.
+  - One loss short of `loss_streak_stop` or the gate's daily loss count: the
+    next entry is the day's last.
+  - A stop would take most of the day's room, or headroom is spent: done for
+    the day. Headroom is a cap, not a target.
+  - Near the target: smaller or none; never risk the day the pass depends on.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;
@@ -63,8 +76,19 @@ it:
   verdict yet`), as is a verdict that names no bar: stand aside until the
   next setup's verdict. A verdict permits one
   entry: after a stop-out, wait for the next setup's verdict. Never exceed it
-  or route around it. Once in, the policy strategy's own exit (its trail)
-  manages the trade; nothing closes it early past the ratchet.
+  or route around it. Once in, the rulebook's `exit` manages the trade (exit
+  mode `target`, `target_then_trail` or `trail`). Let a winner run past its
+  target once it is reached: in `target_then_trail` the code locks the stop
+  near the target and trails it; you never widen it, close early or pull
+  the target in by feel.
+- **Loss streak stop.** After `loss_streak_stop` losses in a row in a
+  session (a win ends the streak, a scratch neither), the gate refuses
+  entries until the next session: losses in a row mean the day's read is
+  off, not that a winner is due. Stand down before it does (the attempt
+  line, above).
+- **Pacing** (`sizing.clock_k`, tuned by the phase-2 search, or `off`)
+  caps a trade at what the pass still needs per session left. Never size up
+  to catch up.
 - **Before the first live entry** (the user's steps, not an agent's): the
   policy strategy must be `active` (`prop_portfolio` is; its sizing rules
   decide each verdict), and the user starts the attempt
@@ -92,7 +116,7 @@ it:
   snapshot older than 10 minutes or dated in the future (a clock that
   stepped back: tell the user); a missed close (the user records it with
   `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
-  daily limit; a size over the budget (at the verdict's multiplier); a verdict
+  daily limit; the loss streak stop; a size over the budget (at the verdict's multiplier); a verdict
   that isn't `full`, or carries no multiplier above 0 and at most 1; any entry that doesn't match the
   verdict, or whose verdict is not for the last recorded bar, or is for a
   setup of a strategy that isn't active; any position already open on the account, or any order working

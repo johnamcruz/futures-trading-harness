@@ -22,6 +22,8 @@ const mtf = require('./mtf');
 // A timeframe ('3m', '1h') in minutes; null when it isn't one.
 const tfMinutes = tf => { const m = /^(\d+)(m|h)$/.exec(String(tf || '')); return m ? Number(m[1]) * (m[2] === 'h' ? 60 : 1) : null; };
 
+const { SWING_TFS } = require('./exit-trail');
+
 const DEFAULT_WINDOW = 500; // bars per evaluation, as the original bot's BARS_WINDOW
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
@@ -36,18 +38,40 @@ function timeframeMs(tf) {
 /**
  * The exit plan for a trade in strategy `s`: fixed target and/or trailing
  * stop, in R (1R = the initial stop distance). Without an exit block the
- * target is risk.min_rr, as a bracket.
+ * target is risk.min_rr, as a bracket. A policy strategy whose exit is
+ * in exit mode `target` sets no target of its own (`own`: each trade keeps its own
+ * stop and target, tradeExitPlan), only the trail on top when it has one;
+ * in mode `target_then_trail` its `afterTarget`: past the target the trade is trailed, not closed.
  */
 function exitPlan(s) {
   const x = s.exit || {};
+  const own = x.mode === 'target' || x.mode === 'target_then_trail';
   return {
     // exit.target is a distance per setup (targetDistance on the scan result), not R.
-    targetR: x.target !== undefined ? null : x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
+    targetR: own || x.target !== undefined ? null : x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
     target: x.target ?? null,
     trailActivateR: x.trail_activate_r ?? null,
     trailGivebackR: x.trail_giveback_r ?? null,
     maxBars: x.max_bars ?? null,
+    ...(own ? { own: true } : {}),
+    // Exit mode target_then_trail: past its own target the trade is trailed, not closed (trading/exit-trail.js).
+    ...(x.mode === 'target_then_trail' ? { afterTarget: { lockGivebackR: x.lock_giveback_r, trailBy: x.trail_by, trailR: x.trail_r, swingMinutes: x.trail_by === 'structure' ? SWING_TFS[x.swing_tf] : null } } : {}),
   };
+}
+
+/**
+ * The exit plan of a trade a policy strategy takes from its component (a rules strategy's setup; null for a compose
+ * record, whose own stop and target are its entry's brackets). Mode `trail` (or a policy without a mode): the
+ * policy's trail replaces the trade's own exit, as before. Mode `target`: the component's own exit (none to manage
+ * for a compose record), with the policy's trail on top when it has one. No policy: the component's own plan.
+ */
+function tradeExitPlan(policy, component = null) {
+  if (!policy) return exitPlan(component);
+  const p = exitPlan(policy);
+  if (!p.own) return p;
+  const base = component ? exitPlan(component) : { targetR: null, target: null, trailActivateR: null, trailGivebackR: null, maxBars: null };
+  const own = p.afterTarget ? { ...base, afterTarget: p.afterTarget } : base;
+  return p.trailActivateR === null ? own : { ...own, trailActivateR: p.trailActivateR, trailGivebackR: p.trailGivebackR };
 }
 
 function inSessions(strategy, now) {
@@ -201,4 +225,4 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   return { at, regimeAt, length: bars.length, bars };
 }
 
-module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs, exitPlan };
+module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs, exitPlan, tradeExitPlan };

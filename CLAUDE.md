@@ -79,7 +79,7 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   have those keys.
 - `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
   (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`, with the rulebook's multiplier), combine attempts on
-  history (`challenge.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
+  a trade stream (`attempts.js`, scored by `evaluator.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
   OOS month, >= 40% pass over >= 20 independent attempts and 2 months) in `promotion.js`, frozen code with a
   test that its numbers only rise; never lower it. No trained policy runs: the rulebook holds
   today's values, and nothing in it is learned yet.
@@ -183,9 +183,11 @@ request, every time, whatever the size of the change:
    that preflight points to), `docs/research/mtf-setup-catalog.md` (the
    census the basics skills cite as evidence),
    `docs/research/cisd-ote-textbook.md` (the census the `cisd` and
-   `fib-retracement` skills cite), and `docs/COMPOSED-ENTRY.md` (the
+   `fib-retracement` skills cite), `docs/COMPOSED-ENTRY.md` (the
    approved design of `trade_lifecycle` that `prop_portfolio`, the
-   rulebook and the retired-strategy list point to).
+   rulebook and the retired-strategy list point to), and `docs/TRAINING.md`
+   (the training guide the replay's stages and the training preflight
+   point to).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what

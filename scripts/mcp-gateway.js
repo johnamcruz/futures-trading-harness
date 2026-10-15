@@ -32,7 +32,7 @@ const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/ord
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
-const { runningAttempts } = require('./lib/trading/prop-state');
+const { runningAttempts, carriedLossState } = require('./lib/trading/prop-state');
 const { activeBroker, translatedCommand } = require('./lib/broker/config');
 const { createServerAttestation } = require('./lib/broker/allow-list');
 const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/trading/order-tracker');
@@ -55,7 +55,7 @@ async function accountViolations(args, caller, now, ledger, extraOrders = []) {
   }
   const config = loadConfig(process.env);
   const running = entry ? runningAttempts(config.home) : [];
-  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null });
+  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null, carried: entry ? carriedLossState(config.home, now) : null });
   const gated = entry ? regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies) : null;
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);
@@ -158,8 +158,9 @@ function main(argv) {
     waiting.set(id, msg => {
       clearTimeout(timer);
       tracker.onReply(id, msg);
-      if (overdue.delete(id)) recordSent(id, msg);
-      else resolve(msg);
+      overdue.delete(id);
+      try { recordSent(id, msg); } catch (err) { logErr(`could not record reply ${id}: ${err.message}`); } // before the client sees it
+      resolve(msg);
     });
   });
   // Client request ids forwarded to the server and not yet answered.
@@ -206,8 +207,7 @@ function main(argv) {
   // Server → client: whole lines only; responses to the gateway's own calls are consumed.
   const fromServer = lineSplitter(line => {
     if (caller.consume(line)) return;
-    write(line);
-    noteResponse(line);
+    try { noteResponse(line); } finally { write(line); } // bookkeeping never hides a broker reply
   });
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', chunk => fromServer.push(chunk));
@@ -269,7 +269,7 @@ function main(argv) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }
       }
-      const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
+      const replies = lane.map(m => awaitResponse(m.id));
       toChild(line2);
       // Hold the lane until the server has answered every order-changing call.
       await Promise.all(replies);

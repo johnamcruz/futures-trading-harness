@@ -212,6 +212,30 @@ test('categories: each failure in the taxonomy, right, and unchecked', () => {
   assert.deepStrictEqual(CATEGORIES, ['right', 'wrong-side entry', 'bad size', 'early close', 'excessive abstention', 'wrong stated reason', 'risk-rule rejection', 'unchecked']);
 });
 
+test('categories: an entry the gate refused at the loss streak stop is a risk-rule rejection (a mistake to learn from), not a neutral event', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { severityOf } = require('../../scripts/lib/replay/failures');
+  // A session at the account's loss_streak_stop, from the broker's closing fills, as the runner snapshots it.
+  const home = tmpDir();
+  const account = { name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod', daily_loss_limit: 1000, daily_loss_soft: 500, loss_streak_stop: 2, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50 }, fees_per_side: { MNQ: 0.37 } };
+  const now = new Date('2026-06-01T15:00:00Z');
+  prop.startAttempt(home, account, new Date('2026-05-29T14:00:00Z'));
+  prop.snapshot(home, account, 50000, new Date('2026-06-01T14:00:00Z'));
+  const fills = [1, 2].flatMap(k => [
+    { creationTimestamp: `2026-06-01T14:${10 * k}:00Z`, profitAndLoss: null, fees: 0.37 },
+    { creationTimestamp: `2026-06-01T14:${10 * k + 5}:00Z`, profitAndLoss: -20, fees: 0.37 },
+  ]);
+  prop.snapshot(home, account, 50000 - 2 * 20.74, new Date('2026-06-01T14:59:00Z'), { fills });
+  // The gate's own refusal of the next entry, logged as the label reads it (labels.js: the violations' checks).
+  const violations = prop.propViolations(home, { strategy: { name: 'prop_portfolio', valid: true, account: 'mini' }, account, input: { contractId: 'MNQ', side: 'buy', size: 1, stopLossBracket: { ticks: 40, type: 'stop' } }, now });
+  assert.strictEqual(violations.length, 1, JSON.stringify(violations));
+  assert.match(violations[0].message, /2 losing trades in a row this session, at the loss streak stop \(loss_streak_stop 2\)/);
+  const gate = { decision: 'refused', by: 'gateway', checks: violations.map(v => v.check) };
+  const r = run(entry('short', 1, gate), facts({ setups: [setup()] }));
+  assert.deepStrictEqual([r.category, r.agrees, r.why], ['risk-rule rejection', false, ['refused by gateway: combine']]);
+  assert.strictEqual(severityOf({ category: r.category }), 'medium', 'graded as a failure the loop learns from');
+});
+
 // ------------------------------------------------------------------------------------------------
 // A whole run home
 

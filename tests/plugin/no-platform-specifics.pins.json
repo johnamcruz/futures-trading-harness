@@ -1,18 +1,4 @@
 {
-  "README.md|firm": [
-    "04f8cc16dd6a9046",
-    "ab206e02680d3457",
-    "ae06fc26e502d8d6"
-  ],
-  "README.md|account": [
-    "0c71d61f41eb748c",
-    "6cffedfc55e3624c",
-    "6f7ee655d6fb3f71"
-  ],
-  "README.md|firm-time": [
-    "04f8cc16dd6a9046",
-    "c883d537906eb1a6"
-  ],
   "commands/trade-review.md|firm-time": [
     "061ae3d39d8b7546"
   ],
@@ -24,11 +10,7 @@
     "9af1ee2ec4eb691b"
   ],
   "docs/REASONING-TRADER-DESIGN.md|account": [
-    "8cbc55fd6bab5686",
     "f785e500b7311759"
-  ],
-  "docs/REASONING-TRADER-DESIGN.md|firm-time": [
-    "4c3136fa4340390b"
   ],
   "mcp-configs/replay.example.json|account": [
     "4bc3a294d9a6966b"
@@ -76,18 +58,6 @@
     "521880aaca6b6d70",
     "d4d524fce4ce7028"
   ],
-  "scripts/lib/replay/verdict.js|firm": [
-    "af8499b50edf3698",
-    "f4e1dd5f2dc4b92f"
-  ],
-  "scripts/lib/replay/verdict.js|account": [
-    "4c404c3d648bf32c",
-    "df3815517ea858b4"
-  ],
-  "scripts/lib/replay/verdict.js|firm-time": [
-    "353a4696849e47ee",
-    "af8499b50edf3698"
-  ],
   "scripts/lib/trading/account-gate.js|firm-time": [
     "96a82f2535f25bc3"
   ],
@@ -125,23 +95,12 @@
   "scripts/lib/trading/report-cache.js|account": [
     "f1e5d8c2c56574d9"
   ],
-  "scripts/replay.js|account": [
-    "5769fe1d465676c4"
-  ],
-  "skills/replay/SKILL.md|firm": [
-    "c37cddfe2ff5f33d"
-  ],
   "skills/replay/SKILL.md|account": [
     "011e6f9022668405",
-    "103538f464e03d58",
-    "51c2d5d664e4da9a",
     "614560bc8894c9f9",
     "75375c8d03e5a15a",
     "7f3069fdbe555e49",
     "ddd42fa57f89439b"
-  ],
-  "skills/replay/SKILL.md|firm-time": [
-    "06165f7a4af4cd73"
   ],
   "strategies/README.md|account": [
     "5eeca293b452b47e"
@@ -208,9 +167,6 @@
   ],
   "tests/lib/autotrader.test.js|firm-time": [
     "1021d34dddb684c8"
-  ],
-  "tests/lib/backtest.test.js|account": [
-    "75cdb5d64d7947ab"
   ],
   "tests/lib/clock.test.js|firm-time": [
     "188313c390374da4",
@@ -290,26 +246,6 @@
   ],
   "tests/lib/replay-scorecard.test.js|firm-time": [
     "1686b688b2750072"
-  ],
-  "tests/lib/replay-verdict.test.js|account": [
-    "115febf55f60e100",
-    "1a0719e4f4bb7c9c",
-    "24d39a026d53295d",
-    "25a44409881a29dd",
-    "2d4ead46c5d41428",
-    "3221718bb1f2ccea",
-    "45fa3cfedcc4e87e",
-    "89f4afd96544f74b",
-    "957e35b7e85dd458",
-    "a52869d98fba41f2",
-    "a607776a1feaa389",
-    "cb2a30558416e06a",
-    "de02e830a29c8957",
-    "e22dfcc15d3b44d5",
-    "fe4cb5500fa158b7"
-  ],
-  "tests/lib/replay-verdict.test.js|firm-time": [
-    "d5233991473dca76"
   ],
   "tests/lib/replay.test.js|account": [
     "0138f0f950231470",

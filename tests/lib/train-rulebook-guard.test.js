@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, withExitBlock, exitBlock } = require('../helpers');
 const G = require('../../scripts/lib/train/rulebook-guard');
 const { validateProposal } = require('../../scripts/lib/train/proposal');
 const { SIZING_KEYS } = require('../../scripts/lib/trading/rulebook');
@@ -26,7 +26,7 @@ const errs = (t, find, replace) => validateProposal(prop(find, replace), { root:
 const line = (t, re) => t.text.match(re)[0];
 
 test('every sizing limit has a direction; the fixture rulebook is valid as written', () => {
-  assert.deepStrictEqual([...SIZING_KEYS].sort(), Object.keys(G.DIRECTION).filter(k => k !== 'daily_loss_soft').sort());
+  assert.deepStrictEqual([...SIZING_KEYS].sort(), Object.keys(G.DIRECTION).filter(k => !['daily_loss_soft', 'loss_streak_stop'].includes(k)).sort());
   const t = tree();
   assert.deepStrictEqual(errs(t, 'learned: none', 'learned: none '), '', 'a no-op on the numbers passes');
 });
@@ -95,19 +95,35 @@ test('every key\'s direction: the looser way is refused and the stricter way pas
     assert.match(G.loosenings(at(k, 10), at(k, looser)).join(), new RegExp(`${k}: 10 -> ${looser} is looser`), `${k}: 10 -> ${looser}`);
   }
   // Pinned, so a flipped direction fails here.
-  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher' });
+  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', loss_streak_stop: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher' });
 });
 
 test('exits, policies and the enforced classification: never loosened or changed', () => {
   const t = tree();
-  const act = line(t, /trail_activate_r: \S+/);
-  assert.match(errs(t, act, 'trail_activate_r: 9'), /policies\.p1\.exit: changed/);
+  // Any valid change of the exit (its mode, its lock, its trail) is refused: the exit is searched, never a proposal's.
+  const block = line(t, / {4}exit:\n(?: {6}.*\n)+/);
+  for (const exit of [exitBlock({ mode: 'trail', trail_activate_r: 9, trail_giveback_r: 1 }), exitBlock({ mode: 'target' }),
+    exitBlock({ mode: 'target_then_trail', lock_giveback_r: 0.25, trail_by: 'r', trail_r: 1 })]) {
+    const now = withExitBlock(block, exit);
+    assert.notStrictEqual(now, block);
+    assert.match(errs(t, block, now), /policies\.p1\.exit: changed/, JSON.stringify(exit));
+  }
   assert.match(errs(t, '  p1:\n', '  p2:\n'), /policies\.p2: added|policies\.p1: removed/);
   assert.match(errs(t, 'enforced: [daily_loss_soft, ', 'enforced: ['), /daily_loss_soft: classified neither|moved out of enforced/);
   // The guard on its own (a valid edit that moves an item out of enforced is caught here, never only by validity).
   assert.deepStrictEqual(G.loosenings({ enforced: ['a', 'b'] }, { enforced: ['a'] }), ['enforced: b moved out of enforced (the code no longer holds it)']);
   assert.deepStrictEqual(G.loosenings({ learned: 'none', x: 1 }, { learned: 'none' }), ['x: removed (a rulebook key is never removed)']);
   assert.match(G.loosenings({ policies: { p: { sizing: { mystery: 1 } } } }, { policies: { p: { sizing: { mystery: 2 } } } }).join(), /not a limit with a known direction/);
+});
+
+test('the loss streak stop: lower or a stop where it was off passes; higher, off or removed is refused, naming the key', () => {
+  const t = tree();
+  assert.strictEqual(errs(t, 'loss_streak_stop: off', 'loss_streak_stop: 2'), '', 'a stop where there was none: stricter');
+  const at = v => ({ loss_streak_stop: v });
+  assert.deepStrictEqual(G.loosenings(at(2), at(1)), []);
+  assert.match(G.loosenings(at(2), at(3)).join(), /loss_streak_stop: 2 -> 3 is looser/);
+  assert.match(G.loosenings(at(2), at('off')).join(), /loss_streak_stop: 2 -> off turns a limit off/);
+  assert.match(G.loosenings(at(2), {}).join(), /loss_streak_stop: removed/);
 });
 
 test('an invalid rulebook after the edit is refused before any comparison', () => {

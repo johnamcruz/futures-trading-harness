@@ -28,6 +28,14 @@
  *   libraryDisplay true shows the pinned library to the model: experience_lookup's code-measured section (counts, the
  *                  win rate and no-room only); needs setupLibrary; part of the setup (setupHash), so an arm with it
  *                  and one without are two setups, paired only as a library-display arm (learning/looks.js) (default: false)
+ *   riskRecord     a risk record index file (learning/risk-record-index.js buildRiskIndex),
+ *                  pinned for the run at its start (default: none). Pinned alone it is code's, never shown to the model
+ *   riskRecordDisplay true shows the pinned risk record to the model: experience_lookup's "your risk record" section (counts
+ *                  and outcomes of its own risk decisions by account state, practice-train days before the bar's session);
+ *                  needs riskRecord; part of the setup (setupHash) only when on, so existing hashes are unchanged; an arm
+ *                  dimension of its own (learning/looks.js `+risk:`), and a resume can't change it (default: false)
+ *   comparisonArm  true declares the run one arm of a with/without comparison (two replays, the paired test): stage 2
+ *                  shows the risk record only on one (replay/stage.js); a declaration only, in no hash (default: false)
  *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
  *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
  *                  on for a learning run, off for one declared not learning)
@@ -36,8 +44,19 @@
  *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
  *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
  *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
- *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
- *                  maxDailyLoss is the account's daily_loss_limit
+ *   accountStates  a stage-2 curated run's account states (prop/account-states.js, scripts/account-states.js draw):
+ *                  { file }. Each window day starts from a drawn state (assignStates): the run seeds its attempt record
+ *                  (prop-state seedAttempt) and the replay broker's balance (the balance schedule, brokerEnv
+ *                  balanceSchedule) from it before the day's first step (replay/driver.js). Needs curatedList, never
+ *                  prop; the document's account must still be the profile it was drawn on; part of both hashes
+ *                  (default: none)
+ *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop` or
+ *                  `accountStates`, its maxDailyLoss is the account's daily_loss_limit
+ *   stage          a training preset (replay/stage.js; docs/TRAINING.md): 1 learn to trade, 2 pass prop. It sets
+ *                  defaults and requirements only: an explicit value contradicting it is refused, never overridden;
+ *                  the training preflight (learning/preflight.js) checks the rest; part of both hashes (default: none).
+ *                  An A/B of a skill change is two replays with the same stage, seed and list (practice and
+ *                  curatedList), compared with the paired test (train/paired.js)
  *
  * Isolation: the run home is a fresh harness home (FTH_HOME) of its own, never
  * the default home, the caller's FTH_HOME, or inside the repository; it holds
@@ -52,6 +71,8 @@
  *   replayEnv(base, run, { at, brokers })             the environment for a process at replayed time `at`
  *   brokerErrors(env, run)                           [message]: the broker isn't a usable replay broker
  *   configHash(run)                                  sha256 of what makes a run a run
+ *   runSettings(run, base)                           { gate, brokerEntry, brokerSettings }: the gate's settings and the
+ *                                                    broker's entry and settings (no credential) the hash reads
  *   setupHash(run), setupBase(run)                   a run's setup (the arms of one evaluation share it); the same
  *                                                    without the library display (a library-display pair shares it)
  *   setupFixed(run)                                  the setup without its code digest (a resume keeps it)
@@ -73,11 +94,13 @@ const { latencySetting } = require('./latency');
 const { WALL_START } = require('../trading/harness-now');
 const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
 const { decisionPoints } = require('./schedule');
+const { applyStage } = require('./stage');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
 // Backtester-mcp's variables (its README); another replay broker names its own.
-const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END', maxDailyLoss: 'BACKTESTER_MAX_DAILY_LOSS' };
+// balanceSchedule: the replay-only balance schedule (a run with account states: the balance each practice day starts at).
+const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END', maxDailyLoss: 'BACKTESTER_MAX_DAILY_LOSS', balanceSchedule: 'BACKTESTER_BALANCE_SCHEDULE' };
 // Overrides that could send a child's records, gate log, kill switch or settings outside the run home,
 // or change how it runs. Each is set explicitly (never just removed: a child's .env load fills a missing
 // or empty variable from <FTH_HOME>/.env and the repo's .env).
@@ -147,8 +170,10 @@ function startedPinned(manifestFile) {
 }
 
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
-  const errors = [];
-  const r = raw && typeof raw === 'object' ? raw : {};
+  // A stage preset's defaults under the config's own values; a value contradicting it is refused (replay/stage.js).
+  const staged = applyStage(raw);
+  const errors = [...staged.errors];
+  const r = staged.raw;
   if (!RUN_ID.test(String(r.runId || ''))) errors.push('runId: letters, digits, ".", "_", "-" (up to 64), starting with a letter or digit');
   if (!(typeof r.workDir === 'string' && /^(\/|~\/)/.test(r.workDir))) errors.push('workDir: an absolute path or ~/...');
   if (!(typeof r.broker === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(r.broker))) errors.push('broker: the replay broker\'s name in brokers.json');
@@ -163,6 +188,10 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (r.setupLibrary !== undefined && !(typeof r.setupLibrary === 'string' && r.setupLibrary.trim())) errors.push('setupLibrary: a history library index file (scripts/setup-library.js index)');
   if (r.libraryDisplay !== undefined && typeof r.libraryDisplay !== 'boolean') errors.push('libraryDisplay: true or false');
   else if (r.libraryDisplay === true && r.setupLibrary === undefined) errors.push('libraryDisplay: shows the pinned history library; name it (setupLibrary)');
+  if (r.riskRecord !== undefined && !(typeof r.riskRecord === 'string' && r.riskRecord.trim())) errors.push('riskRecord: a risk record index file (learning/risk-record-index.js)');
+  if (r.riskRecordDisplay !== undefined && typeof r.riskRecordDisplay !== 'boolean') errors.push('riskRecordDisplay: true or false');
+  else if (r.riskRecordDisplay === true && r.riskRecord === undefined) errors.push('riskRecordDisplay: shows the pinned risk record; name it (riskRecord)');
+  if (r.comparisonArm !== undefined && typeof r.comparisonArm !== 'boolean') errors.push('comparisonArm: true or false');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -180,6 +209,13 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
   if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
   if (curatedCfg.curated && r.prop !== undefined) errors.push('curatedList: not with prop (a combine attempt is judged over whole days; curated runs are scored apart)');
+  const statesCfg = r.accountStates;
+  if (statesCfg !== undefined) {
+    if (!(statesCfg && typeof statesCfg === 'object' && !Array.isArray(statesCfg) && typeof statesCfg.file === 'string' && statesCfg.file.trim())) errors.push('accountStates: { "file": "<account states>" } (scripts/account-states.js draw)');
+    else if (Object.keys(statesCfg).some(k => k !== 'file')) errors.push(`accountStates.${Object.keys(statesCfg).find(k => k !== 'file')}: unknown (file)`);
+    if (!curatedCfg.curated) errors.push('accountStates: each curated window day starts from a drawn state; set curatedList too');
+    if (r.prop !== undefined) errors.push('accountStates: not with prop (the run\'s attempt is seeded from the drawn states)');
+  }
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -197,7 +233,10 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     runHome, runDir, workspace: path.join(runHome, 'workspace'), bars: path.join(runHome, 'bars'),
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
+    // A run with account states: the balance each day starts at (read by the replay broker), and what each day was given.
+    balanceSchedule: path.join(runDir, 'broker', 'balance-schedule.json'), statesLog: path.join(runDir, 'account-states.jsonl'),
   };
+  const pinnedResume = r.latency === undefined && startedPinned(paths.manifest);
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
   if (base.practice !== undefined || overrides.practice !== undefined) throw new Error('invalid replay config:\n- practice: set in the replay config (its own field), never in the runner config or overrides');
   const holidays = holidayDates(start, end);
@@ -223,6 +262,22 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
       throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
     }
   }
+  // The account states: the document (its hash checked), its account still the profile it was drawn on, its draws
+  // assigned to the curated window days.
+  let accountStates = null;
+  let statesAccount = null;
+  if (statesCfg !== undefined) {
+    try {
+      const S = require('../prop/account-states');
+      const file = path.resolve(baseDir, expandHome(statesCfg.file, home));
+      const doc = S.readDocument(file);
+      statesAccount = require('../trading/accounts').accountNamed(root, doc.account, env);
+      if (S.accountDigest(statesAccount) !== doc.accountDigest) throw new Error(`accountStates: ${doc.account}'s rules changed since the states were drawn: draw them again`);
+      accountStates = { file, hash: doc.hash, account: doc.account, assignment: S.assignStates(doc, curated.windows) };
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -233,16 +288,27 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
     // Whether the model is shown that library (experience_lookup); off unless the config says true.
     libraryDisplay: r.libraryDisplay === true,
+    // The risk record index the run pins at its start (learning/risk-record-index.js pinRiskRecord), or null, and whether it is shown.
+    riskRecord: r.riskRecord ? path.resolve(baseDir, expandHome(r.riskRecord, home)) : null,
+    riskRecordDisplay: r.riskRecordDisplay === true,
+    // Whether the run is declared one arm of a with/without comparison (replay/stage.js); in no hash.
+    comparisonArm: r.comparisonArm === true,
     prop: r.prop || null,
+    // The training stage preset (replay/stage.js), or null.
+    stage: staged.stage,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
     // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
-    latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
+    latency: pinnedResume ? false : latency.value,
+    // A resume of a run started before the setting (pinned, the config naming none): the preflight passes it, noted.
+    latencyPinnedResume: pinnedResume,
     // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
     curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
-    propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
+    propDailyLoss: propAccount || statesAccount ? Number((propAccount || statesAccount).daily_loss_limit) || 0 : null,
+    // The account states the run's window days start from (prop/account-states.js), or null.
+    accountStates,
     brokerEnv, paths, derived, cfg, autotraderFile, root,
   };
 }
@@ -280,6 +346,9 @@ function replayEnv(base, run, { at }) {
   set(run.brokerEnv.start, run.start.toISOString());
   set(run.brokerEnv.end, run.end.toISOString());
   if (run.propDailyLoss !== null && run.propDailyLoss !== undefined) set(run.brokerEnv.maxDailyLoss, String(run.propDailyLoss));
+  // The balance schedule is the driver's alone: set for a run with account states, never inherited by any other run.
+  if (run.accountStates) set(run.brokerEnv.balanceSchedule, run.paths.balanceSchedule);
+  else if (run.brokerEnv.balanceSchedule) delete env[run.brokerEnv.balanceSchedule];
   if (broker.replay === true) set(broker.journalEnv, run.paths.journal); // a live broker is refused by brokerErrors
   return env;
 }
@@ -309,7 +378,11 @@ function brokerErrors(env, run) {
  * replay broker's entry and settings, and the strategies, accounts,
  * skills, agents and rules the cycles read. Nothing about where it was started from.
  */
-function configHash(run, base = process.env) {
+/**
+ * The gate's settings and the replay broker's entry and settings (never a credential) a run runs under: part of its
+ * config hash, and of its setup record (train/ab-compare.js: the same market and data).
+ */
+function runSettings(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
   // The role-skills mode as the runner reads it (unset or blank is index, the default): one mode, one hash.
@@ -324,20 +397,34 @@ function configHash(run, base = process.env) {
   // every allowlisted name is one of `env`).
   const names = [...new Set(b.env || [])].filter(k => !own.has(k) && !CREDENTIAL.test(k));
   const brokerSettings = Object.fromEntries(names.sort().map(k => [k, env[k] ?? null]));
+  // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
+  const brokerEntry = { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) };
+  return { gate, brokerEntry, brokerSettings };
+}
+
+function configHash(run, base = process.env) {
+  const { gate, brokerEntry, brokerSettings } = runSettings(run, base);
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // Named only when charged, so a run with a pinned clock keeps the hash it had before the setting existed.
     ...(run.latency ? { latency: true } : {}),
+    // The training stage, named only when set, so a run without one keeps the hash it had.
+    ...(run.stage ? { stage: run.stage } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
-    brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
+    brokerEntry, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
     // The curated list a run replays (its decision times are the list's): named only when there is one.
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    // The account states its days start from (the draw and its assignment): named only when there are some.
+    ...statesPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
+
+/** A run's account states in its hashes: the document's hash (seed, weights, buckets, draws) and the days' assignment. */
+const statesPart = run => (run.accountStates ? { accountStates: { hash: run.accountStates.hash, assignment: run.accountStates.assignment.hash } } : {});
 
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
 /**
@@ -353,6 +440,7 @@ function setupHash(run, { code = true } = {}) {
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
     // The arms of one evaluation charge the latency alike (named only when charged, as configHash).
     ...(run.latency ? { latency: true } : {}),
+    ...(run.stage ? { stage: run.stage } : {}),
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root && code ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
@@ -360,8 +448,12 @@ function setupHash(run, { code = true } = {}) {
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
     // Whether the model is shown it: named only when on, so a run without the display keeps the hash it had.
     ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
+    // The risk record shown to the model, by its hash (named only when shown, so every other setup keeps its hash).
+    ...(run.riskRecord && run.riskRecordDisplay === true ? { riskRecordDisplay: require('../learning/risk-record-index').readRiskIndex(run.riskRecord).hash } : {}),
     // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    // The account states its days start from: named only when there are some.
+    ...statesPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -370,17 +462,18 @@ function setupHash(run, { code = true } = {}) {
 const setupFixed = run => setupHash(run, { code: false });
 
 /** The setup without the library display: the two arms of a library-display pair (learning/looks.js) share it. */
-const setupBase = run => setupHash({ ...run, libraryDisplay: false });
+const setupBase = run => setupHash({ ...run, libraryDisplay: false, riskRecordDisplay: false });
 
-/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library. */
+/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library, then `+risk:<hash>` when it shows the risk record. */
 function lookArm(run) {
-  const arm = require('../learning/experience-index').armOf(run.experienceIndex);
-  if (!(run.setupLibrary && run.libraryDisplay === true)) return arm;
-  return `${arm}+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
+  let arm = require('../learning/experience-index').armOf(run.experienceIndex);
+  if (run.setupLibrary && run.libraryDisplay === true) arm += `+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
+  if (run.riskRecord && run.riskRecordDisplay === true) arm += `+risk:${require('../learning/risk-record-index').readRiskIndex(run.riskRecord).hash.slice(0, 16)}`;
+  return arm;
 }
 
 function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

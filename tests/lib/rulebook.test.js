@@ -10,7 +10,7 @@ const path = require('path');
 const RB = require('../../scripts/lib/trading/rulebook');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, withExitBlock, exitBlock } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BODY = '## When to Use\n## How It Works\n## Examples\n';
@@ -18,11 +18,14 @@ const KINDS = {
   enforced: Object.keys(RB.ITEMS).filter(k => RB.ITEMS[k].enforcedBy),
   taught: Object.keys(RB.ITEMS).filter(k => !RB.ITEMS[k].enforcedBy),
 };
-const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a test account', learned: 'none', daily_loss_soft: 500, ...KINDS, ...extra });
+const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a test account', learned: 'none', daily_loss_soft: 500, loss_streak_stop: 2, ...KINDS, ...extra });
 const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 'acct');
 /** A complete policy entry: every sizing key and the trail stated. */
 const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1 };
-const ENTRY = { sizing: SIZING, exit: { trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
+const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' };
+const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
+const TARGET = { ...OFFS, mode: 'target' };
+const AFTER = { ...OFFS, mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' };
 
 test('validateRulebook: a complete one is valid; every item is classified exactly once, as a kind it has', () => {
   assert.deepStrictEqual(errorsOf({}), []);
@@ -32,6 +35,11 @@ test('validateRulebook: a complete one is valid; every item is classified exactl
   // The soft stop is enforced: stated, and turned off only by `off` (0, empty, negative or text is refused).
   assert.match(errorsOf({ daily_loss_soft: undefined }).join(), /daily_loss_soft: missing; state it \(enforced: no code default\)/);
   for (const v of [0, -1, '', 'none', null]) assert.match(errorsOf({ daily_loss_soft: v }).join(), /daily_loss_soft: .* is not dollars above 0, or off/, String(v));
+  // The loss streak stop too: a whole number of losing trades from 1, or `off`; never a code default.
+  assert.deepStrictEqual(errorsOf({ loss_streak_stop: 'off' }), []);
+  assert.deepStrictEqual(errorsOf({ loss_streak_stop: 1 }), []);
+  assert.match(errorsOf({ loss_streak_stop: undefined }).join(), /loss_streak_stop: missing; state it \(enforced: no code default\)/);
+  for (const v of [0, -1, 1.5, '', 'none', '2', null, true]) assert.match(errorsOf({ loss_streak_stop: v }).join(), /loss_streak_stop: .* is not a whole number of losing trades, at least 1, or off/, String(v));
   assert.match(errorsOf({ surprise: 1 }).join(), /unknown key "surprise"/);
   assert.match(errorsOf({}, '## When to Use\n').join(), /missing section "## How It Works"/);
   assert.match(errorsOf({ enforced: undefined }).join(), /enforced and taught: the rulebook items of each kind/);
@@ -60,9 +68,37 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
     assert.match(errorsOf(p({ sizing: rest })).join(), new RegExp(`policies.prop_a.sizing.${k}: missing; state it \\(no code default\\)`), k);
   }
   for (const k of RB.EXIT_KEYS) {
-    const { [k]: _drop, ...rest } = ENTRY.exit;
-    assert.match(errorsOf(p({ exit: rest })).join(), new RegExp(`policies.prop_a.exit.${k}: missing`), k);
+    for (const exit of [ENTRY.exit, TARGET, AFTER]) {
+      const { [k]: _drop, ...rest } = exit;
+      assert.match(errorsOf(p({ exit: rest })).join(), new RegExp(`policies.prop_a.exit.${k}: missing`), k);
+    }
   }
+  // The exit mode: target (the trade's own stop and target, a trail on top only with both in R) or trail (both in R).
+  assert.deepStrictEqual(errorsOf(p({ exit: TARGET })), []);
+  assert.deepStrictEqual(errorsOf(p({ exit: { ...TARGET, trail_activate_r: 3, trail_giveback_r: 1 } })), []);
+  for (const mode of ['trailing', 'own', '', 0, null]) assert.match(errorsOf(p({ exit: { ...TARGET, mode } })).join(), /exit.mode: .* is not target, target_then_trail, trail/, String(mode));
+  // target_then_trail: the lock, trail_by and trail_r set; swing_tf with a structure trail only; no R trail before the target.
+  assert.deepStrictEqual(errorsOf(p({ exit: AFTER })), []);
+  assert.deepStrictEqual(errorsOf(p({ exit: { ...AFTER, trail_by: 'r', swing_tf: 'off' } })), []);
+  for (const k of ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf']) assert.match(errorsOf(p({ exit: { ...AFTER, [k]: 'off' } })).join(), new RegExp(`exit.${k}: mode target_then_trail needs it`), k);
+  assert.match(errorsOf(p({ exit: { ...AFTER, trail_by: 'r' } })).join(), /exit.swing_tf: off in mode target_then_trail \(only a structure trail reads swings\)/);
+  assert.match(errorsOf(p({ exit: { ...AFTER, trail_activate_r: 2, trail_giveback_r: 0.5 } })).join(), /exit.trail_activate_r: off in mode target_then_trail/);
+  for (const v of ['4h', '15', 'abc', 0]) assert.match(errorsOf(p({ exit: { ...AFTER, swing_tf: v } })).join(), /exit.swing_tf: .* is not one of 5m, 15m, 1h, or off/, String(v));
+  for (const v of ['atr', 'R', 0]) assert.match(errorsOf(p({ exit: { ...AFTER, trail_by: v } })).join(), /exit.trail_by: .* is not r or structure, or off/, String(v));
+  for (const v of [0, -1, 51, 'x']) assert.match(errorsOf(p({ exit: { ...AFTER, lock_giveback_r: v } })).join(), /exit.lock_giveback_r: .* is not R above 0/, String(v));
+  // The modes' own keys stay off elsewhere.
+  for (const mode of ['target', 'trail']) {
+    const base = mode === 'trail' ? ENTRY.exit : TARGET;
+    assert.match(errorsOf(p({ exit: { ...base, lock_giveback_r: 0.5 } })).join(), new RegExp(`exit.lock_giveback_r: off in mode ${mode}`), mode);
+  }
+  assert.match(errorsOf(p({ exit: { ...TARGET, trail_activate_r: 2 } })).join(), /exit: trail_activate_r and trail_giveback_r are both off or both R/);
+  assert.match(errorsOf(p({ exit: { ...TARGET, mode: 'trail' } })).join(), /exit.trail_activate_r: mode trail needs it \(the trail is how every trade exits\)/);
+  assert.match(errorsOf(p({ exit: { ...ENTRY.exit, trail_giveback_r: 'off' } })).join(), /both off or both R/);
+  for (const v of [0, -1, '', 'none', null]) assert.match(errorsOf(p({ exit: { ...TARGET, trail_activate_r: v } })).join(), /exit.trail_activate_r: .* is not R above 0, at most 50, or off/, String(v));
+  // As the strategy loader reads it: the mode, and the trail only when it is in R.
+  assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: TARGET } } }, 'prop_a').exit, { mode: 'target' });
+  assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: ENTRY } }, 'prop_a').exit, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 });
+  assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: AFTER } } }, 'prop_a').exit, { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' });
   // A limit is off only by `off`: 0 would turn the cap or the halving off unseen, so it is refused.
   for (const k of ['cap_usd', 'drawdown_halve_usd', 'clock_k']) {
     for (const v of [0, -5, '', 'none', null]) assert.match(errorsOf(p({ sizing: { ...SIZING, [k]: v } })).join(), new RegExp(`sizing.${k}: .* is not .*or off`), `${k} ${v}`);
@@ -199,9 +235,9 @@ test('the strategy loader sizes a policy only from its account\'s rulebook: neve
   const { root, file } = rootCopy();
   const policy = n => loadStrategies(root, {}).strategies.find(s => s.name === n);
   const text = fs.readFileSync(file, 'utf8');
-  fs.writeFileSync(file, text.replace(/^( {6}cushion_frac: )0\.3\b/m, '$10.25').replace(/^( {6}trail_activate_r: )2\b/m, '$13'));
+  fs.writeFileSync(file, withExitBlock(text.replace(/^( {6}cushion_frac: )0\.3\b/m, '$10.25'), exitBlock({ trail_activate_r: 3, trail_giveback_r: 1 })));
   assert.strictEqual(policy('prop_portfolio').sizing.cushion_frac, 0.25);
-  assert.strictEqual(policy('prop_portfolio').exit.trail_activate_r, 3);
+  assert.deepStrictEqual(policy('prop_portfolio').exit, { mode: 'target', trail_activate_r: 3, trail_giveback_r: 1 });
   assert.deepStrictEqual(policy('prop_portfolio').multipliers, []);
   // `off` reaches the code as 0 ("no limit"): a policy listed with the retired prop_flow_1m's entry (its limits off).
   const flowDir = path.join(tmpDir(), 'strategies');

@@ -662,16 +662,19 @@ strategy fx_vwap_reclaim: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "3576 chars sha256:0ece308de865bd61",
+  "body": "4120 chars sha256:b2116fa3a95a62a6",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
   "contracts": "auto",
-  "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade. Its one component is trade_lifecycle.",
+  "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and exits each trade by its rulebook's exit (today the trade's own stop until its own target, then a trail past it). Its one component is trade_lifecycle.",
   "errors": [],
   "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
+    "mode": "target_then_trail",
+    "lock_giveback_r": 0.5,
+    "trail_by": "structure",
+    "trail_r": 1,
+    "swing_tf": "15m"
   },
   "instruments": [
     "MNQ",
@@ -755,6 +758,7 @@ account test_100k: {
     "RTY": 1.4
   },
   "firm": "Test Firm",
+  "loss_streak_stop": 0,
   "max_contracts": {
     "MNQ": 100,
     "MES": 100,
@@ -792,6 +796,7 @@ account test_50k: {
     "RTY": 1.4
   },
   "firm": "Test Firm",
+  "loss_streak_stop": 0,
   "max_contracts": {
     "MNQ": 50,
     "MES": 50,
@@ -829,6 +834,7 @@ account <name-43f416>: {
     "RTY": 1.4
   },
   "firm": "<name-a44ad9>",
+  "loss_streak_stop": 2,
   "max_contracts": {
     "MNQ": 100,
     "MES": 100,
@@ -866,6 +872,7 @@ account <name-aa1519>: {
     "RTY": 1.4
   },
   "firm": "<name-a44ad9>",
+  "loss_streak_stop": 2,
   "max_contracts": {
     "MNQ": 150,
     "MES": 150,
@@ -903,6 +910,7 @@ account <name-45bd4d>: {
     "RTY": 1.4
   },
   "firm": "<name-a44ad9>",
+  "loss_streak_stop": 2,
   "max_contracts": {
     "MNQ": 50,
     "MES": 50,

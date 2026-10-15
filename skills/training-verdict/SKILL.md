@@ -33,21 +33,25 @@ edit. Code decides; the model never does.
    multiplier raised, including a value no entry lists, which is 0; no exit
    changed, no key removed).
 
-**The evaluator** (section 10 step 9) verifies every change mechanically
-when the config names one (`"evaluator": { "prop", "data": { "MNQ":
-"<bar file>" }, ... }`, any `scripts/evaluate.js` setting): the champion
-and the candidate on the same bar files and seed; a blow, a gate failure
-the champion lacks, or a pass-rate lower bound that doesn't rise above the
-champion's rejects (a tie, the 0 of a short window included, shows
-nothing). Only a change that edits nothing the evaluator reads may tie,
-with identical results. Without one, a
-strategy or rulebook change stays `blocked`, and so does a change to a
-strategy its streams don't read, or to a rulebook (it reads none yet). On
-held-out windows it scores the candidate alone against the promotion gate,
-inside the judging's one look; a window too short for the gate's attempts
-and months fails it, so judge a mechanical change on windows long enough.
-Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the
-same: the one ledger is where the budget lives.
+**With `modelScore`** (`scripts/lib/train/model-verifier.js`):
+
+- **What runs:** the challenger replays the champion's windows with the
+  same seed; judged on the paired 30-day Monte Carlo.
+- **Kept only if:**
+  - 0 challenger blows: hard.
+  - One pooled interval over the real attempts favours the challenger on
+    the pass rate.
+  - No window significantly worse on pass, blow or median days.
+  - Reads and adherence not significantly worse.
+- **Inconclusive, never kept:** a window shorter than about 3×
+  `sessions`; too few paired decisions; decisions that don't pair.
+- **Resampled paths** are conditional on the window's days: never
+  evidence of a gain.
+- **A rulebook change:** scored under its own rulebook, on practice-train
+  and practice-validate only; the account must be unchanged (else
+  `blocked`); a loosening is rejected unscored.
+- **Without `modelScore`:** a strategy or rulebook change stays
+  `blocked`.
 
 **The scorecard** is section 10 step 2's (`replay/scorecard.js`, read
 through an adapter in `scripts/lib/train/loop.js`), under the look's rules:
@@ -65,3 +69,5 @@ refused: restore the file, or judge again under a new `loopId`.
   kept.
 - A candidate that turns a judged decision `unchecked` counts that
   decision as broken.
+- A challenger that wins on resampled paths but not on the real start
+  days is not kept.

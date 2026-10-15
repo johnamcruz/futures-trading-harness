@@ -28,11 +28,13 @@ The system is judged by:
 
 ## The combine Monte Carlo is the score
 
-The backtester's prop runs are the combine Monte Carlo
-(`scripts/lib/prop/challenge.js`): each attempt starts on a trading day and
-runs through the backtester (the same evaluator, fills, trailing exits, fees
-and session as live) until it passes, blows, or times out. Passes and blows
-are counted month by month.
+The backtester's prop runs were the combine Monte Carlo
+(`scripts/lib/prop/challenge.js`, retired 2026-10-14: each attempt started on
+a trading day and ran the rules strategies' setups through the backtester
+until it passed, blew, or timed out; what they found is in
+`docs/research/mechanical-prop-backtester.md`). The combine is now scored by
+attempts over a trade stream (`scripts/lib/prop/attempts.js`, scored by
+`evaluator.js`), counted month by month.
 
 What the combine needs decided is the size at each setup (today the
 policy strategy's sizing verdict: full or skip; the priority order may halve
@@ -45,7 +47,7 @@ it); the trail exits every trade.
 | Signals | rules strategies | Does each setup have an edge after fees: expectancy in R, win rate, the R distribution, by regime, session and trend alignment? |
 | Filter | the reasoning model with the skills | Does its judgment add edge? Taken setups against every signal, using the counterfactuals on skipped labels. |
 | Sizing | the position-sizing skill and the policy strategy's `sizing` | Which risk per trade maximizes P(pass) with P(blow) at zero? |
-| Exits | `prop_portfolio`'s `exit` (hold the stop, then trail; the numbers in its account's `RULEBOOK.md`) | Do exits keep the move: the best and worst R in a trade against the R banked? |
+| Exits | `prop_portfolio`'s `exit` (its mode: the trade's own stop and target, that target then a trail past it, or hold the stop then trail; the values in its account's `RULEBOOK.md`) | Do exits keep the move: the best and worst R in a trade against the R banked? |
 | Portfolio | `strategies/prop_portfolio` order | Do losses cluster on the same days across strategies? Combines die from clustered losses, not the average. |
 
 ### Why sizing is the crux
@@ -72,8 +74,9 @@ first moment, in the run's own home (`skills/replay/SKILL.md`, The prop
 policy), so the reasoning model sees what it would see in a live combine:
 the balance, the floor and cushion, progress to the target, the day's P&L,
 sessions left, and the prop pacing rules, and the gate's prop checks apply.
-The replay report's combine verdict is per calendar month; the window's own
-attempt is read with `combine.js status`.
+The replay report's prop score is the 30-day Monte Carlo of the run's own
+trades (`scripts/lib/prop/model-score.js`); the window's own attempt is read
+with `combine.js status`.
 
 While an attempt runs, only the policy strategy may enter, so the policy
 must be `active`: `prop_portfolio` is, for live and replay alike. Its

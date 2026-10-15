@@ -24,9 +24,10 @@ Nothing measured or trained on that judgment:
 - The backtester (`scripts/lib/backtest/engine.js`) runs only rules
   strategies; it skips any `signal: manual` strategy ("manual strategies need
   the LLM").
-- The prop backtests (`scripts/lib/prop/challenge.js`) run the rules'
-  setups through the combine. They never see the reasoning model, so they
-  can't say how it trades. (The trained PPO policy that once sized those
+- The prop backtests (`scripts/lib/prop/challenge.js`, retired 2026-10-14:
+  `docs/research/mechanical-prop-backtester.md`) ran the rules' setups
+  through the combine. They never saw the reasoning model, so they
+  couldn't say how it trades. (The trained PPO policy that once sized those
   setups learned only from them too; it is retired.)
 
 ## The idea
@@ -264,48 +265,40 @@ expectancy, net, MAE and MFE in R when the broker reports them, and the
 gate's refusals by check. Next to the rules-only baseline (from
 `scripts/backtest.js` on the same window): later.
 
-The combine verdict (`scripts/lib/replay/verdict.js`) scores each calendar
-month as a prop attempt, so a year replayed month by month reads as months
-passed and failed, as a combine is judged. A real attempt inside a
-replay isn't used: while one runs, the gate lets only the policy strategy
-enter. Instead the report replays the run's fills through `combine.js`,
-the state machine the backtester drives, so backtests and replay judge
-alike:
+The prop score (`scripts/lib/prop/model-score.js`) replaced the per-month
+combine verdict, which judged one fresh attempt per calendar month on the
+run's single path. The run's own trades become a trade stream
+(`scripts/lib/prop/model-stream.js`: R and ticks from the replay broker's
+fills, the adverse path and the no-stop path from the run's own bars, each
+trade's order within its day and its record's context; a day the model passed
+is a no-trade day), and the evaluator (`scripts/lib/prop/evaluator.js`) runs
+30-day Monte Carlo combine attempts on it under the account's rules
+(`combine.js`, the one rule engine of live, the gate and the simulator): every
+start day of the run, and stationary-block-bootstrap paths over its days with
+the stop overshoots redrawn and faults injected (docs/LEARNED-RULEBOOK.md,
+R6-R9). The report and the end of every run print, in order:
 
-- **Fresh each month** (the default): every calendar month, by CME trading
-  day (17:00 Chicago, `clock.js` `tradingDayKey`), starts at the account's
-  starting balance; a fill at 17:30 Chicago on the 31st is the next month's.
-- **Money**: every fill's realized P&L less its fees, as the balance moves
-  (fees on the opening fill too).
-- **Rules** (`accounts/<name>/ACCOUNT.md`): a pass is checked at a day's end
-  (profit at the target; the best day at most `consistency_pct` of the
-  profit); equity at the max-loss floor fails the month (`trailing_eod`: the
-  floor trails the highest end-of-day balance and locks at the start;
-  `static`: fixed); the firm's daily limit flattens the account there and
-  stops the day, not the attempt (as a trade's open P&L falls, the nearer of
-  the daily limit and the floor is reached first). `sessions` is the training length, not a
-  firm rule: a month never times out (as `prop-state.js` for a live
-  attempt; training would stop at `sessions` days, and the output says when
-  a month has more). The accounts have no minimum-days rule to apply.
-- **Approximations**, stated in the output: intraday equity is a round
-  trip's MAE (`maeDollars`, from the open, partial exits included) less its
-  closing fee and what the position had realized by then, set against the
-  account as it was at the MAE's `maeTime`, in time order on its own day (so
-  it can stop that day or undo a later pass), or without one at every point
-  the position was held (after each fill and at each day's start), each on
-  its own balance, floor and room to the daily limit, the worst counting; an
-  earlier day's point is judged against its floor only (trades open together are not added up; without MAE only the
-  close is seen; an MAE is judged after the fills at its instant and also right
-  after its own position's fill there (a partial exit or add); fills at one instant are otherwise read in
-  the broker's order); at the daily limit the breaching close counts as the limit and
-  what was still open is left out, as are positions opened after it that
-  day and positions carried in from the month before.
-- **Output** per month: PASS and the day, FAIL with the rule and day, or
-  NOT YET with profit vs target, what consistency still needs, and days
-  traded; the max loss used vs the limit, the daily P&L path, and a year
-  summary. Account: `--account`, else the runner config's `account` when it
-  names an account profile, else the policy strategies' account, else
-  `topstep_100k`.
+1. **Zero blows**, the hard gate: the frozen promotion gate
+   (`prop/promotion.js`), never weakened.
+2. **Pass within 30 trading days** (the account's `sessions`).
+3. **Days to pass**: the median and the 90th percentile.
+4. **Blow and timeout rates**, with their intervals (a block bootstrap over
+   start days, Wilson at the effective sample size, Wilson over the paths).
+
+A full-day run's score is `real`. A curated run (a pinned curated list) is
+rebuilt at each list's natural frequency, from the curated scan's candidate
+counts in its lists document (`prop/natural-rate.js` `curatedRates`; the
+report needs the run's `--config`, which names the document, or rates by
+hand with `--natural-rates`), and labelled `diagnostic (reweighted)`; a setup-focused run is `diagnostic (setup-focused)`. The
+promotion gate refuses a diagnostic score. A score of a practice-validate,
+test or final run is logged in the learning ledger beside the run's own
+look (`learning/looks.js` `recordScore`), never as a look of its own; a
+reasoning-fix run's outcomes are hidden, so it has no score. Account:
+`--account`, else the run's own attempt, else the runner config's `account`
+when it names a profile, else the policy strategies' account; with none the
+run is not scored (there is no default account). The score is what the
+replayed trades would do across attempts, never a guarantee of a live
+result.
 
 ### Cost
 

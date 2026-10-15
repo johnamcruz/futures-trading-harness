@@ -35,7 +35,8 @@ function world() {
   const trader = { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-10:28@America/New_York'], eodAt: '10:30@America/New_York' };
   const loop = {
     loopId: 'e2e-loop',
-    replay: { workDir: path.join(user, 'train'), broker: 'replaymock', premarket: false, autotrader: trader, brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null } },
+    // A practice-train run sets its practice mode (the training preflight); every quiet bar sampled, so every bar cycles.
+    replay: { workDir: path.join(user, 'train'), broker: 'replaymock', premarket: false, autotrader: trader, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 1, seed: 1 }, brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null } },
     // Wednesday 2022-03-09, in Train: a trade decision every 3 minutes from 09:30 to 10:27 (each polled 2 s after its bar
     // closed), 20 in all, and end of day: the fewest decisions the paired test's frozen minimum allows (repeats are not independent pairs).
     tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }],
