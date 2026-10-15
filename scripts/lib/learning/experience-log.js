@@ -84,24 +84,46 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   if (fill === null) return none('unfilled');
   // The brackets are in ticks from the fill (section 3.4): the record's distances, placed from the fill price.
   const risk = Math.abs(entry - stop);
-  const stopPx = fill - s * risk;
-  const targetPx = Number.isFinite(target) && s * (target - entry) > 0 ? fill + s * Math.abs(target - entry) : null;
   const fillAt = new Date(bars[i].ms).toISOString();
-  const out = (price, bar, reason) => ({
-    source: 'counterfactual', filled: true, entryPrice: fill, entryTime: fillAt, exitPrice: price, exitTime: new Date(bar.ms + tfMs).toISOString(), exitReason: reason,
-    R: round((s * (price - fill)) / risk),
-  });
+  // The fill is inside bar i (at its open or past it): bar i is the fill bar, read by bracketExit's worse-is-taken rule.
+  const targetDist = Number.isFinite(target) && s * (target - entry) > 0 ? Math.abs(target - entry) : null;
+  const x = bracketExit({ bars, i, partial: true, tfMs, side, fill, risk, targetDist, eodMs, tick });
+  if (!x) return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
+  return {
+    source: 'counterfactual', filled: true, entryPrice: fill, entryTime: fillAt, exitPrice: x.exitPrice, exitTime: new Date(x.exitMs).toISOString(), exitReason: x.reason,
+    R: round((s * (x.exitPrice - fill)) / risk),
+  };
+}
+
+/**
+ * A filled position held to its bracket on the bars from bar i: the stop and the target placed `risk` and `targetDist`
+ * from the fill price `fill` (the real fill, or a counterfactual's), never from another price. `partial`: the fill fell
+ * inside bar i; on that bar only what follows the fill counts, and its OHLC can't tell what that was, so the worse is
+ * taken: the stop is hit when the bar reaches it (filled at the stop with the expected slippage, never at the bar's
+ * open, which came before the fill) and the target never is. Every later bar: the stop first (the stop's fill, or the
+ * open when the bar gapped through it), then the target, then the end of day (the session's change, or the bar closing
+ * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod }, or null when the bars
+ * end first.
+ */
+function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetDist = null, eodMs = Infinity, tick }) {
+  const s = sgn(side);
+  if (!s || !(i >= 0 && i < bars.length) || !Number.isFinite(fill) || !(risk > 0) || !(tick > 0)) return null;
+  const day = tradingDayKey(new Date(bars[i].ms));
+  const stopPx = fill - s * risk;
+  const targetPx = targetDist > 0 ? fill + s * targetDist : null;
   const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
+  const out = (price, bar, reason) => ({ exitPrice: price, exitMs: bar.ms + tfMs, reason });
   let last = bars[i];
   for (let j = i; j < bars.length; j += 1) {
     const b = bars[j];
+    const fillBar = partial && j === i;
     if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
-    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, 'stop');
-    if (j > i && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
+    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, 'stop');
+    if (!fillBar && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
     if (b.ms + tfMs >= eodMs) return out(b.c, b, 'eod');
     last = b;
   }
-  return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
+  return null;
 }
 
 /**
@@ -270,4 +292,4 @@ function appendDecisions(file, lines) {
   return { added: fresh.length, kept: lines.length - fresh.length };
 }
 
-module.exports = { VERSION, FRAME, limitOutcome, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };

@@ -33,12 +33,13 @@
  *   actions, sizeFraction, hold   the model's risk actions on the entry (prop/risk-actions.js): `size-down` (its
  *                     filled size under the ceiling of the verdict it was sized under: the policy's verdicts file, matched
  *                     by bar, side and market; sizeFraction the share), `early-exit` (closed before its stop, its target and
- *                     end of day; `hold` is the same entry held to its bracket, by the experience log's limitOutcome rule
- *                     on the run's bars from the fill's bar). An exit the runner's trail made is counted as early too:
- *                     nothing recorded tells a trailed stop from a tightened one or a manual close.
+ *                     end of day; `hold` is the same position held to its bracket: the real fill's price and time, the
+ *                     stop and target placed from that price, walked on the run's bars by experience-log.js bracketExit,
+ *                     the fill's own bar read after the fill by the worse-is-taken rule). An exit the runner's trail made
+ *                     is counted as early too: nothing recorded tells a trailed stop from a tightened one or a manual close.
  * Each day also lists the model's passes on valid composed setups as the trades they would have been (`passed`: the
- * limitOutcome counterfactual the experience log keeps; `pass`, or `day-stop` after a losing entry closed that day);
- * the score never takes them.
+ * limitOutcome counterfactual the experience log keeps; `day-stop` when an entry of that day had already closed at a net
+ * loss, fees included, and the model entered nothing later that day; else `pass`); the score never takes them.
  * Every session day the run replayed is a day of the stream: a day the model passed (passes, plain passes, refusals)
  * is a no-trade day, with its count of the model's passes (`passes`, for the risk attribution). A day's regime is
  * trade-stream.js dayRegimes on the run's bars (its range against the days before it, as the mechanical stream
@@ -63,7 +64,7 @@ const { specFor, familyRoot } = require('../trading/contracts');
 const { noStopPath, dayRegimes } = require('./trade-stream');
 const { runDecisions } = require('../learning/run-experience');
 const { parseAt } = require('../autotrader');
-const { limitOutcome } = require('../learning/experience-log');
+const { bracketExit } = require('../learning/experience-log');
 const { eodOf } = require('../replay/labels');
 const { readVerdicts } = require('../trading/prop-state');
 
@@ -119,8 +120,11 @@ function factsOf(d) {
   return { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null };
 }
 
-/** The bar a moment falls in: its open time (ms), or the moment itself without one. */
-const barOf = (bars, ms, tfMs) => { const b = bars.find(x => x.ms <= ms && ms < x.ms + tfMs); return b ? b.ms : ms; };
+/** A trade that closed at a net loss per contract: its move in dollars less both sides' fees (attempts.js counts net). */
+const netLoss = t => t.moveTicks * t.tickValue - 2 * t.feesPerSide < 0;
+/** An entered decision's fill time (ms), else its cycle's. */
+const entryMsOf = e => { const f = Date.parse(e.outcome && e.outcome.entryTime); return Number.isFinite(f) ? f : Date.parse(e.cycleAt); };
+
 
 function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
   const o = d.outcome || {};
@@ -146,12 +150,15 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
   const eodMs = Number.isFinite(p.entryMs) ? eodOf(p.entryMs) : Infinity;
   let hold = null;
   if (!p.stopped && !atTarget && Number.isFinite(p.exitMs) && p.exitMs + tfMs < eodMs && Number.isFinite(p.entryMs) && bars.length) {
-    const from = barOf(bars, p.entryMs, tfMs);
-    const cf = limitOutcome({ bars, tfMs, side: d.side, entry: o.entryPrice, stop: o.entryPrice - s * risk, target: dist !== null ? o.entryPrice + s * dist : null, fromMs: from, expiresMs: from + tfMs, eodMs, tick });
-    if (cf.filled && Number.isFinite(cf.exitPrice)) {
-      const h = pathOf({ side: d.side, entryPrice: cf.entryPrice, exitPrice: cf.exitPrice, entryTime: cf.entryTime, exitTime: cf.exitTime, risk, tick, bars, tfMs, eod });
+    // The same position held: from the real fill (its price and time), the bracket placed from that price (bracketExit;
+    // the fill's own bar read after the fill by the worse-is-taken rule), never a re-fill at another price.
+    const i = bars.findIndex(b => b.ms + tfMs > p.entryMs);
+    const x = i >= 0 ? bracketExit({ bars, i, partial: bars[i].ms < p.entryMs, tfMs, side: d.side, fill: o.entryPrice, risk, targetDist: dist, eodMs, tick }) : null;
+    if (x) {
+      const exitTime = new Date(x.exitMs).toISOString();
+      const h = pathOf({ side: d.side, entryPrice: o.entryPrice, exitPrice: x.exitPrice, entryTime: o.entryTime, exitTime, risk, tick, bars, tfMs, eod });
       const { entryMs: _e, exitMs: _x, stopped: _s, ...rest } = h;
-      hold = { ...rest, r: cf.R, exitTime: cf.exitTime, reason: `hold (${cf.exitReason})` };
+      hold = { ...rest, r: Math.round(((s * (x.exitPrice - o.entryPrice)) / risk) * 1e4) / 1e4, exitTime, reason: `hold (${x.reason})` };
       actions.push('early-exit');
     }
   }
@@ -169,7 +176,8 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf, eodOf, verdictOf }) {
 /**
  * A pass the model made on a valid composed setup, as the trade it would have been (the experience log's limitOutcome
  * counterfactual: the record's limit, stop and target from the fill), never taken by the score: prop/risk-actions.js
- * scores standing down against taking it. `day-stop` when an entry of that day had already closed at a loss before it.
+ * scores standing down against taking it. `day-stop` when an entry of that day had already closed at a net loss before it
+ * and none followed it (modelStream).
  */
 function passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore) {
   const o = d.outcome || {};
@@ -233,10 +241,12 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   for (const d of decisions) {
     if (!d || d.decision !== 'passed') continue;
     passesOn.set(d.day, (passesOn.get(d.day) || 0) + 1);
-    // A pass after an entry of the day had closed at a loss: standing down for the day.
+    // Standing down for the day: a pass after an entry of the day closed at a net loss (fees in, as attempts.js counts a
+    // loss: a scratch that pays its fees is one), with no entry later that day. A pass followed by an entry is a pass.
     const cycle = Date.parse(d.cycleAt);
-    const lossBefore = trades.some(t => t.day === d.day && t.moveTicks < 0 && Number.isFinite(t.exitMs) && t.exitMs <= cycle);
-    const c = passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore);
+    const lossBefore = trades.some(t => t.day === d.day && netLoss(t) && Number.isFinite(t.exitMs) && t.exitMs <= cycle);
+    const enteredLater = decisions.some(e => e && e.decision === 'entered' && e.day === d.day && entryMsOf(e) > cycle);
+    const c = passOf(d, { barsFor, tfMs, eod, specOf }, lossBefore && !enteredLater);
     if (!c) continue;
     if (!passedOn.has(c.day)) passedOn.set(c.day, []);
     passedOn.get(c.day).push(c);

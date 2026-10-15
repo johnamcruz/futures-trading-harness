@@ -144,3 +144,47 @@ test('two fills opening at one instant: one entered decision credits one of them
   const s = modelStream({ decisions: [d], dayKeys: ['2023-03-15'], tfMs: M3, trips: [{ family: 'MNQ', side: 'buy', openMs: ms }, { family: 'MNQ', side: 'buy', openMs: ms }] });
   assert.deepStrictEqual(s.excluded.map(x => x.why), ['a fill no record placed']);
 });
+
+test('day-stop: a pass after a net loss that day, only when no entry followed it; a scratch that pays its fees is a loss', () => {
+  const ent = (id, entryTime, exitTime, exitPrice) => ({ id, decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: entryTime, cycleAt: entryTime, plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
+    outcome: { source: 'fills', entryPrice: 100, exitPrice, entryTime, exitTime, exitReason: 'closed', R: (exitPrice - 100) / 2 } });
+  const pass = { id: 'p', decision: 'passed', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T14:36:00.000Z', cycleAt: '2023-03-15T14:39:00.000Z', plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
+    outcome: { source: 'counterfactual', filled: true, entryPrice: 100, exitPrice: 104, entryTime: '2023-03-15T14:42:00.000Z', exitTime: '2023-03-15T14:51:00.000Z', exitReason: 'target', R: 2 } };
+  const loss = ent('l', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 99);
+  const later = ent('n', '2023-03-15T14:45:00.000Z', '2023-03-15T14:50:00.000Z', 101);
+  const kind = decisions => modelStream({ decisions, dayKeys: ['2023-03-15'], tfMs: M3 }).days[0].passed[0].actions[0];
+  assert.strictEqual(kind([loss, pass, later]), 'pass', 'the model entered again at 14:45: it did not stop for the day');
+  assert.strictEqual(kind([loss, pass]), 'day-stop');
+  // A scratch: out at its entry price, so it loses its fees (net), as attempts.js counts a loss.
+  assert.strictEqual(kind([ent('s', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100), pass]), 'day-stop');
+  assert.strictEqual(kind([ent('w', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100.5), pass]), 'pass', 'two ticks won ($1.00) pay the $0.74 of fees: no loss');
+});
+
+test('early-exit hold: the real fill\'s price, the bracket placed from it (a mid-bar fill at 100.00, the bar opening at 99.50)', () => {
+  const ms = iso => Date.parse(iso);
+  // Fill at 100.00 at 14:01 inside the 14:00 bar (open 99.50); closed early at 100.50 at 14:05. Stop 98.00 from the real
+  // fill (8 ticks), target 104.00. The 14:06 bar reaches 97.75: the stop from 100 is hit; from 99.50 (97.50) it would not be.
+  const bars = [
+    { ms: ms('2023-03-15T14:00:00.000Z'), o: 99.5, h: 100.5, l: 99.25, c: 100.25 },
+    { ms: ms('2023-03-15T14:03:00.000Z'), o: 100.25, h: 101, l: 99, c: 99.5 },
+    { ms: ms('2023-03-15T14:06:00.000Z'), o: 99.5, h: 99.5, l: 97.75, c: 98 },
+  ];
+  const d = { id: 'e', decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T13:57:00.000Z', plan: { entry: 100, stop: 98, target: 104 }, context: {}, signatures: {},
+    outcome: { source: 'fills', entryPrice: 100, exitPrice: 100.5, entryTime: '2023-03-15T14:01:00.000Z', exitTime: '2023-03-15T14:05:00.000Z', exitReason: 'closed', R: 0.25 } };
+  const t = modelStream({ decisions: [d], dayKeys: ['2023-03-15'], tfMs: M3, barsFor: () => bars }).trades[0];
+  assert.deepStrictEqual(t.actions, ['early-exit']);
+  assert.deepStrictEqual([t.hold.reason, t.hold.moveTicks, t.hold.r, t.hold.stopTicks], ['hold (stop)', -9, -1.125, 8], 'stopped at 98 less a tick of slippage, from the 100.00 fill');
+});
+
+test('bracketExit: on the fill bar only the worse is taken (the stop at its fill, never the open; no target); later bars as usual', () => {
+  const { bracketExit } = require('../../scripts/lib/learning/experience-log');
+  const t0 = Date.parse('2023-03-15T14:00:00.000Z');
+  const args = { tfMs: M3, side: 'long', fill: 100, risk: 2, targetDist: 4, tick: 0.25 };
+  // The fill bar opened at 97.00 (before the fill) and dipped to 97.90: stopped at 97.75, not at the open.
+  assert.deepStrictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 97, h: 100.5, l: 97.9, c: 100 }], i: 0, partial: true }), { exitPrice: 97.75, exitMs: t0 + M3, reason: 'stop' });
+  // Its high reached the 104 target: not credited on the fill bar; the next bar's is.
+  const up = [{ ms: t0, o: 99.5, h: 104.5, l: 99, c: 101 }, { ms: t0 + M3, o: 101, h: 104.25, l: 100.5, c: 104 }];
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target' });
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target' }, 'a fill at the bar\'s open: the whole bar follows it');
+  assert.strictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 100, h: 101, l: 99, c: 100 }], i: 0, partial: true }), null, 'the bars end first');
+});

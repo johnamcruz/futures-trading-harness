@@ -150,11 +150,6 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
           .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
         const counts = state.attemptCounts(r, now);
-        // The session's loss streak the gate counts (prop-state sessionLossStreak) when this harness has it: one source.
-        if (typeof state.sessionLossStreak === 'function') {
-          const st = state.sessionLossStreak(home, a, now);
-          counts.lossStreak = st && Number.isInteger(st.count) ? st.count : null;
-        }
         out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts: combine.attemptFacts(cs, counts) });
       }
       return out;
