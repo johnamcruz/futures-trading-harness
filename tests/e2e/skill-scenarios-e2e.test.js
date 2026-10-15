@@ -28,11 +28,10 @@ const D = require('../fixtures/decision-path');
 const TL = require('../../scripts/lib/trading/trade-lifecycle');
 const { readBriefing } = require('../../scripts/lib/trading/briefing');
 const { checkReads, parseRead } = require('../../scripts/lib/trading/composed-reads');
-const { requiredFor, needed } = require('../../scripts/lib/trading/skill-lookups');
+const { TICK, asReads, expectedPlan, composedCycle } = require('../fixtures/composed-cycle');
 const { skillOfRead, shapeOf, READ_SKILL, SHAPE_SKILL } = require('../../scripts/lib/learning/curated-moments');
 const { NO_READ_SKILLS } = require('../../scripts/lib/learning/skill-usage');
 
-const TICK = 0.25;
 const BLOCKED = 'CYCLE RESULT: blocked - the order gate refused the entry';
 
 // The combinations, from the bars (each read TRUE at its bar, checked by the checker): A on the 14:00 UTC bar of
@@ -96,54 +95,7 @@ const TODO = {
 // read `pullback` and a rejection its way) never holds on these bars: m15.alignment is never `pullback` on an entry bar.
 const PARTIAL_TODO = ['pullback-vs-reversal, the pullback shape: no bar of the parity series reads `pullback` (m15.alignment) on an entry bar, so only the reversal shape has a scenario'];
 
-const asReads = list => list.map(([step, skill, read]) => ({ step, skill, read, why: `the ${skill} read` }));
 const swap = (list, from, to) => list.map(([step, skill, read]) => [step, skill, read === from ? to : read]);
-const priceOf = read => Number(parseRead(read).price);
-
-/** Phase-2 FACTS true by the briefing (D.trueFacts), less any the briefing has no value for (an early bar's prior value). */
-const facts = w => D.trueFacts(w).filter(f => !/ (null|undefined)$/.test(f)).join('; ');
-
-/** The bar's required lookups for each role, as the gate computes them from the briefing the runner wrote. */
-function roleLookups(w) {
-  const req = requiredFor(D.ROOT);
-  return Object.fromEntries(Object.keys(D.REQUIRED_LOOKUPS).map(role => [role, needed(role, req, D.m3Of(w)).map(r => r.skill)]));
-}
-
-/** The head trader's lookups for its composed reads (skills-loaded.js SITUATIONAL, composed): the gate's own list. */
-function headLookups(reads) {
-  const rels = new Set(reads.map(([, , r]) => parseRead(r)).filter(p => p.kind === 'relation').map(p => p.rel));
-  return ['confluence-counting', 'invalidation', ...(rels.has('rejected') ? ['rejection'] : []), ...(rels.has('broke') ? ['breakout'] : [])];
-}
-
-/** The place_order a composed trade sends: a limit at the reference with the plan's ticks (`plan`: { ref, stopTicks, targetTicks }). */
-const orderOf = (side, size, plan) => ({
-  accountId: 7, contractId: 'MNQ', side: side === 'long' ? 'buy' : 'sell', type: 'limit', limitPrice: plan.ref, size,
-  stopLossBracket: { ticks: plan.stopTicks, type: 'stop' }, takeProfitBracket: { ticks: plan.targetTicks, type: 'limit' },
-  rationale: `setup:trade_lifecycle ${side}, composed from its reads`,
-});
-
-/** The plan the reads name, worked out here (D3: the stop one tick beyond its level; the target at its level). */
-function expectedPlan(reads, side, ref) {
-  const stopLevel = priceOf(reads.find(r => r[0] === 'stop')[2]);
-  const target = priceOf(reads.find(r => r[0] === 'target')[2]);
-  const stop = side === 'long' ? stopLevel - TICK : stopLevel + TICK;
-  return { ref, stop, target, stopTicks: Math.round(Math.abs(ref - stop) / TICK), targetTicks: Math.round(Math.abs(target - ref) / TICK) };
-}
-
-/** The composed cycle on the scenario's bar: the round, the lookups, compose_check, the plan, phase 2, the executor. */
-function composedCycle(w, s, { reads = s.reads, size = 1, result = null, order = null } = {}) {
-  return () => [
-    ...D.roundSteps(w, { lookups: roleLookups(w) }),
-    ...D.entryLoads(w).map(x => ({ load: x })),
-    ...headLookups(reads).map(x => ({ lookup: x })),
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: s.side, reads: asReads(reads), size } },
-    { broker: 'journal_add', args: { kind: 'plan', contractId: 'MNQ', tags: ['setup:trade_lifecycle', 'MNQ'], text: `composed ${s.side}, the ${s.skill} read` } },
-    { role: 'risk-manager', lookups: [], report: () => `Phase 2 on the trade_lifecycle ${s.side} plan for MNQ.\nVERDICT: APPROVE - size ${size}\nFACTS: ${facts(w)}` },
-    { executor: [{ broker: 'place_order', args: () => order || orderOf(s.side, size, expectedPlan(s.reads, s.side, D.m3Of(w).price)) }] },
-    { result: result || `CYCLE RESULT: executed - trade_lifecycle ${s.side} MNQ ${size}` },
-  ];
-}
-
 /** The gate's last place_order decision: { decision, checks, messages }. */
 function lastEntry(w) {
   const e = D.gateLog(w).filter(x => /place_order/.test(String(x.tool || ''))).at(-1);
