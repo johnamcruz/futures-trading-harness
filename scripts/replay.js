@@ -57,6 +57,7 @@ const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinForRun } = require('./lib/learning/run-pins');
+const { pinCurated, curatedPoints } = require('./lib/learning/curated-lists');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
@@ -78,13 +79,14 @@ function load(argv) {
 const say = msg => process.stdout.write(`[replay] ${msg}\n`);
 
 function points(run) {
-  const list = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const all = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const list = run.curated ? curatedPoints(all, run.curated, (run.cfg.barDelaySeconds || 0) * 1000).filter(p => !p.manage) : all;
   for (const d of tradingDays(run.cfg, run)) {
     const mine = list.filter(p => p.day === d.day);
     const kinds = ['premarket', 'trade', 'eod'].map(k => `${mine.filter(p => p.kind === k).length} ${k}`).join(', ');
     process.stdout.write(`${d.day}  ${d.skipped ? `skipped: ${d.skipped}` : `${kinds}${mine.length ? ` (${mine[0].t.toISOString()} .. ${mine[mine.length - 1].t.toISOString()})` : ''}`}\n`);
   }
-  process.stdout.write(`${list.length} decision times; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
+  process.stdout.write(`${list.length} decision times${run.curated ? ' of the curated windows (plus management times, stepped only while something is open: not counted)' : ''}; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
   return 0;
 }
 
@@ -166,6 +168,7 @@ async function run(argv) {
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
   for (const line of pinForRun(r, { fresh, arm: gate.arm })) say(line);
+  if (r.curated) say(`curated list pinned: ${r.curated.list} of ${pinCurated(r.paths.runHome, r.curated).fingerprint.slice(0, 16)}, ${r.curated.windows.length} window(s)`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);

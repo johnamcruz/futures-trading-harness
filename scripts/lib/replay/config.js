@@ -31,6 +31,11 @@
  *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
  *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
  *                  on for a learning run, off for one declared not learning)
+ *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list> },
+ *                  the run's market (symbol, bar and setup timeframes) the list's, every bar (no everyNthBar), no
+ *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
+ *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
+ *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -66,6 +71,8 @@ const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
 const { latencySetting } = require('./latency');
 const { WALL_START } = require('../trading/harness-now');
+const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
+const { decisionPoints } = require('./schedule');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -168,6 +175,11 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (latency.error) errors.push(latency.error);
   // A run started before the setting (its manifest doesn't say latency: true) keeps its pinned clock when the config
   // doesn't name one, so it resumes under the hash it was started with.
+  const curatedCfg = validateCuratedConfig(r.curatedList);
+  errors.push(...curatedCfg.errors);
+  if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
+  if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
+  if (curatedCfg.curated && r.prop !== undefined) errors.push('curatedList: not with prop (a combine attempt is judged over whole days; curated runs are scored apart)');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -199,6 +211,18 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     ...(practice.practice ? { practice: practice.practice } : {}),
   };
   const cfg = validateConfig(derived);
+  // The curated list: its windows inside the run's, its use the run's window (a validation list never on practice-train),
+  // its market the run's, and every window holding a decision time of the run's sessions.
+  let curated = null;
+  if (curatedCfg.curated) {
+    try {
+      curated = curatedForRun({ ...curatedCfg.curated, file: path.resolve(baseDir, expandHome(curatedCfg.curated.file, home)), start, end, symbols: cfg.symbols, timeframe: cfg.timeframe, setupTf: practice.practice.setupTf });
+      const missed = emptyWindows(decisionPoints(cfg, { start, end }), curated, (cfg.barDelaySeconds || 0) * 1000);
+      if (missed.length) throw new Error(`curatedList: ${missed.length} window(s) hold no decision time of the run's sessions, the first ${new Date(missed[0].from).toISOString()}`);
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -214,6 +238,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     practice: practice.practice,
     // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
     latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
+    // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
+    curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
@@ -307,6 +333,8 @@ function configHash(run, base = process.env) {
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
+    // The curated list a run replays (its decision times are the list's): named only when there is one.
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -332,6 +360,8 @@ function setupHash(run, { code = true } = {}) {
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
     // Whether the model is shown it: named only when on, so a run without the display keeps the hash it had.
     ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
+    // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
