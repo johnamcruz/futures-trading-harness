@@ -290,6 +290,13 @@ test('absorption at a level: met it without closing beyond, on high volume, with
   // Touched and held: the open and close on the read's side of the level (the prior RTH high 21520 under both).
   assert.strictEqual(one('15m absorption at prior RTH high up', b).check, true);
   assert.strictEqual(one('15m absorption at prior RTH high down', b).check, false);
+  // Touched but not held: open above, close below the level (a small net move, high volume): neither way.
+  Object.assign(c15, { o: 21521, c: 21519 });
+  assert.strictEqual(one('15m absorption at prior RTH high up', b).check, false, 'closed below it');
+  assert.strictEqual(one('15m absorption at prior RTH high down', b).check, false, 'opened above it');
+  Object.assign(c15, { o: 21519, c: 21518 });
+  assert.strictEqual(one('15m absorption at prior RTH high down', b).check, true, 'held under it');
+  Object.assign(c15, { o: 21536, c: 21541 });
   // A gap edge: from the candle's gap relations.
   c15.fvgRelations = [{ name: '15m fvg low', price: 21515, side: 'bullish', rel: 'rejected', dir: 'up' }];
   assert.strictEqual(one('15m absorption at 15m fvg low up', b).check, true);
@@ -373,6 +380,120 @@ test('on briefings built from the fixture bars: every gap-edge relation verifies
   assert.strictEqual(one('15m rejected 15m fvg low up', b).check, true);
   assert.strictEqual(one('15m broke 15m fvg low down', b).check, false);
   assert.strictEqual(one('1h rejected 15m fvg low down', b).check, true);
-  // Never rendered: the briefing's text names no gap relation.
+  // The field itself is never rendered (the candle line says the strongest relation in words).
   assert.ok(!/fvgRelations/.test(require('../../scripts/lib/trading/briefing').renderBriefing(b)));
+});
+
+test('regime trend-up points long and trend-down short; range and transition point nowhere', () => {
+  const b = scenario1();
+  b.sections.m3.data.regime.primary = 'trend-up';
+  assert.strictEqual(one('regime trend-up', b).dir, 'long');
+  b.sections.m3.data.regime.primary = 'trend-down';
+  assert.deepStrictEqual([one('regime trend-down', b).check, one('regime trend-down', b).dir], [true, 'short']);
+  b.sections.m3.data.regime.primary = 'range';
+  assert.strictEqual(one('regime range', b).dir, null);
+  // As a bias read: with the long, a trend-down regime is against it; trend-up agrees.
+  b.sections.m3.data.regime.primary = 'trend-down';
+  const against = CR.checkReads({ reads: SCENARIO_1.concat({ step: 'bias', skill: 'trend-vs-range', read: 'regime trend-down' }), side: 'long', briefing: b });
+  assert.strictEqual(against.reads.at(-1).agrees, false);
+  assert.strictEqual(against.ok, false);
+  b.sections.m3.data.regime.primary = 'trend-up';
+  assert.strictEqual(CR.checkReads({ reads: SCENARIO_1.concat({ step: 'bias', skill: 'trend-vs-range', read: 'regime trend-up' }), side: 'long', briefing: b }).ok, true);
+});
+
+test('the setup and the entry each need a true read pointing to the side: reads without a direction only support it', () => {
+  const b = scenario1();
+  b.sections.m3.data.participation = { relVolLast3VsPrior20: 1.7 };
+  b.sections.m3.data.fvgs = { '15m': [{ side: 'bullish', low: 21530, high: 21535, state: 'open' }] };
+  const base = SCENARIO_1.filter(x => !['location', 'setup', 'entry'].includes(x.step));
+  const flat = base.concat(
+    { step: 'location', skill: 'fair-value-gaps', read: 'at 15m fvg' },
+    { step: 'setup', skill: 'levels-and-reactions', read: '15m touched prior RTH high' },
+    { step: 'entry', skill: 'momentum-and-volume', read: 'participation high' },
+  );
+  const r = CR.checkReads({ reads: flat, side: 'long', briefing: b });
+  assert.ok(r.reads.every(x => x.check === true && x.agrees), CR.renderCheck(r));
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.problems.some(p => /the setup has no read pointing up \(long\)/.test(p)), r.problems.join('; '));
+  assert.ok(r.problems.some(p => /the entry has no read pointing up \(long\)/.test(p)), r.problems.join('; '));
+  // A directional setup but an entry of volume alone: still refused (the entry).
+  const volOnly = SCENARIO_1.filter(x => x.step !== 'entry').concat({ step: 'entry', skill: 'momentum-and-volume', read: '3m volume high' });
+  const v = CR.checkReads({ reads: volOnly, side: 'long', briefing: b });
+  assert.strictEqual(v.ok, false);
+  assert.deepStrictEqual(v.problems.filter(p => /no read pointing/.test(p)).length, 1);
+  // With a confirming close the long's way it stands.
+  const ok = CR.checkReads({ reads: volOnly.concat({ step: 'entry', skill: 'candle-reading', read: '3m close top' }), side: 'long', briefing: b });
+  assert.strictEqual(ok.ok, true, CR.renderCheck(ok));
+  // A false directional read doesn't count: the 15m rejection stated the other way is false, and no other read points.
+  const wrong = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior VAH down' } : x));
+  assert.ok(CR.checkReads({ reads: wrong, side: 'long', briefing: b }).problems.some(p => /the setup has no read pointing/.test(p)));
+});
+
+test('a 1m-built candle reads the gaps as of its own open, not the last base bar before it', () => {
+  // 1m bars making 5m candles: the gap's third 5m candle completes at 09:30 + 115 min. The 3m base bars close at +114
+  // and +117: as of the base bar closing at +114 the gap is not known; read up to +115 (a 5m candle's open) it is.
+  const fine = barsOf([...FLAT, ...GAP, [106.5, 108, 104, 107.5]], 5, 1);
+  const base = Array.from({ length: 45 }, (_, k) => ({ t: new Date(T0 + k * 3 * MIN).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 100 }));
+  const at = 37; // closes at +114
+  assert.strictEqual(Date.parse(base[at].t) + 3 * MIN, T0 + 114 * MIN);
+  assert.deepStrictEqual(F.fvgEdgesAt({ bars: base, base: 3, fine, frames: [5], at }), []);
+  assert.deepStrictEqual(F.fvgEdgesAt({ bars: base, base: 3, fine, frames: [5], at, until: T0 + 115 * MIN }), [['5m fvg low', 101, 'bullish'], ['5m fvg high', 103, 'bullish']]);
+  // An until outside the base bar's interval is ignored (never reads past the next base close).
+  assert.deepStrictEqual(F.fvgEdgesAt({ bars: base, base: 3, fine, frames: [5], at, until: T0 + 200 * MIN }), []);
+  // briefingCandles hands zonesAt the candle's own open.
+  const seen = [];
+  CF.briefingCandles({ bars: base.slice(0, 40), base: 3, fine, timeframes: [5], zonesAt: (k, t) => { seen.push([k, t]); return []; } }); // the last closes with the 1m bars (+120)
+  assert.ok(seen.length > 0);
+  for (const [k, t] of seen) assert.ok(Date.parse(base[k].t) + 3 * MIN <= t && t < Date.parse(base[k].t) + 6 * MIN, `${k} ${t}`);
+});
+
+test('the gap edges and the candle\'s gap relations: malformed gaps give no edge, a repeated edge is read once', () => {
+  assert.deepStrictEqual(F.fvgEdges({ '15m': [
+    { side: 'bullish', low: 101, high: 103, state: 'partly', unfilled: [101] },
+    { side: 'bullish', low: 101, high: 103, state: 'partly', unfilled: [101, NaN] },
+    { side: 'bullish', low: 101, high: 103, state: 'partly', unfilled: 'x' },
+    { side: 'bullish', low: 101, high: null, state: 'open' },
+    { side: 'bullish', low: 101, high: 103, state: 'filled' },
+  ] }), []);
+  assert.deepStrictEqual(F.fvgEdges('15m'), []);
+  const bars = barsOf([...FLAT, ...GAP, [106.5, 107, 100.75, 104]]);
+  const zones = [['15m fvg low', 101, 'bullish'], ['15m fvg low', 101, 'bullish'], ['15m fvg high', 103, 'bullish'], 'junk', [null, 101, 'bullish'], ['15m fvg low', 500, 'bullish']];
+  const c = CF.briefingCandles({ bars, base: 3, timeframes: [15], zonesAt: () => zones })['15m'];
+  assert.deepStrictEqual(c.fvgRelations.map(r => [r.name, r.price, r.rel]), [['15m fvg low', 101, 'rejected'], ['15m fvg high', 103, 'rejected']]);
+});
+
+test('the candle line shows its strongest gap relation and, on high volume, its net move, within their byte budgets', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const rel = (name, price, r, dir = null) => ({ name, price, rel: r, dir });
+  assert.strictEqual(B.gapText({}), '');
+  assert.strictEqual(B.gapText({ fvgRelations: [] }), '');
+  assert.strictEqual(B.gapText({ fvgRelations: [rel('5m fvg low', 101, 'touched'), rel('15m fvg high', 103, 'broke', 'down'), rel('5m fvg high', 102, 'rejected', 'up')] }), '; rejected up 5m fvg high 102');
+  assert.strictEqual(B.gapText({ fvgRelations: [rel('5m fvg low', 101, 'rejected', 'up'), rel('1h fvg low', 99, 'rejected', 'up')] }), '; rejected up 1h fvg low 99', 'the higher timeframe\'s gap first');
+  assert.strictEqual(B.gapText({ fvgRelations: [rel('15m fvg low', 101, 'touched')] }), '; touched 15m fvg low 101');
+  // Byte budgets: the gap text and the net move on every candle line of the fixture's briefings.
+  const GAP_TEXT_BUDGET = 40;
+  const NET_BUDGET = 16;
+  const bars = fixtureBars();
+  let lines = 0;
+  for (let i = 400; i < bars.length; i += 50) {
+    const b = briefingAt(bars, i);
+    const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+    for (const [tf, c] of Object.entries(b.sections.m3.data.candles)) {
+      if (c.unavailable || tf === '4h') continue; // the 4h line is event-driven
+      assert.ok(Buffer.byteLength(B.gapText(c)) <= GAP_TEXT_BUDGET, B.gapText(c));
+      const net = CR.netAtrOf(c);
+      if (c.volRatio >= CR.VOLUME_HIGH && net !== null) {
+        assert.ok(text.includes(`, net ${net} ATR`), `${i}: net ${net}`);
+        assert.ok(Buffer.byteLength(`, net ${net} ATR`) <= NET_BUDGET);
+        lines += 1;
+      }
+      if (B.gapText(c)) { assert.ok(text.includes(B.gapText(c)), `${i}: ${B.gapText(c)}`); lines += 1; }
+    }
+    // Under high volume only: never on a quieter candle.
+    for (const m of text.matchAll(/vol ([\d.]+)x, net /g)) assert.ok(Number(m[1]) >= CR.VOLUME_HIGH, m[0]);
+  }
+  assert.ok(lines >= 10, `${lines} lines with a gap relation or a net move`);
+  assert.strictEqual(CR.netAtrOf({ o: 1, h: 1, l: 1, c: 1, rangeAtr: 0 }), 0);
+  assert.strictEqual(CR.netAtrOf({ o: 1, h: 2, l: 0, c: 2, rangeAtr: null }), null);
+  assert.strictEqual(CR.netAtrOf(null), null);
 });

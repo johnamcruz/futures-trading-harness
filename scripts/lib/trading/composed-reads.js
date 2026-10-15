@@ -23,7 +23,8 @@
  *   read long|short <aligned|mixed|pullback|counter>   m15.alignment for that side         its side
  *   vwap above|below|at                     m3.vwap.side                                  none
  *   value inside|above|below                m3.location.priorValue                        none
- *   regime <name>, day type <name>          m3.regime.primary, m3.today.dayType ("trend-up" read as "trend up")   none
+ *   regime <name>, day type <name>          m3.regime.primary, m3.today.dayType ("trend-up" read as "trend up")   regime
+ *                                                                                         trend up long, trend down short
  *   at <level>                              the level inside the trigger bar's range (m3.bar), or met by the base
  *                                           timeframe's candle or the next one up and within one ATR(14) of price
  *                                           (m3.candles.<tf>.relations, m3.atr14)         none
@@ -72,7 +73,8 @@
  * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
  * (the same pattern in setup and entry counts once). The combination is ok when every read is true and agrees,
- * every step is stated, and there is exactly one stop and one target read.
+ * every step is stated, the setup and the entry each hold a true read pointing to the side, and there is exactly one
+ * stop and one target read.
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
  *   checkRead(parsed, briefing, { side, tick })  { check, fact, field, value, dir, price? }
@@ -318,6 +320,16 @@ function atZone(tf, m3, base, res) {
 }
 
 /**
+ * A candle's net move in ATR(14), to the cent: |close - open| over the ATR its range was measured against (range /
+ * rangeAtr); 0 for a zero range; null when a value is unknown. The briefing's candle line shows it (`net N ATR`).
+ */
+function netAtrOf(c) {
+  const [o, h, l, cl, rangeAtr] = isObj(c) ? [c.o, c.h, c.l, c.c, c.rangeAtr].map(num) : [null];
+  if ([o, h, l, cl, rangeAtr].some(x => x === null || x === undefined)) return null;
+  return h > l && rangeAtr > 0 ? Math.round((Math.abs(cl - o) * rangeAtr / (h - l)) * 100) / 100 : 0;
+}
+
+/**
  * The relations a level read is checked in: a gap edge ('<tf> fvg low|high') the candle's fvgRelations (the gaps as they
  * stood at its open), any other level its relations. list null: the briefing doesn't hold them.
  */
@@ -390,7 +402,9 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
     case 'regime': {
       const r = isObj(m3.regime) && typeof m3.regime.primary === 'string' ? m3.regime.primary : null;
       if (!r) return res('unchecked', 'the regime is unknown');
-      return res(levelName(r) === p.value, `the regime is ${r}`, { field: 'm3.regime.primary', value: r });
+      // A trend regime points its way (trend-up long, trend-down short); range and transition point nowhere.
+      const dir = p.value === 'trend up' ? 'long' : p.value === 'trend down' ? 'short' : null;
+      return res(levelName(r) === p.value, `the regime is ${r}`, { field: 'm3.regime.primary', value: r, dir });
     }
     case 'dayType': {
       const d = isObj(m3.today) && typeof m3.today.dayType === 'string' ? m3.today.dayType : null;
@@ -457,8 +471,7 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
         || (x.rel === 'touched' && num(x.price) !== null && (p.value === 'up' ? Math.min(o, cl) >= x.price : Math.max(o, cl) <= x.price));
       const named = list.filter(x => isObj(x) && levelName(x.name) === p.level);
       const r = named.find(held) || named[0];
-      // The net move in ATR(14): |close - open| over the ATR the range was measured against (range / rangeAtr).
-      const progress = h > l && rangeAtr > 0 ? Math.round((Math.abs(cl - o) * rangeAtr / (h - l)) * 100) / 100 : 0;
+      const progress = netAtrOf({ o, h, l, c: cl, rangeAtr });
       const ok = Boolean(r) && held(r) && volRatio >= ABSORPTION.volRatio && progress <= ABSORPTION.progressAtr;
       const met = r ? `${r.rel}${r.dir ? ` ${r.dir}` : ''} ${r.name}` : `didn't meet ${p.level}`;
       return res(ok, `the ${p.tf} candle ${met}, volume ${volRatio}x, net move ${progress} ATR (absorption ${p.value}: held at the level, volume >= ${ABSORPTION.volRatio}x, net move <= ${ABSORPTION.progressAtr} ATR)`,
@@ -634,6 +647,14 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   }
   const missingSteps = STEPS.filter(s => !checked.some(r => r.step === s));
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
+  // The reaction and its confirmation point the trade's way: the setup and the entry each need a true read whose
+  // direction is the side (reads without a direction, such as touched, at, volume or participation, support it only).
+  if (SIDES.includes(side)) {
+    for (const s of ['setup', 'entry']) {
+      if (missingSteps.includes(s)) continue;
+      if (!checked.some(r => r.step === s && r.check === true && r.dir === side)) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
+    }
+  }
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
     if (n > 1) problems.push(`${n} ${k} reads: state exactly one`);
@@ -666,4 +687,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, STEP_KINDS, ENTRY_PATTERNS, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, STEP_KINDS, ENTRY_PATTERNS, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
