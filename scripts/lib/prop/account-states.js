@@ -70,8 +70,9 @@ const KIND = 'account-states';
 const VERSION = 1;
 const PRACTICE_BUCKETS = Object.freeze(['fresh', 'mid', 'near-target', 'near-mll', 'after-losses']);
 /** Practice dwells on the states near the limits: these buckets are drawn this many times their natural share. */
-const DEFAULT_OVERSAMPLE = Object.freeze({ fresh: 1, mid: 1, 'near-target': 1, 'near-mll': 3, 'after-losses': 3 });
-const DEFAULTS = Object.freeze({ seed: 1, paths: MC_SIZE.paths, count: 200, meanBlock: 7 }); // paths: the Monte Carlo's one default (mc-size.js)
+const AS = require('../tunables').replay().accountStates; // config/replay.json accountStates
+const DEFAULT_OVERSAMPLE = AS.oversample;
+const DEFAULTS = Object.freeze({ seed: AS.seed, paths: MC_SIZE.paths, count: AS.count, meanBlock: AS.meanBlock }); // paths: the Monte Carlo's one default (mc-size.js)
 
 const r2 = x => Math.round(x * 100) / 100;
 const r6 = x => Math.round(x * 1e6) / 1e6;
@@ -105,7 +106,7 @@ function* attemptPaths(stream, account, { seed, paths, meanBlock, label }) {
   for (let p = 0; p < paths; p += 1) yield stats.stationaryPath(days.length, account.sessions, { meanBlock, rand: prand, regimes, byRegime }).map(k => days[k]);
 }
 
-function sampleAccountStates(stream, { account, sizing = null, contracts = 'auto', seed = 1, paths = MC_SIZE.paths, perBucket = 5, meanBlock = 7 } = {}) {
+function sampleAccountStates(stream, { account, sizing = null, contracts = 'auto', seed = AS.seed, paths = MC_SIZE.paths, perBucket = AS.perBucket, meanBlock = AS.meanBlock } = {}) {
   if (!account || !Number.isInteger(account.sessions)) throw new Error('account: an account profile with sessions');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
   if (!(Number.isInteger(perBucket) && perBucket >= 1)) throw new Error('perBucket: 1 or more');

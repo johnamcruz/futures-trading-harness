@@ -68,7 +68,7 @@ const STEPS = Object.freeze(['bias', 'location', 'setup', 'entry', 'stop', 'targ
 const USE_OF = Object.freeze({ 'practice-train': 'practice', 'practice-validate': 'validate', test: 'test', final: 'final' });
 /** A curated list's use for the run's role (curated-lists.js ROLE). */
 const CURATED_USE = Object.freeze({ 'practice-train': 'practice', 'practice-validate': 'validate' });
-const WINDOW_BARS = 700;
+const WINDOW_BARS = require('../tunables').replay().windowBars; // config/replay.json (setup-library.js reads it too)
 const MINUTE = 60000;
 
 const errText = e => String((e && e.message) || e).split('\n').join(' ');

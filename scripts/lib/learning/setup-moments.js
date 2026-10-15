@@ -48,10 +48,11 @@
 const crypto = require('crypto');
 
 const MODES = Object.freeze(['setup-focus']);
-const SETUP_TFS = Object.freeze([5, 15, 60]);
+const SM = require('../tunables').replay().setupMoments; // config/replay.json setupMoments
+const SETUP_TFS = SM.setupTfs;
 const LEVEL_SETS = Object.freeze(['key', 'wide']);
 const REACTION_KINDS = Object.freeze(['rejected', 'broke']);
-const DEFAULTS = Object.freeze({ mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 0, levels: 'key', reactions: REACTION_KINDS });
+const DEFAULTS = Object.freeze({ mode: 'setup-focus', setupTf: SM.setupTf, quietSample: SM.quietSample, seed: SM.seed, levels: SM.levels, reactions: REACTION_KINDS });
 const KNOWN = Object.freeze(['mode', 'setupTf', 'quietSample', 'seed', 'levels', 'reactions']);
 
 // The key levels a reaction counts at (candle-facts.js level names, briefing.js levelsAt): the fixed ones, complete

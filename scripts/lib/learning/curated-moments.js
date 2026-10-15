@@ -85,11 +85,12 @@ const { LISTS } = require('./curated-lists');
 // 2: the standard's limit window is the trade_lifecycle strategy's valid_bars (1 held it one bar), as the library's.
 const VERSION = 2;
 const USES = Object.freeze(['practice', 'validate']);
-const LEAD_SETUP = 2;
+const CM = require('../tunables').replay().curatedMoments; // config/replay.json
+const LEAD_SETUP = CM.leadSetup;
 /** The history library's skill labels that differ from the crosswalk's (setup-library.js labels its bias reads so). */
 const SKILL_ALIAS = Object.freeze({ 'mtf-bias-filter': 'multi-timeframe-analysis' });
 const SHAPE_SKILL = 'pullback-vs-reversal';
-const FIRST_BAR = 300;
+const FIRST_BAR = CM.firstBar;
 
 /** The trade-lifecycle crosswalk's skill for each kind of read, per step (its table, skills/trade-lifecycle/SKILL.md). */
 const READ_SKILL = Object.freeze({

@@ -30,7 +30,7 @@
 const fs = require('fs');
 const { WALL_START } = require('../trading/harness-now');
 
-const TICK_MS = 1000;
+const TICK_MS = require('../tunables').replay().latency.tickMs; // config/replay.json
 
 function latencySetting(raw, learning) {
   if (raw === undefined) return { value: learning === true, error: null };

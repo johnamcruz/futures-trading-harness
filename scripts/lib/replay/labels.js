@@ -84,15 +84,16 @@ const { endOfDayAt } = require('../autotrader');
 const { expandHome } = require('../paths');
 
 const VERSION = 1;
-const STOP_ATR_MULTIPLES = [0.5, 0.75, 1, 1.5, 2, 3];
+const LAB = require('../tunables').replay().labels; // config/replay.json labels
+const STOP_ATR_MULTIPLES = LAB.stopAtrMultiples;
 // A stop further than this from every multiple is out of range (unmapped), never snapped to the end bucket.
-const STOP_ATR_RANGE = [0.375, 4.5];
-const SIZE_STEPS = [0.25, 0.5, 0.75, 1];
+const STOP_ATR_RANGE = LAB.stopAtrRange;
+const SIZE_STEPS = LAB.sizeSteps;
 const ATR_PERIOD = ind.STOP_ATR_PERIOD; // the market features' ATR (trading/market-features.js atr20)
 const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)(?:\s+(long|short|buy|sell))?\b/i;
 const SIDE = { long: 'buy', buy: 'buy', short: 'sell', sell: 'sell' };
-const GATE_SLACK_MS = 2000;
+const GATE_SLACK_MS = require('../tunables').runner().session.gateSlackMs; // config/runner.json (cycle-log.js)
 // Order tools neither the hook nor the gateway gates (mcp-gateway.js ORDER_TOOL): risk-reducing, never logged.
 const UNGATED = new Set(['close_position']);
 // A flat label with one of these reasons is no skip (nor a stand-aside, nor a hold in a trade): the teacher
@@ -330,7 +331,7 @@ function normalizeOrder(tool, args, gate) {
   };
 }
 
-const PAIR_MS = 1000;
+const PAIR_MS = LAB.pairMs;
 // The order tracker's own refusals after the gate allowed the call (order-tracker.js beforeSend,
 // order-markers.js prepareSend), told from the gate's own order-pending (markers.pendingMessage) by message.
 const TRACKER_REFUSAL = /^(customTag .* is in use by an order of unknown outcome|The gateway could not record the order before sending it|place_order needs an accountId)/;
