@@ -27,7 +27,7 @@
  * opening order at placement (entry-orders.json composed.record, by the fill's order id); without a stamp, to the latest
  * ok record at or before its opening fill whose order could have filled it (side, root, before the record expired).
  *
- * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
+ * The line (VERSION 2): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
@@ -49,7 +49,8 @@ const { familyRoot } = require('../trading/contracts');
 const { roleOf } = require('./splits');
 const { formOf } = require('./lifecycle-record');
 
-const VERSION = 1;
+// 2: decisions per cycle, root and side, trades by the gateway's stamp (a version-1 line's id may name another record).
+const VERSION = 2;
 const round = (x, d = 4) => (x === null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
 const sgn = side => (side === 'long' ? 1 : side === 'short' ? -1 : 0);
 
@@ -171,7 +172,7 @@ const idOf = parts => crypto.createHash('sha256').update(parts.join('|')).digest
  * @param records the trade_lifecycle records (lifecycle-record.js), any order
  * @param trips round trips from the run's fills (replay/labels.js roundTrips): { family, side: buy|sell, openMs, closeMs, opens, closes }
  * @param stamps { orderId: record id } the gateway's stamp on each composed entry it placed (entry-orders.json composed.record)
- * @param gateRefusals [{ cycleAt (ISO), root or null, side?, check }] the gate's refusals of an entry order in a cycle (the store line's refusals)
+ * @param gateRefusals [{ cycleAt (ISO), root or null, check }] the gate's refusals of an entry order in a cycle (the store line's refusals)
  * @param barsFor (root) -> bars sorted, each { ms, o, h, l, c }; tfMs the bar length
  * @param tickOf (root) -> tick size; eodOf (ms) -> that trading day's end of day (ms)
  */
@@ -200,11 +201,14 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
       const oks = recs.filter(r => r.ok);
       if (!oks.length) { slots.push({ at, root, recs, ok: null, fromMs: null, expiresMs: null, latest: true }); continue; }
       const last = oks[oks.length - 1];
+      const sided = new Set(oks.map(r => r.side));
       for (const side of ['long', 'short']) {
         const mine = oks.filter(r => r.side === side);
         if (!mine.length) continue;
         const ok = mine[mine.length - 1];
-        slots.push({ at, root, side, recs: recs.filter(r => r.side === side), oks: mine, ok, ...spanOf(ok), latest: ok === last });
+        // `checked`: the side's records; the cycle's latest slot also counts those of a side with no ok record.
+        const counted = recs.filter(r => r.side === side || (ok === last && !sided.has(r.side)));
+        slots.push({ at, root, side, recs: counted, oks: mine, ok, ...spanOf(ok), latest: ok === last });
       }
     }
   }
@@ -212,30 +216,33 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
   const want = (s, t) => (s.side === 'long' ? 'buy' : 'sell') === t.side && (!t.family || t.family === familyRoot(s.root));
   // A round trip belongs first to the record the gate judged: the gateway's stamp at placement (entry-orders.json
   // composed.record, by the opening fill's order id). Its slot then speaks for that record, whatever was composed
-  // after it in the cycle; the legs of one stamped order are one trade.
-  const stampOf = t => {
-    for (const f of t.opens || []) {
-      const id = f && f.orderId !== undefined && f.orderId !== null ? stamps[String(f.orderId)] : null;
-      if (id) return String(id);
-    }
-    return null;
+  // after it in the cycle; the legs of one stamped order (its partial fills) are one trade. A stamp that can't be
+  // this trade's (its record composed after the fill, another side or root, or its slot holding another order's
+  // trade) is ignored: the time window decides.
+  const orderOf = t => {
+    const f = (t.opens || []).find(x => x && x.orderId !== undefined && x.orderId !== null);
+    return f ? String(f.orderId) : null;
   };
   const unstamped = [];
   for (const t of trips.filter(x => x.openMs !== null).sort((a, b) => a.openMs - b.openMs)) {
-    const id = stampOf(t);
-    const slot = id ? slots.find(s => s.ok && want(s, t) && s.oks.some(r => r.id === id)) : null;
-    if (!slot) { unstamped.push(t); continue; }
-    const had = tripOf.get(slot);
-    if (had && had.stamp !== id) { unstamped.push(t); continue; }
+    const order = orderOf(t);
+    const id = order !== null && stamps[order] !== undefined && stamps[order] !== null ? String(stamps[order]) : null;
+    const slot = id ? slots.find(s => s.ok && want(s, t) && s.oks.some(r => r.id === id && Date.parse(r.at) <= t.openMs)) : null;
+    const had = slot ? tripOf.get(slot) : null;
+    if (!slot || (had && had.order !== order)) { unstamped.push(t); continue; }
     if (!had) Object.assign(slot, { ok: slot.oks.find(r => r.id === id) }, spanOf(slot.oks.find(r => r.id === id)));
-    tripOf.set(slot, had ? { ...had, opens: [...had.opens, ...t.opens], openMs: Math.min(had.openMs, t.openMs) } : { ...t, stamp: id });
+    tripOf.set(slot, had ? { ...had, opens: [...had.opens, ...t.opens], openMs: Math.min(had.openMs, t.openMs) } : { ...t, order });
   }
   // Without a stamp: the latest ok record at or before its opening fill whose order could have filled it (its side
   // and root, the fill before the record expired), never an earlier one still open: each record at most one.
+  // A slot's earlier record of the same side counts too (a re-compose after the fill never hides the record before it).
   for (const t of unstamped) {
-    const owner = slots.filter(s => s.ok && !tripOf.has(s) && want(s, t) && s.fromMs <= t.openMs && t.openMs <= s.expiresMs)
-      .sort((a, b) => b.fromMs - a.fromMs)[0];
-    if (owner) tripOf.set(owner, t);
+    const fits = slots.filter(s => s.ok && !tripOf.has(s) && want(s, t)).flatMap(s => s.oks.map(r => ({ s, r, ...spanOf(r) })))
+      .filter(x => x.fromMs <= t.openMs && t.openMs <= x.expiresMs).sort((a, b) => b.fromMs - a.fromMs);
+    if (!fits.length) continue;
+    const { s, r } = fits[0];
+    Object.assign(s, { ok: r }, spanOf(r));
+    tripOf.set(s, t);
   }
   const out = [];
   for (const slot of slots) {
@@ -256,7 +263,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
       outcome = tripOutcome(trip, ok.plan, ok.side);
     } else {
       // A refusal names no side: it stays with the cycle's latest ok record (the one order_plan plans from).
-      const refused = gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)) && (g.side ? g.side === ok.side : slot.latest));
+      const refused = slot.latest && gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
       if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
       outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root) });
     }
@@ -287,9 +294,17 @@ function readDecisions(file) {
   return out;
 }
 
-/** Append-only: lines whose id the file holds already are kept as written, never replaced. */
+/**
+ * Append-only: lines whose id the file holds already are kept as written, never replaced. A run whose lines the file
+ * holds from another version is refused (their ids may name other records, so a trade would count twice); delete
+ * that run's lines and write it again.
+ */
 function appendDecisions(file, lines) {
-  const have = new Set(readDecisions(file).map(d => d.id));
+  const old = readDecisions(file);
+  const runs = new Set(lines.map(l => l.runId));
+  const stale = old.find(d => runs.has(d.runId) && Number.isInteger(d.v) && d.v !== VERSION);
+  if (stale) throw new Error(`${file}: run ${stale.runId}'s decisions were written by experience log version ${stale.v}, not ${VERSION}: delete that run's lines and write them again`);
+  const have = new Set(old.map(d => d.id));
   const fresh = lines.filter(l => !have.has(l.id));
   if (fresh.length) {
     fs.mkdirSync(path.dirname(file), { recursive: true });

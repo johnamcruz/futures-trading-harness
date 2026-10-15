@@ -247,12 +247,32 @@ test('attribution: a same-side re-compose after the fill: the trade is the stamp
   // Two fills of one stamped order (legs): one trade, both legs.
   const one = E.buildDecisions({ ...args, trips: [stampedTrip(at(30), t(3), 100, 104, 9), stampedTrip(at(40), t(3), 100, 104, 9)], stamps: { 9: 'rec-a' } });
   assert.deepStrictEqual([one.length, one[0].decision, one[0].outcome.R], [1, 'entered', 2]);
+  // Two orders stamped with one record: the second isn't folded into the first's trade (the time window decides).
+  const two = E.buildDecisions({ ...args, trips: [stampedTrip(at(30), t(3), 100, 104, 9), stampedTrip(at(70), t(3), 101, 97, 10)], stamps: { 9: 'rec-a', 10: 'rec-a' } });
+  assert.deepStrictEqual(two.map(d => [d.decision, d.outcome.entryPrice, d.outcome.R]), [['entered', 100, 2]]);
+  // A stamp naming a record composed after the fill can't be that trade's: the time window decides (A's).
+  const after = E.buildDecisions({ ...args, trips: [stampedTrip(at(30), t(3), 100, 104, 9)], stamps: { 9: 'rec-b' } });
+  assert.deepStrictEqual([after[0].decision, after[0].signatures.skill], ['entered', A.signatures.skill]);
+});
+
+test('checked: a cycle\'s records of a side with no ok record count on its latest decision; a run logged by another version is refused', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  const at = s => new Date(ms(T0) + s * 1000).toISOString();
+  const A = fromLifecycleRecord({ ...record({ at: at(10) }), id: 'a' });
+  const N = fromLifecycleRecord({ ...record({ at: at(20), side: 'short', ok: false }), id: 'n' });
+  const out = E.buildDecisions({ cycles: [{ at: t(0), roots: ['MNQ'] }], records: [A, N], barsFor: () => [], tfMs: M3, tickOf: () => 0.25 });
+  assert.deepStrictEqual(out.map(d => [d.side, d.checked]), [['long', 2]]);
+  const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
+  E.appendDecisions(file, [{ id: 'old', v: 1, runId: 'r1' }]);
+  assert.throws(() => E.appendDecisions(file, [{ id: 'new', v: E.VERSION, runId: 'r1' }]), /run r1's decisions were written by experience log version 1, not 2: delete that run's lines/);
+  assert.deepStrictEqual(E.appendDecisions(file, [{ id: 'other', v: E.VERSION, runId: 'r2' }]), { added: 1, kept: 0 });
 });
 
 test('writeRunExperience: the run home\'s entry-orders.json stamps credit the judged record', () => {
   const at = s => new Date(ms(T0) + s * 1000).toISOString();
   const fills = [
-    { id: 1, orderId: 41, contractId: 'MNQ:2023-06', creationTimestamp: at(30), price: 100, size: 1, side: 0, profitAndLoss: null },
+    // A's order fills after B was composed: the time window alone would credit B.
+    { id: 1, orderId: 41, contractId: 'MNQ:2023-06', creationTimestamp: at(70), price: 100, size: 1, side: 0, profitAndLoss: null },
     { id: 2, orderId: 42, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
   ];
   const A = { ...record({ at: at(10) }), id: 'rec-a' };
