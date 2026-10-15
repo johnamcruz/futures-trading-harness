@@ -45,7 +45,7 @@ it); the trail exits every trade.
 | Signals | rules strategies | Does each setup have an edge after fees: expectancy in R, win rate, the R distribution, by regime, session and trend alignment? |
 | Filter | the reasoning model with the skills | Does its judgment add edge? Taken setups against every signal, using the counterfactuals on skipped labels. |
 | Sizing | the position-sizing skill and the policy strategy's `sizing` | Which risk per trade maximizes P(pass) with P(blow) at zero? |
-| Exits | `prop_portfolio`'s `exit` (hold the stop, then trail; the numbers in its account's `RULEBOOK.md`) | Do exits keep the move: the best and worst R in a trade against the R banked? |
+| Exits | `prop_portfolio`'s `exit` (its mode: the trade's own stop and target, that target then a trail past it, or hold the stop then trail; the values in its account's `RULEBOOK.md`) | Do exits keep the move: the best and worst R in a trade against the R banked? |
 | Portfolio | `strategies/prop_portfolio` order | Do losses cluster on the same days across strategies? Combines die from clustered losses, not the average. |
 
 ### Why sizing is the crux

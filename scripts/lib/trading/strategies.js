@@ -25,7 +25,8 @@ const { parseWindows } = require('./clock');
 const { normalizeBars } = require('./indicators');
 const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
-const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
+const { createEvaluator, inSessions, exitPlan, tradeExitPlan } = require('./evaluator');
+const { SWING_TFS } = require('./exit-trail');
 const { familyOf, selectedLeg } = require('./contracts');
 const rulebook = require('./rulebook');
 const { accountDirs } = require('./accounts');
@@ -99,7 +100,10 @@ const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks'];
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
-const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
+const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
+/** A policy strategy's exit modes and its after-target keys (its rulebook's exit; trading/rulebook.js EXIT_MODES). */
+const POLICY_EXIT_MODES = ['target', 'target_then_trail', 'trail'];
+const AFTER_TARGET_KEYS = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -157,7 +161,15 @@ function exitErrors(x) {
       }
       req(x.target_r === undefined, 'exit: target_r or target, not both');
     }
-    req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
+    if (x.mode !== undefined) req(POLICY_EXIT_MODES.includes(x.mode), `exit.mode: ${POLICY_EXIT_MODES.join(', ')} (a policy strategy's, from its rulebook)`);
+    // The after-target trail (exit mode target_then_trail, trading/exit-trail.js): every key, valid, in that mode only.
+    const after = AFTER_TARGET_KEYS.filter(k => x[k] !== undefined);
+    if (x.mode === 'target_then_trail') {
+      for (const k of ['lock_giveback_r', 'trail_r']) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
+      req(['r', 'structure'].includes(x.trail_by), 'exit.trail_by: r or structure');
+      req(x.trail_by !== 'structure' || Object.hasOwn(SWING_TFS, x.swing_tf), `exit.swing_tf: one of ${Object.keys(SWING_TFS).join(', ')} (a structure trail's swings)`);
+    } else if (after.length) errors.push(`exit.${after[0]}: only for exit mode target_then_trail`);
+    req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined || x.mode === 'target' || x.mode === 'target_then_trail', 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
     if (x.target_r !== undefined && x.trail_activate_r !== undefined) {
       req(x.trail_activate_r < x.target_r, 'exit: with both, trail_activate_r must be below target_r (the target would fill first)');
     }
@@ -215,7 +227,9 @@ function validateStrategy(data, body, folderName) {
     }
     req(data.contracts === undefined || CONTRACT_MODES.includes(data.contracts), `contracts: ${CONTRACT_MODES.join(' | ')} (auto: minis once the size reaches one mini)`);
     req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");
-    req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (the trail that exits every trade it takes)');
+    // Mode target: each trade keeps its own stop and target (a trail on top only when stated); else the trail exits every trade.
+    req(data.exit && (['target', 'target_then_trail'].includes(data.exit.mode) || data.exit.trail_activate_r !== undefined), 'exit: mode target or target_then_trail (each trade\'s own stop and target), or trail_activate_r and trail_giveback_r (the trail that exits every trade it takes)');
+    req(!(data.exit && data.exit.mode === 'trail' && data.exit.trail_activate_r === undefined), 'exit: mode trail needs trail_activate_r and trail_giveback_r');
     // Its setups come from other strategies' scans, which carry no target distance of its own.
     req(!(data.exit && data.exit.target !== undefined), 'exit.target: not for a policy strategy (its trades exit by its trail; the strategies it lists keep their own targets only when traded on their own)');
   } else {
@@ -223,6 +237,7 @@ function validateStrategy(data, body, folderName) {
       if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio)`);
     }
     if (data.risk && data.risk.stop === 'strategy') errors.push('risk.stop: strategy is only for a policy strategy');
+    if (data.exit && data.exit.mode !== undefined) errors.push('exit.mode: only a policy strategy has one (its rulebook\'s; a strategy\'s own exit is its target, trail or time stop)');
     if (data.priority !== undefined) errors.push('priority: only a policy strategy (signal: policy) has one (it orders policies whose setups come in the same cycle)');
   }
   // Which policy goes first when two lanes' policies have a setup in the same cycle: 1 first. Parsed and
@@ -619,6 +634,7 @@ module.exports = {
   componentsNote,
   parseRetired,
   exitPlan,
+  tradeExitPlan,
   exitErrors,
   STATUSES,
   SIGNALS,

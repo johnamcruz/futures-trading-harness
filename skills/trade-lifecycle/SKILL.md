@@ -26,7 +26,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | stop | stop at a level | `invalidation` |
    | target | target at a level | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled | `manage-position` |
+   | management | once filled: the record's stop and target are the exit; in an attempt the rulebook's exit mode may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
 
    The setup is the reaction on a closed candle (often 15m); an entry read
    your way must be on a candle that closed after it (often the next 3m).

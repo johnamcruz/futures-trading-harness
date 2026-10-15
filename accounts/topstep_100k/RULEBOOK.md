@@ -3,6 +3,7 @@ name: topstep_100k
 description: The rulebook for this account - the numbers its policy strategies trade with and which of its rules the code enforces or the skills teach. Today's values; nothing is learned yet.
 learned: none                   # none: today's values, carried over unchanged (docs/LEARNED-RULEBOOK.md, step 7)
 daily_loss_soft: 1000           # dollars: no new entries for the rest of the day once the day is down this much
+loss_streak_stop: 2             # losing trades in a row: no new entries for the rest of the session (a scratch neither ends nor extends the streak)
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
     sizing:                     # risk from the headroom above the floor
@@ -11,13 +12,18 @@ policies:                       # each policy strategy that trades this account 
       drawdown_halve_usd: 1500  # half that while the balance is this far or more below its peak
       min_size_guard: 1.5       # one micro may risk up to this many times the budget; a mini never more than the budget
       stop_slippage_ticks: 1    # a stop's expected slippage, counted in each contract's risk
-      clock_k: off              # a number: also at most k x what the pass still needs per session left; off: none
+      clock_k: off              # pacing: a number k caps the risk at k x what the pass still needs per session left; off: none
       r_per_session: 0.3        # the R a session is expected to make, for clock_k
     exit:
-      trail_activate_r: 2       # hold the setup's own stop until this many R ...
-      trail_giveback_r: 0.5     # ... then trail this many R behind the best price
+      mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
+      trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
+      trail_giveback_r: off     # ... then trail this many R behind the best price
+      lock_giveback_r: 0.5      # target_then_trail: once the target is reached the stop locks at the target's R less this
+      trail_by: structure       # target_then_trail: structure (behind the last confirmed swing on swing_tf) or r (trail_r behind the best price)
+      trail_r: 1                # target_then_trail: R behind the best price (trail_by r, and structure's fallback until a swing is confirmed)
+      swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
-enforced: [daily_loss_soft, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
 taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
@@ -26,14 +32,14 @@ taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, 
 The one place for the numbers this account's policy strategies trade with
 (docs/LEARNED-RULEBOOK.md, R1-R4). The frontmatter holds every value; nothing
 else states one. The account loader takes the soft daily stop from here, and
-the strategy loader each policy's sizing, trail and multipliers, so the
+the loss streak stop, and the strategy loader each policy's sizing, exit and multipliers, so the
 runner, the sizing verdict, the order gate and the backtester all read them
 from this file. A policy strategy listed here may not set them itself.
 
 ## When to Use
 
 - To see or change what a policy strategy on this account risks, how it
-  exits, or when the day stops: edit the frontmatter here, never the
+  exits, how it paces, or when the day or the session stops: edit the frontmatter here, never the
   strategy or a skill.
 - To see which rules the code holds (`enforced`) and which the skills teach
   (`taught`).
@@ -55,6 +61,43 @@ than `full` or `skip`, and a full verdict without a multiplier above 0 and at
 most 1. There are no multiplier items yet, so every full verdict carries 1
 and every skip 0: decisions are as before. No code supplies a fact yet (the runner and the backtester pass none), so an item added before its fact source exists skips every setup: it fails closed.
 
+**The loss streak stop.** After `loss_streak_stop` losing trades in a row
+in a session, no new entries until the next session: the verdict skips, the
+gate refuses (combine.entryBlock), and the backtester and the attempt
+simulator skip as well. A loss is a trade closed below its entry before fees
+(live: the broker's closing fills, one trade per round trip), a win ends the
+streak, and a scratch (closed at its entry) neither ends nor extends it, as
+the gate's own loss-streak cooldown counts. Exits and protective orders always
+go. Two losses in a row is the point where the day is more likely tilted
+than unlucky: standing down keeps the soft daily stop and the floor out of
+reach.
+
+**The exit.** Three modes, each tunable by the 30-day Monte Carlo, the same
+rule in the runner, the backtester and the attempt simulator (which re-exits
+each trade from its recorded path, prop/attempts.js exitAs):
+
+- `target`: out at the trade's own target, a real level at 2:1 to 3:1 (the
+  compose record's bracket), a trail on top only when `trail_activate_r` and
+  `trail_giveback_r` are R.
+- `target_then_trail` (today's): the original stop holds until the trade's
+  own target is reached; from there the trade is not closed but trailed, so a
+  runner can make more R. The stop locks at the target's R less
+  `lock_giveback_r` and never goes below it, and trails behind the last
+  swing confirmed on `swing_tf` candles (`trail_by: structure`, from closed
+  bars only), or `trail_r` behind the best price (`trail_by: r`, and the
+  structure trail's fallback until a swing is confirmed). Live, the runner
+  cancels the entry's target order when it first manages the trade and moves
+  the stop at each closed bar; a target reached before then fills there.
+- `trail`: hold the stop until `trail_activate_r`, then trail
+  `trail_giveback_r` behind the best price, in place of the target. Kept only
+  as a tunable: our research found this tight trail cut the edge.
+
+**Pacing.** `clock_k` is the pacing knob the phase-2 search tunes: a number k
+caps each trade's risk at k x what the pass still needs per session left (in
+R at `r_per_session`), so a lead slows the attempt and a deficit can't push
+the size past the budget. It is `off` today, and it works the same for the
+composed trade (its verdict and the gate size from these values).
+
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the
 calibration (docs/LEARNED-RULEBOOK.md, sections 5 and 6) will replace each
@@ -63,13 +106,16 @@ one with its evidence.
 | Value | Today's source | Training-window effect | Stability across years | Learned |
 | --- | --- | --- | --- | --- |
 | `daily_loss_soft` | this account's profile | not measured | not measured | not learned |
+| `loss_streak_stop` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
-| `policies.prop_portfolio.exit` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
+| `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
+| `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 
 `prop_portfolio` lists no strategies since 2026-10-14 (every rules strategy
 retired, strategies/README.md): it has no setups, so it sizes nothing until
 its one component, `trade_lifecycle`, is built (docs/COMPOSED-ENTRY.md).
-Its numbers here are unchanged. The retired `prop_flow_1m`'s entry went with
+Its sizing numbers here are unchanged; its exit now holds the stop to the
+trade's own target and trails past it (`target_then_trail`). The retired `prop_flow_1m`'s entry went with
 it.
 
 Every sizing key is stated for every policy: the loader refuses an entry

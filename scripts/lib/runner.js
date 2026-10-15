@@ -64,6 +64,7 @@ const { coverageError } = require('./trading/exchange-calendar');
 const famOf = contractId => familyRoot(contractRoot(contractId));
 const etTime = iso => { const p = zonedParts(new Date(iso), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ET`; };
 const { trailStep } = require('./trading/trail');
+const { afterTargetStep, liveTarget, swingAtBar } = require('./trading/exit-trail');
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ, parseWindows, inWindow } = require('./trading/clock');
 
 /** Whether a session window of the runner's is open at `now` (a trade cycle could run). */
@@ -488,18 +489,29 @@ function createRunner(deps) {
       if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;
       else if (stopOrder && sign * (entry - Number(stopOrder.stopPrice)) > 0) risk = sign * (entry - Number(stopOrder.stopPrice));
       else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
-      // Managed: a trailing exit, or a time stop (max_bars), or both.
-      const managed = plan && (plan.trailActivateR !== null || plan.maxBars);
+      // Managed: a trailing exit, or a time stop (max_bars), or a trail past the target (exit mode target_then_trail).
+      const managed = plan && (plan.trailActivateR !== null || plan.maxBars || plan.afterTarget);
       // max_bars counts the strategy's own bars; the runner sees its own timeframe's.
       const tfMin = ((strategy && timeframeMs(strategy.timeframe)) || cfg.timeframe * 60000) / 60000;
       const maxRunnerBars = plan && plan.maxBars ? Math.ceil((plan.maxBars * tfMin) / cfg.timeframe) : null;
+      // Past the target: the trade's own target (its bracket), whose resting order is cancelled so the trail can run.
       const ok = managed && tick > 0 && risk >= 4 * tick - 1e-9;
+      const after = ok && plan.afterTarget ? liveTarget({ rec, entry, sign, tick, orders, contractId: cid }) : null;
       t = ok
-        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null }
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null, ...(after ? { target: after.price, armed: false } : {}) }
         : { key, skip: true };
+      if (after && after.price === null) log(`${item.symbol}: ${rec.setup}: no target to trail past (${after.why}); the stop holds until its own exit`, 'error');
+      for (const o of after ? after.cancel : []) {
+        try {
+          await client.cancelOrder(cfg.account, o.id);
+          log(`${item.symbol}: cancelled the target order ${o.id} at ${o.limitPrice}: past its target ${rec.setup} is trailed, not closed (exit mode target_then_trail)`);
+        } catch (err) {
+          log(`${item.symbol}: could not cancel the target order ${o.id} (${err.message}); it may fill at the target`, 'error');
+        }
+      }
       save(t);
       if (ok) {
-        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R, trail ${plan.afterTarget.trailBy === 'structure' ? `behind ${plan.afterTarget.swingMinutes}m swings (${plan.afterTarget.trailR}R until one is confirmed)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
         log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
         emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars });
       } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
@@ -517,12 +529,18 @@ function createRunner(deps) {
     let barsHeld = t.barsHeld || 0;
     let target = resting ?? t.stop;
     let cross = null;
+    let armed = Boolean(t.armed);
+    let fellBack = false;
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
       if ((resting === null || sign * (target - resting) > 0) && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
       troughR = Math.min(troughR, (sign * ((sign > 0 ? bar.l : bar.h) - t.entry)) / t.risk);
-      const step = trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
+      const after = t.plan.afterTarget;
+      // Past the target: exit-trail.js on this closed bar, the swing confirmed by its close (never a later bar).
+      const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, after.trailBy === 'structure' ? swingAtBar(item.bars, bar, after.swingMinutes, sign) : null)
+        : trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
+      if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; }
       peakR = step.peakR;
       target = step.stop;
       if (step.close) { cross = { bar, stop: step.stop }; break; }
@@ -535,7 +553,7 @@ function createRunner(deps) {
       const last = bars[bars.length - 1];
       emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
         lastClose: last.c, rNow: (sign * (last.c - t.entry)) / t.risk, peakR, troughR, barsHeld });
-      save({ ...t, peakR, troughR, barsHeld, lastBarT });
+      save({ ...t, peakR, troughR, barsHeld, lastBarT, armed });
       // The runner's own exit, one record per position (append-only, the last few kept), for the decision history's
       // real R (decision-history.js withPositions).
       state = { ...state, runnerExits: appendExit(state.runnerExits, { contractId: cid, side: sign > 0 ? 'long' : 'short', openedAt: new Date(t.since).toISOString(), size: Number(p.size), at: clock.now().toISOString(), r: Math.round(((sign * (last.c - t.entry)) / t.risk) * 100) / 100 }) };
@@ -558,7 +576,8 @@ function createRunner(deps) {
       await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
-    save({ ...t, peakR, troughR, barsHeld, lastBarT });
+    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: no ${t.plan.afterTarget.swingMinutes}m swing confirmed yet; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
+    save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack) });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;
       log(`${item.symbol}: trail wants the stop at ${target} but there is no single working stop order to move`, 'error');

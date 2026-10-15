@@ -3,7 +3,8 @@ name: topstep_50k
 description: The rulebook for this account - the numbers its policy strategies trade with and which of its rules the code enforces or the skills teach. Today's values; nothing is learned yet.
 learned: none                   # none: today's values, carried over unchanged (docs/LEARNED-RULEBOOK.md, step 7)
 daily_loss_soft: 500            # dollars: no new entries for the rest of the day once the day is down this much
-enforced: [daily_loss_soft, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
+loss_streak_stop: 2             # losing trades in a row: no new entries for the rest of the session (a scratch neither ends nor extends the streak)
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
 taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
@@ -12,13 +13,13 @@ taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, 
 The one place for the numbers this account's policy strategies trade with
 (docs/LEARNED-RULEBOOK.md, R1-R4). The frontmatter holds every value; nothing
 else states one. No policy strategy trades this account yet, so it holds the
-soft daily stop and the classification only; a policy that names this
-account gets its sizing, trail and multipliers here (`policies`, as the
+soft daily stop, the loss streak stop and the classification only; a
+policy that names this account gets its sizing, exit and multipliers here (`policies`, as the
 100K account's rulebook has them).
 
 ## When to Use
 
-- To see or change when the day stops on this account: edit the frontmatter
+- To see or change when the day or the session stops on this account: edit the frontmatter
   here, never the account profile or a skill.
 - To see which rules the code holds (`enforced`) and which the skills teach
   (`taught`).
@@ -30,11 +31,16 @@ rulebook (`scripts/lib/trading/rulebook.js`): an `enforced` item is held in
 code, a `taught` item is taught by the priority order in the
 `strategy-library` skill.
 
+**The loss streak stop.** `loss_streak_stop` losing trades in a row in a
+session stop new entries until the next session, as the 100K account's
+rulebook says; exits and protective orders always go.
+
 **Evidence (R3).** Nothing here is learned yet.
 
 | Value | Today's source | Training-window effect | Stability across years | Learned |
 | --- | --- | --- | --- | --- |
 | `daily_loss_soft` | this account's profile | not measured | not measured | not learned |
+| `loss_streak_stop` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 
 ## Examples
 

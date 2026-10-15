@@ -279,7 +279,13 @@ ways; the fills still slip by `slippageTicks` (the same tick by default), so
 a larger `--slippage` tests the live sizing under worse fills. Equity at the
 floor inside a bar is a blow, liquidated there.
 Every setup the budget can fund is taken at its full size, and every trade
-exits by the policy strategy's trail, as live. The run writes `combine.json`
+exits by the policy strategy's exit, as live: in exit mode `target` at its
+own strategy's stop and target (a trail on top only when the rulebook sets
+one); in `target_then_trail` its stop holds to that target, and from there
+the stop locks near it and trails behind the last confirmed swing of the
+rulebook's timeframe, or by R (`scripts/lib/trading/exit-trail.js`); in mode
+`trail` by the R trail. The account's `loss_streak_stop` ends a
+session's entries after that many losses in a row, as the gate does. The run writes `combine.json`
 and `combine.md`: pass, blow, and timeout rates, win rate, median days to
 pass, and pass and blow rates by the month an attempt starts in. (The
 retired PPO policy's `--bundle` option is gone; a config naming `bundle` is

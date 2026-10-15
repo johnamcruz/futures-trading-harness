@@ -172,7 +172,7 @@ strategy loses, add one where it works.
 
 ```text
 strategies/
-  prop_portfolio/STRATEGY.md the prop account layer (sizing, trail); no components yet
+  prop_portfolio/STRATEGY.md the prop account layer (sizing, exit); no components yet
   _template/STRATEGY.md      copy this to add a strategy
 ```
 
@@ -610,7 +610,8 @@ The goal is to pass prop-firm combines consistently, never blowing the
 account. The prop challenge is a strategy: a **policy strategy**
 (`signal: policy`) trades the setups of every rules strategy it lists on a
 prop account, each at the largest size the attempt's budget allows (or
-skipped), and its trail exits every trade
+skipped), and its rulebook's exit manages every trade (today the trade's own
+stop until its own target, then a trail past it)
 (`strategies/prop_portfolio/STRATEGY.md`):
 
 ```yaml

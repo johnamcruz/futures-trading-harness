@@ -12,7 +12,8 @@ const path = require('path');
 const { wireRunner } = require('../../scripts/lib/runner-wiring');
 const { createRunner } = require('../../scripts/lib/runner');
 const { validateConfig } = require('../../scripts/lib/autotrader');
-const { tmpDir, rootWithPolicies, shippedPolicy } = require('../helpers');
+const { tmpDir, rootWithPolicies, shippedPolicy, withExitBlock, exitBlock } = require('../helpers');
+const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 
 const DAY = Date.UTC(2026, 9, 7); // Wednesday; New York = UTC-4
 const et = (h, m, s = 0) => DAY + ((h + 4) * 60 + m) * 60000 + s * 1000;
@@ -65,9 +66,17 @@ async function wired({ root, home, high }) {
   return { managed, logs, events, modified: client.modified };
 }
 
+/**
+ * The shipped policy on a copy of its account, its rulebook's exit set to a trail (exit mode trail): the shipped one
+ * keeps each trade's own stop and target, so the runner would manage nothing for these tests to remember.
+ */
 function world() {
-  const policy = shippedPolicy();
+  const shipped = shippedPolicy();
   const root = rootWithPolicies({});
+  const file = path.join(root, 'accounts', shipped.account, 'RULEBOOK.md');
+  fs.writeFileSync(file, withExitBlock(fs.readFileSync(file, 'utf8'), exitBlock({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 })));
+  const policy = loadStrategies(root, {}).strategies.find(s => s.name === shipped.name);
+  assert.deepStrictEqual(policy.exit, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 }, policy.errors.join());
   // The rest of the plugin linked in as it is (the wiring reads the agents for their timeframes, lanes.js).
   const repo = path.resolve(__dirname, '..', '..');
   for (const e of fs.readdirSync(repo)) if (!['accounts', 'strategies', '.git'].includes(e)) fs.symlinkSync(path.join(repo, e), path.join(root, e));

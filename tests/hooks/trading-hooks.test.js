@@ -1451,6 +1451,41 @@ test('order gate: at the profit target a prop entry is refused only once today\'
   assert.match(spread.stderr, /\[combine\] topstep_50k: at the profit target: no new entries/);
 });
 
+test('order gate: after the rulebook\'s loss_streak_stop losing trades in a row a prop entry is refused for the session; an exit still goes', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  // The account the fixture's propped policy trades: the smallest shipped one.
+  const account = loadAccounts(REPO, {}).accounts.reduce((a, b) => (b.starting_balance < a.starting_balance ? b : a));
+  const n = account.loss_streak_stop; // the shipped rulebook's
+  assert.ok(Number.isInteger(n) && n >= 1);
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const run = (losses, input = order) => {
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: HOOK_ACCOUNTS });
+    prop.startAttempt(env.FTH_HOME, account, new Date('2026-10-02T14:00:00Z'));
+    prop.recordEndOfDay(env.FTH_HOME, account, 50000, '2026-10-06');
+    const anchorAt = Date.parse(TEST_NOW) - 40 * 60000;
+    prop.snapshot(env.FTH_HOME, account, 50000, new Date(anchorAt));
+    // Each losing round trip: an opening fill (no P&L) and a closing one losing $20, $0.37 a side.
+    const fills = Array.from({ length: losses }, (_, k) => [
+      { creationTimestamp: new Date(anchorAt + (2 * k + 1) * 60000).toISOString(), profitAndLoss: null, fees: 0.37 },
+      { creationTimestamp: new Date(anchorAt + (2 * k + 2) * 60000).toISOString(), profitAndLoss: -20, fees: 0.37 },
+    ]).flat();
+    prop.snapshot(env.FTH_HOME, account, Math.round((50000 - losses * 20.74) * 100) / 100, new Date(Date.parse(TEST_NOW) - 60000), { fills });
+    prop.appendVerdict(env.FTH_HOME, {
+      strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, maxSize: 18,
+      bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    return gate(orderPayload(input), env);
+  };
+  const before = run(n - 1);
+  assert.strictEqual(before.code, 0, before.stderr);
+  const after = run(n);
+  assert.strictEqual(after.code, 2);
+  assert.match(after.stderr, new RegExp(`\\[combine\\] ${account.name}: ${n} losing trades in a row this session, at the loss streak stop \\(loss_streak_stop ${n}\\): no new entries until the next session`));
+  const exit = run(n, { ...EXIT_BASE, contractId: order.contractId, size: 1, side: 'sell', rationale: '[exit] flatten' });
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate: a live attempt past its sessions still trades (sessions bound training, not the firm)', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');
