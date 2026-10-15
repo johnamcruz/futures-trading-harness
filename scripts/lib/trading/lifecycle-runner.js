@@ -26,7 +26,8 @@
  *                                     adding to the position's side (a bracket's target, the other side, stays)
  *   liveComposed({ entries, roots, since })   a composed entry on the roots that may still be working in a cycle
  *   recordSummary(record)             a record as the decision history and the cycle log keep it: id, side, ok, the
- *                                     signatures, the stated size, the stop and target, each read with its check
+ *                                     signatures, the stated size, the stop and target, the first level in the way,
+ *                                     each read with its check
  *   cycleComposed(home, cycleId, symbols, at)   the records the cycle's compose_check calls wrote (their cycleId); `at`
  *                                     (the cycle's time): only the day shards near it (trade-lifecycle.js daysNear)
  *
@@ -168,6 +169,7 @@ function recordSummary(r) {
     entry: p && isObj(p.entry) ? p.entry.price : null, tick: p ? p.tick ?? null : null, tickValue: p ? p.tickValue ?? null : null,
     size: p && Number.isInteger(p.size) ? p.size : null,
     stop: p && isObj(p.stop) ? p.stop.price : null, target: p && isObj(p.target) ? p.target.price : null, rr: p ? p.rr ?? null : null,
+    inTheWay: p && isObj(p.inTheWay) ? { name: p.inTheWay.name ?? null, price: p.inTheWay.price ?? null, R: p.inTheWay.R ?? null } : null,
     reads: (Array.isArray(r.reads) ? r.reads : []).map(x => ({ step: x.step, skill: x.skill, read: x.read, check: x.check, agrees: x.agrees, why: x.why })),
     problems: Array.isArray(r.problems) ? r.problems.length : 0,
   };

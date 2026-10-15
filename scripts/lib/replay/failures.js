@@ -194,7 +194,7 @@ function dataOf(label, facts) {
   return {
     values: label.valuesAbsent ? 'absent' : label.valuesError ? 'error' : isObj(label.values) ? 'recorded' : 'none',
     archive: label.archivePruned ? 'pruned' : label.archiveError ? 'error' : label.archivedBar ? 'archived' : 'none',
-    scanned: Boolean(facts.scanned), rebuilt: facts.setups.length ? Boolean(facts.rebuilt) : null,
+    scanned: Boolean(facts.scanned), rebuilt: facts.setups.some(s => !s.composed) ? Boolean(facts.rebuilt) : null,
     ...(label.valuesError ? { valuesError: label.valuesError } : {}), ...(label.archiveError ? { archiveError: label.archiveError } : {}),
   };
 }

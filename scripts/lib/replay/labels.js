@@ -30,7 +30,8 @@
  *   clone     { ok, reasons }: what the mechanical action space can't express (limit or stop entries, a target other
  *             than the strategy's own exit as order_plan places it (teacher.target.from), several
  *             entries, adds, partial exits, unknown arguments, an unmapped stop); the skip and hold
- *             counts read its reasons (NOT_A_SKIP)
+ *             counts read its reasons (NOT_A_SKIP). A composed entry's limit at its OK compose record's entry, and
+ *             that record's target (target.from 'record'), are its plan's own: never a reason (composedPlan)
  *   values / valuesAbsent / valuesError / archivedBar / archiveError   the broker field values the strategies the
  *             scan ran read on the decision bar, as the decision line recorded them ({ strategy: { path: value |
  *             null } }; R35), and that bar as the session archived it, every field kept (joined by symbol,
@@ -74,6 +75,7 @@ const { readRun, readLines } = require('./store');
 const { versionAt } = require('../session/record');
 const { archivedBars, archiveFile, wasPruned } = require('../session/bars-archive');
 const { targetFor } = require('../trading/order-plan');
+const { STRATEGY: COMPOSED } = require('../trading/trade-lifecycle');
 const { exitPlan } = require('../trading/evaluator');
 const { simulate, fromFills } = require('./counterfactual');
 const { loadBars: loadDataBars, barMinutes, aggregate } = require('../backtest/data');
@@ -433,6 +435,17 @@ const failedCall = o => (!HOOK_BLOCK.test(o.callError || '') && CLIENT_TIMEOUT.t
 const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error',
   ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : o.gate.decision === 'not-logged' ? { by: 'client' } : {}) });
 
+/**
+ * The entry order a flat decision counts (of its place_order entries): the last the broker accepted, else the last the
+ * gate let through and the broker didn't refuse, else the last sent; null for none.
+ */
+function countedEntry(orders) {
+  const entries = (orders || []).filter(o => isObj(o) && o.tool === 'place_order' && !o.riskReducing);
+  const through = entries.filter(x => !isObj(x.gate) || !refusedBy(x));
+  const accepted = through.filter(x => x.broker && x.broker.decision === 'accepted');
+  return accepted.length ? accepted[accepted.length - 1] : through.length ? through[through.length - 1] : entries[entries.length - 1] || null;
+}
+
 /** The teacher's action for one symbol from its orders, and what the mechanical action space can't express. */
 function teacherAction(orders, inTrade) {
   const reasons = [];
@@ -449,8 +462,7 @@ function teacherAction(orders, inTrade) {
     // the broker didn't refuse, else the last one sent. Refused tries before it (by the gate or the broker)
     // are one decision with it, counted in priorRefusals; only several entries that went through are "several".
     const through = entries.filter(x => !refusedBy(x));
-    const accepted = through.filter(x => x.broker && x.broker.decision === 'accepted');
-    const o = accepted.length ? accepted[accepted.length - 1] : through.length ? through[through.length - 1] : entries[entries.length - 1];
+    const o = countedEntry(entries);
     const priorRefusals = entries.filter(x => x !== o && refusedBy(x)).length;
     if (through.length > 1) reasons.push('several entries');
     if (!o.argsKnown) reasons.push('order arguments unknown');
@@ -490,6 +502,49 @@ function teacherAction(orders, inTrade) {
   }
   if (orders.some(o => o.tool === 'modify_order')) reasons.push('target change');
   return { action: 'hold', order: null, reasons };
+}
+
+/**
+ * The setup tags a composed entry on a symbol's bar goes under (the gate's composedName): the composed strategy, each
+ * strategy of signal composed, and each policy whose latest verdict on that bar and family trades a composed component.
+ */
+function composedTagsAt(strategies, verdicts, symbol, barT) {
+  const valid = (strategies || []).filter(s => isObj(s) && s.name && s.valid !== false);
+  const names = new Set([COMPOSED, ...valid.filter(s => s.signal === 'composed').map(s => s.name)]);
+  const policies = new Set(valid.filter(s => s.signal === 'policy').map(s => s.name));
+  const bar = Date.parse(barT);
+  const fam = familyOfId(symbol);
+  const latest = new Map();
+  for (const v of verdicts || []) {
+    if (isObj(v) && policies.has(v.strategy) && Number.isFinite(bar) && Date.parse(v.bar) === bar && fam && familyOfId(v.symbol || v.contract) === fam) latest.set(v.strategy, v);
+  }
+  return new Set([...names, ...[...latest.values()].filter(v => names.has(v.component)).map(v => v.strategy)]);
+}
+
+/**
+ * A composed entry's own plan (the composed-entry design, section 5): the cycle's latest compose record (the cycle log's
+ * `composed`, lifecycle-runner.js recordSummary) on the entry's family, bar and side, when OK, for an order under a
+ * composed tag (trade_lifecycle, or a strategy or policy composedSetups names), on the record's contract. `limit`: the
+ * order is a limit at the record's entry price or better for its side (as the gate allows it); `target`: its target bracket is the record's target ticks. Each is then the plan's own, never a
+ * clone reason. null when the order is no composed entry or no OK record backs it.
+ */
+function composedPlan(o, side, records, { fam, barT, tags, root = null }) {
+  if (!o || (o.setup !== COMPOSED && !tags.has(o.setup)) || (side !== 'long' && side !== 'short')) return null;
+  const bar = Date.parse(barT);
+  // The bar exactly, as the gate's recordsAt: a record with none (a refused call) is on no bar.
+  const mine = (Array.isArray(records) ? records : []).filter(r => isObj(r) && r.side === side
+    && (!r.symbol || familyOfId(r.symbol) === fam) && Number.isFinite(bar) && Date.parse(r.bar) === bar);
+  const rec = mine[mine.length - 1];
+  // The latest on the family and side is the one the gate judges; on another contract of the family it backs nothing.
+  const sym = rec ? rec.symbol || rec.contract : null;
+  if (!rec || rec.ok !== true || (root && String(sym || '').toUpperCase() !== root)) return null;
+  const tick = num(rec.tick);
+  const entry = num(rec.entry);
+  const target = num(rec.target);
+  // At the record's entry or better for the side (the gate's limitRefusal): a long's at or below it, a short's at or above.
+  const atOrBetter = p => p !== null && entry !== null && (side === 'long' ? p <= entry + 1e-9 : p >= entry - 1e-9);
+  const targetTicks = entry !== null && target !== null && tick > 0 ? Math.round(Math.abs(target - entry) / tick) : null;
+  return { record: rec.id || null, limit: o.type === 'limit' && atOrBetter(o.limitPrice), target: o.targetTicks !== null && o.targetTicks === targetTicks };
 }
 
 /** The stop of an entry in ticks, points and the nearest ATR multiple (ATR from bars closed by t). */
@@ -714,7 +769,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const until = cycleStarts.find(x => x > start) ?? Infinity;
       const ran = (rec.ran || []).filter(x => x.action === c.action)[(rec.cycles || []).slice(0, i).filter(x => x.action === c.action).length] || null;
       const failed = c.timedOut || (ran && ran.timedOut) ? 'cycle timed out' : c.ok === false || (ran && ran.ok === false) ? 'cycle failed' : null;
-      tradeCycles.push({ c, ctx, failed, action: c.action, orders: Number.isFinite(start) ? cycleOrders(c, doc, gateLog, until) : [], result: c.result || (ran && ran.result) || null, symbols: ctx && Array.isArray(ctx.symbols) ? objs(ctx.symbols).map(s => s.symbol) : null });
+      tradeCycles.push({ c, ctx, failed, action: c.action, orders: Number.isFinite(start) ? cycleOrders(c, doc, gateLog, until) : [], result: c.result || (ran && ran.result) || null, symbols: ctx && Array.isArray(ctx.symbols) ? objs(ctx.symbols).map(s => s.symbol) : null, composed: doc ? objs(doc.composed) : [] });
     }
     // A cycle that ran with no cycle log line: a decision whose orders are unknown.
     const ranTrade = (rec.ran || []).filter(x => x.action === 'trade' || x.action === 'manage');
@@ -864,6 +919,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   };
 
   const strategiesHash = hashStrategies(strategies);
+  const policyVerdicts = readLines(path.join(home, 'policy-verdicts.jsonl')).filter(isObj);
   const labels = [];
   for (const d of drafts) {
     const { rec } = d;
@@ -891,7 +947,10 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       // A target bracket is the strategy's own exit when it is what order_plan places for the setup
       // (the backtester applies the strategy's exit); any other target is the teacher's, which the mechanical action space can't express.
       let target = null;
-      if (isEntry && o.targetTicks) {
+      // A composed entry's limit at its record's entry and its record's target are its plan's own (section 5).
+      const plan = isEntry ? composedPlan(o, d.act.action, d.cyc && d.cyc.composed, { fam: d.fam, barT: d.barT, tags: composedTagsAt(strategies, policyVerdicts, d.symbol, d.barT), root: o.contractId ? contractCache.root(String(o.contractId)) || (parseStandardName(String(o.contractId)) || { root: String(o.contractId).toUpperCase() }).root : null }) : null;
+      if (isEntry && o.targetTicks && plan && plan.target) target = { ticks: o.targetTicks, from: 'record' };
+      else if (isEntry && o.targetTicks) {
         const strat = byName.get(o.setup);
         const fired = d.signal.fired.find(r => r.name === o.setup) || {};
         const planned = strat && stop && stop.ticks && ospec ? plannedTarget(strat, stop.ticks, num(fired.targetDistance), ospec.tickSize) : null;
@@ -909,7 +968,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' || by === 'client' ? { brokerReason: o.broker.reason } : {}) };
         if (o.gate.decision === 'not-logged') reasons.push('no gate record');
       }
-      reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
+      reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && (target.from === 'strategy' || target.from === 'record'))
+        && !(r === 'limit entry' && plan && plan.limit)));
       if (isEntry && !stop.points) reasons.push('no stop');
       else if (isEntry && stop.outOfRange) reasons.push('stop out of ATR range');
       else if (isEntry && stop.multiple === null) reasons.push('stop not mapped to ATR');
@@ -1108,7 +1168,7 @@ const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'unknownOutcome', 'skipped
 const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : s[k]}`).join(', ')}\n${Object.keys(s.uncloneableBy).length ? `uncloneable by reason: ${Object.entries(s.uncloneableBy).map(([k, v]) => `${k} ${v}`).join(', ')}\n` : ''}`;
 
 module.exports = {
-  VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
+  VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, composedTagsAt, countedEntry, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
   // The same fills, bars, specs and paths the labels read.
   allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy, configsOf, timeframesOf, outcomeBarsFor, outcomeFor, eodOf,
 };
