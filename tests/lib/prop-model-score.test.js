@@ -329,6 +329,8 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
   assert.deepStrictEqual(res.runs, { a: 'run1', b: 'run1' });
   assert.ok(res.diff.resampled.passRate.diff >= 0, JSON.stringify(res.diff.resampled.passRate));
   assert.ok(res.a.resampled.passRate >= res.b.resampled.passRate);
+  // rootB: run B's records read with its own tree (the training loop's challenger), run A's with root.
+  assert.throws(() => pairRuns(good.dir, bad.dir, { account: ACCOUNT, paths: 10, reps: 10, rootB: path.resolve(bad.dir, '..', '..', '..') }), new RegExp(`${path.resolve(bad.dir, '..', '..').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is inside the repository`));
   // No bars after a fill: no no-stop path, so a stop fault rate is refused for a real score.
   const t0 = '2023-03-15T14:00:00.000Z';
   const bare = multiDayRun({ days: [{ day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [],

@@ -520,3 +520,100 @@ test('the learning gate: each window run checks it as replay.js run does, before
   const again = world({ proposals: [], loop: { replay: { ...w.loop.replay, learning: false } } });
   await assert.rejects(run(again), /a resume keeps it/);
 });
+
+// The model-scoring verifier (train/model-verifier.js), its slow part stubbed: the paired Monte Carlo's verdict.
+const MODEL = { account: 'acct_a', paths: 500 };
+const verdictStub = (seen, verdict = 'kept') => opts => { seen.push(opts); return { available: true, verdict, reasons: [`model ${verdict}`], windows: [] }; };
+
+test('model scoring: the challenger replays every tuning window on the same config and seed; the keep rule decides, archived and in the PR body', async () => {
+  const w = world({ proposals: [fix], loop: { modelScore: MODEL } });
+  const seen = [];
+  w.steps.modelVerifier = verdictStub(seen);
+  await run(w, { dryRun: true });
+  const [e] = readArchive(w.paths.archive);
+  assert.strictEqual(e.verdict, 'kept');
+  assert.deepStrictEqual(e.reasons, ['model kept']);
+  assert.strictEqual(e.panelVerdict.verdict, 'kept');
+  const [o] = seen;
+  assert.deepStrictEqual([o.cfg, o.seed, o.heldOut, o.root, path.basename(o.candidateRoot), o.rule], [w.loop.modelScore, 3, false, path.join(w.loop.workDir, 'trees', 'champion'), e.proposalId, w.loop.rule]);
+  assert.deepStrictEqual(o.pairs.map(p => [p.label, path.basename(p.champion.runDir), path.basename(p.candidate.runDir)]), [['2022-03-09..2022-03-10', 'l1-champion-t0', `l1-c-${e.proposalId}-t0`]]);
+  // Each side's decisions are its own run's: the challenger's tree decided "planted fix" (right) where the champion failed.
+  assert.deepStrictEqual([o.pairs[0].champion.decisions.length, o.pairs[0].candidate.decisions.length], [20, 20]);
+  assert.ok(o.pairs[0].champion.decisions.every(d => d.category === 'wrong stated reason'));
+  assert.ok(o.pairs[0].candidate.decisions.every(d => d.category === 'right'));
+  // The challenger's run: the same replay config as the champion's, its own runId, practice-train (no look).
+  const champ = JSON.parse(fs.readFileSync(path.join(w.loop.workDir, 'runs', 'l1-champion-t0', 'learning-run.json'), 'utf8'));
+  const chal = JSON.parse(fs.readFileSync(path.join(w.loop.workDir, 'runs', `l1-c-${e.proposalId}-t0`, 'learning-run.json'), 'utf8'));
+  assert.deepStrictEqual([champ.role, chal.role, chal.look || null], ['practice-train', 'practice-train', null]);
+  const body = fs.readFileSync(path.join(w.paths.iter(1), 'promotion', e.proposalId, 'pr-body.md'), 'utf8');
+  assert.match(body, /The keep rule on the model's own trades/);
+  assert.match(body, /still the final gate: this change is kept for review, not promoted/);
+  // Resumed: nothing re-runs.
+  const replays = w.calls.replay;
+  await run(w, { dryRun: true });
+  assert.strictEqual(w.calls.replay, replays);
+});
+
+test('model scoring: a rejected or inconclusive keep rule is never kept, whatever the panel shows; a panel harm still rejects', async () => {
+  for (const verdict of ['rejected', 'inconclusive', 'blocked']) {
+    const w = world({ proposals: [fix], loop: { modelScore: MODEL } });
+    w.steps.modelVerifier = verdictStub([], verdict);
+    await run(w, { dryRun: true });
+    const [e] = readArchive(w.paths.archive);
+    assert.strictEqual(e.verdict, verdict);
+    assert.strictEqual(w.calls.branches.length, 0);
+    assert.strictEqual(e.promotion, undefined);
+  }
+  const h = world({ proposals: [harm], loop: { modelScore: MODEL } });
+  h.steps.modelVerifier = verdictStub([]);
+  await run(h, { dryRun: true });
+  const [e] = readArchive(h.paths.archive);
+  assert.strictEqual(e.verdict, 'rejected');
+  assert.match(e.reasons[0], /^panel: /);
+});
+
+test('model scoring screens a strategy change on the model\'s own trades: no longer blocked without the mechanical evaluator', async () => {
+  const strat = { targets: ['wrong stated reason'], expects: 'x', edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'stop: a', replace: 'stop: b' }] };
+  const w = world({ proposals: [strat], loop: { modelScore: MODEL } });
+  const make = w.steps.makeTree;
+  w.steps.makeTree = dir => { const c = make(dir); fs.mkdirSync(path.join(dir, 'strategies', 'orb'), { recursive: true }); fs.writeFileSync(path.join(dir, 'strategies', 'orb', 'STRATEGY.md'), '---\nname: orb\nstop: a\n---\n'); return c; };
+  w.steps.modelVerifier = verdictStub([]);
+  await run(w, { dryRun: true });
+  assert.strictEqual(readArchive(w.paths.archive)[0].verdict, 'kept');
+});
+
+test('model scoring config: tuning on practice-train only; held out through learning looks (an evaluation id) in a held-back window', () => {
+  const base = world().loop;
+  const raw = over => ({ loopId: 'l1', replay: base.replay, proposer: base.proposer, tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }], modelScore: MODEL, ...over });
+  assert.deepStrictEqual(resolveLoop(raw()).modelScore, { account: 'acct_a', paths: 500, reps: 2000, faults: {} });
+  assert.notStrictEqual(resolveLoop(raw()).hash, resolveLoop({ ...raw(), modelScore: undefined }).hash);
+  assert.strictEqual(resolveLoop({ ...raw(), modelScore: undefined }).modelScore, undefined);
+  assert.throws(() => resolveLoop(raw({ tuningWindows: [{ from: '2024-08-05', to: '2024-08-06' }] })), /tunes on practice-train only/);
+  assert.throws(() => resolveLoop(raw({ tuningWindows: [{ from: '2026-07-07', to: '2026-07-08' }] })), /tunes on practice-train only/);
+  assert.throws(() => resolveLoop(raw({ heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }], learning: { evaluation: 'ev' } })), /judges held out inside one of practice-validate/);
+  assert.throws(() => resolveLoop(raw({ heldOutWindows: [{ from: '2024-08-05', to: '2024-08-06' }] })), /learning.evaluation: the model-scored loop judges held out through learning looks/);
+  assert.ok(resolveLoop(raw({ heldOutWindows: [{ from: '2024-08-05', to: '2024-08-06' }], learning: { evaluation: 'ev', validate: true } })));
+  assert.throws(() => resolveLoop(raw({ modelScore: { account: 'acct_a', seed: 9 } })), /modelScore.seed/);
+});
+
+test('model scoring held out: the challenger\'s held-out run takes its own learning look before its first cycle; the verifier judges held out', async () => {
+  const H = [{ from: '2024-09-10', to: '2024-09-11' }];
+  const w = world({ proposals: [fix], loop: { modelScore: MODEL, heldOutWindows: H, learning: { evaluation: 'ev1', validate: true } } });
+  const seen = [];
+  w.steps.modelVerifier = verdictStub(seen);
+  await run(w, { dryRun: true });
+  const [kept] = readArchive(w.paths.archive);
+  const v = await L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true });
+  assert.strictEqual(v.verdict, 'kept');
+  const o = seen[seen.length - 1];
+  assert.strictEqual(o.heldOut, true);
+  assert.deepStrictEqual(o.pairs.map(p => path.basename(p.candidate.runDir)), [`l1-c-${kept.proposalId}-h0`]);
+  const ledger = path.join(w.env.HOME, '.futures-trading-harness', 'learning', 'looks.jsonl');
+  const looks = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(looks.map(l => [l.role, l.purpose, l.evaluation, l.runId]), [
+    ['practice-validate', 'validate', `ev1.champion-h-${kept.proposalId}-0`, `l1-champion-h-${kept.proposalId}-0`],
+    ['practice-validate', 'validate', `ev1.c-${kept.proposalId}-h0`, `l1-c-${kept.proposalId}-h0`],
+  ]);
+  const held = readArchive(w.paths.archive).find(e => e.phase === 'held-out');
+  assert.deepStrictEqual([held.verdict, held.model.verdict], ['kept', 'kept']);
+});

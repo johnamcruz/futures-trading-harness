@@ -26,7 +26,7 @@
  *
  *   resolveAccount({ override, attempts, runnerAccount, strategies, accounts })   { name, why } (name null: none)
  *   scoreRun(runDir, { root, env, account, policy, rates, weights, listOf, barsFiles, seed, paths, reps, faults, attribution, now })
- *   pairRuns(runDirA, runDirB, { root, env, account, policy, barsFiles, seed, paths, reps, faults, now })   two runs of the
+ *   pairRuns(runDirA, runDirB, { root, rootB, env, account, policy, barsFiles, seed, paths, reps, faults, now })   two runs of the
  *       same days (skill version A against B) through the same paths (prop/evaluator.js scorePaired), each run's score
  *       logged beside its own look: the judge a skill change is kept by
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
@@ -106,10 +106,11 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   };
 }
 
-function pairRuns(runDirA, runDirB, { root = null, account, policy = null, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
+function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, barsFiles = {}, seed = 1, paths = 2000, reps = 2000, faults = {}, env = process.env, now = new Date() } = {}) {
   if (!account) throw new Error('an account profile to score against');
   const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
-  const b = streamAndPass(runDirB, { root, barsFiles, faults, env, now });
+  // rootB: the tree run B ran on, when it is another (the training loop's challenger); its records are read with its documents.
+  const b = streamAndPass(runDirB, { root: rootB || root, barsFiles, faults, env, now });
   const res = scorePaired(a.stream, b.stream, {
     passA: a.pass, passB: b.pass, account, rulebook: { sizing: policy ? policy.sizing || null : null }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults,
   });

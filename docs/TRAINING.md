@@ -259,8 +259,9 @@ the same stage, seed and list, judged with the paired test. A rulebook change
 is screened by the training loop's evaluator first, but only where it can:
 the evaluator's layer 1 takes setups with a mechanical stop distance, and
 `trade_lifecycle` (the one strategy `prop_portfolio` lists) has none, so the
-screen finds no trades and the change stays blocked until a model-trade Monte
-Carlo exists. The backtester's own prop runs are retired
+screen finds no trades. Without the loop's model scoring (section 6) such a
+change stays blocked; with it, the change is judged on the model's own trades.
+The backtester's own prop runs are retired
 (`docs/research/mechanical-prop-backtester.md`).
 
 **The 30-day Monte Carlo** (phase 2, not merged yet) is printed at the end of
@@ -274,7 +275,85 @@ a stage-2 run. Read it in this order:
 The Monte Carlo of a curated run is diagnostic only: the curated moments are
 reweighted, not a calendar of whole days.
 
-## 6. Sealed test and final
+## 6. The training loop's keep rule
+
+With `modelScore` in the loop config (`scripts/train-loop.js`), the loop
+judges a change on the model's own trades. The verifier is
+`scripts/lib/train/model-verifier.js`, and the keep rule lives only there.
+
+```json
+"modelScore": { "account": "<account profile>", "paths": 2000, "reps": 2000, "faults": "stop=0.01,outage=0.005" }
+```
+
+`account` is required. `faults` is optional; without it, faults are not
+measured. The seed is the loop's, and both sides use it.
+
+**What runs.** The challenger's tree replays every window the champion
+replayed: the same replay config, the same seed, the same days or curated
+moments. Then, window by window, the two runs are scored:
+
+- **The paired 30-day Monte Carlo** (`prop/model-score.js pairRuns`). Both
+  runs go through the same start days, the same resampled day blocks and the
+  same faults. Every difference is champion minus challenger, with a 90%
+  paired interval over the resampled paths.
+- **The paired decision measures** (`train/paired.js`), each an exact
+  one-sided McNemar test:
+  - process adherence: each scorecard decision right or not;
+  - the correct-read rate: on the decisions both runs read on, whether every
+    read was verified true.
+
+**The keep rule.** In this order:
+
+1. **(a) Zero blows for the challenger.** This is a hard rule. A blow in any
+   real attempt or resampled path of any window rejects the change.
+2. **(b) No significantly worse blow rate** in any window.
+3. **(c) A gain.** In every window, the pass rate within the account's
+   sessions (30) is better, or the median days to pass are fewer, with the
+   paired interval clear of 0. A pass rate or days to pass that is
+   significantly worse in any window rejects the change, even beside a gain
+   on the other measure. A window shorter than one attempt shows nothing.
+4. **(d) Process adherence and the correct-read rate are not significantly
+   worse** in any window. "Significantly" uses the loop's decision rule:
+   at least `minDiscordant` discordant decisions and p at most `alpha`.
+
+A change that adds return but adds a blow is rejected. A change with no
+significant gain is not kept. A measure that can't be read (an unsettled
+entry, a run without its reads, a window too short) is never a pass: the
+verdict is `blocked` or `inconclusive`.
+
+The other verifiers can still only reject:
+
+- the panel's paired test: blows, and any failure category broken past its
+  tolerance or significantly worse;
+- the mechanical evaluator: blows and failures.
+
+With model scoring, a strategy or rulebook change is no longer blocked for
+want of a mechanical screen. A change to the account or to the policy's
+sizing is blocked, because the paired Monte Carlo sizes both runs with one
+rulebook.
+
+**Splits and looks.**
+
+- Tuning windows must lie in practice-train; the config refuses others.
+- Held-out windows must each lie in one held-back learning window
+  (practice-validate, test or final), and the loop needs
+  `learning.evaluation`. Each held-out run, the champion's and the
+  challenger's, takes its own look in the learning ledger before its first
+  cycle. On test, that is two looks per window from its budget of 3, so judge
+  on practice-validate first.
+- A curated or setup-focused (diagnostic) score can keep a change on tuning,
+  labelled diagnostic, but it never judges held-out months and never
+  promotes.
+- The promotion gate (`prop/promotion.js`) is frozen and stays the final
+  gate. Held-out judging reports its verdict on the challenger's score
+  beside the keep rule, and never replaces it. A kept change is not a
+  promotion.
+
+**A kept change is a pull request for the owner.** The loop writes a local
+branch and a PR body draft with the keep rule's table. Nothing is pushed or
+merged, and no document is edited outside the candidate's own tree.
+
+## 7. Sealed test and final
 
 - **The budgets.** Test (2025) has 3 judging looks and final (2026) has 1.
   Final needs a test pass first (`scripts/lib/learning/looks.js`).
@@ -292,7 +371,7 @@ reweighted, not a calendar of whole days.
 - **Reasoning-fix looks.** `--reasoning-fix` takes a free look whose outcomes
   are hidden.
 
-## 7. Rules that keep it honest
+## 8. Rules that keep it honest
 
 - **No outcomes shown to the model.** It sees only its own record (the
   walk-forward experience index), never a run's results or labels.
@@ -308,7 +387,7 @@ reweighted, not a calendar of whole days.
 - **Practice equals live.** The same runner, agents, skills, gate and
   briefing. Only the data, the clock and the fills are simulated.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Message | Meaning |
 | --- | --- |
