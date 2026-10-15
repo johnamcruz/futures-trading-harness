@@ -29,8 +29,10 @@
  *                  never widened: `stop-under-floor`), the target on the tick, R:R at least 2 (no verified target reaching it:
  *                  `no-room`).
  *   outcome        experience-log.js limitOutcome, the experience log's counterfactual: the limit until the record
- *                  expires (the next base-bar close), the stop checked first on every bar, SLIPPAGE_TICKS on the stop,
- *                  out at end of day.
+ *                  expires (the trade_lifecycle strategy's valid_bars base bars after the confirmation bar's close,
+ *                  trade-lifecycle.js expiryOf: the plan the gate allows), the stop checked first on every bar,
+ *                  SLIPPAGE_TICKS on the stop, out at end of day. Each record keeps its validBars; an index of records
+ *                  with different ones is refused.
  * No parameter search and no optimisation: one standard, measured. Practice-train only (learning/splits.js): a scan
  * touching practice-validate, test or final is refused, and so is an index of any record outside practice-train.
  *
@@ -40,7 +42,9 @@
  * reaction's no-room days; hashed, and pinned per run (pinLibrary) next to the experience index, never mixed with it.
  *
  *   STANDARD                               the standard, one line (the lookup shows it)
- *   scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf, sessions })   [record], causal, deterministic
+ *   scanLibrary({ bars, root, minutes, tick, from, to, setupTf, eodOf, sessions, validBars })   [record], causal,
+ *                                          deterministic; validBars (required): the strategy's valid_bars
+ *   strategyValidBars(pluginRoot, env)     the shipped trade_lifecycle strategy's valid_bars (throws without a valid one)
  *   composeAt(briefing, reaction, { side, tick })   { reads, checked, plan, status, why } at one confirmation bar
  *   buildLibraryIndex(records, { sources, seed, reps, now })   the index document, with its hash
  *   setupKeyOf(reads)                      'setup:<slug>' of the first setup relation read, or null
@@ -55,7 +59,7 @@ const fs = require('fs');
 const path = require('path');
 const { buildBriefing, sessionWindow } = require('../trading/briefing');
 const { checkReads, parseRead } = require('../trading/composed-reads');
-const { planOf } = require('../trading/trade-lifecycle');
+const { STRATEGY: LIFECYCLE, planOf, expiryOf } = require('../trading/trade-lifecycle');
 const { limitOutcome } = require('./experience-log');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
 const { assertUse, sessionDate } = require('./splits');
@@ -63,7 +67,8 @@ const { cellStats, cellKey, contextKey, knownDay, assertPracticeTrain, MIN_N, MI
 const { CONTEXT_KEYS } = require('./lifecycle-record');
 const { barMinutes, aggregate } = require('../backtest/data');
 
-const VERSION = 1;
+// 2: the limit window is the strategy's valid_bars (1 held it one bar); a version-1 library is rebuilt.
+const VERSION = 2;
 const KIND = 'setup-library';
 const MIN_RR = 2;
 const WINDOW_BARS = 700;
@@ -170,6 +175,13 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf }) {
   return { status: 'not-composable', why: refused || 'no target the checker verifies' };
 }
 
+/** The shipped trade_lifecycle strategy's valid_bars: the window the library's limit is measured over. */
+function strategyValidBars(pluginRoot, env = {}) {
+  const doc = require('../trading/strategies').loadStrategies(pluginRoot, env).strategies.find(x => x.name === LIFECYCLE);
+  if (!doc || !doc.valid || !Number.isInteger(doc.valid_bars)) throw new Error(`strategies/${LIFECYCLE}/STRATEGY.md is ${doc ? 'invalid or states no valid_bars' : 'missing'}: the library's limit window comes from it`);
+  return doc.valid_bars;
+}
+
 /** 'setup:<slug>' of the first setup relation read, or null. */
 function setupKeyOf(reads) {
   for (const r of Array.isArray(reads) ? reads : []) {
@@ -187,8 +199,9 @@ const idOf = (...parts) => crypto.createHash('sha256').update(parts.join('|')).d
  * by time) of one root; from/to: the session dates scanned ([from, to), practice-train only); eodOf(ms): that day's end
  * of day; inSession(closeMs): whether a bar is a decision time (the runner's sessions).
  */
-function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true }) {
+function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf = DEFAULTS.setupTf, eodOf, inSession = () => true, validBars }) {
   assertUse('practice', from, to);
+  if (!(Number.isInteger(validBars) && validBars >= 1)) throw new Error(`validBars: the ${LIFECYCLE} strategy's valid_bars, a whole number of bars from 1 (the limit's window, as the gate allows it)`);
   const list = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));
   const tfMs = minutes * 60000;
   const stepMs = setupTf * 60000;
@@ -207,7 +220,7 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
     const reaction = m.reactions[0];
     const side = sideOf(reaction.dir);
     if (!side) continue;
-    const base = { v: VERSION, root, day, reactionAt: m.candle.closedAt, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price }, side };
+    const base = { v: VERSION, validBars, root, day, reactionAt: m.candle.closedAt, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price }, side };
     let rec = { ...base, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), bar: list[i].t, status: 'no-confirmation', why: null, reads: [], signature: null, setupKey: null, context: null, plan: null, outcome: null };
     // The window: the closes AFTER the reaction bar (an entry read is on a candle closed after the setup candle, the
     // gate's same-candle rule) while the reaction candle is the last completed one. Each confirming close is tried in
@@ -226,7 +239,7 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
       const r = composeAt(bj, reaction, { side, tick, setupTf });
       rec = { ...rec, bar: list[j].t, status: r.status, why: r.why || null };
       if (r.status === 'traded') {
-        const outcome = limitOutcome({ bars: list, tfMs, side, entry: r.plan.entry.price, stop: r.plan.stop.price, target: r.plan.target.price, fromMs: cj, expiresMs: new Date(bj.sections.m3.validUntil).getTime(), eodMs: eodOf(cj), tick });
+        const outcome = limitOutcome({ bars: list, tfMs, side, entry: r.plan.entry.price, stop: r.plan.stop.price, target: r.plan.target.price, fromMs: cj, expiresMs: expiryOf(bj, validBars), eodMs: eodOf(cj), tick });
         rec = {
           ...rec, reads: r.reads.map(x => ({ step: x.step, skill: x.skill, read: x.read })), signature: r.checked.signature, setupKey: setupKeyOf(r.reads), context: r.checked.context,
           plan: { entry: r.plan.entry.price, stop: r.plan.stop.price, target: r.plan.target.price, rr: r.plan.rr, stopTicks: r.plan.stop.ticks },
@@ -258,6 +271,8 @@ function buildLibraryIndex(records, { sources = [], seed = 1, reps = 2000, now =
   const ids = new Set();
   const recs = records.filter(r => r && r.v === VERSION && (ids.has(r.id) ? false : (ids.add(r.id), true)));
   assertPracticeTrain(recs);
+  const windows = [...new Set(recs.map(r => r.validBars))];
+  if (windows.length > 1) throw new Error(`library index refused: records measured with different limit windows (valid_bars ${windows.join(', ')}): scan them again under one`);
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
   const noRoom = {};
@@ -281,7 +296,7 @@ function buildLibraryIndex(records, { sources = [], seed = 1, reps = 2000, now =
   for (const k of Object.keys(noRoom)) noRoom[k].sort();
   const days = [...new Set(recs.map(knownDay))].sort();
   const doc = {
-    v: VERSION, kind: KIND, builtAt: now.toISOString(), standard: STANDARD, minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, walkForward: true,
+    v: VERSION, kind: KIND, builtAt: now.toISOString(), standard: STANDARD, validBars: windows[0] ?? null, minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, walkForward: true,
     sources: sources.map(s => ({ file: s.file ? path.basename(s.file) : null, sha256: s.sha256 || null })),
     roles: ['practice-train'], months: { from: days[0] || null, to: days[days.length - 1] || null },
     records: recs.length, status: Object.fromEntries(Object.entries(status).sort()), cells, noRoom: Object.fromEntries(Object.entries(noRoom).sort()),
@@ -358,7 +373,7 @@ function runnerClock({ from, to, sessions = null }) {
   return { inSession: ms => isTradeTime(cfg, new Date(ms)), eodOf: ms => eodOf(cfg, ms) };
 }
 
-module.exports = {
+module.exports = { strategyValidBars,
   baseBars, runnerClock,
   VERSION, KIND, MIN_RR, STANDARD, scanLibrary, composeAt, entryRead, targetCandidates, setupKeyOf, buildLibraryIndex, libraryCellAt, noRoomBefore,
   libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary,

@@ -23,7 +23,7 @@ const { limitOutcome } = require('../../scripts/lib/learning/experience-log');
 const SHIFT = 312 * 7 * 86400000;
 const BARS = G.load(G.SERIES[0]).map(({ t, o, h, l, c, v }) => ({ t: new Date(Date.parse(t) - SHIFT).toISOString(), o, h, l, c, v }));
 const CLOCK = L.runnerClock({ from: '2020-04-01', to: '2020-06-01' });
-const scan = (bars = BARS) => L.scanLibrary({ bars, root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession });
+const scan = (bars = BARS, validBars = 2) => L.scanLibrary({ bars, root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession, validBars });
 const RECORDS = scan();
 const briefAt = t => {
   const i = BARS.findIndex(b => b.t === t);
@@ -101,9 +101,23 @@ test('the standard: entry at the confirmation close, stop one tick beyond the re
     assert.ok(r.plan.rr >= 2, `rr ${r.plan.rr}`);
     const bars = BARS.map(x => ({ ...x, ms: Date.parse(x.t) }));
     const fromMs = Date.parse(r.bar) + 180000;
-    const again = limitOutcome({ bars, tfMs: 180000, side: r.side, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, fromMs, expiresMs: fromMs + 180000, eodMs: CLOCK.eodOf(fromMs), tick: 0.25 });
+    const again = limitOutcome({ bars, tfMs: 180000, side: r.side, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, fromMs, expiresMs: fromMs + 2 * 180000, eodMs: CLOCK.eodOf(fromMs), tick: 0.25 });
     assert.deepStrictEqual({ ...r.outcome, source: again.source }, again);
+    assert.strictEqual(r.validBars, 2, 'the window it was measured over');
   }
+});
+
+test('the limit window is the strategy\'s valid_bars (the plan the gate allows): required, kept on each record; one bar fills fewer; an index mixing windows is refused', () => {
+  assert.strictEqual(L.strategyValidBars(path.resolve(__dirname, '..', '..'), {}), 2, 'the shipped trade_lifecycle');
+  for (const bad of [undefined, 0, 1.5, '2']) assert.throws(() => L.scanLibrary({ bars: BARS, root: 'MNQ', from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession, validBars: bad }), /validBars: the trade_lifecycle strategy's valid_bars/, String(bad));
+  const one = scan(BARS, 1);
+  const traded = rs => rs.filter(r => r.status === 'traded');
+  const filled = rs => traded(rs).filter(r => r.outcome.filled).length;
+  assert.deepStrictEqual(one.map(r => r.id), RECORDS.map(r => r.id), 'the same moments and plans');
+  assert.ok(filled(one) < filled(RECORDS), `one bar fills ${filled(one)}, two ${filled(RECORDS)}`);
+  assert.ok(one.every(r => r.validBars === 1));
+  assert.throws(() => L.buildLibraryIndex([...one.slice(0, 5), ...RECORDS.slice(5, 10)], { reps: 10 }), /different limit windows \(valid_bars 1, 2\)/);
+  assert.strictEqual(L.buildLibraryIndex(RECORDS, { reps: 10 }).validBars, 2);
 });
 
 test('signature parity: a record\'s reads, checked by compose_check\'s checker on its bar\'s briefing, are all true and give its signature', () => {
