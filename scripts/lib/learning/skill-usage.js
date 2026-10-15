@@ -62,7 +62,7 @@ const { readRecords } = require('../trading/trade-lifecycle');
 const { readsAt, skillOfRead, shapeOf, READ_SKILL, SHAPE_SKILL } = require('./curated-moments');
 const { cellStats, knownDay } = require('./experience-index');
 
-const MAX_BYTES = 64 * 1024 * 1024;
+const MAX_BYTES = require('../tunables').runner().limits.skillUsageBytes; // config/runner.json
 const TOP = 3;
 /** The crosswalk's skills with no read form: the size step's and the management step's (no compose read states them). */
 const NO_READ_SKILLS = Object.freeze({ size: Object.freeze(['position-sizing', 'prop-challenge-pacing', 'prop-pacing-judgment']), management: Object.freeze(['manage-position']) });

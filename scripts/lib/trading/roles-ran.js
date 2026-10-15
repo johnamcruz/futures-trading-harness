@@ -61,7 +61,7 @@ const { transcriptFiles } = require('./skills-loaded');
 const ANALYSTS = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
 const CYCLES = ['full', 'lean'];
 const TASK_TOOLS = new Set(['task', 'Task', 'Agent']);
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_BYTES = require('../tunables').runner().limits.rolesRanBytes; // config/runner.json
 const PHASE2 = 'risk-manager phase 2 (a second call, started after phase 1';
 const EXECUTOR = 'trade-executor';
 // Claude Code's answer when a subagent was launched in the background instead of run.

@@ -47,11 +47,12 @@ const path = require('path');
 const { activeBroker, loadBrokers, DEFAULTS_FILE } = require('../broker/config');
 
 const STARTED_AT = Date.now();
-const SERVER_TIME_TOLERANCE_MS = 5 * 60000;
+const CLOCK = require('../tunables').runner().clock; // config/runner.json, tighten-only
+const SERVER_TIME_TOLERANCE_MS = CLOCK.serverTimeToleranceMs;
 const WALL_START = 'FTH_REPLAY_WALL_START';
 // How old a replay step's wall start may be (a step runs at most its cycle timeouts, hours), and how far ahead.
-const WALL_START_MAX_AGE_MS = 24 * 3600000;
-const WALL_START_AHEAD_MS = 5000;
+const WALL_START_MAX_AGE_MS = CLOCK.wallStartMaxAgeMs;
+const WALL_START_AHEAD_MS = CLOCK.wallStartAheadMs;
 // A UTC instant: date, time to the minute or finer, and a Z.
 const ISO_UTC = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?Z$/;
 const REMEDY = 'Unset FTH_REPLAY_NOW to trade live, or select a real replay broker (FTH_BROKER).';

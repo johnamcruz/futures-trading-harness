@@ -55,12 +55,15 @@ const { renderCheck } = require('./composed-reads');
 
 const STRATEGY = 'trade_lifecycle';
 const SCHEMA = 1;
-const STOP_BUFFER_TICKS = 1; // D3
-const FLOOR_TICKS = 8; // D13
-const FLOOR_ATR = 0.25; // D13: 0.25 x ATR(20)
-const MAX_SIZE = 100;
+// config/runner.json `lifecycle` (the stop's buffer pinned, the floor only rises, the size cap only falls).
+const LC = require('../tunables').runner().lifecycle;
+const STOP_BUFFER_TICKS = LC.stopBufferTicks; // D3
+const FLOOR_TICKS = LC.floorTicks; // D13
+const FLOOR_ATR = LC.floorAtr; // D13: FLOOR_ATR x ATR(20)
+const MAX_SIZE = LC.maxSize;
 const DIR = 'trade-lifecycle';
-const MAX_BYTES = 64 * 1024 * 1024; // a file (a day's shard, or an older home's single file) larger than this throws
+// A file (a day's shard, or an older home's single file) larger than this throws.
+const MAX_BYTES = require('../tunables').runner().limits.lifecycleBytes;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const FAMILY = /^[A-Z0-9]{1,8}$/;
 // lane: the bars the reads were checked on (the briefing's base timeframe); contract: the briefing's contract;

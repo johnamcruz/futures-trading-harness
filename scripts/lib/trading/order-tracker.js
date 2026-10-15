@@ -23,7 +23,7 @@ const { isRiskReducing } = require('./order-gate');
 
 const PLACE_ORDER = /(?:^|__)place_order$/;
 
-const ENTRY_ORDERS_KEPT = 200;
+const ENTRY_ORDERS_KEPT = require('../tunables').runner().limits.entryOrdersKept; // config/runner.json
 const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
 
 /**

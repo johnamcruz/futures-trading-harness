@@ -129,7 +129,7 @@ const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
 const headSituationalSkills = (table = SITUATIONAL.filter(e => !e.taughtIn)) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
 /** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_BYTES = require('../tunables').runner().limits.skillsLoadedBytes; // config/runner.json
 
 /** "futures-trading-harness:trade-session" or "/trade-session" -> "trade-session". */
 function skillName(raw) {

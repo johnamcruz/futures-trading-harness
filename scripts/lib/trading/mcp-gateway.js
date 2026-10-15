@@ -109,9 +109,9 @@ const { CALL_TIMEOUT_MS } = require('./gate-timing');
  * normally answered "not sent" before the lane gives up on it (behind another hung lookup it may not be, and is then
  * an order of unknown outcome, which still blocks new entries).
  */
-const LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + 5000;
+const LOOKUP_TIMEOUT_MS = CALL_TIMEOUT_MS + require('../tunables').runner().gate.lookupExtraMs;
 /** How long the gateway holds the order lane for a server reply by default (FTH_LANE_TIMEOUT_MS overrides). */
-const DEFAULT_LANE_TIMEOUT_MS = 30000;
+const DEFAULT_LANE_TIMEOUT_MS = require('../tunables').runner().gate.laneTimeoutMs;
 
 /**
  * Calls tools on the wrapped server on the gateway's own behalf. Requests use

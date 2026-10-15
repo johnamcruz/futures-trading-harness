@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The prop Monte Carlo's size, the one home: the resampled attempt paths and the bootstrap repetitions every entry
+ * The prop Monte Carlo's size, the one home (config/runner.json monteCarlo, read here): the resampled attempt paths and the bootstrap repetitions every entry
  * point defaults to (prop/evaluator.js scoreStream, scoreArms and scorePaired; prop/model-score.js; the training
  * loop's model score, train/model-verifier.js; learning/risk-record-build.js; prop/account-states.js), so a result's
  * confidence never depends on which entry point ran. A size is never clamped quietly: one above the maximum is
@@ -12,8 +12,9 @@
  *   checkSize({ paths, reps })   throws when either is not a whole number from 0 to MC_MAX
  */
 
-const MC_SIZE = Object.freeze({ paths: 2000, reps: 2000 });
-const MC_MAX = 20000;
+const MC = require('../tunables').runner().monteCarlo;
+const MC_SIZE = Object.freeze({ paths: MC.paths, reps: MC.reps });
+const MC_MAX = MC.max; // tighten-only: it may only fall
 
 function checkSize({ paths, reps } = {}) {
   for (const [k, v] of [['paths', paths], ['reps', reps]]) {

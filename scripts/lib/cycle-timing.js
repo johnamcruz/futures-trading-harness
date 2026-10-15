@@ -52,7 +52,7 @@ const TASK_TOOLS = new Set(['task', 'Task', 'Agent']);
 const RESULT_LINE = /CYCLE RESULT:[^\n]*/g;
 const ORDER_TOOL = /(^|__|_)place_order$/;
 // After the run's end, the slack for the gate log's write (cycle-log.js, replay/labels.js GATE_SLACK_MS).
-const GATE_SLACK_MS = 2000;
+const GATE_SLACK_MS = require('./tunables').runner().session.gateSlackMs; // config/runner.json
 
 const isObj = v => Boolean(v) && typeof v === 'object';
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);

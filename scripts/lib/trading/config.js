@@ -7,6 +7,8 @@
  */
 
 const { MAX_AGE_CEILING_MIN } = require('./signal-state');
+// The gate's defaults (config/runner.json `gate`, tighten-only there; tests/lib/tunables.test.js holds each).
+const G = require('../tunables').runner().gate;
 const path = require('path');
 const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
@@ -19,10 +21,8 @@ const CACHEABLE = ['market-structure-analyst', 'trend-momentum-analyst', 'volume
 // Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
 // Strategies narrow their own hours with `sessions` (e.g. [ny]).
 const DEFAULT_ENTRY_HOURS = '';
-const DEFAULT_NO_ENTRY_WINDOWS = [
-  '09:30-09:35@America/New_York', // opening print: first 5 minutes of the New York cash session
-  '15:45-16:00@America/New_York', // into end of day and the 16:00 ET close
-].join(',');
+// The opening print (the first 5 minutes of the New York cash session) and into end of day and the 16:00 ET close.
+const DEFAULT_NO_ENTRY_WINDOWS = G.noEntryWindows.join(',');
 
 const GATE_CHECKS = [
   'paper-mode',
@@ -125,28 +125,28 @@ function listEnv(env, name) {
  * rulebook's loss_streak_stop may be above it, so the session stop never waits for more losses than the cooldown
  * (tests/lib/one-home.test.js holds both). A loss extends both streaks, a win ends them, a scratch does neither.
  */
-const MAX_CONSECUTIVE_LOSSES = 2;
+const MAX_CONSECUTIVE_LOSSES = G.maxConsecutiveLosses;
 
 function loadConfig(env = process.env) {
   return {
-    planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', 120, { min: 1 }),
+    planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', G.planMaxAgeMin, { min: 1 }),
     maxConsecutiveLosses: intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', MAX_CONSECUTIVE_LOSSES, { min: 1 }),
-    lossCooldownMin: intEnv(env, 'FTH_LOSS_COOLDOWN_MIN', 30),
-    maxDailyLosses: intEnv(env, 'FTH_MAX_DAILY_LOSSES', 3, { min: 1 }),
-    maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', 6), // 0 = off
+    lossCooldownMin: intEnv(env, 'FTH_LOSS_COOLDOWN_MIN', G.lossCooldownMin),
+    maxDailyLosses: intEnv(env, 'FTH_MAX_DAILY_LOSSES', G.maxDailyLosses, { min: 1 }),
+    maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', G.maxEntriesPerDay), // 0 = off
     // How old the multi-timeframe record may be (minutes after its last bar closed).
-    mtfMaxAgeMin: intEnv(env, 'FTH_MTF_MAX_AGE_MIN', 15, { min: 1 }),
+    mtfMaxAgeMin: intEnv(env, 'FTH_MTF_MAX_AGE_MIN', G.mtfMaxAgeMin, { min: 1 }),
     // How long after its bar closed a rules strategy's signal may still be entered, in bars of the signal's own
     // timeframe (signal-state.js signalMaxAgeMin: 3 bars is 3 min on 1m, 9 min on 3m, 45 min on 15m).
-    signalMaxAgeBars: intEnv(env, 'FTH_SIGNAL_MAX_AGE_BARS', 3, { min: 1 }),
+    signalMaxAgeBars: intEnv(env, 'FTH_SIGNAL_MAX_AGE_BARS', G.signalMaxAgeBars, { min: 1 }),
     // A cap in minutes over that, only when set (the flat limit this replaced): it only ever shortens the age.
     signalMaxAgeCapMin: intEnv(env, 'FTH_SIGNAL_MAX_AGE_MIN', null, { min: 1 }),
     // The owner's ceiling over the bars, whatever the timeframe (signal-state.js MAX_AGE_CEILING_MIN): no setting.
     signalMaxAgeCeilingMin: MAX_AGE_CEILING_MIN,
     // Strategies that must fire the same side for a rules entry (the entry's own included), as the backtest's minConfluence.
-    minConfluence: intEnv(env, 'FTH_MIN_CONFLUENCE', 1, { min: 1 }),
+    minConfluence: intEnv(env, 'FTH_MIN_CONFLUENCE', G.minConfluence, { min: 1 }),
     // Open equity-index positions in one direction across indexes (MNQ, MES, MYM, M2K and minis), the new one included.
-    maxCorrelatedPositions: intEnv(env, 'FTH_MAX_CORRELATED_POSITIONS', 1, { min: 1 }),
+    maxCorrelatedPositions: intEnv(env, 'FTH_MAX_CORRELATED_POSITIONS', G.maxCorrelatedPositions, { min: 1 }),
     // Entries only inside these windows (empty = any time). Default: the
     // runner's default session, so a strategy without its own sessions still
     // can't open trades overnight.

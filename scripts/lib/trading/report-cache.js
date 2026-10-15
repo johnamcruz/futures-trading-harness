@@ -41,9 +41,9 @@ const { sharedParts, frameHolds } = require('./briefing');
 const PHASE1 = 'risk-manager';
 const CACHED_ROLES = [...ANALYSTS, PHASE1];
 const PARTS = ['m15', 'h1', 'day'];
-const MAX_TEXT = 8000; // a longer report isn't cached (never served cut): the role runs again
+const MAX_TEXT = require('../tunables').runner().prompt.reportMaxText; // a longer report isn't cached (never served cut): the role runs again
 // Phase 1 is read again at least this often, even on an unchanged account: a cached report is a claim, not a fact.
-const PHASE1_MAX_AGE_MS = 30 * 60000;
+const PHASE1_MAX_AGE_MS = require('../tunables').runner().prompt.phase1MaxAgeMs; // config/runner.json
 
 // Denials of a running attempt: "no attempt is running", "no prop attempt running", "Attempt: none", "the attempt
 // hasn't started", "wait for a prop attempt to be started". "no attempt restrictions", "no attempt block" and the like

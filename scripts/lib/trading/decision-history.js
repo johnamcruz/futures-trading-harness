@@ -62,7 +62,7 @@ const { familyRoot } = require('./contracts');
 const ACTIONS = { 'no-trade': 'no-trade', planned: 'planned', executed: 'entered', managed: 'managed', flattened: 'flattened', blocked: 'blocked', error: 'error' };
 // The actions whose setup was not taken: what it would have done is the counterfactual.
 const NOT_TAKEN = new Set(['skipped', 'vetoed', 'no-trade', 'planned']);
-const REASON_CHARS = 100;
+const REASON_CHARS = require('../tunables').runner().prompt.reasonChars; // config/runner.json prompt
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 const SETUP_TAG = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
 const SIDE_WORD = /^\s*setup:[a-z0-9_-]+\s+(long|short|buy|sell)\b/i;
@@ -259,7 +259,7 @@ function tradeText(e) {
 const famOfId = id => { try { return familyRoot(contractRoot(id)); } catch (_err) { return String(id || '').toUpperCase(); } };
 
 /** How many of the runner's exit records it keeps (runner.js runnerExits): enough for a day's history. */
-const EXITS_KEPT = 50;
+const EXITS_KEPT = require('../tunables').runner().prompt.exitsKept;
 
 /**
  * The runner's exit records as a list [{ contractId, side, openedAt, at, r }]: `runnerExits` (append-only, one
@@ -295,7 +295,7 @@ const isClosing = f => f.profitAndLoss !== null && f.profitAndLoss !== undefined
 // A position with another order's fills in it (a scale-in, a manual add): no one decision's R.
 const MIXED = 'mixed';
 // How many fills reads a decision never seen open waits through before its outcome is final (unknown).
-const UNSEEN_READS = 10;
+const UNSEEN_READS = require('../tunables').runner().prompt.unseenReads;
 
 /**
  * The plan's 1R for a decision: its own stop distance (the entry order's stop bracket, or the setup's), else the

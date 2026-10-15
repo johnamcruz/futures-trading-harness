@@ -65,7 +65,7 @@ function runsComposed(strategies, timeframe) {
   return (strategies || []).some(s => s && s.valid !== false && s.signal === 'composed' && s.status === 'active' && s.timeframe === timeframe);
 }
 
-const PENDING_KEPT = 200;
+const PENDING_KEPT = require('../tunables').runner().limits.pendingKept; // config/runner.json
 const pendingFile = env => path.join(require('../paths').harnessHome(env), 'composed-stamps.json');
 
 function isComposedEntry(env, args, root = path.resolve(__dirname, '..', '..', '..')) {

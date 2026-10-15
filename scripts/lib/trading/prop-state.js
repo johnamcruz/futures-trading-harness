@@ -22,10 +22,11 @@ const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
 const { componentRefusal, componentsNote } = require('./strategies');
 
-const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
-const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
-const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
-const VERDICT_KEEP = 500;
+const ACC = require('../tunables').runner().account; // config/runner.json, tighten-only but verdictsKept
+const SNAPSHOT_MAX_AGE_MS = ACC.snapshotMaxAgeMs; // the gate refuses entries on an older snapshot
+const BALANCE_TOLERANCE = ACC.balanceToleranceUsd; // dollars: the broker's balance against the anchor plus the fills' net
+const SNAPSHOT_FUTURE_TOLERANCE_MS = ACC.snapshotFutureToleranceMs; // ... and on one further in the future (clock skew)
+const VERDICT_KEEP = ACC.verdictsKept;
 /** A verdict is `full` or `skip` (docs/LEARNED-RULEBOOK.md, R4); only a full one allows an entry. Any other action refuses. */
 const ENTRY_ACTIONS = Object.freeze(['full']);
 

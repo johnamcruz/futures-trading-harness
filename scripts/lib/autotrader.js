@@ -13,7 +13,9 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
-const { scratchDir } = require('./bars-fetch');
+const { scratchDir, MAX_COUNT: GET_BARS_MAX } = require('./bars-fetch');
+// The runner's defaults (config/runner.json: bars, cycle, prompt; the kill switch's error count only falls).
+const TUN = require('./tunables').runner();
 const { SERVER_NAME, activeBroker } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
@@ -40,18 +42,18 @@ const DEFAULTS = {
   symbols: ['MNQ'],
   account: '',
   workdir: 'workspace',
-  timeframe: 3, // minutes per bar; a cycle runs after each closed bar
+  timeframe: TUN.bars.timeframe, // minutes per bar; a cycle runs after each closed bar
   trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
   bars: null, // closed bars written to dataDir and scanned each bar; default max(2000, 3 trading days), so
   // prior-day and overnight levels and long indicators match a backtest
   dataDir: null, // default ~/.futures-trading-harness/bars (runner-owned; agents can read it but not write it)
-  barDelaySeconds: 2, // wait after the scheduled close before polling
-  barPollSeconds: 2, // between polls while waiting for the closed bar
-  barTimeoutSeconds: 60, // give up on a bar (daily break, halt) and resync
+  barDelaySeconds: TUN.bars.delaySeconds, // wait after the scheduled close before polling
+  barPollSeconds: TUN.bars.pollSeconds, // between polls while waiting for the closed bar
+  barTimeoutSeconds: TUN.bars.timeoutSeconds, // give up on a bar (daily break, halt) and resync
   // The whole market session (18:00-16:00 ET) up to end of day; strategies
   // narrow their own hours (orb: sessions [ny]). Named sessions: asia, london, ny.
   sessions: [...SESSION_DEFAULTS.sessions],
-  premarketAt: '18:05@America/New_York', // briefing at the start of the trading day (before the 08:30 ET data)
+  premarketAt: TUN.bars.premarketAt, // briefing at the start of the trading day (before the 08:30 ET data)
   eodAt: SESSION_DEFAULTS.eodAt, // flatten everything; required, no later than the 16:00 ET close (trading/clock.js SESSION_DEFAULTS)
   eodReview: true, // false: end of day flattens and records the close without the agents' review run (replay uses it)
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
@@ -64,7 +66,7 @@ const DEFAULTS = {
   earlyCloseDates: [], // e.g. ["2028-07-03", "2028-11-24"]: early closes (13:00 ET)
   closedDates: [], // e.g. ["2028-01-17", ...]: holidays and other closures (the runner and the gate stay out)
   earlyCloseEodAt: SESSION_DEFAULTS.earlyCloseEodAt,
-  maxConsecutiveErrors: 3,
+  maxConsecutiveErrors: TUN.cycle.maxConsecutiveErrors,
   alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
   alertCommand: null, // or an argv array run with the message in FTH_ALERT, e.g. ["osascript", "-e", "display notification (system attribute \"FTH_ALERT\")"]
   paper: false,
@@ -231,12 +233,14 @@ function sessionPastEod(cfg) {
   return false;
 }
 
-/** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
+/** Closed bars the runner keeps per symbol: historyDays trading days (historyDayHours each), at least historyMinBars. */
 function historyBars(timeframe) {
-  // At least 2000 bars and three trading days, and the multi-timeframe read's whole window
-  // (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. get_bars caps a request at 20000.
+  // At least historyMinBars bars and historyDays trading days (config/runner.json bars), and the multi-timeframe read's
+  // whole window (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. get_bars caps a
+  // request at its interface's MAX_COUNT.
   const { HISTORY_HOURS } = require('./trading/mtf');
-  return Math.min(20000, Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
+  const B = TUN.bars;
+  return Math.min(GET_BARS_MAX, Math.max(B.historyMinBars, Math.ceil((B.historyDays * B.historyDayHours * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
 
 function validateConfig(raw) {
@@ -274,7 +278,7 @@ function validateConfig(raw) {
     }
   }
   if (laneSpec.lanes.slice(1).some(l => l.trigger === 'signal') && !cfg.account) errors.push('account: required with a lane on trigger "signal" (to see open positions)');
-  if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
+  if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(TUN.cycle.timeoutMinMinutes, TUN.cycle.timeoutBars * cfg.timeframe);
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
   for (const k of ['earlyCloseDates', 'closedDates']) {
     if (!Array.isArray(cfg[k]) || !cfg[k].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push(`${k}: ["YYYY-MM-DD", ...]`);
@@ -287,7 +291,7 @@ function validateConfig(raw) {
     cfg.earlyCloseDates = [...cal.earlyCloseDates].sort();
   }
   if (cfg.bars === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.bars = historyBars(cfg.timeframe);
-  if (cfg.maxCyclesPerDay === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.maxCyclesPerDay = Math.ceil((22 * 60) / cfg.timeframe) + 10;
+  if (cfg.maxCyclesPerDay === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.maxCyclesPerDay = Math.ceil((22 * 60) / cfg.timeframe) + TUN.cycle.extraCyclesPerDay;
   // US Eastern or Central time only: they change clocks with the exchange, so
   // end of day can't drift past the close in the weeks other zones differ.
   const zoneOk = z => ['America/New_York', 'America/Chicago'].includes(z);
@@ -374,7 +378,7 @@ function accountText(state) {
   return head + trades + unbuilt + attempts.join('');
 }
 
-const RECENT_IN_PROMPT = 10;
+const RECENT_IN_PROMPT = TUN.prompt.recentDecisions;
 
 /** The last closed bars, oldest first, compact: "09:33 O 21500.25 H 21504 L 21498.5 C 21503.75 V 1200 c-o +3.5" (close minus open). */
 function recentBarsText(symbol, bars, timeframe) {

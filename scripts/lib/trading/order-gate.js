@@ -36,6 +36,7 @@ const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMiss
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
+const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -83,7 +84,7 @@ function briefingAgeRefusal(config, root, now) {
   if (!Number.isFinite(closed)) return `The ${fam} bar briefing (bar at ${b.asOf}) has no readable close time: its data's age can't be checked, so no entry this cycle.`;
   const age = (now.getTime() - closed) / 60000;
   if (age <= limit) return null;
-  return `Stale data: the ${fam} bar briefing's bar (at ${b.asOf}) closed ${age.toFixed(1)} min ago, over the ${limit} min limit (the signal age limit: ${config.signalMaxAgeBars || 3} bars of ${tf || '1 minute (no readable timeframe)'}, with its ceiling and cap): no entry on it. The cycle took too long; report the block and end the cycle (trade-session step 6). The next bar's cycle decides on fresh data. Exits, stops and closes are never held by this.`;
+  return `Stale data: the ${fam} bar briefing's bar (at ${b.asOf}) closed ${age.toFixed(1)} min ago, over the ${limit} min limit (the signal age limit: ${config.signalMaxAgeBars || GATE.signalMaxAgeBars} bars of ${tf || '1 minute (no readable timeframe)'}, with its ceiling and cap): no entry on it. The cycle took too long; report the block and end the cycle (trade-session step 6). The next bar's cycle decides on fresh data. Exits, stops and closes are never held by this.`;
 }
 
 /** True when `b` is a stop bracket: {ticks: a whole number above 0, type: "stop" | "trailing_stop"}. */
@@ -195,7 +196,7 @@ function checkConsistency(input, rationale, specOf = () => null) {
   // Brackets vs the rationale's prices, within a tick of rounding.
   if (spec && !problems.length) {
     const tick = spec.tickSize;
-    const near = (ticks, dist) => Math.abs(ticks - dist / tick) <= 1 + 1e-6;
+    const near = (ticks, dist) => Math.abs(ticks - dist / tick) <= GATE.bracketToleranceTicks + 1e-6;
     if (entry !== null) {
       if (sl !== null && stop !== null && !near(sl, Math.abs(entry - stop))) {
         problems.push(`stopLossBracket.ticks ${sl} doesn't match the stop: ${fmtPrice(entry, tick)} to ${fmtPrice(stop, tick)} is ${Math.ceil(Math.abs(entry - stop) / tick - 1e-9)} ticks`);
@@ -204,7 +205,7 @@ function checkConsistency(input, rationale, specOf = () => null) {
         problems.push(`takeProfitBracket.ticks ${tp} doesn't match the target: ${fmtPrice(entry, tick)} to ${fmtPrice(target, tick)} is ${Math.round(Math.abs(target - entry) / tick)} ticks`);
       }
     } else if (sl !== null && tp !== null && stop !== null && target !== null
-      && Math.abs(sl + tp - Math.abs(target - stop) / tick) > 2 + 1e-6) {
+      && Math.abs(sl + tp - Math.abs(target - stop) / tick) > GATE.bracketSpanToleranceTicks + 1e-6) {
       problems.push(`the brackets span ${sl + tp} ticks but the rationale's stop ${stop} to target ${target} is ${Math.round(Math.abs(target - stop) / tick)} ticks`);
     }
   }

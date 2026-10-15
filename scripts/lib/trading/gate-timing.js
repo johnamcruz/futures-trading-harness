@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * The order gate's and the order ledger's timing, one home each: every user imports these, so tightening one never
- * leaves a copy loose. Pinned (exact): a test holds each value exactly, and each user named below says which direction is
- * stricter for it; the gate fails closed on what these bound, and none is a setting.
+ * The order gate's and the order ledger's timing, one home each (config/runner.json `gate`, read through tunables.js):
+ * every user imports these, so tightening one never leaves a copy loose. Pinned (exact): the config marks each
+ * pinned-exact and a test holds each value exactly, and each user named below says which direction is stricter for it;
+ * the gate fails closed on what these bound (a refused config file refuses the gate), and none is an env setting.
  *
  *   PENDING_ORDER_TTL_MS  a market order sent this recently may not show in the broker's positions yet: the gateway's
  *                         order ledger keeps it this long (scripts/mcp-gateway.js), the account gate projects the net
@@ -20,8 +21,10 @@
  *                         the contract translator's lookups wait longer (mcp-gateway.js LOOKUP_TIMEOUT_MS).
  */
 
-const PENDING_ORDER_TTL_MS = 30000;
-const ORDER_GRACE_MS = 120000;
-const CALL_TIMEOUT_MS = 15000;
+const G = require('../tunables').runner().gate;
+
+const PENDING_ORDER_TTL_MS = G.pendingOrderTtlMs;
+const ORDER_GRACE_MS = G.orderGraceMs;
+const CALL_TIMEOUT_MS = G.callTimeoutMs;
 
 module.exports = { PENDING_ORDER_TTL_MS, ORDER_GRACE_MS, CALL_TIMEOUT_MS };

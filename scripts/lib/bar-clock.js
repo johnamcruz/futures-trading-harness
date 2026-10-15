@@ -10,6 +10,9 @@
  * Per-symbol state: { lastBarT, expectedCloseAt, pollingSince }
  */
 
+// A bar is stale after staleAfterBars of its length (tighten-only); the loop's sleep bounds (config/runner.json bars).
+const BARS = require('./tunables').runner().bars;
+
 function barOpenMs(bar) {
   const t = Date.parse(bar && bar.t);
   if (!Number.isFinite(t)) throw new Error(`bar has no valid open time: ${JSON.stringify(bar).slice(0, 80)}`);
@@ -54,13 +57,13 @@ function onBars(state, bars, now, minutes, { staleAfterMs } = {}) {
     return { state, bar: null, stale: false };
   }
   const next = stateFromBars(bars, minutes);
-  const limit = staleAfterMs === undefined ? (minutes * 60000) / 2 : staleAfterMs;
+  const limit = staleAfterMs === undefined ? minutes * 60000 * BARS.staleAfterBars : staleAfterMs;
   const stale = now.getTime() - barCloseMs(last, minutes) > limit;
   return { state: next, bar: last, stale };
 }
 
 /** Milliseconds until any symbol needs attention (bounded so the loop stays responsive). */
-function sleepMs(states, now, { delayMs, maxMs = 5000, minMs = 250 }) {
+function sleepMs(states, now, { delayMs, maxMs = BARS.sleepMaxMs, minMs = BARS.sleepMinMs }) {
   let soonest = maxMs;
   for (const s of states) {
     if (!s || s.expectedCloseAt === null) return minMs;

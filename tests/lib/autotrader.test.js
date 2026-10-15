@@ -404,7 +404,7 @@ test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run 
 test('CLI start: a harness tools server that does not offer the registry\'s tools refuses a run; a manual end of day only warns', { timeout: 120000 }, () => {
   // A copy of the harness whose tools server is a foreign MCP server (the fake broker).
   const root = tmpDir();
-  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  for (const d of ['scripts', 'config', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
   fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
   fs.writeFileSync(path.join(root, 'scripts', 'harness-tools-mcp.js'), `require(${JSON.stringify(path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js'))});\n`);
   const dir = tmpDir();

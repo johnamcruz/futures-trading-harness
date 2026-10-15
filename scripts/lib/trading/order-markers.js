@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const { harnessHome } = require('../paths');
 
 const { ORDER_GRACE_MS: GRACE_MS } = require('./gate-timing');
-const LOOKBACK_MS = 60000;
+const LOOKBACK_MS = require('../tunables').runner().gate.markerLookbackMs;
 // Interface order statuses (broker/interface.js ENUMS.orderStatus) of an order that never worked or no longer does.
 const DEAD = new Set([3, 4, 5]); // cancelled, expired, rejected
 // Interface order type ids for orders that rest in the book before they fill.

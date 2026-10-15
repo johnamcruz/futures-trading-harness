@@ -19,12 +19,13 @@ const fs = require('fs');
 const path = require('path');
 const { familyRoot } = require('./contracts');
 
-const DEFAULT_MAX_AGE_BARS = 3;
+const G = require('../tunables').runner().gate; // config/runner.json, tighten-only
+const DEFAULT_MAX_AGE_BARS = G.signalMaxAgeBars;
 // However slow the timeframe, a signal is never entered more than this long after its bar closed (the owner's ceiling).
-const MAX_AGE_CEILING_MIN = 45;
+const MAX_AGE_CEILING_MIN = G.signalMaxAgeCeilingMin;
 // How far after now a bar's close may be dated and still be trusted: the broker's clock may run a
 // little ahead of the harness's (order_plan applies the same tolerance to the bars it plans from).
-const FUTURE_TOLERANCE_MIN = 1;
+const FUTURE_TOLERANCE_MIN = G.futureToleranceMin;
 
 // One record per index family and timeframe: a 1m scan never overwrites the 3m one.
 const signalFile = (home, root, timeframe) => path.join(home, 'signals', `${familyRoot(root)}-${timeframe}.json`);

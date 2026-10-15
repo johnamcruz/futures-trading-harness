@@ -19,7 +19,7 @@ const { familyRoot } = require('./contracts');
 const { mtfRead, trendRule, RULE_FRAMES, label } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 
-const DEFAULT_MAX_AGE_MIN = 15;
+const DEFAULT_MAX_AGE_MIN = require('../tunables').runner().gate.mtfMaxAgeMin; // config/runner.json, tighten-only
 
 const recordFile = (home, root) => path.join(home, 'mtf', `${familyRoot(root)}.json`);
 

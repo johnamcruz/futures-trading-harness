@@ -30,7 +30,7 @@ const { harnessHome, expandHome } = require('../paths');
 
 // JSON and CSV only: the Parquet and Excel readers trust their file (the user's own data, through the CLIs).
 const EXTENSIONS = ['.json', '.csv'];
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_BYTES = require('../tunables').runner().limits.barsFileBytes; // config/runner.json
 
 /** The directories bars files may come from: the bars directory and the home's bars scratch directory. */
 function barsDirs(env = process.env) {

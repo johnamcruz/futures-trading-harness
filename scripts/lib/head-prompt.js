@@ -56,7 +56,7 @@ const CORE = [...new Set([
   'autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context',
   ...COMPOSED_READS,
 ])];
-const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
+const MAX_CONFIG_BYTES = require('./tunables').runner().limits.headPromptConfigBytes; // config/runner.json
 const SHA = /^[0-9a-f]{64}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
