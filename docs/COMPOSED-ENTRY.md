@@ -250,8 +250,9 @@ a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH, a
 none). A 15m CHoCH never excuses the 1h or 4h trend; a 3m CHoCH excuses
 nothing. The gate's trend rule fades the prevailing frame (the
 multi-timeframe record) on the same tiers, one definition (`D2_TIERS`,
-`composed-reads.js`), so a record that names the 4h trend it fades stands
-exactly when the trend rule lets it.
+`composed-reads.js`), so a record that names the 4h trend it fades is held to
+the same tier as the trend rule (the checker reads the trend from the briefing,
+the trend rule from the multi-timeframe record).
 
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend

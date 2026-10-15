@@ -353,8 +353,9 @@ function netAtrOf(c) {
 
 // The reads made on one completed candle (`<tf> ...`): the ones timed for reaction, then confirmation.
 const CANDLE_KINDS = new Set(['relation', 'pattern', 'close', 'momentum', 'absorption']);
-// The setup reads that name a candle, timed for reaction, then confirmation: the candle reads, and a CISD read (its
-// confirming candle). An OTE zone and a sweep name none, and point no side as a setup (they only support it).
+// The reads that name a candle as a setup, timed for reaction, then confirmation: the candle reads (of which a setup
+// takes a relation or a pattern; close, momentum and absorption are entry-only), and a CISD read (its confirming
+// candle). An OTE zone and a sweep name none, and point no side as a setup (they only support it).
 const SETUP_CANDLE = new Set([...CANDLE_KINDS, 'cisd']);
 const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
 
