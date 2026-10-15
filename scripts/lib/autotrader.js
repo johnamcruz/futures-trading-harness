@@ -231,6 +231,18 @@ function validateConfig(raw) {
   if (raw && raw.lanes !== undefined && laneSpec.lanes.length) Object.assign(cfg, { lanes: laneSpec.lanes, timeframe: laneSpec.lanes[0].timeframe, trigger: laneSpec.lanes[0].trigger });
   // Per-role timeframes (lanes.js): their shape here; the roles and which may leave the first lane's, at start (agentErrors).
   errors.push(...agentOverrideErrors(cfg.agents));
+  // Setup-focused practice (learning/setup-moments.js): its shape here; only on a practice replay (runner-wiring.js).
+  if (cfg.practice !== undefined && cfg.practice !== null) {
+    const p = require('./learning/setup-moments').validatePractice(cfg.practice);
+    errors.push(...p.errors);
+    if (p.practice) cfg.practice = p.practice;
+    if (!cfg.account) errors.push('practice: needs an account (every bar with a position or working order runs its cycle)');
+    // The reaction bar only notes the setup (an entry read is on a candle closed after it): the window needs a later
+    // close of the runner's bars inside the same setup candle's life, so the setup timeframe is a multiple of at least two bars.
+    if (p.practice && Number.isInteger(cfg.timeframe) && !(p.practice.setupTf % cfg.timeframe === 0 && p.practice.setupTf >= 2 * cfg.timeframe)) {
+      errors.push(`practice.setupTf: ${p.practice.setupTf}m must be a whole number of at least two ${cfg.timeframe}m bars (a confirmation close after the reaction bar)`);
+    }
+  }
   if (laneSpec.lanes.slice(1).some(l => l.trigger === 'signal') && !cfg.account) errors.push('account: required with a lane on trigger "signal" (to see open positions)');
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');

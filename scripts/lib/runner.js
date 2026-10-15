@@ -156,6 +156,9 @@ function createRunner(deps) {
     composed = null,
     // How often a running cycle's composed limits are checked for expiry (watchComposed).
     composedWatchMs = 5000,
+    // Setup-focused practice (learning/setup-moments.js selectBar, wired only on a practice replay): (item, open) ->
+    // { run, why, reason }, whether a bar the trigger would run a cycle on runs one. null: every bar as live.
+    practiceSelect = null,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -763,10 +766,13 @@ function createRunner(deps) {
             log(`${item.symbol}: account check for the policy screen failed (${err.message}); no verdict this bar`, 'error');
           }
         }
+        // Setup-focused practice: only a selected bar runs its cycle (what fired is recorded either way).
+        const decision = await practiced(item, { run: true, reason: 'bar closed' });
         // The decision log gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
-        logScan(item, screened, { run: true, reason: 'bar closed' });
+        logScan(item, screened, decision);
+        return decision;
       }
-      return { run: true, reason: 'bar closed' };
+      return practiced(item, { run: true, reason: 'bar closed' });
     }
     // A retired lane with no account to see positions: a manage cycle every bar, as its bar trigger ran before (the
     // scan is empty, so it offers nothing to enter and the gate refuses any entry on it).
@@ -801,9 +807,38 @@ function createRunner(deps) {
     if (!results) return net !== 0 || working > 0 ? { run: true, reason: 'manage (the scan failed)' } : { run: false, reason: 'the scan failed' };
     const screened = prop && net === 0 && working === 0 ? screenItem(item) : results;
     if (!(prop && net === 0 && working === 0)) item.verdicts = [];
-    const decision = signalDecision(screened, net, working, { paper: cfg.paper });
+    const decision = await practiced(item, signalDecision(screened, net, working, { paper: cfg.paper }), net !== 0 || working > 0);
     logScan(item, screened, decision);
     return decision;
+  }
+
+  /**
+   * Setup-focused practice (practiceSelect, learning/setup-moments.js): a cycle the trigger asked for runs only on a
+   * selected bar (a setup moment, the quiet sample, or something open: every bar while it is). The account is read
+   * for what is open (`open`, when the caller already read it); an unreadable account or a failed selector runs the
+   * bar. Each bar's choice goes to the event log (practice_<why>), which the replay report counts.
+   */
+  async function practiced(item, decision, open = null) {
+    if (!practiceSelect || !decision.run) return decision;
+    let isOpen = open;
+    if (isOpen === null) {
+      try {
+        const [net, working] = await exposure(item);
+        isOpen = net !== 0 || working > 0;
+      } catch (err) {
+        emit('practice_manage', { symbol: item.symbol, bar: item.bar.t, run: true, reason: `account check failed (${err.message})` });
+        return { ...decision, reason: `${decision.reason}; practice: account check failed (${err.message}), the bar runs` };
+      }
+    }
+    let s;
+    try {
+      s = practiceSelect(item, isOpen);
+    } catch (err) {
+      log(`${item.symbol}: practice selector failed (${err.message}); the bar runs`, 'error');
+      s = { run: true, why: 'unavailable', reason: `practice: selector failed (${err.message}); the bar runs` };
+    }
+    emit(`practice_${s.why}`, { symbol: item.symbol, bar: item.bar.t, run: s.run, reason: s.reason });
+    return s.run ? { ...decision, reason: `${decision.reason}; ${s.reason}` } : { run: false, reason: s.reason };
   }
 
   /**

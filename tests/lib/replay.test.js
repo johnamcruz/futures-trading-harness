@@ -1217,3 +1217,20 @@ test('runner wiring: a live run needs the server\'s apiUrl; its cycles carry FTH
   assert.strictEqual(paper.FTH_ACCOUNT_LOCK, undefined, 'paper: the gate refuses entries anyway');
 });
 
+
+test('replay config: setup-focused practice is the replay config\'s own field, validated, carried into the runner config and the run\'s hash', () => {
+  const plain = userWorld();
+  seedRunHome(plain.run, { root: ROOT, userEnv: plain.env });
+  assert.strictEqual(plain.run.practice, null);
+  assert.ok(!('practice' in plain.run.cfg), 'none: the runner config is as before');
+  const w = { env: plain.env, run: resolveReplay(replayConfig(plain.dir, { practice: { seed: 4, quietSample: 0.2 } }), { env: plain.env, home: plain.dir, root: ROOT }) };
+  const want = { mode: 'setup-focus', setupTf: 15, quietSample: 0.2, seed: 4, levels: 'key', reactions: ['rejected', 'broke'] };
+  assert.deepStrictEqual(w.run.practice, want);
+  assert.deepStrictEqual(w.run.cfg.practice, want, 'the runner reads it from its config');
+  assert.notStrictEqual(configHash(w.run, w.env), configHash(plain.run, plain.env), 'a setup-focused run is another run');
+  const dir = tmpDir();
+  assert.throws(() => resolveReplay(replayConfig(dir, { practice: { setupTf: 4 } }), { env: {}, home: dir, root: ROOT }), /practice.setupTf/);
+  assert.throws(() => resolveReplay(replayConfig(dir, { overrides: { practice: {} } }), { env: {}, home: dir, root: ROOT }), /practice: set in the replay config/);
+  const auto = { ...replayConfig(dir).autotrader, practice: {} };
+  assert.throws(() => resolveReplay(replayConfig(dir, { autotrader: auto }), { env: {}, home: dir, root: ROOT }), /practice: set in the replay config/);
+});

@@ -405,6 +405,31 @@ function dayLine(sym, bars) {
   return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round, level }) || describeOvernight(bars, { symbol: sym.symbol, round, level });
 }
 
+/**
+ * Setup-focused practice's bar selector (learning/setup-moments.js selectBar), from the bar's own briefing (the
+ * symbol's, the facts the model reads), or null without `practice`. Refused (throws) unless the run is a replay
+ * (FTH_REPLAY_NOW) of a practice learning run (the run home's learning-run.json: practice-train or practice-validate):
+ * live and the sealed windows always run every bar.
+ */
+function practiceSelector(cfg, home, env) {
+  if (!cfg.practice) return null;
+  const { selectBar } = require('./learning/setup-moments');
+  const { readLearningRun } = require('./learning/run-gate');
+  const run = readLearningRun(home);
+  if (!env.FTH_REPLAY_NOW) throw new Error('practice (setup-focus) runs only in a replay: live runs every bar');
+  if (!run || run.learning !== true || !['practice-train', 'practice-validate'].includes(run.role)) {
+    throw new Error(`practice (setup-focus) runs only on a practice-train or practice-validate learning run (this run: ${run ? (run.learning ? run.role : 'not a learning run') : 'no learning-run.json'}); test and final run every bar`);
+  }
+  return (item, open) => {
+    const b = readBriefing(home, item.symbol);
+    const data = b && b.sections && b.sections.m3 && b.sections.m3.data;
+    const barClose = Date.parse(item.bar.t) + (item.minutes || cfg.timeframe) * 60000;
+    // The first lane's briefing as of this close (another lane's bar reads the one holding then); an older one is none.
+    const candles = data && data.bar && Date.parse(data.bar.t) + cfg.timeframe * 60000 <= barClose && Date.parse(b.sections.m3.validUntil) >= barClose ? data.candles : null;
+    return selectBar({ practice: cfg.practice, candles, symbol: item.symbol, bar: item.bar.t, barClose, open });
+  };
+}
+
 /** A replay pass (FTH_REPLAY_NOW: one step per process) holds no cycle for a late lane; the live loop keeps the default. */
 const passHold = env => (env.FTH_REPLAY_NOW ? { coalesceHoldMs: 0 } : {});
 
@@ -515,7 +540,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     ...(env.NODE_ENV === 'test' && Number(env.FTH_COMPOSED_WATCH_MS) > 0 && env.FTH_AUTONOMOUS !== '1' ? { composedWatchMs: Number(env.FTH_COMPOSED_WATCH_MS) } : {}),
     // A replay pass is one step in its own process: it can't hold a cycle for a lane that is late (runner.js).
     ...passHold(env),
+    // Setup-focused practice: only a practice replay's selected bars run a cycle (refused anywhere else).
+    practiceSelect: practiceSelector(cfg, home, env),
   });
 }
 
-module.exports = { laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

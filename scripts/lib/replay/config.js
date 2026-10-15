@@ -20,6 +20,9 @@
  *   endOfDay       the agents' end-of-day review (default true); end of day always flattens
  *   prop           a prop account profile (e.g. topstep_100k): a fresh run starts its attempt at `start`, before the
  *                  first decision, so every trade of the window is inside it (default: none)
+ *   practice       setup-focused practice (learning/setup-moments.js): { mode: 'setup-focus', setupTf, quietSample, seed };
+ *                  cycles only at the selected bars, the clock advancing between them; a practice-train or
+ *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -48,6 +51,7 @@ const { activeBroker, loadBrokers, CREDENTIAL } = require('../broker/config');
 const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
+const { validatePractice } = require('../learning/setup-moments');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -136,6 +140,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // Checked here, before any run state is written (a typo found later would change the config of a started run).
     try { propAccount = require('../trading/accounts').accountNamed(root, r.prop, env); } catch (err) { errors.push(`prop: ${err.message}`); }
   }
+  const practice = validatePractice(r.practice);
+  errors.push(...practice.errors);
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -155,6 +161,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
   };
   const { raw: base, file: autotraderFile } = readAutotrader(r.autotrader, baseDir);
+  if (base.practice !== undefined || overrides.practice !== undefined) throw new Error('invalid replay config:\n- practice: set in the replay config (its own field), never in the runner config or overrides');
   const holidays = holidayDates(start, end);
   const derived = {
     ...base, ...overrides,
@@ -163,6 +170,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     eodReview: r.endOfDay !== false,
     closedDates: [...new Set([...(base.closedDates || []), ...(overrides.closedDates || []), ...holidays.closed])].sort(),
     earlyCloseDates: [...new Set([...(base.earlyCloseDates || []), ...(overrides.earlyCloseDates || []), ...holidays.early])].sort(),
+    ...(practice.practice ? { practice: practice.practice } : {}),
   };
   const cfg = validateConfig(derived);
   return {
@@ -172,6 +180,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // The experience index the run pins at its start (learning/experience-index.js pinIndex), or null.
     experienceIndex: r.experienceIndex ? path.resolve(baseDir, expandHome(r.experienceIndex, home)) : null,
     prop: r.prop || null,
+    // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
+    practice: practice.practice,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,

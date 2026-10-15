@@ -201,7 +201,7 @@ function learningGate(ctx, run, look, label) {
   return {
     from: run.start, to: run.end, runId: run.runId, learning: run.learning,
     candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked && l.evaluation ? `${l.evaluation}.${label}` : null,
-    validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
+    validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, practice: run.practice || null, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
   };
 }
 

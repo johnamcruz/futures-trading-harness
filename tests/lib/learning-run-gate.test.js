@@ -140,3 +140,25 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
   assert.notStrictEqual(h({}), h({ end: '2025-03-03T16:00:00Z' }));
 });
 
+
+test('setup-focused practice: allowed on practice-train and practice-validate, kept on resume; refused on test, final and runs not learning', () => {
+  const env = { FTH_HOME: tmp() };
+  const practice = { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 1, levels: 'key', reactions: ['rejected', 'broke'] };
+  const train = { from: D('2022-03-01T00:00:00Z'), to: D('2022-04-01T00:00:00Z'), runId: 'sp1', env, practice };
+  assert.deepStrictEqual(G.checkLearningRun(train).practice, practice);
+  const home = tmp();
+  G.startLearningRun(home, train);
+  assert.deepStrictEqual(G.readLearningRun(home).practice, practice, 'kept with the run (the learning report reads it)');
+  assert.throws(() => G.startLearningRun(home, { ...train, practice: null }), /this run started as/, 'a resume keeps it');
+  assert.throws(() => G.startLearningRun(home, { ...train, practice: { ...practice, seed: 2 } }), /this run started as/);
+  // A run started before practice existed (no field) resumes as it was.
+  const old = tmp();
+  G.startLearningRun(old, { ...train, practice: null, runId: 'sp0' });
+  assert.strictEqual(G.readLearningRun(old).practice, undefined);
+  assert.doesNotThrow(() => G.startLearningRun(old, { ...train, practice: null, runId: 'sp0' }));
+  assert.strictEqual(G.checkLearningRun({ ...train, practice: null }).practice, undefined, 'none: no field');
+  assert.deepStrictEqual(G.checkLearningRun({ from: D('2024-08-01T00:00:00Z'), to: D('2024-09-01T00:00:00Z'), runId: 'sv', env, validate: true, practice }).practice, practice);
+  assert.throws(() => G.checkLearningRun({ from: D('2025-03-01T00:00:00Z'), to: D('2025-04-01T00:00:00Z'), runId: 'st', env, candidate: 'c', evaluation: 'e', practice }), /practice runs only on practice-train or practice-validate \(this run: test\)/);
+  assert.throws(() => G.checkLearningRun({ from: D('2026-03-01T00:00:00Z'), to: D('2026-04-01T00:00:00Z'), runId: 'sf', env, candidate: 'c', evaluation: 'e', reasoningFix: true, practice }), /this run: final/);
+  assert.throws(() => G.checkLearningRun({ from: D('2027-02-01T00:00:00Z'), to: D('2027-02-10T00:00:00Z'), runId: 'sn', env, learning: false, practice }), /not a learning run/);
+});
