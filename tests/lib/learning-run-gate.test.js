@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const G = require('../../scripts/lib/learning/run-gate');
+const PF = require('../fixtures/preflight');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-learn-gate-'));
 const D = iso => new Date(iso);
@@ -89,13 +90,19 @@ test('one ledger: the run keeps its ledger\'s path, and the ledger is the defaul
   assert.throws(() => G.startLearningRun(home, { ...sealed, evaluation: 'ev2', env }), /a resume keeps it/);
 });
 
-/** scripts/replay.js run on a config for [start, end), with flags: { status, stdout, stderr, user, live }. */
+/**
+ * scripts/replay.js run on a config for [start, end) (a Monday), with flags: { status, stdout, stderr, user, live }. The
+ * training preflight runs first (learning/preflight.js): the run's 1m bars (--bars), a 1m data lane for the 5m facts,
+ * and practice-train's practice mode. `user`: an existing user folder (a resume), else a fresh one.
+ */
 function replayRun(start, end, flags = [], over = {}, user = tmp()) {
   const config = path.join(user, 'replay.json');
+  const bars = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), start.slice(0, 10));
   fs.writeFileSync(config, JSON.stringify({
     runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
-    autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...over,
+    autotrader: PF.AUTOTRADER, ...(start < '2024-07-01' ? { practice: PF.PRACTICE } : {}), ...over,
   }));
+  flags = [...flags, '--bars', `MNQ=${bars}`];
   const live = path.join(user, 'live');
   fs.mkdirSync(live, { recursive: true });
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
@@ -110,7 +117,7 @@ test('scripts/replay.js run: the gate decides before the run home is seeded', ()
     ['2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', ['--candidate', 'champ'], {}, /--evaluation/],
     ['2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', [], {}, /practice-validate months need the validate flag/],
     ['2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', [], { learning: false }, /"learning": false on a practice-validate, test or final day/],
-    ['2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { endOfDay: false }, /keeps its end of day/],
+    ['2022-03-07T14:30:00Z', '2022-03-07T15:00:00Z', [], { endOfDay: false }, /keeps its end of day/],
     ['2026-03-02T14:30:00Z', '2026-03-02T15:00:00Z', ['--candidate', 'champ', '--evaluation', 'fin'], {}, /look refused: final: candidate champ has no test pass/],
   ];
   for (const [start, end, flags, over, why] of cases) {
@@ -120,7 +127,7 @@ test('scripts/replay.js run: the gate decides before the run home is seeded', ()
     assert.ok(!seeded(r), `${start}: nothing seeded`);
   }
   // A practice-train run passes the gate: its decision kept with the run record before the first cycle.
-  const ok = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
+  const ok = replayRun('2022-03-07T14:30:00Z', '2022-03-07T15:00:00Z');
   assert.match(ok.stdout, /learning: practice-train/);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ok.user, 'replays', 'r', 'replay', 'r', 'learning-run.json'), 'utf8')).role, 'practice-train');
   // A validate run with its flag: logged and counted in the one ledger.
@@ -267,16 +274,19 @@ test('library display: off unless the config says true, part of the setup; a pai
   assert.strictEqual(G.startLearningRun(tmp(), { ...gate, runId: 'g-on', arm: lookArm(on), config: setupHash(on), base: setupBase(on) }).taken.ok, true);
   assert.throws(() => G.startLearningRun(tmp(), { ...gate, runId: 'g-nobase', arm: `with:${'b'.repeat(16)}+library:${hashA}`, config: setupHash(on) }), /names its setup without the display/);
   // scripts/replay.js run: the config's flag reaches the run's pin; without it the library is pinned hidden.
-  for (const [display, said] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/]]) {
-    const r = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
+  // (Shown only on an evaluation's arm, the training preflight's rule: a validate run naming its evaluation; hidden on
+  // practice. Mondays, the preflight's bar fixture.)
+  for (const [display, said, start, flags] of [[true, /history library pinned: [0-9a-f]{16}, shown to the model/, '2024-08-05', ['--validate', '--evaluation', 'evD']], [undefined, /history library pinned: [0-9a-f]{16}, not shown to the model \(libraryDisplay off\)/, '2022-03-07', []]]) {
+    const r = replayRun(`${start}T14:30:00Z`, `${start}T15:00:00Z`, flags, { setupLibrary: libA, ...(display === undefined ? {} : { libraryDisplay: display }) });
     assert.match(r.stdout, said, r.stderr);
     assert.strictEqual(L.libraryShown(path.join(r.user, 'replays', 'r')), display === true);
   }
   // A resume can't pin a library its run started without (its look named no display).
-  const first = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
-  const again = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { setupLibrary: libA, libraryDisplay: true }, first.user);
+  const first = replayRun('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate', '--evaluation', 'evR']);
+  const again = replayRun('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate', '--evaluation', 'evR'], { setupLibrary: libA, libraryDisplay: true }, first.user);
   assert.strictEqual(again.status, 1, again.stdout);
-  assert.match(again.stderr, /this run started without a history library; a resume can't pin one/);
+  // Refused by the preflight's ledger-look (the resume names another arm and setup) before its pin could be tried.
+  assert.match(again.stderr, /a resume keeps its arm|this run started without a history library; a resume can't pin one/);
   assert.strictEqual(L.libraryShown(path.join(first.user, 'replays', 'r')), false);
 });
 

@@ -12,11 +12,12 @@ const exchange = require('./mock-exchange');
 const fs = require('fs');
 const path = require('path');
 
-// MOCK_STATE, or a replay run's state folder (MOCK_STATE_DIR), whose state starts from MOCK_INIT.
+// MOCK_STATE, or a replay run's state folder (MOCK_STATE_DIR), whose state starts from MOCK_INIT, or from the JSON file
+// MOCK_INIT_FILE names (one env string over ~128 KB fails to spawn on Linux with E2BIG).
 const file = process.env.MOCK_STATE || path.join(process.env.MOCK_STATE_DIR, 'state.json');
 if (!process.env.MOCK_STATE && !fs.existsSync(file)) {
   const tmp = `${file}.${process.pid}.init`;
-  exchange.initState(tmp, JSON.parse(process.env.MOCK_INIT || '{}'));
+  exchange.initState(tmp, JSON.parse(process.env.MOCK_INIT_FILE ? fs.readFileSync(process.env.MOCK_INIT_FILE, 'utf8') : process.env.MOCK_INIT || '{}'));
   try {
     fs.linkSync(tmp, file); // exclusive: another copy of the server may be starting too
   } catch (err) {

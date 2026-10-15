@@ -54,6 +54,7 @@ const A = require('./archive');
 const proposer = require('./proposer');
 const E = require('./evaluator');
 const { replayFor } = require('./config');
+const { preflightForRun } = require('../learning/preflight');
 const { unitContaining } = require('../prop/splits');
 const { checkLook } = require('../prop/looks');
 const { checkLearningRun, startLearningRun } = require('../learning/run-gate');
@@ -223,8 +224,13 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     // its look taken before the first cycle, its decision checked again on resume. The point runs start from this
     // run's checkpoints (decision-points.js runPoint copies its home), so they inherit what it was allowed.
     const gate = learningGate(ctx, run, look, label);
+    // The training preflight (learning/preflight.js), as replay.js run applies it: any FAIL refuses the run before it
+    // is seeded. Its facts read the loop's data source (the evaluator's bars) when it has one; else they are N/A.
+    const data = ctx.loop.evaluator && ctx.loop.evaluator.data ? ctx.loop.evaluator.data : null;
+    const pre = (ctx.steps.preflight || preflightForRun)(run, gate, { root: tree, env: ctx.env, barsFiles: data || {}, noBars: data ? null : 'no bars given to the loop', log: m => ctx.log(`${label}: ${m}`) });
     checkLearningRun(gate);
     ctx.steps.seedRunHome(run, { root: tree, userEnv: ctx.env });
+    if (pre && typeof pre.record === 'function') pre.record(run.paths.runHome);
     const learned = (ctx.steps.startLearningRun || startLearningRun)(run.paths.runHome, gate);
     // The loop reads every outcome (scorecards, the paired test): a run whose outcomes are hidden never runs in it.
     if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);

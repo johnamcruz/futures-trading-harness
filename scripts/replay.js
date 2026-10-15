@@ -9,7 +9,8 @@
  *   node scripts/replay.js run --config replay.json [--max-cycles N]   run (or resume) a replay; a learning run (the
  *       default; "learning": false in the config declares one that is not) lies in one window of the learning split
  *       and takes its look first (learning/run-gate.js): --validate for practice-validate months, --candidate and
- *       --evaluation (the arms of one evaluation share it) for test or final, --reasoning-fix (outcomes hidden); every
+ *       --evaluation (the arms of one evaluation share it) for test or final, --reasoning-fix (outcomes hidden); the
+ *       training preflight first (learning/preflight.js; --bars: the run's bars for its facts check); every
  *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl; the config's experienceIndex (and setupLibrary) is pinned for the
  *       run (learning/experience-index.js)
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
@@ -47,7 +48,7 @@ require('./lib/env-file').loadEnvForCli('replay');
 
 const fs = require('fs');
 const path = require('path');
-const { resolveReplay, setupHash, setupFixed, setupBase, lookArm } = require('./lib/replay/config');
+const { resolveReplay } = require('./lib/replay/config');
 const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
@@ -59,12 +60,13 @@ const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
 const { pinForRun } = require('./lib/learning/run-pins');
-const { pinCurated, curatedPoints } = require('./lib/learning/curated-lists');
+const { curatedPoints } = require('./lib/learning/curated-lists');
+const { gateOptions, preflightForRun } = require('./lib/learning/preflight');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] [--faults stop=R,outage=R] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--bars SYM=file ...] [--faults stop=R,outage=R] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] [--faults stop=R,outage=R] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -157,26 +159,24 @@ function labels(argv) {
   return 0;
 }
 
-
 async function run(argv) {
   const r = load(argv);
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
   if (!(max === Infinity || (Number.isInteger(max) && max > 0))) throw new Error('--max-cycles: a positive whole number');
   // The learning gate (learning/run-gate.js): checked before the run home is seeded, its look taken before the first cycle.
-  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, practice: r.practice, runDir: r.paths.runDir, arm: lookArm(r), config: setupHash(r), base: setupBase(r), setup: setupFixed(r) };
-  checkLearningRun(gate);
+  const gate = gateOptions(r, { candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix') });
+  const pre = preflightForRun(r, gate, { root: ROOT, env: process.env, barsFiles: barsArgs(argv), log: say }); checkLearningRun(gate);
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
+  if (pre) pre.record(r.paths.runHome);
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
   for (const line of pinForRun(r, { fresh, arm: gate.arm })) say(line);
-  if (r.curated) say(`curated list pinned: ${r.curated.list} of ${pinCurated(r.paths.runHome, r.curated).fingerprint.slice(0, 16)}, ${r.curated.windows.length} window(s)`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
-  if (res.stopped) say(`${res.stopped}; run it again to resume`);
-  else say(`done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
-  // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
-  if (res.done) {
+  say(res.stopped ? `${res.stopped}; run it again to resume` : `done: ${res.cycles} decision time(s) this time; report: node scripts/replay.js report ${r.paths.runDir}`);
+  if (res.done) { // a finished learning run logs its experience (learning/run-experience.js), then its stage report and prop score
     try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
+    for (const line of require('./lib/replay/stage').stageReport(r, { root: ROOT, env: process.env, barsFiles: barsArgs(argv) })) say(line);
     process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT, curated: r.curated, faults: parseFaults(arg(argv, '--faults')), riskActions: false }).text);
   }
   return res.stopped && !/max-cycles/.test(res.stopped) ? 1 : 0;
