@@ -14,7 +14,8 @@ CLIs can drive. The harness names no broker, firm or model.
 > [!WARNING]
 > This software lets an AI place real orders on your account. Futures trading
 > involves substantial risk of loss, and AI models make mistakes. Start with
-> trading disabled on the broker server and `"paper": true`, then a practice
+> trading disabled on the broker server and `"paper": true` (`autotrader.paper`
+> in the runner config), then a practice
 > account, micro contracts and size 1. You are responsible for every order
 > placed.
 
@@ -107,8 +108,12 @@ The design in full: [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md) and
    npm run verify
    ```
 
-5. Run a replay. Copy the example config, set the replay broker, window, `runId`
-   and `workDir`, list the decision times, then run:
+5. Run a replay. A replay never touches a real account: the replay broker
+   server serves your own historical bars (getting the server and the bar data:
+   [docs/OPERATING.md](docs/OPERATING.md#replay) and
+   [docs/BACKTESTING.md](docs/BACKTESTING.md)). Copy the example config, set the
+   replay broker, window, `runId` and `workDir`, list the decision times, then
+   run:
 
    ```bash
    cp mcp-configs/replay.example.json replay.json
