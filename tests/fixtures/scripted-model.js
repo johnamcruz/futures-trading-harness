@@ -30,6 +30,9 @@
  *
  * `args` may be a function of ctx. ctx: { env, prompt, results, calls: [{ tool, args, ok, text }] } where every
  * gateway and harness-tool call lands; `scripted.last` is the last cycle's ctx.
+ *
+ * As a process (scripted-opencode.js): `stream(line)` is called with each event as it is printed, to write it to the standard
+ * output the runner's live writer reads, so the gate reads the transcript mid-cycle as it reads a real one (no `liveFile`).
  */
 
 const fs = require('fs');
@@ -44,7 +47,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /** A run (argv, { env, liveFile }) -> { ok, timedOut, code, output, stdout } that plays `script(prompt, env)`. */
 function scriptedModel(script) {
-  const scripted = async (argv, { env, liveFile }) => {
+  const scripted = async (argv, { env, liveFile, stream = null }) => {
     const prompt = String(argv[argv.length - 1] || '');
     const steps = typeof script === 'function' ? script(prompt, env) : script;
     const ctx = { env, prompt, results: {}, calls: [], liveFile };
@@ -63,6 +66,7 @@ function scriptedModel(script) {
     const emit = ev => {
       const line = `${JSON.stringify({ ...ev, timestamp: Date.now(), sessionID: SESSION })}\n`;
       out += line;
+      if (stream) stream(line);
       if (liveFile) try { fs.appendFileSync(liveFile, line); } catch (_err) { /* removed by the test: the gate reads none */ }
     };
     const toolEvent = (tool, input, state) => emit({ type: 'tool_use', part: { type: 'tool', tool, callID: `call_${(id += 1)}`, sessionID: SESSION, state: { input, ...state } } });

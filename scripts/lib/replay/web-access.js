@@ -286,7 +286,9 @@ function unreadable(user) {
 
 function replayStep(run, { root, env = process.env, home = (env && env.HOME) || os.homedir() }) {
   const autotrader = require('../autotrader');
-  const cfg = autotrader.validateConfig(run.cfg);
+  // run.cfg is already the validated runner config (replay/config.js resolve): validating its normalized output again
+  // would refuse a data lane's normalized `strategies: null`.
+  const cfg = run.cfg;
   // A replay step's clock (replay/config.js replayEnv sets FTH_REPLAY_NOW on every step) in its run home; the rest of
   // replayEnv points at the run home's copies, which aren't seeded before the preflight, and decides no permission.
   const base = { ...env, ...(run.paths && run.paths.runHome ? { FTH_HOME: run.paths.runHome } : {}), FTH_REPLAY_NOW: new Date(run.start).toISOString() };

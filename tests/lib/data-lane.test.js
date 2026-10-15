@@ -259,3 +259,10 @@ test('replay retries a failed cycle (ok, FAILED, ok): the retry of the same poin
     assert.notDeepStrictEqual(outcomes[3], outcomes[2], label);
   }
 });
+
+test('the replay no-web check reads the run\'s validated config as is: a stage-1 config with a 1m data lane is not refused for its normalized lanes', () => {
+  const { replayStep } = require('../../scripts/lib/replay/web-access');
+  const cfg = validateConfig({ harness: 'opencode', symbols: ['MNQ'], account: '7', timeframe: 3, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] });
+  const root = path.join(__dirname, '..', '..');
+  assert.doesNotThrow(() => replayStep({ cfg, start: '2022-04-21T13:00:00Z', paths: {} }, { root, env: { HOME: fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-home-')) } }));
+});
