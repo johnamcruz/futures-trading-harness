@@ -53,8 +53,8 @@ function learningLook(dir, run, { purpose = null, env = process.env } = {}) {
   let ledger;
   try { ledger = readLedger(canonical); } catch (e) { return refuse(`the learning ledger can't be read (${e.message}): no look without it`); }
   try { schedule.assertSealed('learning', ledger); } catch (e) { return refuse(e.message); }
-  const started = rec.schedule;
-  if (started && (!started.sealed || started.sealed.learning !== schedule.current().fingerprint.sealed.learning)) {
+  const started = schedule.entryFingerprint(rec); // a record from before fingerprints was taken under LEGACY
+  if (started.sealed.learning !== schedule.current().fingerprint.sealed.learning) {
     refuse(`the run started under schedule ${started.version}, whose sealed learning windows are not the current schedule's (${schedule.current().version}): a ${rec.role} run is read under the windows it was taken under`);
   }
   const taken = ledger.find(e => e && e.kind === 'look' && e.runId === run.manifest.runId && e.role === rec.role && e.purpose === rec.look.purpose && e.evaluation === rec.look.evaluation);

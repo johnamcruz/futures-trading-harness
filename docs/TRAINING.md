@@ -582,7 +582,8 @@ The file has an `open` part and a `sealed` part for each schedule:
 
 What you can and can't change:
 
-- **You can extend the data dates** (`data.start`, `data.flowCoverage`).
+- **You can extend the data dates** (`data.start`, `data.flowCoverage`;
+  the curated-lists scan refuses a `--from` before `data.start`).
   New months need no edit: they fall into the half-year walk-forward and
   reserve blocks by rule.
 - **You can move the open windows.** For example, start practice-train
@@ -593,6 +594,8 @@ What you can and can't change:
   The recorded looks count as such looks, so today both sealed parts are
   fixed. Changing a sealed window after looking at it would let a result
   pick its own test.
+- **Keep the ledgers.** The ledger files are the evidence of sealed looks, so
+  keep them backed up and never delete them.
 - **A changed file needs a new `version`.** If you edit the file and keep
   its version name, the change is refused.
 - **Budgets only tighten.** A test refuses a higher look budget or validate

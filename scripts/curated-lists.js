@@ -77,6 +77,7 @@ async function scanJobs(argv, from, to, out, jobs) {
 async function scan(argv) {
   const [file, root, from, to, use, out] = ['--bars', '--root', '--from', '--to', '--use', '--out'].map(f => opt(argv, f));
   if (!file || !root || !from || !to || !use || !out) throw new Error(USAGE);
+  C.assertWithinData(from);
   if (!/^[A-Z0-9]{1,8}$/.test(root)) throw new Error('--root: a contract root, e.g. MNQ');
   const minutes = numberOpt(argv, '--minutes', 3, { integer: true, min: 1 });
   const setupTf = numberOpt(argv, '--setup-tf', 15, { integer: true, min: 1 });

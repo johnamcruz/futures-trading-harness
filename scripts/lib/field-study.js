@@ -408,7 +408,7 @@ function splitCheck(months, { heldOutLook = null } = {}) {
   if (held.length && !reason) {
     throw new Error(`refused: the span holds held-out or reserved months (${held.map(r => `${r.month} ${r.role}${r.part ? ` ${r.part}` : ''}`).join(', ')}). Only Train months run freely (docs/LEARNED-RULEBOOK.md section 4, R16). A deliberate look needs --held-out-look "<reason>", and the look must then be recorded.`);
   }
-  const warning = held.length ? `WARNING: a held-out look at ${held.map(r => r.month).join(', ')} (${reason}). Record it in the schedule's recorded looks (RECORDED_LOOKS: config/schedule.json prop.sealed.recordedLooks, a new schedule version) and the ledger (R16) before using anything it shows.` : null;
+  const warning = held.length ? `WARNING: a held-out look at ${held.map(r => r.month).join(', ')} (${reason}). Record it in the ledger (R16) only: the schedule's recordedLooks (config/schedule.json prop.sealed.recordedLooks) are the pre-ledger looks and are frozen. Do this before using anything it shows.` : null;
   return { months: rows, heldOut: held.map(r => r.month), warning };
 }
 

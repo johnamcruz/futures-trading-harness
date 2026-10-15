@@ -130,3 +130,20 @@ test('the schedule: a held-back run is read only while its sealed windows are th
   fs.appendFileSync(ledgerPath(env), `${JSON.stringify({ kind: 'look', role: 'final', evaluation: 'x', runId: 'x', from: '2026-02-02', to: '2026-02-03', schedule: other })}\n`);
   assert.throws(() => learningLook(runDir, run, { env }), /sealed learning windows .* schedule v0/);
 });
+
+test('a record from before fingerprints is read under LEGACY: refused when the current sealed learning part differs', () => {
+  const { runDir, env } = makeRun('2025-03-04', { learning: SEALED('2025-03-04') });
+  const run = { manifest: { runId: 'lr1' }, days: { '2025-03-04': {} } };
+  const file = path.join(runDir, 'learning-run.json');
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  delete rec.schedule;
+  fs.writeFileSync(file, JSON.stringify(rec));
+  assert.strictEqual(learningLook(runDir, run, { env }).role, 'test'); // the current sealed part is LEGACY's
+  const schedule = require('../../scripts/lib/schedule');
+  const real = schedule.current;
+  const cur = real();
+  schedule.current = () => ({ ...cur, version: 'v2', fingerprint: { ...cur.fingerprint, sealed: { ...cur.fingerprint.sealed, learning: 'e'.repeat(64) } } });
+  try {
+    assert.throws(() => learningLook(runDir, run, { env }), /started under schedule v1, whose sealed learning windows are not the current schedule's/);
+  } finally { schedule.current = real; }
+});

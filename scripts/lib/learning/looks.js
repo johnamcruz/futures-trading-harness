@@ -42,8 +42,8 @@
  * evaluation, candidate, runId, role, from, to, rulebook, diagnostic, at } (a prop Monte Carlo of a run's trades, logged
  * beside the run's look; never a look itself).
  *
- *   checkLook(look, ledger, { budgets })    { ok, refusals, role, purpose, spent, remaining, budget, repeat, shared, hideOutcomes }
- *   recordLook(file, look, { create, now, budgets })   check, then append under the lock; throws when refused
+ *   checkLook(look, ledger)    { ok, refusals, role, purpose, spent, remaining, budget, repeat, shared, hideOutcomes }
+ *   recordLook(file, look, { create, now })   check, then append under the lock; throws when refused
  *   recordResult(file, result, { now })     a test evaluation's result (pass lets its candidate take the final look)
  *   recordScore(file, entry)                a Monte Carlo score of a run, beside its look (refused without it)
  *   scoresOf(ledger)                        the scores logged
@@ -119,8 +119,8 @@ function lookRule(role) {
   return { purposes: ['judging', 'reasoning-fix'], budget: s.lookBudgets[role], needsTestPass: role === 'final' && s.finalNeedsTestPass, validateCap: null };
 }
 
-function checkLook(look, ledger, { budgets = null } = {}) {
-  budgets = budgets || S().lookBudgets;
+function checkLook(look, ledger) {
+  const budgets = S().lookBudgets;
   const refusals = [];
   const l = look || {};
   if (!ID.test(String(l.evaluation || ''))) refusals.push('a look names its evaluation id (letters, digits, ".", "_", "-"; the arms of one evaluation share it)');
@@ -232,9 +232,9 @@ function underLock(file, create, fn) {
 }
 
 /** Check a look and append it (a repeat of the same run is not appended again). Throws when refused. */
-function recordLook(file, look, { create = false, now = new Date(), budgets = null } = {}) {
+function recordLook(file, look, { create = false, now = new Date() } = {}) {
   return underLock(file, create, ledger => {
-    const r = checkLook(look, ledger, { budgets });
+    const r = checkLook(look, ledger);
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
     if (!r.repeat) {
       appendLook(file, {

@@ -46,6 +46,7 @@
  *                                            replay/driver.js), so a position carried past a window or a day is managed
  *   emptyWindows(points, curated, delayMs)   the windows no decision time falls in (the run's sessions miss them)
  *   pinCurated(runHome, curated), loadPinnedCurated(home)   the run's copy: its windows only, never the outcomes
+ *   assertWithinData(from)                   refuses a from before the schedule's data.start
  *   dayChunks(from, to, n)                   [from, to) split into n runs of whole session dates (a parallel scan)
  *   curatedSelect({ windows, barClose, open, select })   the practice selector inside the list's windows
  */
@@ -335,6 +336,12 @@ function emptyWindows(points, curated, delayMs = 0) {
 }
 
 /** [from, to) (session dates) as up to n runs of whole dates, in order: [[from, to]]. */
+/** A scan starts no earlier than the data's first day (the schedule's data.start): refuses an earlier from. */
+function assertWithinData(from, dataStart = require('../schedule').current().data.start) {
+  if (sessionDate(from) < dataStart) throw new Error(`--from ${from} is before the data's start ${dataStart} (config/schedule.json data.start): no history there to scan`);
+  return from;
+}
+
 function dayChunks(from, to, n) {
   const days = [];
   for (let d = sessionDate(from); d < sessionDate(to); d = nextDay(d)) days.push(d);
@@ -391,5 +398,5 @@ function curatedSelect({ windows, barClose, open, select }) {
 module.exports = {
   VERSION, KIND, DEFAULTS, LISTS, OUTCOMES, ROLE, YEAR_CAP, skillsOf,
   buildLists, selectList, listSizes, accountOpen, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
-  validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, emptyWindows, dayChunks, pinCurated, loadPinnedCurated, curatedSelect,
+  validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, emptyWindows, assertWithinData, dayChunks, pinCurated, loadPinnedCurated, curatedSelect,
 };
