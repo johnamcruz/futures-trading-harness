@@ -111,17 +111,19 @@ function writeRiskIndex(dir, doc) {
 }
 
 /** Pin an index for a run (its own copy); a run keeps the one it pinned and whether the model is shown it. */
-function pinRiskRecord(runHome, file, { display = false } = {}) {
+function pinRiskRecord(runHome, file, { display = false, comparisonArm = false } = {}) {
   if (typeof display !== 'boolean') throw new Error('display: true or false');
+  if (typeof comparisonArm !== 'boolean') throw new Error('comparisonArm: true or false');
   const doc = readRiskIndex(file);
   const dir = path.join(runHome, 'experience');
   let pinned = null;
   try { pinned = JSON.parse(fs.readFileSync(path.join(dir, PINNED), 'utf8')); } catch (_err) { /* none yet */ }
   if (pinned && pinned.hash !== doc.hash) throw new Error(`this run pinned risk record ${String(pinned.hash).slice(0, 16)}; a run keeps its risk record (start another runId for ${doc.hash.slice(0, 16)})`);
   if (pinned && (pinned.display === true) !== display) throw new Error(`this run pinned its risk record with the display ${pinned.display === true ? 'on' : 'off'}; a run keeps it (start another runId to change it)`);
+  if (pinned && (pinned.comparisonArm === true) !== comparisonArm) throw new Error(`this run pinned its risk record ${pinned.comparisonArm === true ? 'as' : 'not as'} a declared comparison arm; a run keeps it (start another runId to change it)`);
   const copy = writeRiskIndex(dir, doc);
-  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, display })}\n`);
-  return { file: copy, hash: doc.hash, display };
+  fs.writeFileSync(path.join(dir, PINNED), `${JSON.stringify({ file: path.basename(copy), hash: doc.hash, display, comparisonArm })}\n`);
+  return { file: copy, hash: doc.hash, display, comparisonArm };
 }
 
 /** The run's pin ({ file, hash, display }), or null when none is pinned (or it can't be read). */

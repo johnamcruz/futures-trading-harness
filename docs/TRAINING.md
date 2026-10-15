@@ -288,9 +288,12 @@ To show it, set `"riskRecord": "<file>"` and `"riskRecordDisplay": true` in
 the replay config. In stage 2 the display also needs `"comparisonArm": true`:
 the run is one arm of a with/without pair, judged with the paired test. Stage
 1 refuses the display. The preflight's `risk-record` check fails when the
-display is on without a practice-train-built record, or on a held-out run
-(practice-validate, test or final); it is N/A when the display is off. The
-run pins the record with its display, and a resume can't change either.
+display is on without a practice-train-built record, or on a test or final
+run (or a window spanning two roles); it is N/A when the display is off. A
+practice-validate run may show it: the record holds practice-train days only,
+so it is train-derived evidence like the walk-forward experience index, and
+validation outcomes never enter it. The run pins the record with its display
+and its `comparisonArm`, and a resume can't change any of them.
 
 **The 30-day Monte Carlo** (phase 2, not merged yet) is printed at the end of
 a stage-2 run. Read it in this order:
@@ -359,4 +362,4 @@ reweighted, not a calendar of whole days.
 | `FAIL curated-source: ... disagree with the run's bars` | The list was scanned from another series than the run's bars: scan it from the bars the replay serves. |
 | `FAIL library-display: libraryDisplay is on, but the run is no library comparison arm` | Show the library only on an evaluation's arm (`--evaluation`). |
 | `riskRecordDisplay: true in stage 2 (pass prop) only on a run declared a comparison arm` | Add `"comparisonArm": true`, or turn the display off. |
-| `FAIL risk-record: ... the risk record is shown on practice-train only` | Show the risk record only on practice-train runs. |
+| `FAIL risk-record: ... the risk record is shown on practice-train and practice-validate only` | Show the risk record only on practice-train or practice-validate runs, not test or final. |

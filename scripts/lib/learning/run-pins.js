@@ -55,7 +55,7 @@ function pinForRun(run, { fresh, arm, setup = null }) {
   }
   if (run.riskRecord) {
     const display = run.riskRecordDisplay === true;
-    const h = pinRiskRecord(run.paths.runHome, run.riskRecord, { display }).hash.slice(0, 16);
+    const h = pinRiskRecord(run.paths.runHome, run.riskRecord, { display, comparisonArm: run.comparisonArm === true }).hash.slice(0, 16);
     lines.push(`risk record pinned: ${h}${display ? ', shown to the model' : ', not shown to the model (riskRecordDisplay off)'}`);
   }
   // The curated list the run replays (learning/curated-lists.js pinCurated: checked against the config's fingerprint).

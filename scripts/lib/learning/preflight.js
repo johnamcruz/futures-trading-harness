@@ -300,11 +300,13 @@ function experienceIndex(ctx) {
   return r('experience-index', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built; pinned at the run's start`);
 }
 
-/** The model's risk record (learning/risk-record-index.js): shown only from a pinned, practice-train-built record, on practice-train. */
+/** The model's risk record (learning/risk-record-index.js): shown only from a pinned, practice-train-built record, on practice-train or practice-validate. */
 function riskRecord(ctx) {
   if (ctx.run.riskRecordDisplay !== true) return r('risk-record', NA, 'off: the model is shown no risk record');
   const role = roleOf(ctx);
-  if (role !== 'practice-train') return r('risk-record', FAIL, `riskRecordDisplay is on, on a ${role || 'no-role'} run: the risk record is shown on practice-train only (a held-out run's outcomes are judged, never shown)`);
+  // Train-derived evidence may be shown on practice-validate (like the walk-forward experience index): the record holds
+  // practice-train days only, and validation outcomes never enter it. Test, final and no-role windows are refused.
+  if (role !== 'practice-train' && role !== 'practice-validate') return r('risk-record', FAIL, `riskRecordDisplay is on, on a ${role || 'no-role'} run: the risk record is shown on practice-train and practice-validate only (a test or final run's outcomes are judged, never shown)`);
   if (!ctx.run.riskRecord) return r('risk-record', FAIL, 'riskRecordDisplay is on without a risk record to pin (riskRecord)');
   let doc;
   try { doc = ctx.read.riskRecord(ctx.run.riskRecord); } catch (e) { return r('risk-record', FAIL, errText(e)); }
@@ -317,6 +319,7 @@ function riskRecord(ctx) {
   const pin = home ? ctx.read.riskPin(home) : null;
   if (pin && pin.hash !== doc.hash) bad.push(`the run pinned risk record ${String(pin.hash).slice(0, 12)}, not this one`);
   if (pin && pin.display !== true) bad.push('the run pinned its risk record with the display off');
+  if (pin && (pin.comparisonArm === true) !== (ctx.run.comparisonArm === true)) bad.push(`the run pinned its risk record ${pin.comparisonArm === true ? 'as' : 'not as'} a declared comparison arm (comparisonArm), and the config says otherwise`);
   if (bad.length) return r('risk-record', FAIL, `${String(doc.hash).slice(0, 12)}: ${bad.join('; ')}`);
   return r('risk-record', PASS, `${doc.hash.slice(0, 12)}: walk-forward, practice-train-built, ${doc.days} day(s); ${pin ? 'pinned' : 'pinned at the run\'s start'}, shown`);
 }

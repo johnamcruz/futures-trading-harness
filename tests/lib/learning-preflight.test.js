@@ -345,7 +345,7 @@ test('risk-record: N/A when off; on, it needs a pinned practice-train-built reco
   const good = P.riskRecord(ctx({ run: on }));
   assert.strictEqual(good.status, P.PASS, good.detail);
   assert.match(good.detail, /^cccccccccccc: walk-forward, practice-train-built, 3 day\(s\); pinned at the run's start, shown$/);
-  const pinned = { file: 'risk-record-cccccccccccccccc.json', hash: 'c'.repeat(64), display: true };
+  const pinned = { file: 'risk-record-cccccccccccccccc.json', hash: 'c'.repeat(64), display: true, comparisonArm: true };
   assert.strictEqual(P.riskRecord(ctx({ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => pinned } })).status, P.PASS, 'a resume of the same shown record');
   const rec = ctx().read.riskRecord();
   const cases = [
@@ -356,11 +356,16 @@ test('risk-record: N/A when off; on, it needs a pinned practice-train-built reco
     [{ run: on, read: { riskRecord: () => ({ ...rec, entries: [{ day: '2024-08-05', role: 'practice-validate', cells: {} }] }) } }, /an entry not of practice-train/],
     [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, hash: 'd'.repeat(64) }) } }, /pinned risk record dddddddddddd, not this one/],
     [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, display: false }) } }, /pinned its risk record with the display off/],
-    // Held out: practice-validate, test, final (and a window spanning two roles) are never shown it.
-    [{ run: on, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } }, /on a practice-validate run: the risk record is shown on practice-train only/],
-    [{ run: on, gate: { from: D('2025-03-03T14:30:00Z'), to: D('2025-03-03T15:00:00Z') } }, /on a test run/],
+    // The comparison arm is pinned with the record: a resume whose config says otherwise is refused.
+    [{ run: { ...on, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, comparisonArm: false }) } }, /pinned its risk record not as a declared comparison arm/],
+    [{ run: { ...on, comparisonArm: false, paths: { runHome: '/h' } }, read: { riskPin: () => ({ ...pinned, comparisonArm: true }) } }, /pinned its risk record as a declared comparison arm/],
+    // Test, final (and a window spanning two roles) are never shown it.
+    [{ run: on, gate: { from: D('2025-03-03T14:30:00Z'), to: D('2025-03-03T15:00:00Z') } }, /on a test run: the risk record is shown on practice-train and practice-validate only/],
     [{ run: on, gate: { from: D('2024-06-28T00:00:00Z'), to: D('2024-07-03T00:00:00Z') } }, /on a no-role run/],
   ];
+  // Train-derived evidence may be shown on practice-validate (the record holds practice-train days only).
+  const validate = P.riskRecord(ctx({ run: on, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } }));
+  assert.strictEqual(validate.status, P.PASS, JSON.stringify(validate));
   for (const [over, why] of cases) {
     const res = P.riskRecord(ctx(over));
     assert.strictEqual(res.status, P.FAIL, `${why}: ${JSON.stringify(res)}`);

@@ -206,6 +206,15 @@ test('looks: a with/without risk record comparison is an arm dimension; two dime
   refused(look('r-both', on, { arm: `without+library:${'a'.repeat(16)}+risk:${riskHash}`, config: '9'.repeat(64) }), [lines[0]], /differ only in/);
   // A resume is the look it took.
   refused(look('r-off', on), lines, /as another arm/);
+  // (a) An arm differing in BOTH displays (library and risk) from the plain arm.
+  refused(look('r-a', on, { arm: `without+library:${'a'.repeat(16)}+risk:${riskHash}`, config: '8'.repeat(64) }), [lines[0]], /differ only in/);
+  // (b) Two arms both showing the record, with different risk hashes: no display differs.
+  refused(look('r-b', on, { arm: `without+risk:${'e'.repeat(16)}`, config: '7'.repeat(64) }), lines, /differ only in/);
+  // One display differs, the other shown in both with different hashes (not alike), either way round.
+  refused(look('r-d', on, { arm: `without+library:${'a'.repeat(16)}+risk:${'e'.repeat(16)}`, config: '6'.repeat(64) }), [lines[1]], /differ only in/);
+  refused(look('r-e', on, { arm: `without+library:${'a'.repeat(16)}+risk:${riskHash}`, config: '5'.repeat(64) }), [{ ...lines[1], arm: `without+library:${'a'.repeat(16)}+risk:${'e'.repeat(16)}`, config: '4'.repeat(64), runId: 'r-f' }, { ...lines[1], arm: `without+risk:${'e'.repeat(16)}`, config: '3'.repeat(64), runId: 'r-g' }].slice(0, 1), /differ only in/);
+  // (c) The same config with a different risk part.
+  refused(look('r-c', on, { arm: `without+risk:${'d'.repeat(16)}` }), [lines[1]], /library display or base, or its risk record display/);
 });
 
 test('run pins: the record is pinned with its display; a resume can\'t add, drop, or flip it', () => {
@@ -219,6 +228,14 @@ test('run pins: the record is pinned with its display; a resume can\'t add, drop
   assert.deepStrictEqual(pin(run(shownHome, { riskRecord: file, riskRecordDisplay: true }), { fresh: true }), [`risk record pinned: ${h16}, shown to the model`]);
   assert.strictEqual(R.riskShown(shownHome), true);
   assert.strictEqual(pin(run(shownHome, { riskRecord: file, riskRecordDisplay: true }), { fresh: false }).length, 1, 'a resume with the same');
+  // The comparison arm declaration is pinned with the record: a resume can't flip it either way.
+  const cmpHome = tmp();
+  pin(run(cmpHome, { riskRecord: file, riskRecordDisplay: true, comparisonArm: true }), { fresh: true });
+  assert.strictEqual(R.riskPin(cmpHome).comparisonArm, true);
+  assert.strictEqual(R.riskPin(shownHome).comparisonArm, false);
+  assert.strictEqual(pin(run(cmpHome, { riskRecord: file, riskRecordDisplay: true, comparisonArm: true }), { fresh: false }).length, 1, 'a resume with the same');
+  assert.throws(() => pin(run(cmpHome, { riskRecord: file, riskRecordDisplay: true }), { fresh: false }), /not as a declared comparison arm|as a declared comparison arm/);
+  assert.throws(() => pin(run(shownHome, { riskRecord: file, riskRecordDisplay: true, comparisonArm: true }), { fresh: false }), /not as a declared comparison arm/);
   // The flag flipped off on a resume.
   assert.throws(() => pinForRun(run(shownHome, { riskRecord: file }), { fresh: false, arm: 'without' }), /pinned its risk record with the display on/);
   // Dropped.
