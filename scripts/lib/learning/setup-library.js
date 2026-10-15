@@ -48,7 +48,9 @@
  *   composeAt(briefing, reaction, { side, tick })   { reads, checked, plan, status, why } at one confirmation bar
  *   buildLibraryIndex(records, { sources, seed, reps, now })   the index document, with its hash
  *   setupKeyOf(reads)                      'setup:<slug>' of the first setup relation read, or null
- *   readLibrary(file), writeLibrary(dir, doc), pinLibrary(runHome, file), loadPinnedLibrary(home)
+ *   readLibrary(file), writeLibrary(dir, doc), pinLibrary(runHome, file, { validBars }), loadPinnedLibrary(home)
+ *                                          (pinLibrary refuses an index measured over another window than validBars,
+ *                                          the shipped strategy's valid_bars by default)
  *   baseBars(bars, minutes)                a bars file's bars as base bars (1m bars aggregated), by time
  *   runnerClock({ from, to, sessions })    { inSession(closeMs), eodOf(ms) }: the runner's decision times and end of day
  *                                          (its default sessions, the exchange calendar for those years)
@@ -69,6 +71,7 @@ const { barMinutes, aggregate } = require('../backtest/data');
 
 // 2: the limit window is the strategy's valid_bars (1 held it one bar); a version-1 library is rebuilt.
 const VERSION = 2;
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const KIND = 'setup-library';
 const MIN_RR = 2;
 const WINDOW_BARS = 700;
@@ -328,8 +331,10 @@ function readLibrary(file) {
 const learningRun = home => { try { return JSON.parse(fs.readFileSync(path.join(home, 'learning-run.json'), 'utf8')); } catch (_err) { return null; } };
 
 /** Pin a library index for a run (its own copy, frozen by its hash); a run keeps the one it pinned. */
-function pinLibrary(runHome, file) {
+function pinLibrary(runHome, file, { validBars = strategyValidBars(PLUGIN_ROOT) } = {}) {
   const doc = readLibrary(file);
+  // Measured over the window the gate allows now (the strategy's valid_bars), or not pinned.
+  if (doc.validBars !== validBars) throw new Error(`${file}: measured with limits valid ${doc.validBars ?? 'an unknown number of'} bar(s); the ${LIFECYCLE} strategy's valid_bars is ${validBars}: scan and index it again`);
   const run = learningRun(runHome);
   if (run && run.learning === false) throw new Error('this run is declared not learning: no history library');
   const dir = path.join(runHome, 'experience');

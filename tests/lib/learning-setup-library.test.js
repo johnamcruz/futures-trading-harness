@@ -167,6 +167,12 @@ test('index: walk-forward by day (a lookup on day D sees only rows known before 
   assert.strictEqual(L.pinLibrary(home, file).hash, doc.hash);
   assert.strictEqual(L.loadPinnedLibrary(home).hash, doc.hash);
   assert.throws(() => L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), one)), /a run keeps its library/);
+  // An index measured over another window than the strategy's valid_bars is never pinned (one bar against the shipped
+  // two; or the shipped two once a strategy says three).
+  const oneBar = L.buildLibraryIndex(scan(BARS, 1), { reps: 20 });
+  assert.throws(() => L.pinLibrary(tmpHome(), L.writeLibrary(path.join(home, 'built1'), oneBar)), /limits valid 1 bar\(s\); the trade_lifecycle strategy's valid_bars is 2: scan and index it again/);
+  assert.throws(() => L.pinLibrary(tmpHome(), file, { validBars: 3 }), /valid_bars is 3/);
+  assert.strictEqual(L.pinLibrary(tmpHome(), L.writeLibrary(path.join(home, 'built1'), oneBar), { validBars: 1 }).hash, oneBar.hash);
   fs.writeFileSync(path.join(home, 'built', 'bad.json'), JSON.stringify({ ...doc, records: 1 }));
   assert.throws(() => L.readLibrary(path.join(home, 'built', 'bad.json')), /doesn't match its hash/);
   assert.throws(() => L.readLibrary(path.join(home, 'built', path.basename(file)).replace('library-', 'nope-')), /ENOENT/);
@@ -176,7 +182,7 @@ test('index: walk-forward by day (a lookup on day D sees only rows known before 
 function libraryFor(rec, { n = 24 } = {}) {
   const days = Array.from({ length: 12 }, (_, i) => `2022-03-${String(i + 1).padStart(2, '0')}`);
   return Array.from({ length: n }, (_, i) => ({
-    v: L.VERSION, id: `l${i}`, root: 'MNQ', day: days[i % 12], bar: `${days[i % 12]}T15:00:00.000Z`, status: i === n - 1 ? 'no-room' : 'traded', side: 'long',
+    v: L.VERSION, validBars: 2, id: `l${i}`, root: 'MNQ', day: days[i % 12], bar: `${days[i % 12]}T15:00:00.000Z`, status: i === n - 1 ? 'no-room' : 'traded', side: 'long',
     reads: rec.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read })), signature: rec.signatures.read, setupKey: L.setupKeyOf(rec.reads), context: rec.context,
     outcome: { filled: true, R: i % 3 ? 2 : -1, exitTime: `${days[i % 12]}T16:00:00.000Z` },
   }));

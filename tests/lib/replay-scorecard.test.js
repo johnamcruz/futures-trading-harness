@@ -289,7 +289,9 @@ function makeRun({ withBars = true, finished = true, steps = STEPS } = {}) {
     if (s.scan) scans.push({ at: iso(t + (s.lag || 0)), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 0 }, decision: { run: true, reason: 'bar closed' }, candidates: s.scan.filter(r => r.candidate).map(r => r.name), results: s.scan });
     if (s.verdict) {
       const v = s.scan.find(r => r.verdict).verdict;
-      verdicts.push({ at: iso(t + (s.lag || 0)), strategy: 'prop_portfolio', component: 'orb', symbol: 'MNQ', contractId: 'MNQ', bar: barT, direction: 'long', stopTicks: 40, account: 'topstep_100k', combine: ATTEMPT, ...v });
+      verdicts.push({ at: iso(t), strategy: 'prop_portfolio', component: 'orb', symbol: 'MNQ', contractId: 'MNQ', bar: barT, direction: 'long', stopTicks: 40, account: 'topstep_100k', combine: ATTEMPT, ...v });
+      // A verdict stamped on a running clock, after the line's time (latency charged).
+      if (s.lag) verdicts[verdicts.length - 1].at = iso(t + s.lag);
     }
     if (s.cycle) {
       const c = s.cycle;
