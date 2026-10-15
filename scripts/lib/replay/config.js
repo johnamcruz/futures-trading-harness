@@ -27,6 +27,11 @@
  *                  experience_lookup's code-measured section (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
+ *   stage          a training preset (replay/stage.js; docs/TRAINING.md): 1 learn to trade, 2 pass prop. It sets
+ *                  defaults and requirements only: an explicit value contradicting it is refused, never overridden;
+ *                  the training preflight (learning/preflight.js) checks the rest; part of both hashes (default: none).
+ *                  An A/B of a skill change is two replays with the same stage, seed and list (practice and
+ *                  curatedList), compared with the paired test (train/paired.js)
  *
  * Isolation: the run home is a fresh harness home (FTH_HOME) of its own, never
  * the default home, the caller's FTH_HOME, or inside the repository; it holds
@@ -54,6 +59,7 @@ const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
+const { applyStage } = require('./stage');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -123,8 +129,10 @@ function readAutotrader(spec, baseDir) {
 }
 
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
-  const errors = [];
-  const r = raw && typeof raw === 'object' ? raw : {};
+  // A stage preset's defaults under the config's own values; a value contradicting it is refused (replay/stage.js).
+  const staged = applyStage(raw);
+  const errors = [...staged.errors];
+  const r = staged.raw;
   if (!RUN_ID.test(String(r.runId || ''))) errors.push('runId: letters, digits, ".", "_", "-" (up to 64), starting with a letter or digit');
   if (!(typeof r.workDir === 'string' && /^(\/|~\/)/.test(r.workDir))) errors.push('workDir: an absolute path or ~/...');
   if (!(typeof r.broker === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(r.broker))) errors.push('broker: the replay broker\'s name in brokers.json');
@@ -185,6 +193,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     // The history library index the run pins at its start (learning/setup-library.js pinLibrary), or null.
     setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
     prop: r.prop || null,
+    // The training stage preset (replay/stage.js), or null.
+    stage: staged.stage,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
@@ -272,6 +282,8 @@ function configHash(run, base = process.env) {
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
+    // The training stage, named only when set, so a run without one keeps the hash it had.
+    ...(run.stage ? { stage: run.stage } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
@@ -291,6 +303,7 @@ function setupHash(run) {
     // The runner config without the run's own folders (its runId is in their paths).
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
+    ...(run.stage ? { stage: run.stage } : {}),
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
