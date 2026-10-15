@@ -10,7 +10,8 @@
  * (logs/cycles-<day>.jsonl), the run's own bars (its bars files, or the data it replayed, as the experience log reads
  * them), and the experience log (experience/decisions.jsonl) for the outcomes the run itself filled. The briefing at a
  * decision bar is rebuilt from the bars closed by that bar's close (briefing.js buildBriefing, the runner's history
- * window, the run home's round-number steps), never a later bar.
+ * window, the run home's round-number steps and news blackouts, its 1m bars as the fine bars for the 5m facts),
+ * never a later bar. The scan results and the session clock are not rebuilt: no read depends on them.
  *
  * A decision point is a bar and side the model composed on (a compose_check record for that root, bar and side; the
  * sides it considered). Each read the model stated is the skill's the crosswalk gives its form (curated-moments.js
@@ -24,7 +25,9 @@
  *   correct    claimed reads the checker verified (TRUE and agreeing with the side)
  *   wrong      claimed reads refused (FALSE, unverifiable, against the side, or refused by the checker's rules), with
  *              the top reasons
- *   missed     the points where a read of it was TRUE and agreed with the side the model traded or considered, and the
+ *   missed     the points where a read of it was TRUE and pointed the way of the side the model traded or considered
+ *              (its direction the side's, as the checker gives it; a read with no direction, such as a range, the
+ *              regime, the VWAP side or `at` a level, counts as available only), and the
  *              model claimed none of its reads, with the reads it missed most
  *   mislabeled claimed reads the model filed under another skill (the checker records the label, never checks it)
  * pullback-vs-reversal (the shape skill) is claimed when the model names it, and available when the true agreeing
@@ -44,14 +47,14 @@
  *
  *   skillUsage({ records, briefingAt, decisions, cycles, hideOutcomes, tick })   the report
  *   readComposeRecords(home)            every compose record under a home, oldest first, once each (by id)
- *   availableAt(briefing, side, { tick })   Map skill -> { reads: the TRUE ones, agreeing: those agreeing }
+ *   availableAt(briefing, side, { tick })   Map skill -> { reads: the TRUE ones, agreeing: those pointing the side's way }
  *   readSkillUsage(runDir, { barsFiles })   the report of a replay run (its run dir, as `replay.js report` takes it)
  *   skillUsageMarkdown(u), skillUsageText(u)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { parseRead } = require('../trading/composed-reads');
+const { parseRead, checkRead } = require('../trading/composed-reads');
 const { tradingDayKey } = require('../trading/clock');
 const { readRecords } = require('../trading/trade-lifecycle');
 const { readsAt, skillOfRead, shapeOf, READ_SKILL, SHAPE_SKILL } = require('./curated-moments');
@@ -114,18 +117,19 @@ function availableAt(b, side, { tick = 0.25 } = {}) {
       const form = parseRead(r.read).form;
       if (seen.has(form)) continue;
       seen.add(form);
-      reads.push({ ...r, form });
+      // The read's own direction (the checker's): only a read pointing the side's way is relevant to it.
+      reads.push({ ...r, form, dir: checkRead(parseRead(r.read), b, { tick }).dir || null });
     }
   }
   const out = new Map();
   const add = (skill, r) => {
     if (!out.has(skill)) out.set(skill, { reads: [], agreeing: [] });
     out.get(skill).reads.push(r);
-    if (r.agrees) out.get(skill).agreeing.push(r);
+    if (r.agrees && r.dir === side) out.get(skill).agreeing.push(r);
   };
   for (const r of reads) add(r.skill, r);
   const shape = shapeOf(reads, side);
-  if (shape) add(SHAPE_SKILL, { step: 'bias', skill: SHAPE_SKILL, read: shape, form: shape, agrees: true });
+  if (shape) add(SHAPE_SKILL, { step: 'bias', skill: SHAPE_SKILL, read: shape, form: shape, agrees: true, dir: side });
   return out;
 }
 
@@ -270,7 +274,7 @@ function readCycleLines(home) {
  * `count` before it, never a later bar, with the run's round-number steps (`roundSteps`, its home's, as the scorecard
  * rebuilds it). null when the bar isn't in them.
  */
-function briefingFrom(bars, { root, minutes, count, roundSteps = null }) {
+function briefingFrom(bars, { root, minutes, count, roundSteps = null, fineBars = null, blackouts = null }) {
   const { buildBriefing } = require('../trading/briefing');
   const index = new Map(bars.map((b, i) => [Date.parse(b.t), i]));
   return (r, bar) => {
@@ -278,7 +282,10 @@ function briefingFrom(bars, { root, minutes, count, roundSteps = null }) {
     const i = index.get(Date.parse(bar));
     if (i === undefined) return null;
     const slice = bars.slice(Math.max(0, i + 1 - count), i + 1).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
-    return buildBriefing({ symbol: root, bars: slice, minutes, roundSteps, now: new Date(Date.parse(bars[i].t) + minutes * 60000) });
+    const close = Date.parse(bars[i].t) + minutes * 60000;
+    // The run's 1m bars closed by the bar's close (the runner's fine bars: its 5m facts), never a later one.
+    const fine = Array.isArray(fineBars) && fineBars.length ? fineBars.filter(x => Date.parse(x.t) + 60000 <= close).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v })) : null;
+    return buildBriefing({ symbol: root, bars: slice, minutes, roundSteps, fineBars: fine && fine.length ? fine : null, blackouts, now: new Date(close) });
   };
 }
 
@@ -308,11 +315,14 @@ function readSkillUsage(runDir, { barsFiles = {} } = {}) {
   const count = Number(cfg.bars) > 0 ? Number(cfg.bars) : minutes ? historyBars(minutes) : 0;
   const outcomeBars = minutes && Object.keys(barsFiles).length ? labels.outcomeBarsFor(dir, barsFiles) : null;
   const roundSteps = require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home });
+  // The run's own news blackouts (seeded in its home, as the scorecard reads them).
+  const blackouts = require('../trading/check-order').readBlackouts(path.join(home, 'blackouts', 'blackouts.json'));
   const builders = new Map();
   const briefingAt = minutes ? (root, bar) => {
     if (!builders.has(root)) {
       const bars = (labels.outcomeFor(outcomeBars, root, minutes) || labels.loadBars(home, root, minutes)).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
-      builders.set(root, bars.length ? briefingFrom(bars, { root, minutes, count, roundSteps }) : () => null);
+      const fineBars = minutes !== 1 ? labels.loadBars(home, root, 1).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t)) : null;
+      builders.set(root, bars.length ? briefingFrom(bars, { root, minutes, count, roundSteps, fineBars, blackouts }) : () => null);
     }
     return builders.get(root)(root, bar);
   } : null;

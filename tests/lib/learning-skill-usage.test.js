@@ -10,7 +10,7 @@ const L = require('../../scripts/lib/learning/learning-report');
 const TL = require('../../scripts/lib/trading/trade-lifecycle');
 const { checkReads } = require('../../scripts/lib/trading/composed-reads');
 const { MIN_N, MIN_DAYS } = require('../../scripts/lib/learning/experience-index');
-const { BARS, ROOT } = require('../fixtures/decision-path');
+const { BARS, MINUTE_BARS, ROOT } = require('../fixtures/decision-path');
 const { tmpDir } = require('../helpers');
 
 // Records composed on the parity bars (tests/fixtures/parity/NQ-3m.csv), checked by the real checker on the briefing
@@ -101,6 +101,41 @@ test('skill usage: available is the curated scanner\'s readsAt over every reacti
   const none = U.availableAt(bare, 'long');
   assert.ok(none.get('multi-timeframe-analysis').agreeing.some(r => r.form === '15m up'));
   assert.ok(!none.has('fair-value-gaps') || !none.get('fair-value-gaps').reads.some(r => r.step === 'setup'));
+});
+
+test('skill usage: missed counts only a TRUE read pointing the side\'s way: one against it, or one with no direction, is available only', () => {
+  // The long at 14:00: the 3m CHoCH up is TRUE and points long, never claimed: missed. The VWAP side, the regime and the
+  // day type have no direction: available, never missed.
+  const long = U.skillUsage({ records: RECORDS.slice(0, 2), briefingAt: at });
+  assert.deepStrictEqual([of(long, 'bos-vs-choch').missed, of(long, 'bos-vs-choch').relevant], [1, 1]);
+  assert.ok(of(long, 'bos-vs-choch').topMissed.some(x => x.what === '3m choch up'));
+  for (const sk of ['vwap-volume-profile', 'trend-vs-range']) assert.deepStrictEqual([of(long, sk).available, of(long, sk).relevant, of(long, sk).missed, of(long, sk).topMissed], [1, 0, 0, []], sk);
+  // The short at 16:24: the 3m CHoCH up and the 15m and 1h BOS up are TRUE but against the short: not missed.
+  const short = U.skillUsage({ records: [RECORDS[2]], briefingAt: at });
+  const bc = of(short, 'bos-vs-choch');
+  assert.deepStrictEqual([bc.available, bc.relevant, bc.missed, bc.topMissed], [1, 0, 0, []]);
+  assert.ok(U.availableAt(at('MNQ', R_BAR), 'short').get('bos-vs-choch').reads.some(r => r.form === '3m choch up' && r.dir === 'long'));
+  for (const sk of ['vwap-volume-profile', 'trend-vs-range', 'daily-bias', 'cisd', 'breakout']) assert.strictEqual(of(short, sk).missed, 0, sk);
+});
+
+test('skill usage: a 1m lane: the run\'s 1m bars closed by the bar\'s close are the fine bars (the 5m facts), as the live briefing has them', () => {
+  const plain = at('MNQ', R_BAR);
+  assert.ok(plain.sections.m3.data.candles['5m'].unavailable);
+  const fine = U.briefingFrom(BARS, { root: 'MNQ', minutes: 3, count: 1400, fineBars: MINUTE_BARS });
+  const b = fine('MNQ', R_BAR);
+  const c5 = b.sections.m3.data.candles['5m'];
+  assert.ok(!c5.unavailable && Date.parse(c5.closedAt) <= Date.parse(R_BAR) + 180000, JSON.stringify(c5).slice(0, 200));
+  assert.ok([...U.availableAt(b, 'short').values()].some(a => a.reads.some(r => /^5m /.test(r.form))), 'a 5m read counts');
+  // A later 1m bar changes nothing.
+  const end = Date.parse(R_BAR) + 180000;
+  const later = MINUTE_BARS.map(x => (Date.parse(x.t) + 60000 > end ? { ...x, h: x.h + 300, c: x.c + 200 } : x));
+  assert.deepStrictEqual(U.briefingFrom(BARS, { root: 'MNQ', minutes: 3, count: 1400, fineBars: later })('MNQ', R_BAR).sections.m3.data, b.sections.m3.data);
+  // Read from the run home's 1m bars file.
+  const { home, dir } = runHome();
+  fs.writeFileSync(path.join(home, 'bars', 'MNQ-1m.json'), JSON.stringify({ bars: MINUTE_BARS }));
+  const withLane = U.readSkillUsage(dir);
+  fs.unlinkSync(path.join(home, 'bars', 'MNQ-1m.json'));
+  assert.notDeepStrictEqual(withLane.skills, U.readSkillUsage(dir).skills);
 });
 
 test('skill usage: the briefing at a bar reads no later bar: changing every bar after it changes nothing', () => {
