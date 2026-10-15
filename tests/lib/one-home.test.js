@@ -72,6 +72,22 @@ test('sizing: the live verdict and the gate refuse a policy without a whole sizi
   assert.match(noFee.reason, /no fees_per_side\.MNQ in the unit profile/);
 });
 
+test('sizing and fees: the gate\'s budget refuses a policy without a whole sizing or a tradable leg without its fee', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { tmpDir } = require('../helpers');
+  const a = acct();
+  const home = tmpDir();
+  const now = new Date('2026-10-07T14:00:00Z');
+  prop.startAttempt(home, a, new Date(now.getTime() - 86400000));
+  prop.snapshot(home, a, 50000, new Date(now.getTime() - 60000));
+  const policy = sizing => ({ name: 'p', contracts: 'micro', sizing });
+  assert.strictEqual(prop.budgetPlan(home, a, policy(TEST_SIZING), 'MNQ', 40).size, 18, '$400: 18 MNQ at $21.24');
+  assert.match(prop.budgetPlan(home, a, policy({ cushion_frac: 0.2 }), 'MNQ', 40).error, /p has no whole sizing from its account's rulebook/);
+  assert.match(prop.budgetPlan(home, a, policy(undefined), 'MNQ', 40).error, /p has no whole sizing/);
+  assert.match(prop.budgetPlan(home, { ...a, fees_per_side: { NQ: 1.4 } }, policy(TEST_SIZING), 'MNQ', 40).error, /no fees_per_side\.MNQ in the unit profile/);
+  assert.match(prop.budgetPlan(home, { ...a, fees_per_side: { MNQ: 0.37 } }, policy(TEST_SIZING), 'MNQ', 40).error, /no fees_per_side\.NQ/, 'the mini is tradable too');
+});
+
 // ---- 3. Fees: the account's only ----
 
 test('fees: the account profile is the one home; the contract table and the broker spec carry none; a missing one is refused', () => {
