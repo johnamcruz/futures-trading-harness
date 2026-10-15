@@ -11,7 +11,10 @@
  *              timeframe lanes (lanes.js), the union of every lane's closes,
  *              one point per close time however many lanes close then (the
  *              live runner coalesces them into one cycle), each point listing
- *              its lanes (`lanes`: [3, 1], in the config's lane order);
+ *              its lanes (`lanes`: [3, 1], in the config's lane order); a data
+ *              lane (trigger "data") adds no point: its bars are polled at the
+ *              trading lanes' points, up to each point (causal), as live
+ *              cycles only on them;
  *   premarket  the config's premarketAt (when premarket runs);
  *   eod        end of day (eodAt, or earlyCloseEodAt on an early close).
  *
@@ -31,7 +34,7 @@
 const { tradingDayStart, tradingDayKey, inMarketHours, inWindow, parseWindows, sessionMinute, sessionMinuteOf } = require('../trading/clock');
 const { endOfDayAt, parseAt } = require('../autotrader');
 const { CLOSED, cmeHolidays } = require('../trading/exchange-calendar');
-const { lanesOf } = require('../lanes');
+const { tradingLanes } = require('../lanes');
 
 const HOUR = 3600000;
 
@@ -62,7 +65,7 @@ function laneCloses(lanes, from, to) {
 }
 
 function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000 }) {
-  const lanes = lanesOf(cfg);
+  const lanes = tradingLanes(cfg);
   const multi = lanes.length > 1;
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   const inside = t => t.getTime() >= start.getTime() && t.getTime() < end.getTime();
