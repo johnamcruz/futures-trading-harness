@@ -170,6 +170,23 @@ function entryClock({ entryHours = '', noEntryWindows = '' } = {}) {
 const MARKET_TZ = 'America/New_York';
 const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
+/**
+ * The session boundaries every module reads, in New York minutes of the day (the one home: no module restates
+ * them): the regular (cash) session 09:30-16:00 and the Globex open at 18:00, where a trading day starts.
+ */
+const RTH_OPEN_MIN = 9 * 60 + 30;
+const RTH_CLOSE_MIN = MARKET_CLOSE_MIN;
+const GLOBEX_OPEN_MIN = MARKET_OPEN_MIN;
+/**
+ * The runner's and the backtester's session and end-of-day defaults (autotrader.js and backtest/engine.js DEFAULTS
+ * read these; a config may only narrow them: an end of day later than the close is refused). The whole market
+ * session to end of day, flat 10 minutes before the 16:00 ET close (13:00 on an early close).
+ */
+const SESSION_DEFAULTS = Object.freeze({
+  sessions: Object.freeze(['18:00-15:50@America/New_York']),
+  eodAt: '15:50@America/New_York',
+  earlyCloseEodAt: '12:50@America/New_York',
+});
 const MARKET_HOURS_LABEL = 'the harness\'s hours inside the Topstep trading day (17:00 CT reset): from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; Topstep\'s own flatten is 16:10 ET';
 
 /**
@@ -230,6 +247,10 @@ module.exports = {
   MARKET_TZ,
   MARKET_OPEN_MIN,
   MARKET_CLOSE_MIN,
+  RTH_OPEN_MIN,
+  RTH_CLOSE_MIN,
+  GLOBEX_OPEN_MIN,
+  SESSION_DEFAULTS,
   MARKET_HOURS_LABEL,
   SESSION_ALIASES,
   inMarketHours,

@@ -11,7 +11,8 @@
  *   touches(s, openPnl)             would equity at openPnl reach the floor?
  *   endDay(s)                       the session closed: floor, pass, timeout
  *   entryBlock(s)                   why no new entry now (or null)
- *   budget(s, sizing)               dollars a new trade may risk
+ *   budget(s, sizing)               dollars a new trade may risk (sizing: a policy's rulebook entry, every key; else 0)
+ *   sizingErrors(z), requireSizing(z)  what a sizing lacks (SIZING_KEYS: no code default)
  *   attemptFacts(s, counts)         the attempt line's further facts (room to the limits, today's counts, consistency)
  *   contracts(budget, riskPerContract, max, guard, room)
  *
@@ -27,18 +28,45 @@
  * streak, a win ends it, and a scratch (gross 0) does neither.
  */
 
-const DEFAULT_SIZING = {
-  cushion_frac: 0.2, // risk at most this share of the cushion on one trade
-  cap_usd: 0, // and at most this many dollars (0 = no cap)
-  clock_k: 0, // > 0: also at most k x (target - profit) / (sessions left x r_per_session)
-  r_per_session: 0.3,
-  min_size_guard: 1.5, // skip when one contract risks more than guard x budget
-  drawdown_halve_usd: 0, // > 0: halve the budget while the balance is at least this far below its peak
-  // A stop's expected slippage, in ticks per contract, counted in each contract's risk: a full stop
-  // plus this never reaches the floor or the daily limit. At least the backtester's fill slippage
-  // (engine.js DEFAULTS.slippageTicks, 1), so a backtest sizes and fills as live.
-  stop_slippage_ticks: 1,
-};
+/**
+ * The sizing keys a policy's rulebook entry states (accounts/<name>/RULEBOOK.md, rulebook.js SIZING_RULES). There is
+ * no code default for any of them: the rulebook is the one home of their values. A sizing that leaves one out sizes
+ * nothing (budget 0), and every caller refuses it with sizingErrors' reason.
+ *   cushion_frac        risk at most this share of the cushion on one trade
+ *   cap_usd             and at most this many dollars (0 = no cap: the rulebook's `off`)
+ *   clock_k             > 0: also at most k x (target - profit) / (sessions left x r_per_session)
+ *   r_per_session       the R a session makes (clock sizing)
+ *   min_size_guard      one contract is still taken when it risks at most guard x budget
+ *   drawdown_halve_usd  > 0: halve the budget while the balance is at least this far below its peak
+ *   stop_slippage_ticks a stop's expected slippage, in ticks per contract, counted in each contract's risk: a full
+ *                       stop plus this never reaches the floor or the daily limit
+ */
+const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks']);
+/**
+ * The floor under a stop's expected slippage: the schema's (rulebook.js refuses less), not a value. A missing or
+ * smaller slippage only ever sizes the same or down. The backtester's fill slippage (engine.js DEFAULTS.slippageTicks)
+ * is this floor too, so a backtest sizes and fills as live.
+ */
+const MIN_STOP_SLIPPAGE_TICKS = 1;
+
+/** What a sizing lacks (empty: every key stated, each a number 0 or more, the slippage at least its floor). */
+function sizingErrors(z) {
+  if (!z || typeof z !== 'object' || Array.isArray(z)) return [`no sizing: a policy's rulebook entry states every key (${SIZING_KEYS.join(', ')}); there is no code default`];
+  const out = [];
+  for (const k of SIZING_KEYS) {
+    const v = z[k];
+    if (!(typeof v === 'number' && Number.isFinite(v) && v >= 0)) out.push(`sizing.${k}: ${v === undefined ? 'missing' : JSON.stringify(v)}; the policy's rulebook states it (no code default)`);
+  }
+  if (!out.length && z.stop_slippage_ticks < MIN_STOP_SLIPPAGE_TICKS) out.push(`sizing.stop_slippage_ticks: at least ${MIN_STOP_SLIPPAGE_TICKS}`);
+  return out;
+}
+
+/** The sizing when it is whole, else throws naming what it lacks: a run is refused, never sized by a guess. */
+function requireSizing(z, where = 'sizing') {
+  const errors = sizingErrors(z);
+  if (errors.length) throw new Error(`${where}: ${errors.join('; ')}`);
+  return z;
+}
 
 const round2 = x => Math.round(x * 100) / 100;
 
@@ -153,8 +181,10 @@ function entryBlock(s) {
  * and (clock sizing) under what is still needed per session left. Never more
  * than the room to the floor or to the firm's daily limit.
  */
-function budget(s, sizing = {}) {
-  const z = { ...DEFAULT_SIZING, ...sizing };
+function budget(s, sizing) {
+  // No whole sizing (the rulebook's), no budget: fails closed, never a code default.
+  if (sizingErrors(sizing).length) return 0;
+  const z = sizing;
   if (entryBlock(s)) return 0;
   let b = z.cushion_frac * cushion(s);
   if (z.cap_usd > 0) b = Math.min(b, z.cap_usd);
@@ -170,9 +200,10 @@ function budget(s, sizing = {}) {
   return Math.max(0, round2(b));
 }
 
-/** Whole contracts for a budget; 0 when even one risks more than guard x budget. */
-function contracts(dollars, riskPerContract, max, guard = DEFAULT_SIZING.min_size_guard, room = Infinity) {
+/** Whole contracts for a budget; 0 when even one risks more than guard x budget (no guard given: 0, none over budget). */
+function contracts(dollars, riskPerContract, max, guard = 0, room = Infinity) {
   if (!(riskPerContract > 0) || !(dollars > 0)) return 0;
+  if (!(typeof guard === 'number' && Number.isFinite(guard) && guard >= 0)) guard = 0;
   // Never a full stop's worth of risk that reaches the floor or the daily limit.
   const fit = Number.isFinite(room) ? Math.floor((room - 0.01) / riskPerContract) : Infinity;
   const n = Math.floor(dollars / riskPerContract);
@@ -197,18 +228,20 @@ const CONTRACT_MODES = ['micro', 'mini', 'auto'];
  * stopped trade's expected loss fits the budget and never reaches the room.
  * Returns { root, size, riskPerContract } or null when no contract fits.
  */
-function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = DEFAULT_SIZING.min_size_guard, fraction = 1, ratio = 10, slipTicks = DEFAULT_SIZING.stop_slippage_ticks }) {
+function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = 0, fraction = 1, ratio = 10, slipTicks = MIN_STOP_SLIPPAGE_TICKS }) {
   const mi = legs.micro;
   const mn = legs.mini;
-  // Never less than the default: a missing or smaller expected slippage only ever sizes the same or down.
-  const slip = Math.max(DEFAULT_SIZING.stop_slippage_ticks, Number(slipTicks) || 0);
+  // Never less than the floor: a missing or smaller expected slippage only ever sizes the same or down.
+  const slip = Math.max(MIN_STOP_SLIPPAGE_TICKS, Number(slipTicks) || 0);
   const riskOf = leg => (stopTicks + slip) * leg.tickValue + 2 * leg.fee;
-  const canMini = mode !== 'micro' && mn && mn.max > 0;
-  const canMicro = mode !== 'mini' && mi && mi.max > 0;
+  // A leg is priced only with its tick value and the account's fee (a null fee would count as $0): else it sizes nothing.
+  const priced = leg => Boolean(leg) && leg.tickValue > 0 && typeof leg.fee === 'number' && Number.isFinite(leg.fee) && leg.fee >= 0;
+  const canMini = mode !== 'micro' && priced(mn) && mn.max > 0;
+  const canMicro = mode !== 'mini' && priced(mi) && mi.max > 0;
   // The most micros the account allows, counting a mini as `ratio` micros.
   const cap = Math.max(canMicro ? mi.max : 0, canMini ? mn.max * ratio : 0);
   if (!cap) return null;
-  const unit = mi || { tickValue: mn.tickValue / ratio, fee: mn.fee / ratio };
+  const unit = priced(mi) ? mi : { tickValue: mn.tickValue / ratio, fee: mn.fee / ratio };
   let n = contracts(dollars, riskOf(unit), cap, guard, room);
   // Never more than the whole budget; a fraction that isn't a number sizes nothing (fails closed).
   const f = typeof fraction === 'number' && Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
@@ -275,6 +308,6 @@ const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
   : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
 
 module.exports = {
-  DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary, attemptFacts,
+  SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS, sizingErrors, requireSizing, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary, attemptFacts,
   profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

@@ -121,9 +121,9 @@ trade's own target and trails past it (`target_then_trail`). The retired `prop_f
 it.
 
 Every sizing key is stated for every policy: the loader refuses an entry
-that leaves one out, since the code's default (`combine.js`
-`DEFAULT_SIZING`) is off for the cap, the drawdown halving and the clock
-and would loosen risk unseen. A limit is turned off only by the word `off`
+that leaves one out: the code has no default (`combine.js` `SIZING_KEYS`
+only names the keys), so a key left out sizes nothing rather than loosen
+risk unseen. A limit is turned off only by the word `off`
 (as `clock_k` is here): 0, an empty value, a negative number or text is refused, never read as
 off. Each policy is sized only from here: a policy on this account that
 isn't listed is refused, and so is the account when this file is missing,

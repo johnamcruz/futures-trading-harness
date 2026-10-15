@@ -14,7 +14,7 @@
 const path = require('path');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { trendHome } = require('../helpers');
+const { trendHome, TEST_SIZING } = require('../helpers');
 const LC = require('./lifecycle');
 
 const NOW = new Date('2026-10-07T14:00:02Z');
@@ -26,7 +26,7 @@ const MINI = {
 const THIN = { ...MINI, max_loss: 1000 };
 const policy = (extra = {}) => ({
   name: 'prop_portfolio', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null,
-  strategies: ['trade_lifecycle'], account: 'mini', contracts: 'micro', timeframe: '3m', risk: { stop: 'strategy', min_rr: 2 }, ...extra,
+  strategies: ['trade_lifecycle'], account: 'mini', contracts: 'micro', timeframe: '3m', risk: { stop: 'strategy', min_rr: 2 }, sizing: TEST_SIZING, ...extra,
 });
 const SHIPPED = loadStrategies(path.resolve(__dirname, '..', '..'), {}).strategies.find(s => s.name === 'trade_lifecycle');
 const LC_DOC = SHIPPED;

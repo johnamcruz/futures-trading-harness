@@ -116,4 +116,22 @@ function accountNamed(pluginRoot, name, env = process.env) {
   return a;
 }
 
-module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed };
+/**
+ * The account's fee per contract per side for a contract root (ACCOUNT.md `fees_per_side`, the one home of a fee), or
+ * null when the profile states none: a fee is never assumed (no code default, no contract-table fee).
+ */
+function feePerSide(account, root) {
+  const fees = account && account.fees_per_side;
+  const k = String(root || '').toUpperCase();
+  const v = fees && typeof fees === 'object' && Object.hasOwn(fees, k) ? fees[k] : undefined;
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+/** The account's fee for a root, or throws naming the missing key: a run, a size or an order is refused, never priced by a guess. */
+function requireFee(account, root) {
+  const f = feePerSide(account, root);
+  if (f === null) throw new Error(`${(account && account.name) || 'the account'}: no fees_per_side.${String(root || '').toUpperCase()} in its ACCOUNT.md; a fee is never assumed`);
+  return f;
+}
+
+module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed, feePerSide, requireFee };

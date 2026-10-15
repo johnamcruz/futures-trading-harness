@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const c = require('../../scripts/lib/trading/combine');
 const { loadAccounts, accountNamed, validateAccount } = require('../../scripts/lib/trading/accounts');
-const { tmpDir, shippedPolicy } = require('../helpers');
+const { tmpDir, shippedPolicy, TEST_SIZING, testSizing } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const acct = (extra = {}) => ({
@@ -74,7 +74,7 @@ test('at the profit target, entries stop only once today\'s close would pass', (
   const next = c.endDay(big);
   assert.strictEqual(next.status, 'active', 'consistency not met');
   assert.strictEqual(c.entryBlock(next), null, 'the next session trades on');
-  assert.ok(c.budget(next) > 0, 'with a size budget');
+  assert.ok(c.budget(next, TEST_SIZING) > 0, 'with a size budget');
   // Past the target, a day smaller than the best one helps: it trades on.
   let lop = c.endDay(c.applyClose(c.endDay(c.applyClose(c.start(acct()), 1000)), 4500)); // $5,500
   lop = c.applyClose(lop, 1000); // $6,500, best $4,500 > $3,250; today $1,000
@@ -83,7 +83,7 @@ test('at the profit target, entries stop only once today\'s close would pass', (
   let rec = c.endDay(c.applyClose(c.endDay(c.applyClose(c.start(acct()), 1000)), 1000));
   rec = c.applyClose(rec, 4500);
   assert.match(c.entryBlock(rec), /today the best day/);
-  assert.strictEqual(c.budget(rec), 0);
+  assert.strictEqual(c.budget(rec, TEST_SIZING), 0);
   // Every day stays tradable until a pass: no state blocks the attempt for good.
   let s2 = next;
   for (let d = 0; d < 3 && s2.status === 'active'; d += 1) {
@@ -97,7 +97,7 @@ test('at the profit target, entries stop only once today\'s close would pass', (
   s = c.endDay(c.applyClose(s, 2000));
   s = c.applyClose(s, 2100);
   assert.match(c.entryBlock(s), /profit target/);
-  assert.strictEqual(c.budget(s), 0);
+  assert.strictEqual(c.budget(s, TEST_SIZING), 0);
   assert.strictEqual(c.endDay(s).status, 'passed');
   // Without a consistency rule the target alone stops entries.
   assert.match(c.entryBlock(c.applyClose(c.start(acct({ consistency_pct: 0 })), 6100)), /profit target/);
@@ -128,7 +128,7 @@ test('loss streak stop: that many losses in a row stop entries for the session; 
   assert.strictEqual(s.lossStreak, 1, 'a scratch neither ends nor extends it');
   s = c.applyClose(s, -50.74, -50);
   assert.match(c.entryBlock(s), /^2 losing trades in a row this session, at the loss streak stop \(loss_streak_stop 2\): no new entries until the next session$/);
-  assert.strictEqual(c.budget(s, { cushion_frac: 0.2 }), 0, 'no budget while blocked');
+  assert.strictEqual(c.budget(s, testSizing({ cushion_frac: 0.2 })), 0, 'no budget while blocked');
   assert.strictEqual(c.applyClose(c.applyClose(c.start(two), -10), 10).lossStreak, 0, 'a win ends it');
   // Without gross, the net decides (the engine and the simulator pass the gross).
   assert.strictEqual(c.applyClose(c.start(two), -0.74).lossStreak, 1);
@@ -144,21 +144,22 @@ test('loss streak stop: that many losses in a row stop entries for the session; 
 
 test('size budget: a share of the cushion, capped, clock-limited, never past the daily limit', () => {
   const s = c.start(acct());
-  assert.strictEqual(c.budget(s), 600, '0.2 x 3000');
-  assert.strictEqual(c.budget(s, { cap_usd: 400 }), 400);
+  assert.strictEqual(c.budget(s, TEST_SIZING), 600, '0.2 x 3000');
+  assert.strictEqual(c.budget(s, testSizing({ cap_usd: 400 })), 400);
   // clock: need 6000 over 5 sessions at 0.3R/session, k 0.1 -> 0.1 x 6000 / 1.5 = 400
-  assert.strictEqual(c.budget(s, { clock_k: 0.1 }), 400);
+  assert.strictEqual(c.budget(s, testSizing({ clock_k: 0.1 })), 400);
   // Past the target but short of consistency, the clock still sizes for what a pass needs:
   // days $4,000, $2,100 -> profit $6,100, needs $8,000 (best $4,000 at 50%): $1,900 over 3 sessions.
   const past = c.endDay(c.applyClose(c.endDay(c.applyClose(s, 4000)), 2100));
   assert.strictEqual(c.profitNeeded(past), 8000);
-  assert.strictEqual(c.budget(past, { clock_k: 0.1 }), 211.11, '0.1 x 1900 / (3 x 0.3)');
+  assert.strictEqual(c.budget(past, testSizing({ clock_k: 0.1 })), 211.11, '0.1 x 1900 / (3 x 0.3)');
   assert.strictEqual(c.profitNeeded(c.start(acct())), 6000);
   const down = c.applyClose(s, -1900); // firm limit 2000: 100 left today (also the soft limit is hit)
-  assert.strictEqual(c.budget(down), 0, 'soft limit reached');
-  assert.strictEqual(c.budget(c.applyClose(s, -900), { cushion_frac: 1 }), 1100, 'room to the daily limit');
+  assert.strictEqual(c.budget(down, TEST_SIZING), 0, 'soft limit reached');
+  assert.strictEqual(c.budget(c.applyClose(s, -900), testSizing({ cushion_frac: 1 })), 1100, 'room to the daily limit');
   assert.strictEqual(c.contracts(600, 50, 100), 12);
-  assert.strictEqual(c.contracts(600, 800, 100), 1, 'one contract within 1.5x the budget');
+  assert.strictEqual(c.contracts(600, 800, 100, 1.5), 1, 'one contract within 1.5x the budget');
+  assert.strictEqual(c.contracts(600, 800, 100), 0, 'no guard given: none over the budget (stricter, never a default guard)');
   assert.strictEqual(c.contracts(600, 1000, 100), 0, 'too big: skip');
   assert.strictEqual(c.contracts(6000, 50, 100), 100, 'capped at max contracts');
 });
@@ -177,9 +178,9 @@ test('contractPlan: a contract\'s risk counts the stop\'s expected slippage (a t
   // Never less than the default: 0, a fraction, or junk size as 1 tick does (stricter only).
   for (const slipTicks of [0, 0.5, -2, undefined, null, 'x']) assert.deepStrictEqual(plan({ slipTicks }), plan(), String(slipTicks));
   // The backtester fills (and the replay counterfactual) slip by the same default number of ticks.
-  assert.strictEqual(c.DEFAULT_SIZING.stop_slippage_ticks, 1);
-  assert.strictEqual(require('../../scripts/lib/backtest/engine').DEFAULTS.slippageTicks, c.DEFAULT_SIZING.stop_slippage_ticks);
-  assert.strictEqual(require('../../scripts/lib/replay/counterfactual').SLIPPAGE_TICKS, c.DEFAULT_SIZING.stop_slippage_ticks);
+  assert.strictEqual(c.MIN_STOP_SLIPPAGE_TICKS, 1);
+  assert.strictEqual(require('../../scripts/lib/backtest/engine').DEFAULTS.slippageTicks, c.MIN_STOP_SLIPPAGE_TICKS);
+  assert.strictEqual(require('../../scripts/lib/replay/counterfactual').SLIPPAGE_TICKS, c.MIN_STOP_SLIPPAGE_TICKS);
 });
 
 test('contractPlan: a fraction (the verdict\'s multiplier) rounds the size down, 0 fits nothing, and junk sizes nothing', () => {
@@ -199,7 +200,7 @@ test('contractPlan: when the room to the floor sets the size, a stop a tick past
   // $50,000 start, $2,000 max loss, no daily limit: down $1,917, so $83 of cushion ($48,083 over a $48,000 floor).
   const s = c.applyClose(c.start(acct({ starting_balance: 50000, max_loss: 2000, daily_loss_limit: 0, daily_loss_soft: 0, consistency_pct: 0 })), -1917);
   assert.deepStrictEqual([s.status, c.room(s)], ['active', 83]);
-  const z = { cushion_frac: 1 }; // the whole cushion as the budget: the room is what limits
+  const z = testSizing({ cushion_frac: 1 }); // the whole cushion as the budget: the room is what limits
   const cp = c.contractPlan({ dollars: c.budget(s, z), room: c.room(s), stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' });
   // Without the slippage term: $20.74 a micro, floor($82.99 / $20.74) = 4 ($82.96), and 4 stopped a tick past the
   // stop lose 4 x $21.24 = $84.96: $47,998.04, under the floor. With it: floor($82.99 / $21.24) = 3.
@@ -212,8 +213,8 @@ test('contractPlan: when the room to the floor sets the size, a stop a tick past
 test('contractPlan: when the daily-limit headroom sets the size, a stop a tick past its price never reaches the daily limit', () => {
   // A $1,000 firm daily limit (soft limit off), down $917 today: $83 of headroom; the cushion ($2,083) is larger.
   const s = c.applyClose(c.start(acct({ max_loss: 3000, daily_loss_limit: 1000, daily_loss_soft: 0 })), -917);
-  assert.deepStrictEqual([c.room(s), c.budget(s)], [83, 83], 'the budget is held to the daily headroom too');
-  const cp = c.contractPlan({ dollars: c.budget(s), room: c.room(s), stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' });
+  assert.deepStrictEqual([c.room(s), c.budget(s, TEST_SIZING)], [83, 83], 'the budget is held to the daily headroom too');
+  const cp = c.contractPlan({ dollars: c.budget(s, TEST_SIZING), room: c.room(s), stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' });
   assert.deepStrictEqual(cp, { root: 'MNQ', size: 3, riskPerContract: 21.24 });
   assert.ok(c.dailyBreached(s, -4 * 21.24), 'the old size (4), stopped a tick past its stop: -$1,001.96 today');
   assert.ok(!c.dailyBreached(s, -cp.size * cp.riskPerContract), '3 stopped a tick past: -$980.72 today');
@@ -225,7 +226,7 @@ test('contractPlan: when the daily-limit headroom sets the size, a stop a tick p
 test('sizing in a drawdown: the budget halves while the balance is far enough below its peak', () => {
   const combine = require('../../scripts/lib/trading/combine');
   const acct = { name: 'a', starting_balance: 100000, profit_target: 6000, max_loss: 3000, max_loss_mode: 'trailing_eod', daily_loss_limit: 0, sessions: 30 };
-  const z = { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500 };
+  const z = testSizing({ cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500 });
   let s = combine.applyClose(combine.start(acct), 2000); // peak $102,000
   assert.strictEqual(s.peak, 102000);
   s = combine.endDay(s); // floor trails to $99,000
@@ -248,7 +249,7 @@ test('live: the attempt keeps the peak balance across snapshots and closes, as t
   const cs = prop.snapshot(home, acct, 100100, new Date('2026-10-06T15:00:00Z'));
   assert.strictEqual(cs.peak, 101800);
   // $1,700 below the peak: half of 0.3 x ($100,100 - $98,200 floor).
-  assert.strictEqual(require('../../scripts/lib/trading/combine').budget(cs, { cushion_frac: 0.3, drawdown_halve_usd: 1500 }), 285);
+  assert.strictEqual(require('../../scripts/lib/trading/combine').budget(cs, testSizing({ cushion_frac: 0.3, drawdown_halve_usd: 1500 })), 285);
 });
 
 test('closeBefore: a past day\'s close is today\'s balance less what later fills made (P&L and fees); an unreadable fill throws', () => {

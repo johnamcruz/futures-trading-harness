@@ -329,7 +329,8 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   assert.doesNotMatch(read(file('levels-and-reactions')), /~2 ticks/);
   // Fair value gaps as the code computes them: the last 60 bars (a strong displacement middle bar, by ATR(14): #129), the
   // last 3 of each kind; an open gap untouched, a partly filled one traded into but not through (low-high the unfilled part).
-  assert.match(ms, /function fairValueGaps\(bars, n = 60, atr14 = ind\.atr\(bars, 14\)\)/);
+  assert.match(ms, /function fairValueGaps\(bars, n = 60, atr14 = ind\.atr\(bars, ind\.ATR_PERIOD\)\)/);
+  assert.strictEqual(require('../../scripts/lib/trading/indicators').ATR_PERIOD, 14, 'ATR(14), as the skill says');
   assert.match(ms, /openFvgs: open\.slice\(-3\),\n\s*partlyFilledFvgs: partly\.slice\(-3\),/);
   assert.match(ms, /else if \(deepest > g\.low\) partly\.push\(\{ side: 'bullish', low: g\.low, high: deepest, gapLow: g\.low, gapHigh: g\.high, at: g\.at \}\);/);
   // Unsourced numbers stay out of confluence-counting.

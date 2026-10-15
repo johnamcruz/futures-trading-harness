@@ -153,7 +153,7 @@ function labels(argv) {
   const barsFiles = barsArgs(argv);
   // The strategies' exits for the counterfactuals: the ones the run's gate read (the repository's and FTH_STRATEGIES_DIRS).
   const { strategies } = loadStrategies(ROOT, process.env);
-  const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, barsFiles, outDir: arg(argv, '--out') || null });
+  const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, accounts: loadAccounts(ROOT, process.env).accounts, barsFiles, outDir: arg(argv, '--out') || null });
   process.stdout.write(summaryText(summary));
   say(`wrote ${file} and labels-summary.json${summary.unfinished ? ` (the run is not finished: ${summary.unfinished})` : ''}`);
   return 0;

@@ -145,10 +145,8 @@ const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
 const candleFacts = require('./candle-facts');
+const { RTH_OPEN_MIN, RTH_CLOSE_MIN, GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const RTH_OPEN = 9 * 60 + 30;
-const RTH_CLOSE = 16 * 60;
-const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
 const CISD_FUNCS = ['cisd_dir', 'cisd_level', 'cisd_sweep', 'ote_top', 'ote_bot', 'in_ote', 'cisd_entry', 'cisd_risk'];
@@ -424,17 +422,17 @@ function causalLevels(bars) {
     const p = zonedParts(new Date(b.t), 'America/New_York');
     const day = `${p.year}-${p.month}-${p.day}`;
     const minute = p.hour * 60 + p.minute;
-    const session = ind.sessionKey(b.t, GLOBEX_OPEN);
-    if (rth && (day !== rthDay || minute >= RTH_CLOSE)) { prior = rth.complete ? rth : null; rth = null; rthDay = null; }
+    const session = ind.sessionKey(b.t, GLOBEX_OPEN_MIN);
+    if (rth && (day !== rthDay || minute >= RTH_CLOSE_MIN)) { prior = rth.complete ? rth : null; rth = null; rthDay = null; }
     if (session !== onSession) { onSession = session; onHigh = NaN; onLow = NaN; onComplete = i > 0; }
     if (prior) { out.prior_high[i] = prior.high; out.prior_low[i] = prior.low; out.prior_close[i] = prior.close; }
     if (onComplete) { out.overnight_high[i] = onHigh; out.overnight_low[i] = onLow; }
-    if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
+    if (minute >= RTH_OPEN_MIN && minute < RTH_CLOSE_MIN) {
       // Complete only when the bars before it were seen (not cut off mid-session).
       if (!rth) { rth = { open: b.o, high: b.h, low: b.l, close: b.c, complete: i > 0 }; rthDay = day; }
       rth.high = Math.max(rth.high, b.h); rth.low = Math.min(rth.low, b.l); rth.close = b.c;
       if (rth.complete) { out.rth_open[i] = rth.open; out.rth_high[i] = rth.high; out.rth_low[i] = rth.low; }
-    } else if (!(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
+    } else if (!(minute >= RTH_CLOSE_MIN && minute < GLOBEX_OPEN_MIN)) {
       onHigh = Number.isNaN(onHigh) ? b.h : Math.max(onHigh, b.h);
       onLow = Number.isNaN(onLow) ? b.l : Math.min(onLow, b.l);
     }
@@ -454,7 +452,7 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
   const crts = new Map();
   const crtOf = m => {
     if (!crts.has(m)) {
-      crts.set(m, crt.crtSeries(bars, m, ind.atr(bars, params.atrStop || 20), {
+      crts.set(m, crt.crtSeries(bars, m, ind.atr(bars, params.atrStop || ind.STOP_ATR_PERIOD), {
         sweepBars: params.crtSweepBars, shiftBars: params.crtShiftBars, maxDepth: params.crtMaxDepth,
         minRangeAtr: params.crtMinRangeAtr, bufferAtr: params.crtBufferAtr, minRR: params.crtMinRR,
       }));
@@ -463,7 +461,7 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
   };
   // CISD on completed m-minute candles (cisd.js), once per m.
   const cisds = new Map();
-  const oneCisd = m => cisd.cisdSeries(bars, m, { levels: level(null), atr: ind.atr(bars, params.atrStop || 20), params: cisd.paramsFrom(params) });
+  const oneCisd = m => cisd.cisdSeries(bars, m, { levels: level(null), atr: ind.atr(bars, params.atrStop || ind.STOP_ATR_PERIOD), params: cisd.paramsFrom(params) });
   // With params.cisdHigherMinutes H (a whole number of m, above it), cisd_entry(m) and cisd_risk(m) also take the
   // H-minute CISD's bounce, the higher one first when both fire on a bar (cisd.combineHigher); the rest stay m's own.
   const cisdOf = m => {
@@ -550,8 +548,8 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
       case 'keltner_upper': return ind.keltner(bars, params.kcLen, params.kcMult, params.kcAtr).upper;
       case 'keltner_mid': return ind.keltner(bars, params.kcLen, params.kcMult, params.kcAtr).mid;
       case 'keltner_lower': return ind.keltner(bars, params.kcLen, params.kcMult, params.kcAtr).lower;
-      case 'vwap_session': return ind.anchoredVwap(bars, 18 * 60);
-      case 'vwap_rth': return ind.anchoredVwap(bars, 9 * 60 + 30, 16 * 60);
+      case 'vwap_session': return ind.anchoredVwap(bars, GLOBEX_OPEN_MIN);
+      case 'vwap_rth': return ind.anchoredVwap(bars, RTH_OPEN_MIN, RTH_CLOSE_MIN);
       case 'or_high': return completeRange(ind.openingRange(bars, params.orbMinutes).high, 'h');
       case 'or_low': return completeRange(ind.openingRange(bars, params.orbMinutes).low, 'l');
       case 'swing_high': return ind.swings(bars, params.swingK).high;
@@ -582,7 +580,7 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
       if (d > 0 && d < step) step = d;
     }
     const stepMin = Number.isFinite(step) ? step / 60000 : 1;
-    const open = 9 * 60 + 30;
+    const open = RTH_OPEN_MIN;
     const end = open + params.orbMinutes;
     let day = null;
     let acc = NaN;
@@ -625,12 +623,12 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
   get.resets = (key, i) => {
     if (i < 1) return false;
-    if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN_MIN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN_MIN);
     // A developing profile level (session_poc, vp_vah(n), ...) that moves jumps past price: a cross
     // counts only through a level that stayed put.
     if (/^session_(poc|vah|val)$/.test(key) || /^vp_(poc|vah|val)\(\d+\)$/.test(key)) {
       const s = get(key);
-      return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN) || !(s[i - 1] === s[i]);
+      return ind.sessionKey(bars[i].t, GLOBEX_OPEN_MIN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN_MIN) || !(s[i - 1] === s[i]);
     }
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);

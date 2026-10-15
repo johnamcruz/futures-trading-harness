@@ -28,8 +28,8 @@ function liveVerdicts(home, now) {
 
 /**
  * An attempt's state. The size budget is each policy strategy's own (its
- * `sizing`), as the gate and the verdicts compute it; with no policy strategy
- * on the account, the default sizing's, labelled so.
+ * `sizing`, its account's rulebook entry), as the gate and the verdicts compute it; with no policy strategy
+ * on the account, none (budgetUsd null): sizing lives only in a policy's rulebook entry, never a code default.
  */
 function statusOf(home, account, now, strategies = []) {
   const r = prop.readAttempt(home, account.name);
@@ -39,14 +39,14 @@ function statusOf(home, account, now, strategies = []) {
   const policies = strategies.filter(x => x.valid && x.signal === 'policy' && x.account === account.name && x.status !== 'disabled');
   const budgets = policies.length
     ? policies.map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }))
-    : [{ strategy: null, budgetUsd: combine.budget(cs) }];
+    : [{ strategy: null, budgetUsd: null }];
   return {
     account: account.name, started: true, startedAt: r.startedAt, days: r.days.length, ...combine.summary(cs),
     budgets, budgetUsd: budgets[0].budgetUsd, snapshotAt: s ? s.at : null, entryBlock: prop.combineBlock(home, account.name, now),
   };
 }
 
-const budgetText = r => r.budgets.map(b => (b.strategy ? `${b.strategy} size budget $${b.budgetUsd}` : `size budget $${b.budgetUsd} (default sizing; no policy strategy trades this account)`)).join('; ');
+const budgetText = r => r.budgets.map(b => (b.strategy ? `${b.strategy} size budget $${b.budgetUsd}` : 'no size budget (no policy strategy trades this account; sizing lives only in a policy\'s rulebook entry)')).join('; ');
 
 function status({ account: name, json = false } = {}, ctx) {
   const c = context(ctx);

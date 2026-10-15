@@ -85,14 +85,14 @@
  * swings, CRT range, previous candle, round numbers), the rest counted.
  */
 
-const { htfCandles, atr: atrOf, sessionKey } = require('./indicators');
+const { htfCandles, atr: atrOf, sessionKey, ATR_PERIOD } = require('./indicators');
 const { zonedParts, tradingDayStart } = require('./clock');
 const { pivots } = require('./structure-events');
 const { momentumRead } = require('./momentum');
+const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
 const TIMEFRAMES = [3, 5, 15, 60, 240];
-const SESSION_OPEN = 18 * 60; // the session (trading day) opens at 18:00 ET
-const ATR_LEN = 14;
+const ATR_LEN = ATR_PERIOD;
 const VOL_LEN = 20;
 const VOL_MIN = 5;
 const SWING_K = 2;
@@ -111,7 +111,7 @@ function onBoundary(ms, minutes) {
 function sinceOpen(ms) {
   if (ms % 60000 !== 0) return -1;
   const p = zonedParts(new Date(ms), 'America/New_York');
-  return (p.hour * 60 + p.minute - 18 * 60 + 1440) % 1440;
+  return (p.hour * 60 + p.minute - GLOBEX_OPEN_MIN + 1440) % 1440;
 }
 
 /** The open of the m-minute boundary containing `ms` (counted from the trading day's start, as briefing nextClose). */
@@ -317,7 +317,7 @@ function relationSeries(bars, minutes, base, level, { at = 'close', session = fa
     const k = !c ? -1 : at === 'open' ? c.first - 1 : at === 'first' ? c.first : at === 'close' ? c.last : i;
     // A session's own level (`session`: the opening range, IB, overnight, today's RTH open) read on a bar of the
     // session before (a new session's first candle) is stale: no level, so no relation.
-    const stale = session && k >= 0 && sessionKey(bars[k].t, SESSION_OPEN) !== sessionKey(c.t, SESSION_OPEN);
+    const stale = session && k >= 0 && sessionKey(bars[k].t, GLOBEX_OPEN_MIN) !== sessionKey(c.t, GLOBEX_OPEN_MIN);
     const rel = c ? relation(c, k >= 0 && !stale ? level[k] : NaN, j > 0 ? s.candles[j - 1].c : NaN) : null;
     const dir = rel && rel.dir === 'up' ? 1 : -1;
     out.rejected.push(rel ? (rel.relation === 'rejected' ? dir : 0) : NaN);

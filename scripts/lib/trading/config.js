@@ -114,10 +114,23 @@ function listEnv(env, name) {
   );
 }
 
+/**
+ * Two loss-streak mechanisms, both kept, documented here (the one place that says how they differ):
+ * - the order gate's cooldown: after MAX_CONSECUTIVE_LOSSES losing trades in a row in a trading day (FTH_MAX_CONSECUTIVE_LOSSES
+ *   overrides), no new entry for FTH_LOSS_COOLDOWN_MIN minutes, on every account and every strategy (order-gate.js,
+ *   account-gate.js; the backtester and the attempt simulator apply it as the gate does);
+ * - an account's session stop: after its rulebook's loss_streak_stop losing trades in a row in a session, no new entry
+ *   until the next session (accounts/<name>/RULEBOOK.md, combine.js entryBlock).
+ * MAX_CONSECUTIVE_LOSSES is the cooldown's default, its one home. Tighten-only: it may only go down, and no shipped
+ * rulebook's loss_streak_stop may be above it, so the session stop never waits for more losses than the cooldown
+ * (tests/lib/one-home.test.js holds both). A loss extends both streaks, a win ends them, a scratch does neither.
+ */
+const MAX_CONSECUTIVE_LOSSES = 2;
+
 function loadConfig(env = process.env) {
   return {
     planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', 120, { min: 1 }),
-    maxConsecutiveLosses: intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', 2, { min: 1 }),
+    maxConsecutiveLosses: intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', MAX_CONSECUTIVE_LOSSES, { min: 1 }),
     lossCooldownMin: intEnv(env, 'FTH_LOSS_COOLDOWN_MIN', 30),
     maxDailyLosses: intEnv(env, 'FTH_MAX_DAILY_LOSSES', 3, { min: 1 }),
     maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', 6), // 0 = off
@@ -206,6 +219,7 @@ module.exports = {
   DEFAULT_NO_ENTRY_WINDOWS,
   DEFAULT_ENTRY_HOURS,
   GATE_CHECKS,
+  MAX_CONSECUTIVE_LOSSES,
   cycleLaneBarsOf,
   loadConfig,
 };
