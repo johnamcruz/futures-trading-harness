@@ -8,24 +8,35 @@
  * - the tag: the skill the edit changes, a finding id the round listed (a finding that names a skill: that skill), and
  *   one of KINDS (rewording, example, rule, removal);
  * - the edits: every one in that skill's SKILL.md (proposal.js validateProposal runs as well);
- * - the owner's style: no number the found text did not already hold; each new line short (at most MAX_LINE
- *   characters, the condition -> action list the prompt asks for); a removal shrinks the text it replaces; the skill's
- *   body stays within its byte cap (SKILL_BYTES, the basics skills' cap; a skill already over it may not grow).
+ * - the owner's style: no number the found text did not already hold, in digits or in words (NUMBER_WORDS: "two",
+ *   "half", "three bars"); each new line short (at most MAX_LINE characters, the condition -> action list the prompt
+ *   asks for); a removal shrinks the text it replaces; the skill's body stays within its byte cap (skill-caps.js, the
+ *   one source the basics-skills test reads too; a skill already over it may not grow);
+ * - the frontmatter (name, description) is never edited: no find may reach into it, and it reads the same after.
  *
- *   KINDS, SKILL_BYTES, MAX_LINE
+ *   KINDS, MAX_LINE, NUMBER_WORDS
  *   splitTagged(raw)                         { tag, proposal }: a PROPOSAL object split into its tag and the proposal
  *   tagErrors(tag, proposal, { findings })   [error]
  *   styleErrors(proposal, { root, kind })    [error]
+ *   numbers(text)                            the numbers a text states, digits and number words (lower case)
  *   bodyBytes(text)                          the bytes of a skill's body (after its frontmatter)
+ *   frontmatterEnd(text)                     where the frontmatter block ends (0: none)
  */
 
 const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
+const { skillByteCap } = require('../skill-caps');
 
 const KINDS = Object.freeze(['rewording', 'example', 'rule', 'removal']);
-const SKILL_BYTES = 3400;
-const MAX_LINE = 240;
+const MAX_LINE = 120;
+// A count or a share in words is a number too ("wait three bars", "half the range"). "one" is left out: it is mostly
+// a pronoun ("the one that", "no one"), and a lone "one" adds no threshold the text did not have.
+const NUMBER_WORDS = Object.freeze(['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'twenty', 'thirty', 'forty', 'fifty', 'hundred', 'thousand', 'half', 'halves', 'quarter', 'quarters', 'third', 'thirds',
+  'twice', 'thrice', 'double', 'triple', 'dozen', 'percent']);
+const WORD = new RegExp(`\\b(?:${NUMBER_WORDS.join('|')})\\b`, 'gi');
+const FRONTMATTER = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 const SKILL_FILE = /^skills\/([a-z0-9-]+)\/SKILL\.md$/;
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -52,7 +63,12 @@ function tagErrors(tag, proposal, { findings = [] } = {}) {
   return errors;
 }
 
-const numbers = s => new Set(String(s).match(/\d+(?:[.,]\d+)?/g) || []);
+const numbers = s => new Set([...(String(s).match(/\d+(?:[.,]\d+)?/g) || []), ...(String(s).match(WORD) || []).map(w => w.toLowerCase())]);
+
+function frontmatterEnd(text) {
+  const m = FRONTMATTER.exec(String(text));
+  return m ? m[0].length : 0;
+}
 
 function bodyBytes(text) {
   let body = text;
@@ -60,7 +76,7 @@ function bodyBytes(text) {
   return Buffer.byteLength(body);
 }
 
-/** The owner's style, in code: no new numbers, short lines, a removal removes, the skill within its byte cap. */
+/** The owner's style, in code: no new numbers, short lines, a removal removes, the frontmatter untouched, the skill within its byte cap. */
 function styleErrors(proposal, { root, kind = null } = {}) {
   const errors = [];
   const edits = isObj(proposal) && Array.isArray(proposal.edits) ? proposal.edits.filter(isObj) : [];
@@ -81,15 +97,23 @@ function styleErrors(proposal, { root, kind = null } = {}) {
       texts.set(e.file, { before: text, after: text });
       text = texts.get(e.file);
     }
-    if (text.after.includes(e.find)) text.after = text.after.replace(e.find, () => e.replace);
+    const where = text.after.indexOf(e.find);
+    if (where < 0) return;
+    // The frontmatter (the skill's name and description: what loads it) is never the edit's: uncapped and unchecked.
+    if (where < frontmatterEnd(text.after)) { errors.push(`${at}: the frontmatter is not edited: the find reaches into it`); return; }
+    text.after = text.after.replace(e.find, () => e.replace);
   });
   for (const [file, t] of texts) {
+    const fm = s => s.slice(0, frontmatterEnd(s));
+    if (fm(t.after) !== fm(t.before)) errors.push(`${file}: the frontmatter is not edited: it would read differently`);
+    const skill = SKILL_FILE.exec(file)[1];
+    const max = skillByteCap(skill);
     const before = bodyBytes(t.before);
     const after = bodyBytes(t.after);
-    const cap = Math.max(SKILL_BYTES, before);
-    if (after > cap) errors.push(`${file}: the skill's body would be ${after} bytes, over its cap (${before > SKILL_BYTES ? `already over ${SKILL_BYTES}: it may not grow past ${before}` : SKILL_BYTES})`);
+    const cap = Math.max(max, before);
+    if (after > cap) errors.push(`${file}: the skill's body would be ${after} bytes, over its cap (${before > max ? `already over ${max}: it may not grow past ${before}` : max})`);
   }
   return errors;
 }
 
-module.exports = { KINDS, SKILL_BYTES, MAX_LINE, splitTagged, tagErrors, styleErrors, bodyBytes };
+module.exports = { KINDS, MAX_LINE, NUMBER_WORDS, splitTagged, tagErrors, styleErrors, numbers, bodyBytes, frontmatterEnd };

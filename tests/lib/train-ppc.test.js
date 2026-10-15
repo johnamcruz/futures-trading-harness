@@ -27,15 +27,20 @@ const { DECISION_RULE } = require('../../scripts/lib/train/paired');
 const ROOT = path.resolve(__dirname, '..', '..');
 const SKILL = 'skills/a/SKILL.md';
 const TEXT = '---\nname: a\ndescription: a test skill\n---\n\n# A\n\n- line one\n\n- line two\n\n- line three\n';
-const TIMES = Array.from({ length: 20 }, (_, i) => new Date(Date.parse('2022-03-09T14:33:02.000Z') + i * 180000).toISOString());
-const WINDOW = [{ from: '2022-03-09', to: '2022-03-10' }];
+// Ten session dates, four decisions each: the overfit guard splits them by date into a probe and a confirm half.
+const DAYS = ['2022-03-07', '2022-03-08', '2022-03-09', '2022-03-10', '2022-03-11', '2022-03-14', '2022-03-15', '2022-03-16', '2022-03-17', '2022-03-18'];
+const TIMES = Array.from({ length: 40 }, (_, i) => new Date(Date.parse(`${DAYS[Math.floor(i / 4)]}T14:33:02.000Z`) + (i % 4) * 180000).toISOString());
+const dayOfT = t => t.slice(0, 10);
+const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
 
 // --- the screen's sides, built from scripted decisions -------------------------------------------------------------
 
 /** n decisions; state(i) -> 'right' | 'misread' | 'missed' for skill a; category(i); R(i). */
-function side({ n = 20, state = () => 'right', category = () => 'right', R = () => 0, blow = () => false, other = () => true } = {}) {
+function side({ n = 20, state = () => 'right', category = () => 'right', R = () => 0, blow = () => false, other = () => true, relevant = () => false } = {}) {
   const decisions = [];
   const scorecard = [];
+  // The skill-usage report's per-point relevance: skill a had a TRUE read pointing the side's way at the bar.
+  const points = Array.from({ length: n }, (_, i) => ({ root: 'MNQ', bar: TIMES[i], relevant: relevant(i) ? ['a'] : [] }));
   for (let i = 0; i < n; i += 1) {
     const s = state(i);
     const reads = [{ step: 'zone', skill: 'b', read: 'x', check: other(i), agrees: true }];
@@ -43,7 +48,7 @@ function side({ n = 20, state = () => 'right', category = () => 'right', R = () 
     decisions.push({ root: 'MNQ', bar: TIMES[i], decision: R(i) === 0 ? 'passed' : 'entered', reads, outcome: { R: R(i) } });
     scorecard.push({ key: `${TIMES[i]}|MNQ`, category: category(i), blow: blow(i) });
   }
-  return SC.sideOf({ decisions, scorecard, usage: [{ skill: 'a', used: 1, available: 2, reads: 3, correct: 1, missed: 1, relevant: 2 }] });
+  return SC.sideOf({ decisions, scorecard, usage: [{ skill: 'a', used: 1, available: 2, reads: 3, correct: 1, missed: 1, relevant: 2 }], points });
 }
 const champ = side({ state: i => (i % 2 ? 'right' : 'misread'), category: i => (i % 2 ? 'right' : 'wrong stated reason') });
 
@@ -85,6 +90,62 @@ test('the screen: a scripted helpful edit passes; harmful and neutral ones do no
   assert.ok(SC.SCREEN.harmAlpha >= DECISION_RULE.alpha);
 });
 
+test('the screen rewards reading better, never claiming more: "always cite read X" where it is not relevant fixes nothing', () => {
+  // The champion never claimed skill a; the probe cites a (verified TRUE) at every bar.
+  const silent = side({ state: () => 'missed' });
+  const cites = side({ state: () => 'right' });
+  for (const kind of ['misread', 'missed']) {
+    const m = SC.measure(silent, cites, { skill: 'a', kind });
+    assert.deepStrictEqual([m.target.pairs, m.target.b, SC.screen(m).verdict], [0, 0, 'no effect'], `${kind}: no bar where it was relevant, none the champion claimed`);
+  }
+  // A misread pairs only the decisions the champion claimed the skill at: a new claim elsewhere is not a fix.
+  const half = side({ state: i => (i < 10 ? 'misread' : 'missed') });
+  const misread = SC.measure(half, cites, { skill: 'a', kind: 'misread' });
+  assert.deepStrictEqual([misread.target.pairs, misread.target.b, misread.target.c], [10, 10, 0]);
+  // A miss counts only where the skill was relevant at the bar (a TRUE read of it pointing the side's way).
+  const relevantSome = side({ state: () => 'missed', relevant: i => i < 6 });
+  const missed = SC.measure(relevantSome, cites, { skill: 'a', kind: 'missed' });
+  assert.deepStrictEqual([missed.target.pairs, missed.target.b, SC.screen(missed).verdict], [6, 6, 'helped']);
+  // A fix counts only when the decision's scorecard pair got no worse: the read claimed, the decision now wrong.
+  const worse = SC.measure(relevantSome, side({ state: () => 'right', category: i => (i < 6 ? 'wrong-side entry' : 'right') }), { skill: 'a', kind: 'missed' });
+  assert.deepStrictEqual([worse.target.pairs, worse.target.b, SC.screen(worse).verdict], [6, 0, 'hurt']);
+  const worseRead = SC.measure(half, side({ state: () => 'right', category: i => (i < 4 ? 'wrong-side entry' : 'right') }), { skill: 'a', kind: 'misread' });
+  assert.deepStrictEqual([worseRead.target.b, worseRead.target.c], [6, 0], 'the four decisions made worse are no fix');
+});
+
+test('the screen pairs only runs under one exit plan (the run\'s manifest records it): another plan is refused', () => {
+  const planned = (plan, n = 20) => SC.sideOf({ decisions: TIMES.slice(0, n).map(t => ({ root: 'MNQ', bar: t, decision: 'passed', exitPlan: plan, reads: [], outcome: { R: 0 } })), scorecard: [] });
+  assert.deepStrictEqual(planned('h1').exitPlans, ['h1']);
+  assert.doesNotThrow(() => SC.measure(planned('h1'), planned('h1'), { skill: 'a', kind: 'misread' }));
+  assert.throws(() => SC.measure(planned('h1'), planned('h2'), { skill: 'a', kind: 'misread' }), /exit plan .* is not the champion's/);
+});
+
+test('the screen\'s minimum effect: 3 fixed, 0 broken is a gain on 20 paired decisions, not on 30', () => {
+  assert.strictEqual(SC.SCREEN.minEffect, 0.15);
+  const of = n => SC.measure(side({ n, state: i => (i < 3 ? 'misread' : 'right') }), side({ n }), { skill: 'a', kind: 'misread' });
+  const thirty = of(30);
+  assert.deepStrictEqual([thirty.target.b, thirty.target.c, thirty.target.pairs], [3, 0, 30]);
+  assert.ok(thirty.target.pBetter <= SC.SCREEN.gainAlpha, 'significant by McNemar alone');
+  assert.strictEqual(SC.screen(thirty).verdict, 'no effect');
+  assert.strictEqual(SC.screen(of(20)).verdict, 'helped');
+});
+
+test('the overfit guard: the moments split by session date, by a seeded hash, into a probe half and a confirm half', () => {
+  const all = side({ n: 40 });
+  const [probe, confirm] = SC.HALVES.map(h => SC.half(all, h, 3));
+  assert.strictEqual(probe.decisions.length + confirm.decisions.length, 40);
+  assert.strictEqual(probe.scorecard.length + confirm.scorecard.length, 40);
+  const days = h => new Set(h.decisions.map(d => d.day));
+  assert.ok(days(probe).size > 0 && days(confirm).size > 0);
+  assert.ok(![...days(probe)].some(d => days(confirm).has(d)), 'no session date in both halves');
+  // A decision and its scorecard line fall in the same half (both by their bar's session date).
+  assert.deepStrictEqual(probe.decisions.map(d => d.key), probe.scorecard.map(d => d.at));
+  // Deterministic for a seed; another seed splits otherwise.
+  assert.deepStrictEqual(DAYS.map(d => SC.halfOf(d, 3)), DAYS.map(d => SC.halfOf(d, 3)));
+  assert.notDeepStrictEqual(DAYS.map(d => SC.halfOf(d, 3)), DAYS.map(d => SC.halfOf(d, 1)));
+  assert.throws(() => SC.half(all, 'test', 3), /half: one of probe, confirm/);
+});
+
 test('the combined change: its parts must not cancel; a harm or a lost target fails it', () => {
   const part = (id, kind = 'misread') => ({ id, tag: { skill: 'a', kind: 'rewording' }, finding: { id: 'F1', kind } });
   const good = side({ state: () => 'right', category: () => 'right' });
@@ -121,12 +182,33 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   assert.match(PE.styleErrors(edit('- line one', '- wait 3 bars'), { root }).join(), /no numbers: the edit adds 3/);
   assert.deepStrictEqual(PE.styleErrors(edit('- line 2 of 2', '- line 2 of 2, reworded'), { root: tree(TEXT.replace('line two', 'line 2 of 2')) }), [], 'a number the text held is kept');
   assert.match(PE.styleErrors(edit('- line one', `- ${'x'.repeat(PE.MAX_LINE)}`), { root }).join(), /short condition -> action lines/);
+  assert.strictEqual(PE.MAX_LINE, 120);
+  assert.deepStrictEqual(PE.styleErrors(edit('- line one', `- ${'x'.repeat(PE.MAX_LINE - 2)}`), { root }), []);
+  // Numbers in words are numbers: "two", "half", "three bars"; one the found text held is kept.
+  for (const added of ['- wait three bars → enter', '- half the range → skip', '- Two closes → confirmed', '- twice the stop → no trade']) {
+    assert.match(PE.styleErrors(edit('- line one', added), { root }).join(), /no numbers: the edit adds/, added);
+  }
+  assert.deepStrictEqual(PE.styleErrors(edit('- line one', '- the one that holds → enter; someone, often → none'), { root }), [], 'words that hold a number word inside them, and "one", are not numbers');
+  assert.deepStrictEqual(PE.styleErrors(edit('- line two', '- line two, reworded'), { root: tree(TEXT.replace('line two', 'line two of three')) }).filter(x => /numbers/.test(x)), []);
+  assert.deepStrictEqual([...PE.numbers('Wait Three bars, half of 2.5')].sort(), ['2.5', 'half', 'three']);
+  // The frontmatter (name, description: what loads the skill) is never edited, whatever the cap.
+  assert.match(PE.styleErrors(edit('description: a test skill', 'description: always read a first'), { root }).join(), /the frontmatter is not edited: the find reaches into it/);
+  assert.match(PE.styleErrors(edit('---\n\n# A', '---\n\n# A!'), { root }).join(), /the frontmatter is not edited/, 'a find spanning its closing line');
+  assert.match(PE.styleErrors(edit('name: a\n', 'name: a\nextra: x\n'), { root }).join(), /the frontmatter is not edited/);
+  assert.deepStrictEqual(PE.styleErrors(edit('# A', '# A, reworded'), { root }), [], 'the body right after it is editable');
   assert.match(PE.styleErrors(edit('- line one', '- line one, longer'), { root, kind: 'removal' }).join(), /a removal shrinks/);
   assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(300)}`), { root }).join(), /over its cap \(3400\)/);
   // Already over the cap: may not grow, may shrink.
   const big = tree(`${TEXT}${'- filler line\n'.repeat(300)}`);
   assert.match(PE.styleErrors(edit('- line one', '- line one, grown'), { root: big }).join(), /already over 3400/);
   assert.deepStrictEqual(PE.styleErrors(edit('- line one\n', ''), { root: big, kind: 'removal' }), []);
+  // The cap is the skill's own, from the one source the basics-skills test reads (a setup has more room).
+  const setup = tmpDir();
+  fs.mkdirSync(path.join(setup, 'skills', 'rejection'), { recursive: true });
+  fs.writeFileSync(path.join(setup, 'skills', 'rejection', 'SKILL.md'), TEXT);
+  const grow = n => ({ ...edit('- line one', `- line one\n${'- grow → more\n'.repeat(n)}`), edits: [{ file: 'skills/rejection/SKILL.md', find: '- line one', replace: `- line one\n${'- grow → more\n'.repeat(n)}` }] });
+  assert.deepStrictEqual(PE.styleErrors(grow(220), { root: setup }), [], 'over 3400, within 4000');
+  assert.match(PE.styleErrors(grow(300), { root: setup }).join(), /over its cap \(4000\)/);
 });
 
 test('findings: the skills with the most misreads, misses and wrong-reason refusals first; refusals credited to the reads at their bar', () => {
@@ -203,6 +285,23 @@ test('the lessons record: written by code, practice-train only, capped, and what
   assert.strictEqual(LS.summarize([]), 'none yet');
 });
 
+test('the lessons record: the keep rule\'s verdict on a combined change, so a screen "helped" the keep rule rejected shows as such', () => {
+  const file = path.join(tmpDir(), LS.FILE);
+  LS.appendLesson(file, { proposalId: 'e1', iteration: 1, skill: 'a', kind: 'rule', findingKind: 'misread', windows: WINDOW, verdict: 'helped', n: 28 });
+  LS.appendLesson(file, { proposalId: 'e2', iteration: 1, skill: 'b', kind: 'example', findingKind: 'missed', windows: WINDOW, verdict: 'helped', n: 28 });
+  LS.appendLesson(file, { proposalId: 'c1', iteration: 1, composed: true, parts: 1, partIds: ['e1'], windows: WINDOW, verdict: 'helped', n: 12 });
+  const before = LS.summarize(LS.readLessons(file));
+  assert.doesNotMatch(before, /keep rule:/);
+  LS.appendKeep(file, { proposalId: 'c1', iteration: 1, keep: 'rejected', windows: WINDOW });
+  const text = LS.summarize(LS.readLessons(file));
+  assert.match(text, /- a, rule \(misread\): helped 1 of 1, no effect 0, hurt 0 \(n per probe: 28\); then the keep rule: rejected 1/);
+  assert.match(text, /- combined changes \(1 parts\): helped 1 of 1, no effect 0, hurt 0 \(n per probe: 12\); then the keep rule: rejected 1/);
+  assert.match(text, /- b, example \(missed\): helped 1 of 1, no effect 0, hurt 0 \(n per probe: 28\)$/m, 'an edit not in the combined change: no keep verdict');
+  // Never a held-out window, never without a verdict.
+  assert.throws(() => LS.appendKeep(file, { proposalId: 'c1', iteration: 1, keep: 'kept', windows: [{ from: '2025-03-03', to: '2025-03-04' }] }), /practice-train only/);
+  assert.throws(() => LS.appendKeep(file, { proposalId: 'c1', iteration: 1, windows: WINDOW }), /keep: the keep rule's verdict/);
+});
+
 test('the probe prompt: the skill\'s text block, its placeholders filled; proposeProbes reads tagged PROPOSAL lines in one call', async () => {
   const t = proposer.readProbeTemplate(ROOT);
   for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) assert.ok(t.includes(k), k);
@@ -225,6 +324,44 @@ test('the probe prompt: the skill\'s text block, its placeholders filled; propos
   assert.match(res.proposals[1].error, /not JSON/);
 });
 
+test('the default probeData on a finished run: the real experience decisions, skill usage (per-point relevance) and compose reads; the keys join', () => {
+  const { M3, record, runDir } = require('../fixtures/learning');
+  const { BARS } = require('../fixtures/decision-path');
+  const BAR = '2026-04-23T14:00:00.000Z';
+  const at = new Date(Date.parse(BAR) + M3).toISOString();
+  const { dir, home } = runDir({ day: '2026-04-23', times: [at], records: [record({ at })], barRows: [[1, 1, 1, 1]] });
+  fs.writeFileSync(path.join(home, 'bars', 'MNQ-3m.json'), JSON.stringify({ bars: BARS }));
+  fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify({ timeframe: 3, bars: 1400, symbols: ['MNQ'] }));
+  const data = PR.probeData({ runDir: dir, tree: ROOT });
+  assert.deepStrictEqual(data.decisions.map(d => [d.bar, d.decision]), [[BAR, 'passed']]);
+  assert.deepStrictEqual(data.records.map(r => [r.root, r.bar, r.reads.length]), [['MNQ', BAR, 6]]);
+  assert.strictEqual(data.usage.points, 1);
+  assert.strictEqual(data.usage.perPoint, undefined, 'the per-point list goes to `points`, not the usage report');
+  // The real availableAt relevance (a TRUE read pointing the side's way) at the bar, joined to the decision by its key.
+  assert.deepStrictEqual(data.points.map(p => [p.root, p.bar]), [['MNQ', BAR]]);
+  assert.ok(data.points[0].relevant.includes('bos-vs-choch'), JSON.stringify(data.points));
+  // The scorecard line: its cycle's time and symbol as key, its bar as barT (another ISO spelling of the same moment).
+  const scorecard = [
+    { key: `${at}|MNQ`, t: at, barT: '2026-04-23T14:00:00Z', symbol: 'MNQ', category: 'wrong stated reason', actual: { action: 'none' }, falseReasons: ['"no gap": a gap holds'] },
+    { key: `${new Date(Date.parse(at) + M3).toISOString()}|MNQ`, t: at, barT: at, symbol: 'MNQ', category: 'wrong stated reason', actual: { action: 'none' }, falseReasons: [] },
+  ];
+  const sided = SC.sideOf({ decisions: data.decisions, scorecard, usage: F.mergeUsage([data.usage]), points: data.points });
+  assert.deepStrictEqual(sided.decisions.map(d => [d.key, d.day]), [[SC.momentKey('MNQ', BAR), '2026-04-23']]);
+  assert.ok(sided.decisions[0].relevant.includes('bos-vs-choch'));
+  assert.strictEqual(sided.scorecard[0].at, sided.decisions[0].key, 'the scorecard line and the decision: one moment');
+  // refusalsOf: the refusal credited to the skills of the reads composed at its bar; a refusal at another bar to none.
+  const refusals = F.refusalsOf(scorecard, data.records);
+  // (Each read's skill is the crosswalk's for its form, not the label filed with it: "at prior VAH" is levels-and-reactions'.)
+  assert.deepStrictEqual(refusals[0].skills, ['bos-vs-choch', 'candle-reading', 'invalidation', 'levels-and-reactions', 'rejection', 'take-profit']);
+  assert.deepStrictEqual(refusals[1].skills, []);
+  // keep: the points outside it are not counted, and their relevance is still listed.
+  const none = PR.probeData({ runDir: dir, tree: ROOT, keep: () => false });
+  assert.deepStrictEqual([none.usage.points, none.points.length], [0, 1]);
+  assert.ok(data.usage.skills.some(x => x.reads > 0 && x.available > 0));
+  assert.ok(none.usage.skills.every(x => x.reads === 0 && x.available === 0 && x.missed === 0), 'nothing outside keep is counted');
+  assert.strictEqual(PR.probeData({ runDir: dir, tree: ROOT, keep: PR.inHalf(SC.halfOf('2026-04-23', 3), 3) }).usage.points, 1);
+});
+
 test('pool: at most `limit` at once; every started one finishes; the first error is thrown after', async () => {
   let now = 0;
   let peak = 0;
@@ -245,11 +382,12 @@ test('pool: at most `limit` at once; every started one finishes; the first error
 
 const MODEL = { account: 'acct_a', paths: 500 };
 // The tree's skill text decides each side's decisions: GOOD fixes every misread of skill a and every wrong reason,
-// SOME fixes 6 of the 10 misreads only, BAD misreads everywhere; anything else is the champion's (every other decision wrong).
+// SOME fixes the misreads of the first four session dates only (i < 16), BAD misreads everywhere; anything else is the champion's (every other decision wrong).
 // REASON fixes the wrong reasons only; SOME and REASON together cancel (the champion's decisions).
-const behaviour = text => (text.includes('BAD') ? 'bad' : text.includes('GOOD') ? 'good'
+// LUCKY fixes the misreads on the probe half's session dates only (seed 3): a gain found by chance there.
+const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD') ? 'bad' : text.includes('GOOD') ? 'good'
   : text.includes('SOME') && text.includes('REASON') ? 'champion' : text.includes('SOME') ? 'some' : text.includes('REASON') ? 'reason' : 'champion');
-const stateOf = (b, i) => (b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 12) ? 'right' : 'misread');
+const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
 function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
@@ -261,10 +399,11 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
   const loop = resolveLoop({
     loopId: 'l1', replay, tuningWindows: WINDOW, proposer: trader, repeats: 1, seed: 3, maxFlagged: 6, controlPoints: 0, modelScore: MODEL,
     // The config's probe replay is a stage-1 curated practice config; the stub world runs the same replay without a list.
-    probe: { replay: { ...replay, stage: 1, curatedList: { file: 'curated.json', list: 'mix' }, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } }, windows: WINDOW, k: 4, parallel: 2 },
+    // parallel 2: no latency charged, so the probes queued together are charged as the champion's run alone (none).
+    probe: { replay: { ...replay, latency: false, stage: 1, curatedList: { file: 'curated.json', list: 'mix' }, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } }, windows: WINDOW, k: 4, parallel: 2 },
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
-  loop.probe = { ...loop.probe, replay: { ...replay, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
+  loop.probe = { ...loop.probe, replay: { ...replay, latency: false, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
   const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0 };
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
@@ -282,8 +421,8 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
       const todo = TIMES.filter(t => !done.has(t));
       for (const t of todo) {
         fs.writeFileSync(run.paths.clockFile, JSON.stringify({ now: t }));
-        const res = await deps.step({ t: new Date(t), kind: 'trade', day: '2022-03-09' }, {}, 1000);
-        store.appendRecord(run.paths, manifest, { t, day: '2022-03-09', kind: 'trade', ran: store.parseStep(res.output).ran });
+        const res = await deps.step({ t: new Date(t), kind: 'trade', day: dayOfT(t) }, {}, 1000);
+        store.appendRecord(run.paths, manifest, { t, day: dayOfT(t), kind: 'trade', ran: store.parseStep(res.output).ran });
       }
       return { cycles: todo.length, stopped: null, done: true };
     },
@@ -363,17 +502,23 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   assert.match(body, /The keep rule on the model's own trades/);
   // Edits only in the probe trees: the repository's skill is never touched, and dry run makes no branch.
   assert.strictEqual(w.calls.branches.length, 0);
-  // The lessons record: one line per probe and one for the combined change, practice-train windows only.
-  const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+  // The lessons record: one line per probe, one for the combined change, then the keep rule's verdict on it; practice-train only.
+  const all = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+  const lessons = all.slice(0, 5);
   assert.deepStrictEqual(lessons.map(l => [l.verdict, l.composed === true]), [['helped', false], ['helped', false], ['hurt', false], ['no effect', false], ['helped', true]]);
-  assert.ok(lessons.every(l => LS.practiceOnly(l.windows) && l.n === 20));
+  // n: each probe on the probe half's 28 decisions (seven session dates), the combined change on the confirm half's 12.
+  assert.deepStrictEqual(lessons.map(l => [l.n, l.half]), [[28, 'probe'], [28, 'probe'], [28, 'probe'], [28, 'probe'], [12, 'confirm']]);
+  assert.ok(lessons.every(l => LS.practiceOnly(l.windows) && l.seed === 3));
+  assert.deepStrictEqual([all.length, all[5].proposalId, all[5].keep, LS.practiceOnly(all[5].windows)], [6, e.proposalId, 'kept', true]);
+  // The split: by session date, seeded, recorded; the confirm half's dates never screened an edit.
+  assert.deepStrictEqual(report.split, { seed: 3, by: 'session date', probe: ['2022-03-07', '2022-03-08', '2022-03-10', '2022-03-11', '2022-03-15', '2022-03-17', '2022-03-18'], confirm: ['2022-03-09', '2022-03-14', '2022-03-16'] });
   // The probe look: logged once, tuning, practice-train (no budget).
   assert.deepStrictEqual(S.readLedger(w.paths.ledger).filter(l => l.candidate === 'l1/probe').map(l => l.purpose), ['tuning']);
   // Resumed: nothing re-runs, nothing is written twice.
   const runs = w.calls.runs.length;
   await run(w);
   assert.strictEqual(w.calls.runs.length, runs);
-  assert.strictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).length, 5);
+  assert.strictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).length, 6);
 });
 
 test('the combined change still needs the full keep rule: a screen pass with a rejected or inconclusive keep rule is never kept', async () => {
@@ -383,6 +528,10 @@ test('the combined change still needs the full keep rule: a screen pass with a r
     const [e] = readArchive(w.paths.archive);
     assert.strictEqual(e.verdict, verdict);
     assert.strictEqual(w.calls.branches.length, 0);
+    // The lessons record says so: the next round's proposer reads a screen "helped" the keep rule did not keep.
+    const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+    assert.deepStrictEqual(lessons.filter(l => l.keep).map(l => [l.proposalId, l.keep]), [[e.proposalId, verdict]]);
+    assert.match(LS.summarize(lessons), new RegExp(`then the keep rule: ${verdict} 1`));
   }
 });
 
@@ -399,6 +548,16 @@ test('compose re-probes the combined change: two edits that each helped but canc
   assert.deepStrictEqual([last.composed, last.parts, last.verdict], [true, 2, 'no effect']);
 });
 
+test('the overfit guard in the loop: an edit that helps on the probe half only passes the screen and fails on the confirm half', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- LUCKY → read it', 'lucky')] });
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.deepStrictEqual(report.probes.map(p => [p.verdict, p.target.b, p.target.pairs]), [['helped', 14, 28]]);
+  assert.deepStrictEqual([report.composed.verdict, report.composed.cancelled.length], ['no effect', 1]);
+  assert.strictEqual(w.calls.verifier.length, 0, 'never to the keep rule');
+  assert.deepStrictEqual(readArchive(w.paths.archive), []);
+});
+
 test('nothing passes the screen: no proposal reaches the keep rule; the next round\'s proposer reads the lessons, never held-out data', async () => {
   const w = world({ proposals: [tagged('a', 'F1', 'example', '- line two', '- line two\n- BAD → no read', 'harm')], loop: { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } } });
   await run(w);
@@ -407,7 +566,7 @@ test('nothing passes the screen: no proposal reaches the keep rule; the next rou
   assert.strictEqual(w.calls.proposeProbes.length, 2);
   const second = w.calls.proposeProbes[1].lessons;
   assert.match(second, /^Evidence only, from practice-train probes/);
-  assert.match(second, /- a, example \(misread\): helped 0 of 1, no effect 0, hurt 1 \(n per probe: 20\)/);
+  assert.match(second, /- a, example \(misread\): helped 0 of 1, no effect 0, hurt 1 \(n per probe: 28\)/);
   // The same edit again is not re-probed.
   const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(2), 'probe-report.json'), 'utf8'));
   assert.deepStrictEqual(report.edits.map(x => x.probedBefore), [true]);
@@ -428,7 +587,16 @@ test('the `probe` config: needs modelScore; stage-1 curated practice; practice-t
   const read = x => x;
   const replay = { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } };
   const ok = { replay, windows: WINDOW };
-  assert.deepStrictEqual(PC.resolveProbe(ok, { read, modelScore: MODEL }), { replay, windows: WINDOW, k: 4, parallel: 1 });
+  const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3 };
+  // The probes run the loop's own model and runner config: left out, the loop's; given, it must be the loop's.
+  assert.deepStrictEqual(PC.resolveProbe(ok, { read, modelScore: MODEL, autotrader: trader }), { replay: { ...replay, autotrader: trader }, windows: WINDOW, k: 4, parallel: 1 });
+  const reordered = { timeframe: 3, symbols: ['MNQ'], command: ['x', '{prompt}'], harness: 'custom' };
+  assert.deepStrictEqual(PC.resolveProbe({ ...ok, replay: { ...replay, autotrader: reordered } }, { read, modelScore: MODEL, autotrader: trader }).replay.autotrader, reordered);
+  assert.throws(() => PC.resolveProbe({ ...ok, replay: { ...replay, autotrader: { ...trader, timeframe: 1 } } }, { read, modelScore: MODEL, autotrader: trader }), /probe.replay.autotrader: the loop's replay.autotrader/);
+  // parallel > 1 only with no latency charged (the champion's probe run runs alone: charged latency would differ).
+  assert.throws(() => PC.resolveProbe({ ...ok, parallel: 2 }, { read, modelScore: MODEL, autotrader: trader }), /probe.parallel: more than 1 only with probe.replay.latency false/);
+  assert.throws(() => PC.resolveProbe({ ...ok, replay: { ...replay, latency: true }, parallel: 2 }, { read, modelScore: MODEL, autotrader: trader }), /probe.replay.latency false/);
+  assert.strictEqual(PC.resolveProbe({ ...ok, replay: { ...replay, latency: false }, parallel: 2 }, { read, modelScore: MODEL, autotrader: trader }).parallel, 2);
   assert.strictEqual(PC.resolveProbe(undefined, { read }), null);
   assert.throws(() => PC.resolveProbe(ok, { read }), /set modelScore/);
   assert.throws(() => PC.resolveProbe({ ...ok, windows: [{ from: '2024-08-05', to: '2024-08-06' }] }, { read, modelScore: MODEL }), /practice-train only \(this touches practice-validate\)/);
@@ -442,6 +610,8 @@ test('the `probe` config: needs modelScore; stage-1 curated practice; practice-t
   const raw = over => ({ loopId: 'l1', replay: base.replay, proposer: base.proposer, tuningWindows: WINDOW, modelScore: MODEL, probe: ok, ...over });
   assert.notStrictEqual(resolveLoop(raw()).hash, resolveLoop({ ...raw(), probe: undefined }).hash);
   assert.throws(() => resolveLoop(raw({ modelScore: undefined })), /set modelScore/);
+  assert.throws(() => resolveLoop(raw({ probe: { ...ok, replay: { ...replay, autotrader: { ...base.replay.autotrader, timeframe: 1 } } } })), /probe.replay.autotrader/);
+  assert.deepStrictEqual(resolveLoop(raw()).probe.replay.autotrader, base.replay.autotrader);
 });
 
 test('no model judges: the screen, compose and the lessons record load no harness runner and no proposer', () => {

@@ -6,19 +6,24 @@
  *
  *   probe {
  *     replay     a stage-1 replay config (an object or a path, as the loop's `replay`): a curated practice list and
- *                its practice settings; the probes' runs, the champion's and each edit's, use it with the loop's seed
+ *                its practice settings; the probes' runs, the champion's and each edit's, use it with the loop's seed.
+ *                Its `autotrader` is the loop's (left out: the loop's is used), so the probes and the keep rule run the
+ *                same model and runner config
  *     windows    [{ from, to }] session dates, each inside practice-train: the curated moments the probes replay
+ *                (split by session date into a probe half and a confirm half: screen.js halfOf)
  *     k          edits the proposer writes per round (1-8, default 4)
- *     parallel   probes replayed at once (1-4, default 1: one after another). Raise it only when the local model
- *                server serves that many prompts at once (its own concurrency setting, in your local config): the
- *                replay charges each cycle's real time, so probes that queue at the server are slower than the champion
+ *     parallel   probes replayed at once (1-4, default 1: one after another). More than 1 only with
+ *                `replay.latency: false`: a replay that charges each cycle's real time would charge probes queued at
+ *                the model server more than the champion, whose probe run runs alone; with no latency charged, both
+ *                are charged alike (none)
  *   }
  *
  * It needs `modelScore`: the combined change goes through the full keep rule (train/model-verifier.js), never the
  * screen alone.
  *
  *   PROBE_KEYS, PROBE_LIMITS
- *   resolveProbe(raw, { read, modelScore })   the resolved setting, or null without one; throws with every error
+ *   resolveProbe(raw, { read, modelScore, autotrader })   the resolved setting, or null without one; throws with every
+ *                                             error. autotrader: the loop's replay's, resolved
  */
 
 const { rolesBetween } = require('../learning/splits');
@@ -29,8 +34,10 @@ const PROBE_LIMITS = Object.freeze({ k: [4, 1, 8], parallel: [1, 1, 4] });
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const sessionStart = d => tradingDayStart(new Date(`${d}T12:00:00Z`));
+/** JSON with its object keys sorted: two configs equal whatever their key order. */
+const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v));
 
-function resolveProbe(raw, { read, modelScore = null } = {}) {
+function resolveProbe(raw, { read, modelScore = null, autotrader = null } = {}) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
   const errors = [];
@@ -63,8 +70,15 @@ function resolveProbe(raw, { read, modelScore = null } = {}) {
   };
   const k = int('k');
   const parallel = int('parallel');
+  if (replay && parallel > 1 && replay.latency !== false) errors.push('probe.parallel: more than 1 only with probe.replay.latency false (charged latency would differ from the champion\'s, whose probe run runs alone)');
+  // The same model and runner config as the keep rule's runs: the loop's own autotrader.
+  if (replay && replay.autotrader !== undefined) {
+    let own = replay.autotrader;
+    try { if (typeof own === 'string') own = read(own); } catch (err) { errors.push(`probe.replay.autotrader: ${err.message}`); own = null; }
+    if (own && canonical(own) !== canonical(autotrader)) errors.push('probe.replay.autotrader: the loop\'s replay.autotrader (the probes and the keep rule run the same model and runner config); leave it out to use the loop\'s');
+    else if (own) replay = { ...replay, autotrader: own };
+  } else if (replay) replay = { ...replay, autotrader };
   if (errors.length) throw new Error(errors.join('\n- '));
-  if (typeof replay.autotrader === 'string') replay = { ...replay, autotrader: read(replay.autotrader) };
   return { replay, windows, k, parallel };
 }
 

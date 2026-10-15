@@ -289,28 +289,44 @@ It is on when the loop config has a `probe` block
 ```
 
 `replay` is a stage-1 practice config with a curated practice list (as in
-"A practice run" above), and `windows` lie in practice-train. Each
+"A practice run" above), and `windows` lie in practice-train. Its
+`autotrader` must be the loop's (leave it out to use the loop's), so the
+probes and the keep rule run the same model and runner config. Each
 iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
 
+0. **Split.** The curated moments are split by session date, by a seeded
+   hash (the loop's `seed`), into a probe half and a confirm half, both in
+   practice-train. The iteration's `probe-report.json` records the seed and
+   each half's dates. Give the windows enough session dates for both
+   halves (a half with too few decisions shows no gain).
 1. **Findings.** The champion replays the windows' curated moments. Its
-   skill-usage report and scorecard give the skills with the most
-   misreads, misses and wrong-reason refusals
+   skill-usage report and scorecard on the probe half give the skills with
+   the most misreads, misses and wrong-reason refusals
    (`scripts/lib/train/findings.js`). A refusal is credited to the skills
    whose reads the model composed at that bar.
 2. **Propose.** One proposer call (the `design-self-review` skill's probe
    prompt) writes up to `k` small, independent skill edits. Each targets
    one finding and carries a tag: the skill, the finding and the edit's
    kind (rewording, example, rule or removal). Code checks every edit
-   (`scripts/lib/train/probe-edit.js`): one skill's file, no new numbers,
-   short condition → action lines, a removal that removes, and the
-   skill's byte cap. An edit probed before is not run again.
+   (`scripts/lib/train/probe-edit.js`): one skill's file, no new numbers
+   (in digits or words, such as "three bars" or "half"), condition → action
+   lines of at most 120 characters, a removal that removes, the frontmatter
+   untouched, and the skill's byte cap (`scripts/lib/skill-caps.js`, the
+   same caps the basics-skills test enforces). An edit probed before is
+   not run again.
 3. **Probe.** Each edit's tree replays the same curated moments with the
    same replay config and seed as the champion. Code pairs the two runs
-   decision by decision (`scripts/lib/train/screen.js`): the correct-read
-   rate per decision, process adherence, R per decision, and the target
-   (the targeted skill's reads right, or, for a wrong-reason refusal, the
-   refusals fixed). The targeted skill's used, correct and missed counts
-   are shown beside them. The verdict is `helped`, `no effect` or `hurt`.
+   decision by decision on the probe half only
+   (`scripts/lib/train/screen.js`), under one exit plan (two runs whose
+   exit plans differ are refused): the correct-read rate per decision,
+   process adherence, R per decision, and the target. The target rewards
+   reading better, never claiming more: for a misread, only the decisions
+   where the champion claimed the skill; for a miss, only those where the
+   skill was relevant at the bar (a TRUE read of it pointed the side's
+   way); for a wrong-reason refusal, the refusals fixed. A fix counts only
+   when the decision's scorecard result got no worse. The targeted skill's
+   used, correct and missed counts are shown beside them. The verdict is
+   `helped`, `no effect` or `hurt`.
    Probing uses practice-train only and spends no looks: its tuning look
    is logged in the loop's ledger, as every loop look is, and counts
    against no budget.
@@ -319,8 +335,10 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    the larger paired gain stays and the conflict is reported. An edit that
    would break the proposal's limits (3 edits, the diff size, a byte cap)
    is left out, with the reason. The combined change is probed once more
-   on the same moments: no measure may be worse and every part's target
-   must still gain, so its parts can't cancel.
+   and judged on the confirm half only, which no edit was chosen on: no
+   measure may be worse and every part's target must still gain there, so
+   its parts can't cancel and a gain found by chance on the probe half
+   doesn't carry it.
 5. **Keep.** The combined change is the iteration's one proposal and goes
    through the full keep rule (section 6), unchanged: the challenger's
    full-day tuning windows, zero blows, the pooled interval, then held-out
@@ -337,6 +355,12 @@ the one place:
 | `harmAlpha` | 0.2 | a harm on any measure: p at most this (quick to call a harm) |
 | `minDiscordant` | 3 | the discordant decisions a gain or a harm needs |
 | `minPairs` | 10 | the paired decisions R per decision needs before it can show a harm |
+| `minEffect` | 0.15 | a gain's size: fixed minus broken, as a share of the target's paired decisions |
+
+`minEffect` is why 3 fixed and 0 broken (p 0.125) passes on 20 paired
+decisions but not on 30 (0.1 of them): an effect that small can't be told
+from noise in the keep rule's pooled full-day windows, so probing it
+further only spends model time.
 
 The screen is permissive: it only filters noise. Passing it keeps nothing.
 The keep rule stays strict and unchanged.
@@ -344,22 +368,27 @@ The keep rule stays strict and unchanged.
 **The lessons record** (`<loop dir>/lessons.jsonl`,
 `scripts/lib/train/lessons.js`) is append-only and written by code. Each
 probed edit (and each combined change) gets one line: the skill, the
-edit's kind, the finding, the paired measures, the verdict and n. The
+edit's kind, the finding, the paired measures, the verdict, n, the split
+seed and the half it was judged on. A combined change that went to the
+keep rule gets one more line with the keep rule's verdict (its tuning
+windows are practice-train), so a screen `helped` that the keep rule
+rejected shows as such in the summary, on the change and on its parts. The
 proposer reads a short, capped summary of it in the next round, for
 example "a, rewording (misread): helped 3 of 4, no effect 1, hurt 0 (n per
 probe: 12, 9, 15, 20)". It is evidence only, labelled with its sample
-sizes. It holds practice-train probes only: a line on any other window is
+sizes. It holds practice-train lines only: a line on any other window is
 refused, and no validate, test or final outcome is ever in it.
 
 **Cost.** K probes multiply model time. The champion replays the probe
 windows once per loop. Each round then replays them k + 1 times: each of
 the k edits and the combined change. That is about k + 1 times the model
 time of one practice run a round, on top of the keep rule's runs. Probes
-run one after another by default (`parallel: 1`). Raise `parallel` only
+run one after another by default (`parallel: 1`). `parallel` above 1 is
+refused unless `probe.replay` sets `latency: false`: a replay that
+charges each cycle's real time would charge probes queued at the model
+server more than the champion's probe run, which runs alone. Raise it only
 when your local model server serves that many prompts at once (its own
-concurrency setting, in your local config). The replay charges each
-cycle's real time, so probes that queue at the server run slower than the
-champion did.
+concurrency setting, in your local config).
 
 ## 5. Stage 2: pass prop
 

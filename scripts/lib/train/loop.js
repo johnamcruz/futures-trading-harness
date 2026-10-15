@@ -65,6 +65,7 @@ const { ledgerPath: learningLedgerPath } = require('../learning/looks');
 const { readLedger: readLedgerFile } = require('../prop/ledger-file');
 const { probeRound } = require('./probe');
 const { compositionLines } = require('./compose');
+const LS = require('./lessons');
 
 class Stop extends Error {}
 
@@ -446,6 +447,9 @@ async function iteration(ctx, n, { champion, champ }) {
       if (already.has(x.id)) continue;
       const entry = { ...common, proposalId: x.id, source: x.source, proposal: x.proposal, files: cand.files, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator: v.evaluator, ...(v.model ? { model: v.model, panelVerdict: v.panel } : {}), ...(x.composition ? { composition: x.composition } : {}) };
       if (v.verdict === 'kept') entry.promotion = promote(ctx, { entry, n, tree: cand.tree, dir });
+      // A combined change (Propose-Probe-Compose): the keep rule's verdict goes to the lessons record too (its tuning
+      // windows are practice-train), before the archive line, once, so a resume never loses or repeats it.
+      if (x.composition) keepLesson(ctx, { n, id: x.id, verdict: v.verdict });
       A.appendEntry(ctx.paths.archive, entry);
       ctx.log(`iteration ${n}: ${x.id} ${v.verdict}: ${v.reasons.join('; ')}`);
     }
@@ -453,6 +457,14 @@ async function iteration(ctx, n, { champion, champ }) {
   });
   it.done = true;
   ctx.save();
+}
+
+/** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
+function keepLesson(ctx, { n, id, verdict }) {
+  const file = path.join(ctx.paths.dir, LS.FILE);
+  if (!LS.practiceOnly(ctx.loop.tuningWindows)) return;
+  if (LS.readLessons(file).some(e => e.iteration === n && e.proposalId === id && typeof e.keep === 'string')) return;
+  LS.appendKeep(file, { proposalId: id, iteration: n, keep: verdict, windows: ctx.loop.tuningWindows });
 }
 
 /** A kept change: the PR body draft and the edits (always); a local branch unless dry-run. Never pushed. */

@@ -12,8 +12,8 @@
  *   skill over its byte cap) is left out, with why;
  * - the rest is one proposal: its targets the parts' together, its edits the parts' in that order.
  *
- * The combined change is then probed once more on the same moments (screen.js composedScreen), so its parts must not
- * cancel, and only then goes through the full keep rule (train/model-verifier.js) like any proposal. Nothing here
+ * The combined change is then probed once more, judged on the confirm half of the moments (screen.js composedScreen,
+ * no edit was chosen on it), so it must hold there and its parts must not cancel, and only then goes through the full keep rule (train/model-verifier.js) like any proposal. Nothing here
  * merges, pushes or edits a document outside the candidate's tree.
  *
  *   gainOf(part)                       the part's paired gain on its target
@@ -100,7 +100,7 @@ function compositionLines(c) {
   if (!c) return [];
   return [
     '', '### Propose-Probe-Compose', '',
-    `Composed by code from ${c.parts.length} probed edit(s) that passed the screen (train/screen.js), each probed alone on the same curated practice-train moments and seed as the champion, then together (${c.composed ? `${c.composed.verdict}` : 'not re-probed'}).`, '',
+    `Composed by code from ${c.parts.length} probed edit(s) that passed the screen (train/screen.js), each screened alone against the champion on the probe half of the same curated practice-train moments and seed, then together on the confirm half (${c.composed ? `${c.composed.verdict}` : 'not re-probed'}).`, '',
     '| part | skill | kind | finding | target fixed/broken (pairs) | gain |', '| --- | --- | --- | --- | --- | ---: |',
     ...c.parts.map(p => `| ${p.id} | ${p.skill} | ${p.kind} | ${p.finding.id} ${p.finding.kind} | ${p.target.b}/${p.target.c} (${p.target.pairs}) | ${p.gain} |`),
     ...(c.conflicts.length ? ['', 'Conflicts (the same lines; the larger paired gain kept):', ...c.conflicts.map(x => `- ${x.dropped} left out for ${x.kept}: ${x.file} lines ${x.lines} (gains ${x.gains.join(' vs ')})`)] : []),

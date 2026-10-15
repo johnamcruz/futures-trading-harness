@@ -81,8 +81,9 @@ Read the skills in your working directory. Propose at most {{K}} small edits. Ea
 
 Rules:
 - Edit the skill the finding names. A finding with no skill: edit the skill whose text misled you.
-- Write rules as short lines, condition then action: "- <when this holds> → <do this>".
-- Add no numbers.
+- Write rules as short lines (at most 120 characters), condition then action: "- <when this holds> → <do this>".
+- Add no numbers, in digits or words ("three", "half").
+- Never edit the skill's frontmatter (its name and description).
 - Keep the skill small: never make it longer than it needs to be.
 - "find" is text copied exactly from the file. It must appear exactly once in that file.
 - "kind" is one of: {{KINDS}}.
