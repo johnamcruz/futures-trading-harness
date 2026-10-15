@@ -21,6 +21,13 @@
  * A decision's list: listOf(decision), by default its `list`; with a single list in `rates`, every composed decision
  * without one is that list's.
  *
+ * From a curated lists document (learning/curated-lists.js, the curated scan's own counts): curatedRates(doc, { list,
+ * scanDays }) gives each list's candidatesPerDay as its scan candidates (coverage[list].candidates) over the trading
+ * days the scan covered, and listOf: the list of the moment whose window (from, to] holds the decision's cycle. The
+ * document doesn't record the scan's span, so scanDays is, unless given, the exchange's sessions from the first to the
+ * last selected moment's day (the selection is balanced across the scan's years, so it spans it; an estimate, said
+ * so in `scanDaysFrom`). A run of one list (not the mix) puts every decision in that list.
+ *
  * Rebuilt days: `days` days (default 252); on each, the number of trades is Poisson with the stream's natural trades per
  * day, each drawn in proportion to its rate (with its overshoot, adverse and no-stop paths, as filled), in the time
  * order they were filled. Seeded: the same stream, input and seed, the same days. The days are labelled R0001, ...
@@ -33,6 +40,7 @@
 
 const { streamFor } = require('./stats');
 const { tradingDayStart } = require('../trading/clock');
+const { hasSession } = require('./splits');
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -133,4 +141,32 @@ function reweightStream(stream, decisions, { rates = null, weights = null, listO
   };
 }
 
-module.exports = { validateRates, naturalRates, reweightStream, poisson };
+/** Natural rates and the decisions' lists from a curated lists document (see the header). */
+function curatedRates(doc, { list = 'mix', scanDays = null } = {}) {
+  if (!isMap(doc) || !isMap(doc.lists) || !isMap(doc.coverage)) throw new Error('curatedRates: a curated lists document (learning/curated-lists.js)');
+  const names = Object.keys(doc.lists);
+  const moments = names.flatMap(n => (doc.lists[n] || []).map(m => ({ ...m, list: n })));
+  if (!moments.length) throw new Error('curatedRates: the document selects no moments');
+  let days = scanDays;
+  let from = 'given';
+  if (days === null) {
+    const ds = moments.map(m => m.day).filter(Boolean).sort();
+    days = 0;
+    for (let t = Date.parse(`${ds[0]}T00:00:00Z`); t <= Date.parse(`${ds[ds.length - 1]}T00:00:00Z`); t += 86400000) if (hasSession(new Date(t).toISOString().slice(0, 10))) days += 1;
+    from = `the sessions from ${ds[0]} to ${ds[ds.length - 1]} (the selected moments' span: an estimate; the document doesn't record its scan's)`;
+  }
+  if (!(Number.isFinite(days) && days >= 1)) throw new Error('curatedRates: scanDays, the trading days the scan covered, 1 or more');
+  const wanted = list === 'mix' ? names : [list];
+  if (wanted.some(n => !doc.coverage[n] || !Number.isFinite(doc.coverage[n].candidates))) throw new Error(`curatedRates: no candidate count for ${wanted.filter(n => !doc.coverage[n]).join(', ')}`);
+  const rates = Object.fromEntries(wanted.map(n => [n, { candidatesPerDay: doc.coverage[n].candidates / days }]));
+  const windows = moments.filter(m => wanted.includes(m.list) && m.window).map(m => ({ list: m.list, from: Date.parse(m.window.from), to: Date.parse(m.window.to) }));
+  const listOf = d => {
+    if (list !== 'mix') return list;
+    const at = Date.parse(d.cycleAt);
+    const w = windows.find(x => at > x.from && at <= x.to);
+    return w ? w.list : null;
+  };
+  return { rates, listOf, scanDays: days, scanDaysFrom: from };
+}
+
+module.exports = { validateRates, naturalRates, reweightStream, curatedRates, poisson };

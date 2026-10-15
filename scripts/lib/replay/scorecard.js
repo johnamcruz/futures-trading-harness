@@ -326,6 +326,8 @@ function windowAt(t) {
 /** The facts at one decision: window, setups (with the trend rule, room, read, confluence), trend rule per side, attempt. */
 function factsAt(label, rec, { home, tf, count, accounts }) {
   const t = Date.parse(label.t);
+  // The line's own scans and verdicts: up to where its step ended (latency charged: label.endedAt), else its time.
+  const ownT = Number.isFinite(Date.parse(label.endedAt)) ? Math.max(t, Date.parse(label.endedAt)) : t;
   const facts = {
     t: label.t, et: etClock(t), window: windowAt(t), news: newsState(rec.blackouts, new Date(t)),
     // The runner config at the decision's time: its bar size and the bars a cycle was handed.
@@ -335,7 +337,7 @@ function factsAt(label, rec, { home, tf, count, accounts }) {
     // A strategy's exit plan and bar size (its max_bars count in its own bars).
     planOf: name => { const s = rec.byName.get(name); return s && s.risk ? { ...exitPlan(s), minutes: parseInt(s.timeframe, 10) || tf } : null; },
   };
-  const scan = before(rec.scans.get(`${label.symbol}|${label.barT}`), t);
+  const scan = before(rec.scans.get(`${label.symbol}|${label.barT}`), ownT);
   if (scan && Array.isArray(scan.results)) {
     facts.scanned = true;
     const results = scan.results.filter(isObj);
@@ -355,7 +357,7 @@ function factsAt(label, rec, { home, tf, count, accounts }) {
     for (const r of results.filter(x => x.direction && (x.verdict || x.candidate))) {
       const policy = Boolean(r.verdict) || (rec.byName.get(r.name) || {}).signal === 'policy';
       if (!policy && !tradeable.has(`${r.name}|${r.direction}`)) continue;
-      const v = policy ? before(rec.verdicts.get(`${label.symbol}|${label.barT}|${r.name}`), t) : null;
+      const v = policy ? before(rec.verdicts.get(`${label.symbol}|${label.barT}|${r.name}`), ownT) : null;
       const component = v ? v.component : null;
       const own = component ? results.find(x => x.name === component) || {} : r;
       const mtf = isObj(own.mtf) ? own.mtf : {};

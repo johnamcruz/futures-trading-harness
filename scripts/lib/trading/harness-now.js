@@ -16,6 +16,13 @@
  *       get_server_config reports replay: true and a serverTime within 5 minutes
  *       of FTH_REPLAY_NOW (pinGatewayClock), decided once for the gateway's life.
  *
+ * FTH_REPLAY_WALL_START=<epoch ms>  with a replay clock: the wall time a replay step began (the replay driver's, with
+ *                                    its config's `latency` on): the replay clock then runs at wall speed from
+ *                                    FTH_REPLAY_NOW at that moment, so a cycle's own time is charged as it is live (an
+ *                                    order goes at the decision time plus the cycle's time). Unset: the clock is frozen at
+ *                                    FTH_REPLAY_NOW for the process. Set but not a whole number of ms within the last day
+ *                                    and not ahead of the wall clock: the replay clock is refused (fails closed).
+ *
  * Otherwise the override is refused: the clock is the wall clock (a refused
  * override means a live broker, where wall time is right) with `refused` set.
  * The gate then refuses new entries ([replay-clock]) and judges every
@@ -23,10 +30,13 @@
  * The override never relaxes a check; it only moves the time checks run at.
  * Reads only local state, except pinGatewayClock, which asks the gateway's server.
  *
- * resolveClock(env, { broker, testClock })  { replay, refused, at, now() }
+ * resolveClock(env, { broker, testClock, wall })  { replay, refused, at, running, now(), atWall(ms) }: `at` the
+ *                          replay time the process was given, `now()` the replay time now (at, or at plus the wall time
+ *                          since FTH_REPLAY_WALL_START when `running`), atWall(ms) the replay time at that wall moment
+ *                          (the wall clock's own outside a replay); wall: () => wall ms (Date.now)
  * harnessNow(env, opts)    a Date, or throws ReplayClockError when refused
  * recordNow(env, opts)     the same clock, never throws (bookkeeping, lookups)
- * replayAt(env, opts)      the replay clock's time (a Date) when one is in force, null live (FTH_REPLAY_NOW
+ * replayAt(env, opts)      the replay clock's time now (a Date) when one is in force, null live (FTH_REPLAY_NOW
  *                          unset: no broker config read); throws ReplayClockError when it is refused
  * pinGatewayClock(env, { broker, fromArgv, call })  the gateway's clock (a promise)
  * createGatewayClock(env, opts)  { ready(): Promise<clock>, now() } pinned once
@@ -38,6 +48,10 @@ const { activeBroker, loadBrokers, DEFAULTS_FILE } = require('../broker/config')
 
 const STARTED_AT = Date.now();
 const SERVER_TIME_TOLERANCE_MS = 5 * 60000;
+const WALL_START = 'FTH_REPLAY_WALL_START';
+// How old a replay step's wall start may be (a step runs at most its cycle timeouts, hours), and how far ahead.
+const WALL_START_MAX_AGE_MS = 24 * 3600000;
+const WALL_START_AHEAD_MS = 5000;
 // A UTC instant: date, time to the minute or finer, and a Z.
 const ISO_UTC = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?Z$/;
 const REMEDY = 'Unset FTH_REPLAY_NOW to trade live, or select a real replay broker (FTH_BROKER).';
@@ -89,12 +103,23 @@ function liveTwin(broker, env) {
 }
 
 function refusedClock(env, why, testClock = true) {
-  return { replay: false, refused: `${why} ${REMEDY}`, at: null, now: () => wallNow(env, testClock) };
+  return { replay: false, refused: `${why} ${REMEDY}`, at: null, running: false, now: () => wallNow(env, testClock), atWall: ms => new Date(ms) };
 }
 
-function resolveClock(env = process.env, { broker = null, testClock = true } = {}) {
+/** FTH_REPLAY_WALL_START: { ms } (null when unset) or { error }. */
+function wallStartOf(env, wallMs) {
+  const raw = env[WALL_START];
+  if (raw === undefined || raw === null || raw === '') return { ms: null };
+  const ms = /^\d{1,15}$/.test(String(raw)) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(ms) || ms > wallMs + WALL_START_AHEAD_MS || ms < wallMs - WALL_START_MAX_AGE_MS) {
+    return { error: `${WALL_START} ${JSON.stringify(String(raw))} is not the wall time (epoch ms, within the last day, not ahead of the wall clock) a replay step began: the replay clock is refused.` };
+  }
+  return { ms };
+}
+
+function resolveClock(env = process.env, { broker = null, testClock = true, wall = Date.now } = {}) {
   const raw = env.FTH_REPLAY_NOW;
-  if (raw === undefined || raw === null || raw === '') return { replay: false, refused: null, at: null, now: () => wallNow(env, testClock) };
+  if (raw === undefined || raw === null || raw === '') return { replay: false, refused: null, at: null, running: false, now: () => wallNow(env, testClock), atWall: ms => new Date(ms) };
   const at = parseReplayTime(String(raw));
   if (!at) return refusedClock(env, `FTH_REPLAY_NOW ${JSON.stringify(String(raw))} is not an ISO 8601 UTC time (e.g. 2026-03-02T15:30:00Z): the replay clock is refused.`, testClock);
   let b = broker;
@@ -109,7 +134,11 @@ function resolveClock(env = process.env, { broker = null, testClock = true } = {
     return refusedClock(env, `FTH_REPLAY_NOW is set but the selected broker "${b.name}" is not a replay broker ("replay": true in brokers.json): a replayed time is never used with a live broker.`, testClock);
   }
   if (twin) return refusedClock(env, `FTH_REPLAY_NOW is set but the replay broker "${b.name}" looks live: ${twin}. The replay clock is refused.`, testClock);
-  return { replay: true, refused: null, at, now: () => new Date(at.getTime()) };
+  const start = wallStartOf(env, wall());
+  if (start.error) return refusedClock(env, start.error, testClock);
+  // Running: the replay time moves with the wall clock from the step's start (never back before `at`).
+  const atWall = ms => new Date(at.getTime() + (start.ms === null ? 0 : Math.max(0, ms - start.ms)));
+  return { replay: true, refused: null, at, running: start.ms !== null, now: () => atWall(wall()), atWall };
 }
 
 function harnessNow(env = process.env, opts = {}) {
@@ -123,7 +152,7 @@ function replayAt(env = process.env, opts = {}) {
   if (raw === undefined || raw === null || raw === '') return null;
   const c = resolveClock(env, opts);
   if (c.refused) throw new ReplayClockError(c.refused);
-  return c.replay ? new Date(c.at.getTime()) : null;
+  return c.replay ? c.now() : null;
 }
 
 function recordNow(env = process.env, opts = {}) {
@@ -135,11 +164,11 @@ function recordNow(env = process.env, opts = {}) {
  * the server came from its command line, `fromArgv`). `call(name, args)` asks
  * that server. The override is honored only if the server confirms it.
  */
-async function pinGatewayClock(env, { broker = null, fromArgv = false, call, toleranceMs = SERVER_TIME_TOLERANCE_MS } = {}) {
+async function pinGatewayClock(env, { broker = null, fromArgv = false, call, toleranceMs = SERVER_TIME_TOLERANCE_MS, wall = Date.now } = {}) {
   const raw = env.FTH_REPLAY_NOW;
   if (raw === undefined || raw === null || raw === '') return resolveClock(env);
   if (fromArgv || !broker) return refusedClock(env, 'FTH_REPLAY_NOW is set but the gateway runs a server given on its command line (-- <command>), not a configured replay broker: the replay clock is refused.');
-  const c = resolveClock(env, { broker });
+  const c = resolveClock(env, { broker, wall });
   if (!c.replay) return c;
   let cfg;
   try {
@@ -151,8 +180,10 @@ async function pinGatewayClock(env, { broker = null, fromArgv = false, call, tol
   }
   if (!cfg || cfg.replay !== true) return refusedClock(env, `FTH_REPLAY_NOW is set but the server of broker "${broker.name}" does not report itself a replay server (get_server_config.replay): the replay clock is refused.`);
   const t = Date.parse(String(cfg.serverTime || ''));
-  if (!Number.isFinite(t) || Math.abs(t - c.at.getTime()) > toleranceMs) {
-    return refusedClock(env, `FTH_REPLAY_NOW ${c.at.toISOString()} is not within ${Math.round(toleranceMs / 60000)} min of the replay server's time (${cfg.serverTime}): the replay clock is refused.`);
+  // The replay time now (a running clock has moved on since the step began, as the server's has).
+  const mine = c.now();
+  if (!Number.isFinite(t) || Math.abs(t - mine.getTime()) > toleranceMs) {
+    return refusedClock(env, `FTH_REPLAY_NOW ${mine.toISOString()} is not within ${Math.round(toleranceMs / 60000)} min of the replay server's time (${cfg.serverTime}): the replay clock is refused.`);
   }
   return c;
 }
@@ -167,4 +198,4 @@ function createGatewayClock(env, opts) {
   };
 }
 
-module.exports = { harnessNow, recordNow, replayAt, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError, SERVER_TIME_TOLERANCE_MS };
+module.exports = { harnessNow, recordNow, replayAt, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError, SERVER_TIME_TOLERANCE_MS, WALL_START };

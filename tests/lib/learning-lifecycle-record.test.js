@@ -46,6 +46,25 @@ test('readRecords: every root\'s file, oldest first, a torn line skipped; none: 
   assert.deepStrictEqual(R.readRecords(home).map(r => r.root), ['MES', 'MNQ']);
 });
 
+test('readRecords: the learning loop reads every day shard of every family, with an older single file\'s records', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const home = tmpHome();
+  // Three sessions of MNQ shards, one of MES, and an older home's single MNQ file.
+  for (const at of ['2023-03-13T14:00:00.000Z', '2023-03-14T21:59:00.000Z', '2023-03-14T22:03:00.000Z', '2023-03-15T14:00:00.000Z']) TL.appendRecord(home, record({ at }));
+  TL.appendRecord(home, record({ at: '2023-03-14T15:00:00.000Z', root: 'MES' }));
+  fs.writeFileSync(TL.legacyFile(home, 'MNQ'), `${JSON.stringify(record({ at: '2023-03-10T14:00:00.000Z' }))}\n`);
+  assert.deepStrictEqual(fs.readdirSync(path.join(home, 'trade-lifecycle', 'MNQ')).sort(), ['2023-03-13.jsonl', '2023-03-14.jsonl', '2023-03-15.jsonl']);
+  const all = R.readRecords(home);
+  assert.deepStrictEqual(all.map(r => `${r.root} ${r.at}`), [
+    'MNQ 2023-03-10T14:00:00.000Z', 'MNQ 2023-03-13T14:00:00.000Z', 'MES 2023-03-14T15:00:00.000Z',
+    'MNQ 2023-03-14T21:59:00.000Z', 'MNQ 2023-03-14T22:03:00.000Z', 'MNQ 2023-03-15T14:00:00.000Z']);
+  // A family and days asked: that family's shards of those days (and its older file's records of them).
+  assert.deepStrictEqual(R.readRecords(home, { root: 'NQ', days: ['2023-03-14'] }).map(r => r.at), ['2023-03-14T21:59:00.000Z']);
+  // A shard the loop can't read throws, never a silently shorter record.
+  fs.mkdirSync(TL.recordFile(home, 'MES', '2023-03-20'));
+  assert.throws(() => R.readRecords(home), /can't be read \(EISDIR\)/);
+});
+
 test('the adapter reads the reads checker\'s field names: signature, skillSignature, trendSide, boolean checks, problems', () => {
   const a = record({ ok: false });
   const raw = { ...a, signatures: undefined, signature: 'bias:1h-bos-up', skillSignature: 'bias:bos-vs-choch', problems: ['a read is false'],

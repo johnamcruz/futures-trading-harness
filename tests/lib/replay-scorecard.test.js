@@ -285,11 +285,13 @@ function makeRun({ withBars = true, finished = true, steps = STEPS } = {}) {
     const t = s.t || tOf(s.k);
     const barT = iso(s.t ? t - 182000 : barOf(s.k));
     const wall = WALL0 + i * 60000;
-    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: [{ symbol: 'MNQ', lastBarT: barT }], trades: s.trades || [], since: iso(t - 180000) };
-    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 0 }, decision: { run: true, reason: 'bar closed' }, candidates: s.scan.filter(r => r.candidate).map(r => r.name), results: s.scan });
+    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: [{ symbol: 'MNQ', lastBarT: barT }], trades: s.trades || [], since: iso(t - 180000), ...(s.endedAt ? { endedAt: iso(t + s.endedAt) } : {}) };
+    if (s.scan) scans.push({ at: iso(t + (s.lag || 0)), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 0 }, decision: { run: true, reason: 'bar closed' }, candidates: s.scan.filter(r => r.candidate).map(r => r.name), results: s.scan });
     if (s.verdict) {
       const v = s.scan.find(r => r.verdict).verdict;
       verdicts.push({ at: iso(t), strategy: 'prop_portfolio', component: 'orb', symbol: 'MNQ', contractId: 'MNQ', bar: barT, direction: 'long', stopTicks: 40, account: 'topstep_100k', combine: ATTEMPT, ...v });
+      // A verdict stamped on a running clock, after the line's time (latency charged).
+      if (s.lag) verdicts[verdicts.length - 1].at = iso(t + s.lag);
     }
     if (s.cycle) {
       const c = s.cycle;
@@ -323,6 +325,19 @@ test('scoreRun rebuilds the room on the run\'s own round-number steps (its seede
   fs.writeFileSync(path.join(home, FILE_NAME), JSON.stringify(seedFile(loadRoundSteps({ FTH_HOME: tmpDir() }))).replace('"MNQ":100', '"MNQ":null'));
   const room = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }).records[0].facts.setups[0].room;
   assert.notStrictEqual(room.inTheWay && room.inTheWay.name, 'round number', JSON.stringify(room));
+});
+
+test('scoreRun, latency charged: a line\'s own scan and verdict, stamped after its time on the running clock, count up to where its step ended', () => {
+  const steps = (lag, endedAt) => [{ ...STEPS[0], lag, ...(endedAt ? { endedAt } : {}) }, STEPS.at(-1)];
+  const first = (lag, endedAt) => scoreRun(makeRun({ steps: steps(lag, endedAt) }).runDir, { strategies: STRATS, accounts: ACCOUNTS }).records[0].facts;
+  const f = first(5000, 240000);
+  assert.deepStrictEqual([f.scanned, f.setups[0] && f.setups[0].verdict && f.setups[0].verdict.maxSize], [true, 4]);
+  // The verdicts file's record (its component and stop), stamped after the line's time, is the line's too.
+  const p = f.setups.find(x => x.name === 'prop_portfolio');
+  assert.deepStrictEqual([p.component, p.verdict.stopTicks], ['orb', 40]);
+  assert.strictEqual(first(5000, null).scanned, false, 'pinned (no endedAt): only up to the line\'s time');
+  assert.strictEqual(first(241000, 240000).scanned, false, 'past the step\'s end: not the line\'s');
+  assert.strictEqual(f.et, '10:00', 'the decision\'s own time still sets the facts\' clock');
 });
 
 test('scoreRun: every decision of a run scored from its own records', () => {

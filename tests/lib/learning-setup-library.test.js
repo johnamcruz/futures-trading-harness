@@ -23,7 +23,7 @@ const { limitOutcome } = require('../../scripts/lib/learning/experience-log');
 const SHIFT = 312 * 7 * 86400000;
 const BARS = G.load(G.SERIES[0]).map(({ t, o, h, l, c, v }) => ({ t: new Date(Date.parse(t) - SHIFT).toISOString(), o, h, l, c, v }));
 const CLOCK = L.runnerClock({ from: '2020-04-01', to: '2020-06-01' });
-const scan = (bars = BARS) => L.scanLibrary({ bars, root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession });
+const scan = (bars = BARS, validBars = 2) => L.scanLibrary({ bars, root: 'MNQ', minutes: 3, tick: 0.25, from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession, validBars });
 const RECORDS = scan();
 const briefAt = t => {
   const i = BARS.findIndex(b => b.t === t);
@@ -61,7 +61,7 @@ test('the same-candle rule: every traded record confirms on a candle that closed
 test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
   const count = {};
   for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
-  assert.deepStrictEqual(count, { traded: 68, 'no-room': 21, 'not-composable': 12, 'no-confirmation': 20, 'no-entry-window': 2 });
+  assert.deepStrictEqual(count, { traded: 79, 'no-room': 24, 'not-composable': 12, 'no-confirmation': 19, 'no-entry-window': 2 });
   // A traded record whose window had an earlier confirming close that did not compose.
   const later = RECORDS.filter(r => r.status === 'traded').find(r => {
     for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {
@@ -101,9 +101,23 @@ test('the standard: entry at the confirmation close, stop one tick beyond the re
     assert.ok(r.plan.rr >= 2, `rr ${r.plan.rr}`);
     const bars = BARS.map(x => ({ ...x, ms: Date.parse(x.t) }));
     const fromMs = Date.parse(r.bar) + 180000;
-    const again = limitOutcome({ bars, tfMs: 180000, side: r.side, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, fromMs, expiresMs: fromMs + 180000, eodMs: CLOCK.eodOf(fromMs), tick: 0.25 });
+    const again = limitOutcome({ bars, tfMs: 180000, side: r.side, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, fromMs, expiresMs: fromMs + 2 * 180000, eodMs: CLOCK.eodOf(fromMs), tick: 0.25 });
     assert.deepStrictEqual({ ...r.outcome, source: again.source }, again);
+    assert.strictEqual(r.validBars, 2, 'the window it was measured over');
   }
+});
+
+test('the limit window is the strategy\'s valid_bars (the plan the gate allows): required, kept on each record; one bar fills fewer; an index mixing windows is refused', () => {
+  assert.strictEqual(L.strategyValidBars(path.resolve(__dirname, '..', '..'), {}), 2, 'the shipped trade_lifecycle');
+  for (const bad of [undefined, 0, 1.5, '2']) assert.throws(() => L.scanLibrary({ bars: BARS, root: 'MNQ', from: '2020-04-01', to: '2020-06-01', eodOf: CLOCK.eodOf, inSession: CLOCK.inSession, validBars: bad }), /validBars: the trade_lifecycle strategy's valid_bars/, String(bad));
+  const one = scan(BARS, 1);
+  const traded = rs => rs.filter(r => r.status === 'traded');
+  const filled = rs => traded(rs).filter(r => r.outcome.filled).length;
+  assert.deepStrictEqual(one.map(r => r.id), RECORDS.map(r => r.id), 'the same moments and plans');
+  assert.ok(filled(one) < filled(RECORDS), `one bar fills ${filled(one)}, two ${filled(RECORDS)}`);
+  assert.ok(one.every(r => r.validBars === 1));
+  assert.throws(() => L.buildLibraryIndex([...one.slice(0, 5), ...RECORDS.slice(5, 10)], { reps: 10 }), /different limit windows \(valid_bars 1, 2\)/);
+  assert.strictEqual(L.buildLibraryIndex(RECORDS, { reps: 10 }).validBars, 2);
 });
 
 test('signature parity: a record\'s reads, checked by compose_check\'s checker on its bar\'s briefing, are all true and give its signature', () => {
@@ -153,6 +167,12 @@ test('index: walk-forward by day (a lookup on day D sees only rows known before 
   assert.strictEqual(L.pinLibrary(home, file).hash, doc.hash);
   assert.strictEqual(L.loadPinnedLibrary(home).hash, doc.hash);
   assert.throws(() => L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), one)), /a run keeps its library/);
+  // An index measured over another window than the strategy's valid_bars is never pinned (one bar against the shipped
+  // two; or the shipped two once a strategy says three).
+  const oneBar = L.buildLibraryIndex(scan(BARS, 1), { reps: 20 });
+  assert.throws(() => L.pinLibrary(tmpHome(), L.writeLibrary(path.join(home, 'built1'), oneBar)), /limits valid 1 bar\(s\); the trade_lifecycle strategy's valid_bars is 2: scan and index it again/);
+  assert.throws(() => L.pinLibrary(tmpHome(), file, { validBars: 3 }), /valid_bars is 3/);
+  assert.strictEqual(L.pinLibrary(tmpHome(), L.writeLibrary(path.join(home, 'built1'), oneBar), { validBars: 1 }).hash, oneBar.hash);
   fs.writeFileSync(path.join(home, 'built', 'bad.json'), JSON.stringify({ ...doc, records: 1 }));
   assert.throws(() => L.readLibrary(path.join(home, 'built', 'bad.json')), /doesn't match its hash/);
   assert.throws(() => L.readLibrary(path.join(home, 'built', path.basename(file)).replace('library-', 'nope-')), /ENOENT/);
@@ -162,7 +182,7 @@ test('index: walk-forward by day (a lookup on day D sees only rows known before 
 function libraryFor(rec, { n = 24 } = {}) {
   const days = Array.from({ length: 12 }, (_, i) => `2022-03-${String(i + 1).padStart(2, '0')}`);
   return Array.from({ length: n }, (_, i) => ({
-    v: L.VERSION, id: `l${i}`, root: 'MNQ', day: days[i % 12], bar: `${days[i % 12]}T15:00:00.000Z`, status: i === n - 1 ? 'no-room' : 'traded', side: 'long',
+    v: L.VERSION, validBars: 2, id: `l${i}`, root: 'MNQ', day: days[i % 12], bar: `${days[i % 12]}T15:00:00.000Z`, status: i === n - 1 ? 'no-room' : 'traded', side: 'long',
     reads: rec.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read })), signature: rec.signatures.read, setupKey: L.setupKeyOf(rec.reads), context: rec.context,
     outcome: { filled: true, R: i % 3 ? 2 : -1, exitTime: `${days[i % 12]}T16:00:00.000Z` },
   }));
@@ -180,11 +200,14 @@ test('experience_lookup: the history library in a section of its own, after the 
   // No library pinned: the lookup is as before.
   const plain = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
   assert.doesNotMatch(plain, /History library/);
-  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })));
+  L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })), { display: true });
   const text = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
   assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16} \(code-measured, not your decisions\): every number is the standard plan's \(a limit at the confirmation close.*\), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:/);
-  assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[/);
-  assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 .*; 1 more had no room at 2:1/);
+  assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]\n/);
+  assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]; 1 more had no room at 2:1/);
+  // Counts, the win rate and no-room only: never an R (the library measures one fixed plan, not the model's trades).
+  const libText = text.slice(text.indexOf('History library'));
+  assert.doesNotMatch(libText, /mean R|\bR\b|\blast \d/, libText);
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
   assert.doesNotMatch(text, /\b(should|enter|take it|avoid)\b/i, 'never advice');
   // With the model's own index too: its record first; the cap drops the library's lines before the model's cells.
@@ -211,9 +234,54 @@ test('experience_lookup: the history library in a section of its own, after the 
   assert.match(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library \(code-measured, not your decisions\): unreadable \(the pinned library's hash/);
   fs.writeFileSync(pinFile, JSON.stringify(pin));
   // The learning report: the library's hash, apart; none of its rows in the measures.
-  const m = R.learningMeasures({ library: { hash: lib.hash.slice(0, 16) } });
+  const m = R.learningMeasures({ library: { hash: lib.hash.slice(0, 16), shown: true } });
   assert.deepStrictEqual({ ...m, library: null }, R.learningMeasures({}));
   assert.match(R.learningMarkdown(m), /History library [0-9a-f]{16} pinned: code-measured, shown in experience_lookup apart; never counted below or as the model's record/);
+  assert.match(R.learningMarkdown(R.learningMeasures({ library: { hash: lib.hash.slice(0, 16), shown: false } })), /History library [0-9a-f]{16} pinned: code-measured, not shown to the model \(its display off\)/);
+});
+
+test('experience_lookup: a pinned library is hidden unless the run enables its display; the pin keeps the choice', () => {
+  const AT = '2023-03-15T14:00:00.000Z';
+  const rec = fromLifecycleRecord(record({ at: AT }));
+  const home = tmpHome();
+  fs.mkdirSync(path.join(home, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(home, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(record({ at: AT }))}\n`);
+  const ctx = { env: { FTH_HOME: home, FTH_CYCLE_TRANSCRIPT: path.join(home, 'cycle.jsonl') }, now: () => new Date('2023-03-15T14:01:00.000Z') };
+  const file = L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 }));
+  // Pinned alone: code's (loadPinnedLibrary reads it), never the model's.
+  assert.strictEqual(L.pinLibrary(home, file).display, false);
+  assert.strictEqual(L.loadPinnedLibrary(home).hash.length, 64);
+  assert.strictEqual(L.libraryShown(home), false);
+  const hidden = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
+  assert.doesNotMatch(hidden, /History library|history library/);
+  assert.strictEqual(hidden, `${hidden.split('\n').slice(0, 5).join('\n')}\n`, 'the lookup as it is without a library');
+  const lookups = require('../../scripts/lib/learning/experience-lookups');
+  assert.strictEqual(lookups.readExperienceLookups(ctx.env.FTH_CYCLE_TRANSCRIPT)[0].library, undefined, 'its record names no library it was not shown');
+  // A broken library while hidden says nothing either (the model is never told of it).
+  const pinFile = path.join(home, 'experience', 'library-pinned.json');
+  const pin = JSON.parse(fs.readFileSync(pinFile, 'utf8'));
+  assert.strictEqual(pin.display, false, 'a hidden pin says so (a pin without the key is from before the flag)');
+  fs.writeFileSync(pinFile, JSON.stringify({ ...pin, hash: 'f'.repeat(64) }));
+  assert.doesNotMatch(H.experienceLookup({ symbol: 'MNQ' }, ctx).text, /History library/);
+  fs.writeFileSync(pinFile, JSON.stringify(pin));
+  // A run keeps its display: a resume asking for the other is refused; the same is fine.
+  assert.throws(() => L.pinLibrary(home, file, { display: true }), /pinned its library with the display off; a run keeps it/);
+  assert.throws(() => L.pinLibrary(home, file, { display: 'yes' }), /display: true or false/);
+  assert.strictEqual(L.pinLibrary(home, file, { display: false }).display, false);
+  // Only an explicit true shows it.
+  for (const display of [1, 'true', null]) {
+    fs.writeFileSync(pinFile, JSON.stringify({ ...pin, display }));
+    assert.strictEqual(L.libraryShown(home), false, String(display));
+  }
+  const shownHome = tmpHome();
+  fs.mkdirSync(path.join(shownHome, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(shownHome, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(record({ at: AT }))}\n`);
+  L.pinLibrary(shownHome, file, { display: true });
+  assert.strictEqual(L.libraryShown(shownHome), true);
+  const shownEnv = { FTH_HOME: shownHome, FTH_CYCLE_TRANSCRIPT: path.join(shownHome, 'cycle.jsonl') };
+  assert.match(H.experienceLookup({ symbol: 'MNQ' }, { ...ctx, env: shownEnv }).text, /History library [0-9a-f]{16} \(code-measured/);
+  assert.strictEqual(lookups.readExperienceLookups(shownEnv.FTH_CYCLE_TRANSCRIPT)[0].library, L.loadPinnedLibrary(shownHome).hash);
+  assert.throws(() => L.pinLibrary(shownHome, file), /pinned its library with the display on; a run keeps it/);
 });
 
 test('the cap drops the library\'s lines before the model\'s cells', () => {

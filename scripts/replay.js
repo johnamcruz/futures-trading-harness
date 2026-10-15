@@ -46,7 +46,7 @@ require('./lib/env-file').loadEnvForCli('replay');
 
 const fs = require('fs');
 const path = require('path');
-const { resolveReplay, setupHash } = require('./lib/replay/config');
+const { resolveReplay, setupHash, setupFixed, setupBase, lookArm } = require('./lib/replay/config');
 const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
@@ -57,8 +57,8 @@ const { writeLabels, summaryText } = require('./lib/replay/labels');
 const scorecard = require('./lib/replay/scorecard');
 const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/learning/run-gate');
 const { writeRunExperience, experienceLine } = require('./lib/learning/run-experience');
-const { pinIndex, armOf } = require('./lib/learning/experience-index');
-const { pinLibrary } = require('./lib/learning/setup-library');
+const { pinForRun } = require('./lib/learning/run-pins');
+const { pinCurated, curatedPoints } = require('./lib/learning/curated-lists');
 const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
@@ -80,24 +80,26 @@ function load(argv) {
 const say = msg => process.stdout.write(`[replay] ${msg}\n`);
 
 function points(run) {
-  const list = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const all = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const list = run.curated ? curatedPoints(all, run.curated, (run.cfg.barDelaySeconds || 0) * 1000).filter(p => !p.manage) : all;
   for (const d of tradingDays(run.cfg, run)) {
     const mine = list.filter(p => p.day === d.day);
     const kinds = ['premarket', 'trade', 'eod'].map(k => `${mine.filter(p => p.kind === k).length} ${k}`).join(', ');
     process.stdout.write(`${d.day}  ${d.skipped ? `skipped: ${d.skipped}` : `${kinds}${mine.length ? ` (${mine[0].t.toISOString()} .. ${mine[mine.length - 1].t.toISOString()})` : ''}`}\n`);
   }
-  process.stdout.write(`${list.length} decision times; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
+  process.stdout.write(`${list.length} decision times${run.curated ? ' of the curated windows (plus management times, stepped only while something is open: not counted)' : ''}; each trade time is one harness cycle (${run.cfg.harness}${run.cfg.model ? ` ${run.cfg.model}` : ''}) unless the runner stands down\n`);
   return 0;
 }
 
 function report(argv) {
-  const dir = arg(argv, '--config') ? load(argv).paths.runDir : argv.slice(1).find((a, i, all) => !a.startsWith('--') && !['--account', '--natural-rates', '--bars'].includes(all[i - 1]));
+  const cfg = arg(argv, '--config') ? load(argv) : null;
+  const dir = cfg ? cfg.paths.runDir : argv.slice(1).find((a, i, all) => !a.startsWith('--') && !['--account', '--natural-rates', '--bars'].includes(all[i - 1]));
   if (!dir || dir.startsWith('--')) throw new Error(USAGE);
   outcomesShown(dir, 'report');
   const { manifest, days } = readRun(path.resolve(dir));
   const summary = summarize(days);
   // The 30-day Monte Carlo of the model's trades (prop/model-score.js): the account named, else the run's attempt, ...
-  const prop = propScoreSection(dir, { root: ROOT, override: arg(argv, '--account'), ratesFile: arg(argv, '--natural-rates') || null, barsFiles: barsArgs(argv) });
+  const prop = propScoreSection(dir, { root: ROOT, override: arg(argv, '--account'), ratesFile: arg(argv, '--natural-rates') || null, curated: cfg && cfg.curated, barsFiles: barsArgs(argv) });
   const file = path.join(path.resolve(dir), 'report.md');
   // The learning measures, when the run has an experience log (learning/learning-report.js), the prop score beside them.
   const learned = learning.readLearning(path.resolve(dir, '..', '..'));
@@ -159,13 +161,13 @@ async function run(argv) {
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
   if (!(max === Infinity || (Number.isInteger(max) && max > 0))) throw new Error('--max-cycles: a positive whole number');
   // The learning gate (learning/run-gate.js): checked before the run home is seeded, its look taken before the first cycle.
-  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, practice: r.practice, runDir: r.paths.runDir, arm: armOf(r.experienceIndex), config: setupHash(r) };
+  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, practice: r.practice, runDir: r.paths.runDir, arm: lookArm(r), config: setupHash(r), base: setupBase(r), setup: setupFixed(r) };
   checkLearningRun(gate);
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
   const learned = startLearningRun(r.paths.runHome, gate);
   // The record the model is shown (walk-forward: only days before each bar's session), frozen for the run.
-  if (r.experienceIndex) say(`experience index pinned: ${pinIndex(r.paths.runHome, r.experienceIndex).hash.slice(0, 16)}`);
-  if (r.setupLibrary) say(`history library pinned: ${pinLibrary(r.paths.runHome, r.setupLibrary).hash.slice(0, 16)}`);
+  for (const line of pinForRun(r, { fresh, arm: gate.arm })) say(line);
+  if (r.curated) say(`curated list pinned: ${r.curated.list} of ${pinCurated(r.paths.runHome, r.curated).fingerprint.slice(0, 16)}, ${r.curated.windows.length} window(s)`);
   say(`${fresh ? 'new run' : 'resuming'} ${r.runId} in ${r.paths.runHome} (broker ${r.broker}, ${r.start.toISOString()} to ${r.end.toISOString()}; ${learned.learning ? `learning: ${learned.role}${learned.look ? `, ${learned.look.purpose} look ${learned.look.evaluation}` : ''}` : 'not a learning run'})`);
   const res = await runReplay({ run: r, baseEnv: process.env, root: ROOT, maxCycles: max, log: say });
   if (res.stopped) say(`${res.stopped}; run it again to resume`);
@@ -173,7 +175,7 @@ async function run(argv) {
   // A finished learning run logs its experience (learning/run-experience.js); a run declared not learning has none.
   if (res.done) {
     try { if (learned.learning) say(experienceLine(writeRunExperience(r.paths.runDir, { root: ROOT }))); } catch (err) { say(`experience log not written: ${err.message}`); }
-    process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT, riskActions: false }).text);
+    process.stdout.write(propScoreSection(r.paths.runDir, { root: ROOT, curated: r.curated, riskActions: false }).text);
   }
   return res.stopped && !/max-cycles/.test(res.stopped) ? 1 : 0;
 }

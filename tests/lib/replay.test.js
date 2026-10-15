@@ -63,6 +63,8 @@ test('decision points: holidays, weekends and early closes from the harness cale
 function replayConfig(dir, over = {}) {
   return {
     runId: 'r1', workDir: path.join(dir, 'replays'), broker: 'sim', start: '2026-10-07T13:31:00Z', end: '2026-10-07T13:40:00Z', premarket: false,
+    // A pinned replay clock unless a test charges the latency (the default for a learning run: replay/latency.js).
+    latency: false,
     autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York', dataDir: '/live/bars', alertWebhook: 'https://example.com/hook' },
     ...over,
   };
@@ -279,6 +281,133 @@ test('driver: one step per decision time at its time, a line each, end of day re
   fs.writeFileSync(w.run.paths.manifest, JSON.stringify(m));
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).done, true);
   assert.strictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).finished, true);
+});
+
+// Latency charged (replay/latency.js): a fake wall clock each step moves on by the minutes the cycle "took".
+function chargedWorld(over = {}) {
+  const w = userWorld({ end: '2026-10-07T19:53:00Z', start: '2026-10-07T19:40:00Z', latency: true, ...over });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const clock = { wall: 1_800_000_000_000 };
+  const clockNow = () => JSON.parse(fs.readFileSync(w.run.paths.clockFile, 'utf8')).now;
+  return { w, clock, clockNow, wall: () => clock.wall };
+}
+
+test('driver, latency charged: each step\'s replay clock runs with the wall clock; a time the clock passed runs at the clock, a trade time whose next time it passed too runs no step; end of day never skipped; the clock never goes back', async () => {
+  const { w, clock, clockNow, wall } = chargedWorld();
+  const calls = [];
+  const minutes = { '19:42:02': 4, '19:46:02': 5, '19:51:02': 1 };
+  // The broker fills during each step, 30 s in (an entry, the end-of-day flatten): after the time the step ran.
+  const fills = [];
+  const deps = {
+    serverCheck: async () => null,
+    async step(point, env) {
+      const t = point.t.toISOString();
+      calls.push({ kind: point.kind, t: t.slice(11, 19), now: env.FTH_REPLAY_NOW === t, clock: clockNow() === t, wallStart: env.FTH_REPLAY_WALL_START === String(clock.wall) });
+      fills.push({ id: fills.length, creationTimestamp: new Date(point.t.getTime() + 30000).toISOString() });
+      clock.wall += (minutes[t.slice(11, 19)] || 1) * 60000;
+      if (point.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: point.kind === 'trade' ? 'trade' : 'eod', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` };
+    },
+    async trades(env, account, since, until) { return fills.filter(f => Date.parse(f.creationTimestamp) > since.getTime() && Date.parse(f.creationTimestamp) <= until.getTime()); },
+  };
+  const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, wall });
+  assert.strictEqual(r.done, true);
+  // 19:42:02 took 4 min: 19:45:02 runs at 19:46:02; it took 5 min (to 19:51:02): 19:48:02 (its next, the 19:50 end of
+  // day, passed too) runs no step; end of day runs late at 19:51:02.
+  assert.deepStrictEqual(calls.map(c => `${c.kind}@${c.t}`), ['trade@19:42:02', 'trade@19:46:02', 'eod@19:51:02']);
+  assert.ok(calls.every(c => c.now && c.clock && c.wallStart), JSON.stringify(calls));
+  const lines = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(lines.map(l => [l.t.slice(11, 19), (l.scheduled || '').slice(11, 19), l.ranAt || null, l.skipped || null]), [
+    ['19:42:02', '', null, null], ['19:46:02', '19:45:02', null, null], ['19:51:02', '19:50:00', null, ['2026-10-07T19:48:02.000Z']],
+  ]);
+  // Each line's fills are its own step's (made after the time it ran, up to where it ended), the last step's too.
+  assert.deepStrictEqual(lines.map(l => l.trades.map(f => f.creationTimestamp.slice(11, 19))), [['19:42:32'], ['19:46:32'], ['19:51:32']]);
+  assert.deepStrictEqual(lines.map(l => [l.since.slice(11, 19), l.endedAt.slice(11, 19)]), [['19:40:00', '19:46:02'], ['19:46:02', '19:51:02'], ['19:51:02', '19:52:02']]);
+  // The broker's clock where the last step left it (19:51:02 plus its minute).
+  assert.strictEqual(clockNow(), '2026-10-07T19:52:02.000Z');
+  assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.daysDone, ['2026-10-07']);
+});
+
+test('driver, latency charged: a resume starts from the clock file, never before it; the error limit keeps a late time under its key and a resume folds its attempts in', async () => {
+  // A stop after one 7-minute step: the clock is at 19:49:02. The resume skips 19:45:02 (19:48:02 passed too) and runs
+  // 19:48:02 at 19:49:02; the server check is at that time, never the 19:45:02 the schedule says.
+  let { w, clock, clockNow, wall } = chargedWorld();
+  const seen = [];
+  const step = (fail = () => false) => async point => {
+    seen.push([point.t.toISOString().slice(11, 19), clockNow().slice(11, 19)]);
+    clock.wall += (point.t.toISOString().endsWith('42:02.000Z') ? 7 : 1) * 60000;
+    if (point.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+    const failed = fail(point);
+    return { code: failed ? 1 : 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: point.kind === 'trade' ? 'trade' : 'eod', ok: !failed, result: failed ? 'CYCLE RESULT: (none reported)' : 'CYCLE RESULT: no-trade - x' }] })}\n` };
+  };
+  const checks = [];
+  const deps = { serverCheck: async (env, at) => { checks.push(at.toISOString().slice(11, 19)); return null; }, trades: async () => [], step: step() };
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, wall, maxCycles: 1 })).done, false);
+  assert.strictEqual(clockNow(), '2026-10-07T19:49:02.000Z');
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, wall })).done, true);
+  assert.deepStrictEqual(checks, ['19:42:02', '19:49:02']);
+  assert.deepStrictEqual(seen, [['19:42:02', '19:42:02'], ['19:49:02', '19:49:02'], ['19:50:02', '19:50:02']]);
+  assert.deepStrictEqual(store.readRun(w.run.paths.runDir).days['2026-10-07'].map(l => [l.t.slice(11, 19), (l.scheduled || '').slice(11, 19), l.skipped || null]),
+    [['19:42:02', '', null], ['19:49:02', '19:48:02', ['2026-10-07T19:45:02.000Z']], ['19:50:02', '19:50:00', null]]);
+  // A late time (19:48:02 run at 19:49:02) whose cycle fails to the error limit: due under its key, with the time it was
+  // scheduled; each try runs at the clock then (never back), and the resume folds the three attempts into its line.
+  ({ w, clock, clockNow, wall } = chargedWorld());
+  seen.length = 0;
+  let fails = 3;
+  const failing = { ...deps, step: step(p => p.kind === 'trade' && p.t.toISOString() >= '2026-10-07T19:49' && fails-- > 0) };
+  const stopped = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: failing, wall });
+  assert.match(stopped.stopped, /3 failed cycles in a row at 2026-10-07T19:49:02.000Z/);
+  assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.cycleRetry, { t: '2026-10-07T19:49:02.000Z', day: '2026-10-07', kind: 'trade', tries: 3, scheduled: '2026-10-07T19:48:02.000Z' });
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: failing, wall })).done, true);
+  assert.deepStrictEqual(seen.map(x => x[0]), ['19:42:02', '19:49:02', '19:50:02', '19:51:02', '19:52:02', '19:53:02']);
+  const day = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(day.map(l => [l.t.slice(11, 19), (l.retries || []).length, (l.ranAt || '').slice(11, 19)]), [['19:42:02', 0, ''], ['19:49:02', 3, '19:52:02'], ['19:53:02', 0, '']]);
+  // The fills windows run from where each step ended (the retry ended 19:53:02, not its line's 19:49:02).
+  assert.deepStrictEqual(day.map(l => l.since.slice(11, 19)), ['19:40:00', '19:49:02', '19:53:02']);
+  assert.strictEqual(store.readRun(w.run.paths.runDir).manifest.cycleRetry, undefined);
+});
+
+test('driver, latency charged: an end of day not verified flat retries a minute after its step ended, never at or past the close; a run started pinned resumes pinned; a stale wall start never reaches a step', async () => {
+  // End of day (15:50 ET) takes 9 minutes and isn't flat: its retry would be 16:00 ET, the close: none.
+  const { w, clock, wall } = chargedWorld({ start: '2026-10-07T19:49:00Z', end: '2026-10-07T20:30:00Z' });
+  const kinds = [];
+  const deps = {
+    serverCheck: async () => null, trades: async () => [],
+    async step(point, env) {
+      kinds.push([point.kind, point.t.toISOString().slice(11, 19), env.FTH_REPLAY_WALL_START === String(clock.wall)]);
+      clock.wall += 9 * 60000;
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: 'eod', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` };
+    },
+  };
+  await runReplay({ run: w.run, baseEnv: { ...w.env, FTH_REPLAY_WALL_START: '1' }, root: ROOT, deps, wall });
+  assert.deepStrictEqual(kinds, [['eod', '19:50:00', true]], 'no retry at or past the close');
+  assert.strictEqual(store.readRun(w.run.paths.runDir).manifest.eodRetry, undefined);
+  // A shorter end of day (2 minutes): its retry a minute after it ended (19:53), not after its time (19:51).
+  const b = chargedWorld({ start: '2026-10-07T19:49:00Z', end: '2026-10-07T20:30:00Z' });
+  const seen = [];
+  let tries = 0;
+  await runReplay({ run: b.w.run, baseEnv: b.w.env, root: ROOT, wall: b.wall, deps: { ...deps, async step(point) {
+    seen.push(point.t.toISOString().slice(11, 19));
+    b.clock.wall += 2 * 60000;
+    tries += 1;
+    fs.writeFileSync(path.join(b.w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: tries >= 2 }));
+    return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: 'eod', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` };
+  } } });
+  assert.deepStrictEqual(seen, ['19:50:00', '19:53:00']);
+  // replayEnv never passes on a wall start it was given (only the charged step sets its own).
+  assert.strictEqual(replayEnv({ ...b.w.env, FTH_REPLAY_WALL_START: '123' }, b.w.run, { at: iso('2026-10-07T19:50:00Z') }).FTH_REPLAY_WALL_START, undefined);
+  // A run whose manifest predates the setting (no latency: true) and whose config doesn't name it resumes pinned,
+  // under the hash it started with; a charged run's manifest keeps it charged.
+  const cfg = over => resolveReplay(replayConfig(b.w.dir, { end: '2026-10-07T20:30:00Z', start: '2026-10-07T19:49:00Z', ...over }), { env: b.w.env, home: b.w.dir, root: ROOT });
+  const { latency: _drop, ...unnamed } = replayConfig(b.w.dir, { end: '2026-10-07T20:30:00Z', start: '2026-10-07T19:49:00Z' });
+  const resolve = raw => resolveReplay(raw, { env: b.w.env, home: b.w.dir, root: ROOT });
+  assert.strictEqual(JSON.parse(fs.readFileSync(b.w.run.paths.manifest, 'utf8')).latency, true);
+  assert.strictEqual(resolve(unnamed).latency, true, 'started charged: stays charged');
+  const m = JSON.parse(fs.readFileSync(b.w.run.paths.manifest, 'utf8'));
+  delete m.latency;
+  fs.writeFileSync(b.w.run.paths.manifest, JSON.stringify(m));
+  assert.strictEqual(resolve(unnamed).latency, false, 'started before the setting: pinned');
+  assert.strictEqual(cfg({ latency: true }).latency, true, 'named: as named');
 });
 
 test('driver: a time whose step started but whose line was never written is recorded as interrupted, never run twice', async () => {

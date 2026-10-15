@@ -30,6 +30,14 @@ it differs):
   flight) owns targets (section 3.4).
 - **The code stays** until its own PRs (section 9's table): dead code is
   kept and tested through fixtures meanwhile.
+- **A plan holds two base bars** (the owner, 2026-10-14): a compose record
+  expires the strategy's `valid_bars` base bars after its bar's close (2:
+  6 minutes on the 3m), not at the next close, so a cycle that runs past the
+  next close can still enter on the facts of its own bar. The gate works the
+  expiry out again from that bar's briefing (`lifecycle-gate.js`), and
+  replay charges each cycle's real time on its clock (the replay config's
+  `latency`, `replay/latency.js`), so an entry lost to expiry in a replay is
+  one live would lose too.
 
 ## 1. Thesis
 
@@ -244,11 +252,15 @@ for a long; their mirrors for a short. A long with `1h bos down` is refused,
 even though the read is true. A read with no direction (`at prior VAH`,
 `value inside`) agrees with either side. The only exception is the verified
 reversal of owner decision D2: a trend or break read against the side is
-allowed when the combination also has a true 15m or 1h CHoCH the order's way,
-on a timeframe at or below that CHoCH's (a 15m CHoCH never excuses the 1h or
-4h trend; a 3m CHoCH excuses nothing). It is the reads' agreement only: the
-gate's trend rule has its own tiers (D2): the prevailing frame (the
-multi-timeframe record) is faded only on a CHoCH at or above it.
+allowed when the combination also holds that frame's D2 tier the order's way:
+a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH, a
+4h frame a 1h CHoCH plus a 4h candle that rejected a key level (a gap's edge is
+none). A 15m CHoCH never excuses the 1h or 4h trend; a 3m CHoCH excuses
+nothing. The gate's trend rule fades the prevailing frame (the
+multi-timeframe record) on the same tiers, one definition (`D2_TIERS`,
+`composed-reads.js`), so a record that names the 4h trend it fades is held to
+the same tier as the trend rule (the checker reads the trend from the briefing,
+the trend rule from the multi-timeframe record).
 
 **Each step its own reads.** The step a read belongs to is fixed by its
 form, as the table above lists it (bias: trend, break, prior RTH range, trend
@@ -265,8 +277,9 @@ the entry each hold a true read pointing to the side (the reaction and its
 confirmation; reads without a direction, such as `touched`, `at`, `swept`,
 `volume high` or `participation high`, and a setup `in ote`, only support
 them), the confirmation comes after the reaction (when the setup's pointing
-reads are candle reads, an entry read pointing the side is on a candle that
-closed after the last of them: the 3m after the 15m rejection, never the 15m
+reads name a candle, a relation's or pattern's or a CISD's confirming
+candle, an entry read pointing the side is on a candle that closed after the
+last of them: the 3m after the 15m rejection or the 15m CISD, never that
 candle itself or the last 3m inside it; a setup candle without a close time
 refuses), and the stop and target reads are present. Any false, unchecked or
 disagreeing read refuses it, naming the read.
@@ -278,12 +291,14 @@ disagreeing read refuses it, naming the read.
 runner passes the cycle bar; without it `briefingFor` would return the
 briefing current at the wall clock, so the tool refuses rather than guess.
 It then works out the plan in code and appends a record to
-`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl` (one file per index family; its
+`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl` (one shard per index family
+and trading day: the session date of the record's bar, at the 18:00 ET
+rollover, so the gate reads the cycle bar's one shard; its
 schema is `RECORD_KEYS` in `trading/trade-lifecycle.js`), the way the runner
 records policy verdicts (`prop-state.js:526`):
 
 - the root, contract, side, bar (the briefing's `asOf`), `at`, `expiresAt`
-  (the next base-bar close), the cycle id and the lane (the briefing's base
+  (the strategy's `valid_bars` base bars after the bar's close), the cycle id and the lane (the briefing's base
   timeframe); the run id comes with the runner (PR 14);
 - the context: `m3.regime` (primary and volatility), `m3.window`, the trend
   rule for the side, `m15.alignment` for the side, `m3.today.dayType`
@@ -528,7 +543,7 @@ computes.
 
 | Source | Gives the log |
 |---|---|
-| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
+| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>/<day>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
 | Cycle log (`cycle-log.js`: `<FTH_HOME>/logs/cycles-<day>.jsonl`) | The cycle's result, its `compose_check` and `experience_lookup` calls, the gate's refusals |
 | Decision history (`decision-history.js`) | The action words (entered, skipped, no-trade) and its fill matching for an entered trade's real R (`closedTrade`, `decision-history.js:326`). The history itself is not the log: the runner keeps only the last ten (`runner.js:1410`) |
 | Counterfactual (`replay/counterfactual.js:70`, `simulate`) | A pass's R from the record's stop and target distances, with the backtester's slippage |

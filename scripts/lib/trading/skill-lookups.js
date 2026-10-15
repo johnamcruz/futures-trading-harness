@@ -156,7 +156,11 @@ function briefingFacts(home, root, now, laneBars = {}, cycleBar = null) {
  */
 function composedAt(home, root, bar) {
   if (!home || !bar) return [];
-  return recordsAt(home, root, bar).map(r => {
+  // The bar's day shard unreadable: none here. Only a composed entry's triggers read these, and its own check
+  // (lifecycle-gate.js composedRefusal) reads the same shard and refuses it; any other entry doesn't depend on them.
+  let records;
+  try { records = recordsAt(home, root, bar); } catch (_err) { return []; }
+  return records.map(r => {
     const parsed = readsOf(r).map(x => parseRead(x.read));
     return { id: String(r.id || ''), side: r.side, kinds: [...new Set(parsed.map(p => p.kind))].sort(), relations: [...new Set(parsed.filter(p => p.kind === 'relation' && p.rel).map(p => p.rel))].sort() };
   });

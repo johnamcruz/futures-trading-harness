@@ -284,10 +284,11 @@ R6-R9). The report and the end of every run print, in order:
 4. **Blow and timeout rates**, with their intervals (a block bootstrap over
    start days, Wilson at the effective sample size, Wilson over the paths).
 
-A full-day run's score is `real`. A curated run (its natural rates beside
-it, `natural-rates.json`, or `--natural-rates`) is rebuilt at each list's
-natural frequency (`prop/natural-rate.js`) and labelled `diagnostic
-(reweighted)`; a setup-focused run is `diagnostic (setup-focused)`. The
+A full-day run's score is `real`. A curated run (a pinned curated list) is
+rebuilt at each list's natural frequency, from the curated scan's candidate
+counts in its lists document (`prop/natural-rate.js` `curatedRates`; the
+report needs the run's `--config`, which names the document, or rates by
+hand with `--natural-rates`), and labelled `diagnostic (reweighted)`; a setup-focused run is `diagnostic (setup-focused)`. The
 promotion gate refuses a diagnostic score. A score of a practice-validate,
 test or final run is logged in the learning ledger beside the run's own
 look (`learning/looks.js` `recordScore`), never as a look of its own; a

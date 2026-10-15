@@ -268,10 +268,11 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   const text = scoreText(r);
   for (const want of [/1\. Zero blows \(hard gate\): held/, /2\. Pass within 30 trading days/, /3\. Days to pass: median/, /4\. Blow rate/, /Promotion gate: n\/a \(practice-validate is not out of sample; it would refuse: /]) assert.match(text, want);
   assert.ok(text.indexOf('1. Zero') < text.indexOf('2. Pass') && text.indexOf('2. Pass') < text.indexOf('3. Days') && text.indexOf('3. Days') < text.indexOf('4. Blow'), 'the owner\'s order');
-  // Natural rates beside the run make it a curated run: diagnostic.
-  fs.writeFileSync(path.join(dir, 'natural-rates.json'), JSON.stringify({ sweep: { candidatesPerDay: 0.5 } }));
+  // Rates given by hand make it a reweighted, diagnostic score.
+  const ratesFile = path.join(home, 'rates.json');
+  fs.writeFileSync(ratesFile, JSON.stringify({ sweep: { candidatesPerDay: 0.5 } }));
   const root = path.resolve(__dirname, '..', '..');
-  const sec = propScoreSection(dir, { root });
+  const sec = propScoreSection(dir, { root, ratesFile });
   assert.strictEqual(sec.error, undefined, sec.error);
   assert.deepStrictEqual([sec.result.score, sec.summary.score], ['diagnostic (reweighted)', 'diagnostic (reweighted)']);
   assert.match(sec.text, /Prop Monte Carlo, 30-day attempts .*: diagnostic \(reweighted\), never a promotion score/);
@@ -343,4 +344,43 @@ test('scoreRun: trades open at the same time (a scale-in) are refused in a real 
       { id: 3, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:08:00Z', price: 101, size: 2, side: 1, profitAndLoss: 4 },
     ] }] });
   assert.throws(() => scoreRun(dir, { account: ACCOUNT, paths: 10, reps: 10 }), /open at the same time .* a real score refuses them/);
+});
+
+test('a curated run is reweighted at its lists\' natural rates from the curated scan\'s candidate counts; without its document it is not scored', () => {
+  const CL = require('../../scripts/lib/learning/curated-lists');
+  const { curatedRates } = require('../../scripts/lib/prop/natural-rate');
+  const home = tmpHome('fth-pmc-');
+  const ledger = path.join(home, 'ledger', 'looks.jsonl');
+  const t0 = '2024-07-15T14:00:00.000Z';
+  looks.recordLook(ledger, { evaluation: 'v2', candidate: 'v2', purpose: 'validate', runId: 'run1', from: '2024-07-15', to: '2024-07-17' }, { create: true });
+  const gate = { learning: true, role: 'practice-validate', look: { evaluation: 'v2', candidate: 'v2', purpose: 'validate' }, hideOutcomes: false, ledger, practice: { mode: 'setup-focus', setupTf: 15 } };
+  const { dir } = multiDayRun({
+    home, gate,
+    days: [
+      { day: '2024-07-15', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]],
+        fills: [{ id: 1, contractId: 'MNQ:2024-09', creationTimestamp: '2024-07-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null }, { id: 2, contractId: 'MNQ:2024-09', creationTimestamp: '2024-07-15T14:05:00Z', price: 104, size: 1, side: 1, profitAndLoss: 8 }] },
+      { day: '2024-07-16', times: ['2024-07-16T14:00:00.000Z'], rows: [] },
+    ],
+  });
+  // A lists document: one trend-up moment whose window holds the decision; the scan found 60 trend-up candidates.
+  const moment = { id: 'm1', list: 'trend-up', day: '2024-07-15', window: { from: '2024-07-15T13:30:00.000Z', to: '2024-07-15T14:30:00.000Z' } };
+  const lists = Object.fromEntries(CL.LISTS.map(n => [n, n === 'trend-up' ? [moment] : []]));
+  const coverage = Object.fromEntries([...CL.LISTS.map(n => [n, { candidates: n === 'trend-up' ? 60 : 0 }]), ['mix', { candidates: 60 }]]);
+  const body = { v: CL.VERSION, kind: CL.KIND, builtAt: 'x', use: 'validate', role: 'practice-validate', market: { roots: ['MNQ'], minutes: 3, setupTf: 15 }, seed: 1, options: {}, sources: [], lists, mix: ['m1'], short: {}, coverage };
+  const doc = { ...body, fingerprint: CL.fingerprintOf(body) };
+  const file = path.join(home, 'curated.json');
+  fs.writeFileSync(file, JSON.stringify(doc));
+  CL.pinCurated(home, { file, list: 'mix', fingerprint: doc.fingerprint });
+  const c = curatedRates(doc, { list: 'mix', scanDays: 120 });
+  assert.deepStrictEqual(c.rates['trend-up'], { candidatesPerDay: 0.5 });
+  assert.deepStrictEqual([c.listOf({ cycleAt: t0 }), c.listOf({ cycleAt: '2024-07-16T14:00:00.000Z' })], ['trend-up', null]);
+  assert.match(curatedRates(doc).scanDaysFrom, /an estimate/);
+  const root = path.resolve(__dirname, '..', '..');
+  const sec = propScoreSection(dir, { root, curated: { file, list: 'mix' } });
+  assert.strictEqual(sec.error, undefined, sec.error);
+  assert.strictEqual(sec.result.score, 'diagnostic (reweighted)');
+  assert.match(sec.text, /rebuilt at natural rates .* from mix of [0-9a-f]{16}, \d+ scan days/);
+  assert.strictEqual(sec.result.promotion.passes, false);
+  assert.match(propScoreSection(dir, { root }).text, /not scored \(a curated run is scored at its lists' natural rates/);
+  assert.match(propScoreSection(dir, { root, curated: { file, list: 'trend-up' } }).text, /not scored \(the run pinned curated list/);
 });

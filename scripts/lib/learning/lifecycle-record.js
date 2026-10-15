@@ -17,19 +17,19 @@
  *                               reads, signatures: { skill, read }, context, plan: { entry, stop, target, size },
  *                               exploratory } or null (not a record)
  *   recordsDir(home)            where the records live (<FTH_HOME>/trade-lifecycle)
- *   readRecords(home, { runId })   every record of every root, normalized, in time order
+ *   readRecords(home, { runId, root, days })   every record of every root (every day shard and any older single
+ *                               file), normalized, in time order; `root`, `days`: only that family's, those days'
  *   skillSignature(reads), readSignature(reads)
  *   CONTEXT_KEYS                the six context keys (section 4.2, D17)
  */
 
-const fs = require('fs');
 const path = require('path');
 const { parseRead } = require('../trading/composed-reads');
+const { readRecords: readLifecycle } = require('../trading/trade-lifecycle');
 
 const STEPS = Object.freeze(['bias', 'location', 'setup', 'entry', 'stop', 'target']);
 const CONTEXT_KEYS = Object.freeze(['regime', 'volatility', 'window', 'biasSide', 'alignment', 'dayType']);
 const DIR = 'trade-lifecycle';
-const MAX_BYTES = 64 * 1024 * 1024;
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const str = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -139,22 +139,16 @@ function fromLifecycleRecord(raw, { runId = null } = {}) {
 
 const recordsDir = home => path.join(home, DIR);
 
-/** Every record under the home, normalized, oldest first (a line that isn't a record is skipped). */
-function readRecords(home, { runId = null } = {}) {
-  const dir = recordsDir(home);
-  let names;
-  try { names = fs.readdirSync(dir).filter(n => /^[A-Z0-9]{1,8}\.jsonl$/.test(n)).sort(); } catch (_err) { return []; }
+/**
+ * The records under the home, normalized, oldest first (a line that isn't a record is skipped): every family's day
+ * shards and any older single file (trade-lifecycle.js readRecords: a file over its MAX_BYTES or unreadable throws).
+ * `root`: that family's alone; `days`: those trading days' shards alone (experience_lookup's candidate).
+ */
+function readRecords(home, { runId = null, root = null, days = null } = {}) {
   const out = [];
-  for (const n of names) {
-    const file = path.join(dir, n);
-    if (fs.statSync(file).size > MAX_BYTES) throw new Error(`${file}: over ${MAX_BYTES} bytes`);
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
-      if (!line.trim()) continue;
-      let raw;
-      try { raw = JSON.parse(line); } catch (_err) { continue; }
-      const r = fromLifecycleRecord(raw, { runId });
-      if (r) out.push(r);
-    }
+  for (const raw of readLifecycle(home, root, { days })) {
+    const r = fromLifecycleRecord(raw, { runId });
+    if (r) out.push(r);
   }
   return out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }

@@ -12,8 +12,11 @@
  *   3. the median and the 90th percentile of days to pass;
  *   4. the blow and timeout rates, with their intervals (a block bootstrap over start days, Wilson at the effective
  *      sample size, Wilson over the resampled paths).
- * A full-day run's score is `real`. A curated run (natural rates given, or <run dir>/natural-rates.json, prop/natural-
- * rate.js) is `diagnostic (reweighted)`, a setup-focused one `diagnostic (setup-focused)`: never promotion scores.
+ * A full-day run's score is `real`. A curated run (one with a pinned curated list, learning/curated-lists.js) is
+ * reweighted to its lists' natural rates (prop/natural-rate.js curatedRates, from the curated scan's candidate counts in
+ * its lists document, which the replay config names; or rates given by hand) and scored `diagnostic (reweighted)`; a
+ * curated run without its document is not scored. A setup-focused run is `diagnostic (setup-focused)`. Neither is ever
+ * a promotion score.
  * A real score refuses a stream with an entry it couldn't settle (a dropped loss would flatter it).
  *
  * The account: --account; else the run's own attempt (its home's combine/<account>.json); else the runner config's
@@ -33,12 +36,11 @@
 const fs = require('fs');
 const path = require('path');
 const { readModelStream } = require('./model-stream');
-const { reweightStream } = require('./natural-rate');
+const { reweightStream, curatedRates } = require('./natural-rate');
 const { scoreRiskActions } = require('./risk-actions');
 const { checkModelWindow, scoreStream, scorePaired } = require('./evaluator');
 const { recordScore, ledgerPath } = require('../learning/looks');
 
-const RATES_FILE = 'natural-rates.json';
 
 function resolveAccount({ override = null, attempts = [], runnerAccount = null, strategies = [], accounts = [] }) {
   const names = new Set(accounts.filter(a => a.valid !== false).map(a => a.name));
@@ -130,7 +132,7 @@ function scoreLines(r) {
     ['test', 'final'].includes(r.window.role)
       ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
       : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,
-    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured'} (stop ${r.inputs.faults.stopFault}, outage ${r.inputs.faults.outage}${rs.faults && rs.faults.injected + rs.faults.missed ? `; ${rs.faults.injected} fired, ${rs.faults.missed} without a no-stop path` : ''})`,
+    `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.ratesFrom ? `, from ${r.ratesFrom}` : ''}${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured'} (stop ${r.inputs.faults.stopFault}, outage ${r.inputs.faults.outage}${rs.faults && rs.faults.injected + rs.faults.missed ? `; ${rs.faults.injected} fired, ${rs.faults.missed} without a no-stop path` : ''})`,
   ];
   if (r.attribution) {
     const a = r.attribution.states;
@@ -162,18 +164,28 @@ function scoreSummary(r) {
   };
 }
 
-/** The run's natural rates: the file given, else <run dir>/natural-rates.json when the curated run wrote one, else null. */
-function ratesFor(runDir, file) {
-  const f = file || path.join(runDir, RATES_FILE);
-  if (!file && !fs.existsSync(f)) return null;
-  return JSON.parse(fs.readFileSync(f, 'utf8'));
+/**
+ * A curated run's natural rates and its decisions' lists: rates given by hand (a file), else from the run's curated lists
+ * document (`curated`: { file, list }, the replay config's), checked against the list the run pinned. A run that pinned
+ * none: null. A curated run with neither: refused (it is never scored as a full-day run).
+ */
+function ratesFor(runDir, { ratesFile = null, curated = null } = {}) {
+  const { loadPinnedCurated, readLists } = require('../learning/curated-lists');
+  const pinned = loadPinnedCurated(path.resolve(runDir, '..', '..'));
+  if (ratesFile) return { rates: JSON.parse(fs.readFileSync(ratesFile, 'utf8')), listOf: undefined, from: ratesFile };
+  if (!pinned) return null;
+  if (!curated || !curated.file) throw new Error('a curated run is scored at its lists\' natural rates: give its replay config (--config), which names its lists document, or --natural-rates');
+  const doc = readLists(curated.file);
+  if (doc.fingerprint !== pinned.fingerprint || (curated.list || 'mix') !== pinned.list) throw new Error(`the run pinned curated list ${String(pinned.fingerprint).slice(0, 16)} (${pinned.list}), not ${doc.fingerprint.slice(0, 16)} (${curated.list || 'mix'})`);
+  const c = curatedRates(doc, { list: pinned.list });
+  return { rates: c.rates, listOf: c.listOf, from: `${pinned.list} of ${doc.fingerprint.slice(0, 16)}, ${c.scanDays} scan days (${c.scanDaysFrom})` };
 }
 
 /**
  * The section for the replay's report and the end of a run: { result, text, markdown, summary }; a run that can't be
  * scored says why (never throws: the report still writes).
  */
-function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, barsFiles = {}, riskActions = true, now = new Date() } = {}) {
+function propScoreSection(runDir, { root, env = process.env, override = null, ratesFile = null, curated = null, barsFiles = {}, riskActions = true, now = new Date() } = {}) {
   try {
     const { loadAccounts, accountNamed } = require('../trading/accounts');
     const { loadStrategies } = require('../trading/strategies');
@@ -185,7 +197,9 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
     const pick = resolveAccount({ override, attempts: runningAttempts(path.resolve(dir, '..', '..')), runnerAccount: runner.account, strategies, accounts: loadAccounts(root, env).accounts });
     if (!pick.name) throw new Error(pick.why);
     const account = accountNamed(root, pick.name, env);
-    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: ratesFor(dir, ratesFile), barsFiles, riskActions, now });
+    const nat = ratesFor(dir, { ratesFile, curated });
+    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, barsFiles, riskActions, now });
+    if (nat) result.ratesFrom = nat.from;
     result.accountWhy = pick.why;
     return { result, text: `\n${scoreText(result)}`, markdown: scoreMarkdown(result), summary: scoreSummary(result) };
   } catch (err) {
@@ -194,4 +208,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { RATES_FILE, resolveAccount, policyFor, scoreRun, pairRuns, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { resolveAccount, policyFor, scoreRun, pairRuns, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

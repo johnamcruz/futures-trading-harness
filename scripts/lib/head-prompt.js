@@ -7,10 +7,10 @@
  * Without a prompt the head trader (opencode.js HEAD_AGENT) reads opencode's default prompt, the workspace
  * instructions (AGENTS.md) and, while it may use the skill tool, opencode's listing of every skill, then loads its
  * per-cycle skills one tool turn each, after the cycle's prompt, where no prompt cache reaches. In index mode its
- * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_COMPOSED and REQUIRED_AT_ENTRY, and the others it reads
- * every cycle), the same text a load returns, as part of its fixed prefix; any other skill it reads whole with the
- * harness tool skill_lookup (the Skills list of AGENTS.md is its index), and opencode's skill tool is denied it
- * (opencode.js sessionPermission). Full mode, and every other harness, stay as before: the skills are loaded.
+ * prompt embeds those skills (CORE: the order gate's REQUIRED_FOR_COMPOSED and REQUIRED_AT_ENTRY, the others it
+ * reads every cycle, and a composed bar's reads), the same text a load returns, as part of its fixed prefix; any other
+ * skill it reads whole with the harness tool skill_lookup (the Skills list of AGENTS.md is its index), and opencode's
+ * skill tool is denied it (opencode.js sessionPermission). Full mode, and every other harness, stay as before: the skills are loaded.
  *
  * The order gate counts an embedded skill as loaded only on the runner's attestation (FTH_HEAD_PROMPT, which the
  * runner sets for an opencode run in index mode only), checked whole when an entry is judged: the run's opencode.json
@@ -19,6 +19,7 @@
  * file changed or unreadable, a skill edited since): no embedded skill counts, so the transcript decides as before.
  *
  *   CORE                          the skills embedded, in prompt order
+ *   COMPOSED_READS                the composed bar's reads among them (SITUATIONAL entries taught in trade-lifecycle)
  *   ATTEST_ENV                    'FTH_HEAD_PROMPT'
  *   headPlan(root, mode)          { docs: [{ name, body }] } in index mode, null in full mode
  *   headPrompt(plan)              the prompt's text
@@ -46,9 +47,14 @@ const HEAD_MARK = 'You are the head trader of the futures trading harness.';
 // trade_lifecycle is the one entry strategy: the composed entry's list (REQUIRED_FOR_COMPOSED: trade-lifecycle in place
 // of strategy-library, strategy-scan and strategy-gate-checks). A rules strategy's entry (a user's or a fixture's) still
 // needs those three, read with skill_lookup (the gate requires them for it).
+// Last, the composed bar's own reads (SITUATIONAL entries taught in trade-lifecycle: confluence-counting, invalidation,
+// rejection, breakout), which the gate requires on every composed bar: embedded, they cost no lookup turn per bar (the
+// owner's exception to the prompt's no-growth rule, about 13 KB).
+const COMPOSED_READS = [...new Set(SITUATIONAL.filter(e => e.taughtIn).map(e => e.skill))];
 const CORE = [...new Set([
   ...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY,
   'autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context',
+  ...COMPOSED_READS,
 ])];
 const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
 const SHA = /^[0-9a-f]{64}$/;
@@ -69,7 +75,7 @@ function headPlan(root, mode) {
 }
 
 /** The situational skills the head trader must read when the bar shows them (SITUATIONAL entries marked head). */
-// An entry taught in a skill (`taughtIn`: trade-lifecycle) is listed there, not here: the prompt doesn't grow for it.
+// An entry taught in a skill (`taughtIn`: trade-lifecycle) is named there and embedded below (CORE), not listed here.
 const listed = e => e.head === true && !e.taughtIn;
 const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(listed).map(e => e.skill))]
   .map(skill => ({ skill, when: table.filter(e => listed(e) && e.skill === skill).map(e => parseTrigger(e.when)) }));
@@ -171,4 +177,4 @@ function attestedSkills(att, root, { transcript } = {}) {
   return att.skills.filter(s => embedded.includes(s));
 }
 
-module.exports = { HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256 };
+module.exports = { HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256 };

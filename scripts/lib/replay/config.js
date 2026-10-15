@@ -23,8 +23,19 @@
  *   practice       setup-focused practice (learning/setup-moments.js): { mode: 'setup-focus', setupTf, quietSample, seed };
  *                  cycles only at the selected bars, the clock advancing between them; a practice-train or
  *                  practice-validate learning run only (learning/run-gate.js), never test or final (default: none)
- *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start: the
- *                  experience_lookup's code-measured section (default: none)
+ *   setupLibrary   a history library index (scripts/setup-library.js index), pinned for the run at its start (default:
+ *                  none). Pinned alone it is code's, never shown to the model
+ *   libraryDisplay true shows the pinned library to the model: experience_lookup's code-measured section (counts, the
+ *                  win rate and no-room only); needs setupLibrary; part of the setup (setupHash), so an arm with it
+ *                  and one without are two setups, paired only as a library-display arm (learning/looks.js) (default: false)
+ *   latency        charge each cycle's real time on the replay clock, as live (replay/latency.js): the clock runs with
+ *                  the wall clock during a step, so orders go, fill and expire at the bar plus the cycle's time (default:
+ *                  on for a learning run, off for one declared not learning)
+ *   curatedList    a curated lists document (scripts/curated-lists.js build) and its list: { file, list: 'mix' | <list> },
+ *                  the run's market (symbol, bar and setup timeframes) the list's, every bar (no everyNthBar), no
+ *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
+ *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
+ *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
  *                  maxDailyLoss is the account's daily_loss_limit
  *
@@ -41,6 +52,10 @@
  *   replayEnv(base, run, { at, brokers })             the environment for a process at replayed time `at`
  *   brokerErrors(env, run)                           [message]: the broker isn't a usable replay broker
  *   configHash(run)                                  sha256 of what makes a run a run
+ *   setupHash(run), setupBase(run)                   a run's setup (the arms of one evaluation share it); the same
+ *                                                    without the library display (a library-display pair shares it)
+ *   setupFixed(run)                                  the setup without its code digest (a resume keeps it)
+ *   lookArm(run)                                     the arm its look names (learning/looks.js ARM)
  */
 
 const crypto = require('crypto');
@@ -54,6 +69,10 @@ const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { validatePractice } = require('../learning/setup-moments');
+const { latencySetting } = require('./latency');
+const { WALL_START } = require('../trading/harness-now');
+const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
+const { decisionPoints } = require('./schedule');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -122,6 +141,11 @@ function readAutotrader(spec, baseDir) {
   return { raw: JSON.parse(fs.readFileSync(file, 'utf8')), file };
 }
 
+/** A run whose manifest exists and doesn't say it charges latency (started before the setting, or pinned). */
+function startedPinned(manifestFile) {
+  try { return JSON.parse(fs.readFileSync(manifestFile, 'utf8')).latency !== true; } catch (_err) { return false; }
+}
+
 function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home = os.homedir(), root }) {
   const errors = [];
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -137,6 +161,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   for (const k of ['premarket', 'endOfDay', 'learning']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
   if (r.experienceIndex !== undefined && !(typeof r.experienceIndex === 'string' && r.experienceIndex.trim())) errors.push('experienceIndex: an experience index file (scripts/experience-index.js build)');
   if (r.setupLibrary !== undefined && !(typeof r.setupLibrary === 'string' && r.setupLibrary.trim())) errors.push('setupLibrary: a history library index file (scripts/setup-library.js index)');
+  if (r.libraryDisplay !== undefined && typeof r.libraryDisplay !== 'boolean') errors.push('libraryDisplay: true or false');
+  else if (r.libraryDisplay === true && r.setupLibrary === undefined) errors.push('libraryDisplay: shows the pinned history library; name it (setupLibrary)');
   let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
@@ -145,6 +171,15 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   }
   const practice = validatePractice(r.practice);
   errors.push(...practice.errors);
+  const latency = latencySetting(r.latency, r.learning !== false);
+  if (latency.error) errors.push(latency.error);
+  // A run started before the setting (its manifest doesn't say latency: true) keeps its pinned clock when the config
+  // doesn't name one, so it resumes under the hash it was started with.
+  const curatedCfg = validateCuratedConfig(r.curatedList);
+  errors.push(...curatedCfg.errors);
+  if (curatedCfg.curated && !practice.practice) errors.push('curatedList: runs through setup-focused practice; set practice too');
+  if (curatedCfg.curated && everyNth !== 1) errors.push('curatedList: every bar of its windows runs (everyNthBar 1)');
+  if (curatedCfg.curated && r.prop !== undefined) errors.push('curatedList: not with prop (a combine attempt is judged over whole days; curated runs are scored apart)');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -176,6 +211,18 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     ...(practice.practice ? { practice: practice.practice } : {}),
   };
   const cfg = validateConfig(derived);
+  // The curated list: its windows inside the run's, its use the run's window (a validation list never on practice-train),
+  // its market the run's, and every window holding a decision time of the run's sessions.
+  let curated = null;
+  if (curatedCfg.curated) {
+    try {
+      curated = curatedForRun({ ...curatedCfg.curated, file: path.resolve(baseDir, expandHome(curatedCfg.curated.file, home)), start, end, symbols: cfg.symbols, timeframe: cfg.timeframe, setupTf: practice.practice.setupTf });
+      const missed = emptyWindows(decisionPoints(cfg, { start, end }), curated, (cfg.barDelaySeconds || 0) * 1000);
+      if (missed.length) throw new Error(`curatedList: ${missed.length} window(s) hold no decision time of the run's sessions, the first ${new Date(missed[0].from).toISOString()}`);
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -184,9 +231,15 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     experienceIndex: r.experienceIndex ? path.resolve(baseDir, expandHome(r.experienceIndex, home)) : null,
     // The history library index the run pins at its start (learning/setup-library.js pinLibrary), or null.
     setupLibrary: r.setupLibrary ? path.resolve(baseDir, expandHome(r.setupLibrary, home)) : null,
+    // Whether the model is shown that library (experience_lookup); off unless the config says true.
+    libraryDisplay: r.libraryDisplay === true,
     prop: r.prop || null,
     // Setup-focused practice (learning/setup-moments.js), or null: every bar runs, as live.
     practice: practice.practice,
+    // The cycle's real time charged on the replay clock (replay/latency.js): on unless said otherwise for a learning run.
+    latency: r.latency === undefined && startedPinned(paths.manifest) ? false : latency.value,
+    // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
+    curated,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
@@ -213,6 +266,8 @@ function replayEnv(base, run, { at }) {
   for (const v of live) env[v] = DISABLED;
   env.FTH_BROKER = run.broker;
   env.FTH_REPLAY_NOW = at.toISOString();
+  // Never inherited: only the driver's charged step sets it (a stale one would run a pinned run's clock).
+  delete env[WALL_START];
   const broker = activeBroker(env);
   const set = (key, value) => {
     if (!key) return;
@@ -272,10 +327,14 @@ function configHash(run, base = process.env) {
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
+    // Named only when charged, so a run with a pinned clock keeps the hash it had before the setting existed.
+    ...(run.latency ? { latency: true } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
+    // The curated list a run replays (its decision times are the list's): named only when there is one.
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -283,25 +342,45 @@ function configHash(run, base = process.env) {
 /** The harness command a cycle runs (the prompt elided), as the runner builds it in the run's environment. */
 /**
  * A run's setup, from its config alone (no environment, nothing seeded): the runner config, broker, window, the
- * decision times' settings and the harness's documents and code. Not its runId, learning flag or experience index:
- * the arms of one evaluation (learning/looks.js) share it and differ in their index only.
+ * decision times' settings, the harness's documents and code, its history library and whether the model is shown it.
+ * Not its runId, learning flag or experience index: the arms of one evaluation (learning/looks.js) share it and differ
+ * in their index only (a library-display pair shares setupBase instead).
  */
-function setupHash(run) {
+function setupHash(run, { code = true } = {}) {
   const body = {
     // The runner config without the run's own folders (its runId is in their paths).
     cfg: { ...run.cfg, dataDir: null, workdir: null }, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null,
-    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root ? treeDigest(run.root, CODE_DIRS) : null,
+    // The arms of one evaluation charge the latency alike (named only when charged, as configHash).
+    ...(run.latency ? { latency: true } : {}),
+    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null, code: run.root && code ? treeDigest(run.root, CODE_DIRS) : null,
     // The history library the run pins (learning/setup-library.js), by its own hash: the arms of one evaluation share
     // it, so they differ in their experience index only. Named only when there is one, so a setup without a library keeps
     // the hash it had (its looks in the ledger stay its own).
     ...(run.setupLibrary ? { library: require('../learning/setup-library').readLibrary(run.setupLibrary).hash } : {}),
+    // Whether the model is shown it: named only when on, so a run without the display keeps the hash it had.
+    ...(run.setupLibrary && run.libraryDisplay === true ? { libraryDisplay: true } : {}),
+    // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
+    ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
+/** The setup without its code (setupHash's code digest): what a resumed look keeps (learning/looks.js), a code fix aside. */
+const setupFixed = run => setupHash(run, { code: false });
+
+/** The setup without the library display: the two arms of a library-display pair (learning/looks.js) share it. */
+const setupBase = run => setupHash({ ...run, libraryDisplay: false });
+
+/** The arm a run's look names: its experience index's (experience-index.js armOf), `+library:<hash>` when it shows the library. */
+function lookArm(run) {
+  const arm = require('../learning/experience-index').armOf(run.experienceIndex);
+  if (!(run.setupLibrary && run.libraryDisplay === true)) return arm;
+  return `${arm}+library:${require('../learning/setup-library').readLibrary(run.setupLibrary).hash.slice(0, 16)}`;
 }
 
 function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

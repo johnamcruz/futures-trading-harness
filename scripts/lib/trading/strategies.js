@@ -92,13 +92,16 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
-  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'priority', 'source'];
+  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'priority', 'source', 'valid_bars'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks'];
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
+// A composed record's validity in base bars after its bar's close: at most the gate's default briefing age (3 bars,
+// FTH_SIGNAL_MAX_AGE_BARS), which refuses an entry past it anyway.
+const MAX_VALID_BARS = 3;
 const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
@@ -191,6 +194,9 @@ function validateStrategy(data, body, folderName) {
     req(data.risk && data.risk.stop === 'structure', 'risk.stop: structure (signal: composed: the stop is the verified level the model names)');
     req(data.risk && typeof data.risk.max_risk_usd === 'number' && data.risk.max_risk_usd > 0, 'risk.max_risk_usd: required for signal: composed (the per-trade dollar cap)');
     req(data.exit === undefined, 'exit: not for signal: composed (its target is the verified level the model names)');
+    req(Number.isInteger(data.valid_bars) && data.valid_bars >= 1 && data.valid_bars <= MAX_VALID_BARS, `valid_bars: required for signal: composed, a whole number of base bars from 1 to ${MAX_VALID_BARS} (how long after its bar's close a compose record, and its resting limit, stays valid)`);
+  } else if (data.valid_bars !== undefined) {
+    errors.push('valid_bars: only for signal: composed');
   }
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);

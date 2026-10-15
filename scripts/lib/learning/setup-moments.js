@@ -13,13 +13,14 @@
  *             or both):
  *               levels 'key' (default)  a FIXED key level, complete before the candle opened (KEY_LEVEL: prior RTH
  *                                       high/low/close, overnight high/low, IB, opening range, the prior VAH/VAL/POC,
- *                                       the 1h and 15m swings still holding), or a fair value gap's edge;
- *               levels 'wide'           those, and the moving levels (VWAP, the developing session VAH/VAL/POC), a
+ *                                       the 1h and 15m swings still holding), the VWAP (the owner's key level, moving:
+ *                                       at its value when the candle closed), or a fair value gap's edge;
+ *               levels 'wide'           those, and the developing session profile (VAH/VAL/POC, MOVING_LEVEL), a
  *                                       previous-candle level rejected (the previous candle's or a CRT range's high or
  *                                       low: the failed break; a plain break of the previous candle is continuation),
  *                                       and a sweep of the previous candle that closed back inside.
- *             On the parity fixtures 'wide' selects most bars (VWAP and the developing profile are met by nearly every
- *             candle), so 'key' is the default. `phase` is `reaction` on the entry bar that completed that candle,
+ *             On the parity fixtures 'wide' selects most bars (the developing profile and the previous candle's levels
+ *             are met by nearly every candle), so 'key' is the default. `phase` is `reaction` on the entry bar that completed that candle,
  *             `confirmation` on the entry-timeframe closes after it while it is still the last completed candle (the
  *             window ends when the next setup candle completes: it is superseded). The reaction bar stays selected (the
  *             model notes the setup there) but is never the only one: an entry read is on a candle closed after the
@@ -54,9 +55,10 @@ const DEFAULTS = Object.freeze({ mode: 'setup-focus', setupTf: 15, quietSample: 
 const KNOWN = Object.freeze(['mode', 'setupTf', 'quietSample', 'seed', 'levels', 'reactions']);
 
 // The key levels a reaction counts at (candle-facts.js level names, briefing.js levelsAt): the fixed ones, complete
-// before the candle opened; round numbers are not one. 'wide' adds the moving ones (VWAP, the developing session profile).
-const KEY_LEVEL = /^(prior RTH (high|low|close)|overnight (high|low)|IB (high|low)|opening range (high|low)|prior (VAH|VAL|POC)|1h swing|15m swing)/;
-const MOVING_LEVEL = /^(VWAP|session (VAH|VAL|POC))/;
+// before the candle opened, and the VWAP (the owner names it a key level); round numbers are not one. 'wide' adds the
+// developing session profile.
+const KEY_LEVEL = /^(prior RTH (high|low|close)|overnight (high|low)|IB (high|low)|opening range (high|low)|prior (VAH|VAL|POC)|1h swing|15m swing|VWAP)/;
+const MOVING_LEVEL = /^session (VAH|VAL|POC)/;
 // The previous candle's levels (its own and a CRT range's): only a rejection (the failed break) is a reaction.
 const PREVIOUS_LEVEL = /^(previous |CRT )/;
 
@@ -138,7 +140,7 @@ function selectBar({ practice, candles, symbol, bar, barClose, open = false }) {
 
 function practiceLine(p) {
   if (!p) return null;
-  return `setup-focused practice: cycles only at ${tfLabel(p.setupTf)} candles that ${(p.reactions || DEFAULTS.reactions).join(' or ')} a ${p.levels === 'wide' ? 'key or moving' : 'fixed key'} level, and their confirmation window, a ${Math.round(p.quietSample * 100)}% quiet sample (seed ${p.seed}), every bar with something open, premarket and end of day; not comparable bar for bar with a full-day run`;
+  return `setup-focused practice: cycles only at ${tfLabel(p.setupTf)} candles that ${(p.reactions || DEFAULTS.reactions).join(' or ')} a ${p.levels === 'wide' ? 'key or moving level' : 'fixed key level or the VWAP'}, and their confirmation window, a ${Math.round(p.quietSample * 100)}% quiet sample (seed ${p.seed}), every bar with something open, premarket and end of day; not comparable bar for bar with a full-day run`;
 }
 
 module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel };
