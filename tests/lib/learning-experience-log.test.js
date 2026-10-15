@@ -101,6 +101,20 @@ test('a round trip is credited to the latest ok record before its fill, not an e
   assert.deepStrictEqual(early.map(d => d.decision), ['entered', 'passed']);
 });
 
+test('frame: default with a 1h bias, a 15m reaction and a 3m confirmation read; anything else other; on every composed decision', () => {
+  const R = (step, read) => ({ step, skill: 's', read });
+  const base = [R('bias', '1h bos up'), R('setup', '15m rejected prior VAH up'), R('entry', '3m close top'), R('stop', 'stop 15m low 98')];
+  assert.strictEqual(E.frameOf(base), 'default');
+  assert.strictEqual(E.frameOf([R('bias', '60m up'), ...base.slice(1)]), 'default', '60m is 1h');
+  assert.strictEqual(E.frameOf([R('bias', '4h up'), ...base.slice(1)]), 'other');
+  assert.strictEqual(E.frameOf([base[0], R('setup', '5m rejected prior VAH up'), base[2]]), 'other');
+  assert.strictEqual(E.frameOf([base[0], base[1], R('entry', '1m close top')]), 'other');
+  assert.strictEqual(E.frameOf([base[0], base[1], R('location', '3m close top')]), 'other', 'the 3m read at the entry step');
+  assert.strictEqual(E.frameOf(null), 'other');
+  const d = E.buildDecisions({ cycles: [{ at: T0, roots: ['MNQ'] }], records: [fromLifecycleRecord(record({ at: T0 }))], barsFor: () => [], tfMs: M3, tickOf: () => 0.25 })[0];
+  assert.strictEqual(d.frame, 'default', 'the fixture: 1h bias, 15m setup, 3m entry');
+});
+
 test('limitOutcome: a target on the fill bar is never credited; the limit never fills across the session or past end of day', () => {
   // The fill bar reaches the target, the next bar the stop: a loss, the fill bar's target not counted.
   const fillBarTarget = E.limitOutcome(plan({ rows: [[100.5, 104.5, 99.75, 104], [104, 104.25, 97.5, 98]], expiry: 1 }));

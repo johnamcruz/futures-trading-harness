@@ -28,7 +28,7 @@
  * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
- *   dates it so), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
+ *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
  *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick })   the counterfactual
@@ -100,6 +100,18 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   }
   return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
 }
+
+/**
+ * The owner's default frame (the scorecard tag `frame`): a 1h bias read, a 15m reaction read at the setup step and a
+ * 3m confirmation read at the entry step. A composed decision with all three is `default`; any other is `other`.
+ * A read's timeframe is its first word (`1h up`, `15m rejected prior VAH up`, `3m close top`; 60m is 1h).
+ */
+const FRAME = Object.freeze([['bias', '1h'], ['setup', '15m'], ['entry', '3m']]);
+const tfOf = read => {
+  const w = String(read || '').trim().toLowerCase().split(/\s+/)[0];
+  return w === '60m' ? '1h' : w;
+};
+const frameOf = reads => (FRAME.every(([step, tf]) => (reads || []).some(r => r.step === step && tfOf(r.read) === tf)) ? 'default' : 'other');
 
 /**
  * A round trip split by its opening fills: one leg per fill (its own time and price, the trip's exit), so an add
@@ -196,7 +208,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], gateRefusals = 
     const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, writtenAt: now.toISOString() };
     if (!ok) {
       const day = tradingDayKey(new Date(at));
-      out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null,
+      out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null, frame: null,
         exploratory: false, verified: false, reads: [], signatures: { skill: null, read: null }, context: null, plan: null, outcome: null, grade: null });
       continue;
     }
@@ -216,7 +228,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], gateRefusals = 
       ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
       role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
       reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
-      settledDay: settledDay(tradingDayKey(new Date(Date.parse(ok.bar))), outcome),
+      settledDay: settledDay(tradingDayKey(new Date(Date.parse(ok.bar))), outcome), frame: frameOf(ok.reads),
     });
   }
   return out;
@@ -251,4 +263,4 @@ function appendDecisions(file, lines) {
   return { added: fresh.length, kept: lines.length - fresh.length };
 }
 
-module.exports = { VERSION, limitOutcome, tripOutcome, legsOf, settledDay, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, FRAME, limitOutcome, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
