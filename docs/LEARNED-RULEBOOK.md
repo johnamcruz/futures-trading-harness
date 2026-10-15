@@ -391,6 +391,30 @@ as written, with these readings and inputs:
 - **Left to the search (R8, R9, step 11).** Choosing among candidates: the
   lower bound as the objective, the trade-off report, and the flat region.
 
+**The model's trades (built).** Layer 2 also scores the model's own replay
+trades (`scripts/lib/prop/model-stream.js`: R and ticks from the replay
+broker's fills, the adverse and no-stop paths from the run's own bars, each
+trade's order within its day and its record's context; a day the model passed
+is a no-trade day). That score is the replay's report (`prop/model-score.js`,
+in the owner's order: zero blows, the pass rate within `sessions`, the median
+and 90th-percentile days to pass, the blow and timeout rates with their
+intervals). Its windows are the learning split's (`learning/splits.js`), not
+the schedule's: a run's look is taken in the learning ledger before its first
+cycle (`learning/run-gate.js`), and each score of a practice-validate, test or
+final run is logged beside that look (`learning/looks.js` `recordScore`).
+Practice-train is free. A curated practice run is rebuilt at each list's
+natural frequency (`prop/natural-rate.js`) and scored `diagnostic
+(reweighted)`, a setup-focused one `diagnostic (setup-focused)`; the promotion
+gate refuses both. Beside it: the paired comparison of two runs of the same
+days through the same paths, blocks and faults (`evaluator.js`
+`scorePaired`, the judge for keeping a skill change), the risk attribution by
+the account state at each decision (`prop/risk-attribution.js`), the account
+states drawn from the attempt paths for practice (`prop/account-states.js`,
+not yet shown to a replay: that needs the replay broker to start at the drawn
+balance), and the account-policy hook that scores a candidate rulebook on the
+model's trades (`prop/rulebook-score.js`, refused on test and final; no search
+built, no rulebook value changed).
+
 **R6. Evaluator, in two layers.**
 
 1. **Trade generation (slow, deterministic).** For each set of strategy

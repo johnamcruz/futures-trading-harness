@@ -58,24 +58,40 @@ const forcedNet = (want, perTick, fees) => Math.floor((want + fees) / perTick + 
  * One attempt over `days` ([{ day, trades }], in order) from a fresh account state. ctx: { account, sizing,
  * size, multiplier, mode, legsOf(trade) -> { legs, ratio }, maxDailyLoss (the engine's realized daily stop, 0
  * off), variant(trade, { first }) -> the trade to replay (or null to keep it), outageDay(dayIndex) -> true when
- * the runner is down that day }. Returns { status, sessions, profit, taken, skipped, passDays }.
+ * the runner is down that day, onDay(cs, dayIndex) -> called with the account as each day opens (read only: the
+ * account states the attempt passed through, prop/account-states.js), onTrade({ before, after, trade, net, forced,
+ * dayIndex, counters }) after each trade taken and onSkip({ cs, trade, dayIndex, counters, why }) for each one the
+ * account layer passed over (both read only: the risk attribution, prop/evaluator.js) }. `counters`: the day's trades
+ * and losing trades so far and the losing streak across the attempt, as the attempt line shows them
+ * (combine.attemptFacts); the multiplier sees them too (multiplier(trade, { cs, counters })).
+ * Returns { status, sessions, profit, taken, skipped }.
  */
 function runAttempt(days, ctx) {
-  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null } = ctx;
+  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null } = ctx;
   let cs = combine.start(account);
   let taken = 0;
   let skipped = 0;
+  const view = x => Object.freeze({ ...x, days: Object.freeze([...x.days]) });
+  let streak = 0;
   for (let d = 0; d < days.length && cs.status === 'active'; d += 1) {
+    if (onDay) onDay(view(cs), d);
     let closed = 0;
     const outage = outageDay ? outageDay(d) : false;
     let first = true;
+    let tradesToday = 0;
+    let lossesToday = 0;
+    const counters = () => Object.freeze({ tradesToday, lossesToday, lossStreak: streak });
+    const skip = (t0, why) => { skipped += 1; if (onSkip) onSkip({ cs: view(cs), trade: t0, dayIndex: d, counters: counters(), why }); };
     for (const t0 of days[d].trades) {
-      if (combine.entryBlock(cs) || (maxDailyLoss > 0 && closed <= -maxDailyLoss) || (outage && !first)) { skipped += 1; continue; }
-      const m = Number(multiplier(t0, { cs }));
-      if (!(m > 0)) { skipped += 1; continue; }
+      if (combine.entryBlock(cs)) { skip(t0, 'blocked'); continue; }
+      if ((maxDailyLoss > 0 && closed <= -maxDailyLoss) || (outage && !first)) { skip(t0, outage && !first ? 'outage' : 'daily-stop'); continue; }
+      const m = Number(multiplier(t0, { cs, counters: counters() }));
+      if (!(m > 0)) { skip(t0, 'multiplier'); continue; }
       const { legs, ratio } = legsOf(t0);
       const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m) });
-      if (!plan || !(plan.size >= 1)) { skipped += 1; continue; }
+      if (!plan || !(plan.size >= 1)) { skip(t0, 'no-size'); continue; }
+      const before = cs;
+      const counted = counters();
       const leg = plan.root === legs.micro.root ? legs.micro : legs.mini;
       // A runner outage leaves the day's first trade unmanaged (a stop fault), and no more entries that day.
       const t = (outage ? stopFault(t0) : null) || (variant ? variant(t0, { first }) : null) || t0;
@@ -94,8 +110,12 @@ function runAttempt(days, ctx) {
       cs = combine.applyClose(cs, net);
       taken += 1;
       closed += net;
-      if (forced === 'blow') { cs = combine.blow(cs); break; }
+      tradesToday += 1;
+      if (net < 0) { lossesToday += 1; streak += 1; } else if (net > 0) streak = 0;
+      if (forced === 'blow') cs = combine.blow(cs);
       if (forced === 'daily') cs = { ...cs, dayStopped: true };
+      if (onTrade) onTrade({ before: view(before), after: view(cs), trade: t0, net, forced, dayIndex: d, counters: counted });
+      if (forced === 'blow') break;
     }
     if (cs.status === 'active') cs = combine.endDay(cs);
   }

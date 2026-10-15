@@ -29,15 +29,27 @@
  * - Blows: `blown` at the top counts every blow on every attempt scored (real, resampled, every cut), so the
  *   gate's zero-blow rule and R8's constraint read one number; `blows` breaks it down.
  * - Everything random is seeded (`seed`): the same stream, options and seed give the same result.
+ *
+ * The model's replay trades (prop/model-stream.js): a stream with `source: 'model'` is scored only on a pass from
+ * checkModelWindow, never checkWindow, and a mechanical stream never on one. Its windows are the learning split's
+ * (learning/splits.js), not the schedule's: the run's own look (learning/run-gate.js, taken in the learning ledger
+ * before its first cycle) is what lets anyone read its outcomes, so every score of a practice-validate, test or final
+ * run is logged beside that look (learning/looks.js recordScore), which must be there. Practice-train is free. A
+ * reasoning-fix look's outcomes are hidden: no score. A curated run's score is `diagnostic (reweighted)` (its days are
+ * resampled at each list's natural rate, prop/natural-rate.js) and a setup-focused run's `diagnostic (setup-focused)`:
+ * both practice only, and refused by the promotion gate (`diagnostic`); a full-day run's score is `real`. Days to pass
+ * are reported as the median and the 90th percentile (the nearest rank above: never faster than the attempts were).
  */
 
 const { unitContaining, attemptFlowCovered, isFlowCovered } = require('./splits');
+const learningSplits = require('../learning/splits');
 const { checkLook } = require('./looks');
 const { gateFailures } = require('./promotion');
 const { tradingDayStart } = require('../trading/clock');
 const combine = require('../trading/combine');
 const stats = require('./stats');
 const at = require('./attempts');
+const { createAttribution } = require('./risk-attribution');
 
 const LOOK_PURPOSES = Object.freeze(['tuning', 'judging']);
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -83,6 +95,51 @@ function checkWindow({ from, to, look = null, ledger = null, logLook = null, now
   return pass;
 }
 
+const DIAGNOSTIC = Object.freeze(['reweighted', 'setup-focused']);
+
+/**
+ * Check a model replay run before its trades are scored (module header). run: { runId, from, to (session dates, `to`
+ * exclusive), learning, role, look, hideOutcomes } (the run's learning-run.json decision and its window); diagnostic:
+ * null (a full-day run: the real score), 'reweighted' (a curated run) or 'setup-focused'; candidateRulebook: true
+ * when the score is a candidate rulebook's (prop/rulebook-score.js), refused on test and final; logScore(entry):
+ * appends the score beside the run's look (learning/looks.js recordScore, which refuses one without it), required
+ * on practice-validate, test and final. Returns a single-use pass for scoreStream. Throws with the reason.
+ */
+function checkModelWindow({ run, diagnostic = null, candidateRulebook = false, logScore = null, now = new Date() }) {
+  if (!run || typeof run !== 'object') throw new Error('run: the replay run\'s learning decision and window');
+  if (run.hideOutcomes) throw new Error(`run ${run.runId} is a reasoning-fix look: its outcomes are hidden, so it has no Monte Carlo score`);
+  if (diagnostic !== null && !DIAGNOSTIC.includes(diagnostic)) throw new Error(`diagnostic: null (a full-day run) or one of ${DIAGNOSTIC.join(', ')}, not ${String(diagnostic)}`);
+  const { from, to } = run;
+  if (!ISO_DAY.test(String(from)) || !ISO_DAY.test(String(to)) || !(from < to)) throw new Error(`run window: from and to as session dates YYYY-MM-DD, from before to (got ${from}, ${to})`);
+  let role = null;
+  if (run.learning === true) {
+    const roles = learningSplits.rolesBetween(from, to);
+    if (roles.length !== 1) throw new Error(`run ${run.runId} spans ${roles.join(' + ')}: a learning run lies inside one window`);
+    role = roles[0];
+    if (run.role !== role) throw new Error(`run ${run.runId} was started as ${String(run.role)}, but its days are ${role}`);
+  } else if (learningSplits.touchesHeldBack(from, to)) {
+    throw new Error(`run ${run.runId} is not a learning run but touches practice-validate, test or final: those months are read only through their look`);
+  }
+  const sealed = learningSplits.SEALED.includes(role);
+  if (sealed && diagnostic) throw new Error(`${role} is sealed and judged on every bar, as live: a ${diagnostic} score is practice's, never ${role}'s`);
+  if (sealed && candidateRulebook) throw new Error(`${role} is sealed: a candidate rulebook is tuned on practice-train and chosen on practice-validate, never scored on ${role}`);
+  let entry = null;
+  if (role && role !== 'practice-train') {
+    if (!run.look || typeof run.look !== 'object' || !run.look.evaluation) throw new Error(`run ${run.runId} is ${role} but carries no look: its outcomes are read only through the look it took before its first cycle`);
+    if (typeof logScore !== 'function') throw new Error(`a score of a ${role} run is logged beside its look: logScore is required`);
+    entry = Object.freeze({
+      kind: 'score', evaluation: run.look.evaluation, candidate: run.look.candidate, runId: run.runId, role, from, to,
+      rulebook: candidateRulebook ? 'candidate' : 'account', diagnostic, at: now.toISOString(), what: 'prop Monte Carlo of the model\'s trades (prop/model-stream.js)',
+    });
+    logScore(entry);
+  }
+  const unit = Object.freeze({ role: role || 'unscheduled', block: role || 'unscheduled', part: null });
+  const checked = Object.freeze({ unit, look: entry, from, to, model: true, diagnostic, synthetic: diagnostic === 'reweighted', candidateRulebook: Boolean(candidateRulebook) });
+  const pass = Object.freeze({ ...checked });
+  issued.set(pass, checked);
+  return pass;
+}
+
 const blank = () => ({ attempts: 0, passed: 0, blown: 0, timeout: 0, unfinished: 0, passDays: [] });
 function add(agg, o) {
   agg.attempts += 1;
@@ -95,45 +152,75 @@ const rate = (k, n) => (n ? Math.round((k / n) * 10000) / 10000 : null);
 const finish = a => ({
   attempts: a.attempts, passed: a.passed, blown: a.blown, timeout: a.timeout, unfinished: a.unfinished,
   passRate: rate(a.passed, a.attempts), blowRate: rate(a.blown, a.attempts), timeoutRate: rate(a.timeout, a.attempts),
-  medianDaysToPass: stats.median(a.passDays),
+  medianDaysToPass: stats.median(a.passDays), p90DaysToPass: stats.quantileUp(a.passDays, 0.9),
 });
 
-/**
- * Score a trade stream (layer 2 and the statistics). opts: { pass (from checkWindow, for this stream's window),
- * account, rulebook: { sizing, multiplier }, size, contracts (micro | mini | auto), maxDailyLoss, seed, paths,
- * meanBlock, reps, level, every, cuts, faults: { stopFault, outage, measured } }. Returns the result (module
- * header); gateFailures(result) is the promotion gate's verdict on it.
- */
-function scoreStream(stream, opts) {
-  const started = Date.now();
-  const {
-    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 2000, meanBlock = 7,
-    reps = 2000, level = 0.9, every = 1, cuts = [0.25, 0.5], faults = {},
-  } = opts || {};
+/** The pass checked for this scoring, used up (each scoring of a held-out window is a look of its own). */
+function takePass(given) {
   const pass = given && typeof given === 'object' ? issued.get(given) : undefined;
   if (!pass) throw new Error('scoreStream needs the pass checkWindow returned for this window (each scoring of a held-out window is a look, logged)');
   issued.delete(given);
+  return pass;
+}
+
+/** The options every scoring checks; returns the fault rates. */
+function checkOptions({ account, seed, paths, every, meanBlock, faults }) {
   if (!account || !Number.isInteger(account.sessions) || account.sessions < 1) throw new Error('account: an account profile with sessions');
   if (!Number.isInteger(seed)) throw new Error('seed: a whole number');
   if (!(Number.isInteger(paths) && paths >= 0) || !(Number.isInteger(every) && every >= 1)) throw new Error('paths: 0 or more; every: 1 or more');
   if (!(meanBlock >= 5 && meanBlock <= 10)) throw new Error(`meanBlock: 5 to 10 days (R9), not ${String(meanBlock)}`);
   const rates = { stopFault: Number(faults.stopFault) || 0, outage: Number(faults.outage) || 0 };
   for (const [k, v] of Object.entries(rates)) if (!(v >= 0 && v <= 1)) throw new Error(`faults.${k}: a rate from 0 to 1, not ${v}`);
-  const days = stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
+  return rates;
+}
+
+/** The stream's days, held to the pass (a model stream to a model pass, a reweighted one to a diagnostic one). */
+function daysFor(stream, pass, rulebook) {
+  const model = stream.source === 'model';
+  if (model !== Boolean(pass.model)) throw new Error(model ? 'a model stream is scored on a pass from checkModelWindow (its run\'s look), never checkWindow' : 'a mechanical stream is scored on a pass from checkWindow, never checkModelWindow');
+  if (Boolean(stream.reweighted) !== Boolean(pass.synthetic)) throw new Error(stream.reweighted ? 'a reweighted stream is scored only as a diagnostic (reweighted) score' : 'a diagnostic (reweighted) score needs the reweighted stream (prop/natural-rate.js)');
+  if (pass.model && Boolean(rulebook.candidate) !== Boolean(pass.candidateRulebook)) throw new Error('a candidate rulebook is scored only on a pass checked for one (checkModelWindow candidateRulebook), and the account\'s only on one that was not');
+  // A reweighted stream's days are resampled, not session dates: no window to hold them to.
+  const days = pass.synthetic ? stream.days : stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
   if (days.length !== stream.days.length) throw new Error(`the stream has days outside the window ${pass.from}..${pass.to}`);
   const bad = days.find(d => d.trades.some(t => t.day !== d.day));
   if (bad) throw new Error(`the stream's day ${bad.day} holds a trade of another day`);
-  const inWindow = days.flatMap(d => d.trades);
-  const S = account.sessions;
+  return days;
+}
+
+/** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
+function contextFor({ account, rulebook, size, contracts, maxDailyLoss }) {
   const sizing = { ...combine.DEFAULT_SIZING, ...(rulebook.sizing || {}) };
   const legsCache = new Map();
-  const ctx = {
+  return {
     account, sizing, size, multiplier: rulebook.multiplier || at.fullVerdict, mode: contracts, maxDailyLoss,
     legsOf: t => {
       if (!legsCache.has(t.symbol)) legsCache.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) }));
       return legsCache.get(t.symbol);
     },
   };
+}
+
+/**
+ * Score a trade stream (layer 2 and the statistics). opts: { pass (from checkWindow, for this stream's window, or
+ * checkModelWindow for a model stream), account, rulebook: { sizing, multiplier, candidate }, size, contracts (micro |
+ * mini | auto), maxDailyLoss, seed, paths, meanBlock, reps, level, every, cuts, faults: { stopFault, outage, measured },
+ * attribution (true: the risk attribution of the resampled paths, prop/risk-attribution.js) }. Returns the result
+ * (module header); gateFailures(result) is the promotion gate's verdict on it.
+ */
+function scoreStream(stream, opts) {
+  const started = Date.now();
+  const {
+    pass: given, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 2000, meanBlock = 7,
+    reps = 2000, level = 0.9, every = 1, cuts = [0.25, 0.5], faults = {}, attribution = false,
+  } = opts || {};
+  const pass = takePass(given);
+  const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
+  const days = daysFor(stream, pass, rulebook);
+  const inWindow = days.flatMap(d => d.trades);
+  const S = account.sessions;
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const { sizing } = ctx;
   const branch = Array.isArray(stream.fieldBranch) && stream.fieldBranch.length > 0;
   const covers = d => !branch || attemptFlowCovered(d, S);
 
@@ -143,7 +230,7 @@ function scoreStream(stream, opts) {
   const real = startIdx.map(i => {
     const o = at.runAttempt(days.slice(i), ctx);
     const covered = covers(days[i].day);
-    return { start: days[i].day, month: days[i].day.slice(0, 7), index: i, covered, ...(covered ? {} : { flowOff: true }), ...o };
+    return { start: days[i].day, month: days[i].month || days[i].day.slice(0, 7), index: i, covered, ...(covered ? {} : { flowOff: true }), ...o };
   });
   const gatePop = real.filter(o => o.covered);
   const months = new Map();
@@ -165,6 +252,7 @@ function scoreStream(stream, opts) {
   const byRegime = stats.groupBy(regimes);
   const pools = at.overshootPools(inWindow);
   const pathOf = rand => stats.stationaryPath(days.length, S, { meanBlock, rand, regimes, byRegime }).map(k => days[k]);
+  const attr = attribution ? createAttribution() : null;
   const resample = (label, transform = null) => {
     const prand = stats.streamFor(seed, `paths:${label}`);
     const vrand = stats.streamFor(seed, `variants:${label}`);
@@ -173,8 +261,9 @@ function scoreStream(stream, opts) {
     if (!days.length) return { all: agg, covered: cov };
     for (let p = 0; p < paths; p += 1) {
       const list = pathOf(prand);
+      const watch = attr && label === 'base' ? attr.observe(list) : {};
       const o = at.runAttempt(list, {
-        ...ctx,
+        ...ctx, ...watch,
         outageDay: () => rates.outage > 0 && vrand() < rates.outage,
         variant: t0 => {
           let t = transform ? transform(t0) : t0;
@@ -182,6 +271,7 @@ function scoreStream(stream, opts) {
           return rates.stopFault > 0 && vrand() < rates.stopFault ? at.stopFault(t) || t : t;
         },
       });
+      if (attr && label === 'base') attr.end(o.status);
       add(agg, o);
       if (!branch || list.every(d => isFlowCovered(d.day))) add(cov, o);
     }
@@ -213,7 +303,8 @@ function scoreStream(stream, opts) {
     attempts: pop.attempts, passed: pop.passed, blown: totalBlown, timeout: pop.timeout,
     months: Object.fromEntries([...months].map(([k, v]) => [k, finish(v)])),
     passRate: rate(pop.passed, pop.attempts), blowRate: rate(all.blown, all.attempts), timeoutRate: rate(pop.timeout, pop.attempts),
-    medianDaysToPass: stats.median(pop.passDays),
+    medianDaysToPass: stats.median(pop.passDays), p90DaysToPass: stats.quantileUp(pop.passDays, 0.9),
+    score: pass.diagnostic ? `diagnostic (${pass.diagnostic})` : 'real', diagnostic: Boolean(pass.diagnostic),
     intervals: {
       pass: passBoot,
       blow: boot(real.map(o => (o.status === 'blown' ? 1 : 0)), 'interval:blow'),
@@ -225,12 +316,13 @@ function scoreStream(stream, opts) {
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },
     resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true },
     cuts: cutResults,
+    ...(attr ? { attribution: attr.result() } : {}),
     coverage: {
       fieldBranch: branch ? stream.fieldBranch : [], covered: gatePop.length, uncovered: real.length - gatePop.length,
       flowOffMonths: [...new Set(real.filter(o => !o.covered).map(o => o.month))],
     },
     objective: {
-      lowerBound: passBoot.lo, zeroBlows: totalBlown === 0, medianDaysToPass: stats.median(pop.passDays),
+      lowerBound: passBoot.lo, zeroBlows: totalBlown === 0, medianDaysToPass: stats.median(pop.passDays), p90DaysToPass: stats.quantileUp(pop.passDays, 0.9),
       rejected: totalBlown > 0 ? [`${totalBlown} blow(s) over the attempts scored (R8: a single blow rejects)`] : [],
     },
     window: { from: pass.from, to: pass.to, role: pass.unit.role, block: pass.unit.block, part: pass.unit.part, days: days.length },
@@ -248,4 +340,113 @@ function scoreStream(stream, opts) {
   return result;
 }
 
-module.exports = { LOOK_PURPOSES, sessionStart, checkWindow, scoreStream };
+/** A paired difference's interval: the mean of per-pair differences, resampled (block 1 over paths, `block` over starts). */
+function pairedInterval(diffs, { block, reps, level, rand }) {
+  const b = stats.blockBootstrap(diffs, { block, reps, level, rand });
+  // Too few blocks to resample: no information, the whole range a difference of rates can take.
+  return b.degenerate ? { diff: b.rate, lo: -1, hi: 1, level, degenerate: true, n: diffs.length } : { diff: b.rate, lo: b.lo, hi: b.hi, level, n: diffs.length };
+}
+
+/** The median days to pass of A minus B, with a percentile interval over resampled pairs (null without passes on a side). */
+function medianDiff(pairs, { reps, level, rand }) {
+  const med = list => stats.median(list.filter(x => x !== null));
+  const of = (list, side) => list.map(p => (p[side].status === 'passed' ? p[side].sessions : null));
+  const point = med(of(pairs, 'a')) !== null && med(of(pairs, 'b')) !== null ? med(of(pairs, 'a')) - med(of(pairs, 'b')) : null;
+  if (point === null || pairs.length < 2) return { diff: point, lo: null, hi: null, level, n: pairs.length };
+  const out = [];
+  for (let r = 0; r < reps; r += 1) {
+    const draw = Array.from({ length: pairs.length }, () => pairs[stats.pick(rand, pairs.length)]);
+    const a = med(of(draw, 'a'));
+    const b = med(of(draw, 'b'));
+    if (a !== null && b !== null) out.push(a - b);
+  }
+  out.sort((x, y) => x - y);
+  const tail = (1 - level) / 2;
+  return { diff: point, lo: stats.quantile(out, tail), hi: stats.quantile(out, 1 - tail), level, n: pairs.length };
+}
+
+/**
+ * Two runs of the same days or moments (skill version A against B, the library on against off), scored through the
+ * same Monte Carlo paths: the same start days, the same resampled day blocks (stationary bootstrap, drawn once from
+ * the seed, regime-matched on A's regimes), and the same faults and overshoot draws (each path's day, and each trade
+ * of it by its order within the day, has a random source of its own both runs read: the k-th trade of a day meets
+ * the same draws in both; the overshoots are drawn from the two runs' observed ones together). The judge for keeping
+ * a skill change: nothing is kept on opinion.
+ *
+ * opts: { passA, passB (checkModelWindow, one per run: each run's score is logged beside its own look), account,
+ * rulebook, size, contracts, maxDailyLoss, seed, paths, meanBlock, reps, level, every, faults }. The runs must hold
+ * the same days; reweighted (curated) streams are refused (their days are each run's own draw, not shared).
+ *
+ * Returns { a, b (each: pass, blow and timeout rates, median and p90 days to pass, on the real and the resampled
+ * paths), diff: { real, resampled } (each: passRate, blowRate, timeoutRate and medianDaysToPass, A minus B, with a
+ * paired interval: a block bootstrap over start days, blocks of `sessions`, or over paths), verdict (on the resampled
+ * paths): 'A better' when A passes more (interval above 0) without blowing more, or blows less (interval below 0)
+ * without passing less; 'B better' mirrored; 'trade-off' when each is better on one; else 'no significant difference' }.
+ */
+function scorePaired(streamA, streamB, opts) {
+  const {
+    passA: givenA, passB: givenB, account, rulebook = {}, size = at.defaultSize, contracts = 'auto', maxDailyLoss = 0, seed = 1, paths = 2000,
+    meanBlock = 7, reps = 2000, level = 0.9, every = 1, faults = {},
+  } = opts || {};
+  if (givenA === givenB) throw new Error('scorePaired: one pass per run (passA, passB)');
+  const passA = takePass(givenA);
+  const passB = takePass(givenB);
+  if (!passA.model || !passB.model) throw new Error('scorePaired compares two model runs (checkModelWindow passes)');
+  if (passA.synthetic || passB.synthetic) throw new Error('scorePaired: a reweighted (curated) stream draws its own days; compare full-day or setup-focused runs of the same days');
+  const rates = checkOptions({ account, seed, paths, every, meanBlock, faults });
+  const daysA = daysFor(streamA, passA, rulebook);
+  const daysB = daysFor(streamB, passB, rulebook);
+  if (daysA.length !== daysB.length || daysA.some((d, k) => d.day !== daysB[k].day)) throw new Error('scorePaired: the two runs must hold the same days (the same window, or the same moments)');
+  const S = account.sessions;
+  const ctx = contextFor({ account, rulebook, size, contracts, maxDailyLoss });
+  const pools = at.overshootPools([...daysA, ...daysB].flatMap(d => d.trades));
+  const runWith = (list, p) => {
+    let day = 0;
+    let out = false;
+    return at.runAttempt(list, {
+      ...ctx,
+      // The day's outage and each of its trades' draws (by its order within the day) from sources of their own, so
+      // the two runs meet the same faults whatever the other trades of the day consumed.
+      onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },
+      outageDay: () => out,
+      variant: t0 => {
+        const cur = stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}`);
+        const t = at.redrawOvershoot(t0, pools.get(t0.symbol), cur);
+        return rates.stopFault > 0 && cur() < rates.stopFault ? at.stopFault(t) || t : t;
+      },
+    });
+  };
+  const startIdx = [];
+  for (let i = 0; i < daysA.length - S; i += 1) if (i % every === 0) startIdx.push(i);
+  const real = startIdx.map(i => ({ a: runWith(daysA.slice(i), `real${i}`), b: runWith(daysB.slice(i), `real${i}`) }));
+  const regimes = daysA.map(d => d.regime || 'normal');
+  const byRegime = stats.groupBy(regimes);
+  const prand = stats.streamFor(seed, 'paths:paired');
+  const resampled = [];
+  if (daysA.length) {
+    for (let p = 0; p < paths; p += 1) {
+      const idx = stats.stationaryPath(daysA.length, S, { meanBlock, rand: prand, regimes, byRegime });
+      resampled.push({ a: runWith(idx.map(k => daysA[k]), p), b: runWith(idx.map(k => daysB[k]), p) });
+    }
+  }
+  const side = (pairs, k) => finish(pairs.map(x => x[k]).reduce(add, blank()));
+  const is = st => o => (o.status === st ? 1 : 0);
+  const diffs = (pairs, label, block) => {
+    const d = st => pairedInterval(pairs.map(x => is(st)(x.a) - is(st)(x.b)), { block, reps, level, rand: stats.streamFor(seed, `paired:${label}:${st}`) });
+    return { passRate: d('passed'), blowRate: d('blown'), timeoutRate: d('timeout'), medianDaysToPass: medianDiff(pairs, { reps, level, rand: stats.streamFor(seed, `paired:${label}:days`) }) };
+  };
+  const diff = { real: diffs(real, 'real', Math.ceil(S / every)), resampled: diffs(resampled, 'resampled', 1) };
+  const r = diff.resampled;
+  // Blows are A minus B too: an interval below 0 is fewer blows for A.
+  const aBetter = (r.passRate.lo > 0 && !(r.blowRate.lo > 0)) || (r.blowRate.hi < 0 && !(r.passRate.hi < 0));
+  const bBetter = (r.passRate.hi < 0 && !(r.blowRate.hi < 0)) || (r.blowRate.lo > 0 && !(r.passRate.lo > 0));
+  const verdict = aBetter && !bBetter ? 'A better' : bBetter && !aBetter ? 'B better' : aBetter ? 'trade-off (one passes more, the other blows less)' : 'no significant difference';
+  return {
+    a: { real: side(real, 'a'), resampled: side(resampled, 'a'), score: passA.diagnostic ? `diagnostic (${passA.diagnostic})` : 'real', look: passA.look },
+    b: { real: side(real, 'b'), resampled: side(resampled, 'b'), score: passB.diagnostic ? `diagnostic (${passB.diagnostic})` : 'real', look: passB.look },
+    diff, verdict, paired: { sameDays: true, sameBlocks: true, sameFaults: true },
+    inputs: { sessions: S, seed, paths, reps, level, every, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, days: daysA.length },
+  };
+}
+
+module.exports = { LOOK_PURPOSES, DIAGNOSTIC, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired };

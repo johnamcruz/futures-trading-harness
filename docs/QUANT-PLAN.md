@@ -72,8 +72,9 @@ first moment, in the run's own home (`skills/replay/SKILL.md`, The prop
 policy), so the reasoning model sees what it would see in a live combine:
 the balance, the floor and cushion, progress to the target, the day's P&L,
 sessions left, and the prop pacing rules, and the gate's prop checks apply.
-The replay report's combine verdict is per calendar month; the window's own
-attempt is read with `combine.js status`.
+The replay report's prop score is the 30-day Monte Carlo of the run's own
+trades (`scripts/lib/prop/model-score.js`); the window's own attempt is read
+with `combine.js status`.
 
 While an attempt runs, only the policy strategy may enter, so the policy
 must be `active`: `prop_portfolio` is, for live and replay alike. Its

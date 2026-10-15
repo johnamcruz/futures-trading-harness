@@ -155,6 +155,38 @@ const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math
  * reconciled: same balance, still flat) carries that check forward without
  * asking the broker for its fills again.
  */
+/**
+ * The day's trade counts for the attempt line (combine.attemptFacts): trades closed today, losing ones, and the
+ * losing streak, which runs on from the last recorded close (its `lossStreak`) until a win. From the fills this
+ * snapshot read (since the day's anchor, the first flat snapshot); else the day's last counts; else, on the day's
+ * first snapshot (its anchor, flat), none yet. Null when unknown (no fills read today, or an older record without the
+ * last close's streak): facts only, never a block.
+ */
+function dayCounts(record, day, fills, fresh, open) {
+  const prior = [...record.days].filter(d => d.day < day).pop();
+  const priorStreak = prior ? (Number.isInteger(prior.lossStreak) ? prior.lossStreak : null) : 0;
+  const prev = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === day ? record.snapshot.counts : null;
+  let today = null;
+  if (Array.isArray(fills)) {
+    // Lazily: the account gate reads this module's state, so it can't be loaded with it.
+    const { closingFills, fillLossState } = require('./account-gate');
+    const closes = closingFills(fills);
+    const st = fillLossState(fills);
+    today = { trades: closes.length, losses: st.losses, streakToday: st.streak, won: closes.some(f => f.pnl > 0) };
+  } else if (prev) today = prev;
+  else if (fresh && open === 0) today = { trades: 0, losses: 0, streakToday: 0, won: false };
+  if (!today) return null;
+  const streak = today.won ? today.streakToday : priorStreak === null ? null : priorStreak + today.streakToday;
+  return { day, trades: today.trades, losses: today.losses, streakToday: today.streakToday, won: today.won, streak };
+}
+
+/** The counts combine.attemptFacts takes, from the attempt's latest snapshot when it is of today; nulls otherwise. */
+function attemptCounts(record, now = new Date()) {
+  const c = record && record.snapshot && record.snapshot.counts;
+  if (!c || c.day !== tradingDayKey(now)) return { tradesToday: null, lossesToday: null, lossStreak: null };
+  return { tradesToday: c.trades, lossesToday: c.losses, lossStreak: c.streak };
+}
+
 function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [], fills, fillsError = null, unchanged = false } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
@@ -186,9 +218,10 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
       }
     }
   }
+  const counts = dayCounts(record, day, fillsError ? undefined : fills, fresh, open);
   writeJson(combineFile(home, account.name), {
     ...record, missedClose, missedCloses: missed, peak: cs.peak, anchor,
-    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs, counts },
   });
   return cs;
 }
@@ -244,10 +277,14 @@ function recordEndOfDay(home, account, balance, dayKey) {
     return record;
   }
   if (record.startDay && dayKey < record.startDay) throw new Error(`${account.name}: ${dayKey} is before the attempt started (${record.startDay})`);
-  const sorted = [...record.days.map(d => ({ day: d.day, balance: d.balance })), { day: dayKey, balance }].sort((a, b) => a.day.localeCompare(b.day));
+  // The day's losing streak at its close (the attempt line's facts carry it into the next day): its last counts.
+  const c = record.snapshot && record.snapshot.counts && record.snapshot.counts.day === dayKey ? record.snapshot.counts : null;
+  const streakOf = d => (d.day === dayKey ? (c && Number.isInteger(c.streak) ? c.streak : undefined) : d.lossStreak);
+  const sorted = [...record.days.map(d => ({ day: d.day, balance: d.balance, lossStreak: d.lossStreak })), { day: dayKey, balance }].sort((a, b) => a.day.localeCompare(b.day));
   let prev = account.starting_balance;
   const days = sorted.map(d => {
-    const out = { day: d.day, balance: d.balance, pnl: Math.round((d.balance - prev) * 100) / 100 };
+    const streak = streakOf(d);
+    const out = { day: d.day, balance: d.balance, pnl: Math.round((d.balance - prev) * 100) / 100, ...(Number.isInteger(streak) ? { lossStreak: streak } : {}) };
     prev = d.balance;
     return out;
   });
@@ -550,6 +587,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

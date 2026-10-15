@@ -81,7 +81,7 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.match(unread.entryBlock, /snapshot is missing/);
   await hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07');
   await hooks.endOfDay(new Date('2026-10-07T19:55:00Z'), '2026-10-07');
-  assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250 }]);
+  assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250, lossStreak: 0 }], "the day's close carries its losing streak (the attempt line's facts)");
   // A catch-up end of day after the 18:00 ET open records the day it closes, not today, at that day's balance:
   // what the fills since it ended (the catch-up's own close at -$150, fees $0.74) made is taken back out.
   client.fills = [{ creationTimestamp: '2026-10-08T22:05:00Z', profitAndLoss: -150, fees: 0.74 }, { creationTimestamp: '2026-10-08T19:00:00Z', profitAndLoss: 40, fees: 0.74 }];

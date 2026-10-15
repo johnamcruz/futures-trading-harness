@@ -27,7 +27,8 @@
  *
  * The line (VERSION 1): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
- *   exitPrice, exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
+ *   exitPrice, entryTime (fills only: the opening fill's time; lines written before it lack it), exitTime, exitReason,
+ *   R }, grade, settledDay (the later of its bar's session and its exit's: the index
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
@@ -146,6 +147,7 @@ function tripOutcome(trip, plan, side) {
   const risk = Number.isFinite(plan.stop) && Number.isFinite(plan.entry) ? Math.abs(plan.entry - plan.stop) : null;
   return {
     source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
+    entryTime: Number.isFinite(trip.openMs) ? new Date(trip.openMs).toISOString() : null,
     exitTime: closed ? new Date(trip.closeMs).toISOString() : null, exitReason: closed ? 'closed' : 'open',
     R: closed && risk ? round((s * (exitPrice - entryPrice)) / risk) : null,
   };

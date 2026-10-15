@@ -149,7 +149,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const cs = state.stateFrom(a, r, fresh ? balance : r.snapshot.balance);
         const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
           .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
-        out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock });
+        out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts: combine.attemptFacts(cs, state.attemptCounts(r, now)) });
       }
       return out;
     },

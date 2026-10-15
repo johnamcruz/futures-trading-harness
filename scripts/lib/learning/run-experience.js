@@ -10,6 +10,7 @@
  * and its look were decided before its first cycle. A run declared not learning, or started before the gate, is
  * refused, so it never teaches. A run on a reasoning-fix look keeps its decisions with their outcomes hidden.
  *
+ *   runDecisions(runDir, { root, barsFiles, now })        the run's decisions and what they were read from, nothing written
  *   writeRunExperience(runDir, { root, barsFiles, now })   { file, added, kept, decisions, role, hidden }
  *   experienceLine(result)                                 the CLI's one line
  */
@@ -25,20 +26,23 @@ const { readLearningRun } = require('./run-gate');
 
 const ENTRY_TOOL = /(?:^|__)place_order$/;
 
-function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
+/**
+ * A finished run's decisions, built from what it wrote (the module header), nothing appended: { dir, home, manifest,
+ * days (the store's, by day), dayKeys, gate (learning-run.json, or null), cfg, tfMs, decisions, barsFor }. The
+ * experience log and the prop Monte Carlo (prop/model-stream.js) read a run through this one function. Throws on an
+ * unfinished run or one with no days.
+ */
+function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
-  if (root && labels.inside(home, root)) throw new Error(`${home} is inside the repository (${root}): the experience log lives in the run home`);
+  if (root && labels.inside(home, root)) throw new Error(`${home} is inside the repository (${root}): a run's records live in its run home`);
   const { manifest, days } = readRun(dir);
   // The run record keeps the gate's decision (run-gate.js); a run home's copy only for a run started before it did.
   const gate = readLearningRun(dir) || readLearningRun(home);
-  if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
   const why = labels.unfinishedWhy(manifest, days);
-  if (why) throw new Error(`run ${manifest.runId} is not finished (${why}): the experience log holds outcomes, written after the run's last day`);
+  if (why) throw new Error(`run ${manifest.runId} is not finished (${why}): its decisions hold outcomes, read after the run's last day`);
   const dayKeys = Object.keys(days).sort();
   if (!dayKeys.length) throw new Error(`run ${manifest.runId} has no days`);
-  const outside = dayKeys.filter(d => roleOf(d) !== gate.role);
-  if (outside.length) throw new Error(`run ${manifest.runId} started in ${gate.role} but holds ${outside[0]} (${roleOf(outside[0])})`);
   const cfg = labels.configsOf(dir, manifest)(null);
   const tf = Number(cfg.timeframe) || null;
   const tfMs = tf ? tf * 60000 : 0;
@@ -56,10 +60,20 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
     if (!bars.has(r)) bars.set(r, labels.outcomeFor(outcomeBars, r, tf) || labels.loadBars(home, r, tf));
     return bars.get(r);
   };
-  let decisions = buildDecisions({
+  const decisions = buildDecisions({
     cycles, records: readRecords(home, { runId: manifest.runId }), trips, gateRefusals, barsFor, tfMs,
     tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now,
   });
+  return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor };
+}
+
+function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
+  const run = runDecisions(runDir, { root, barsFiles, now });
+  const { manifest, gate, dayKeys, home } = run;
+  if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
+  const outside = dayKeys.filter(d => roleOf(d) !== gate.role);
+  if (outside.length) throw new Error(`run ${manifest.runId} started in ${gate.role} but holds ${outside[0]} (${roleOf(outside[0])})`);
+  let { decisions } = run;
   // A reasoning-fix look: the decisions without what came after them.
   if (gate.hideOutcomes) decisions = decisions.map(d => ({ ...d, outcome: null, grade: null, hidden: true }));
   const file = logFile(home);
@@ -69,4 +83,4 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
 
 const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
 
-module.exports = { writeRunExperience, experienceLine };
+module.exports = { runDecisions, writeRunExperience, experienceLine };

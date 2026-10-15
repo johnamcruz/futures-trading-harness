@@ -11,6 +11,7 @@
  *   endDay(s)                       the session closed: floor, pass, timeout
  *   entryBlock(s)                   why no new entry now (or null)
  *   budget(s, sizing)               dollars a new trade may risk
+ *   attemptFacts(s, counts)         the attempt line's further facts (room to the limits, today's counts, consistency)
  *   contracts(budget, riskPerContract, max, guard, room)
  *
  * The floor (max_loss_mode trailing_eod) trails the highest end-of-day
@@ -227,12 +228,41 @@ function summary(s) {
   };
 }
 
+/**
+ * The attempt line's further facts, from one function the live prompt (autotrader accountText, through
+ * prop/live-runner.js summaries), practice and the simulator (prop/attempts.js counters, the risk attribution)
+ * read, so practice and the Monte Carlo see what live shows. Facts only: nothing here blocks or sizes (entryBlock,
+ * budget and the gate do). Counts the caller knows (trades and losing trades closed today, the losing streak: from the
+ * day's fills live, from the attempt in the simulator) are passed in; null when unknown.
+ *   dailyRoom       dollars to the firm's daily limit (null without one)
+ *   softStop, softRoom   the rulebook's soft daily stop and the dollars to it (null without one)
+ *   day             the session of the attempt this is (1 on the first)
+ *   consistencyCap  with a consistency rule and profit before today: the most today may make and stay within it
+ *                   (pct x profit / (1 - pct), today counted in the profit); null otherwise
+ *   needed          profit still needed to pass, consistency included
+ */
+function attemptFacts(s, { tradesToday = null, lossesToday = null, lossStreak = null } = {}) {
+  const p = profit(s);
+  const before = p - s.dayPnl;
+  const c = s.consistency ? s.consistency / 100 : 0;
+  const count = x => (Number.isInteger(x) && x >= 0 ? x : null);
+  return {
+    dailyRoom: s.dailyLimit > 0 ? round2(Math.max(0, s.dailyLimit + s.dayPnl)) : null,
+    softStop: s.dailySoft > 0 ? s.dailySoft : null,
+    softRoom: s.dailySoft > 0 ? round2(Math.max(0, s.dailySoft + s.dayPnl)) : null,
+    tradesToday: count(tradesToday), lossesToday: count(lossesToday), lossStreak: count(lossStreak),
+    day: s.days.length + 1, sessions: s.sessions, sessionsLeft: sessionsLeft(s),
+    consistencyCap: c > 0 && c < 1 && before > 0 ? round2((c * before) / (1 - c)) : null,
+    needed: round2(Math.max(0, profitNeeded(s, [...s.days, s.dayPnl]) - p)),
+  };
+}
+
 /** A summary's sessions left; a live attempt past its training length (`sessions`) says so rather than "0 left". */
 const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
   ? `${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left`
   : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
 
 module.exports = {
-  DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary,
+  DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary, attemptFacts,
   profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

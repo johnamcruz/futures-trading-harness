@@ -298,6 +298,22 @@ const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
 const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
 
 /**
+ * The attempt line's further facts (combine.attemptFacts), compact: the day of the attempt, the profit still needed, the
+ * room to the daily limit and the soft stop, today's trades, losses and the losing streak, and today's P&L against
+ * the most the consistency rule allows today. A fact not known (null) is left out. Facts only: the gate enforces.
+ */
+function factsText(f) {
+  if (!f) return '';
+  const out = [`day ${f.day}`, `needs ${usd(f.needed)}`];
+  if (f.dailyRoom !== null) out.push(`daily room ${usd(f.dailyRoom)}`);
+  if (f.softStop !== null) out.push(`soft stop ${usd(f.softStop)} (room ${usd(f.softRoom)})`);
+  if (f.tradesToday !== null) out.push(`today ${f.tradesToday} trade${f.tradesToday === 1 ? '' : 's'}, ${f.lossesToday} loss${f.lossesToday === 1 ? '' : 'es'}`);
+  if (f.lossStreak !== null) out.push(`losing streak ${f.lossStreak}`);
+  if (f.consistencyCap !== null) out.push(`consistency cap today ${usd(f.consistencyCap)}`);
+  return `; ${out.join(', ')}`;
+}
+
+/**
  * The account as the runner read it just before the run (accountState in
  * runner.js): balance, open positions, working orders, and each running prop
  * attempt's state. Every decision is made with these numbers in view; when
@@ -317,7 +333,7 @@ function accountText(state) {
   const attempts = (state.attempts || []).map(a => (a.noBalance
     ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
     : ` ${a.account} attempt (${a.status})${a.asOf && a.asOf === state.at ? '' : ` as of ${a.asOf ? (tradingDayKey(new Date(a.asOf)) === tradingDayKey(new Date(state.at)) ? etTime(a.asOf) : etStamp(a.asOf)) : '?'}, balance ${usd(a.balance)}`}: floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
-    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}`
+    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}${factsText(a.facts)}`
     + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
   const trades = (state.openTrades || []).map(t => ` ${t}`).join('');
   // Positions whose trade details couldn't be built: the model reads them itself.
