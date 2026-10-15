@@ -1,4 +1,5 @@
 {
+ "scan": 2,
  "constants": {
   "scripts/hooks/hook-input.js": {
    "DEFAULT_MAX_STDIN": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value"

@@ -89,6 +89,9 @@ function againstBase(pins, base) {
       else if (was !== why) problems.push(`${f}: ${n}'s reason differs from the base branch's ("${was}"): a reason is not edited in place`);
     }
   }
+  // A wider scan (a higher `scan` number in the pins, raised in a reviewed change that says why) counts what the base's
+  // scan did not see: its mechanics and per-file counts start over. The constants' list still only shrinks.
+  if ((pins.scan || 1) > (base.scan || 1)) return problems;
   for (const [form, why] of Object.entries(pins.mechanics || {})) {
     const was = (base.mechanics || {})[form];
     if (!was) problems.push(`mechanics: ${form} is not listed on the base branch: the list may only shrink`);
@@ -111,6 +114,10 @@ test('guard: the base comparison catches a name added, a reason edited and a cou
   assert.match(againstBase({ ...base, constants: { 'a.js': { ...base.constants['a.js'], Y: 'a unit, honestly' } } }, base).join(), /Y is not listed on the base branch/);
   assert.match(againstBase({ ...base, constants: { 'a.js': { X: 'a unit, and a threshold now' } } }, base).join(), /X's reason differs from the base branch's/);
   assert.match(againstBase({ ...base, literals: { 'a.js': 4 } }, base).join(), /pinned at 4, above the base's 3/);
+  // A wider scan (scan raised) restarts the counts and the mechanics, never the constants.
+  assert.deepStrictEqual(againstBase({ ...base, scan: 2, literals: { 'a.js': 9 }, mechanics: { 'x\\(1\\)': 'a fixed protocol field' } }, base), []);
+  assert.match(againstBase({ ...base, scan: 2, constants: { 'a.js': { ...base.constants['a.js'], Y: 'a unit, honestly' } } }, base).join(), /Y is not listed on the base branch/);
+  assert.match(againstBase({ ...base, scan: 1, literals: { 'a.js': 9 } }, base).join(), /pinned at 9/);
   const withForm = { ...base, mechanics: { 'exitCode:\\s*2\\b': 'the hook protocol\'s block exit code' } };
   assert.deepStrictEqual(againstBase(withForm, withForm), []);
   assert.match(againstBase(withForm, base).join(), /mechanics: .* is not listed on the base branch/);
