@@ -139,7 +139,8 @@ The 5m facts need a 1m data lane in the runner config
 live. Each start (and each resume) appends its result to the run home's
 `preflight.jsonl`. A resume runs the preflight again, so give it `--bars` again.
 The training loop (`scripts/train-loop.js`) runs the same preflight before each
-champion run; its facts read the loop's data source (`evaluator.data`), and are
+champion run; its facts read the loop's data source (`evaluator.data`; the evaluator is `scripts/lib/train/evaluator.js`, whose
+logic is in `scripts/lib/prop/`, not the retired backtester prop runs), and are
 N/A ("no bars given to the loop") without one. A loop's replay config sets
 `practice` like any practice-train run.
 
@@ -191,7 +192,8 @@ Every validate run is a look, logged in the ledger and counted.
 **At the end of the run**, the replay prints:
 
 - **Skill usage.** For each skill: used, correct, wrong, missed and outcome
-  (`feat/skill-usage`; it prints N/A until merged).
+  (the skill-usage report, `scripts/lib/learning/skill-usage.js`; the same
+  report runs alone: `node scripts/skill-usage.js <run dir>`).
 - **The scorecard summary.** Decisions, agree, disagree, unchecked.
 - **R by setup.** For each setup step's skills: the decisions with an R,
   how many were entered, and their mean R.
@@ -254,7 +256,12 @@ month, a pass rate of at least 40% over at least 20 independent attempts and
 
 **An A/B of a risk-skill or rulebook change:** as in stage 1. Two runs with
 the same stage, seed and list, judged with the paired test. A rulebook change
-is mechanical: the training loop screens it with the evaluator first.
+is screened by the training loop's evaluator first, but only where it can:
+the evaluator's layer 1 takes setups with a mechanical stop distance, and
+`trade_lifecycle` (the one strategy `prop_portfolio` lists) has none, so the
+screen finds no trades and the change stays blocked until a model-trade Monte
+Carlo exists. The backtester's own prop runs are retired
+(`docs/research/mechanical-prop-backtester.md`).
 
 **The 30-day Monte Carlo** (phase 2, not merged yet) is printed at the end of
 a stage-2 run. Read it in this order:

@@ -508,11 +508,14 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       // ITEMS say loss_streak_stop exists), never from its text: a comment naming "composed" is no feature.
       let scorecardComposed = false;
       try { scorecardComposed = require(path.join(root, 'scripts', 'lib', 'replay', 'scorecard.js')).SCORES_COMPOSED === true; } catch (_err) { /* none */ }
+      // The skill-usage report is merged when its module exports the reader (readSkillUsage), as the scorecard's flag.
+      let skillUsage = false;
+      try { skillUsage = typeof require(path.join(root, 'scripts', 'lib', 'learning', 'skill-usage.js')).readSkillUsage === 'function'; } catch (_err) { /* none */ }
       return {
         scorecardComposed,
         lossStreakStop: Object.hasOwn(rb.ITEMS, 'loss_streak_stop'),
         exitMode: rb.EXIT_KEYS.includes('mode'),
-        skillUsage: exists(path.join('scripts', 'lib', 'learning', 'skill-usage.js')),
+        skillUsage,
         accountFacts: false,
         monteCarlo: false,
       };

@@ -147,7 +147,7 @@ function rBySetup(decisions = []) {
 }
 
 /** The default readers of a finished run: its learning log and measures, its scorecard, its role, the merged features. */
-function defaultRead(run, { root, env }) {
+function defaultRead(run, { root, env, barsFiles = {} }) {
   const learning = require('../learning/learning-report');
   return {
     learning: () => learning.readLearning(run.paths.runHome),
@@ -160,7 +160,18 @@ function defaultRead(run, { root, env }) {
       return sc.scoreRun(run.paths.runDir, { strategies, accounts }).summary.agreement.overall;
     },
     features: () => require('../learning/preflight').defaultReaders(root, env).features(),
+    skillUsage: () => learning.skillUsageFor(run.paths.runDir, { barsFiles }),
   };
+}
+
+/** The skill-usage lines: the run's real report (learning-report.js skillUsageFor) when merged, else N/A. */
+function skillUsageLines(merged, rd) {
+  if (!merged) return ['skill usage: N/A (needs feat/skill-usage)'];
+  let u = null;
+  try { u = rd.skillUsage ? rd.skillUsage() : null; } catch (e) { u = { error: String(e.message).split('\n')[0] }; }
+  if (!u) return ['skill usage: no compose records in the run'];
+  if (u.error) return [`skill usage: not read (${u.error})`];
+  return require('../learning/skill-usage').skillUsageText(u).trimEnd().split('\n');
 }
 
 function stageReport(run, opts = {}) {
@@ -172,11 +183,11 @@ function stageReport(run, opts = {}) {
   }
 }
 
-function stageLines(run, { root, env = process.env, read = null }) {
-  const rd = read || defaultRead(run, { root, env });
+function stageLines(run, { root, env = process.env, barsFiles = {}, read = null }) {
+  const rd = read || defaultRead(run, { root, env, barsFiles });
   const lines = [`stage ${run.stage} (${STAGES[run.stage].name}) report:`];
   const f = rd.features();
-  lines.push(f.skillUsage ? 'skill usage: see the skill-usage report' : 'skill usage: N/A (needs feat/skill-usage)');
+  lines.push(...skillUsageLines(f.skillUsage, rd));
   let adherence = null;
   try {
     const a = rd.adherence();

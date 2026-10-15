@@ -218,6 +218,15 @@ test('feature detection reads an exported symbol, never the source text: a comme
   assert.strictEqual(P.defaultReaders(tmp(), {}).features().scorecardComposed, false, 'no scorecard');
   // On this repository (no scorecard fix merged): N/A.
   assert.strictEqual(P.defaultReaders(ROOT, {}).features().scorecardComposed, false);
+  // The skill-usage report: merged when its module exports readSkillUsage, not when a file merely exists.
+  const su = path.join(tmp(), 'scripts', 'lib', 'learning');
+  fs.mkdirSync(su, { recursive: true });
+  const usage = () => P.defaultReaders(path.resolve(su, '..', '..', '..'), {}).features().skillUsage;
+  fs.writeFileSync(path.join(su, 'skill-usage.js'), "// readSkillUsage\nmodule.exports = { other: 1 };\n");
+  assert.strictEqual(usage(), false, 'a file without the export');
+  fs.writeFileSync(path.join(su, 'skill-usage.js'), 'module.exports = { readSkillUsage() {} };\n');
+  assert.strictEqual(usage(), true, 'the exported function');
+  assert.strictEqual(P.defaultReaders(ROOT, {}).features().skillUsage, true, 'this repository');
 });
 
 test('a check that throws is a FAIL with its message', () => {

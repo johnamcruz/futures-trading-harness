@@ -132,6 +132,12 @@ test('stageReport: stage 1 prints skill usage (N/A until merged), the scorecard,
   const v = S.stageReport({ stage: 1 }, { read: read() }).join('\n');
   assert.match(v, /^stage 1 \(learn to trade\) report:/);
   assert.match(v, /skill usage: N\/A \(needs feat\/skill-usage\)/);
+  // Merged: the run's real report (skillUsageFor), its text; no records and a refused read are said, never N/A.
+  const withUsage = skillUsage => S.stageReport({ stage: 1 }, { read: { ...read({ features: { skillUsage: true } }), skillUsage } }).join('\n');
+  assert.match(withUsage(() => null), /skill usage: no compose records in the run/);
+  assert.match(withUsage(() => ({ error: 'bad ledger' })), /skill usage: not read \(bad ledger\)/);
+  assert.match(withUsage(() => { throw new Error('boom\nmore'); }), /skill usage: not read \(boom\)/);
+  assert.match(withUsage(() => require('../../scripts/lib/learning/skill-usage').skillUsage({})), /^stage 1[^]*skill/mi);
   assert.match(v, /scorecard: 50 decisions, 45 agree, 5 disagree/);
   assert.match(v, /R by setup:\n {2}rejection: 40 decision\(s\), 40 entered, mean 1\.25R/);
   assert.match(v, /stage-1 exit test: PASS\n {2}PASS planned-rr/);
