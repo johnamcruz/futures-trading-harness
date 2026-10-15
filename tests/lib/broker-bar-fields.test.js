@@ -131,7 +131,9 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
   assert.strictEqual(run('without', absorbed(false)).summary.trades, 0);
 });
 
-test('a prop run on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
+test('a policy on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
+  // Through the two-layer evaluator's run (prop/evaluate-run.js), which builds the policy's bars with barsAt.
+  const { runEvaluation } = require('../../scripts/lib/prop/evaluate-run');
   const dir = tmpDir();
   // va_paper: a paper copy of fx_value_area (it reads the broker's flow), listed by an active policy with fx_orb.
   const strategies = path.join(dir, 'strategies');
@@ -139,16 +141,17 @@ test('a prop run on finer bars with broker fields: a paper strategy the policy l
   write('va_paper', fs.readFileSync(path.join(FX_GOLDEN, 'fx_value_area', 'STRATEGY.md'), 'utf8').replace(/^name: fx_value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
   write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, fx_orb]'));
   const file = path.join(dir, 'one.json');
+  // 1-minute bars in Train (the evaluator runs Train windows freely), from 10:00 ET on Wednesday 2022-10-05.
+  const T1 = Date.UTC(2022, 9, 5, 14, 0);
   const bars = [];
-  for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
+  for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T1 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
   const env = { ...process.env, FTH_STRATEGIES_DIRS: `${strategies},${FX_GOLDEN}` };
   // prop_mixed is listed in its account's rulebook (a plugin root with the accounts copied).
   const root = rootWithPolicies({ prop_mixed: fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').match(/^account: (\S+)/m)[1] });
-  const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root, outRoot: dir, env, log: m => logs.push(m) });
   const logs = [];
   try {
-    run('prop_mixed', logs);
+    runEvaluation({ prop: 'prop_mixed', symbols: ['MNQ'], data: { MNQ: file }, from: '2022-10-06', to: '2022-10-08', gate: false, window: 160, facts: false, paths: 10, reps: 10 }, { root, env, log: m => logs.push(m) });
   } catch (err) {
     // The run may find no attempt in so short a span; it must not be the bar-fields refusal.
     assert.doesNotMatch(err.message, /carry the broker's own fields/);
