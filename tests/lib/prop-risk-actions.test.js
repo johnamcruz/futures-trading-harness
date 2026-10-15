@@ -93,6 +93,9 @@ test('the paired difference has the right sign on a scripted case: passing a gap
     assert.strictEqual(row.effect.blow, 'lowered', `${k}: the model's action lowered the blow rate (${JSON.stringify(row.diff.blowRate)})`);
     assert.ok(row.diff.blowRate.hi < 0);
   }
+  // Each state's arm reverts only the actions met in that state.
+  const pass = r.actions.pass.byState;
+  assert.ok(['fresh', 'mid', 'near-target', 'near-mll'].some(st => pass[st].applied < pass.all.applied), JSON.stringify(Object.fromEntries(Object.entries(pass).map(([k, v]) => [k, v.applied]))));
   // Kinds the run has none of change nothing: exactly no difference.
   assert.deepStrictEqual([r.actions['size-down'].byState.all.applied, r.actions['size-down'].byState.all.diff.passRate.diff], [0, 0]);
   const rec = riskActionRecord(r, { minN: 5 });

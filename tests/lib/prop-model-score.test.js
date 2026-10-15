@@ -331,3 +331,16 @@ test('scorePaired: zero blows first: a run with a blow never beats one without, 
   assert.ok(res.a.resampled.medianDaysToPass < res.b.resampled.medianDaysToPass, 'A passes faster');
   assert.strictEqual(res.verdict, 'B better');
 });
+
+test('scoreRun: trades open at the same time (a scale-in) are refused in a real score', () => {
+  const t0 = '2023-03-15T14:00:00.000Z';
+  const t1 = '2023-03-15T14:03:00.000Z';
+  const { dir } = multiDayRun({ days: [{ day: '2023-03-15', times: [t0, t1], records: [record({ at: t0 }), record({ at: t1 })],
+    rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5], [100.5, 101.5, 100, 101]],
+    fills: [
+      { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+      { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:04:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+      { id: 3, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:08:00Z', price: 101, size: 2, side: 1, profitAndLoss: 4 },
+    ] }] });
+  assert.throws(() => scoreRun(dir, { account: ACCOUNT, paths: 10, reps: 10 }), /open at the same time .* a real score refuses them/);
+});
