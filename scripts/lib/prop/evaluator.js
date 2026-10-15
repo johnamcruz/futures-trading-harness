@@ -390,8 +390,10 @@ function medianDiff(pairs, { reps, level, rand }) {
  * Returns { a, b (each: pass, blow and timeout rates, median and p90 days to pass, on the real and the resampled
  * paths), diff: { real, resampled } (each: passRate, blowRate, timeoutRate and medianDaysToPass, A minus B, with a
  * paired interval: a block bootstrap over start days, blocks of `sessions`, or over paths), verdict (on the resampled
- * paths): 'A better' when A passes more (interval above 0) without blowing more, or blows less (interval below 0)
- * without passing less; 'B better' mirrored; 'trade-off' when each is better on one; else 'no significant difference' }.
+ * paths), verdict: zero blows first (a run with no blow, real or resampled, beats one with any, whatever its pass
+ * rate); else, on the resampled paths, 'A better' when A passes more (interval above 0) without blowing more, or blows
+ * less (interval below 0) without passing less; 'B better' mirrored; 'trade-off' when each is better on one; else
+ * 'no significant difference' }.
  */
 function scorePaired(streamA, streamB, opts) {
   const {
@@ -420,9 +422,8 @@ function scorePaired(streamA, streamB, opts) {
       onDay: (_cs, d) => { day = d; out = rates.outage > 0 && stats.streamFor(seed, `pair:${p}:${d}`)() < rates.outage; },
       outageDay: () => out,
       variant: t0 => {
-        const cur = stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}`);
-        const t = at.redrawOvershoot(t0, pools.get(t0.symbol), cur);
-        return rates.stopFault > 0 && cur() < rates.stopFault ? at.stopFault(t) || t : t;
+        const t = at.redrawOvershoot(t0, pools.get(t0.symbol), stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:overshoot`));
+        return rates.stopFault > 0 && stats.streamFor(seed, `pair:${p}:${day}:${t0.seq}:fault`)() < rates.stopFault ? at.stopFault(t) || t : t;
       },
     });
   };
@@ -447,14 +448,17 @@ function scorePaired(streamA, streamB, opts) {
   };
   const diff = { real: diffs(real, 'real', Math.ceil(S / every)), resampled: diffs(resampled, 'resampled', 1) };
   const r = diff.resampled;
+  // Zero blows first (the hard gate): a run with a blow never beats one without, whatever its pass rate.
+  const blowsOf = k => [...real, ...resampled].filter(x => x[k].status === 'blown').length;
+  const [ba, bb] = [blowsOf('a'), blowsOf('b')];
   // Blows are A minus B too: an interval below 0 is fewer blows for A.
   const aBetter = (r.passRate.lo > 0 && !(r.blowRate.lo > 0)) || (r.blowRate.hi < 0 && !(r.passRate.hi < 0));
   const bBetter = (r.passRate.hi < 0 && !(r.blowRate.hi < 0)) || (r.blowRate.lo > 0 && !(r.passRate.lo > 0));
-  const verdict = aBetter && !bBetter ? 'A better' : bBetter && !aBetter ? 'B better' : aBetter ? 'trade-off (one passes more, the other blows less)' : 'no significant difference';
+  const verdict = ba === 0 && bb > 0 ? 'A better' : bb === 0 && ba > 0 ? 'B better' : aBetter && !bBetter ? 'A better' : bBetter && !aBetter ? 'B better' : aBetter ? 'trade-off (one passes more, the other blows less)' : 'no significant difference';
   return {
     a: { real: side(real, 'a'), resampled: side(resampled, 'a'), score: passA.diagnostic ? `diagnostic (${passA.diagnostic})` : 'real', look: passA.look },
     b: { real: side(real, 'b'), resampled: side(resampled, 'b'), score: passB.diagnostic ? `diagnostic (${passB.diagnostic})` : 'real', look: passB.look },
-    diff, verdict, paired: { sameDays: true, sameBlocks: true, sameFaults: true },
+    diff, verdict, blows: { a: ba, b: bb }, paired: { sameDays: true, sameBlocks: true, sameFaults: true },
     inputs: { sessions: S, seed, paths, reps, level, every, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, days: daysA.length },
   };
 }

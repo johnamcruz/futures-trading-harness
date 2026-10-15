@@ -115,3 +115,24 @@ test('fault injection fires on model trades: every trade carries the full set of
   assert.strictEqual(faulty.resampled.faults.missed, 0, 'none dropped out for want of a no-stop path');
   assert.deepStrictEqual(score({}).resampled.faults, { injected: 0, missed: 0 });
 });
+
+test('a fill no record placed is left out (a real score refuses it); trades open together are listed; the no-stop worst covers the fill\'s bar', () => {
+  const entered = (id, entryTime, exitTime, extra = {}) => ({ id, decision: 'entered', root: 'MNQ', side: 'long', day: '2023-03-15', bar: '2023-03-15T13:57:00.000Z', plan: { entry: 100, stop: 98 }, context: {}, signatures: {},
+    outcome: { source: 'fills', entryPrice: 100, exitPrice: 101, entryTime, exitTime, exitReason: 'closed', R: 0.5 }, ...extra });
+  const a = entered('a', '2023-03-15T14:01:00.000Z', '2023-03-15T14:20:00.000Z');
+  const trips = [
+    { family: 'MNQ', side: 'buy', openMs: Date.parse('2023-03-15T14:01:00.000Z') },
+    { family: 'MNQ', side: 'buy', openMs: Date.parse('2023-03-15T15:30:00.000Z') }, // filled after its record expired: no owner
+  ];
+  const s = modelStream({ decisions: [a], dayKeys: ['2023-03-15'], tfMs: M3, trips });
+  assert.deepStrictEqual(s.excluded.map(x => [x.why, x.bar]), [['a fill no record placed', '2023-03-15T15:30:00.000Z']]);
+  // A scale-in (a second leg while the first is open): both kept, the pair listed.
+  const b = entered('b', '2023-03-15T14:10:00.000Z', '2023-03-15T14:20:00.000Z');
+  const o = modelStream({ decisions: [a, b], dayKeys: ['2023-03-15'], tfMs: M3 });
+  assert.deepStrictEqual(o.overlaps.map(x => [x.a, x.b]), [['a', 'b']]);
+  assert.deepStrictEqual(modelStream({ decisions: [a, entered('c', '2023-03-15T14:30:00.000Z', '2023-03-15T14:40:00.000Z')], dayKeys: ['2023-03-15'], tfMs: M3 }).overlaps, []);
+  // A mid-bar fill whose own bar holds the deepest low: the no-stop worst is at least as deep as the adverse path.
+  const bars = [{ ms: Date.parse('2023-03-15T14:00:00.000Z'), o: 100, h: 100.5, l: 97, c: 99.5 }, { ms: Date.parse('2023-03-15T14:03:00.000Z'), o: 99.5, h: 101.5, l: 99.25, c: 101 }];
+  const t = modelStream({ decisions: [entered('d', '2023-03-15T14:01:00.000Z', '2023-03-15T14:05:00.000Z')], dayKeys: ['2023-03-15'], tfMs: M3, barsFor: () => bars }).trades[0];
+  assert.deepStrictEqual([t.troughTicks, t.noStop.worstTicks], [[-9], -9], 'the fill bar\'s low, held at the stop\'s fill, in both');
+});

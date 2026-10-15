@@ -247,17 +247,6 @@ test('the account-policy hook: a candidate rulebook scored through the same Mont
   assert.throws(() => checkModelWindow({ run: run({ from: '2025-03-03', to: '2025-03-08', role: 'test', look: { evaluation: 'e' } }), candidateRulebook: true, logScore: () => {} }), /never scored on test/);
 });
 
-test('combine.attemptFacts: the room to the limits, the day, consistency headroom, profit needed; counts passed in', () => {
-  const acct = { ...ACCOUNT, daily_loss_soft: 500, consistency_pct: 50 };
-  let s = combine.start(acct);
-  s = combine.endDay(combine.applyClose(s, 600));
-  s = combine.applyClose(s, -200);
-  const f = combine.attemptFacts(s, { tradesToday: 2, lossesToday: 1, lossStreak: 3 });
-  assert.deepStrictEqual(f, { dailyRoom: 800, softStop: 500, softRoom: 300, tradesToday: 2, lossesToday: 1, lossStreak: 3, day: 2, sessions: 30, sessionsLeft: 29, consistencyCap: 600, needed: 2600 });
-  const none = combine.attemptFacts(combine.start(ACCOUNT));
-  assert.deepStrictEqual([none.softStop, none.softRoom, none.consistencyCap, none.tradesToday, none.day, none.needed], [null, null, null, null, 1, 3000]);
-});
-
 test('scoreRun: a finished practice-validate run scored end to end, logged beside its look; the section never throws', () => {
   const home = tmpHome('fth-pmc-');
   const ledger = path.join(home, 'ledger', 'looks.jsonl');
@@ -277,7 +266,7 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   assert.deepStrictEqual([r.score, r.role, r.trades, r.runDays, r.look.kind, r.look.runId], ['real', 'practice-validate', 1, 2, 'score', 'run1']);
   assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 1);
   const text = scoreText(r);
-  for (const want of [/1\. Zero blows \(hard gate\): held/, /2\. Pass within 30 trading days/, /3\. Days to pass: median/, /4\. Blow rate/, /Promotion gate: refused/]) assert.match(text, want);
+  for (const want of [/1\. Zero blows \(hard gate\): held/, /2\. Pass within 30 trading days/, /3\. Days to pass: median/, /4\. Blow rate/, /Promotion gate: n\/a \(practice-validate is not out of sample; it would refuse: /]) assert.match(text, want);
   assert.ok(text.indexOf('1. Zero') < text.indexOf('2. Pass') && text.indexOf('2. Pass') < text.indexOf('3. Days') && text.indexOf('3. Days') < text.indexOf('4. Blow'), 'the owner\'s order');
   // Natural rates beside the run make it a curated run: diagnostic.
   fs.writeFileSync(path.join(dir, 'natural-rates.json'), JSON.stringify({ sweep: { candidatesPerDay: 0.5 } }));
@@ -329,4 +318,16 @@ test('pairRuns: two replay runs of the same days through the same paths; a fault
       { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:05:00Z', price: 101, size: 1, side: 1, profitAndLoss: 2 }] }] });
   assert.throws(() => scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10, faults: { stopFault: 0.01 } }), /without a no-stop path .* silently drop out/);
   assert.strictEqual(scoreRun(bare.dir, { account: ACCOUNT, paths: 10, reps: 10 }).score, 'real');
+});
+
+test('scorePaired: zero blows first: a run with a blow never beats one without, however fast it passes', () => {
+  // A wins more on every day but carries one gap loss through the floor; B never blows.
+  const days = weekdays('2022-01-03', 300);
+  const A = modelStreamOf(days, (d, k) => [k === 150 ? modelTrade(`${d}-0`, -900, {}, { troughTicks: [-900], overshootTicks: 859 }) : modelTrade(`${d}-0`, k % 3 === 2 ? -40 : 120)]);
+  // B's losses close a tick inside the stop (no stop exit, so no overshoot drawn from A's gap).
+  const B = modelStreamOf(days, (d, k) => [modelTrade(`${d}-0`, k % 3 === 2 ? -39 : 60)]);
+  const res = scorePaired(A, B, { ...quick, contracts: 'micro', rulebook: { sizing: { cushion_frac: 0.4 } }, passA: checkModelWindow({ run: run({ runId: 'a', to: '2023-03-01' }) }), passB: checkModelWindow({ run: run({ runId: 'b', to: '2023-03-01' }) }) });
+  assert.ok(res.blows.a > 0 && res.blows.b === 0, JSON.stringify(res.blows));
+  assert.ok(res.a.resampled.medianDaysToPass < res.b.resampled.medianDaysToPass, 'A passes faster');
+  assert.strictEqual(res.verdict, 'B better');
 });

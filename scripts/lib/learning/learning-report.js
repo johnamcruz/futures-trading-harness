@@ -201,7 +201,7 @@ function readLearning(home) {
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
 /** The prop score in one line, the owner's order. */
-const propLine = p => `prop Monte Carlo (${p.score}): zero blows ${p.zeroBlows ? 'held' : 'FAILED'}, pass within 30 days ${f2(p.passRate)} real / ${f2(p.resampledPassRate)} resampled, `
+const propLine = p => `prop Monte Carlo (${p.score}): zero blows ${p.zeroBlows ? 'held' : 'FAILED'}, pass within ${p.sessions || '?'} days ${f2(p.passRate)} real / ${f2(p.resampledPassRate)} resampled, `
   + `days to pass median ${p.medianDaysToPass ?? '-'} p90 ${p.p90DaysToPass ?? '-'}, blow ${f2(p.blowRate)} (resampled ${f2(p.resampledBlowRate)}), timeout ${f2(p.timeoutRate)}`;
 
 function learningText(m) {

@@ -28,7 +28,8 @@ const ENTRY_TOOL = /(?:^|__)place_order$/;
 
 /**
  * A finished run's decisions, built from what it wrote (the module header), nothing appended: { dir, home, manifest,
- * days (the store's, by day), dayKeys, gate (learning-run.json, or null), cfg, tfMs, decisions, barsFor }. The
+ * days (the store's, by day), dayKeys, gate (learning-run.json, or null), cfg, tfMs, decisions, barsFor, trips (every
+ * round trip leg of the run's fills, credited to a record or not) }. The
  * experience log and the prop Monte Carlo (prop/model-stream.js) read a run through this one function. Throws on an
  * unfinished run or one with no days.
  */
@@ -64,7 +65,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
     cycles, records: readRecords(home, { runId: manifest.runId }), trips, gateRefusals, barsFor, tfMs,
     tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now,
   });
-  return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor };
+  return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor, trips };
 }
 
 function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {

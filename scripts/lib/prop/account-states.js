@@ -46,7 +46,7 @@ function sampleAccountStates(stream, { account, sizing = {}, contracts = 'auto',
   const legs = new Map();
   const ctx = {
     account, sizing: { ...combine.DEFAULT_SIZING, ...sizing }, mode: contracts,
-    legsOf: t => { if (!legs.has(t.symbol)) legs.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue })); return legs.get(t.symbol); },
+    legsOf: t => { if (!legs.has(t.symbol)) legs.set(t.symbol, at.legsFor(account, t.symbol, { tickValue: t.tickValue, ...(Number.isFinite(t.feesPerSide) ? { feesPerSide: t.feesPerSide } : {}) })); return legs.get(t.symbol); },
   };
   const regimes = days.map(d => d.regime || 'normal');
   const byRegime = stats.groupBy(regimes);

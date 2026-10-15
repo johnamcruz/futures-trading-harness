@@ -22,7 +22,8 @@
  *                     slippage (SLIPPAGE_TICKS), resampled by the bootstrap; null for any other exit (a trailed stop's
  *                     level isn't recorded, so its overshoot isn't known);
  *   noStop            the worst move and the last close to the day's end (trade-stream.js noStopPath) on the run's own
- *                     bars, used only when a stop fault is injected; null without the bars;
+ *                     bars, its worst never shallower than the adverse path's (the fill's own bar included), used only
+ *                     when a stop fault is injected; null without the bars;
  *   day, seq          the session day it settled (experience-log.js settledDay) and its order within it, by its fill;
  *   r                 gross R: the price move from the fill to the exit over the stop distance, before fees (the
  *                     stream's `rBasis`); layer 2 settles net dollars (fees per contract), and its expectancy cuts are
@@ -36,10 +37,14 @@
  * record read, else 'normal'.
  *
  * An entered decision without a settled outcome (still open, fills unreadable, no stop distance, no contract spec) is
- * left out and listed in `excluded` with why; a real score refuses a stream with any (prop/model-score.js), since a
- * dropped loss would flatter it. A run whose outcomes are hidden (a reasoning-fix look) has no stream.
+ * left out and listed in `excluded` with why, and so is a round trip of the run's fills that no record placed (a fill
+ * after its record expired, a second fill on one record: `trips`, matched to the entered decisions by side, family
+ * and opening time); a real score refuses a stream with any (prop/model-score.js), since a dropped loss would flatter
+ * it. Trades open at the same time (a scale-in leg, two markets) are listed in `overlaps`: layer 2 settles each trade
+ * alone against the account, so their combined drawdown is not seen, and a real score refuses them too. A run whose
+ * outcomes are hidden (a reasoning-fix look) has no stream.
  *
- *   modelStream({ decisions, dayKeys, barsFor, tfMs, eod, specOf })   the stream (pure)
+ *   modelStream({ decisions, dayKeys, barsFor, tfMs, eod, specOf, regimes, trips })   the stream (pure)
  *   readModelStream(runDir, { root, barsFiles })   { stream, run: { runId, from, to, learning, role, look, hideOutcomes,
  *                                                  practice, ledger } } from a finished run
  */
@@ -93,8 +98,10 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
   let troughTicks = fromBars || (floor < 0 ? [floor] : []);
   const last = troughTicks.length ? troughTicks[troughTicks.length - 1] : 0;
   if (moveTicks < Math.min(0, last)) troughTicks = [...troughTicks, moveTicks];
-  const noStop = Number.isFinite(entryMs) && bars.length
+  const path = Number.isFinite(entryMs) && bars.length
     ? noStopPath({ bars, tickSize: tick }, { direction: d.side, entryTime: o.entryTime, entry: o.entryPrice }, { tfMs, eod }) : null;
+  // noStopPath starts at the first bar opening after the fill; the fill's own bar is in the adverse path: the worse.
+  const noStop = path ? { ...path, worstTicks: Math.min(path.worstTicks, ...troughTicks) } : null;
   const facts = Object.fromEntries(CONTEXT.map(k => [k, d.context ? d.context[k] ?? null : null]));
   return {
     trade: {
@@ -104,7 +111,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
       stopTicks, moveTicks, r: o.R, troughTicks, adverse: fromBars ? 'bars' : 'bound',
       overshootTicks: stopped ? Math.max(0, round6((s * (stopPx - o.exitPrice)) / tick - SLIPPAGE_TICKS)) : null,
       noStop, facts: { ...facts, skill: d.signatures ? d.signatures.skill : null, exploratory: Boolean(d.exploratory), frame: d.frame || null, list: d.list ?? null },
-      entryMs,
+      entryMs, exitMs,
     },
   };
 }
@@ -115,7 +122,7 @@ function tradeOf(d, { barsFor, tfMs, eod, specOf }) {
  * of day (autotrader parseAt), or null (to the trading day's end); specOf(root): the contract spec (tickSize,
  * tickValue, feesPerSide).
  */
-function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null }) {
+function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, eod = null, specOf = specFor, regimes = null, trips = null }) {
   const started = Date.now();
   if (!(tfMs > 0)) throw new Error('tfMs: the run\'s bar length in ms');
   if (decisions.some(d => d && d.hidden)) throw new Error('the run\'s outcomes are hidden (a reasoning-fix look): no trade stream');
@@ -126,6 +133,22 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
     const r = tradeOf(d, { barsFor, tfMs, eod, specOf });
     if (r.excluded) excluded.push(r.excluded);
     else trades.push(r.trade);
+  }
+  // Round trips of the run's fills no record placed: each entered decision credits the leg that opened at its entry.
+  if (Array.isArray(trips)) {
+    const credited = new Set(decisions.filter(d => d && d.decision === 'entered' && d.outcome && d.outcome.entryTime)
+      .map(d => `${familyRoot(d.root) || d.root}|${d.side === 'long' ? 'buy' : 'sell'}|${Date.parse(d.outcome.entryTime)}`));
+    for (const t of trips) {
+      if (!Number.isFinite(t.openMs) || credited.has(`${t.family}|${t.side}|${t.openMs}`)) continue;
+      excluded.push({ id: null, root: t.family || null, bar: new Date(t.openMs).toISOString(), why: 'a fill no record placed' });
+    }
+  }
+  // Trades open at the same time: settled one by one, their combined drawdown unseen.
+  const overlaps = [];
+  const timed = trades.filter(t => Number.isFinite(t.entryMs) && Number.isFinite(t.exitMs)).sort((a, b) => a.entryMs - b.entryMs);
+  for (let i = 1; i < timed.length; i += 1) {
+    const open = timed.slice(0, i).filter(p => p.exitMs > timed[i].entryMs);
+    for (const p of open) overlaps.push({ a: p.id, b: timed[i].id, at: timed[i].entryTime });
   }
   const keys = [...new Set([...dayKeys, ...trades.map(t => t.day)])].sort();
   const byDay = new Map(keys.map(k => [k, []]));
@@ -140,11 +163,11 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   }
   const days = keys.map(day => {
     const list = byDay.get(day).sort((a, b) => (a.entryMs - b.entryMs) || String(a.id).localeCompare(String(b.id)));
-    return { day, regime: (regimes && regimes.get(day)) || regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, trades: list.map((t, seq) => { const { entryMs: _m, ...rest } = t; return Object.assign(rest, { seq }); }) };
+    return { day, regime: (regimes && regimes.get(day)) || regimeOf.get(day) || 'normal', passes: passesOn.get(day) || 0, trades: list.map((t, seq) => { const { entryMs: _m, exitMs: _x, ...rest } = t; return Object.assign(rest, { seq }); }) };
   });
   const all = days.flatMap(d => d.trades);
   return {
-    source: 'model', rBasis: 'gross', days, trades: all, excluded, fieldBranch: [], entryDelayMs: null, slippageTicks: SLIPPAGE_TICKS, timeframe: tfMs / 60000,
+    source: 'model', rBasis: 'gross', days, trades: all, excluded, overlaps, fieldBranch: [], entryDelayMs: null, slippageTicks: SLIPPAGE_TICKS, timeframe: tfMs / 60000,
     noStop: { known: all.filter(t => t.noStop).length, missing: all.filter(t => !t.noStop).length },
     adverse: { bars: all.filter(t => t.adverse === 'bars').length, bound: all.filter(t => t.adverse === 'bound').length },
     decisions: { total: decisions.length, entered: decisions.filter(d => d && d.decision === 'entered').length },
@@ -165,7 +188,7 @@ function readModelStream(runDir, { root = null, barsFiles = {} } = {}) {
   const first = (Array.isArray(r.cfg.symbols) && r.cfg.symbols[0] ? familyRoot(r.cfg.symbols[0]) : null) || roots[0] || null;
   const bars = first ? r.barsFor(first) || [] : [];
   const regimes = bars.length && r.tfMs ? dayRegimes(bars, r.tfMs) : null;
-  const stream = modelStream({ decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes });
+  const stream = modelStream({ decisions: r.decisions, dayKeys: r.dayKeys, barsFor: r.barsFor, tfMs: r.tfMs, eod, regimes, trips: r.trips });
   return {
     stream,
     run: {

@@ -32,6 +32,7 @@
  */
 
 const { streamFor } = require('./stats');
+const { tradingDayStart } = require('../trading/clock');
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -117,7 +118,8 @@ function reweightStream(stream, decisions, { rates = null, weights = null, listO
     while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] > x) hi = mid; else lo = mid + 1; }
     return pool[lo];
   };
-  const minuteOf = t => { const ms = Date.parse(t.entryTime); return Number.isFinite(ms) ? ((ms % 86400000) + 86400000 - 22 * 3600000) % 86400000 : 0; };
+  // Time since its session opened, so the rebuilt day keeps the order the trades were filled in.
+  const minuteOf = t => { const ms = Date.parse(t.entryTime); return Number.isFinite(ms) ? ms - tradingDayStart(new Date(ms)).getTime() : 0; };
   const out = [];
   for (let k = 0; k < days; k += 1) {
     const day = `R${String(k + 1).padStart(4, '0')}`;

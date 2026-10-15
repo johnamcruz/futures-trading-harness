@@ -62,6 +62,9 @@ function streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, n
   if (!diagnostic && stream.excluded.length) {
     throw new Error(`${stream.excluded.length} entr${stream.excluded.length === 1 ? 'y' : 'ies'} without a settled outcome (${stream.excluded.slice(0, 3).map(x => `${x.root} ${x.bar}: ${x.why}`).join('; ')}): a real score never leaves one out`);
   }
+  if (!diagnostic && stream.overlaps.length) {
+    throw new Error(`${stream.overlaps.length} pair(s) of trades open at the same time (first at ${stream.overlaps[0].at}): each is settled alone against the account, so their combined drawdown would go unseen; a real score refuses them`);
+  }
   if (!diagnostic && Number(faults && faults.stopFault) > 0 && stream.noStop.missing) {
     throw new Error(`${stream.noStop.missing} trade(s) without a no-stop path (no bars after the fill): an injected stop fault would silently drop out of them; give the run's bars (--bars)`);
   }
@@ -115,7 +118,9 @@ function scoreLines(r) {
     `2. Pass within ${S} trading days: ${pct(r.passRate)} of ${r.attempts} real attempts (bootstrap ${iv(r.intervals.pass)}, Wilson at ${r.ess} independent ${iv(r.intervals.passAtEss)}); resampled ${pct(rs.passRate)} of ${rs.paths} (Wilson ${iv(rs.mcInterval)})`,
     `3. Days to pass: median ${num(r.medianDaysToPass)}, p90 ${num(r.p90DaysToPass)} (real); median ${num(rs.medianDaysToPass)}, p90 ${num(rs.p90DaysToPass)} (resampled)`,
     `4. Blow rate ${pct(r.blowRate)} (bootstrap ${iv(r.intervals.blow)}, Wilson at ${r.real.ess} independent ${iv(r.intervals.blowAtEss)}), timeout rate ${pct(r.timeoutRate)} (bootstrap ${iv(r.intervals.timeout)}, Wilson at ${r.ess} independent ${iv(r.intervals.timeoutAtEss)}) (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
-    `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`,
+    ['test', 'final'].includes(r.window.role)
+      ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
+      : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,
     `From ${r.trades} of the model's trades (its fills) over ${r.runDays} session day(s)${r.reweighted ? `, rebuilt at natural rates (${r.reweighted.tradesPerDay} trades a day over ${r.reweighted.days} days${r.reweighted.unsampled.length ? `; unsampled lists: ${r.reweighted.unsampled.join(', ')}` : ''})` : ''}; adverse path from bars on ${r.adverse.bars}, the stop bound on ${r.adverse.bound}${r.excluded.length ? `; ${r.excluded.length} entr${r.excluded.length === 1 ? 'y' : 'ies'} left out (no settled outcome)` : ''}; R gross (price over the stop; the attempts settle net dollars); faults ${r.inputs.faults.measured ? 'measured' : 'unmeasured'} (stop ${r.inputs.faults.stopFault}, outage ${r.inputs.faults.outage}${rs.faults && rs.faults.injected + rs.faults.missed ? `; ${rs.faults.injected} fired, ${rs.faults.missed} without a no-stop path` : ''})`,
   ];
   if (r.attribution) {
@@ -133,7 +138,7 @@ const scoreMarkdown = r => ['## Prop Monte Carlo', '', ...scoreLines(r).map(l =>
 /** The few numbers the learning report shows beside R and the skill measures. */
 function scoreSummary(r) {
   return {
-    score: r.score, account: r.account, zeroBlows: r.blown === 0, passRate: r.passRate, resampledPassRate: r.resampled.passRate,
+    score: r.score, account: r.account, sessions: r.inputs.sessions, zeroBlows: r.blown === 0, passRate: r.passRate, resampledPassRate: r.resampled.passRate,
     medianDaysToPass: r.medianDaysToPass, p90DaysToPass: r.p90DaysToPass, blowRate: r.blowRate, timeoutRate: r.timeoutRate,
     resampledBlowRate: r.resampled.blowRate, attempts: r.attempts, paths: r.resampled.paths, promotion: r.promotion.passes,
   };

@@ -41,9 +41,15 @@ test('prop-state: the day\'s trade counts and the losing streak are recorded wit
   assert.deepStrictEqual(counts(at(2, '14:31:00')), { tradesToday: 1, lossesToday: 1, lossStreak: 3 });
   prop.snapshot(home, a, 100018.15, at(2, '15:30:00'), { fills: [fill(2, '14:00:00', -20), fill(2, '15:00:00', 40)] });
   assert.strictEqual(counts(at(2, '15:31:00')).lossStreak, 0);
-  // Fills that couldn't be read: the day's last counts carried, never invented.
+  // Fills that couldn't be read, or a position open (no fills read): unknown, never the last counts shown as current.
   prop.snapshot(home, a, 100018.15, at(2, '15:40:00'), { fillsError: 'down' });
-  assert.deepStrictEqual(counts(at(2, '15:41:00')), { tradesToday: 2, lossesToday: 1, lossStreak: 0 });
+  assert.deepStrictEqual(counts(at(2, '15:41:00')), { tradesToday: null, lossesToday: null, lossStreak: null });
+  prop.snapshot(home, a, 100018.15, at(2, '15:42:00'), { fills: [fill(2, '14:00:00', -20), fill(2, '15:00:00', 40)] });
+  prop.snapshot(home, a, 100010, at(2, '15:45:00'), { open: 1, openIds: ['MNQ'] });
+  assert.strictEqual(counts(at(2, '15:46:00')).tradesToday, null, 'a position open: unknown');
+  // A close that moved after the last counts (the end-of-day flatten's loss): the close keeps no streak.
+  prop.recordEndOfDay(home, a, 99990, '2026-06-02');
+  assert.strictEqual(prop.readAttempt(home, a.name).days[1].lossStreak, undefined);
   // An older record without the last close's streak: the streak is unknown until a win today.
   const old = prop.dayCounts({ days: [{ day: '2026-06-01', balance: 1, pnl: 0 }], snapshot: null }, '2026-06-02', [fill(2, '14:00:00', -5)], false, 0);
   assert.deepStrictEqual([old.trades, old.losses, old.streak], [1, 1, null]);
