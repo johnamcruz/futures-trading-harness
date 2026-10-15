@@ -20,7 +20,12 @@
  *            bar that trades it before the record expires, else `unfilled` (R null); then the record's stop and
  *            target, the stop checked first on every bar (a bar touching both is a loss) and alone on the fill bar,
  *            the stop filled SLIPPAGE_TICKS worse (the backtester's market-stop slippage), the target at its price,
- *            out at the close of the bar that reaches end of day or the last bar of the trading day.
+ *            out at the close of the bar that reaches end of day or the last bar of the trading day; under the run's
+ *            exit (`exit`: evaluator.js composedExit, the one the runner manages its composed trades by): past the
+ *            target trailed, not closed (target_then_trail), or an R trail, as the runner's rule per closed bar.
+ * Each line holds the run's exit mode (`exit`: brackets, target_then_trail, ...) and the hash of its exit plan
+ * (`exitPlan`: exitHash of the mode and its parameters, as the run's manifest recorded them at seed time; null for a
+ * run started before the record): an index never mixes two plans (experience-index.js).
  * Grade: an entry's result (win, loss, scratch); a pass whose counterfactual lost is a `good-pass`, one that would
  * have won a `missed-win`, unfilled or flat a `neutral-pass`; a gate refusal apart (refused-would-lose, refused-would-win,
  * refused-neutral), never counted as the model's pass. A round trip belongs to the record the gateway stamped on its
@@ -34,8 +39,10 @@
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
- *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick })   the counterfactual
- *   buildDecisions({ cycles, records, trips, stamps, gateRefusals, barsFor, tickOf, eodOf, runId, now })   the lines
+ *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick, plan })   the counterfactual
+ *   buildDecisions({ cycles, records, trips, stamps, gateRefusals, barsFor, tickOf, eodOf, runId, now, exit })   the lines
+ *                                         (`exit`: { plan, mode, hash } the run's exit, BRACKETS by default)
+ *   exitRecord(exit), exitHash(exit)      an exit as a manifest records it ({ mode, plan, hash }), its hash
  *   appendDecisions(file, lines)          append the lines whose id isn't in the file yet; { added, kept }
  *   readDecisions(file)                   every line, [] without a file
  *   logFile(runHome)                      <run home>/experience/decisions.jsonl
@@ -49,9 +56,21 @@ const { tradingDayKey } = require('../trading/clock');
 const { familyRoot } = require('../trading/contracts');
 const { roleOf } = require('./splits');
 const { formOf } = require('./lifecycle-record');
+const { afterTargetStep, swingSeries } = require('../trading/exit-trail');
+const { trailStep } = require('../trading/trail');
 
 // 2: decisions per cycle, root and side, trades by the gateway's stamp (a version-1 line's id may name another record).
 const VERSION = 2;
+/** The exit of a run whose composed trades keep their brackets (no policy lists the strategy: evaluator.js composedExit). */
+const BRACKETS = Object.freeze({ plan: null, mode: 'brackets' });
+
+/** JSON with every object's keys sorted: one text per value, whatever order its keys were built in. */
+const stable = v => (Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object'
+  ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}` : JSON.stringify(v === undefined ? null : v));
+/** The hash of an exit plan (its mode and parameters): what each experience line and an index name it by. */
+const exitHash = exit => crypto.createHash('sha256').update(stable({ mode: exit.mode, plan: exit.plan || null })).digest('hex');
+/** An exit as a run's manifest records it at seed time (replay/driver.js): { mode, plan, hash }. */
+const exitRecord = exit => ({ mode: exit.mode, plan: exit.plan || null, hash: exitHash(exit) });
 const round = (x, d = 4) => (x === null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
 const sgn = side => (side === 'long' ? 1 : side === 'short' ? -1 : 0);
 
@@ -69,7 +88,7 @@ function lowerBound(bars, t) {
 const resultOf = R => (R === null ? null : R > 0 ? 'win' : R < 0 ? 'loss' : 'scratch');
 
 /** The record's limit order on the bars after the decision (see the head). */
-function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick }) {
+function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick, plan = null }) {
   const none = (reason, extra = {}) => ({ source: 'counterfactual', filled: false, entryPrice: null, exitPrice: null, exitTime: null, exitReason: reason, R: null, ...extra });
   const s = sgn(side);
   if (!s || ![entry, stop].every(Number.isFinite) || !(tick > 0)) return none('no plan');
@@ -90,7 +109,7 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   const fillAt = new Date(bars[i].ms).toISOString();
   // The fill is inside bar i (at its open or past it): bar i is the fill bar, read by bracketExit's worse-is-taken rule.
   const targetDist = Number.isFinite(target) && s * (target - entry) > 0 ? Math.abs(target - entry) : null;
-  const x = bracketExit({ bars, i, partial: true, tfMs, side, fill, risk, targetDist, eodMs, tick });
+  const x = bracketExit({ bars, i, partial: true, tfMs, side, fill, risk, targetDist, eodMs, tick, plan, swingAt: swingsFor(bars, plan) });
   if (!x) return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
   return {
     source: 'counterfactual', filled: true, entryPrice: fill, entryTime: fillAt, exitPrice: x.exitPrice, exitTime: new Date(x.exitMs).toISOString(), exitReason: x.reason,
@@ -108,25 +127,54 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
  * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod }, or null when the bars
  * end first.
  */
-function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetDist = null, eodMs = Infinity, tick }) {
+function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetDist = null, eodMs = Infinity, tick, plan = null, swingAt = null }) {
   const s = sgn(side);
   if (!s || !(i >= 0 && i < bars.length) || !Number.isFinite(fill) || !(risk > 0) || !(tick > 0)) return null;
   const day = tradingDayKey(new Date(bars[i].ms));
-  const stopPx = fill - s * risk;
+  // The exit the trade is managed by (`plan`, evaluator.js composedExit): past the target trailed, not closed (exit mode
+  // target_then_trail: exit-trail.js), or an R trail (trail.js); else the brackets alone. The runner's rule, per bar.
+  const after = plan && plan.afterTarget ? plan.afterTarget : null;
+  const trails = Boolean(plan) && plan.trailActivateR !== null && plan.trailActivateR !== undefined;
+  const initial = fill - s * risk;
+  let stopPx = initial;
+  let peakR = 0;
+  let armed = false;
   const targetPx = targetDist > 0 ? fill + s * targetDist : null;
-  const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
   const out = (price, bar, reason) => ({ exitPrice: price, exitMs: bar.ms + tfMs, reason });
   let last = bars[i];
   for (let j = i; j < bars.length; j += 1) {
     const b = bars[j];
     const fillBar = partial && j === i;
     if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
-    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, 'stop');
-    if (!fillBar && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
+    const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
+    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, stopPx === initial ? 'stop' : 'trail');
+    if (!fillBar && !after && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
+    // The trail on this closed bar (the fill bar's prices after the fill can't be told: none, the worse taken).
+    if (!fillBar && (after || trails)) {
+      const t = { sign: s, entry: fill, risk, stop: stopPx, peakR, armed, target: targetPx };
+      const step = after ? afterTargetStep(t, b, plan, tick, swingAt ? swingAt(j, s) : null) : trailStep(t, b, plan, tick);
+      peakR = step.peakR;
+      armed = Boolean(step.armed);
+      if (step.close) return out(step.close.price, b, 'trail');
+      stopPx = step.stop;
+    }
     if (b.ms + tfMs >= eodMs) return out(b.c, b, 'eod');
     last = b;
   }
   return null;
+}
+
+/** Per bars list and swing timeframe, its swing series once (exit-trail.js swingSeries: causal, bar j from bars 0..j). */
+const SWINGS = new WeakMap();
+/** A structure trail's swing at bar j for side s (a long's swing low, a short's high), or null when the plan has none. */
+function swingsFor(bars, plan) {
+  const a = plan && plan.afterTarget;
+  if (!a || a.trailBy !== 'structure' || !a.swingMinutes || !Array.isArray(bars)) return null;
+  if (!SWINGS.has(bars)) SWINGS.set(bars, new Map());
+  const byTf = SWINGS.get(bars);
+  if (!byTf.has(a.swingMinutes)) byTf.set(a.swingMinutes, swingSeries(bars, a.swingMinutes));
+  const sw = byTf.get(a.swingMinutes);
+  return (j, s) => { const v = (s > 0 ? sw.low : sw.high)[j]; return Number.isFinite(v) ? v : null; };
 }
 
 /**
@@ -202,7 +250,7 @@ const idOf = parts => crypto.createHash('sha256').update(parts.join('|')).digest
  * @param barsFor (root) -> bars sorted, each { ms, o, h, l, c }; tfMs the bar length
  * @param tickOf (root) -> tick size; eodOf (ms) -> that trading day's end of day (ms)
  */
-function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, gateRefusals = [], barsFor = () => [], tfMs = 0, tickOf = () => null, eodOf = () => Infinity, runId = null, now = new Date() }) {
+function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, gateRefusals = [], barsFor = () => [], tfMs = 0, tickOf = () => null, eodOf = () => Infinity, runId = null, now = new Date(), exit = BRACKETS }) {
   const times = cycles.map(c => Date.parse(c.at)).filter(Number.isFinite).sort((a, b) => a - b);
   const marks = times.map(t => ({ ms: t }));
   const cycleOf = ms => { const k = lowerBound(marks, ms + 1) - 1; return k >= 0 ? times[k] : null; };
@@ -274,7 +322,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
   const out = [];
   for (const slot of slots) {
     const { at, root, recs, ok, fromMs, expiresMs } = slot;
-    const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, writtenAt: now.toISOString() };
+    const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, exit: exit.mode, exitPlan: exit.hash || null, writtenAt: now.toISOString() };
     if (!ok) {
       const day = tradingDayKey(new Date(at));
       out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null, frame: null,
@@ -292,7 +340,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
       // A refusal names no side: it stays with the cycle's latest ok record (the one order_plan plans from).
       const refused = slot.latest && gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
       if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
-      outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root) });
+      outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root), plan: exit.plan });
     }
     out.push({
       ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
@@ -341,4 +389,4 @@ function appendDecisions(file, lines) {
   return { added: fresh.length, kept: lines.length - fresh.length };
 }
 
-module.exports = { VERSION, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };

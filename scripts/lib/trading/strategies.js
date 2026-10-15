@@ -25,7 +25,7 @@ const { parseWindows } = require('./clock');
 const { normalizeBars } = require('./indicators');
 const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
-const { createEvaluator, inSessions, exitPlan, tradeExitPlan } = require('./evaluator');
+const { createEvaluator, inSessions, exitPlan, tradeExitPlan, composedExit } = require('./evaluator');
 const { SWING_TFS } = require('./exit-trail');
 const { familyOf, selectedLeg } = require('./contracts');
 const rulebook = require('./rulebook');
@@ -641,6 +641,7 @@ module.exports = {
   parseRetired,
   exitPlan,
   tradeExitPlan,
+  composedExit,
   exitErrors,
   STATUSES,
   SIGNALS,

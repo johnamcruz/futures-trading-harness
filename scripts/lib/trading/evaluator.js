@@ -74,6 +74,27 @@ function tradeExitPlan(policy, component = null) {
   return p.trailActivateR === null ? own : { ...own, trailActivateR: p.trailActivateR, trailGivebackR: p.trailGivebackR };
 }
 
+/**
+ * The policies that would trade a composed strategy's setups: every valid policy strategy listing it. A composed trade's
+ * exit is theirs (composedExit) whether or not an attempt is running, so practice outside an attempt trades the exit an
+ * attempt trades.
+ */
+const policiesOf = (strategy, strategies = []) => (strategies || []).filter(p => p && p.valid && p.signal === 'policy' && (p.strategies || []).includes(strategy && strategy.name));
+
+/**
+ * The exit a composed strategy's trade is managed by, with or without a running attempt: { plan, mode }. The exit of
+ * the policy that lists it (tradeExitPlan for a compose record: its own stop and target are its entry's brackets;
+ * `mode` the policy's exit mode), the same one an attempt's entry under that policy gets. With no such policy, or
+ * policies whose exits differ (none to pick), the strategy's own: its brackets (`mode` 'brackets').
+ */
+function composedExit(strategy, strategies = []) {
+  const own = { plan: exitPlan(strategy), mode: 'brackets' };
+  if (!strategy || strategy.signal !== 'composed') return own;
+  const plans = policiesOf(strategy, strategies).map(p => ({ plan: tradeExitPlan(p, null), mode: (p.exit && p.exit.mode) || 'trail' }));
+  if (!plans.length || new Set(plans.map(x => JSON.stringify(x))).size > 1) return own;
+  return plans[0];
+}
+
 function inSessions(strategy, now) {
   if (!Array.isArray(strategy.sessions) || strategy.sessions.length === 0) return true;
   return parseWindows(strategy.sessions.join(',')).windows.some(w => inWindow(now, w));
@@ -225,4 +246,4 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   return { at, regimeAt, length: bars.length, bars };
 }
 
-module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs, exitPlan, tradeExitPlan };
+module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs, exitPlan, tradeExitPlan, composedExit };

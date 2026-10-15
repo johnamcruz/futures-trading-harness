@@ -77,6 +77,33 @@ const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js'
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
+/** A replay step (FTH_REPLAY_NOW: the replay driver's clock, every learning run's too): no web for any agent. */
+const isReplay = env => Boolean(env && String(env.FTH_REPLAY_NOW || '').trim());
+
+/** The roles whose tools reach the web (their agent documents' WebSearch, WebFetch): a replay never launches them. */
+const webRoleNames = () => opencode.webRoles(require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..')));
+
+/** The plugin's name (its manifest): Claude Code names a plugin's roles `<plugin>:<role>`. */
+const pluginName = () => JSON.parse(require('fs').readFileSync(path.resolve(__dirname, '..', '..', '.claude-plugin', 'plugin.json'), 'utf8')).name;
+
+/**
+ * Claude's deny rules for a replay: web search, web fetch, and each role that reaches the web, by its plain name and
+ * by the plugin-scoped name Claude Code gives a plugin's roles (`Agent(<plugin>:<role>)`).
+ */
+const replayWebDenied = () => ['WebSearch', 'WebFetch', ...webRoleNames().flatMap(r => [`Agent(${r})`, `Agent(${pluginName()}:${r})`])];
+
+/**
+ * A replay's MCP servers for Claude (--strict-mcp-config --mcp-config): the broker gateway and the harness tools, as
+ * install.js registers them, and no other (a user's own server could reach the web).
+ */
+function replayMcpConfig(root) {
+  const { gatewayArgs, harnessToolsArgs } = require('./install');
+  return { mcpServers: { [SERVER_NAME]: { command: 'node', args: gatewayArgs(root) }, [HARNESS_SERVER]: { command: 'node', args: harnessToolsArgs(root) } } };
+}
+
+/** Codex's overrides for a replay: the sandbox's network off, web search disabled (`web_search`, and `tools.web_search`). */
+const CODEX_REPLAY_NO_WEB = Object.freeze(['sandbox_workspace_write.network_access=false', 'web_search="disabled"', 'tools.web_search=false']);
+
 /** Where the runner writes closed bars (runner-owned; agents read it). */
 function resolveDataDir(cfg, home = os.homedir(), env = process.env) {
   return cfg.dataDir ? cfg.dataDir.replace(/^~(?=\/)/, home) : path.join(harnessHome(env, home), 'bars');
@@ -94,10 +121,11 @@ const abs = p => `/${p}`;
  * broader allow in the user's settings): reading credentials and other
  * agents' configs, and writing the harness, its state, or Claude settings.
  */
-function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
+function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness'), replay = false } = {}) {
   return [
-    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent', 'WebSearch',
-    ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
+    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent',
+    // A replay: no web (on a replayed date it holds what the market did next; claudeDenied denies it too).
+    ...(replay ? [] : ['WebSearch', ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`)]),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs(scratchDir({ FTH_HOME: stateDir }))}/**)`,
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
@@ -106,11 +134,13 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
-function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null } = {}) {
+function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null, replay = false } = {}) {
   const h = p => abs(path.join(home, p));
   const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
     ...state,
+    // A replay: the web, and every role whose tools reach it, denied (deny beats any allow in the user's settings).
+    ...(replay ? replayWebDenied() : []),
     'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
     `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
     // Credentials (.env in the state dir, the default ~/.futures-trading-harness, or the repo).
@@ -667,7 +697,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
     // that file again. A prompt that embeds none (a full-mode file, none at all): no attestation, the transcript decides.
     const att = headAttestation(cfg, root, { ...base, FTH_ROLE_SKILLS: env.FTH_ROLE_SKILLS });
     if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir, deniedRoles: offDeskRoles(context), refusedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir, deniedRoles: offDeskRoles(context), refusedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS, replay: isReplay(base) });
   }
   return env;
 }
@@ -680,13 +710,18 @@ function buildCommand(cfg, prompt, root, env = process.env) {
     case 'claude':
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
-        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath }).join(','),
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay: isReplay(env) }).join(','),
+        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay: isReplay(env) }).join(','),
+        // A replay: only the harness's own MCP servers load (no user server reaches the web).
+        ...(isReplay(env) ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
+      // A replay: no network from the sandbox (its default, stated so no user config turns it on), and no web search
+      // (CODEX_REPLAY_NO_WEB: the `web_search` mode off, and the older `tools.web_search` toggle).
       return ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
         '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
+        ...(isReplay(env) ? CODEX_REPLAY_NO_WEB.flatMap(o => ['-c', o]) : []),
         ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
       // Default approval mode: only tools allowed in workspace/.qwen/settings.json
@@ -998,6 +1033,11 @@ module.exports = {
   DEFAULTS,
   HARNESSES,
   claudeTools,
+  isReplay,
+  replayWebDenied,
+  replayMcpConfig,
+  pluginName,
+  CODEX_REPLAY_NO_WEB,
   claudeDenied,
   claudeOrderToolConflicts,
   resolveDataDir,

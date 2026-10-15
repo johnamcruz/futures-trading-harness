@@ -311,7 +311,8 @@ const inside = (windows, ms) => windows.some(w => ms > w.from && ms <= w.to);
 
 /**
  * The decision times a curated run steps (a time is its bar's close plus the runner's poll delay, delayMs), from the
- * first window's opening on: the trade times whose bar closed in a window, and the window days' premarket and end of
+ * first window's opening on (a trade time) and from its day's premarket (the first window day's premarket runs, as on
+ * every window day): the trade times whose bar closed in a window, and the window days' premarket and end of
  * day; every other time (the rest of a window's day, and every time of the days after, end of day included) marked
  * `manage`: the driver steps one only while a position or working order is open, as practice manages every bar with
  * something open, so a position the model carries past its window, or past an end of day that didn't flatten it, is
@@ -323,7 +324,8 @@ function curatedPoints(points, curated, delayMs = 0) {
   const kept = p => p.kind === 'trade' && inside(curated.windows, close(p));
   const days = new Set(points.filter(kept).map(p => p.day));
   const first = curated.windows[0].from;
-  return points.filter(p => p.t.getTime() > first).map(p => (kept(p) || (p.kind !== 'trade' && days.has(p.day)) ? p : { ...p, manage: true }));
+  // Before the first window only its day's premarket and end of day run (no trade time: none closed in a window).
+  return points.filter(p => p.t.getTime() > first || (p.kind !== 'trade' && days.has(p.day))).map(p => (kept(p) || (p.kind !== 'trade' && days.has(p.day)) ? p : { ...p, manage: true }));
 }
 
 /** The windows no trade decision time falls in (the run's sessions or end of day miss them). */

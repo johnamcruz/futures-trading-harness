@@ -181,3 +181,23 @@ test('the runner never sends a stop at or below 0 (futures prices): a trail targ
   assert.deepStrictEqual(modified, [], 'a stop at 0 is never sent');
   assert.ok(logs.some(([m, l]) => l === 'error' && /trail: the new stop for trendy is not a price \(0\)/.test(m)), JSON.stringify(logs.filter(([, l]) => l === 'error')));
 });
+
+test('a composed trade outside an attempt is managed by its policy\'s rulebook exit, as in an attempt (practice equals the attempt\'s exit)', async () => {
+  const repo = path.resolve(__dirname, '..', '..');
+  const strategies = loadStrategies(repo, {}).strategies;
+  const { composedExit, exitPlan } = require('../../scripts/lib/trading/strategies');
+  const lifecycle = strategies.find(s => s.signal === 'composed');
+  const policy = strategies.find(s => s.signal === 'policy' && (s.strategies || []).includes(lifecycle.name));
+  const want = composedExit(lifecycle, strategies);
+  assert.deepStrictEqual(want.plan.afterTarget, exitPlan(policy).afterTarget, 'the policy\'s exit');
+  // No attempt is running: the entry is the composed strategy's own (its tag), its target 40 ticks (1R) from the fill.
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 5, contractId: 'MNQ', side: 'buy', setup: lifecycle.name, stopTicks: 40, targetTicks: 40, stopPrice: null, at: iso(et(9, 59, 54)) }]));
+  const r = await wired({ root: repo, home, high: 21530 });
+  assert.ok(r.managed.length >= 1, `managed: ${JSON.stringify(r.logs.filter(([, l]) => l === 'error'))}`);
+  assert.deepStrictEqual(r.managed[0].plan, want.plan);
+  assert.ok(r.managed[0].plan.afterTarget, 'past its target the trade is trailed, not closed at the bracket');
+  // Past the target the stop locks above the entry; these bars' lows (21499) go through it: out at market by the trail.
+  const out = r.events.find(e => e.kind === 'position_closed');
+  assert.ok(out && /trail: price went through the new stop/.test(out.why) && out.peakR >= 2, JSON.stringify(r.events.filter(e => /position/.test(e.kind))));
+});
