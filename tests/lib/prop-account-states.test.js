@@ -377,3 +377,31 @@ test('scripts/account-states.js: show prints a document\'s buckets; a usage erro
   assert.strictEqual(refused.status, 1);
   assert.match(refused.stderr, /practice-train runs only \(this one is test\)/);
 });
+
+test('an attempt\'s end after its close is recorded: a day stopped at the daily limit or the soft stop is stopped, never open', () => {
+  const { attemptEnd } = require('../../scripts/lib/replay/driver');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const env = { FTH_ACCOUNTS_DIRS: path.join(REPO, 'tests', 'fixtures', 'accounts') };
+  const account = accountNamed(REPO, 'test_50k', env);
+  const dayOf = (pnl, { streak = 0 } = {}) => {
+    const home = tmp();
+    const at = '2022-03-01T15:00:00Z';
+    prop.seedAttempt(home, account, { day: '2022-03-01', at, state: { days: [200], peak: 50200, dayPnl: 0, balance: 50200, tradesToday: 0, lossesToday: 0, lossStreak: streak } });
+    // The runner's last snapshot of the day, at the day's loss, then end of day records the close.
+    prop.snapshot(home, account, 50200 + pnl, new Date(at), { open: 0 });
+    prop.recordEndOfDay(home, account, 50200 + pnl, '2022-03-01');
+    return attemptEnd(home, account);
+  };
+  // The daily loss limit ($1,000) hit: stopped for the day, the day's P&L its loss (the recorded close would read 0).
+  const hit = dayOf(-1000);
+  assert.deepStrictEqual([hit.outcome, hit.dayPnl, hit.status], ['stopped', -1000, 'active']);
+  assert.match(hit.block, /daily loss limit/);
+  // The soft stop (the rulebook's daily_loss_soft) the same.
+  const soft = account.daily_loss_soft;
+  assert.ok(soft > 0 && soft < 1000, 'the fixture rulebook has a soft stop under the daily limit');
+  const atSoft = dayOf(-soft);
+  assert.deepStrictEqual([atSoft.outcome, atSoft.dayPnl], ['stopped', -soft]);
+  // A small loss, or a winning day: open (the next day trades as usual).
+  assert.deepStrictEqual([dayOf(-100).outcome, dayOf(-100).dayPnl], ['open', -100]);
+  assert.strictEqual(dayOf(300).outcome, 'open');
+});

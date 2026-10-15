@@ -834,3 +834,24 @@ test('scoreRun and labels: a composed limit entry at its record is right with no
   assert.ok(!trade[0].clone.reasons.includes('limit entry') && !trade[0].clone.reasons.includes('explicit target'), trade[0].clone.reasons.join(', '));
   assert.ok(trade[1].clone.reasons.includes('limit entry'), trade[1].clone.reasons.join(', '));
 });
+
+test('a composed trade\'s exit is judged by the exit it trades: the same with or without an attempt (its own tag or the policy\'s)', () => {
+  const { planFor } = require('../../scripts/lib/replay/scorecard');
+  const repo = path.resolve(__dirname, '..', '..');
+  const all = require('../../scripts/lib/trading/strategies').loadStrategies(repo, {}).strategies;
+  const byName = new Map(all.map(s => [s.name, s]));
+  const lifecycle = all.find(s => s.signal === 'composed');
+  const policy = all.find(s => s.signal === 'policy' && (s.strategies || []).includes(lifecycle.name));
+  const own = planFor(lifecycle.name, byName, 3);
+  const inAttempt = planFor(policy.name, byName, 3);
+  assert.deepStrictEqual(own.afterTarget, inAttempt.afterTarget, 'the policy\'s exit, outside an attempt too');
+  assert.deepStrictEqual([own.ownTargetR, inAttempt.ownTargetR], [lifecycle.risk.min_rr, policy.risk.min_rr]);
+  const f = facts({ planOf: n => planFor(n, byName, 3) });
+  const exit = outcome => classify(label({ decision: 'in-trade', teacher: { action: 'exit', orders: [] }, clone: { ok: false, reasons: [] }, outcome }), f, { decision: 'hold' }, checkReasons('', f));
+  for (const setup of [lifecycle.name, policy.name]) {
+    // Closed under its own target (at least min_rr away): early close; past it, the trail is the plan's management.
+    const early = exit({ setup, r: 0.5, mfeR: 0.8, entryTime: '2026-06-01T14:20:00.000Z' });
+    assert.deepStrictEqual([early.category, early.why], ['early close', [`closed at 0.5R, its best 0.8R, before the plan's ${lifecycle.risk.min_rr}R`]], setup);
+    assert.strictEqual(exit({ setup, r: 2.1, mfeR: 2.4, entryTime: '2026-06-01T14:20:00.000Z' }).category, 'unchecked', setup);
+  }
+});
