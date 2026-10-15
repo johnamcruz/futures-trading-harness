@@ -158,9 +158,12 @@ test('skill usage: readComposeRecords reads the single file and the day shards, 
 
 test('skill usage: a replay run read from what it recorded: records, the cycle log, its bars, its experience log', () => {
   const dec = [decision('2026-04-23', 1, 2.59)];
-  const { dir } = runHome({ shards: true, decisions: dec });
+  const { home, dir } = runHome({ shards: true, decisions: dec });
   const u = U.readSkillUsage(dir);
-  assert.deepStrictEqual(u, U.skillUsage({ records: RECORDS, briefingAt: at, decisions: dec, cycles: [{ action: 'trade', composed: { calls: 2, ok: 1 } }, { action: 'trade', composed: { calls: 1, ok: 0 } }, { action: 'trade' }, { action: 'premarket' }] }));
+  // The briefing rebuilt with the run home's round-number steps, as the scorecard rebuilds it.
+  const roundSteps = require('../../scripts/lib/trading/round-numbers').loadRoundSteps({ FTH_HOME: home });
+  const inHome = U.briefingFrom(BARS, { root: 'MNQ', minutes: 3, count: 1400, roundSteps });
+  assert.deepStrictEqual(u, U.skillUsage({ records: RECORDS, briefingAt: inHome, decisions: dec, cycles: [{ action: 'trade', composed: { calls: 2, ok: 1 } }, { action: 'trade', composed: { calls: 1, ok: 0 } }, { action: 'trade' }, { action: 'premarket' }] }));
   assert.deepStrictEqual(u.cycles, { trade: 3, composed: 2, calls: 3 });
   assert.strictEqual(u.outcome.decisions, 1);
   // A reasoning-fix look: the outcomes hidden, the usage shown.

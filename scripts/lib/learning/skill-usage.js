@@ -234,9 +234,10 @@ function readCycleLines(home) {
 
 /**
  * The briefing at a bar, rebuilt from `bars` (the run's, oldest first) closed by that bar's close: the bar and the
- * `count` before it, never a later bar. null when the bar isn't in them.
+ * `count` before it, never a later bar, with the run's round-number steps (`roundSteps`, its home's, as the scorecard
+ * rebuilds it). null when the bar isn't in them.
  */
-function briefingFrom(bars, { root, minutes, count }) {
+function briefingFrom(bars, { root, minutes, count, roundSteps = null }) {
   const { buildBriefing } = require('../trading/briefing');
   const index = new Map(bars.map((b, i) => [Date.parse(b.t), i]));
   return (r, bar) => {
@@ -244,7 +245,7 @@ function briefingFrom(bars, { root, minutes, count }) {
     const i = index.get(Date.parse(bar));
     if (i === undefined) return null;
     const slice = bars.slice(Math.max(0, i + 1 - count), i + 1).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
-    return buildBriefing({ symbol: root, bars: slice, minutes, now: new Date(Date.parse(bars[i].t) + minutes * 60000) });
+    return buildBriefing({ symbol: root, bars: slice, minutes, roundSteps, now: new Date(Date.parse(bars[i].t) + minutes * 60000) });
   };
 }
 
@@ -273,11 +274,12 @@ function readSkillUsage(runDir, { barsFiles = {} } = {}) {
   const minutes = Number(cfg.timeframe) || null;
   const count = Number(cfg.bars) > 0 ? Number(cfg.bars) : minutes ? historyBars(minutes) : 0;
   const outcomeBars = minutes && Object.keys(barsFiles).length ? labels.outcomeBarsFor(dir, barsFiles) : null;
+  const roundSteps = require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home });
   const builders = new Map();
   const briefingAt = minutes ? (root, bar) => {
     if (!builders.has(root)) {
       const bars = (labels.outcomeFor(outcomeBars, root, minutes) || labels.loadBars(home, root, minutes)).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
-      builders.set(root, bars.length ? briefingFrom(bars, { root, minutes, count }) : () => null);
+      builders.set(root, bars.length ? briefingFrom(bars, { root, minutes, count, roundSteps }) : () => null);
     }
     return builders.get(root)(root, bar);
   } : null;
