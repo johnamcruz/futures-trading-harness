@@ -72,10 +72,10 @@ function gapsOn({ src, upto, candles, j }, { window = WINDOW, max = MAX } = {}) 
 }
 
 /** The briefing's `fvgs`: per timeframe the unfilled gaps on its completed candles, or why there are none to read. */
-function fvgFrames({ bars, base, fine = null, frames = FRAMES, at = bars.length - 1 } = {}) {
+function fvgFrames({ bars, base, fine = null, frames = FRAMES, at = bars.length - 1, until = null } = {}) {
   const out = {};
   for (const m of frames) {
-    const c = completedCandlesAt({ bars, base, fine, minutes: m, at });
+    const c = completedCandlesAt({ bars, base, fine, minutes: m, at, until });
     out[label(m)] = c.unavailable ? `unavailable (${c.unavailable})` : gapsOn(c);
   }
   return out;
@@ -119,8 +119,11 @@ function fvgEdges(fvgs) {
   return out;
 }
 
-/** The gap edges as of base bar `at`'s close (none outside the bars). */
-const fvgEdgesAt = ({ bars, base, fine = null, frames = FRAMES, at }) => (Number.isInteger(at) && at >= 0 && at < bars.length
-  ? fvgEdges(fvgFrames({ bars, base, fine, frames, at })) : []);
+/**
+ * The gap edges as of base bar `at`'s close (none outside the bars); `until` (ms, a candle's open between base closes):
+ * the 1m bars up to it (candle-facts.js completedCandlesAt).
+ */
+const fvgEdgesAt = ({ bars, base, fine = null, frames = FRAMES, at, until = null }) => (Number.isInteger(at) && at >= 0 && at < bars.length
+  ? fvgEdges(fvgFrames({ bars, base, fine, frames, at, until })) : []);
 
 module.exports = { FRAMES, WINDOW, MAX, gapsOn, fvgFrames, fvgLine, leftOf, fvgEdges, fvgEdgesAt };

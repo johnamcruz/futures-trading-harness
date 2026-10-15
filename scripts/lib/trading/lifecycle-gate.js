@@ -132,7 +132,9 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
     const good = x => x.check === true && x.agrees === true && x.dir === side;
     const chochs = check.reads.filter(x => good(x) && x.kind === 'break' && /^(15m|1h) choch (up|down)$/.test(String(x.form || ''))).map(x => String(x.form).split(' ')[0]);
     const hasChoch = tier.choch.some(tf => chochs.includes(tf));
-    const has4h = !tier.rejection4h || check.reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || '')));
+    // A 4h candle that rejected a key level: a fair value gap's edge ('<tf> fvg low|high') is not one.
+    const has4h = !tier.rejection4h || check.reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || ''))
+      && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
     if (hasChoch && has4h) return { ok: true, against: r.prevailing.label, why: null };
     return no(`against the ${r.prevailing.label} trend a verified ${tier.choch.join(' or ')} CHoCH${tier.rejection4h ? ' and a 4h candle that rejected a level' : ''} the trade's way is needed`, r.prevailing.label);
   } catch (err) {

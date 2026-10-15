@@ -3,7 +3,7 @@
 /**
  * The trade_lifecycle tests' scenario-1 world (the composed-entry design, "the two acceptance trades"): a bar briefing
  * for MNQ on the 13:57 UTC bar of tests/helpers.js NOW's day (it closes at NOW, 14:00) whose facts make the owner's
- * scenario-1 long true: bias 1h up, price above the VWAP, the 15m candle rejected the prior VAH up, the 3m candle closed at its top, the
+ * scenario-1 long true: bias 1h up, price above the VWAP, the 15m candle (13:30-13:45) rejected the prior VAH up, the 3m candle closing at NOW (after it) closed at its top, the
  * 15m low 21512.75 under the entry reference 21540.25, the next 1h swing 21598.00 above it. Tick-checked (MNQ, 0.25,
  * $0.50 a tick): the stop one tick beyond the level is 21512.50, 111 ticks ($55.50 a contract); the target 231 ticks,
  * 2.08R; the minimum stop the larger of 8 ticks and 0.25 x ATR(20) (oneR 12 points: ATR(20) 24, 6 points, 24 ticks).
@@ -35,7 +35,7 @@ function briefing(over = {}) {
           price: 21540.25, bar: { t: BAR, o: 21530, h: 21541, l: 21529, c: 21540.25, v: 500 }, oneR: { points: 12, basis: '0.5 x 3m ATR(20) 24' }, referenceStop: { distance: 12, long: 21528.25, short: 21552.25 },
           trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short.',
           vwap: { applies: 'rth', side: 'above' }, location: { priorValue: 'above' }, news: { inBlackout: false },
-          candles: { '3m': { o: 21530, h: 21541, l: 21529, c: 21540.25, closeLocation: 'top' }, '15m': { o: 21520, h: 21545, l: 21512.75, c: 21540.25, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] } },
+          candles: { '3m': { t: BAR, closedAt: CLOSE, o: 21530, h: 21541, l: 21529, c: 21540.25, closeLocation: 'top' }, '15m': { t: '2026-10-07T13:30:00.000Z', closedAt: '2026-10-07T13:45:00.000Z', o: 21520, h: 21545, l: 21512.75, c: 21540.25, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] } },
           swingTargets: { above: [{ frame: '1h', price: 21598, points: 57.75, ticks: 231, R: 4.81 }], below: [] },
           nearestLiquidity: { above: [{ name: 'prior VAH', price: 21570, points: 29.75, R: 2.48 }], below: [] },
           candidates: [],
