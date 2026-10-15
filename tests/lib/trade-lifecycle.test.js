@@ -69,7 +69,7 @@ test('R:R under the minimum, a size over the dollar cap, no cap, a bad size, an 
   assert.strictEqual(plan({ tick: null }).plan, null);
 });
 
-test('buildRecord: the schema; ok only when every read and the plan stand; expiry is the next base-bar close', () => {
+test('buildRecord: the schema; ok only when every read and the plan stand; expiry is validBars base bars after the bar\'s close (the next close by default)', () => {
   const { checked, briefing, ...planned } = plan();
   const r = TL.buildRecord({ at: '2026-04-23T15:00:05.000Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing, checked, planned, cycleId: 'c1' });
   assert.deepStrictEqual(Object.keys(r), TL.RECORD_KEYS);
@@ -77,6 +77,14 @@ test('buildRecord: the schema; ok only when every read and the plan stand; expir
   assert.strictEqual(r.strategy, 'trade_lifecycle');
   assert.strictEqual(r.bar, '2026-04-23T14:57:00.000Z');
   assert.strictEqual(r.expiresAt, '2026-04-23T15:03:00.000Z');
+  // The strategy's valid_bars: two 3m bars after the 15:00 close; an unusable count is one bar.
+  assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing, checked, planned, validBars: 2 }).expiresAt, '2026-04-23T15:06:00.000Z');
+  for (const bad of [0, -1, 1.5, '2', null]) assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing, checked, planned, validBars: bad }).expiresAt, '2026-04-23T15:03:00.000Z', String(bad));
+  // expiryOf: no readable minutes, the next close only; no validUntil, none.
+  assert.strictEqual(TL.expiryOf({ ...briefing, minutes: undefined }, 3), Date.parse('2026-04-23T15:03:00.000Z'));
+  assert.strictEqual(TL.expiryOf({ ...briefing, minutes: 3 }, 3), Date.parse('2026-04-23T15:09:00.000Z'));
+  assert.ok(Number.isNaN(TL.expiryOf({ sections: { m3: {} } }, 2)));
+  assert.strictEqual(TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', briefing: { ...briefing, sections: { ...briefing.sections, m3: { ...briefing.sections.m3, validUntil: 'x' } } }, checked, planned, validBars: 2 }).expiresAt, null);
   assert.strictEqual(r.plan.size, 2);
   assert.strictEqual(r.signature, checked.signature);
   assert.deepStrictEqual(r.context, checked.context);

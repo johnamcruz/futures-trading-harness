@@ -62,7 +62,15 @@ test('composed-reads: the record must be this bar\'s, this side\'s, unexpired an
   let { home } = world();
   assert.match(judge(home, { cycleBars: {} }).message, /no cycle bar for MNQ/);
   assert.match(judge(home, { cycleBars: { MNQ: '2026-10-07T14:00:00.000Z' } }).message, /briefing can't be read .*not the cycle's/);
-  assert.match(judge(home, { now: new Date(F.EXPIRES) }).message, /expired at 2026-10-07T14:03:00.000Z/);
+  assert.match(judge(home, { now: new Date(F.EXPIRES) }).message, /expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\)/);
+  // The next close is no longer the end: the record holds through the second bar (the shipped valid_bars, 2).
+  assert.strictEqual(judge(home, { now: new Date(F.NEXT_CLOSE) }).message, null);
+  // A record or a bar with no readable expiry: refused (fails closed), never read as no limit.
+  const blank = world();
+  appendRecord(blank.home, { ...blank.rec, expiresAt: null });
+  assert.match(judge(blank.home).message, /the compose record or its bar has no readable expiry/);
+  // No readable strategy: one bar, the next close (fails closed: the shorter).
+  assert.match(judge(home, { now: new Date(F.NEXT_CLOSE), strategy: null }).message, /expired at 2026-10-07T14:03:00.000Z \(1 base bar after/);
   const used = { ts: '2026-10-07T14:00:01Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } };
   assert.match(judge(home, { entries: [used] }).message, /already placed since this bar opened/);
   // Any long entry since the bar opened counts, whichever record (13:59, before this record's at), and one whose side

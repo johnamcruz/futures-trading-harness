@@ -190,9 +190,13 @@ test('timing: this cycle\'s place_order decisions in the gate log, by its cycle 
     { ts: iso(w(4)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: 'setup:none' },
     { ts: iso(w(5)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: '[exit] stop hit', cycle },
     { ts: iso(w(6)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:fx_break long', cycle },
+    // An entry refused because its compose record had expired (the gate flags it), and one refused for another reason.
+    { ts: iso(w(7)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:trade_lifecycle long', violations: [{ check: 'composed-reads', message: 'expired', expired: true }], cycle },
+    { ts: iso(w(8)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:trade_lifecycle long', violations: [{ check: 'composed-reads', message: 'no record' }, null], cycle },
     { ts: iso(w(90)), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle },
   ].map(x => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n'));
-  assert.deepStrictEqual(T.gateEntries(env, W, w(10)), [{ ms: w(5), decision: 'allowed', entry: false }, { ms: w(6), decision: 'blocked', entry: true }]);
+  assert.deepStrictEqual(T.gateEntries(env, W, w(10)), [{ ms: w(5), decision: 'allowed', entry: false, expired: false }, { ms: w(6), decision: 'blocked', entry: true, expired: false },
+    { ms: w(7), decision: 'blocked', entry: true, expired: true }, { ms: w(8), decision: 'blocked', entry: true, expired: false }]);
   // No cycle id (not a runner cycle): none; no log: none.
   assert.deepStrictEqual(T.gateEntries({ ...env, FTH_CYCLE_TRANSCRIPT: '' }, W, w(10)), []);
   assert.deepStrictEqual(T.gateEntries({ ...env, FTH_GATE_LOG: path.join(dir, 'none.jsonl') }, W, w(10)), []);
@@ -212,10 +216,25 @@ test('timing report: latencies, overruns, setups caught and missed, role medians
   const s = report.summarize(days);
   assert.deepStrictEqual(s.timing, r);
   const text = report.toText(s);
-  assert.match(text, /\nsetup timing\nbars +cycles +close to decision p50 \/ p90 +close to order p50 \/ p90 \(n\) +overran +decided in time +entered in time +missed \(why\) +no next bar\n/);
-  assert.match(text, /\nsetup bars +2 +17\.0s \/ 202\.0s +17\.0s \/ 17\.0s \(1\) +1 +1 +1 +1 \(overran 1\) +0\n/);
+  assert.match(text, /\nsetup timing\nbars +cycles +close to decision p50 \/ p90 +close to order p50 \/ p90 \(n\) +overran +decided in time +entered in time +missed \(why\) +no next bar +lost to expiry\n/);
+  assert.match(text, /\nsetup bars +2 +17\.0s \/ 202\.0s +17\.0s \/ 17\.0s \(1\) +1 +1 +1 +1 \(overran 1\) +0 +0\n/);
   assert.match(text, /role median: risk-manager 38\.0s\n$/);
-  assert.match(report.toMarkdown(s), /## Setup timing[\s\S]*\| quiet bars \| 1 \| 42\.0s \/ 42\.0s \| - \/ - \(0\) \| 0 \| 0 \| 0 \| 0 \| 0 \|/);
+  assert.match(report.toMarkdown(s), /## Setup timing[\s\S]*\| quiet bars \| 1 \| 42\.0s \/ 42\.0s \| - \/ - \(0\) \| 0 \| 0 \| 0 \| 0 \| 0 \| 0 \|/);
+  // Entries lost to expiry: counted per cycle from the gate's flagged refusals, summed in the report; a replay whose
+  // clock ran (the latency charged) says so, one whose clock was pinned says it is projected.
+  const lost = at(20, { context: SETUP_BAR, replay: true, charged: true, gate: [{ ms: w(15), decision: 'blocked', entry: true, expired: true }, { ms: w(16), decision: 'blocked', entry: true, expired: true }, { ms: w(17), decision: 'blocked', entry: false, expired: true }] });
+  assert.deepStrictEqual([lost.expired, lost.charged, lost.clock], [2, true, 'replay']);
+  assert.ok(!('charged' in at(20, { context: SETUP_BAR, replay: true })), 'pinned: not charged');
+  assert.ok(!('charged' in at(20, { context: SETUP_BAR, charged: true })), 'live: no replay clock to charge');
+  const charged = report.summarize({ '2026-04-28': [{ t: iso(CYCLE_AT), kind: 'trade', ran: [{ action: 'trade', ok: true, result: 'x', timing: lost }] }] });
+  assert.deepStrictEqual([charged.timing.all.expired, charged.timing.all.charged, charged.timing.all.replay], [2, 1, 1]);
+  assert.match(report.toText(charged), /setup timing \(replay: latency charged, as live\)\n[\s\S]*\nall +1 .* 2\n/);
+  assert.match(report.toMarkdown(charged), /latency is CHARGED, as live/);
+  const projected = report.summarize({ '2026-04-28': [{ t: iso(CYCLE_AT), kind: 'trade', ran: [{ action: 'trade', ok: true, result: 'x', timing: at(20, { context: SETUP_BAR, replay: true }) }] }] });
+  assert.match(report.toText(projected), /setup timing \(replay: projected live latency\)/);
+  assert.match(report.toMarkdown(projected), /PROJECTED live latency/);
+  const mixed = report.summarize({ '2026-04-28': [{ t: iso(CYCLE_AT), kind: 'trade', ran: [lost, at(20, { context: SETUP_BAR, replay: true })].map(t => ({ action: 'trade', ok: true, result: 'x', timing: t })) }] });
+  assert.match(report.toText(mixed), /latency charged on some cycles, projected on others/);
   const none = report.summarize({ '2026-04-28': [{ t: iso(CYCLE_AT), kind: 'trade', ran: [{ action: 'trade', ok: true }] }] });
   assert.ok(!/setup timing/i.test(report.toText(none) + report.toMarkdown(none)));
 });
@@ -243,6 +262,18 @@ test('timing in the cycle log: cycle-run records the run\'s timeline on the wall
     assert.deepStrictEqual([line.timing.setupCaught, line.timing.orderDecision, line.timing.enteredInTime, line.timing.roles[0].ms], [true, 'refused', false, 10000]);
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).timing, line.timing);
   }
+});
+
+test('timing with the latency charged: the cycle starts at the replay time its wall start reached (FTH_REPLAY_WALL_START), every moment after on that running clock', () => {
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'rp', brokers: { rp: { command: ['node', path.join(home, 'replay-server.js')], replay: true } } }));
+  const startedMs = Date.now() - 120000;
+  // The step began 60 s before this cycle's run (its pass: bars, briefing, scan) at the 04:12:02 decision time.
+  const env = { HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: iso(CYCLE_AT), FTH_REPLAY_WALL_START: String(startedMs - 60000) };
+  const res = { ok: true, timedOut: false, output: jsonl([ocTask('risk-manager', 2, 12), ocText('CYCLE RESULT: no-trade - x', 29)]), env };
+  // `now`: the runner's cycle time (any: the replay clock decides); the run's wall start is what the clock is read at.
+  const t = T.runTiming({ res, cfg: { timeframe: 3 }, context: QUIET, env, startedMs, endedMs: startedMs + 30000, now: new Date(0), result: 'CYCLE RESULT: no-trade - x' });
+  assert.deepStrictEqual([t.clock, t.charged, t.start, t.end], ['replay', true, iso(CYCLE_AT + 60000), iso(CYCLE_AT + 90000)]);
 });
 
 test('harness run: each standard-output line\'s arrival time, in order (lineTimes)', async () => {

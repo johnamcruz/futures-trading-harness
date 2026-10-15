@@ -30,6 +30,14 @@ it differs):
   flight) owns targets (section 3.4).
 - **The code stays** until its own PRs (section 9's table): dead code is
   kept and tested through fixtures meanwhile.
+- **A plan holds two base bars** (the owner, 2026-10-14): a compose record
+  expires the strategy's `valid_bars` base bars after its bar's close (2:
+  6 minutes on the 3m), not at the next close, so a cycle that runs past the
+  next close can still enter on the facts of its own bar. The gate works the
+  expiry out again from that bar's briefing (`lifecycle-gate.js`), and
+  replay charges each cycle's real time on its clock (the replay config's
+  `latency`, `replay/latency.js`), so an entry lost to expiry in a replay is
+  one live would lose too.
 
 ## 1. Thesis
 
@@ -283,7 +291,7 @@ schema is `RECORD_KEYS` in `trading/trade-lifecycle.js`), the way the runner
 records policy verdicts (`prop-state.js:526`):
 
 - the root, contract, side, bar (the briefing's `asOf`), `at`, `expiresAt`
-  (the next base-bar close), the cycle id and the lane (the briefing's base
+  (the strategy's `valid_bars` base bars after the bar's close), the cycle id and the lane (the briefing's base
   timeframe); the run id comes with the runner (PR 14);
 - the context: `m3.regime` (primary and volatility), `m3.window`, the trend
   rule for the side, `m15.alignment` for the side, `m3.today.dayType`

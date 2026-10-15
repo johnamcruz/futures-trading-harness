@@ -2892,21 +2892,64 @@ test('trade_lifecycle, D2 tiers for the short side (reversalAllowed on the re-ch
   assert.strictEqual(reversalAllowed({ home: trendHome(require('../helpers').tmpDir(), { biases: UP15 }), root: 'MNQ', side: 'short', check: { ok: false, reads: [read('break', '15m choch down')] } }).ok, false);
 });
 
-test('trade_lifecycle: the order is on the record\'s own contract; the briefing\'s validUntil earlier than the record\'s expiresAt decides', () => {
+test('trade_lifecycle: the order is on the record\'s own contract; the bar\'s own expiry (its validUntil plus valid_bars - 1 bars) earlier than the record\'s expiresAt decides', () => {
   const home = lcHome();
   const TL = require('../../scripts/lib/trading/trade-lifecycle');
   const rec = TL.readRecords(home, 'MNQ').at(-1);
   // A record for NQ: an MNQ order is refused (its size is a number of NQ).
   TL.appendRecord(home, { ...rec, symbol: 'NQ', contract: 'NQ' });
   assert.match(lcEval(home).violations.find(v => v.check === 'composed-reads').message, /the compose record is for NQ, not MNQ/);
-  // The briefing expires before the record says: refused at the briefing's.
+  // The bar's own expiry comes before the record says (its validUntil 14:01, plus one more 3m bar: 14:04): refused then.
   const h2 = trendHome();
   const b = LC.briefing();
   b.sections.m3.validUntil = '2026-10-07T14:01:00.000Z';
   LC.writeScenario(h2, { b });
-  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: LC.EXPIRES });
+  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: '2026-10-07T14:30:00.000Z' });
   assert.deepStrictEqual(lcEval(h2).violations, [], 'before both');
-  assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:01:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:01:00.000Z/);
+  assert.deepStrictEqual(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:03:59Z') }).violations, [], 'the second bar');
+  assert.match(lcEval(h2, LC.order(), { now: new Date('2026-10-07T14:04:00Z') }).violations.find(v => v.check === 'composed-reads').message, /expired at 2026-10-07T14:04:00.000Z \(2 base bars after its bar's close\)/);
+});
+
+test('trade_lifecycle: a record stays valid valid_bars (2) base bars after its bar\'s close: an entry after the next close goes on the record\'s own bar; at the expiry it is refused (expired), an exit never', () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const only = r => r.violations.filter(v => v.check === 'composed-reads');
+  const at = iso => ({ now: new Date(iso) });
+  // After the next close (14:03), before the second (14:06): the cycle still on its bar (the runner awaits it), the
+  // reads re-checked against that bar's briefing. The gateway's stamp carries the two-bar expiry (the runner's watch).
+  const home = lcHome();
+  const late = lcEval(home, LC.order(), at('2026-10-07T14:05:59Z'));
+  assert.deepStrictEqual(late.violations, []);
+  assert.strictEqual(late.composed.expiresAt, LC.EXPIRES);
+  // At the second close: refused, flagged expired (the cycle-timing count of entries lost to expiry).
+  const gone = only(lcEval(home, LC.order(), at(LC.EXPIRES)));
+  assert.strictEqual(gone.length, 1);
+  assert.match(gone[0].message, /expired at 2026-10-07T14:06:00.000Z \(2 base bars after its bar's close\): compose again/);
+  assert.strictEqual(gone[0].expired, true);
+  // Another refusal is never flagged expired.
+  assert.ok(!('expired' in only(lcEval(lcHome({ side: 'short' }), LC.order(), at('2026-10-07T14:04:00Z')))[0]));
+  // A record stamped longer than the strategy allows: the bar's own two bars decide.
+  const h2 = lcHome();
+  TL.appendRecord(h2, { ...TL.readRecords(h2, 'MNQ').at(-1), expiresAt: '2026-10-07T14:30:00.000Z' });
+  assert.match(only(lcEval(h2, LC.order(), at(LC.EXPIRES)))[0].message, /expired at 2026-10-07T14:06:00.000Z/);
+  // A record stamped shorter (one bar, written under valid_bars 1): its own stamp decides.
+  const h3 = lcHome({ validBars: 1 });
+  assert.match(only(lcEval(h3, LC.order(), at(LC.NEXT_CLOSE)))[0].message, /expired at 2026-10-07T14:03:00.000Z/);
+  // A strategy document that says one bar: one bar, whatever the record says.
+  const one = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, valid_bars: 1 } : s));
+  assert.match(only(lcEval(lcHome(), LC.order(), { ...at(LC.NEXT_CLOSE), strategies: one }))[0].message, /expired at 2026-10-07T14:03:00.000Z \(1 base bar after its bar's close\)/);
+  // The facts stay the record's bar's: once the briefing on disk is the next bar's, the record's reads aren't checked
+  // against it (a later cycle composes on its own bar).
+  const h4 = lcHome();
+  require('../../scripts/lib/trading/briefing').writeBriefing(h4, { ...LC.briefing(), asOf: LC.CLOSE });
+  assert.match(only(lcEval(h4, LC.order(), at('2026-10-07T14:04:00Z')))[0].message, /briefing can't be read .*not the cycle's/);
+  // One entry per bar and side across the two bars: an entry placed on this record after the next close counts.
+  const placed = { ts: '2026-10-07T14:03:30Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true }, request: { side: 'buy' } } };
+  assert.match(only(lcEval(lcHome(), LC.order(), { ...at('2026-10-07T14:04:30Z'), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' }), placed] }))[0].message, /already placed since this bar opened/);
+  // Past the expiry, an exit and a protective stop still go.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const r = lcEval(lcHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale }, { ...at('2026-10-07T14:10:00Z'), entries: [] });
+    assert.deepStrictEqual([r.intent, r.violations], ['risk-reducing', []], rationale);
+  }
 });
 
 test('trade_lifecycle, D2: a reversal never stands on a stale, future-dated or partly read multi-timeframe record ([mtf-trend])', () => {
