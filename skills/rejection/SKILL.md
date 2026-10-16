@@ -7,8 +7,8 @@ description: Use when a completed candle, on any timeframe, may have rejected a 
 
 ## When to Use
 
-- Price is at a key level, and the plan asks whether a completed candle
-  rejected it, on any timeframe (trader-process step 4).
+- At a key level: did a completed candle, on any timeframe, reject it
+  (trader-process step 4)?
 
 ## How It Works
 
@@ -20,8 +20,6 @@ skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 5m, 15m, 1h and 4h (`candle-reading`).
 
-**By timeframe**, the same setup:
-
 | Timeframe | What it reads | Weight |
 |---|---|---|
 | 3m, 5m | entry timing at an HTF level; alone, a minor level | least |
@@ -31,33 +29,32 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 **Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6),
 with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
 
-By PLAN step:
-
-- **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`) and
-   `trend-vs-range`.
+- **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`),
+  `trend-vs-range`.
 - **3 Location**: price at a key level (`levels-and-reactions`; the
-   previous candle's high/low, a CRT range; `m3.candles` has them).
+  previous candle's high/low, a CRT range: `m3.candles`).
 - **4 Setup**: a completed candle rejects the level: the briefing's
-   relation `rejected` (traded through it, closed back; read
-   `<tf> rejected <level> up|down`). A long wick, the close in the
-   opposite third or an engulfing grade its strength (`candle-reading`); a
-   candle's sweep of its previous candle is one too
-   (`breakout-vs-fakeout`). After
-   an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
-   it is a continuation. Against the HTF, whether a structure break went its way
-   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1
-   of `confluence-counting`; the priority order decides. A reversal rejection
-   reads strongest with an HTF CHoCH its way (`bos-vs-choch`).
-- **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
-   `absorption`), counted by `confluence-counting`.
+  relation `rejected` (traded through it, closed back; read
+  `<tf> rejected <level> up|down`). A long wick, the close in the
+  opposite third or an engulfing grade its strength (`candle-reading`); a
+  candle's sweep of its previous candle is one too (`breakout-vs-fakeout`).
+  - After an HTF BOS, at the level a pullback reaches
+    (`pullback-vs-reversal`), it is a continuation.
+  - Against the HTF, whether a structure break went its way
+    (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item
+    1 of `confluence-counting`; the priority order decides.
+  - A reversal rejection reads strongest with an HTF CHoCH its way
+    (`bos-vs-choch`).
+- **5 Confluence**: volume or absorption at the level
+  (`momentum-and-volume`, `absorption`), counted by `confluence-counting`.
 - **6 Entry**: after a 15m or 1h rejection, a completed 3m or 5m candle
-   confirms the same way: a displacement candle, or a break of the small
-   pullback structure (`m3.lastBreak.last`). Never anticipate it.
-- **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
-   names it (`invalidation`). Aim for the next swing (`m3.swingTargets`);
-   the room to the next level (`inTheWay`) is step 3's.
+  confirms the same way: a displacement candle, or a break of the small
+  pullback structure (`m3.lastBreak.last`). Never anticipate it.
+- **7 Risk**: wrong beyond the rejection wick: the stop read names it
+  (`invalidation`). Target the next swing (`m3.swingTargets`); the room
+  to the next level (`inTheWay`) is step 3's.
 - **9 Manage**: invalidation is a close back through the level against the
-   trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
+  trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 
 **Paired with `breakout`**: a failed breakout (a close back inside)
 is the setup for a rejection the other way.

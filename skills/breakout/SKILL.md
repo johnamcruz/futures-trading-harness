@@ -7,8 +7,8 @@ description: Use when a completed candle, on any timeframe, may have closed beyo
 
 ## When to Use
 
-- Price is at a key level, and the plan asks whether a completed candle
-  accepted price beyond it, on any timeframe (trader-process step 4).
+- At a key level: did a completed candle, on any timeframe, accept price
+  beyond it (trader-process step 4)?
 
 ## How It Works
 
@@ -20,8 +20,6 @@ skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 5m, 15m, 1h and 4h (`candle-reading`).
 
-**By timeframe**, the same setup:
-
 | Timeframe | What it reads | Weight |
 |---|---|---|
 | 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |
@@ -31,31 +29,28 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 **Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6),
 with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
 
-By PLAN step:
-
-- **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`) agrees
-   with the break, or the range is mature (`trend-vs-range`).
+- **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`)
+  agrees with the break, or the range is mature (`trend-vs-range`).
 - **3 Location**: a key level in the way (`levels-and-reactions`; the
-   previous candle's high/low, a CRT range; `m3.candles` has them).
-- **4 Setup**: a completed candle closes beyond the level with
-   acceptance (the briefing's `broke`: `<tf> broke <level> up|down`): a strong close in the extreme third, the body beyond the
-   level, not just a wick (`breakout-vs-fakeout`, `candle-reading`). A
-   close beyond a level that is also a BOS on that timeframe
-   (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure
-   (`bos-vs-choch`).
-- **5 Confluence**: expanding range and volume (`momentum-and-volume`),
-   no absorption against it (`absorption`); counted by
-   `confluence-counting`.
+  previous candle's high/low, a CRT range: `m3.candles`).
+- **4 Setup**: a completed candle closes beyond the level with acceptance
+  (the briefing's `broke`: `<tf> broke <level> up|down`): a strong close
+  in the extreme third, the body beyond the level, not just a wick
+  (`breakout-vs-fakeout`, `candle-reading`). A close beyond a level that
+  is also a BOS on that timeframe (`m15.lastBreak.last`,
+  `h1.lastBreak.last`) is accepted structure (`bos-vs-choch`).
+- **5 Confluence**: expanding range and volume (`momentum-and-volume`), no
+  absorption against it (`absorption`); counted by `confluence-counting`.
 - **6 Entry**: a completed candle confirms: a retest of the broken level
-   that holds (a pullback: `pullback-vs-reversal`), with a rejection candle
-   there (preferred), or a continuation displacement. Never anticipate it.
-- **7 Risk**: the idea is wrong back inside the level, beyond the retest's
-   low (high for a short): the stop read names it (`invalidation`). Aim for
-   the next swing (`m3.swingTargets`); the room to the next level
-   (`inTheWay`) is step 3's.
+  that holds (a pullback: `pullback-vs-reversal`), with a rejection candle
+  there (preferred), or a continuation displacement. Never anticipate it.
+- **7 Risk**: wrong back inside the level, beyond the retest's low (high
+  for a short): the stop read names it (`invalidation`). Target the next
+  swing (`m3.swingTargets`); the room to the next level (`inTheWay`) is
+  step 3's.
 - **9 Manage**: a close back inside the level means the breakout failed:
-   invalidation. A CHoCH against the trade on its timeframe or higher
-   (`bos-vs-choch`) is one too.
+  invalidation. A CHoCH against the trade on its timeframe or higher
+  (`bos-vs-choch`) is one too.
 
 **Paired with `rejection`**: a failed breakout (a close back inside)
 is the setup for a rejection the other way.
