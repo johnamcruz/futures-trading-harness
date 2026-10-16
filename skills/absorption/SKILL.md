@@ -23,6 +23,7 @@ progress (`(c-o)`, `m3.bar.rangeAtr`, whether price got past the level).
   its neighbours (hypothesis: about 1.5 times) with little progress, or
   several bars pushing into it on rising volume with no close beyond. A
   push down absorbed at support favours longs; up at resistance, shorts.
+  Its entry read: `<tf> absorption at <level> up|down`.
 - **Climax**: a very wide bar on very high volume after an extended move,
   often with a long wick: evidence against more of that move.
 - **Not absorption**: high volume with large progress (momentum); low
@@ -40,10 +41,10 @@ them): `broker-bar-fields`. Never derive one from OHLCV; without them,
 ## Examples
 
 ```text
-Take: three bars into prior VAL 21480.00 on V 2,400 / 2,650 / 2,900 (about 1,100 before);
-  (c-o) -1.25 / +0.50 / +0.75, no close below. Read: absorption, longs, beside
-  at prior val, 3m rejected prior val up. Priority order: room -> take.
-Skip: the same read alone (no read form, so no setup read): compose_check refuses.
+Take: a 15m rejection of prior VAL 21480.00, then 3m bars into it on V 2,400 / 2,650 / 2,900
+  (about 1,100 before); (c-o) -1.25 / +0.50 / +0.75, no close below. Reads: at prior val,
+  15m rejected prior val up, 3m absorption at prior val up. Priority order: room -> take.
+Skip: the absorption read alone, no setup read: compose_check refuses.
   Priority order (step 1): skip.
 Loser: absorption at 21480.50; long at 21480.75, stop 21474.25 (6.50 pts = 26 ticks,
   $13.00 on 1 MNQ); closes through on rising volume. -26 ticks, -$13.00.

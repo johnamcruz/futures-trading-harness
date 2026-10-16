@@ -82,32 +82,26 @@ as a step names them.
 **Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
 the `bar-briefing` skill): this bar's analysis by timeframe, computed once by
 the runner (the multi-timeframe read with the alignment per side, the trend
-rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
+rule, the setups to check, the snapshot's levels, VWAP,
 participation and liquidity, the session window), each part with its version
 and how long it holds. Read it once per role and reuse it: no role re-runs
 `market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without a current briefing (interactively, or when the tool says none or old), the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced:** a trend strategy never enters
-against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
-only a strategy with `mtf: reversal` may fade it. The scan already drops
-such candidates and the order gate refuses them. In autonomous runs the
+(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced:** no entry against the prevailing trend
+(the highest of 4h, 1h, 15m with a trend), long or short alike: a composed
+one only on a true CHoCH its way at or above the trend's frame
+(`trade-lifecycle`), a rules one only with `mtf: reversal`. In autonomous runs the
 prompt states the recorded rule; interactively, `bars_fetch` with `record`
 (or `mtf_read` with `record` and `symbol`) records it (the gate refuses
 trend entries unless the recorded bar closed less than 15 minutes ago: fetch
-fresh bars, re-recording an old file doesn't help). Never
-argue a trend strategy into a counter-trend trade; a composed one goes
-against it only with a true CHoCH its way at or above the trend's
-frame (`trade-lifecycle`). Put the read for the side in the plan entry. A policy
+fresh bars, re-recording an old file doesn't help). Put the read for the side in the plan entry. A policy
 verdict is a ceiling, never an order.
 
-**The trigger is checked too.** The scan's `candidate` is the trigger: the
-gate refuses a rules strategy's entry unless that strategy fired, on that
-side, on a bar that closed at most 3 bars of its own timeframe ago, and
-never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min on 15m
-and 1h), per the signal record
-(the runner records every bar; interactively, `strategies_scan` with the
-bars file, `symbol`, and `record: true`). A different setup tag on the
-same trade is refused: enter only on the strategy that fired. A composed
-entry's trigger is this bar's compose record (`trade-lifecycle`).
+**The trigger is checked too.** A composed entry's is this bar's compose
+record (`trade-lifecycle`). A rules strategy's (none active): the scan's
+`candidate` on that side, on a bar that closed at most 3 bars of its own
+timeframe ago and never more than 45 minutes ago (3 min on 1m, 9 min on 3m), per the
+signal record (interactively, `strategies_scan` with `record: true`); enter
+only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"): the `lean-cycle` skill.
 

@@ -108,6 +108,10 @@ const LATE = [
   { from: "rationale:\"[protect] stop for ORB long filled at 21500.25\"}",
     to: "rationale:\"[protect] long filled at 21540.25\"}",
     reason: "the example is a composed entry (orb is retired: strategies/retired.json): a limit at the record's reference, its stop and target ticks, tick-correct (fix/skills-stale-examples)" },
+  { from: "Which strategy fired it reads from the signal record (`strategies_scan` with `record`), not the plan.", to: "A rules strategy's trigger it reads from the signal record, not the plan.",
+    reason: "fix/skills-match-code: no rules strategy is active (strategies/retired.json): the bar's facts are the briefing's, the signal record only a rules strategy's" },
+  { from: "Bars to a file: the runner's bars file, or `bars_fetch` `{symbol:\"MNQ\", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read` (`bar-briefing`) and `strategies_scan` with `record` (`strategy-tools`).", to: "The bar's facts: the bar briefing; without one, `bars_fetch` `{symbol:\"MNQ\", timeframe:3, record:true}` (`bar-briefing`).",
+    reason: "fix/skills-match-code: no rules strategy is active (strategies/retired.json): the bar's facts are the briefing's, the signal record only a rules strategy's" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

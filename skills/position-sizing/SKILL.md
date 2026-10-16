@@ -20,9 +20,10 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3. **Risk budget** = the smallest of:
-   - the strategy / plan $ risk,
-   - 25% of `remainingBeforeLimit` from `get_account_snapshot`,
-   - 10% of the trailing-drawdown cushion (balance − loss floor).
+   - the strategy / plan $ risk (a composed trade: at most its $300 cap),
+   - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
+   - 10% of the trailing-drawdown cushion (balance − loss floor), when
+     known (no attempt: none shown). Never ask for one in an autonomous run.
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
    wide for the budget: skip, or find a tighter, structure-based stop. Never
    shrink the stop to make the size work.
@@ -58,15 +59,12 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 7. **Half size** wherever the priority order (strategy-library) halves a
    trade, computed as it says there. Never round a half up. A composed
    trade is never halved: its size is the one you state, under the caps.
-8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
-   verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
-   for the strategy and side you chose and shows its working (the
-   `order-plan` skill); for a composed trade it plans the compose record
-   (`trade-lifecycle`; refused over its cap). Use its numbers
-   instead of computing them by hand. The budget (step 3) and the caps are
-   still your judgement: a budget below its risk is a skip, and a size you
-   are allowed to raise (30+ reviewed trades) changes only `size`, with the
-   risk scaling by it.
+8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
+   and 4 for a compose record (refused over its cap), a policy verdict or a
+   rules candidate; use its numbers, never your own. The budget (step 3)
+   and the caps stay your judgement: a budget below its risk is a skip; a
+   raised size (a rules setup with 30+ reviewed trades) changes only
+   `size`, the risk scaling with it.
 9. Write entry, stop, size, and $ risk into the plan.
 
 ## Examples

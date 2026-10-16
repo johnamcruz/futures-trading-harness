@@ -42,13 +42,17 @@ const ALLOWED = [
 const ADDED_ROWS = [
   { row: '`[combine] <account>: N losing trades in a row this session, at the loss streak stop (loss_streak_stop N): no new entries until the next session`',
     reason: 'feat/prop-portfolio-missing (owner-approved): the account rulebook\'s loss streak stop, a new [combine] refusal' },
+  { row: '`[loss-streak] N losses in a row. Cooling down for M min more`', reason: 'fix/skills-match-code: the gate\'s loss-streak cooldown (order-gate.js) had no Do row' },
+  { row: '`[briefing-age] Stale data: …` (or no bar briefing)', reason: 'fix/skills-match-code: the gate\'s stale-briefing refusal (order-gate.js briefingAgeRefusal) had no row' },
+  { row: '`[modify-size] …`', reason: 'fix/skills-match-code: the modify_order size refusal (order-gate.js evaluateModify, account-gate.js) had no row' },
+  { row: '`[composed-reprice] …`', reason: 'fix/skills-match-code: a composed entry repriced worse than its record (order-gate.js evaluateModify) had no row' },
 ];
 
 // Each piece's rows, by label (or the message's start when it has no label), in order: a row in the wrong piece fails.
 const ROWS = {
-  'gate-refusals': ['Blocked by trading harness', 'order-pending', 'replay-clock', 'stop-defined', 'account-required', 'contract-specs', 'contract-specs', 'contract-specs', 'order-pending'],
+  'gate-refusals': ['Blocked by trading harness', 'order-pending', 'replay-clock', 'stop-defined', 'account-required', 'contract-specs', 'contract-specs', 'contract-specs', 'order-pending', 'loss-streak', 'briefing-age'],
   'gate-refusals-limits': ['combine', 'combine', 'combine', 'policy', 'strategy', 'strategy', 'strategy', 'strategy', 'max-order-size', 'max-order-size', 'max-risk', 'max-risk'],
-  'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run'],
+  'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run', 'modify-size', 'composed-reprice'],
   'gate-refusals-cycle': ['roles-ran', 'phase2-facts'],
 };
 

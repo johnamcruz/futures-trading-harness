@@ -50,7 +50,7 @@ Don't launch a role whose report the prompt gives (where the harness can, it
 refuses the launch; in a trade cycle it also refuses roles outside the desk,
 such as `strategy-researcher`): use that report for its
 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side,
-the candidates) from the bar briefing. Phase 2 reviews this bar's plan and
+the setups to check) from the bar briefing. Phase 2 reviews this bar's plan and
 is never cached. Cached reports count for the cycle's first entry only: after a
 `trade-executor` call, the next entry needs every role again, and where the
 harness refuses a cached role's launch (opencode) that is the next cycle: a
@@ -59,7 +59,7 @@ harness refuses a cached role's launch (opencode) that is the next cycle: a
 Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
 session timing, sizing and pacing), and neither the prompt's facts (the
-trend rule, which strategies fired) nor the bar briefing are their reports:
+trend rule) nor the bar briefing are their reports:
 the briefing is their input, not their analysis. In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
@@ -79,8 +79,8 @@ it names, and end the cycle the same way.
 
 | Role (agent file) | Returns |
 |---|---|
-| `market-structure-analyst` | Bias, swings, levels, structure strategies in play |
-| `trend-momentum-analyst` | Regime, indicator values, strategy scan results |
+| `market-structure-analyst` | Bias, swings, levels, breaks, candle reactions |
+| `trend-momentum-analyst` | Regime, indicator values, trend and momentum |
 | `volume-liquidity-analyst` | VWAP, participation, liquidity, sweeps |
 | `news-calendar-analyst` | Today's events, proposed blackouts. Premarket only: on trade cycles read `blackouts_list` instead, and run the analyst only when no blackout was recorded for today's scheduled events |
 | `risk-manager` (phase 1) | Account state, limits, budget, stand-down conditions |

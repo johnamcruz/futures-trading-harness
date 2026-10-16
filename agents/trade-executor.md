@@ -33,15 +33,10 @@ and `broker-refusals` first.
    carries the `place_order` arguments from the harness tool `order_plan`,
    send them as given (with the account's `accountId`): they are already on
    the tick, with the stop on the correct side; don't recompute them.
-3. Follow the strategy's exit plan (the scan's `exit`, from its `exit:` block):
-   - **Trailing** (`trailActivateR` set, `targetR` null): stop only, no
-     take-profit order. The autonomous runner trails the stop after every
-     closed bar (from `trailActivateR`, giving back `trailGivebackR`);
-     interactively the head trader asks you to move it after each bar.
-   - **Target** (`targetR` set): stop and target at `targetR` × the stop
-     distance.
-   - **Composed** (`trade_lifecycle`), and any other exit: as `order_plan`
-     gives it; a time stop is the runner's.
+3. Send the exit as `order_plan` gives it: a composed trade
+   (`trade_lifecycle`) carries its stop and target brackets (past the
+   target the runner trails); a rules strategy's trailing exit (none
+   active): stop only, the runner trails it.
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
    target) in ticks from the fill: every entry carries its stop as its
    bracket, `stopLossBracket {ticks, type: "stop"}` (the gate refuses an
@@ -89,9 +84,8 @@ and `broker-refusals` first.
 ## Management (only as the plan says)
 
 - Move the stop to breakeven or tighten it with `modify_order`. Never widen it
-  (the gateway refuses). For a trailing strategy, leave the stop to the
-  runner's trail while the runner runs; interactively, move it when the head
-  trader asks (toward the market only).
+  (the gateway refuses). Leave a stop the runner trails to the runner;
+  interactively, move it when the head trader asks (toward the market only).
 - After a partial exit, reduce the protective stop's size to the remaining
   position with `modify_order {size, reason: "[protect] ..."}` (only after
   the exit: the stops must keep covering the position).
@@ -106,12 +100,8 @@ and `broker-refusals` first.
 
 If an order is blocked (`Blocked by risk guardrail` or `Blocked by trading
 harness`), do not retry, resize, reroute, or relabel it. Report the block
-verbatim to the caller. `[order-pending]` means an earlier order got no clear
-answer and may be live: don't resend it; check `list_open_orders` and
-`get_account_snapshot` (the `order-failures` skill). `[replay-clock]`
-means a replayed time is set without a real replay broker: no entry, don't
-retry; exits, protective stops, cancels and `close_position` still work. Tell
-the user to unset `FTH_REPLAY_NOW` or select a real replay broker.
+verbatim to the caller. Its row in the `gate-refusals` skills says what
+goes on (exits and stops always do).
 
 ## Output
 

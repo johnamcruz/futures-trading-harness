@@ -14,12 +14,11 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 
 - **Read each setup's facts first**: a composed setup's are your reads and
   the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
-  candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3`
-  `candidates`. They are context, not a verdict: judge the setup by its
-  strategy's STRATEGY.md (`strategies_show`: its context filter and skip
-  rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`,
-  its min R:R). A setup the trend rule allows, `aligned` for its side, with
-  room past what it needs and confluence with it is the opportunity this
+  rules candidate's (none active), `facts`, `inTheWay`, `needR` and
+  `blocked` in `m3` `candidates`. They are context, not a verdict: judge by
+  the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules
+  strategy: also its STRATEGY.md). A setup on that side, with room past
+  what it needs and confluence with it is the opportunity this
   harness looks for, when the rest of this skill agrees and it isn't
   `blocked`: the strategy's normal size (position-sizing and the prop
   budget), and let its own exit work (don't bank before its trail or
@@ -39,26 +38,19 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   the size it allows; no trade when there is none, it says skip, or the
   order says no. Never tag the component (`trade_lifecycle`) yourself; the
   gate refuses it.
-- **Track record.** Each strategy that fired carries its record: the
-  recorded backtest (overall, in this regime, at this hour, when there are
-  enough trades) and your reviewed live trades. Weigh the signal by it: a
-  strategy with no recorded edge, a negative slice for this regime or hour,
-  or live results well under its backtest is a smaller trade or no trade;
-  say which in the plan. Under 30 trades is anecdotal, not evidence. No
-  record ("no backtest recorded") is the weakest case, not a neutral one, and
-  a STALE record (the strategy changed since) doesn't describe it.
+- **Track record** (a rules strategy; none active): weigh its signal by
+  its recorded backtest and reviewed live trades: no recorded edge, a
+  negative slice for this regime or hour, or live results well under it is
+  a smaller trade or none. Under 30 trades is anecdotal; "no backtest
+  recorded" is the weakest case; a STALE record doesn't describe it.
+  `trade_lifecycle` has no backtest record: none of this cuts its size.
 - **Confluence.** A composed setup's: the count of `confluence-counting`.
-  Rules strategies firing the same side on the bar (`confluence.with`) are a
-  stronger setup; both sides (`confluence.against`) a conflict: stand aside
-  (the priority order, step 6: no exception). Trust the backtest's
-  `byConfluence` over a feeling that agreement helps.
-- Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in
-  this direction on the last closed bar (candidates are already in session and
-  in regime: the trigger fired), or a manual strategy whose trigger you
-  verified on closed bars and whose `regimes` fit; quote the trigger in the
-  plan. The gate checks a rules strategy's trigger from the signal record;
-  a manual strategy's trigger is yours and risk-manager's to verify. `show` it (strategy-library) and check every context
-  filter and skip rule against the reports.
+  Rules strategies (none active) firing both sides (`confluence.against`):
+  stand aside (priority step 6: no exception).
+- **The setup**: compose it (`trade-lifecycle`). A rules strategy (none
+  active): at most one scan `candidate` this direction on the last closed
+  bar, or a manual strategy whose trigger you verified on closed bars;
+  quote the trigger; check its context filter and skip rules.
 - **Check every reason against the facts** before you decide (a plan, a
   skip, or no trade): state the decision and its reasons, then call
   `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`

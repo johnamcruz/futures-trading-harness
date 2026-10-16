@@ -14,24 +14,23 @@ Strategies are Markdown documents, not code. Each lives at
 
 ## How It Works
 
-### Apply a strategy
+### Apply a rules strategy (none active; composed: `trade-lifecycle`)
 
 1. `strategies_show` it and read the whole body.
-2. A trade needs, in order (and then the priority order below sizes or skips it): the trigger has fired on a closed bar (scan
-   lists it as a candidate, or the manual trigger described in the body), every
-   context filter holds, no "Skip when" rule applies, and planned R:R ≥
-   `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
-   `min_rr` stands in for it).
-3. Stop from `risk.stop`: `atr:<k>` or a distance expression → the scan's
-   `stopDistance`; `structure`/`swing` → beyond the level the body names.
-   Round the stop away from the entry to the tick (a long's stop down, a short's up), the
-   target toward it; bracket ticks = `ceil(distance / tickSize)`.
-   `atr:<k>` means k × ATR(20) on the strategy's bars.
+2. A trade needs, in order (then the priority order sizes or skips it):
+   the trigger fired on a closed bar (a scan candidate, or the body's
+   manual trigger), every context filter holds, no "Skip when" rule
+   applies, and planned R:R ≥ `risk.min_rr` (a trailing exit:
+   `trailActivateR` ≥ `min_rr`).
+3. Stop from `risk.stop`: `atr:<k>` (k × ATR(20) on its bars) or a distance
+   expression → the scan's `stopDistance`; `structure`/`swing` → beyond the
+   level the body names. Round the stop away from the entry to the tick,
+   the target toward it; bracket ticks = `ceil(distance / tickSize)`.
 4. Tag the plan and the order `setup:<name>`.
 
 ### The priority order: the rule for every setup
 
-The rule for every setup. A verdict is a ceiling on size, never an order. Contradicting
+A verdict is a ceiling on size, never an order. Contradicting
 facts mean no trade; confluence means trade. Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
@@ -51,14 +50,14 @@ stated size stands under the code's caps.
 3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
    before the room it needs (`needR`) → no trade. A composed trade's
    room: its R:R to the first real level (at least `risk.min_rr`).
-4. **The multi-timeframe read for its side**: `aligned` → full;
-   `pullback` → no trade until the trigger timeframe turns back with the
+4. **The multi-timeframe read for its side**: a rules strategy:
+   `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the
    bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a
-   non-reversal setup → no trade. Composed: `counter`
-   with step 2's CHoCH is a reversal.
+   non-reversal setup → no trade. Composed: the side rule
+   (`htf-to-ltf`).
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
-6. **Confluence**: another strategy firing the other side → no trade;
+6. **Confluence** (rules strategies): another firing the other side → no trade;
    confluence with it supports the full size.
 7. **Secondary context** (the VWAP side, the lunch lull, participation):
    cuts to half, never vetoes alone.

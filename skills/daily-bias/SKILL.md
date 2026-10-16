@@ -29,9 +29,9 @@ The `bias` (long, short, or neutral) weights the higher timeframes more
 
 ### The levels
 
-The prior RTH day's high and low are in the briefing (`timeframe-sources`).
-The daily and 4-hour swing highs and
-lows are not in it: take them from `mtf_read` (premarket's daily read).
+The prior RTH day's high and low and the 4h swings are in the briefing
+(`timeframe-sources`, `m3.swingTargets`); the daily swings only in
+`mtf_read`: no target read.
 
 ### Today's bias, step by step
 
@@ -71,8 +71,8 @@ trend, trend strategies wait; it never points at a side the rule refuses.
 
 ```text
 Daily UP, 4h UP, 1h UP, 15m DOWN; bias long (score 8 of ±10).
--> Game plan headline: bias long. The daily swing high 21720.50 is the target above,
-   69.50 points (278 ticks, $139.00 per MNQ) over 21651.00.
+-> Game plan headline: bias long. The 4h swing high 21720.50 is the target above
+   (`target 4h swing 21720.50`), 69.50 points (278 ticks, $139.00 per MNQ) over 21651.00.
 ```
 
 NQ, back-adjusted CSV prices:
