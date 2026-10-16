@@ -735,7 +735,7 @@ function summaryLines(b, et) {
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
-  const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et }) : null;
+  const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
   if (check) out.push(check);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);

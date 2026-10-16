@@ -43,14 +43,17 @@
  *   quietPick({ seed, symbol, bar, rate })     whether a bar is in the quiet sample
  *   selectBar({ practice, candles, symbol, bar, barClose, open })   { run, why, moment, reason }
  *   practiceLine(practice)                     one line naming the mode, for reports
- *   checkLine(candles, { barClose, et, setupTf })   the briefing's "Setups to check" line (the setup moment, as the model
- *                                             reads it), or null: no moment, or no completed setup candle
+ *   checkLine(candles, { barClose, et, setupTf, entries, max })   the briefing's "Setups to check" line (the setup
+ *                                             moment, as the model reads it), or null: no moment, no completed setup
+ *                                             candle, or no entries in this window
  */
 
 const crypto = require('crypto');
 
 const MODES = Object.freeze(['setup-focus']);
 const SM = require('../tunables').replay().setupMoments; // config/replay.json setupMoments
+// The reactions a "Setups to check" line lists: the candle lines' own cap (candle-facts.js MAX_LEVELS).
+const MAX_CHECKS = require('../tunables').analysis().candles.maxLevels;
 const SETUP_TFS = SM.setupTfs;
 const LEVEL_SETS = Object.freeze(['key', 'wide']);
 const REACTION_KINDS = Object.freeze(['rejected', 'broke']);
@@ -153,13 +156,22 @@ function practiceLine(p) {
  * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
  * composes and checks it, and passes unless every read is true.
  */
-function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf } = {}) {
+function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS } = {}) {
+  // No entries in this window: nothing to compose now (the gate refuses one), so no line.
+  if (entries !== 'allowed') return null;
   const m = setupMoment(candles, { setupTf, barClose });
   if (!m.moment) return null;
-  const side = d => (d === 'up' ? ' -> long' : d === 'down' ? ' -> short' : '');
-  const what = m.reactions.map(r => `${r.rel} ${r.name}${Number.isFinite(r.price) ? ` ${r.price}` : ''}${side(r.dir)}`).join('; ');
+  const key = tfLabel(setupTf);
+  const side = d => (d === 'up' ? ' (long)' : d === 'down' ? ' (short)' : '');
+  // In the candle lines' read form ("15m rejected overnight high down"), so a read copied from it parses; a level
+  // whose name carries its price isn't priced twice; the same reaction once; the strongest first (setupMoment's order,
+  // the one the curated lists score), at most `max`, as the candle lines cap their levels.
+  const seen = new Set();
+  const shown = m.reactions.filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
+  const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? ` ${r.price}` : '');
+  const what = shown.map(r => `${key} ${r.rel} ${r.name}${priced(r)}${r.dir ? ` ${r.dir}` : ''}${side(r.dir)}`).join('; ');
   const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
-  return `- Setups to check (the ${tfLabel(setupTf)} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
+  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
 }
 
 module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine };

@@ -128,8 +128,21 @@ test('checkLine: the setup moment as the briefing says it: each reaction, the si
   const candles = { '15m': candle({ relations: [{ name: 'overnight high', price: 21650.25, rel: 'rejected', dir: 'down' }], fvgRelations: [{ name: '1h fvg low', price: 21600.5, rel: 'rejected', dir: 'up' }] }) };
   const et = iso => new Date(iso).toISOString().slice(11, 16);
   // The reaction bar: the 15m candle closed with this bar, so an entry read needs a later close (the same-candle rule).
+  // In the candle lines' read form ("15m rejected <level> <dir>"), so a read copied from it parses.
   assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et }),
-    '- Setups to check (the 15m candle closed 14:45): rejected overnight high 21650.25 -> short; rejected 1h fvg low 21600.5 -> long; this bar is the reaction: an entry read needs a later close. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.');
+    '- Setups to check (the 15m candle closed 14:45): 15m rejected overnight high 21650.25 down (short); 15m rejected 1h fvg low 21600.5 up (long); this bar is the reaction: an entry read needs a later close. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.');
+  // A broke reaction; a level whose name carries its price is priced once; a null direction states no side.
+  const more = { '15m': candle({ relations: [{ name: '1h swing low 2264.2', price: 2264.2, rel: 'broke', dir: 'down' }, { name: 'IB high', price: 2290, rel: 'broke', dir: null }] }) };
+  assert.match(M.checkLine(more, { barClose: CLOSE, et }), /: 15m broke 1h swing low 2264\.2 down \(short\); 15m broke IB high 2290; this bar/);
+  // The same reaction once, the strongest first, at most `max` (the candle lines' cap).
+  const many = { '15m': candle({ relations: [
+    { name: '1h swing low 2265.6', price: 2265.6, rel: 'broke', dir: 'down' }, { name: '15m swing low 2265.6', price: 2265.6, rel: 'broke', dir: 'down' },
+    { name: 'prior POC', price: 2270, rel: 'broke', dir: 'down' }, { name: 'prior VAL', price: 2268, rel: 'broke', dir: 'down' }, { name: 'IB low', price: 2266, rel: 'broke', dir: 'down' } ] }) };
+  const capped = M.checkLine(many, { barClose: CLOSE, et, max: 2 });
+  assert.deepStrictEqual((capped.match(/15m broke/g) || []).length, 2);
+  assert.match(capped, /: 15m broke 1h swing low 2265\.6 down \(short\); 15m broke prior POC 2270 down/);
+  // No entries in this window: no line (the gate refuses one; nothing to compose now).
+  assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et, entries: 'none' }), null);
   // A later close inside the same 15m candle's window: a confirmation close.
   assert.match(M.checkLine(candles, { barClose: CLOSE + 3 * 60000, et }), /a confirmation close: the entry reads from this bar\./);
   // No reaction at a key level, or no completed setup candle: no line (never an invented setup).

@@ -398,9 +398,10 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false } = {}) {
-  // Manage-only is stated once, in the instruction's mode.
-  if (manageOnly) return '';
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false, entryBlocked = null } = {}) {
+  // Manage-only is stated once, in the instruction's mode; a lane that fails closed (its briefing can't be built) says
+  // its own "no entry on this bar", never an invitation to compose there.
+  if (manageOnly || entryBlocked) return '';
   // No scan: the reason is in the "Context unavailable" line.
   if (!Array.isArray(scan)) return '';
   const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
@@ -568,14 +569,14 @@ function prompts(cfg, now, root = '') {
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
       // already described this cycle, which adds only its own bars and signals.
-      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, minutes = cfg.timeframe, repeat = false }) =>
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, entryBlocked = null, minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
         ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
         + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
-        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe }));
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe, entryBlocked }));
       const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
