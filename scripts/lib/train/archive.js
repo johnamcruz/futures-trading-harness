@@ -103,6 +103,7 @@ function prBody(entry, { loopId }) {
     '### Before merging', '',
     '- [ ] `npm run verify` passes (run it after the loop and any replay have stopped)',
     '- [ ] Adversarial review of the whole diff (CLAUDE.md, "Before a pull request")',
+    '- [ ] Trim any skill this change grew past its byte cap (scripts/lib/skill-caps.js; a probe edit may grow one by probeEdit.growBytes) and any role-prompt size pin it moves, back to the cap: basics-skills and the prompt pins fail otherwise',
     '- [ ] The owner approves the change (R25)', '',
   ].filter(x => x !== null).join('\n').replace(/\n{3,}/g, '\n\n');
 }

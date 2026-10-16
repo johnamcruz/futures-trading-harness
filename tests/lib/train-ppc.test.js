@@ -204,6 +204,12 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   const big = tree(`${TEXT}${'- filler line\n'.repeat(300)}`);
   assert.deepStrictEqual(PE.styleErrors(edit('- line one', '- line one, grown'), { root: big }), [], 'a few bytes past its size');
   assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(Math.ceil(PE.GROW_BYTES / 14) + 1)}`), { root: big }).join(), new RegExp(`already over 3400: it may grow at most ${PE.GROW_BYTES} past`));
+  // The boundary: as many style-valid lines as fit within GROW_BYTES pass; one line more is refused.
+  const unit = '- grow → more\n';
+  const fit = Math.floor(PE.GROW_BYTES / Buffer.byteLength(unit));
+  const pad = n => edit('- line one', `- line one\n${unit.repeat(n)}`.replace(/\n$/, ''));
+  assert.deepStrictEqual(PE.styleErrors(pad(fit), { root: big }), []);
+  assert.match(PE.styleErrors(pad(fit + 1), { root: big }).join(), /it may grow at most/);
   assert.deepStrictEqual(PE.styleErrors(edit('- line one\n', ''), { root: big, kind: 'removal' }), []);
   // The cap is the skill's own, from the one source the basics-skills test reads (a setup has more room).
   const setup = tmpDir();
