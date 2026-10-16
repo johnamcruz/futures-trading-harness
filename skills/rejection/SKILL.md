@@ -29,6 +29,8 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 **Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6),
 with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
 
+By PLAN step:
+
 - **1 HTF**: the 1h and 15m bias (`h1.h1.trend`, `m15.frame.trend`),
   `trend-vs-range`.
 - **3 Location**: price at a key level (`levels-and-reactions`; the

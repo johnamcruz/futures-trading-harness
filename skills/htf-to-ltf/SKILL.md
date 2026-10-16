@@ -20,18 +20,18 @@ daily read (premarket's) is context, never a second alignment.
 ### 1. Read the alignment
 
 Highest timeframe down, per side (`m15.alignment`; read
-`read <side> <label>`). Step N: the priority order (strategy-library).
+`read <side> <label>`). Priority step N: the priority order's step N (strategy-library).
 
 | Label | Means | Do |
 |---|---|---|
-| `aligned` | none against, most with | Step 4 sizes it; with room to its trail activation and confluence (candidate `facts`): the opportunity |
-| `pullback` | all but the lowest with it, the lowest against: the setup timeframe is pulling back | Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then step 4 sizes it. Never enter while it still moves against you |
-| `mixed` | disagree, no clear pullback | Step 4 sizes it. Target the nearest opposing level; skip in a quiet session |
-| `counter` | the highest against it | Step 4; a reversal at a higher-timeframe level is step 2, and the plan says why |
+| `aligned` | none against, most with | Priority step 4 sizes it; with room to its trail activation and confluence (candidate `facts`): the opportunity |
+| `pullback` | all but the lowest with it, the lowest against: the setup timeframe is pulling back | Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sizes it. Never enter while it still moves against you |
+| `mixed` | disagree, no clear pullback | Priority step 4 sizes it. Target the nearest opposing level; skip in a quiet session |
+| `counter` | the highest against it | Priority step 4; a reversal at a higher-timeframe level is priority step 2, and the plan says why |
 
 - Composed trade: the label is a reason in its plan, never a cut.
 - A composed entry against the prevailing trend needs `trade-lifecycle`'s
-  CHoCH tier (step 2).
+  CHoCH tier (priority step 2).
 
 ### 2. Levels flow down
 

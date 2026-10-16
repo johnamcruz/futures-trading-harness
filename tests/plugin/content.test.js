@@ -291,7 +291,7 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
     /The refused `trade-executor` call ends the round: report\s+the block, end the cycle \(step 6\)/,
     /Autonomous: no\s+stand-in; no reports, no entry\./,
     /until\s+`risk-manager` has returned twice this cycle \(phase 1 and phase 2\)/,
-    /structure: bias, the level entry and stop sit against;/, /volume-liquidity, session-timing: VWAP side, value area or POC;\s+`inTheWay` \(compose record's or candidate's: first level its way, in\s+points and R of its own stop\): room to the target or trail activation\?/,
+    /structure: bias, the level entry and stop sit against;/, /volume-liquidity, session-timing: VWAP side, value area or POC;\s+`inTheWay` \(compose record's or candidate's: first level its way, in\s+points and R of its own stop\): check room to the target or trail activation\./,
     /multi-timeframe alignment for the side \(aligned, pullback, mixed,\s+counter\) and the size it implies;/, /Can't name them: not ready\./,
   ]) assert.match(ts, re);
   assert.match(read('skills/gate-refusals-cycle/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
@@ -326,7 +326,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   // The example's short against the trend is the priority order's step 2 (crt_1h retired; D2 for a composed one).
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /Short: counter; a trend strategy's is refused \(scan and gate\); a composed\s+one needs a 1h CHoCH down and a 4h rejection \(`trade-lifecycle`\)\./);
   assert.match(rm, /`m3` `candidates` is `null` \(the scan failed or the bar wasn't\s+scanned\): VETO a rules strategy/);
-  assert.match(read('skills/htf-to-ltf/SKILL.md'), /Step N: the priority order \(strategy-library\)\.[^]*?\n\| `mixed` \|[^\n]*\| Step 4 sizes it\./);
+  assert.match(read('skills/htf-to-ltf/SKILL.md'), /Priority step N: the priority order's step N \(strategy-library\)\.[^]*?\n\| `mixed` \|[^\n]*\| Priority step 4 sizes it\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /`pullback` → no trade until the trigger timeframe turns back with the\s+bias \(a shift, a reclaim\), then full; `mixed` → half;/);
   assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a\s+15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection\./);
@@ -336,7 +336,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   const ts = read('skills/trade-session/SKILL.md');
   assert.match(ts, /\*\*Every cycle, first:\*\* `bar_briefing \{"symbol": "<SYMBOL>"\}` \(the\s+`bar-briefing` skill\)/);
   assert.match(ts, /Once per role, reused: no role re-runs `market_snapshot`,\s+`mtf_read` or `strategies_scan` for it\./);
-  assert.match(read('skills/role-round/SKILL.md'), /A report opens with `Data:`: the briefing versions used \(no current\s+briefing: the tools called\)\. No `Data:` line, or another bar's `m3`\s+version while this bar's briefing is current: it didn't read this bar;\s+rerun that analyst once, then stand aside\. An old briefing \(the tool says\s+so\) counts as none/);
+  assert.match(read('skills/role-round/SKILL.md'), /A report opens with `Data:`: the briefing versions used \(no current\s+briefing: the tools called\)\. No `Data:` line, or another bar's `m3`\s+version while this bar's briefing is current: it didn't read this bar;\s+rerun that analyst once; if it still doesn't, stand aside\. An old briefing \(the tool says\s+so\) counts as none/);
   assert.match(read('skills/timeframe-sources/SKILL.md'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`\s+skill \(use a current briefing; `mtf_read`[^)]*only for what it lacks:\s[^]*?`mtf_read` json's\)/);
   assert.match(read('skills/htf-to-ltf/SKILL.md'), /A plan's alignment and trend rule are the briefing's \(intraday frames\); a\s+daily read \(premarket's\) is context, never a second alignment\./);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /`bar_briefing` is the runner's file for this bar: read it once per\s+role, reuse it \(it doesn't change in the cycle\)/);
@@ -461,7 +461,7 @@ test('the priority order is written once, in strategy-library, and every role th
 test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
   // Line breaks fall differently in each document: compare with the whitespace collapsed.
   const flat = text => text.replace(/\s+/g, ' ');
-  const step = /\*\*Check every reason\*\* before any decision \(plan, skip, no trade\): state it with reasons, then once `reason_check \{"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"\}`\. It checks each reason against the briefing \(window and entries, trend rule per side, candidates and verdict, room vs needed, the side's MTF read\) and the attempt line, and lists each setup's priority-order steps: judge each step on its own\. - FALSE: name it, drop it, decide again from the facts\. - UNCHECKED, UNPARSED: check yourself; not false for that alone\./;
+  const step = /\*\*Check every reason\*\* before any decision \(plan, skip, no trade\): state it with reasons, then call once `reason_check \{"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"\}`\. It checks each reason against the briefing \(window and entries, trend rule per side, candidates and verdict, room vs needed, the side's MTF read\) and the attempt line, and lists each setup's priority-order steps: judge each step on its own\. - FALSE: name it, drop it, decide again from the facts\. - UNCHECKED, UNPARSED: check yourself; not false for that alone\./;
   // Only a FALSE reason is dropped: a true one the checker can't read (UNPARSED) stays.
   for (const doc of ['agents/risk-manager.md', ...TRADE_SESSION_SPLIT, 'skills/autonomous-trading/SKILL.md']) assert.doesNotMatch(flat(read(doc)), /no fact supports/, doc);
   const rm = read('agents/risk-manager.md');

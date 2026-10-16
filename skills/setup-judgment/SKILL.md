@@ -21,7 +21,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   `blocked`, rest of this skill agrees: the opportunity. Normal size
   (position-sizing, prop budget); let its exit work, no banking before its
   trail or target. The priority order decides, a policy verdict too.
-- Analysts: tabulate bias and confidence. Trade only if 2 of 3 market
+- Analysts: tabulate bias and confidence. Trade only if at least 2 of 3 market
   analysts agree and none is strongly opposed.
 - Regime: start from `m3` `regime` (trend-up, trend-down, range,
   transition; volatility). No narrative override; analysts disagree: say
@@ -48,7 +48,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   risk-manager's. `show` it (strategy-library); check every context filter
   and skip rule against the reports.
 - **Check every reason** before any decision (plan, skip, no trade): state
-  it with reasons, then once
+  it with reasons, then call once
   `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`.
   It checks each reason against the briefing (window and entries, trend rule per side,
   candidates and verdict, room vs needed, the side's MTF read) and the

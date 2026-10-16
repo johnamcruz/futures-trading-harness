@@ -23,14 +23,14 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
 3. **Positions first.** A position is open: only manage it. The runner has
    already cancelled leftover orders on flat contracts, trailed stops
    (initial until `trailActivateR`, then `trailGivebackR` behind the best
-   price; in the scan's `exit`) and closed trades open `exit.max_bars`.
+   price; in the scan's `exit`) and closed trades open for `exit.max_bars` bars.
    Never loosen its stop. Why a setup fired or not, earlier cycles: the
    `runner-logs` skill.
 
    The prompt (New York times; `trade-session` says how to weigh it):
    - The last 10 bars and cycle results (lanes: the `runner-lanes` skill).
      Reverse a recent decision only saying what changed. A result is a past
-     conclusion: the prompt's account or attempt line beats it; say so.
+     conclusion: the prompt's account or attempt line beats it; say the earlier result was wrong.
    - A history line: time, symbol, lane, action (entered, skipped = your
      pass, vetoed = the risk manager's veto, planned, managed, no-trade,
      flattened, blocked, error), setup, side, price, reason; then, from
@@ -38,7 +38,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
      -1R first, an entry's real R (open or closed; "unknown" or
      "unavailable": don't guess).
    - Spot patterns (a skipped setup that keeps reaching +1R; repeated
-     stops). Never chase the last outcome: this bar's setup and rules decide.
+     stops). Never chase the last outcome: a missed winner is no reason to enter, a stop no reason to skip; this bar's setup and rules decide.
    - Premarket plan. "Premarket plan unavailable": none yet; trade from the
      bars and skills (the runner retries between cycles; rarely in time on
      1-minute bars).

@@ -251,16 +251,16 @@ test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cyc
   const flatHtf = htf.replace(/\s+/g, ' ');
   for (const pin of [
     'A plan\'s alignment and trend rule are the briefing\'s (intraday frames); a daily read (premarket\'s) is context, never a second alignment.',
-    'Highest timeframe down, per side (`m15.alignment`; read `read <side> <label>`). Step N: the priority order (strategy-library).',
+    'Highest timeframe down, per side (`m15.alignment`; read `read <side> <label>`). Priority step N: the priority order\'s step N (strategy-library).',
     'Composed trade: the label is a reason in its plan, never a cut.',
-    'A composed entry against the prevailing trend needs `trade-lifecycle`\'s CHoCH tier (step 2).',
+    'A composed entry against the prevailing trend needs `trade-lifecycle`\'s CHoCH tier (priority step 2).',
   ]) assert.ok(flatHtf.includes(pin), `the head trader reads: ${pin}`);
   for (const row of [
     '| Label | Means | Do |',
-    '| `aligned` | none against, most with | Step 4 sizes it; with room to its trail activation and confluence (candidate `facts`): the opportunity |',
-    '| `pullback` | all but the lowest with it, the lowest against: the setup timeframe is pulling back | Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then step 4 sizes it. Never enter while it still moves against you |',
-    '| `mixed` | disagree, no clear pullback | Step 4 sizes it. Target the nearest opposing level; skip in a quiet session |',
-    '| `counter` | the highest against it | Step 4; a reversal at a higher-timeframe level is step 2, and the plan says why |',
+    '| `aligned` | none against, most with | Priority step 4 sizes it; with room to its trail activation and confluence (candidate `facts`): the opportunity |',
+    '| `pullback` | all but the lowest with it, the lowest against: the setup timeframe is pulling back | Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sizes it. Never enter while it still moves against you |',
+    '| `mixed` | disagree, no clear pullback | Priority step 4 sizes it. Target the nearest opposing level; skip in a quiet session |',
+    '| `counter` | the highest against it | Priority step 4; a reversal at a higher-timeframe level is priority step 2, and the plan says why |',
   ]) assert.ok(htf.split('\n').includes(row), `the head trader reads: ${row}`);
   // Self-test: the instruction, not the name, counts; step 0 saying never to load it fails.
   const never = ts.replace(/Load\s+`htf-to-ltf` every cycle as\s+well/, 'Never load `htf-to-ltf`');

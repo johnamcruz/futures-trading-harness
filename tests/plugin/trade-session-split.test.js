@@ -315,8 +315,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // then lowered to their sizes after the owner-approved terse rewrite of the head trader's embedded skills
 // (docs/terse-head-skills: the roles that embed any of them).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 83933, 'news-calendar-analyst': 9875, 'risk-manager': 89310, 'strategy-researcher': 25690, 'trade-executor': 30086, 'trade-reviewer': 9183, 'trend-momentum-analyst': 53846, 'volume-liquidity-analyst': 47492 },
-  index: { 'market-structure-analyst': 39987, 'news-calendar-analyst': 9875, 'risk-manager': 74830, 'strategy-researcher': 25690, 'trade-executor': 30075, 'trade-reviewer': 9183, 'trend-momentum-analyst': 39213, 'volume-liquidity-analyst': 32001 },
+  full: { 'market-structure-analyst': 84035, 'news-calendar-analyst': 9875, 'risk-manager': 89310, 'strategy-researcher': 25690, 'trade-executor': 30086, 'trade-reviewer': 9183, 'trend-momentum-analyst': 53846, 'volume-liquidity-analyst': 47492 },
+  index: { 'market-structure-analyst': 40059, 'news-calendar-analyst': 9875, 'risk-manager': 74830, 'strategy-researcher': 25690, 'trade-executor': 30075, 'trade-reviewer': 9183, 'trend-momentum-analyst': 39213, 'volume-liquidity-analyst': 32001 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

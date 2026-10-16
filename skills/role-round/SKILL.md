@@ -20,7 +20,7 @@ description: Use when running a full cycle's roles - their inputs and reports, c
 - A report opens with `Data:`: the briefing versions used (no current
   briefing: the tools called). No `Data:` line, or another bar's `m3`
   version while this bar's briefing is current: it didn't read this bar;
-  rerun that analyst once, then stand aside. An old briefing (the tool says
+  rerun that analyst once; if it still doesn't, stand aside. An old briefing (the tool says
   so) counts as none: roles read the bars. A cached report names an earlier
   bar's versions by design; it counts (the runner checked its `m15`, `h1`,
   `day` parts are current).

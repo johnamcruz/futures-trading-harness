@@ -81,7 +81,7 @@ tag \`paper\` in plan-only mode.
   - structure: bias, the level entry and stop sit against;
   - volume-liquidity, session-timing: VWAP side, value area or POC;
     \`inTheWay\` (compose record's or candidate's: first level its way, in
-    points and R of its own stop): room to the target or trail activation?
+    points and R of its own stop): check room to the target or trail activation.
     Session window (\`m3\` \`windowText\`: entries allowed, until when);
   - trend-momentum: regime, momentum;
   - multi-timeframe alignment for the side (aligned, pullback, mixed,
@@ -192,7 +192,7 @@ numbers by the rules above and position-sizing.
 - Starting size: rules strategy 1 (position-sizing's size-1 rule); policy,
   the verdict cut to the attempt's size budget now (its most); composed,
   your stated size, refused over its cap (in an attempt, over the verdict).
-- Another size changes only \`size\`; risk scales. Rules strategy: smaller
+- A size other than your plan's changes only \`size\`; risk scales. Rules strategy: smaller
   for \`mixed\` or a reversal fade; larger only as position-sizing allows
   (30+ reviewed trades, positive expectancy, within budget and caps).
 - Manual strategy: no order_plan (stop from its STRATEGY.md); work its
