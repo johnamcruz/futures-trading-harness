@@ -52,8 +52,8 @@ CLIs can drive. The harness names no broker, firm or model.
 - **Replay** is the live harness on replayed data: only the data, the clock
   and the fills are simulated.
 
-The design in full: [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md) and
-[docs/OPERATING.md](docs/OPERATING.md).
+How it trades, in plain language: [docs/HOW-IT-TRADES.md](docs/HOW-IT-TRADES.md). The design in full:
+[docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md) and [docs/OPERATING.md](docs/OPERATING.md).
 
 ## Requirements
 
