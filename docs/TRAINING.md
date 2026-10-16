@@ -185,12 +185,13 @@ false. An explicit value that contradicts the preset (`"learning": false`,
 `"latency": false`, `"libraryDisplay": true`, `"riskRecordDisplay": true`, or
 a `prop` in stage 1) is refused, never silently changed. `stage` is part of the run's hashes.
 
-**A practice run.** The run's window must hold every moment of the list, and
-lie in one window of the split: here from a week after the data starts (so
-the 4h candle and VWAP exist on the first day) to just before
-practice-validate. The run trades the runner's default sessions, the ones the
-scan used. A narrower `sessions` leaves windows with no decision time, and
-the run is refused.
+**A practice run.** The run's window must hold every moment of the list
+(its start at or before the list's first window), and lie in one window of
+the split: here to just before practice-validate. A start in the bars' first
+days fails the preflight's facts check (no completed 4h candle and no VWAP in
+its sample briefing yet), so start once the bars have that history. The run
+trades the runner's default sessions, the ones the scan used. A narrower
+`sessions` leaves windows with no decision time, and the run is refused.
 
 ```json
 {
