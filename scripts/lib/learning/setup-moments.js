@@ -162,14 +162,16 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   const m = setupMoment(candles, { setupTf, barClose });
   if (!m.moment) return null;
   const key = tfLabel(setupTf);
-  const side = d => (d === 'up' ? ' (long)' : d === 'down' ? ' (short)' : '');
-  // In the candle lines' read form ("15m rejected overnight high down"), so a read copied from it parses; a level
-  // whose name carries its price isn't priced twice; the same reaction once; the strongest first (setupMoment's order,
-  // the one the curated lists score), at most `max`, as the candle lines cap their levels.
+  // Each reaction as the compose read that states it, quoted, exactly as composed-reads.js parses and checks it
+  // ("15m rejected overnight high down"): a copy is a TRUE read; its side and price outside the quotes (a bracket or a
+  // price inside a read fails it). One with no direction points no side: not a setup. The same reaction once; the
+  // strongest first (setupMoment's order, the one the curated lists score), at most `max` (the candle lines' cap).
   const seen = new Set();
-  const shown = m.reactions.filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
-  const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? ` ${r.price}` : '');
-  const what = shown.map(r => `${key} ${r.rel} ${r.name}${priced(r)}${r.dir ? ` ${r.dir}` : ''}${side(r.dir)}`).join('; ');
+  const shown = m.reactions.filter(r => r.dir === 'up' || r.dir === 'down')
+    .filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
+  if (!shown.length) return null;
+  const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? `, ${r.price}` : '');
+  const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)})`).join('; ');
   const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
   return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
 }
