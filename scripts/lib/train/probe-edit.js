@@ -30,6 +30,10 @@ const { skillByteCap } = require('../skill-caps');
 
 const KINDS = Object.freeze(['rewording', 'example', 'rule', 'removal']);
 const MAX_LINE = require('../tunables').training().probeEdit.maxLine; // config/training.json
+// An edit may grow its skill by at most this many bytes past its cap (or past its size, when already over it): room for
+// the rule or example a misread needs. Only an edit that helps is kept, and its PR trims the bytes back (the owner's rule
+// that no role prompt grows, met at merge). config/training.json probeEdit.growBytes.
+const GROW_BYTES = require('../tunables').training().probeEdit.growBytes;
 // A count or a share in words is a number too ("wait three bars", "half the range"). "one" is left out: it is mostly
 // a pronoun ("the one that", "no one"), and a lone "one" adds no threshold the text did not have.
 const NUMBER_WORDS = Object.freeze(['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
@@ -110,10 +114,10 @@ function styleErrors(proposal, { root, kind = null } = {}) {
     const max = skillByteCap(skill);
     const before = bodyBytes(t.before);
     const after = bodyBytes(t.after);
-    const cap = Math.max(max, before);
-    if (after > cap) errors.push(`${file}: the skill's body would be ${after} bytes, over its cap (${before > max ? `already over ${max}: it may not grow past ${before}` : max})`);
+    const cap = Math.max(max, before) + GROW_BYTES;
+    if (after > cap) errors.push(`${file}: the skill's body would be ${after} bytes, over its cap (${before > max ? `already over ${max}: it may grow at most ${GROW_BYTES} past ${before}` : `${max} + ${GROW_BYTES}`})`);
   }
   return errors;
 }
 
-module.exports = { KINDS, MAX_LINE, NUMBER_WORDS, splitTagged, tagErrors, styleErrors, numbers, bodyBytes, frontmatterEnd };
+module.exports = { KINDS, MAX_LINE, GROW_BYTES, NUMBER_WORDS, splitTagged, tagErrors, styleErrors, numbers, bodyBytes, frontmatterEnd };

@@ -334,8 +334,11 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    (in digits or words, such as "three bars" or "half"), condition → action
    lines of at most 120 characters, a removal that removes, the frontmatter
    untouched, and the skill's byte cap (`scripts/lib/skill-caps.js`, the
-   same caps the basics-skills test enforces). An edit probed before is
-   not run again.
+   same caps the basics-skills test enforces) plus a small growth budget
+   (`probeEdit.growBytes` in `config/training.json`): room for the rule or
+   example a misread needs, even in a skill already over its cap. Only an
+   edit that helps is kept, and its PR trims the bytes back, so no role
+   prompt grows at merge. An edit probed before is not run again.
 3. **Probe.** Each edit's tree replays the same curated moments with the
    same replay config and seed as the champion. Code pairs the two runs
    decision by decision on the probe half only

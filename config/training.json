@@ -57,6 +57,6 @@
   "skillCaps": { "skillBytes": 3400, "setupSkillBytes": 4000 },
   "compose": { "maxExpects": 300, "maxWhy": 1000 },
   "lessons": { "maxLines": 8, "maxChars": 1200 },
-  "probeEdit": { "maxLine": 120 },
+  "probeEdit": { "maxLine": 120, "growBytes": 150 },
   "skillUsage": { "top": 3 }
 }
