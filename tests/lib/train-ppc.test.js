@@ -632,6 +632,29 @@ test('probes first: a runnable proposal the champion\'s first replays leave no p
   assert.deepStrictEqual(st.iterations.map(x => [x.done, Boolean(x.nothing)]), [[true, true]]);
 });
 
+test('probes first: a crash after the champion\'s first replays and before the archive never drops the round\'s proposal on resume', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => score(opts).map(d => (/champion-t\d+$/.test(opts.runDir) ? { ...d, category: 'right' } : d));
+  // The panel's first build dies once: the champion's scorecard is done, the round's proposals are recorded, nothing archived.
+  const D = require('../../scripts/lib/train/decision-points');
+  const choose = D.choosePanel;
+  let failed = false;
+  D.choosePanel = (...a) => { if (!failed) { failed = true; throw new Error('killed'); } return choose(...a); };
+  try {
+    await assert.rejects(run(w), /killed/);
+    const mid = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+    assert.deepStrictEqual([mid.done['scorecard:t'], mid.done['1:propose']], [true, true]);
+    assert.deepStrictEqual(readArchive(w.paths.archive), []);
+    await run(w);
+  } finally {
+    D.choosePanel = choose;
+  }
+  const [e] = readArchive(w.paths.archive);
+  assert.deepStrictEqual([e && e.verdict, e && e.source], ['blocked', 'propose-probe-compose']);
+  assert.strictEqual(w.calls.proposeProbes.length, 1, 'the resume proposes nothing new');
+});
+
 test('a probe edit that breaks its tag or the owner\'s style never runs', async () => {
   const w = world({ proposals: [tagged('a', 'F7', 'rule', '- line one', '- line one\n- GOOD'), tagged('a', 'F1', 'rule', '- line one', '- wait 5 bars GOOD'), { error: 'not JSON', line: 'PROPOSAL {' }] });
   await run(w);

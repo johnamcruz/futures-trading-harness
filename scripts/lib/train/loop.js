@@ -415,7 +415,8 @@ async function iteration(ctx, n, { champion, champOf }) {
     ctx.save();
     return p;
   };
-  let panel = !ctx.loop.probe || ctx.state.done['scorecard:t'] ? await panelOf() : null;
+  // Lazy also on a resume of a round that already proposed: its proposals are archived (blocked if no panel), never dropped.
+  let panel = !ctx.loop.probe || (ctx.state.done['scorecard:t'] && !ctx.state.done[`${n}:propose`]) ? await panelOf() : null;
   const archive = A.readArchive(ctx.paths.archive);
   const proposals = await phase(ctx, `${n}:propose`, path.join(dir, 'proposals.json'), async () => {
     const raw = await proposalsFor(ctx, { n, flagged: panel ? panel.flagged : [], champion });
