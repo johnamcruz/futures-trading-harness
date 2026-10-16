@@ -94,6 +94,8 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   await none.hooks.snapshot(now);
   assert.strictEqual(prop.readAttempt(none.home, 'topstep_50k'), null);
   assert.match(none.logs.join('\n'), /combine\.js start --account topstep_50k/);
+  // It says what is refused: the policy's sized entries, never every entry (a composed one trades under its strategy's cap).
+  assert.match(none.logs.join('\n'), /refuses the entries its policy strategies size; a composed entry outside an attempt trades under its own strategy's cap/);
 });
 
 test('no end-of-day or position deadlock: a day before the attempt is not an error, and open positions are named', async () => {

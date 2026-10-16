@@ -71,7 +71,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     const balance = closeOf ? state.closeBefore(current, await client.fillsSince(accountId, new Date(closeOf)), closeOf) : current;
     for (const a of list) {
       if (!state.readAttempt(home, a.name)) {
-        warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
+        warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses the entries its policy strategies size; a composed entry outside an attempt trades under its own strategy's cap (node scripts/combine.js start --account ${a.name})`);
         continue;
       }
       // The fills since the day's anchor, to check the balance against (prop-state balanceCheck): only when flat,
