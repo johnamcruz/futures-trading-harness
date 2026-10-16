@@ -1435,7 +1435,7 @@ function createRunner(deps) {
           const ordered = multi ? [...run].sort((a, b) => a.lane - b.lane) : run;
           const repeat = x => multi && ordered.some(y => y !== x && y.symbol === x.symbol && ordered.indexOf(y) < ordered.indexOf(x));
           const items = ordered.map(x => ({
-            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [],
+            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [], entryBlocked: x.entryBlocked || null,
             bar: { ...x.bar, plan: entries && !repeat(x) ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
             ...(multi ? { minutes: x.minutes, repeat: repeat(x) } : {}),
             // The closed bars, for what happened since each recent decision (decision-history.js; never in the prompt).

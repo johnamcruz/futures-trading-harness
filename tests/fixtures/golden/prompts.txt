@@ -12,7 +12,7 @@ Autonomous cycle.
   M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
-  M2K: no rules strategy fired on this bar (the scan's candidates).
+  M2K: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).
   News: none in force; next CPI 2026-04-28 08:30 ET (blackout 08:25-08:45 ET).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.
@@ -55,7 +55,7 @@ Autonomous cycle.
   M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
-  M2K: no rules strategy fired on this bar (the scan's candidates).
+  M2K: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).
   News: none in force; next CPI 2026-04-28 08:30 ET (blackout 08:25-08:45 ET).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.
@@ -98,7 +98,7 @@ Autonomous cycle.
   M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
-  M2K: no rules strategy fired on this bar (the scan's candidates).
+  M2K: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).
   News: none in force; next CPI 2026-04-28 08:30 ET (blackout 08:25-08:45 ET).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.
@@ -161,7 +161,7 @@ Autonomous cycle.
   M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
-  M2K: no rules strategy fired on this bar (the scan's candidates).
+  M2K: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).
   News: none in force; next CPI 2026-04-28 08:30 ET (blackout 08:25-08:45 ET).
   End of day: the runner flattens every position at 15:50 ET (in 317 min); a trade must have room to work before then.
   3 more trade cycles today after this one, then manage-only.

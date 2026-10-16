@@ -34,7 +34,8 @@ Summary (M2K 3m, 06:33 ET):
 - Prior candle range (R = the 3m reference stop): 1h (closed 06:00) high 2285 (1.9 above, 6.22R), mid 2284.25 (1.1 above, 3.6R), low 2283.5 (0.4 above, 1.31R), low taken, closed below it; 4h (closed 06:00) high 2285 (1.9 above, 6.22R), mid 2281.8 (1.3 below, 4.26R), low 2278.6 (4.5 below, 14.73R).
 - FVGs near price or retested (completed candles): 15m bullish 2282.6-2283.5 (04:45) filled to 2283, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 2283.7 (closed 06:33, strong), no key-level sweep, OTE 2284.2-2284.6 (mid 2284.4), waiting; 15m bullish at 2280.4 (closed 03:15, weak, engulfing), no key-level sweep, a weak displacement: no zone; 1h bearish at 2284.7 (closed 02-19 21:00, strong, engulfing), no key-level sweep, OTE 2283.2-2284.8 (mid 2284), bounced.
-- Setups: none fired on this bar.
+- Setups to check (the 15m candle closed 06:30): "15m rejected prior POC down" (short, 2284.48); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
+- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:
 [m3] version m3@2025-02-20T11:33:00.000Z, valid until 06:36 ET
@@ -213,6 +214,7 @@ Summary (M2K 3m, 09:51 ET):
 - Next swing above (R = the 3m reference stop): 3m 2286.1 (24.9 pts, 249 ticks, 19.79R), 15m/1h 2286.5 (25.3 pts, 253 ticks, 20.11R), 4h 2288 (26.8 pts, 268 ticks, 21.31R); below: 3m/15m 2258.5 (2.7 pts, 27 ticks, 2.15R), 1h/4h 2254.4 (6.8 pts, 68 ticks, 5.41R).
 - Prior candle range (R = the 3m reference stop): 1h (closed 09:00) high 2282.7 (21.5 above, 17.09R), mid 2277.6 (16.4 above, 13.04R), low 2272.5 (11.3 above, 8.98R); 4h (closed 06:00) high 2275 (13.8 above, 10.97R), mid 2270.3 (9.1 above, 7.23R), low 2265.6 (4.4 above, 3.5R).
 - CISD (completed candles; a read, not a signal): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 15m bearish at 2273.5 (closed 09:45, strong, engulfing), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 1h bullish at 2265.3 (closed 02:00, strong, engulfing), no key-level sweep, zone void.
+- Setups to check (the 15m candle closed 09:45): "15m broke 15m fvg low down" (short, 2276.2); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
 - Setups:
   - fx_orb short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level in its way: round number at 0.95R; it needs 2R (the level comes first); confluence: none with it; price below the VWAP (its side). Stop 1.26 pts (its own 1R); needs 2R of room; levels ahead in its R: round number 2260 (1.2 pts, 0.95R), prior VAL 2257.9 (3.25 pts, 2.58R), prior RTH low / untested 1h swing low 2254.4 (6.8 pts, 5.41R).
 
@@ -304,6 +306,7 @@ Summary (M2K 3m, 10:06 ET):
 - Next swing above (R = the 3m reference stop): 3m 2269.6 (16.1 pts, 161 ticks, 11.51R), 15m 2286.1 (32.6 pts, 326 ticks, 23.31R), 1h/4h 2286.5 (33 pts, 330 ticks, 23.6R); below: none found.
 - Prior candle range (R = the 3m reference stop): 1h (closed 10:00) high 2286.1 (32.6 above, 23.31R), mid 2272.85 (19.3 above, 13.8R), low 2259.6 (6.1 above, 4.36R), low taken, closed below it; 4h (closed 10:00) high 2286.1 (32.6 above, 23.31R), mid 2272.85 (19.3 above, 13.8R), low 2259.6 (6.1 above, 4.36R), low taken, closed below it.
 - CISD (completed candles; a read, not a signal): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 15m bearish at 2273.5 (closed 09:45, strong, engulfing), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 1h bearish at 2272.2 (closed 10:00, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting.
+- Setups to check (the 15m candle closed 10:00): "15m rejected prior RTH close down" (short, 2267.1); "15m rejected prior VAH down" (short, 2269.26); "15m rejected prior POC down" (short, 2266.84); "15m broke opening range low down" (short, 2265.7); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
 - Setups:
   - fx_value_area_breakout short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level in its way: day low / session low at 0.07R; it needs 2R (the level comes first); confluence: none with it; price below the VWAP (its side). Stop 5.85 pts (its own 1R); needs 2R of room; levels ahead in its R: day low / session low 2253.1 (0.4 pts, 0.07R), round number 2250 (3.5 pts, 0.6R).
 

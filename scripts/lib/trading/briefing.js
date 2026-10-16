@@ -734,9 +734,13 @@ function summaryLines(b, et) {
   if (s5) out.push(s5);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
+  // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
+  const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
+  if (check) out.push(check);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
-  else if (!m3.candidates || !m3.candidates.length) out.push('- Setups: none fired on this bar.');
+  // Only rules setups fire; a composed one is the model's to read, so none fired is never "no setup".
+  else if (!m3.candidates || !m3.candidates.length) out.push('- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).');
   else {
     out.push('- Setups:');
     for (const c of m3.candidates) {

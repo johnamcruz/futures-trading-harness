@@ -43,12 +43,17 @@
  *   quietPick({ seed, symbol, bar, rate })     whether a bar is in the quiet sample
  *   selectBar({ practice, candles, symbol, bar, barClose, open })   { run, why, moment, reason }
  *   practiceLine(practice)                     one line naming the mode, for reports
+ *   checkLine(candles, { barClose, et, setupTf, entries, max })   the briefing's "Setups to check" line (the setup
+ *                                             moment, as the model reads it), or null: no moment, no completed setup
+ *                                             candle, or no entries in this window
  */
 
 const crypto = require('crypto');
 
 const MODES = Object.freeze(['setup-focus']);
 const SM = require('../tunables').replay().setupMoments; // config/replay.json setupMoments
+// The reactions a "Setups to check" line lists: the candle lines' own cap (candle-facts.js MAX_LEVELS).
+const MAX_CHECKS = require('../tunables').analysis().candles.maxLevels;
 const SETUP_TFS = SM.setupTfs;
 const LEVEL_SETS = Object.freeze(['key', 'wide']);
 const REACTION_KINDS = Object.freeze(['rejected', 'broke']);
@@ -144,4 +149,31 @@ function practiceLine(p) {
   return `setup-focused practice: cycles only at ${tfLabel(p.setupTf)} candles that ${(p.reactions || DEFAULTS.reactions).join(' or ')} a ${p.levels === 'wide' ? 'key or moving level' : 'fixed key level or the VWAP'}, and their confirmation window, a ${Math.round(p.quietSample * 100)}% quiet sample (seed ${p.seed}), every bar with something open, premarket and end of day; not comparable bar for bar with a full-day run`;
 }
 
-module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel };
+/**
+ * The setup moment as the model reads it in the bar briefing: the setup timeframe's last completed candle's reactions
+ * at key levels, each with the side it points, and whether this bar is the reaction (an entry read needs a later close:
+ * the gate's same-candle rule) or a confirmation close. The same moment setup-focused practice and the curated lists
+ * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
+ * composes and checks it, and passes unless every read is true.
+ */
+function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS } = {}) {
+  // No entries in this window: nothing to compose now (the gate refuses one), so no line.
+  if (entries !== 'allowed') return null;
+  const m = setupMoment(candles, { setupTf, barClose });
+  if (!m.moment) return null;
+  const key = tfLabel(setupTf);
+  // Each reaction as the compose read that states it, quoted, exactly as composed-reads.js parses and checks it
+  // ("15m rejected overnight high down"): a copy is a TRUE read; its side and price outside the quotes (a bracket or a
+  // price inside a read fails it). One with no direction points no side: not a setup. The same reaction once; the
+  // strongest first (setupMoment's order, the one the curated lists score), at most `max` (the candle lines' cap).
+  const seen = new Set();
+  const shown = m.reactions.filter(r => r.dir === 'up' || r.dir === 'down')
+    .filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
+  if (!shown.length) return null;
+  const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? `, ${r.price}` : '');
+  const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)})`).join('; ');
+  const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
+  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
+}
+
+module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine };
