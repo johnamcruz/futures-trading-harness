@@ -63,6 +63,9 @@ test('buildDecisions: entered from real fills, passed by counterfactual, refused
   assert.deepStrictEqual(out.map(d => d.decision), ['entered', 'passed', 'none', 'none', 'refused']);
   const [entered, passed, tried, nothing, refused] = out;
   assert.deepStrictEqual([entered.outcome.source, entered.outcome.R, entered.grade], ['fills', 1.5, 'win']);
+  // MAE and MFE from the bars wholly inside the trade and its exit: the low 99.5 (-0.25R), the exit 103 (+1.5R).
+  assert.deepStrictEqual([entered.outcome.maeR, entered.outcome.mfeR], [-0.25, 1.5]);
+  assert.deepStrictEqual([passed.outcome.maeR, passed.outcome.mfeR], [0, 2], 'the counterfactual\'s: filled inside the second bar (left out), out at its target');
   assert.deepStrictEqual([passed.outcome.source, passed.outcome.entryPrice, passed.outcome.exitReason, passed.outcome.R, passed.grade], ['counterfactual', 100, 'target', 2, 'missed-win']);
   assert.deepStrictEqual([tried.checked, tried.signatures.skill, nothing.checked], [1, null, 0]);
   assert.deepStrictEqual([refused.refusal, refused.side, refused.outcome.exitReason, refused.grade], ['trade-lifecycle-reads', 'short', 'target', 'refused-would-win']);
@@ -169,6 +172,9 @@ test('writeRunExperience: a finished practice run\'s log in its home; an unfinis
   assert.strictEqual(r.file, path.join(fs.realpathSync(home), 'experience', 'decisions.jsonl'));
   assert.deepStrictEqual([r.role, r.hidden], ['practice-train', false]);
   assert.deepStrictEqual(r.decisions.map(d => [d.decision, d.outcome && d.outcome.R]), [['entered', -0.75], ['none', null]]);
+  // From the run's own bars: the 14:03 bar wholly inside the trade (its high 101, +0.5R) and the exit (98.5, -0.75R).
+  assert.deepStrictEqual([r.decisions[0].outcome.maeR, r.decisions[0].outcome.mfeR], [-0.75, 0.5]);
+  assert.ok(r.decisions.every(d => d.curated === undefined), 'not a curated run');
   assert.deepStrictEqual([r.added, writeRunExperience(dir).added], [2, 0]);
   const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ ...m, finished: false }));
@@ -345,4 +351,56 @@ test('limitOutcome under a structure trail: the stop behind the last confirmed 1
   // Structure: one tick under the swing (104.75), out a tick worse (104.5); the loose 3R trail only at 102.5 (102.25).
   assert.deepStrictEqual([exit('structure').exitReason, exit('structure').exitPrice, exit('structure').R], ['trail', 104.5, 2.25]);
   assert.deepStrictEqual([exit('r').exitPrice, exit('r').R], [102.25, 1.125]);
+});
+
+test('MAE and MFE in R: the counterfactual\'s and the fills\' from the bars held whole and the exit; unknown is null', () => {
+  // Filled at 100 inside the first bar (left out: the dip before the fill is no MAE), 100 to 102 held (+1R), the 104
+  // target inside the third (left out; the exit +2R).
+  const win = E.limitOutcome(plan({ rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 102, 99.5, 101.75], [101.75, 104.25, 101.5, 104]] }));
+  assert.deepStrictEqual([win.maeR, win.mfeR], [-0.25, 2], 'the held bar\'s low 99.5');
+  // Stopped: the stop's fill with slippage (97.75, -1.125R); the stop bar itself left out.
+  const loss = E.limitOutcome(plan({ rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 100.5, 97.5, 98]] }));
+  assert.deepStrictEqual([loss.maeR, loss.mfeR], [-1.125, 0]);
+  const short = E.limitOutcome({ ...plan({ rows: [[99.5, 100.25, 99.25, 99.75], [99.75, 100, 95.75, 96]], side: 'short', stop: 102, target: 96 }) });
+  assert.deepStrictEqual([short.maeR, short.mfeR], [0, 2], 'a short, mirrored');
+  const unfilled = E.limitOutcome(plan({ rows: [[100.5, 101, 100.25, 100.75], [100.75, 101, 99.5, 100]] }));
+  assert.deepStrictEqual([unfilled.maeR, unfilled.mfeR], [null, null]);
+  // A round trip: the bars wholly inside it (99 low: -0.5R; 104 high: +2R) and its exit.
+  const rt = { openMs: ms(T0), closeMs: ms(T0) + 3 * M3, opens: [{ price: 100, size: 1 }], closes: [{ price: 103, size: 1 }] };
+  const rows = bars(T0, [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5], [103.5, 103.5, 102, 103], [103, 110, 90, 100]]);
+  const o = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
+  assert.deepStrictEqual([o.R, o.maeR, o.mfeR], [1.5, -0.5, 2], 'the bar after the exit never counts');
+  assert.deepStrictEqual([E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').maeR, E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').mfeR], [null, null], 'no bars: unknown, never the exit alone');
+  const open = E.tripOutcome({ ...rt, closeMs: null, closes: [] }, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
+  assert.deepStrictEqual([open.R, open.maeR, open.mfeR], [null, null, null]);
+});
+
+test('writeRunExperience: a curated run\'s lines are tagged curated (outcome-balanced: the experience index labels them)', () => {
+  const C = require('../../scripts/lib/learning/curated-lists');
+  const X = require('../../scripts/lib/learning/experience-index');
+  const { home, dir } = runDir({ times: [T0], fills: [], records: [record({ at: T0 })], barRows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5]] });
+  const pin = { fingerprint: 'f', list: 'mix', windows: [] };
+  const hash = require('crypto').createHash('sha256').update(JSON.stringify(pin)).digest('hex');
+  fs.mkdirSync(path.join(home, 'experience'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ kind: 'curated-pin', ...pin, hash }));
+  assert.ok(C.loadPinnedCurated(home), 'a valid pin');
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.ok(r.decisions.length && r.decisions.every(d => d.curated === true));
+  assert.ok(E.readDecisions(r.file).every(d => d.curated === true), 'in the log');
+  assert.strictEqual(X.buildIndex(E.readDecisions(r.file)).curated, r.decisions.filter(d => d.signatures.skill && d.decision !== 'none').length);
+});
+
+test('MAE and MFE: an entered trade and its counterfactual twin on the same bars measure the same', () => {
+  // A long limit at 100 filled inside the first bar, held two bars whole, out inside the fourth: at its target (104), or
+  // stopped (97.75). The twin: the same fill and exit as real fills, at times inside those bars.
+  const rows = [[100.5, 100.75, 99, 100.25], [100.25, 101.5, 99.25, 101], [101, 103, 100.5, 102.5]];
+  for (const [last, exit] of [[[102.5, 104.5, 102, 104], 104], [[100.5, 100.75, 97, 97.5], 97.75]]) {
+    const cf = E.limitOutcome({ ...plan({ rows: [...rows, last], expiry: 1 }) });
+    assert.strictEqual(cf.exitPrice, exit);
+    const rt = { openMs: ms(T0) + 60000, closeMs: ms(T0) + 3 * M3 + 60000, opens: [{ price: 100, size: 1 }], closes: [{ price: exit, size: 1 }] };
+    const real = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: bars(T0, [...rows, last]), tfMs: M3 });
+    assert.deepStrictEqual([real.R, real.maeR, real.mfeR], [cf.R, cf.maeR, cf.mfeR], `exit ${exit}`);
+  }
+  // Their values: the held bars' low 99.25 (-0.375R) and high 103 (+1.5R), the exit's +2R or -1.125R.
+  assert.deepStrictEqual([E.limitOutcome({ ...plan({ rows: [...rows, [102.5, 104.5, 102, 104]] }) }).maeR], [-0.375]);
 });

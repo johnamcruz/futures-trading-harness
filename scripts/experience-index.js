@@ -3,9 +3,10 @@
  * The experience index (the learning loop, the composed-entry design, section 4.3), built between sessions from
  * practice runs' experience logs; the runner never builds one. The user's to run, like replays.
  *
- *   node scripts/experience-index.js build <run home | decisions.jsonl> ... [--out dir] [--seed N] [--shuffle N]
+ *   node scripts/experience-index.js build <run home | decisions.jsonl> ... [--out dir] [--seed N] [--shuffle N] [--lists <doc>] ...
  *       every practice-train decision of the runs (any other month refuses the build) -> <out>/index-<hash>.json
- *       (default <FTH_HOME>/experience)
+ *       (default <FTH_HOME>/experience); a curated run's decisions weighted back to natural rates by its curated lists
+ *       document (--lists, matched by fingerprint: learning/curated-weights.js), else counted, never rated
  *   node scripts/experience-index.js pin <index file> <run home>   the run's own frozen copy and its hash
  *   node scripts/experience-index.js show <index file> [--top N]   the cells with enough samples (every day), best mean R first;
  *       the shuffled arm's index (--shuffle: its rows permuted across cells) is built from the same runs
@@ -21,8 +22,10 @@ const path = require('path');
 const { harnessHome } = require('./lib/paths');
 const { readDecisions, logFile } = require('./lib/learning/experience-log');
 const { buildIndex, writeIndex, readIndex, pinIndex, cellAt } = require('./lib/learning/experience-index');
+const { weighCurated } = require('./lib/learning/curated-weights');
+const { readLists } = require('./lib/learning/curated-lists');
 
-const USAGE = 'usage: experience-index.js build <run home | decisions.jsonl> ... [--out dir] [--seed N] [--shuffle N] | pin <index file> <run home> | show <index file> [--top N]';
+const USAGE = 'usage: experience-index.js build <run home | decisions.jsonl> ... [--out dir] [--seed N] [--shuffle N] [--lists <curated lists doc>] ... | pin <index file> <run home> | show <index file> [--top N]';
 
 function opt(argv, name) {
   const i = argv.indexOf(name);
@@ -36,7 +39,11 @@ function opt(argv, name) {
 const positional = (argv, flags) => argv.filter((a, i) => !a.startsWith('--') && !flags.includes(argv[i - 1]));
 
 function build(argv) {
-  const sources = positional(argv.slice(1), ['--out', '--seed', '--shuffle']);
+  const sources = positional(argv.slice(1), ['--out', '--seed', '--shuffle', '--lists']);
+  const docs = argv.map((a, i) => (a === '--lists' ? argv[i + 1] : null)).filter(a => a !== null).map(f => {
+    if (f === undefined || f.startsWith('--')) throw new Error(`--lists: give its value (${USAGE})`);
+    return readLists(path.resolve(f));
+  });
   if (!sources.length) throw new Error(USAGE);
   const seed = opt(argv, '--seed') !== undefined ? Number(opt(argv, '--seed')) : 1;
   if (!Number.isInteger(seed)) throw new Error('--seed: a whole number');
@@ -47,14 +54,15 @@ function build(argv) {
     if (!fs.existsSync(file)) throw new Error(`no experience log at ${file}`);
     const lines = readDecisions(file);
     runs.push({ runId: lines.length ? lines[0].runId : null, file, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') });
-    decisions.push(...lines);
+    // A curated run's log (its home pinned a curated list): every line tagged and weighted (or counted only).
+    decisions.push(...weighCurated(lines, { home: path.resolve(path.dirname(file), '..'), docs }));
   }
   const shuffle = opt(argv, '--shuffle') !== undefined ? Number(opt(argv, '--shuffle')) : null;
   if (shuffle !== null && !Number.isInteger(shuffle)) throw new Error('--shuffle: a whole-number seed');
   const doc = buildIndex(decisions, { runs, seed, shuffle });
   const out = writeIndex(opt(argv, '--out') ? path.resolve(opt(argv, '--out')) : path.join(harnessHome(), 'experience'), doc);
   const enough = Object.keys(doc.cells).filter(k => cellAt(doc, k).enough).length;
-  process.stdout.write(`[experience-index] ${doc.decisions} decision(s) from ${runs.length} run(s), ${Object.keys(doc.cells).length} cells (${enough} with enough samples), ${doc.months.from || '-'} to ${doc.months.to || '-'}; hash ${doc.hash.slice(0, 16)}\n[experience-index] wrote ${out}\n`);
+  process.stdout.write(`[experience-index] ${doc.decisions} decision(s) from ${runs.length} run(s), ${Object.keys(doc.cells).length} cells (${enough} with enough samples), ${doc.months.from || '-'} to ${doc.months.to || '-'}${doc.curated ? `; ${doc.curated} curated-run decision(s) weighted to natural rates${doc.curatedUnweighted ? `, ${doc.curatedUnweighted} without a weight (counted, never rated: give its --lists document, one that records its candidates' outcomes)` : ''}` : ''}; hash ${doc.hash.slice(0, 16)}\n[experience-index] wrote ${out}\n`);
   return 0;
 }
 

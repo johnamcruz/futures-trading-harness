@@ -90,6 +90,12 @@ node scripts/experience-index.js build <run home> ... --seed 1    # -> <FTH_HOME
 node scripts/experience-index.js show <index file>
 ```
 
+A curated run's moments are picked outcome-balanced, so its decisions are
+weighted back to natural rates by its curated lists document: add
+`--lists <curated lists file>` to the build. Without it, or for a document
+built before it recorded its candidates' outcomes, they are counted but never
+rated.
+
 A run names its index in `experienceIndex` and pins it when it starts. With
 no index, the run is the "without" arm.
 

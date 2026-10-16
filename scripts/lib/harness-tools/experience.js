@@ -14,8 +14,12 @@
  * Output, plain text, at most MAX_BYTES: the signatures and context; the cells, exact first (the read signature in
  * the full context), then the skill signature in the full context, one context key at a time, and alone; each with
  * n, days, the win rate and mean R with their 90% intervals (each cell one of many: an interval describes, it
- * proves nothing alone), last seen, `shifted` with its latest year's n, or `too few samples`; then up to three past
- * decisions of the same skill signature, the closest context first, with their reads, why, decision and outcome;
+ * proves nothing alone), the median MAE and MFE in R and their count (`too few` under the minimum; no interval, so the
+ * cap keeps the past decisions), last
+ * seen, `shifted` with its latest year's n, or `too few samples`; then up to three past decisions of the same skill
+ * signature, the closest context first, with their reads, why, decision and outcome (R, grade, MAE and MFE); a cell's
+ * effective n when it holds curated runs' decisions (reweighted to natural rates; the unrated ones, without a weight)
+ * and an example's `(curated)`, with one line saying what that means (CURATED_NOTE);
  * and the index's hash and the days it showed. With no index pinned, or no match, it says so. It never says what
  * to do.
  *
@@ -60,13 +64,25 @@ const SIMILAR = require('../tunables').training().experienceTool.similar;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^[a-z][a-z-]{0,31}$/;
 
+const CURATED_NOTE = 'n_eff: curated runs reweighted to natural rates; unrated: not weighable, never rated.';
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
+
+/** A cell's median MAE and MFE in R and their count (no interval: the cap keeps the examples), or `too few` (index: medianOf). */
+function excursionText(c) {
+  const { mae, mfe } = c;
+  if (!mae || !mfe) return '';
+  if (mae.median === null || mfe.median === null) return `, MAE/MFE too few (n ${Math.min(mae.n, mfe.n)})`;
+  return `, MAE ${f2(mae.median)} MFE ${f2(mfe.median)} (n ${mae.n === mfe.n ? mae.n : `${mae.n}/${mfe.n}`})`;
+}
+
+/** With curated decisions, a cell's effective n (its rates and medians weighted) and its unrated ones, or nothing. */
+const curatedText = c => (c.curated ? `; n_eff ${Number(c.nEff).toFixed(1)}${c.unweighted ? `, ${c.unweighted} unrated` : ''}` : '');
 
 function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
   if (!c.enough) return `- ${label}: ${c.note}`;
   const shift = c.shifted ? `, shifted (${c.latestYear.year}: mean R ${f2(c.latestYear.meanR)} over n ${c.latestYear.n}, the other sign)` : '';
-  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}], last ${c.lastSeen}${shift}`;
+  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
 }
 
 /** The skill signature with one step's skills replaced. */
@@ -83,7 +99,8 @@ const closeness = (a, b) => CONTEXT_KEYS.filter(k => a && b && a[k] !== null && 
 
 function exampleLines(ex) {
   const reads = ex.reads.map(r => `${r.step} ${r.read}${r.why ? ` (${r.why})` : ''}`).join('; ');
-  return `- ${ex.day} ${ex.side || ''} ${ex.decision}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}: ${reads}`;
+  const x = Number.isFinite(ex.maeR) && Number.isFinite(ex.mfeR) ? `, MAE ${f2(ex.maeR)} MFE ${f2(ex.mfeR)}` : '';
+  return `- ${ex.day} ${ex.side || ''} ${ex.decision}${ex.curated ? ' (curated)' : ''}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}${x}: ${reads}`;
 }
 
 /**
@@ -135,15 +152,17 @@ function riskSection(risk, before) {
 const riskError = risk => (risk && risk.error ? [`Your risk record: unreadable (${risk.error}); no risk record this lookup.`] : []);
 
 /**
- * Text at most MAX_BYTES: whole lines from the end of each optional block are dropped first: the risk record's, then
- * similar decisions, then the library's, all before the model's cells.
+ * Text at most MAX_BYTES, the least specific evidence dropped first: the risk record's lines, then the library's (not
+ * the model's own), then similar decisions down to the closest one, then the cells from the end (alternatives and any
+ * context before this context: the cells run most specific first), never the two "this context" cells.
  */
 function capped(head, cells, similar, tail, library = [], risk = []) {
   const join = () => [...head, ...cells, ...(similar.length > 1 ? similar : []), ...tail, ...(library.length > 1 ? library : []), ...(risk.length > 1 ? risk : [])].join('\n') + '\n';
   while (Buffer.byteLength(join()) > MAX_BYTES && risk.length > 1) risk.pop();
-  while (Buffer.byteLength(join()) > MAX_BYTES && similar.length > 1) similar.pop();
   while (Buffer.byteLength(join()) > MAX_BYTES && library.length > 1) library.pop();
-  while (Buffer.byteLength(join()) > MAX_BYTES && cells.length > 2) cells.splice(cells.length - 2, 1);
+  // The header and more than one example: down to the closest one.
+  while (Buffer.byteLength(join()) > MAX_BYTES && similar.length - 1 > 1) similar.pop();
+  while (Buffer.byteLength(join()) > MAX_BYTES && cells.length > 2) cells.pop();
   const text = join();
   return Buffer.byteLength(text) > MAX_BYTES ? `${Buffer.from(text).subarray(0, MAX_BYTES - 4).toString()}...\n` : text;
 }
@@ -175,7 +194,12 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
   ];
   const before = sessionDate(Date.parse(rec.bar));
   if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], [...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
-  const at = key => cellAt(index, key, before);
+  let curated = false;
+  const at = key => {
+    const c = cellAt(index, key, before);
+    if (c && c.curated) curated = true;
+    return c;
+  };
   const full = contextKey(rec.context);
   const cells = [
     cellLine('read signature, this context', at(cellKey('read', rec.signatures.read, full))),
@@ -189,10 +213,13 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     cells.push(cellLine(`alternative ${a.step}:${a.skill}, this context`, at(cellKey('skill', sig, full))));
     cells.push(cellLine(`alternative ${a.step}:${a.skill}, any context`, at(cellKey('skill', sig))));
   }
-  const examples = examplesBefore(index, rec.signatures.skill, before).map((e, i) => ({ e, i, near: closeness(e.context, rec.context) }))
-    .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => exampleLines(x.e));
+  const picked = examplesBefore(index, rec.signatures.skill, before).map((e, i) => ({ e, i, near: closeness(e.context, rec.context) }))
+    .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => x.e);
+  const examples = picked.map(exampleLines);
   const similar = ['Similar past decisions (same skills, closest context):', ...(examples.length ? examples : ['- none'])];
-  const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic.`];
+  const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic; MAE <= 0 worst against, MFE >= 0 best for, while held (R).`];
+  // Curated runs' decisions are outcome-balanced (experience-index.js): said once, kept by the cap, when any is shown.
+  if (curated || picked.some(e => e.curated)) tail.push(CURATED_NOTE);
   return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
 }
 

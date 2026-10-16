@@ -111,6 +111,11 @@ test('the document: the lists at their mix shares, the mix in time order, seeded
   assert.deepStrictEqual(Object.keys(doc.coverage.mix.years), ['2020', '2021', '2022', '2023', '2024'], 'balanced across years by the selection');
   assert.deepStrictEqual(doc.market, { roots: ['MNQ'], minutes: 3, setupTf: 15 });
   assert.strictEqual(doc.coverage.chop.expected.pass, 7, 'chop: its pass share');
+  // Every candidate's outcome too (the natural mix the selection balanced away: curated-weights.js weighs it back).
+  for (const name of [...C.LISTS, 'mix']) {
+    const c = doc.coverage[name];
+    assert.strictEqual(Object.values(c.candidateOutcomes).reduce((a, k) => a + k, 0), c.candidates, name);
+  }
   const ys = doc.coverage['trend-up'].years;
   assert.ok(Object.keys(ys).length === 2 && ys[2020] + ys[2022] === 35 && Math.abs(ys[2020] - ys[2022]) <= 1, JSON.stringify(ys));
   assert.ok(doc.coverage.mix.skills.rejection.count === 100 && doc.coverage.mix.skills.rejection.combinations[[...BASE_SKILLS].sort().join('+')] === 100);

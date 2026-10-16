@@ -19,7 +19,7 @@ const AT = '2023-03-15T14:00:00.000Z';
 const NOW = () => new Date('2023-03-15T14:01:00.000Z');
 
 /** A home with one verified record at AT, and (pin) an index built from `n` past decisions of the same combination. */
-function home({ pin = true, n = 24, records = [record({ at: AT })], transcript = true } = {}) {
+function home({ pin = true, n = 24, records = [record({ at: AT })], transcript = true, excursion = () => null, curated = () => false } = {}) {
   const h = tmpHome();
   fs.mkdirSync(path.join(h, 'trade-lifecycle'));
   fs.writeFileSync(path.join(h, 'trade-lifecycle', 'MNQ.jsonl'), records.map(r => `${JSON.stringify(r)}\n`).join(''));
@@ -28,7 +28,7 @@ function home({ pin = true, n = 24, records = [record({ at: AT })], transcript =
     const days = Array.from({ length: 12 }, (_, i) => `2022-03-${String(i + 1).padStart(2, '0')}`);
     const past = Array.from({ length: n }, (_, i) => ({
       id: `p${i}`, day: days[i % 12], decision: i % 2 ? 'entered' : 'passed', side: 'long', signatures: r.signatures, reads: r.reads,
-      context: i % 3 ? r.context : { ...r.context, regime: 'range' }, outcome: { R: i % 2 ? 2 : -1 }, grade: i % 2 ? 'win' : 'good-pass',
+      context: i % 3 ? r.context : { ...r.context, regime: 'range' }, outcome: { R: i % 2 ? 2 : -1, ...(excursion(i) || {}) }, grade: i % 2 ? 'win' : 'good-pass', ...(curated(i) ? { curated: true, weight: curated(i) === true ? null : curated(i) } : {}),
     }));
     const file = X.writeIndex(path.join(h, 'built'), X.buildIndex(past, { reps: 200 }));
     X.pinIndex(h, file);
@@ -178,4 +178,96 @@ test('the tool: schema, arguments, a short description (its listing under 1 KB),
   const cli = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'experience-lookup.js'), '--symbol', 'MNQ'], { encoding: 'utf8', env: { ...process.env, FTH_REPLAY_NOW: '', ...env } });
   assert.strictEqual(cli.status, 1);
   assert.match(cli.stderr, /^\[experience-lookup\] no verified trade_lifecycle record for MNQ/);
+});
+
+test('experience_lookup: each cell with enough samples shows its median MAE and MFE in R and n; too few, so said; the sign once; past decisions their own', () => {
+  // Winners ran clean (MAE -0.25R, MFE 2R), the passes that would have lost went deep (MAE -1.05R, MFE 0.5R).
+  const { ctx } = home({ excursion: i => (i % 2 ? { maeR: -0.25, mfeR: 2 } : { maeR: -1.05, mfeR: 0.5 }) });
+  const { text } = H.experienceLookup({ symbol: 'MNQ' }, ctx);
+  const any = text.split('\n').find(l => l.startsWith('- skill signature, any context:'));
+  assert.match(any, /mean R 0\.50 \[-?\d\.\d\d, \d\.\d\d\], MAE -0\.25 MFE 2\.00 \(n 24\), last 2022-03-12$/);
+  assert.match(text, /per statistic; MAE <= 0 worst against, MFE >= 0 best for, while held \(R\)\.\n/, 'the sign, once');
+  assert.match(text, /- read signature, this context: too few samples \(n=16, 8 days\)\n/, 'a cell under the minimum: no median');
+  assert.match(text, /- 2022-03-12 long entered, 2\.00R win, MAE -0\.25 MFE 2\.00: bias 1h/);
+  assert.match(text, /- 2022-03-11 long passed, -1\.00R good-pass, MAE -1\.05 MFE 0\.50: /);
+  assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
+  assert.doesNotMatch(text, /\b(should|enter|take it|avoid)\b/i, 'it never says what to do');
+  // Enough decisions, fewer than the minimum with an excursion (lines written before they were recorded): insufficient.
+  const { ctx: c2 } = home({ excursion: i => (i < X.MIN_N - 1 ? { maeR: -0.5, mfeR: 1 } : null) });
+  const t2 = H.experienceLookup({ symbol: 'MNQ' }, c2).text;
+  assert.match(t2, /- skill signature, any context: n 24 .*, MAE\/MFE too few \(n 19\), last 2022-03-12/);
+  // None at all: no median, no excursion on a past decision, never invented.
+  const t3 = H.experienceLookup({ symbol: 'MNQ' }, home().ctx).text;
+  assert.match(t3, /MAE\/MFE too few \(n 0\)/);
+  assert.doesNotMatch(t3, /, MAE -/);
+});
+
+test('experience_lookup: curated runs\' decisions weighted to natural rates: each cell its effective n, unrated ones named, one line saying so', () => {
+  const plain = H.experienceLookup({ symbol: 'MNQ' }, home().ctx).text;
+  assert.doesNotMatch(plain, /curated|n_eff/, 'no curated decision: no label');
+  // The 12 winners curated, each weighing 0.6 (a list whose natural win share is below its built one): win 7.2 / 19.2.
+  const { text } = H.experienceLookup({ symbol: 'MNQ' }, home({ curated: i => (i % 2 === 1 ? 0.6 : false) }).ctx);
+  assert.match(text, /- skill signature, any context: n 24 \(12 days; 12 entered, 12 passed; n_eff 22\.\d\), win 0\.38 \[/);
+  assert.match(text, /- 2022-03-12 long entered \(curated\), 2\.00R win: /);
+  assert.match(text, /- 2022-03-11 long passed, -1\.00R good-pass: /);
+  assert.match(text, /\nn_eff: curated runs reweighted to natural rates; unrated: not weighable, never rated\.\n/);
+  assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
+  // Without a weight (no document with the candidates' outcomes): counted, never rated; too few rated, no rate.
+  const un = H.experienceLookup({ symbol: 'MNQ' }, home({ curated: i => i % 2 === 1 }).ctx).text;
+  assert.match(un, /- skill signature, any context: too few samples \(n=24, n_eff 12\.0, 6 days\)/);
+  assert.match(un, /\nn_eff: curated runs reweighted/);
+});
+
+/** A mature index: 85 decisions over 30 days for the candidate's skills and for two alternatives, every cell enough. */
+function matureHome({ curated = false } = {}) {
+  const h = tmpHome();
+  fs.mkdirSync(path.join(h, 'trade-lifecycle'));
+  fs.writeFileSync(path.join(h, 'trade-lifecycle', 'MNQ.jsonl'), `${JSON.stringify(record({ at: AT }))}\n`);
+  const r = fromLifecycleRecord(record({ at: AT }));
+  const days = [];
+  for (let t = Date.parse('2022-03-01T00:00:00Z'); days.length < 30; t += 86400000) if (![0, 6].includes(new Date(t).getUTCDay())) days.push(new Date(t).toISOString().slice(0, 10));
+  const sigs = [r.signatures, ...ALTS.map(a => ({ ...r.signatures, skill: H.swapStep(r.signatures.skill, a.step, a.skill) }))];
+  const past = sigs.flatMap((sg, k) => Array.from({ length: 85 }, (_, i) => ({
+    id: `p${k}-${i}`, day: days[i % 30], decision: i % 2 ? 'entered' : 'passed', side: 'long', signatures: sg, reads: r.reads, context: r.context,
+    outcome: { R: i % 2 ? 2 : -1, maeR: i % 2 ? -0.25 : -1.05, mfeR: i % 2 ? 2 : 0.5 }, grade: i % 2 ? 'win' : 'good-pass',
+    ...(curated && i % 3 === 0 ? { curated: true, weight: 0.8 } : {}),
+  })));
+  X.pinIndex(h, X.writeIndex(path.join(h, 'built'), X.buildIndex(past, { reps: 200 })));
+  return { env: { FTH_HOME: h }, now: NOW };
+}
+const ALTS = [{ step: 'setup', skill: 'breakout-vs-fakeout' }, { step: 'entry', skill: 'momentum' }];
+
+test('experience_lookup under the cap: a mature index (every cell enough, two recorded alternatives) still shows all its similar past decisions', () => {
+  for (const curated of [false, true]) {
+    const { text } = H.experienceLookup({ symbol: 'MNQ', alternative: ALTS }, matureHome({ curated }));
+    const lines = text.split('\n');
+    assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES, `${Buffer.byteLength(text)} bytes`);
+    const cells = lines.filter(l => /^- (read|skill) signature|^- alternative/.test(l));
+    assert.strictEqual(cells.length, 14, 'every cell kept');
+    assert.ok(cells.every(l => / MAE -1\.05 MFE 0\.50 \(n \d+\), last /.test(l)), 'each with its MAE and MFE');
+    assert.ok(lines.includes('Similar past decisions (same skills, closest context):'), curated ? 'curated' : 'plain');
+    assert.strictEqual(lines.filter(l => /^- 2022-/.test(l)).length, 3, `all three examples (curated: ${curated})`);
+    assert.match(text, /MAE <= 0 worst against, MFE >= 0 best for/);
+  }
+});
+
+test('capped: the least specific evidence goes first: library, then examples down to the closest, then cells from the end; never the two "this context" cells', () => {
+  const { capped, MAX_BYTES } = require('../../scripts/lib/harness-tools/experience');
+  const fill = (tag, n) => Array.from({ length: n }, (_, i) => `- ${tag} ${i} ${'x'.repeat(300)}`);
+  const cells = ['- read signature, this context: n 30', '- skill signature, this context: n 30', ...fill('cell', 8)];
+  const similar = ['Similar past decisions (same skills, closest context):', ...fill('example', 3)];
+  const library = ['History library (code-measured):', ...fill('library', 4)];
+  const text = capped(['Your record:'], cells.slice(), similar.slice(), ['tail'], library.slice(), []);
+  assert.ok(Buffer.byteLength(text) <= MAX_BYTES);
+  // Library lines go before any example: here dropping library lines alone makes it fit, so every example stays.
+  assert.doesNotMatch(text, /library 3/);
+  for (const k of ['example 0', 'example 1', 'example 2', 'read signature, this context', 'skill signature, this context']) assert.match(text, new RegExp(k));
+  // Over the cap with no library: examples down to the closest one, then cells from the end; "this context" cells stay.
+  const tight = capped(['Your record:'], [...cells.slice(0, 2), ...fill('cell', 14)], similar.slice(), ['tail'], [], []);
+  assert.ok(Buffer.byteLength(tight) <= MAX_BYTES);
+  assert.match(tight, /example 0/);
+  assert.doesNotMatch(tight, /example 2/);
+  assert.match(tight, /cell 0 /);
+  assert.doesNotMatch(tight, /cell 13 /);
+  assert.match(tight, /skill signature, this context/);
 });
