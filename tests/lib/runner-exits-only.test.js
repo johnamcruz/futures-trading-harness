@@ -23,7 +23,7 @@ const CFG = () => validateConfig({ harness: 'custom', command: ['x', '{prompt}']
 const CRITICAL = new CriticalConfigError([{ name: 'runner', file: '/x/config/runner.json', problems: ['gate.maxConsecutiveLosses: a whole number from 1 to Infinity, not "two"'] }], 'Exits still go.');
 
 /** A broker with a long 1 MNQ and no stop working (nothing covers it); it records what the runner closed. */
-function broker(clock) {
+function broker(clock, orders = []) {
   const closed = [];
   let open = true;
   return {
@@ -35,7 +35,7 @@ function broker(clock) {
       return Array.from({ length: Math.min(limit, 60) }, (_, k) => ({ t: iso(lastOpen - (59 - k) * step), o: 21500, h: 21501, l: 21499, c: 21500, v: 1 }));
     },
     async accountState() {
-      return { positions: open ? [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: iso(et(9, 30)) }] : [], orders: [] };
+      return { positions: open ? [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: iso(et(9, 30)) }] : [], orders: open ? orders : [] };
     },
     async accountBalance() { return 50000; },
     async fillsSince() { return []; },
@@ -47,11 +47,11 @@ function broker(clock) {
   };
 }
 
-async function wired({ configCritical, from = et(9, 59, 50), until = et(10, 8) }) {
+async function wired({ configCritical, from = et(9, 59, 50), until = et(10, 8), orders = [] }) {
   const root = REPO;
   const home = tmpDir();
   const clock = { t: from };
-  const client = broker(clock);
+  const client = broker(clock, orders);
   const logs = [];
   const events = [];
   let cycles = 0;
@@ -78,6 +78,15 @@ test('exits-only: a refused config file runs no cycle (no new entry), closes the
   assert.ok(off.logs.some(([m, l]) => l === 'error' && /^CRITICAL config error .*runner\.json.*exits-only/s.test(m)), JSON.stringify(off.logs.slice(0, 3)));
   assert.ok(off.gateLog.some(e => e.source === 'runner' && e.decision === 'config-critical' && /gate\.maxConsecutiveLosses/.test(e.message)));
   assert.ok(!fs.existsSync(path.join(off.home, 'STOP')), 'the kill switch file is not written: fixing the config is enough');
+});
+
+test('exits-only control: a position whose stop covers its full size is NOT closed (only an uncovered one is)', async () => {
+  const stop = { id: 88, contractId: 'MNQ', accountId: 7, side: 1, type: 4, size: 1, stopPrice: 21480, status: 1 };
+  const covered = await wired({ configCritical: CRITICAL, orders: [stop] });
+  assert.strictEqual(covered.cycles, 0, 'still exits-only: no cycle');
+  assert.deepStrictEqual(covered.closed, [], 'the covering stop holds: nothing closed');
+  const uncovered = await wired({ configCritical: CRITICAL });
+  assert.deepStrictEqual(uncovered.closed, ['MNQ'], 'the same run with no stop closes it');
 });
 
 test('exits-only: end of day still flattens on a refused config file', async () => {

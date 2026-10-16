@@ -611,6 +611,24 @@ test('order gate: a refused config file (runner.json missing, not JSON, mistyped
   assert.ok(log.some(e => e.decision === 'blocked' && e.violations.some(v => v.check === 'config-critical')));
 });
 
+test('order gate (hook) under a refused config file: modify_order of an entry or of a protective stop or target is the gateway\'s to judge (the hook has no account data), and never blocked here', () => {
+  const { env } = setup([]);
+  const { root, run } = copiedGateRoot();
+  const modifies = [
+    { accountId: 1, orderId: 31, limitPrice: 21390, reason: 'move the entry' },
+    { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' },
+    { accountId: 1, orderId: 12, size: 1, reason: '[protect] cut the target' },
+  ];
+  for (const input of modifies) assert.strictEqual(run({ tool_name: 'mcp__broker__modify_order', tool_input: input }, env).code, 0, 'committed config');
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), '{ "version": ');
+  for (const input of modifies) {
+    const r = run({ tool_name: 'mcp__broker__modify_order', tool_input: input }, env);
+    assert.strictEqual(r.code, 0, `${JSON.stringify(input)}: ${r.stderr.slice(0, 300)}`);
+  }
+  // The entry itself is still refused at the hook when it is a new order (the contrast): the hook judges orders, the gateway the account.
+  assert.strictEqual(run(orderPayload(), env).code, 2);
+});
+
 test('order gate honours an explicit disable, but not in autonomous runs, and never dry-runs', () => {
   const { env } = setup([]);
   assert.strictEqual(gate(orderPayload(), { ...env, FTH_DISABLED_HOOKS: 'pre:trading:order-gate' }).code, 0);
@@ -804,6 +822,50 @@ test('MCP gateway: a refused config file still starts the gateway; entries are r
   assert.strictEqual(s.byId[5].result.content[0].text, 'forwarded:tools/call:close_position');
   assert.ok(s.log.some(e => e.source === 'gateway' && e.decision === 'config-critical' && /not JSON/.test(e.message)), 'logged at start');
   assert.ok(s.log.some(e => e.source === 'gateway' && e.decision === 'blocked' && e.violations.some(v => v.check === 'config-critical')));
+});
+
+test('MCP gateway under a refused config file: modifying an entry order is refused, modifying a protective stop or target is forwarded, a bracket leg of a working entry may be cut', async () => {
+  const { spawn } = require('child_process');
+  const { root } = copiedGateRoot();
+  fs.writeFileSync(path.join(root, 'config', 'runner.json'), '{ "version": ');
+  const long2 = JSON.stringify([{ contractId: 'MNQ', type: 1, size: 2 }]);
+  const entry = { id: 31, contractId: 'MNQ', side: 0, type: 1, size: 2, limitPrice: 21400 };
+  const stop = { id: 32, contractId: 'MNQ', side: 1, type: 4, size: 2, stopPrice: 21380 };
+  const target = { id: 33, contractId: 'MNQ', side: 1, type: 1, size: 2, limitPrice: 21440 };
+  const session = async (positions, orders, calls) => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FAKE_POSITIONS: positions, FAKE_ORDERS: JSON.stringify(orders),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+    };
+    const gw = spawn(process.execPath, [path.join(root, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    let err = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stderr.on('data', c => { err += c; });
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`);
+    calls.forEach((args, i) => gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: i + 2, method: 'tools/call', params: { name: 'modify_order', arguments: { accountId: 1, reason: '[protect] adjust', ...args } } })}\n`));
+    gw.stdin.end();
+    const code = await new Promise(resolve => gw.on('close', resolve));
+    assert.strictEqual(code, 0, err);
+    return out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(r => r.id > 1).map(r => r.result.content[0].text);
+  };
+  const FORWARDED = 'forwarded:tools/call:modify_order';
+  // An entry order, flat: resized or repriced, refused with the critical error.
+  const entries = await session('[]', [entry], [{ orderId: 31, limitPrice: 21390 }, { orderId: 31, limitPrice: 21410 }, { orderId: 31, size: 3 }, { orderId: 31, size: 1 }]);
+  assert.strictEqual(entries.length, 4);
+  for (const t of entries) assert.match(t, /\[config-critical\] CRITICAL config error .*Order 31 is an entry/s);
+  // A protective stop and a target of an open position: forwarded.
+  const protective = await session(long2, [stop, target], [{ orderId: 32, stopPrice: 21390 }, { orderId: 33, size: 1 }]);
+  assert.deepStrictEqual(protective, [FORWARDED, FORWARDED]);
+  const loosened = await session(long2, [stop, target], [{ orderId: 32, stopPrice: 21370 }]);
+  assert.match(loosened[0], /\[modify-protection\]/);
+  // The bracket of a working entry (flat): a stop tightened toward the entry and a target cut go; looser, larger or the target repriced do not.
+  const book = [entry, stop, target];
+  const bracket = await session('[]', book, [{ orderId: 32, stopPrice: 21390 }, { orderId: 33, size: 1 }, { orderId: 32, stopPrice: 21370 }, { orderId: 32, size: 1 }, { orderId: 33, limitPrice: 21420 }]);
+  assert.deepStrictEqual(bracket.slice(0, 2), [FORWARDED, FORWARDED]);
+  for (const t of bracket.slice(2)) assert.match(t, /\[config-critical\]/);
 });
 
 test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills are in flight', async () => {

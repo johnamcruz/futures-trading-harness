@@ -56,3 +56,39 @@ test('startPreflight: a manual trade run is refused, a manual end of day warns, 
   assert.match(fs.readFileSync(killSwitchFile, 'utf8'), /^operator: paused\nthe harness tools server .*boom\. Fix it, then remove this file to resume trading\.\n$/, 'appended: the other reason is kept');
   assert.match(warned.join(''), /trading is off \(kill switch .*\); end of day and housekeeping still run/);
 });
+
+test('a refused training.json or replay.json: the harness tools still load and list, and the live loop writes no kill switch (it logs the critical error)', { timeout: 120000 }, () => {
+  const { spawnSync } = require('child_process');
+  const os = require('os');
+  for (const file of ['training', 'replay']) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-preflight-cfg-'));
+    fs.cpSync(path.join(ROOT, 'scripts'), path.join(root, 'scripts'), { recursive: true });
+    fs.cpSync(path.join(ROOT, 'config'), path.join(root, 'config'), { recursive: true });
+    for (const d of ['strategies', 'accounts', 'skills', 'agents']) fs.symlinkSync(path.join(ROOT, d), path.join(root, d));
+    fs.writeFileSync(path.join(root, 'config', `${file}.json`), '{ not json');
+    const killSwitchFile = path.join(root, 'state', 'STOP');
+    const code = `
+      const { checkToolsServer, startPreflight } = require(${JSON.stringify(path.join(root, 'scripts', 'lib', 'harness-tools', 'preflight.js'))});
+      const env = { ...process.env, FTH_HOME: ${JSON.stringify(path.join(root, 'home'))}, FTH_AUTONOMOUS: '1' };
+      (async () => {
+        const tools = await checkToolsServer({ root: ${JSON.stringify(root)}, env });
+        const warned = [];
+        const r = await startPreflight({ root: ${JSON.stringify(root)}, env, once: null, killSwitchFile: ${JSON.stringify(killSwitchFile)}, warn: s => warned.push(s), check: async () => { throw new Error('the harness tools server did not answer'); } });
+        process.stdout.write(JSON.stringify({ tools, r, warned }));
+      })().catch(e => { process.stderr.write(String(e.stack)); process.exit(1); });`;
+    const res = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 0, `${file}: ${res.stderr}`);
+    const out = JSON.parse(res.stdout);
+    assert.strictEqual(out.tools, listTools().length, `${file}.json refused: all the harness tools still load`);
+    assert.strictEqual(out.r, 'config-critical');
+    assert.match(out.warned.join(''), new RegExp(`CRITICAL config error[^]*${file} config`));
+    assert.ok(!fs.existsSync(killSwitchFile), `${file}.json refused: no kill switch written`);
+  }
+});
+
+test('startPreflight: a failed check with no refused config file still writes the kill switch (the control)', async () => {
+  const killSwitchFile = path.join(tmpDir(), 'STOP');
+  const r = await startPreflight({ root: ROOT, env: {}, once: null, killSwitchFile, warn: () => {}, check: async () => { throw new Error('boom'); }, critical: () => null });
+  assert.strictEqual(r, 'kill-switch');
+  assert.ok(fs.existsSync(killSwitchFile));
+});
