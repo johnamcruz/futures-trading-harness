@@ -214,9 +214,11 @@ test('experience_lookup: the history library in a section of its own, after the 
   const X2 = X.buildIndex(libraryFor(rec).filter(r => r.status === 'traded').map((r, i) => ({ id: `p${i}`, day: r.day, bar: r.bar, decision: 'entered', side: 'long', signatures: rec.signatures, reads: long.reads, context: rec.context, outcome: { R: r.outcome.R } })), { reps: 200 });
   X.pinIndex(home, X.writeIndex(path.join(home, 'built'), X2));
   const both = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
-  assert.ok(both.indexOf('Cells:') < both.indexOf('History library'), 'the model\'s record first');
+  // The library (code-measured, not the model's) goes first when over the cap; when shown, it follows the model's record.
+  const libAt = both.indexOf('History library') === -1 ? Infinity : both.indexOf('History library');
+  assert.ok(both.indexOf('Cells:') < libAt, 'the model\'s record first');
   assert.ok(Buffer.byteLength(both) <= H.MAX_BYTES, `${Buffer.byteLength(both)} bytes`);
-  const modelCells = both.split('\n').filter(l => /^- (read|skill) signature, /.test(l) && both.indexOf(l) < both.indexOf('History library'));
+  const modelCells = both.split('\n').filter(l => /^- (read|skill) signature, /.test(l) && both.indexOf(l) < libAt);
   assert.ok(modelCells.length >= 2);
   const lib = L.loadPinnedLibrary(home);
   const section = H.librarySection(lib, rec, '2023-03-15');
@@ -315,10 +317,11 @@ test('the cap drops the library\'s lines before the model\'s cells', () => {
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
   assert.ok(cells.every(c => text.includes(c)), 'every model cell kept');
   assert.ok(text.includes('lib 0') && !text.includes('lib 9'), 'the library\'s last lines dropped');
-  // More than the library can free: it goes entirely, then the model's cells are trimmed.
+  // More than the library can free: it goes entirely, then the model's cells are trimmed from the end (they run most
+  // specific first: the "this context" cells lead and stay; the least specific go first).
   const many = Array.from({ length: 45 }, (_, i) => line('cell', i));
   const tight = H.capped(['head'], many.slice(), ['similar'], ['tail'], lib.slice());
-  assert.ok(!tight.includes('History library header') && tight.includes('cell 0') && tight.includes('cell 44'));
+  assert.ok(!tight.includes('History library header') && tight.includes('cell 0') && tight.includes('cell 1') && !tight.includes('cell 44'));
 });
 
 test('CLI: scan, index, pin and show on fixture bars', () => {

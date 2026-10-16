@@ -152,15 +152,17 @@ function riskSection(risk, before) {
 const riskError = risk => (risk && risk.error ? [`Your risk record: unreadable (${risk.error}); no risk record this lookup.`] : []);
 
 /**
- * Text at most MAX_BYTES: whole lines from the end of each optional block are dropped first: the risk record's, then
- * similar decisions, then the library's, all before the model's cells.
+ * Text at most MAX_BYTES, the least specific evidence dropped first: the risk record's lines, then the library's (not
+ * the model's own), then similar decisions down to the closest one, then the cells from the end (alternatives and any
+ * context before this context: the cells run most specific first), never the two "this context" cells.
  */
 function capped(head, cells, similar, tail, library = [], risk = []) {
   const join = () => [...head, ...cells, ...(similar.length > 1 ? similar : []), ...tail, ...(library.length > 1 ? library : []), ...(risk.length > 1 ? risk : [])].join('\n') + '\n';
   while (Buffer.byteLength(join()) > MAX_BYTES && risk.length > 1) risk.pop();
-  while (Buffer.byteLength(join()) > MAX_BYTES && similar.length > 1) similar.pop();
   while (Buffer.byteLength(join()) > MAX_BYTES && library.length > 1) library.pop();
-  while (Buffer.byteLength(join()) > MAX_BYTES && cells.length > 2) cells.splice(cells.length - 2, 1);
+  // The header and more than one example: down to the closest one.
+  while (Buffer.byteLength(join()) > MAX_BYTES && similar.length - 1 > 1) similar.pop();
+  while (Buffer.byteLength(join()) > MAX_BYTES && cells.length > 2) cells.pop();
   const text = join();
   return Buffer.byteLength(text) > MAX_BYTES ? `${Buffer.from(text).subarray(0, MAX_BYTES - 4).toString()}...\n` : text;
 }

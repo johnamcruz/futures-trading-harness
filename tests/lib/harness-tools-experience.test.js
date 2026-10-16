@@ -250,3 +250,24 @@ test('experience_lookup under the cap: a mature index (every cell enough, two re
     assert.match(text, /MAE <= 0 worst against, MFE >= 0 best for/);
   }
 });
+
+test('capped: the least specific evidence goes first: library, then examples down to the closest, then cells from the end; never the two "this context" cells', () => {
+  const { capped, MAX_BYTES } = require('../../scripts/lib/harness-tools/experience');
+  const fill = (tag, n) => Array.from({ length: n }, (_, i) => `- ${tag} ${i} ${'x'.repeat(300)}`);
+  const cells = ['- read signature, this context: n 30', '- skill signature, this context: n 30', ...fill('cell', 8)];
+  const similar = ['Similar past decisions (same skills, closest context):', ...fill('example', 3)];
+  const library = ['History library (code-measured):', ...fill('library', 4)];
+  const text = capped(['Your record:'], cells.slice(), similar.slice(), ['tail'], library.slice(), []);
+  assert.ok(Buffer.byteLength(text) <= MAX_BYTES);
+  // Library lines go before any example: here dropping library lines alone makes it fit, so every example stays.
+  assert.doesNotMatch(text, /library 3/);
+  for (const k of ['example 0', 'example 1', 'example 2', 'read signature, this context', 'skill signature, this context']) assert.match(text, new RegExp(k));
+  // Over the cap with no library: examples down to the closest one, then cells from the end; "this context" cells stay.
+  const tight = capped(['Your record:'], [...cells.slice(0, 2), ...fill('cell', 14)], similar.slice(), ['tail'], [], []);
+  assert.ok(Buffer.byteLength(tight) <= MAX_BYTES);
+  assert.match(tight, /example 0/);
+  assert.doesNotMatch(tight, /example 2/);
+  assert.match(tight, /cell 0 /);
+  assert.doesNotMatch(tight, /cell 13 /);
+  assert.match(tight, /skill signature, this context/);
+});
