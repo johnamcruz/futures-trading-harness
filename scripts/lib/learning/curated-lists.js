@@ -12,7 +12,8 @@
  * counter-trend (mostly passes, plus the few D2 allows). A training document is built from practice-train moments only
  * (use 'practice'), a validation document from practice-validate moments only (use 'validate'): never mixed, and a
  * validation document never runs on practice-train (curatedForRun). Neither feeds the experience index (it is built
- * from practice-train runs' experience logs, learning/experience-index.js). A document is one market's: its root(s),
+ * from practice-train runs' experience logs, learning/experience-index.js); a curated run's log does, labelled: its
+ * moments are outcome-balanced, not natural rates (experience-index.js curatedLog). A document is one market's: its root(s),
  * bar and setup timeframes (`market`), and a run on another is refused.
  *
  * Selection (selectList), per list, of its share of `total` (mix), one moment at a time, the best candidate by, in order:

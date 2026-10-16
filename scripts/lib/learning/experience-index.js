@@ -5,7 +5,7 @@
  * (experience-log.js), per signature and context, which experience_lookup shows the model. Built between sessions,
  * never by the runner; frozen per run (pinIndex: the run home holds its own copy and its hash).
  *
- * Walk-forward: the index keeps each cell's decisions as rows ([day, R, entered, regime]), not finished statistics,
+ * Walk-forward: the index keeps each cell's decisions as rows (ROW: [day, R, entered, regime, maeR, mfeR, curated]), not statistics,
  * and every statistic is computed for a day (cellStats `before`): only from trading days strictly before it. A
  * practice run in 2022 is shown what happened before its bar's session, never after, though the index spans
  * 2020-2024. The examples are kept with their days and filtered the same way.
@@ -18,11 +18,21 @@
  * rate and the mean R each with a 90% interval from resampling whole trading days (a day's cluster counts once;
  * every cell is one of many, so an interval describes and never proves), first and last day seen, the split by year
  * and by regime, and `shifted` when the latest year, itself at least MIN_N decisions over MIN_DAYS days, has the
- * other sign from the whole. A cell under MIN_N decisions or MIN_DAYS distinct days (D16) shows its counts and
- * `too few samples (n=7, 3 days)`, no rate or mean.
+ * other sign from the whole; the median MAE and MFE in R (the worst and best move while held: the fills', or the
+ * counterfactual's) with their counts and day-bootstrap intervals, each only from at least MIN_N decisions over MIN_DAYS
+ * days that have one (a line without them, written before they were recorded, counts in neither). Dated like R, by
+ * knownDay: an excursion is known only at the trade's exit. A cell under MIN_N decisions or MIN_DAYS distinct days
+ * (D16) shows its counts and `too few samples (n=7, 3 days)`, no rate, mean or median.
  *
  * Shuffled (the paired replay's third arm): `shuffle` (a seed) permutes the cells' rows across cells and the
  * examples across signatures, so the record shows numbers that belong to other combinations; it is part of the hash.
+ *
+ * Curated runs, labelled: a curated run's moments are picked outcome-balanced (learning/curated-lists.js: winners and
+ * losers kept level), so its win rate, mean R and MAE/MFE are the list's mix, not the market's, and no reweighting to
+ * natural rates undoes that (prop/model-score.js refuseCurated). Its decisions (tagged `curated` by run-experience.js, or
+ * every line of a log whose run home pinned a curated list: curatedLog) are kept (stage 1's practice is curated) and
+ * labelled: each row's `curated` column, each cell's `curated` count (walk-forward like the rest), each example's flag,
+ * and the index's `curated` total.
  *
  * No leakage: an index is built only from practice-train decisions (learning/splits.js), the day recomputed from
  * the decision's bar (its cycle for a plain pass), never the line's own label, and the day its outcome came (its
@@ -41,21 +51,28 @@
  *   loadPinned(home)                    the pinned index, its hash checked; null when none is pinned or the run is
  *                                       declared not learning
  *   cellKey(kind, sig, ctx), contextKey(ctx), decisionDay(d), knownDay(d)
+ *   curatedLog(file)                    whether an experience log's run home pinned a curated list (a broken pin: yes)
  */
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { streamFor, pick, quantile, round4 } = require('../prop/stats');
+const { streamFor, pick, quantile, median, round4 } = require('../prop/stats');
 const { roleOf, sessionDate } = require('./splits');
 const { CONTEXT_KEYS } = require('./lifecycle-record');
 
-const VERSION = 2;
+// 3: rows carry the decision's maeR and mfeR (a version-2 row has neither: refused, rebuilt).
+const VERSION = 3;
 const EI = require('../tunables').training().experienceIndex; // config/training.json experienceIndex (minN, minDays and level only rise)
 const MIN_N = EI.minN;
 const MIN_DAYS = EI.minDays;
 const LEVEL = EI.level;
 const KINDS = Object.freeze(['skill', 'read']);
+/** A cell row's columns; the excursions' by name, so no index is a bare number. */
+const ROW = Object.freeze(['day', 'R', 'entered', 'regime', 'maeR', 'mfeR', 'curated']);
+const MAE = ROW.indexOf('maeR');
+const MFE = ROW.indexOf('mfeR');
+const CURATED = ROW.indexOf('curated');
 const PINNED = 'pinned.json';
 /** Examples kept per skill signature and month (the latest of each), so a lookup on any day finds some before it. */
 const EXAMPLES_PER_MONTH = EI.examplesPerMonth;
@@ -65,6 +82,8 @@ const ctxVal = (ctx, k) => (ctx && ctx[k] !== null && ctx[k] !== undefined ? ctx
 const contextKey = ctx => CONTEXT_KEYS.map(k => `${k}=${ctxVal(ctx, k)}`).join(';');
 const cellKey = (kind, sig, ctx = '*') => `${kind}|${sig}|${ctx}`;
 const hasR = d => d.outcome && Number.isFinite(d.outcome.R);
+/** An outcome's maeR or mfeR when it has one (a number), else null: never invented. */
+const excursion = (d, k) => (hasR(d) && Number.isFinite(d.outcome[k]) ? d.outcome[k] : null);
 
 /** A decision's trading day, from its bar (its cycle for a plain pass); its own `day` only when it has neither. */
 function decisionDay(d) {
@@ -116,7 +135,45 @@ const sumBy = (rows, f) => {
   return g;
 };
 
-/** A cell's statistics from its rows ([day, R, entered, regime]) on days strictly before `before` (null: all). */
+/**
+ * The median (stats.js: the upper middle) of the rows' column k (MAE, MFE), its count and distinct days, and its
+ * interval at LEVEL from resampling whole days (as dayBootstrap: a day's cluster counts once); the median and its
+ * interval only from at least MIN_N values over MIN_DAYS days. Each resample's median by counting ranks (no sort per draw).
+ */
+function medianOf(rows, k, { reps, rand }) {
+  const vals = rows.filter(r => Number.isFinite(r[k]));
+  const dayList = [...new Set(vals.map(r => r[0]))];
+  const out = { n: vals.length, days: dayList.length, median: null, lo: null, hi: null };
+  if (vals.length < MIN_N || dayList.length < MIN_DAYS) return out;
+  const order = vals.map((r, i) => i).sort((a, b) => vals[a][k] - vals[b][k]);
+  const sorted = order.map(i => vals[i][k]);
+  const rank = new Array(vals.length);
+  order.forEach((i, j) => { rank[i] = j; });
+  const ranksOf = new Map(dayList.map(d => [d, []]));
+  vals.forEach((r, i) => ranksOf.get(r[0]).push(rank[i]));
+  const byDay = dayList.map(d => ranksOf.get(d));
+  const counts = new Int32Array(sorted.length);
+  const meds = new Array(reps);
+  for (let q = 0; q < reps; q += 1) {
+    counts.fill(0);
+    let total = 0;
+    for (let j = 0; j < byDay.length; j += 1) {
+      const list = byDay[pick(rand, byDay.length)];
+      for (const x of list) counts[x] += 1;
+      total += list.length;
+    }
+    const at = Math.floor(total / 2);
+    let c = 0;
+    let m = 0;
+    while (c + counts[m] <= at) { c += counts[m]; m += 1; }
+    meds[q] = sorted[m];
+  }
+  meds.sort((a, b) => a - b);
+  const tail = (1 - LEVEL) / 2;
+  return { ...out, median: round4(median(sorted)), lo: round4(quantile(meds, tail)), hi: round4(quantile(meds, 1 - tail)), level: LEVEL, by: 'day' };
+}
+
+/** A cell's statistics from its rows (ROW) on days strictly before `before` (null: all); `curated`: how many of n are curated runs'. */
 function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = '' } = {}) {
   const seen = (rows || []).filter(r => before === null || r[0] < before);
   const withR = seen.filter(r => Number.isFinite(r[1]));
@@ -135,10 +192,17 @@ function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = 
   const fmt = g => Object.fromEntries(Object.entries(g).sort().map(([k, v]) => [k, { n: v.n, meanR: round4(v.sum / v.n) }]));
   const cell = {
     n, entries: withR.filter(r => r[2] === 1).length, passes: withR.filter(r => r[2] !== 1).length, unfilled: seen.length - n,
-    days: byDay.size, wins, firstSeen: days[0] || null, lastSeen: days[days.length - 1] || null,
+    curated: withR.filter(r => r[CURATED] === 1).length, days: byDay.size, wins, firstSeen: days[0] || null, lastSeen: days[days.length - 1] || null,
     byYear: fmt(years), byRegime: fmt(sumBy(withR, r => r[3] || '-')), before,
   };
-  if (n < MIN_N || byDay.size < MIN_DAYS) return { ...cell, enough: false, note: `too few samples (n=${n}, ${byDay.size} days)`, winRate: null, meanR: null, shifted: false, latestYear: null };
+  const counted = k => {
+    const v = withR.filter(r => Number.isFinite(r[k]));
+    return { n: v.length, days: new Set(v.map(r => r[0])).size, median: null, lo: null, hi: null };
+  };
+  if (n < MIN_N || byDay.size < MIN_DAYS) {
+    return { ...cell, enough: false, note: `too few samples (n=${n}, ${byDay.size} days)`, winRate: null, meanR: null, shifted: false, latestYear: null,
+      mae: counted(MAE), mfe: counted(MFE) };
+  }
   const mean = withR.reduce((a, r) => a + r[1], 0) / n;
   const list = [...byDay.values()];
   const rand = streamFor(seed, `${key}|${before}`);
@@ -148,7 +212,10 @@ function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = 
   const y = ys.length > 1 ? years[ys[ys.length - 1]] : null;
   const latestYear = y ? { year: ys[ys.length - 1], n: y.n, days: y.days.size, meanR: round4(y.sum / y.n) } : null;
   const shifted = Boolean(latestYear && latestYear.n >= MIN_N && latestYear.days >= MIN_DAYS && latestYear.meanR !== 0 && mean !== 0 && Math.sign(latestYear.meanR) !== Math.sign(mean));
-  return { ...cell, enough: true, note: null, winRate, meanR, shifted, latestYear };
+  // Drawn after the win rate's and the mean's, from the same stream: their intervals are unchanged by these.
+  const mae = medianOf(withR, MAE, { reps, rand });
+  const mfe = medianOf(withR, MFE, { reps, rand });
+  return { ...cell, enough: true, note: null, winRate, meanR, shifted, latestYear, mae, mfe };
 }
 
 const cellAt = (index, key, before = null) => (index.cells[key] ? cellStats(index.cells[key], { before, seed: index.seed, reps: index.reps, key }) : null);
@@ -182,7 +249,7 @@ function examplesOf(scored) {
     list.push({
       day, decision: d.decision, side: d.side || null, context: d.context || null,
       reads: (Array.isArray(d.reads) ? d.reads : []).map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why ? String(r.why).slice(0, WHY_CHARS) : null })),
-      R: d.outcome.R, grade: d.grade || null,
+      R: d.outcome.R, maeR: excursion(d, 'maeR'), mfeR: excursion(d, 'mfeR'), grade: d.grade || null, curated: d.curated === true,
     });
   }
   return Object.fromEntries([...by].sort((a, b) => a[0].localeCompare(b[0])));
@@ -246,7 +313,7 @@ function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuf
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
   for (const d of scored) {
-    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-'];
+    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-', excursion(d, 'maeR'), excursion(d, 'mfeR'), d.curated === true ? 1 : 0];
     for (const kind of KINDS) {
       const sig = d.signatures[kind];
       if (!sig) continue;
@@ -271,7 +338,7 @@ function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuf
     v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true, exit, exitPlan,
     runs: runs.map(r => ({ runId: r.runId || null, file: r.file ? path.basename(r.file) : null, sha256: r.sha256 || null })),
     roles: ['practice-train'], months: { from: days[0] || null, to: days[days.length - 1] || null },
-    decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, cells, examples,
+    decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, curated: scored.filter(d => d.curated === true).length, cells, examples,
   };
   return { ...doc, hash: indexHash(doc) };
 }
@@ -291,6 +358,12 @@ function readIndex(file) {
   if (doc.v !== VERSION || doc.walkForward !== true) throw new Error(`${file}: an index of version ${doc.v}, not ${VERSION} (walk-forward): rebuild it`);
   if (indexHash(doc) !== doc.hash) throw new Error(`${file}: its content doesn't match its hash (changed after it was built)`);
   return doc;
+}
+
+/** Whether an experience log (<run home>/experience/decisions.jsonl) is a curated run's: its home pinned a curated list. */
+function curatedLog(file) {
+  const { loadPinnedCurated } = require('./curated-lists');
+  try { return Boolean(loadPinnedCurated(path.resolve(path.dirname(file), '..'))); } catch (_err) { return true; }
 }
 
 /** The run's learning decision (learning/run-gate.js), read here without a dependency loop. */
@@ -338,5 +411,5 @@ function loadPinned(home) {
 
 module.exports = {
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
-  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf,
+  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf, curatedLog,
 };

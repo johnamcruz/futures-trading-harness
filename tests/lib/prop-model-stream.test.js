@@ -210,11 +210,12 @@ test('bracketExit: on the fill bar only the worse is taken (the stop at its fill
   const t0 = Date.parse('2023-03-15T14:00:00.000Z');
   const args = { tfMs: M3, side: 'long', fill: 100, risk: 2, targetDist: 4, tick: 0.25 };
   // The fill bar opened at 97.00 (before the fill) and dipped to 97.90: stopped at 97.75, not at the open.
-  assert.deepStrictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 97, h: 100.5, l: 97.9, c: 100 }], i: 0, partial: true }), { exitPrice: 97.75, exitMs: t0 + M3, reason: 'stop' });
-  // Its high reached the 104 target: not credited on the fill bar; the next bar's is.
+  assert.deepStrictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 97, h: 100.5, l: 97.9, c: 100 }], i: 0, partial: true }), { exitPrice: 97.75, exitMs: t0 + M3, reason: 'stop', maeR: -1.125, mfeR: 0 });
+  // Its high reached the 104 target: not credited on the fill bar; the next bar's is. MAE and MFE the same way: the fill
+  // bar's low (99, -0.5R) counts, its high (104.5) doesn't; the stop bar's MAE is its stop fill (-1.125R), its MFE none.
   const up = [{ ms: t0, o: 99.5, h: 104.5, l: 99, c: 101 }, { ms: t0 + M3, o: 101, h: 104.25, l: 100.5, c: 104 }];
-  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target' });
-  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target' }, 'a fill at the bar\'s open: the whole bar follows it');
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target', maeR: -0.5, mfeR: 2 });
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target', maeR: -0.5, mfeR: 2 }, 'a fill at the bar\'s open: the whole bar follows it');
   assert.strictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 100, h: 101, l: 99, c: 100 }], i: 0, partial: true }), null, 'the bars end first');
 });
 

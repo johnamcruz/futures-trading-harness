@@ -35,7 +35,9 @@
  * The line (VERSION 2): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
- *   size (fills only: the contracts opened), exitTime, exitReason, R }, grade, settledDay (the later of its bar's session and its exit's: the index
+ *   size (fills only: the contracts opened), exitTime, exitReason, R, maeR, mfeR (the worst and best move while held,
+ *   in R; null unknown; lines written before them lack them) }, and `curated: true` on a curated run's lines
+ *   (run-experience.js: outcome-balanced, the experience index labels them), grade, settledDay (the later of its bar's session and its exit's: the index
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
@@ -89,7 +91,7 @@ const resultOf = R => (R === null ? null : R > 0 ? 'win' : R < 0 ? 'loss' : 'scr
 
 /** The record's limit order on the bars after the decision (see the head). */
 function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick, plan = null }) {
-  const none = (reason, extra = {}) => ({ source: 'counterfactual', filled: false, entryPrice: null, exitPrice: null, exitTime: null, exitReason: reason, R: null, ...extra });
+  const none = (reason, extra = {}) => ({ source: 'counterfactual', filled: false, entryPrice: null, exitPrice: null, exitTime: null, exitReason: reason, R: null, maeR: null, mfeR: null, ...extra });
   const s = sgn(side);
   if (!s || ![entry, stop].every(Number.isFinite) || !(tick > 0)) return none('no plan');
   if (sgn(side) * (entry - stop) <= 0) return none('stop on the wrong side');
@@ -113,7 +115,7 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   if (!x) return { ...none('the bars end before the exit'), filled: true, entryPrice: fill };
   return {
     source: 'counterfactual', filled: true, entryPrice: fill, entryTime: fillAt, exitPrice: x.exitPrice, exitTime: new Date(x.exitMs).toISOString(), exitReason: x.reason,
-    R: round((s * (x.exitPrice - fill)) / risk),
+    R: round((s * (x.exitPrice - fill)) / risk), maeR: x.maeR, mfeR: x.mfeR,
   };
 }
 
@@ -124,8 +126,10 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
  * taken: the stop is hit when the bar reaches it (filled at the stop with the expected slippage, never at the bar's
  * open, which came before the fill) and the target never is. Every later bar: the stop first (the stop's fill, or the
  * open when the bar gapped through it), then the target, then the end of day (the session's change, or the bar closing
- * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod }, or null when the bars
- * end first.
+ * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod, maeR, mfeR }, or null when
+ * the bars end first. maeR (<= 0) and mfeR (>= 0): the worst and best move from the fill while held, in R of `risk`, the
+ * worse taken as above: the fill bar's adverse extreme counts and its favorable one doesn't; a stop bar counts its stop
+ * fill alone, a target bar its target and its adverse extreme; every other bar held both extremes; the exit price too.
  */
 function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetDist = null, eodMs = Infinity, tick, plan = null, swingAt = null }) {
   const s = sgn(side);
@@ -140,7 +144,14 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
   let peakR = 0;
   let armed = false;
   const targetPx = targetDist > 0 ? fill + s * targetDist : null;
-  const out = (price, bar, reason) => ({ exitPrice: price, exitMs: bar.ms + tfMs, reason });
+  let adv = 0;
+  let fav = 0;
+  const move = px => s * (px - fill);
+  const out = (price, bar, reason) => {
+    adv = Math.min(adv, move(price));
+    fav = Math.max(fav, move(price));
+    return { exitPrice: price, exitMs: bar.ms + tfMs, reason, maeR: round(adv / risk), mfeR: round(fav / risk) };
+  };
   let last = bars[i];
   for (let j = i; j < bars.length; j += 1) {
     const b = bars[j];
@@ -148,7 +159,9 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
     if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
     const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
     if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, stopPx === initial ? 'stop' : 'trail');
+    adv = Math.min(adv, move(s > 0 ? b.l : b.h));
     if (!fillBar && !after && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
+    if (!fillBar) fav = Math.max(fav, move(s > 0 ? b.h : b.l));
     // The trail on this closed bar (the fill bar's prices after the fill can't be told: none, the worse taken).
     if (!fillBar && (after || trails)) {
       const t = { sign: s, entry: fill, risk, stop: stopPx, peakR, armed, target: targetPx };
@@ -207,8 +220,12 @@ function settledDay(day, outcome) {
   return exit > day ? exit : day;
 }
 
-/** A round trip's real outcome in R of the record's stop. */
-function tripOutcome(trip, plan, side) {
+/**
+ * A round trip's real outcome in R of the record's stop. maeR and mfeR (closed, with the run's bars): the worst and best
+ * move from the entry over the bars wholly inside the trade (opening at or after the fill, closing by the exit: an edge
+ * bar's extremes may fall outside it) and the exit price (replay/counterfactual.js fromFills' rule); else null.
+ */
+function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   const s = sgn(side);
   const avg = fs2 => {
     const size = fs2.reduce((a, f) => a + (Math.abs(Number(f.size)) || 1), 0);
@@ -219,12 +236,25 @@ function tripOutcome(trip, plan, side) {
   const exitPrice = closed ? avg(trip.closes) : null;
   // R in the bracket's risk: the record's stop distance, which the bracket places from the fill.
   const risk = Number.isFinite(plan.stop) && Number.isFinite(plan.entry) ? Math.abs(plan.entry - plan.stop) : null;
+  let maeR = null;
+  let mfeR = null;
+  if (closed && risk && Number.isFinite(entryPrice) && Number.isFinite(exitPrice) && Number.isFinite(trip.openMs) && tfMs > 0 && Array.isArray(bars) && bars.length) {
+    let adv = Math.min(0, s * (exitPrice - entryPrice));
+    let fav = Math.max(0, s * (exitPrice - entryPrice));
+    for (const b of bars) {
+      if (b.ms < trip.openMs || b.ms + tfMs > trip.closeMs) continue;
+      adv = Math.min(adv, s * ((s > 0 ? b.l : b.h) - entryPrice));
+      fav = Math.max(fav, s * ((s > 0 ? b.h : b.l) - entryPrice));
+    }
+    maeR = round(adv / risk);
+    mfeR = round(fav / risk);
+  }
   return {
     source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
     entryTime: Number.isFinite(trip.openMs) ? new Date(trip.openMs).toISOString() : null,
     size: trip.opens.reduce((a, f) => a + (Math.abs(Number(f.size)) || 1), 0),
     exitTime: closed ? new Date(trip.closeMs).toISOString() : null, exitReason: closed ? 'closed' : 'open',
-    R: closed && risk ? round((s * (exitPrice - entryPrice)) / risk) : null,
+    R: closed && risk ? round((s * (exitPrice - entryPrice)) / risk) : null, maeR, mfeR,
   };
 }
 
@@ -335,7 +365,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
     let outcome;
     if (trip) {
       decision = 'entered';
-      outcome = tripOutcome(trip, ok.plan, ok.side);
+      outcome = tripOutcome(trip, ok.plan, ok.side, { bars: barsFor(root), tfMs });
     } else {
       // A refusal names no side: it stays with the cycle's latest ok record (the one order_plan plans from).
       const refused = slot.latest && gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));

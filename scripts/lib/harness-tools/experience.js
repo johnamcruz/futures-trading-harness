@@ -14,8 +14,10 @@
  * Output, plain text, at most MAX_BYTES: the signatures and context; the cells, exact first (the read signature in
  * the full context), then the skill signature in the full context, one context key at a time, and alone; each with
  * n, days, the win rate and mean R with their 90% intervals (each cell one of many: an interval describes, it
- * proves nothing alone), last seen, `shifted` with its latest year's n, or `too few samples`; then up to three past
- * decisions of the same skill signature, the closest context first, with their reads, why, decision and outcome;
+ * proves nothing alone), the median MAE and MFE in R with their intervals and count (`insufficient` under the minimum), last
+ * seen, `shifted` with its latest year's n, or `too few samples`; then up to three past decisions of the same skill
+ * signature, the closest context first, with their reads, why, decision and outcome (R, grade, MAE and MFE); a cell's
+ * count of curated runs' decisions and an example's `(curated)`, with one line saying what that means (CURATED_NOTE);
  * and the index's hash and the days it showed. With no index pinned, or no match, it says so. It never says what
  * to do.
  *
@@ -60,13 +62,22 @@ const SIMILAR = require('../tunables').training().experienceTool.similar;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^[a-z][a-z-]{0,31}$/;
 
+const CURATED_NOTE = 'curated: decisions from curated runs, picked outcome-balanced, not at natural rates: their win rate, mean R and MAE/MFE show the lists\' mix, not the market\'s.';
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
+
+/** A cell's median MAE and MFE in R with their 90% intervals and count, or `insufficient` with it under the minimum (index: medianOf). */
+function excursionText(c) {
+  const { mae, mfe } = c;
+  if (!mae || !mfe) return '';
+  if (mae.median === null || mfe.median === null) return `, MAE/MFE insufficient (n ${Math.min(mae.n, mfe.n)})`;
+  return `, median MAE ${f2(mae.median)}R [${f2(mae.lo)}, ${f2(mae.hi)}] MFE ${f2(mfe.median)}R [${f2(mfe.lo)}, ${f2(mfe.hi)}] (n ${mae.n === mfe.n ? mae.n : `${mae.n}/${mfe.n}`})`;
+}
 
 function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
   if (!c.enough) return `- ${label}: ${c.note}`;
   const shift = c.shifted ? `, shifted (${c.latestYear.year}: mean R ${f2(c.latestYear.meanR)} over n ${c.latestYear.n}, the other sign)` : '';
-  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}], last ${c.lastSeen}${shift}`;
+  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${c.curated ? `; ${c.curated} curated` : ''}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
 }
 
 /** The skill signature with one step's skills replaced. */
@@ -83,7 +94,8 @@ const closeness = (a, b) => CONTEXT_KEYS.filter(k => a && b && a[k] !== null && 
 
 function exampleLines(ex) {
   const reads = ex.reads.map(r => `${r.step} ${r.read}${r.why ? ` (${r.why})` : ''}`).join('; ');
-  return `- ${ex.day} ${ex.side || ''} ${ex.decision}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}: ${reads}`;
+  const x = Number.isFinite(ex.maeR) && Number.isFinite(ex.mfeR) ? `, MAE ${f2(ex.maeR)}R MFE ${f2(ex.mfeR)}R` : '';
+  return `- ${ex.day} ${ex.side || ''} ${ex.decision}${ex.curated ? ' (curated)' : ''}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}${x}: ${reads}`;
 }
 
 /**
@@ -175,7 +187,12 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
   ];
   const before = sessionDate(Date.parse(rec.bar));
   if (!index) return { text: capped([...head, 'No experience index is pinned for this run: no record.'], [], [], [...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
-  const at = key => cellAt(index, key, before);
+  let curated = false;
+  const at = key => {
+    const c = cellAt(index, key, before);
+    if (c && c.enough && c.curated) curated = true;
+    return c;
+  };
   const full = contextKey(rec.context);
   const cells = [
     cellLine('read signature, this context', at(cellKey('read', rec.signatures.read, full))),
@@ -189,10 +206,13 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     cells.push(cellLine(`alternative ${a.step}:${a.skill}, this context`, at(cellKey('skill', sig, full))));
     cells.push(cellLine(`alternative ${a.step}:${a.skill}, any context`, at(cellKey('skill', sig))));
   }
-  const examples = examplesBefore(index, rec.signatures.skill, before).map((e, i) => ({ e, i, near: closeness(e.context, rec.context) }))
-    .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => exampleLines(x.e));
+  const picked = examplesBefore(index, rec.signatures.skill, before).map((e, i) => ({ e, i, near: closeness(e.context, rec.context) }))
+    .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => x.e);
+  const examples = picked.map(exampleLines);
   const similar = ['Similar past decisions (same skills, closest context):', ...(examples.length ? examples : ['- none'])];
   const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic.`];
+  // Curated runs' decisions are outcome-balanced (experience-index.js): said once, kept by the cap, when any is shown.
+  if (curated || picked.some(e => e.curated)) tail.push(CURATED_NOTE);
   return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
 }
 
