@@ -69,7 +69,7 @@ function readBrokerConfig(root, env = process.env, { timeoutMs = require('../tun
   const adapter = path.join(__dirname, '..', 'broker', 'adapter.js');
   const code = 'const {withAdapter}=require(process.argv[1]);withAdapter({root:process.argv[2]},a=>a.serverConfig()).then(c=>{process.stdout.write(JSON.stringify(c))},e=>{process.stderr.write(String(e&&e.message||e));process.exit(1)})';
   const res = spawnSync(process.execPath, ['-e', code, adapter, root], { env, encoding: 'utf8', timeout: timeoutMs });
-  if (res.status !== 0) return { error: String(res.stderr || res.error || 'no answer').trim().slice(0, 300) };
+  if (res.status !== 0) return { error: String(res.stderr || res.error || 'no answer').trim() };
   try { return JSON.parse(res.stdout); } catch (_err) { return { error: 'get_server_config gave no JSON' }; }
 }
 
