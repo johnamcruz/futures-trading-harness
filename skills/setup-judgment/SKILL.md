@@ -12,65 +12,50 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 
 ## How It Works
 
-- **Read each setup's facts first**: a composed setup's are your reads and
-  the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
-  candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3`
-  `candidates`. They are context, not a verdict: judge the setup by its
-  strategy's STRATEGY.md (`strategies_show`: its context filter and skip
-  rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`,
-  its min R:R). A setup the trend rule allows, `aligned` for its side, with
-  room past what it needs and confluence with it is the opportunity this
-  harness looks for, when the rest of this skill agrees and it isn't
-  `blocked`: the strategy's normal size (position-sizing and the prop
-  budget), and let its own exit work (don't bank before its trail or
-  target). The priority order decides: a policy strategy's verdict
-  too.
-- Tabulate each analyst's bias and confidence. Trade only when at least two of
-  the three market analysts agree and none is strongly opposed.
-- Start from the computed regime (the briefing's `m3` `regime`, the same value
-  market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition,
-  plus volatility. Don't override it with a narrative; if the analysts disagree
-  with it, say why in the plan.
-- **A prop attempt with a policy strategy is running** (the prompt lists
-  verdicts, or `combine_status` names a policy strategy): the policy
-  strategy's verdict is the only trade there can be. Plan it (`setup:<policy
-  strategy>`, its contract and side, its stop ticks, at most its size) per the
-  `prop-challenge-pacing` skill only when the priority order says take, at
-  the size it allows; no trade when there is none, it says skip, or the
-  order says no. Never tag the component (`trade_lifecycle`) yourself; the
-  gate refuses it.
-- **Track record.** Each strategy that fired carries its record: the
-  recorded backtest (overall, in this regime, at this hour, when there are
-  enough trades) and your reviewed live trades. Weigh the signal by it: a
-  strategy with no recorded edge, a negative slice for this regime or hour,
-  or live results well under its backtest is a smaller trade or no trade;
-  say which in the plan. Under 30 trades is anecdotal, not evidence. No
-  record ("no backtest recorded") is the weakest case, not a neutral one, and
-  a STALE record (the strategy changed since) doesn't describe it.
-- **Confluence.** A composed setup's: the count of `confluence-counting`.
-  Rules strategies firing the same side on the bar (`confluence.with`) are a
-  stronger setup; both sides (`confluence.against`) a conflict: stand aside
-  (the priority order, step 6: no exception). Trust the backtest's
-  `byConfluence` over a feeling that agreement helps.
-- Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in
-  this direction on the last closed bar (candidates are already in session and
-  in regime: the trigger fired), or a manual strategy whose trigger you
-  verified on closed bars and whose `regimes` fit; quote the trigger in the
-  plan. The gate checks a rules strategy's trigger from the signal record;
-  a manual strategy's trigger is yours and risk-manager's to verify. `show` it (strategy-library) and check every context
-  filter and skip rule against the reports.
-- **Check every reason against the facts** before you decide (a plan, a
-  skip, or no trade): state the decision and its reasons, then call
-  `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`
-  once. It checks each reason against the bar briefing (the session window
-  and whether it allows entries, the trend rule per side, the candidates
-  and verdict, the room in R against the room needed, the multi-timeframe
-  read for the side) and the attempt line, and lists each setup's
-  priority-order steps as the facts answer them: judge each step on its
-  own. A reason marked FALSE: name it, drop it, and decide again from the
-  facts. Check UNCHECKED and UNPARSED reasons yourself; they aren't false
-  for that alone. The order gate's checks still come first and don't
-  change.
+- **Facts first**, context not verdict. Composed: your reads and the
+  record's plan (`compose_check`, `trade-lifecycle`). Candidate: `m3`
+  `candidates` `facts`, `inTheWay`, `needR`, `blocked`. Judge by its
+  STRATEGY.md (`strategies_show`: context filter, skip rules), the trend
+  rule, the alignment table in `htf-to-ltf`, its min R:R.
+- Trend rule allows, `aligned`, room past its need, confluence, not
+  `blocked`, rest of this skill agrees: the opportunity. Normal size
+  (position-sizing, prop budget); let its exit work, no banking before its
+  trail or target. The priority order decides, a policy verdict too.
+- Analysts: tabulate bias and confidence. Trade only if at least 2 of 3 market
+  analysts agree and none is strongly opposed.
+- Regime: start from `m3` `regime` (trend-up, trend-down, range,
+  transition; volatility). No narrative override; analysts disagree: say
+  why in the plan.
+- **Prop attempt with a policy strategy** (prompt lists verdicts, or
+  `combine_status` names one): its verdict is the only trade. Plan it
+  (`setup:<policy strategy>`, its contract, side, stop ticks, at most its
+  size; `prop-challenge-pacing`) only when the priority order says take, at
+  its size. Else no trade. Never tag `trade_lifecycle`; the gate refuses it.
+- **Track record** (backtest overall, by regime and hour when there are
+  enough trades; your reviewed live trades). No edge, negative slice for this regime or hour, or live
+  well under backtest: smaller or none; the plan says which. Under 30
+  trades: anecdotal. No record ("no backtest recorded"): weakest, not
+  neutral. STALE (strategy changed): doesn't describe it.
+- **Confluence.** Composed: the `confluence-counting` count. Rules
+  strategies same side (`confluence.with`): stronger. Both sides
+  (`confluence.against`): stand aside (priority order step 6, no
+  exception). Trust the backtest's `byConfluence` over a feeling.
+- Else compose one (`trade-lifecycle`), or pick at most one: a scan
+  `candidate` this direction on the last closed bar (trigger fired, in
+  session and regime), or a manual strategy whose trigger you verified on
+  closed bars, `regimes` fitting. Quote the trigger in the plan. The gate
+  checks a rules trigger from the signal record; a manual one is yours and
+  risk-manager's. `show` it (strategy-library); check every context filter
+  and skip rule against the reports.
+- **Check every reason** before any decision (plan, skip, no trade): state
+  it with reasons, then call once
+  `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`.
+  It checks each reason against the briefing (window and entries, trend rule per side,
+  candidates and verdict, room vs needed, the side's MTF read) and the
+  attempt line, and lists each setup's priority-order steps: judge each step on its own.
+  - FALSE: name it, drop it, decide again from the facts.
+  - UNCHECKED, UNPARSED: check yourself; not false for that alone.
+  - The order gate's checks still come first, unchanged.
 
 ## Examples
 

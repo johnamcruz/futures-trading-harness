@@ -11,40 +11,38 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 ## How It Works
 
-It adds no filter and no veto:
+No filter, no veto of its own:
 
-- **The priority order decides** (strategy-library, "The priority
-  order"): take, skip and size. Only its hard stops and the gate's end a
-  plan early.
-- **A setup is a combination of reads** you state, step by step, and
-  `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
-- **Management always runs.** Protecting, managing and exiting an open
-  position, and the end-of-day flatten, go ahead whatever steps 1-8 say;
-  a no-entry window or a wait never blocks an exit or a risk reduction.
-- **`unknown`, never invented.** A value the briefing or a report doesn't
-  give is written `unknown` (or `unavailable`); never estimate one.
+- The priority order (strategy-library) decides take, skip and size; only
+  its hard stops and the gate's end a plan early.
+- A setup is reads you state step by step and `compose_check` verifies
+  (`trade-lifecycle`); no one read makes a trade.
+- Management always runs: protecting, managing, exiting and the end-of-day
+  flatten go ahead whatever steps 1-8 say; no window or wait blocks an exit
+  or a risk reduction.
+- A value the briefing or a report doesn't give: `unknown` (or
+  `unavailable`); never estimate.
 
 ### The steps
 
-1. **HTF.** The 4h, 1h and 15m trends and structure frame everything
-   below. The bias agrees with the gate's `Trend rule:` line; where they
-   differ, the Trend rule wins, and the plan says so. Read: `trend-vs-range`.
-2. **Context.** Window, news, regime, account (phase 1's Budget and
-   Attempt lines).
-3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
+1. **HTF.** 4h, 1h, 15m trends and structure frame the rest. The bias
+   agrees with the gate's `Trend rule:` line; if not, the rule wins and the
+   plan says so. Read: `trend-vs-range`.
+2. **Context.** Window, news, regime, account (phase 1's Budget, Attempt).
+3. **Location.** VWAP side, value, nearest levels, sweeps.
    Read: `levels-and-reactions`, `breakout-vs-fakeout`.
-4. **Setup.** The setup reads and the side (`trade-lifecycle`), with the
-   trend or against it. Read: `pullback-vs-reversal`, `cisd`; setups:
-   `rejection`, `breakout`.
+4. **Setup.** The setup reads and side (`trade-lifecycle`), with or against
+   the trend. Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`,
+   `breakout`.
 5. **Confluence.** Count the six items of `confluence-counting`.
 6. **Entry.** A closed bar's entry reads; never anticipate.
    Read: `candle-reading`.
-7. **Risk.** Stop (`invalidation`), size, exit (target or trail), the
-   room; the numbers from `order_plan` or the compose record.
-8. **Decision.** Take, skip or wait, decided with the priority order;
-   write its ONE main reason. The counts never overrule it.
-9. **Management.** What invalidates the trade; its exit. Never loosen the
-   stop. Read: `invalidation`.
+7. **Risk.** Stop (`invalidation`), size, exit (target or trail), room;
+   numbers from `order_plan` or the compose record.
+8. **Decision.** Take, skip or wait by the priority order; ONE main reason.
+   Counts never overrule it.
+9. **Management.** Invalidation and exit; never loosen the stop.
+   Read: `invalidation`.
 
 ### Roles
 
@@ -57,18 +55,16 @@ It adds no filter and no veto:
 | risk-manager | 2, 5, 7, 8 (phase 2) |
 | head trader | the whole PLAN |
 
-The three market analysts never write step 2: a cached report would carry
-a stale window. In a cached report, take this bar's 3m facts from the
-briefing. Phase 2 writes line 2 fresh from this cycle's briefing; phase 1
-writes no PLAN line.
+Market analysts never write step 2 (a cached report's window goes stale);
+in a cached report, this bar's 3m facts come from the briefing. Phase 2
+writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.
 
 ### The PLAN block
 
-Your reasoning, not a claim list. If your role's instructions give a
-fact-claim line, state facts only there, in its forms. Fields are the
-briefing's (`m3`, `m15`, `h1`): on your own timeframe's briefing `m3` is
-its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`,
-the briefing's of the lane trading.
+Reasoning, not claims: facts go only in your role's fact-claim line, if it
+has one, in its forms. Fields are the briefing's (`m3`, `m15`, `h1`); on
+your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`,
+`location` are the runner's; `nearestLiquidity`, the trading lane's.
 
 ```text
 PLAN:
@@ -83,8 +79,8 @@ PLAN:
 9 Manage: <flat | invalidation, exit>
 ```
 
-No level in the way (a null `inTheWay`) with a stop means room enough,
-not `unknown`. The cycle result's reason is line 8's.
+A null `inTheWay` with a stop: room enough, not `unknown`. The cycle
+result's reason is line 8's.
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
 close 9; excessive abstention 8; wrong stated reason the false line's;

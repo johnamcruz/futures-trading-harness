@@ -7,8 +7,8 @@ description: Trader-process steps 7 and 9, and each cycle with a position open -
 
 ## When to Use
 
-- Trader-process steps 7 and 9 (PLAN line 9), and each cycle with a
-  position open.
+- Trader-process steps 7 and 9 (PLAN line 9); each cycle with a position
+  open.
 
 ## How It Works
 
@@ -16,32 +16,36 @@ A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. A missing field
 is `unknown`.
 
-**The idea's invalidation**, on a close: a pullback long, below the swing
-low that made it (`m3.swings.low`, or a swing in `m3.htfLevels`); a
-breakout long, back inside the level (`breakout-vs-fakeout`); a reversal
-long after a sweep, beyond its extreme (`m3.sweeps[].wick`). Shorts: the
-mirror.
+**Invalidation**, on a close (shorts mirror):
 
-**The stop read** (step stop) names that level: `stop <tf> low|high
-<price>` (a completed candle's), `stop [<tf>] swing low|high <price>` (a
-confirmed swing: `m3.swings`, `m3.liquidity`, `m3.htfLevels`) or `stop
-<level> <price>`. Code places the stop one tick beyond it, at least the
-larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never
-widened: name a farther level, or pass. This skill never moves, widens or
-replaces it.
+- Pullback long: below the swing low that made it (`m3.swings.low`, or a
+  swing in `m3.htfLevels`).
+- Breakout long: back inside the level (`breakout-vs-fakeout`).
+- Reversal long after a sweep: beyond its extreme (`m3.sweeps[].wick`).
 
-**What makes management exit**: the stop, the target or trail, the
-end-of-day flatten, and the cases `manage-position` names. A close beyond
-the invalidation before the stop goes on line 9 as `invalidation hit`, a
-fact, never a reason to change the stop; acting on it is management's
-call under trade-session, never a wider stop. Stops move toward the
-market only.
+**The stop read** (step stop) names that level:
 
-**A CHoCH against the trade** (`bos-vs-choch`) weighs by its timeframe
-against the trade's own: on the trade's timeframe or higher
-(`m3.lastBreak.last` for a 3m trade, `m15.lastBreak.last`,
-`h1.lastBreak.last`) it is an invalidation sign for line 9; on a lower
-one it is mostly noise.
+- `stop <tf> low|high <price>`: a completed candle's.
+- `stop [<tf>] swing low|high <price>`: a confirmed swing (`m3.swings`,
+  `m3.liquidity`, `m3.htfLevels`).
+- `stop <level> <price>`.
+
+Code places the stop one tick beyond it, at least the larger of 8 ticks
+and 0.25 x ATR(20); a closer one is refused, never widened: name a farther
+level, or pass. This skill never moves, widens or replaces it.
+
+**Management exits on** the stop, the target or trail, the end-of-day
+flatten, and the cases `manage-position` names.
+
+- A close beyond the invalidation before the stop: line 9 `invalidation
+  hit`, a fact, never a reason to change the stop; acting on it is
+  management's call under trade-session, never a wider stop.
+- Stops move toward the market only.
+- A CHoCH against the trade (`bos-vs-choch`) weighs by its timeframe
+  against the trade's own: on the trade's timeframe or higher
+  (`m3.lastBreak.last` for a 3m trade, `m15.lastBreak.last`,
+  `h1.lastBreak.last`), an invalidation sign for line 9; on a lower one it
+  is mostly noise.
 
 Line 9: `9 Manage: invalidation <price, what>, exit <target|trail>`.
 

@@ -19,8 +19,9 @@
 // in the new homes exactly as many times as before, byte-for-byte after whitespace is normalised, each in the home its
 // old lines map to. position-sizing step 8 points to order-plan the same way (order-plan.before.txt). The only
 // exceptions are listed, each with its reason; an exception that no longer differs fails too, so the lists can only
-// shrink. Every role still has the row of every harness tool it holds, or a reasoned reference, and no file but these
-// tests' fixture and this test names the retired skill.
+// shrink. The homes are compared as merged (skill-split-frozen.js: the split as merged; later rewrites are checked by
+// content pins and review). Every role still has the row of every harness tool it holds, or a reasoned reference, and
+// no file but these tests' fixture and this test names the retired skill (both on the skills as they are now).
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -33,6 +34,8 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const sha = rel => crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
 const skill = s => read(`skills/${s}/SKILL.md`);
+// The split as merged; later rewrites are checked by content pins and review.
+const { atSplit } = require('./skill-split-frozen');
 const flat = text => text.replace(/\s+/g, ' ');
 
 const BEFORE = 'tests/fixtures/skill-split/harness-tools.before.txt';
@@ -213,7 +216,7 @@ const OP_ALLOWED = [
 test('harness-tools retired: every unit of the old skill is in exactly one new home, the one its old lines map to, byte-for-byte', () => {
   assert.strictEqual(sha(BEFORE), BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.ok(BRIEFING_CELL, 'the old bar_briefing row');
-  const homes = HOMES.map(skill);
+  const homes = HOMES.map(atSplit);
   assert.deepStrictEqual(differences(read(BEFORE), homes, ALLOWED), []);
   assert.deepStrictEqual(homeErrors(read(BEFORE), homes), [], 'each unit is in the home its old lines map to');
   for (const a of ALLOWED) assert.ok(a.reason, a.old);
@@ -237,7 +240,7 @@ test('order-plan: position-sizing step 8 points to it for what order_plan shows;
 test('harness-tools retired: the comparison catches a lost, a doubled, an edited or a misplaced unit, and a stale exception', () => {
   const old = read(BEFORE);
   assert.ok(units(old).length > 100, 'the units are fine-grained');
-  const homes = HOMES.map(skill);
+  const homes = HOMES.map(atSplit);
   const at = name => HOMES.indexOf(name);
   const swap = (...pairs) => homes.map((h, i) => { const p = pairs.find(([n]) => at(n) === i); return p ? p[1] : h; });
   const bb = homes[at('bar-briefing')];
@@ -319,7 +322,7 @@ test('every role has the row of every harness tool it holds in its core, or a re
   const rm = flat(read('agents/risk-manager.md'));
   assert.match(rm, /Approve the plan's numbers as order_plan shows them; never supply tick numbers of your own\. Its refusal \(not a candidate now, the other side, a verdict the gate would refuse\) is a VETO; a tick-spec refusal: `get_contract`, then call it again \(the `order-plan` skill\)\./);
   assert.doesNotMatch(read('agents/risk-manager.md'), /^role-skills: \[[^\]]*\border-plan\b/m);
-  assert.match(flat(skill('bar-briefing')), /Without one, the news blackouts are `blackouts_list`\./);
+  assert.match(flat(skill('bar-briefing')), /No current briefing \(or it says old\): read the bars yourself; news blackouts: `blackouts_list`\./);
   // The scan's tool calls in strategy-scan reference the rows' skill.
   assert.match(skill('strategy-scan'), /With the harness tools \(`strategy-tools`\):/);
 });

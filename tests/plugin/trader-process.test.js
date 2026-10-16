@@ -71,21 +71,20 @@ test('trader-process: the steps start from the higher timeframe, in the fixed or
 test('trader-process: it orders the thinking and adds no filter; the priority order decides', () => {
   const t = flat(read(SKILL));
   const pins = [
-    'It adds no filter and no veto',
-    '**The priority order decides** (strategy-library, "The priority order"): take, skip and size.',
-    "Only its hard stops and the gate's end a plan early.",
+    'No filter, no veto of its own:',
+    "The priority order (strategy-library) decides take, skip and size; only its hard stops and the gate's end a plan early.",
     // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
-    '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
-    '**Management always runs.** Protecting, managing and exiting an open position, and the end-of-day flatten, go ahead whatever steps 1-8 say; a no-entry window or a wait never blocks an exit or a risk reduction.',
-    "**`unknown`, never invented.** A value the briefing or a report doesn't give is written `unknown` (or `unavailable`); never estimate one.",
-    'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
-    'Never loosen the stop.',
-    '**Setup.** The setup reads and the side (`trade-lifecycle`), with the trend or against it.',
-    '**Risk.** Stop (`invalidation`), size, exit (target or trail), the room; the numbers from `order_plan` or the compose record.',
-    '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
-    "The bias agrees with the gate's `Trend rule:` line; where they differ, the Trend rule wins, and the plan says so.",
-    'The three market analysts never write step 2: a cached report would carry a stale window.',
-    "In a cached report, take this bar's 3m facts from the briefing.",
+    'A setup is reads you state step by step and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
+    'Management always runs: protecting, managing, exiting and the end-of-day flatten go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
+    "A value the briefing or a report doesn't give: `unknown` (or `unavailable`); never estimate.",
+    '8. **Decision.** Take, skip or wait by the priority order; ONE main reason. Counts never overrule it.',
+    '9. **Management.** Invalidation and exit; never loosen the stop.',
+    '4. **Setup.** The setup reads and side (`trade-lifecycle`), with or against the trend.',
+    '7. **Risk.** Stop (`invalidation`), size, exit (target or trail), room; numbers from `order_plan` or the compose record.',
+    '1. **HTF.** 4h, 1h, 15m trends and structure frame the rest.',
+    "The bias agrees with the gate's `Trend rule:` line; if not, the rule wins and the plan says so.",
+    "Market analysts never write step 2 (a cached report's window goes stale);",
+    "in a cached report, this bar's 3m facts come from the briefing.",
     "Phase 2 writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.",
     "The cycle result's reason is line 8's.",
     '| news-calendar-analyst | 2 (news) |',
@@ -98,7 +97,7 @@ test('trader-process: it orders the thinking and adds no filter; the priority or
 
 test('trader-process: the PLAN is reasoning, not a claim list, and its fields are the briefing\'s', () => {
   const text = read(SKILL);
-  assert.ok(flat(text).includes('Your reasoning, not a claim list. If your role\'s instructions give a fact-claim line, state facts only there, in its forms.'));
+  assert.ok(flat(text).includes('Reasoning, not claims: facts go only in your role\'s fact-claim line, if it has one, in its forms.'));
   // Nothing tells the model to copy PLAN lines into a FACTS line (not on main) or offers PLAN items as claims.
   assert.doesNotMatch(text, /FACTS/);
   const block = planBlock(text);
@@ -185,7 +184,7 @@ test('trader-process: on an analyst\'s own timeframe, m3 is the frame\'s bar par
   // The frame carries no trend rule of its own, and the skill says where the rule and the setups come from.
   assert.match(bar.trendRule, /not in a 15m briefing/);
   assert.ok(!('candidates' in bar));
-  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`, the briefing's of the lane trading."));
+  assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`, the trading lane's."));
 });
 
 test('trader-process: a candidate with nothing in its way has room, not an unknown one', () => {
@@ -195,7 +194,7 @@ test('trader-process: a candidate with nothing in its way has room, not an unkno
   // No level ahead, a known stop: inTheWay is null, stopPoints is set (what the skill's guidance reads).
   assert.strictEqual(c.inTheWay, null);
   assert.ok(c.stopPoints > 0);
-  assert.ok(flat(read(SKILL)).includes('No level in the way (a null `inTheWay`) with a stop means room enough, not `unknown`.'));
+  assert.ok(flat(read(SKILL)).includes('A null `inTheWay` with a stop: room enough, not `unknown`.'));
   // Without a stop, inTheWay is null too: that one is unknown (the guidance names the stop).
   const noStop = B.candidate({ ...r, stopDistance: null }, 100, [['prior RTH high', 120]], {});
   assert.strictEqual(noStop.inTheWay, null);
@@ -249,7 +248,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   assert.match(read('agents/news-calendar-analyst.md'), /\n2 Context: news <clear\|blackout\|unknown> now; next <HH:MM ET event \| none>\n```/);
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
-  assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter: the priority order decides\./);
+  assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide in the `trader-process` skill's order and write its PLAN block before your result line; the checks below fill it\. It adds no filter\. - The priority order \(the `strategy-library` skill\) decides every setup, a policy verdict too, step by step\./);
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

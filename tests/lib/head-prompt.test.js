@@ -44,14 +44,15 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // (full mode, another harness), with skill_lookup when it has no skill tool.
   const tl = body('trade-lifecycle').replace(/\s+/g, ' ');
   assert.doesNotMatch(tl, /Then read\*\* with `skill_lookup`/);
-  assert.ok(tl.includes('**Then read** `confluence-counting` and `invalidation` whenever you composed on the bar, `rejection` when a read says a candle rejected a level, `breakout` when one says it broke one: in your prompt when it embeds them (don\'t look them up); else load each (no skill tool: `skill_lookup`; in index mode the gate requires them).'));
+  assert.ok(tl.includes('**Then read** `confluence-counting` and `invalidation` whenever you composed on the bar; `rejection` when a read says a candle rejected a level; `breakout` when one says it broke one. Embedded in your prompt: don\'t look them up; else load each (no skill tool: `skill_lookup`; in index mode the gate requires them).'));
   // Its size, pinned: 59558 bytes before the composed reads were embedded (main at ac8fb6e3), 72143 with them, the owner's
   // explicit exception to the no-growth rule (perf/head-core-composed-skills); 72455 with the owner's approved
   // trade-lifecycle sentences (plan validity, CISD timing, the library display: +312); 72636 with the owner's approved
   // management row (feat/prop-portfolio-missing: the exit mode may let a winner run past its target: +181); 73246 with the
-  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610). It may shrink;
+  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610); 61898 with the
+  // owner's approved terse rewrite of the embedded skills (docs/terse-head-skills: -11348). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 73246, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 61898, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
@@ -79,8 +80,8 @@ test('headPlan/headPrompt: index mode embeds each core skill whole, as a load re
   // Nothing embedded sends it to reload a skill it holds, or to a tool it lacks: trade-session step 0 and role-round
   // say a skill in its prompt counts and name skill_lookup without a skill tool; skill_lookup says the head trader gives no role.
   const flat = t => t.replace(/\s+/g, ' ');
-  assert.match(flat(prompt), /one already in your prompt counts: don't reload it \(no skill tool: skill_lookup\)/);
-  assert.match(flat(prompt), /load skills yourself \(your skill tool; none: skill_lookup or `SKILL\.md`\)/);
+  assert.match(flat(prompt), /one in your prompt counts: don't reload \(no skill tool: skill_lookup\)/);
+  assert.match(flat(prompt), /load skills yourself \(skill tool; none: skill_lookup or `SKILL\.md`\)/);
   const tool = require('../../scripts/lib/harness-tools/registry').BY_NAME.get('skill_lookup');
   assert.match(tool.description, /A role gives role \(its name\) in a cycle, the head trader none/);
   assert.match(head, /\(no role: that is the roles'\)/);

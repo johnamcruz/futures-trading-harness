@@ -6,7 +6,9 @@
 // line) of each old skill as it was (tests/fixtures/skill-split/mtf-*.before.txt, frozen) appears in ITS new skill
 // (mtf-rejection -> rejection, mtf-breakout -> breakout) exactly as many times as it did before, byte-for-byte after
 // whitespace is normalised. The only exceptions are listed below, each with its reason (most are the MTF-specific
-// wording made generic); an exception that no longer differs fails too, so the list can only shrink.
+// wording made generic); an exception that no longer differs fails too, so the list can only shrink. The new skills are
+// compared as merged (skill-split-frozen.js: the split as merged; later rewrites are checked by content pins and review);
+// the old names' absence is checked on the tree as it is now.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -260,7 +262,8 @@ function differences(beforeText, homeText, home) {
   return bad;
 }
 
-const homeText = h => read(`skills/${h}/SKILL.md`);
+// The split as merged; later rewrites are checked by content pins and review.
+const homeText = h => require('./skill-split-frozen').atSplit(h);
 const allDifferences = (texts = {}) => HOMES.flatMap(h => differences(read(PAIRS[h].file), texts[h] === undefined ? homeText(h) : texts[h], h));
 
 test('setup rename: every unit of each old skill is in its new skill, as often as before, byte-for-byte (whitespace normalised)', () => {

@@ -9,7 +9,9 @@
 // skill as it was (tests/fixtures/skill-split/multi-timeframe-analysis.before.txt, frozen) is in the new homes exactly
 // as many times as before, byte-for-byte after whitespace is normalised, in the home its old section maps to, in its
 // old order within each home. The only exceptions are listed, each with its reason; an exception that no longer
-// differs fails too, so the list can only shrink.
+// differs fails too, so the list can only shrink. The homes are compared as merged (skill-split-frozen.js: the split as
+// merged; later rewrites are checked by content pins and review); the index lines, the pointers and what the head trader
+// and the analysts load are checked on the skills as they are now.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -112,7 +114,9 @@ const LATE_STALE = (() => {
 // The units dropped outright (copies 0, no new text): no home holds them.
 const DROPPED = new Set(ALLOWED.filter(a => a.copies === 0 && !a.now).map(a => a.old));
 
-const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
+// The split as merged; later rewrites are checked by content pins and review.
+const { atSplit } = require('./skill-split-frozen');
+const homeTexts = () => HOMES.map(atSplit);
 
 /** The old units each home must hold: Map home -> Map unit -> count (HOMES[0] takes every unit not moved). */
 function expectedHomes(beforeText) {
@@ -232,15 +236,34 @@ test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cyc
   const ts = read('skills/trade-session/SKILL.md');
   const loads = headTraderLoads(ts);
   for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED, 'trader-process', 'htf-to-ltf']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
-  // Every unit of the old alignment section (the table, the policy ceiling), its reversal paragraph, and the rule that
-  // a plan's alignment is the briefing's (never the daily) is in a skill the head trader loads every cycle.
+  // The split as merged (skill-split-frozen.js): every unit of the old alignment section (the table, the policy
+  // ceiling), its reversal paragraph, and the rule that a plan's alignment is the briefing's (never the daily) was in a
+  // skill the head trader loaded every cycle.
   const old = units(read(BEFORE));
-  const loaded = new Set(loads.flatMap(s => units(read(`skills/${s}/SKILL.md`))));
+  const loaded = new Set(headTraderLoads(atSplit('trade-session')).flatMap(s => units(atSplit(s))));
   // An edited unit (an allow-list `now`) is read as its new text.
   const nowOf = u => { const a = ALLOWED.find(x => x.old === u); return a ? [a.now || []].flat() : [u]; };
   for (const i of [35, ...Array.from({ length: 21 }, (_, k) => 63 + k).filter(i => i !== 81)]) for (const u of nowOf(old[i])) assert.ok(loaded.has(u), `the head trader reads: ${u}`);
+  // Later rewrites are checked by content pins and review: htf-to-ltf as it is now, which step 0 loads every cycle,
+  // still has each of them (the briefing's alignment only; the four labels, what each means and does; the composed
+  // trade's label and its reversal tier).
+  const htf = read('skills/htf-to-ltf/SKILL.md');
+  const flatHtf = htf.replace(/\s+/g, ' ');
+  for (const pin of [
+    'A plan\'s alignment and trend rule are the briefing\'s (intraday frames); a daily read (premarket\'s) is context, never a second alignment.',
+    'Highest timeframe down, per side (`m15.alignment`; read `read <side> <label>`). Priority step N: the priority order\'s step N (strategy-library).',
+    'Composed trade: the label is a reason in its plan, never a cut.',
+    'A composed entry against the prevailing trend needs `trade-lifecycle`\'s CHoCH tier (priority step 2).',
+  ]) assert.ok(flatHtf.includes(pin), `the head trader reads: ${pin}`);
+  for (const row of [
+    '| Label | Means | Do |',
+    '| `aligned` | none against, most with | Priority step 4 sizes it; with room to its trail activation and confluence (candidate `facts`): the opportunity |',
+    '| `pullback` | all but the lowest with it, the lowest against: the setup timeframe is pulling back | Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sizes it. Never enter while it still moves against you |',
+    '| `mixed` | disagree, no clear pullback | Priority step 4 sizes it. Target the nearest opposing level; skip in a quiet session |',
+    '| `counter` | the highest against it | Priority step 4; a reversal at a higher-timeframe level is priority step 2, and the plan says why |',
+  ]) assert.ok(htf.split('\n').includes(row), `the head trader reads: ${row}`);
   // Self-test: the instruction, not the name, counts; step 0 saying never to load it fails.
-  const never = ts.replace(/Load `htf-to-ltf` every cycle as\s+well/, 'Never load `htf-to-ltf`');
+  const never = ts.replace(/Load\s+`htf-to-ltf` every cycle as\s+well/, 'Never load `htf-to-ltf`');
   assert.notStrictEqual(never, ts);
   assert.ok(!headTraderLoads(never).includes('htf-to-ltf'), '"Never load `htf-to-ltf`" is not a load');
 });
@@ -252,7 +275,7 @@ test('multi-timeframe-analysis split: the market-structure analyst loads what it
   assert.ok(data['role-index'].includes('daily-bias'), 'daily-bias is looked up as needed');
   for (const s of ['timeframe-sources', 'mtf-bias-filter']) assert.ok(![...data['role-skills'], ...data['role-index']].includes(s), s);
   assert.match(read('skills/premarket/SKILL.md').replace(/\s+/g, ' '), /see the `timeframe-sources` and `daily-bias` skills/);
-  assert.match(read('skills/trade-session/SKILL.md'), /\(`mtf_read` with the bars file, the `timeframe-sources` skill\)/);
+  assert.match(read('skills/trade-session/SKILL.md'), /No current briefing \(none or old\):\s+`mtf_read` on the bars file \(the `timeframe-sources` skill\)\./);
   // In setup-judgment since the trade-session split (trade-session-split.test.js).
   assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /the alignment table in `htf-to-ltf`/);
   assert.match(read('skills/pullback-vs-reversal/SKILL.md'), /shift or reclaim of `htf-to-ltf`/);

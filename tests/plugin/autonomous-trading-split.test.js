@@ -8,7 +8,9 @@
 // the skill as it was (tests/fixtures/skill-split/autonomous-trading.before.txt, frozen) is in the new homes exactly
 // as many times as before, byte-for-byte after whitespace is normalised, in its old order within each home. The only
 // exceptions are listed, each with its reason: text that restated trade-session is now a pointer to it. An exception
-// that no longer differs fails too, so the list can only shrink.
+// that no longer differs fails too, so the list can only shrink. The homes are compared as merged (skill-split-frozen.js:
+// the split as merged; later rewrites are checked by content pins and review); the index lines, the pointers and the
+// per-cycle load are checked on the skills as they are now.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -150,7 +152,10 @@ function addedErrors(beforeText, coreText) {
   return [...added.filter(u => !want.includes(u)).map(u => `unlisted new text: ${u}`), ...want.filter(u => !added.includes(u)).map(u => `listed, not in the core: ${u}`)];
 }
 
-const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
+// The split as merged; later rewrites are checked by content pins and review (skill-split-frozen.js).
+const { atSplit } = require('./skill-split-frozen');
+const homeTexts = () => HOMES.map(atSplit);
+const liveTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 const at = name => HOMES.indexOf(name);
 
 test('autonomous-trading split: every unit of the old skill is in exactly one new home, in its old order', () => {
@@ -231,7 +236,7 @@ test('autonomous-trading split: each skill has a short "Use when" index line, an
   // The moved jobs left the core: lanes, the kill switch and the lock, the logs.
   assert.doesNotMatch(core, /\*\*Several lanes\.\*\*|<FTH_HOME>\/STOP|One runner per broker account|scans-<day>\.jsonl|gate-log\.jsonl/);
   // Its rule numbers stay (rule 1, rule 4 are named in its text), and the result line is still its own.
-  assert.match(core, /5\. \*\*Kill switch and account lock\.\*\* On `\[kill-switch\]`, `\[allowed-accounts\]` or `\[account-lock\]`: manage, protect or flatten only, end `blocked`, and never retry or trade another account: the user resolves it\. The details: the `kill-switch` skill\./);
+  assert.match(core, /5\. \*\*Kill switch and account lock\.\*\* `\[kill-switch\]`, `\[allowed-accounts\]`, `\[account-lock\]`: manage, protect or flatten only; end `blocked`; never retry or trade another account \(the user resolves it; the `kill-switch` skill\)\./);
   assert.match(core, /`CYCLE RESULT: <[^>]+> - <reason>`/);
 });
 
@@ -260,10 +265,10 @@ test('autonomous-trading split: the per-cycle load shrinks; no role and no gate 
     return `- \`${data.name}\` (skills/${data.name}/SKILL.md): ${data.description}`;
   };
   const before = read(BEFORE).length + indexLine(read(BEFORE)).length;
-  const after = read('skills/autonomous-trading/SKILL.md').length + homeTexts().reduce((n, t) => n + indexLine(t).length + 1, -1);
+  const after = read('skills/autonomous-trading/SKILL.md').length + liveTexts().reduce((n, t) => n + indexLine(t).length + 1, -1);
   assert.ok(after < before, `the core and the index lines are ${after} characters, not under the old ${before}`);
   const agents = read('workspace/AGENTS.md');
-  for (const t of homeTexts()) assert.ok(agents.includes(indexLine(t)), `AGENTS.md lists ${parseFrontmatter(t).data.name}`);
+  for (const t of liveTexts()) assert.ok(agents.includes(indexLine(t)), `AGENTS.md lists ${parseFrontmatter(t).data.name}`);
   // No role's body uses the new skills: none loads or indexes them, so no role's prompt grows.
   const { loadRoles } = require('../../scripts/lib/role-skills');
   for (const a of loadRoles(ROOT)) for (const s of HOMES) assert.ok(!a.skills.includes(s) && !a.index.includes(s), `${a.name}: ${s}`);
@@ -275,7 +280,7 @@ test('autonomous-trading split: the per-cycle load shrinks; no role and no gate 
   const A = require('../../scripts/lib/autotrader');
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z'));
   assert.match(p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /Follow the autonomous-trading skill\./);
-  for (const s of STRUCTURE) for (const t of homeTexts()) assert.ok(t.includes(`## ${s}`));
+  for (const s of STRUCTURE) for (const t of liveTexts()) assert.ok(t.includes(`## ${s}`));
 });
 
 test('autonomous-trading-split: every late edit matches a unit of the homes', () => {

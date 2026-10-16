@@ -11,24 +11,22 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
 
 ## How It Works
 
-- **Today's premarket plan and the news** (the prompt's "premarket plan"
-  and blackout lines): start from the plan's bias and levels, and say in the
-  plan if the day so far has invalidated it. A blackout in force means no
-  entries; one coming soon means a trade entered now must have room to work
-  before it, or be skipped.
-- **The day so far** (the prompt's "day:" line, market-snapshot `day`):
-  the open against the prior day, the opening type, the initial balance
-  (IB) and how far the day has extended past it, the day type, and how much
-  of the average daily range (ADR) is used. Read it before choosing a setup:
-  a trend day (one side extended two IBs, or one from a narrow IB), often
-  after an open outside the prior range and an open-drive, is traded with it
-  (fading needs a reversal setup at a higher-timeframe level); a normal
-  variation day (one side extended, less) has made its move and often
-  rotates back; an open inside the prior value area that stays
-  inside the IB is balance (fade the edges, small targets, stand aside in
-  the middle); a neutral day (both sides extended) is two-sided. With 80% or
-  more of the ADR used, the room left for a target is small: say so, and
-  prefer the nearest target.
+- **Premarket plan**: start from its bias and levels; say in the plan if
+  the day has invalidated it.
+- **Blackout** in force: no entries. One soon: enter only with room to work
+  before it, or skip.
+- **The day so far** ("day:" line, market-snapshot `day`: open vs prior
+  day, opening type, initial balance (IB) and extension, day type, average
+  daily range (ADR) used). Read it before choosing a setup:
+  - Trend day (one side extended two IBs, or one from a narrow IB; often
+    after an open outside the prior range and an open-drive): trade with
+    it; fade only on a reversal setup at a higher-timeframe level.
+  - Normal variation (one side extended, less): move made; often rotates
+    back.
+  - Open inside prior value, staying inside the IB: balance; fade the
+    edges, small targets, stand aside in the middle.
+  - Neutral (both sides extended): two-sided.
+  - ADR 80%+ used: little room; say so, prefer the nearest target.
 
 ## Examples
 

@@ -229,9 +229,9 @@ test('order docs check a new order once and never wait or poll for a fill; the c
       /\*\*Any other error\*\*[^]*?the outcome is unknown, not a refusal\. Read\s+`list_open_positions` and `list_open_orders` at once[^]*?`\[protect\]` stop, or\s+`close_position`, before anything else\. Never send the entry again/,
       /\*\*Flat, no working entry\*\* \(the reply was a success with an order id[^]*?report `ABORTED`\s+with the broker's message\. The caller journals a review for it:\s+`result:nofill`\s+only\s+when\s+nothing\s+shows\s+the\s+order\s+filled/,
       /\*\*Filled\*\*: verify with `list_open_orders` that the protective stop is\s+working\. If it isn't \(missing or cancelled\), place it as a `\[protect\]`\s+stop; if it can't be placed, `close_position` immediately/],
-    'skills/autonomous-trading/SKILL.md': [/Never wait\s+within a cycle/, /\*\*Read once per cycle\.\*\* For each symbol, each\s+role/, /A full cycle still runs its analysts in parallel/, /lacks `remainingBeforeLimit` \(and, without a prop attempt,\s+today's P&L\): a cycle that may enter reads `get_account_snapshot` once/, /gives only a count of working orders, the\s+trend rule, and no scan details: read `list_open_orders` once; take the\s+alignment and the scan's candidates from the bar briefing/, /\(you, each analyst, each call of a role; a role you play yourself\s+counts as that role\)/, /Anything under "Context unavailable", read\s+once yourself/, /A trade review's\s+`get_bars` over a trade's hold is one read per trade reviewed/, /Read the account and open orders once after each `place_order`,\s+`modify_order`, `cancel_order`, `close_position`, or\s+`partial_close_position`, including one that failed or timed out/, /before an order call unless you read them after\s+your last one/, /A failed read may be retried once/, /Never resend an order call blindly: after a failed or timed-out\s+one, read `list_open_orders` and `get_account_snapshot`, and send it\s+again only if they show it didn't go through and it is still needed \(a\s+close or a `\[protect\]` stop always is\)/, /journalled as working and the cycle\s+ends/, /as plain text in your final message: never as a tool call/,
+    'skills/autonomous-trading/SKILL.md': [/Never wait\s+within a cycle/, /\*\*Read once per cycle\*\*, per symbol and role/, /A full cycle still runs its analysts in parallel, except those under "Cached reports"\s+\(role-round\): don't relaunch them\./, /No `remainingBeforeLimit` in the prompt \(or, without a prop attempt,\s+today's P&L\): a cycle that may enter reads `get_account_snapshot`\s+once/, /The prompt has only a working-order\s+count, the trend rule, no scan details: read `list_open_orders`\s+once; alignment and candidates from the briefing/, /\(you, each analyst, each\s+role call; a role you play counts as it\)/, /"Context unavailable" items: read once yourself/, /A trade review's `get_bars`\s+over its hold: one read per trade/, /Account and open orders: once after each `place_order`,\s+`modify_order`, `cancel_order`, `close_position`,\s+`partial_close_position` \(failed or timed out too: it may be live\)/, /and before an order call unless read since your last one/, /Retry a failed read once/, /Never\s+resend an order call blindly \(it may have reached the exchange\): after\s+a failed or timed-out one, read `list_open_orders` and\s+`get_account_snapshot`; resend only if it didn't go through and is\s+still needed \(a close or a `\[protect\]` stop always is\)/, /An order unfilled at its one check: journal\s+it as working, end/, /as plain text in your final\s+message: never as a tool call/,
       // The refused or errored entry is trade-session step 6's (pinned there): here a pointer (autonomous-trading split).
-      /A refused entry, or one whose\s+reply was an error, is handled as trade-session step 6 says \(a refusal\s+ends the cycle `blocked`\), and confirm it yourself: read positions and\s+orders, and fix any position without a working stop first\./],
+      /A refused or errored entry: as trade-session step 6 says \(a refusal\s+ends `blocked`\); read positions and orders yourself, and fix any\s+position without a working stop first\./],
     'skills/end-of-day/SKILL.md': [/a position still\s+open after its close is closed again/, /Don't wait\s+for a close to fill/, /unless its earlier close still shows\s+as a working order in `list_open_orders`: a market order on the opposite\s+side, sized to the position \(a stop or limit is not one/,
       /cancels every working order once that\s+contract reads flat/, /runner keeps\s+closing until it reads flat \(interactively, close again and tell the user/],
     'rules/trading/risk-management.md': [/as soon as the\s+fill shows \(the order's\s+one status check, or the next cycle's read\)/, /without a stop bracket \(one the gate never checked, e\.g\. placed outside\s+the harness\) is cancelled, not waited on/,
@@ -283,15 +283,16 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
   // trade-session's step 2 roles, its lean cycle and its step 4 plan are skills of their own (trade-session-split.test.js).
   const ts = ['role-round', 'lean-cycle', 'trade-plan'].map(s => read(`skills/${s}/SKILL.md`)).join('\n');
   for (const re of [
-    /Every other role runs every full cycle: each carries skills the decision needs/,
-    /\*\*Cached reports\.\*\*[^]*?in a one-symbol cycle, an analyst's report while the bar briefing\s+parts it was built on are current \(until the next 15m close\); `risk-manager`\s+phase 1 while the account is unchanged[^]*?Don't launch a role whose report the prompt gives[^]*?Phase 2 reviews this bar's plan and\s+is never cached\. Cached reports count for the cycle's first entry only: after a\s+`trade-executor` call, the next entry needs every role again, and where the\s+harness refuses a cached role's launch \(opencode\) that is the next cycle: a\s+`trade-executor` call ends this cycle's entries\./,
-    /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle or were given under "Cached reports",\s+`risk-manager` twice \(phase 1, then phase 2 once phase 1 and the analysts\s+that ran have returned; phase 2 alone when phase 1 was cached\), each in the foreground/,
-    /since the last `trade-executor` call:\s+each entry has its own round of reports/,
-    /the refused `trade-executor` call itself ends the round, so\s+report the block and end the cycle \(step 6\)/,
-    /in an autonomous\s+run there is no stand-in: without the roles' reports, no entry/,
+    /Every other role runs every full cycle, carrying skills the decision\s+needs/,
+    /\*\*Cached reports\*\* \(in the prompt\) while their basis holds: an analyst's\s+\(one-symbol cycle\) until its briefing parts change \(the next 15m close\);\s+`risk-manager` phase 1's while the account is unchanged[^]*?Don't launch a cached role[^]*?Phase 2: never cached\.\s+-\s+Cached reports serve the first entry only: after a `trade-executor` call\s+the next entry needs every role again; where the harness refuses a cached\s+launch \(opencode\), that is next cycle: the call ends this cycle's entries\./,
+    /Run the roles at once as your harness's subagents/,
+    /Autonomous, `\[roles-ran\]`: the gate refuses an entry until\s+`market-structure-analyst`, `trend-momentum-analyst`,\s+`volume-liquidity-analyst` and `risk-manager` returned in the foreground\s+this cycle \(or cached\), since the last `trade-executor` call: one round\s+per entry\. `risk-manager` twice: phase 1, then phase 2 after phase 1 and\s+the analysts that ran \(phase 2 alone if phase 1 was cached\)\./,
+    /since the last `trade-executor` call: one round\s+per entry/,
+    /The refused `trade-executor` call ends the round: report\s+the block, end the cycle \(step 6\)/,
+    /Autonomous: no\s+stand-in; no reports, no entry\./,
     /until\s+`risk-manager` has returned twice this cycle \(phase 1 and phase 2\)/,
-    /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way \(`inTheWay`, the compose record's or a\s+candidate's: the first level in its direction in points and R, where 1R is\s+its own stop/,
-    /multi-timeframe alignment for the side \(aligned, pullback, mixed, counter\)\s+and the size it implies/, /A plan\s+that can't name them isn't ready/,
+    /structure: bias, the level entry and stop sit against;/, /volume-liquidity, session-timing: VWAP side, value area or POC;\s+`inTheWay` \(compose record's or candidate's: first level its way, in\s+points and R of its own stop\): check room to the target or trail activation\./,
+    /multi-timeframe alignment for the side \(aligned, pullback, mixed,\s+counter\) and the size it implies;/, /Can't name them: not ready\./,
   ]) assert.match(ts, re);
   assert.match(read('skills/gate-refusals-cycle/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
 });
@@ -304,7 +305,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
     assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
     assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
   }
-  assert.match(read('skills/setup-judgment/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this skill agrees and it isn't\s+`blocked`[^]*?The priority order decides: a policy strategy's verdict\s+too\./);
+  assert.match(read('skills/setup-judgment/SKILL.md'), /\*\*Facts first\*\*, context not verdict\.[^]*?Judge by its\s+STRATEGY\.md \(`strategies_show`: context filter, skip rules\), the trend\s+rule, the alignment table in `htf-to-ltf`, its min R:R\.\s+-\s+Trend rule allows, `aligned`, room past its need, confluence, not\s+`blocked`, rest of this skill agrees: the opportunity\.[^]*?The priority order decides, a policy verdict too\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /### The priority order: the rule for every setup[^]*?A\s+verdict\s+is\s+a\s+ceiling\s+on\s+size,\s+never\s+an\s+order\.\s+Contradicting\s+facts\s+mean\s+no\s+trade;\s+confluence\s+means\s+trade\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
   for (const f of [...TRADE_SESSION_SPLIT, 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
     assert.doesNotMatch(read(f), /Place exactly the verdict|the facts never\s+change it|doesn't halve the verdict|is already sized: don't halve it|Never argue with\s+it/, f);
@@ -315,7 +316,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/manage-position/SKILL.md'), /close at\s+market \(time stop\)\. Each stop move and close goes through the\s+trade-executor role, as all management does\./);
   // Step 6 has no exception: a conflict is no trade, a reversal too.
   assert.match(read('agents/risk-manager.md'), /`confluence\.against`\):\s+its step 6\./);
-  assert.match(read('skills/setup-judgment/SKILL.md'), /both sides \(`confluence\.against`\) a conflict: stand aside\s+\(the priority order, step 6: no exception\)\./);
+  assert.match(read('skills/setup-judgment/SKILL.md'), /Both sides\s+\(`confluence\.against`\): stand aside \(priority order step 6, no\s+exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
   for (const f of ['agents/risk-manager.md', ...TRADE_SESSION_SPLIT, 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'skills/tool-arguments/SKILL.md', 'skills/strategy-tools/SKILL.md', 'skills/bar-briefing/SKILL.md', 'skills/strategy-library/SKILL.md', 'skills/order-plan/SKILL.md', 'skills/reason-check/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');
@@ -323,9 +324,9 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(rm, /within the verdict for a policy strategy; the priority order's size\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Halvings don't compound: however many\s+steps halve, the size is halved once\./);
   // The example's short against the trend is the priority order's step 2 (crt_1h retired; D2 for a composed one).
-  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /a composed\s+short needs a 1h CHoCH down and a 4h rejection \(`trade-lifecycle`\)\./);
+  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /Short: counter; a trend strategy's is refused \(scan and gate\); a composed\s+one needs a 1h CHoCH down and a 4h rejection \(`trade-lifecycle`\)\./);
   assert.match(rm, /`m3` `candidates` is `null` \(the scan failed or the bar wasn't\s+scanned\): VETO a rules strategy/);
-  assert.match(read('skills/htf-to-ltf/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
+  assert.match(read('skills/htf-to-ltf/SKILL.md'), /Priority step N: the priority order's step N \(strategy-library\)\.[^]*?\n\| `mixed` \|[^\n]*\| Priority step 4 sizes it\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /`pullback` → no trade until the trigger timeframe turns back with the\s+bias \(a shift, a reclaim\), then full; `mixed` → half;/);
   assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a\s+15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection\./);
@@ -333,20 +334,22 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(rm, /^tools: .*mcp__harness__bar_briefing/m);
   assert.match(rm, /The market facts come from the bar briefing[^]*?don't fetch bars or run\s+`strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold/);
   const ts = read('skills/trade-session/SKILL.md');
-  assert.match(ts, /\*\*Every cycle, first:\*\* the bar briefing \(`bar_briefing \{"symbol": "<SYMBOL>"\}`/);
-  assert.match(ts, /Read it once per role and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
-  assert.match(read('skills/role-round/SKILL.md'), /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
+  assert.match(ts, /\*\*Every cycle, first:\*\* `bar_briefing \{"symbol": "<SYMBOL>"\}` \(the\s+`bar-briefing` skill\)/);
+  assert.match(ts, /Once per role, reused: no role re-runs `market_snapshot`,\s+`mtf_read` or `strategies_scan` for it\./);
+  assert.match(read('skills/role-round/SKILL.md'), /A report opens with `Data:`: the briefing versions used \(no current\s+briefing: the tools called\)\. No `Data:` line, or another bar's `m3`\s+version while this bar's briefing is current: it didn't read this bar;\s+rerun that analyst once; if it still doesn't, stand aside\. An old briefing \(the tool says\s+so\) counts as none/);
   assert.match(read('skills/timeframe-sources/SKILL.md'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`\s+skill \(use a current briefing; `mtf_read`[^)]*only for what it lacks:\s[^]*?`mtf_read` json's\)/);
-  assert.match(read('skills/htf-to-ltf/SKILL.md'), /The alignment and the trend rule in a trade plan are the briefing's \(intraday\s+frames\); a daily read, if you have one \(premarket's\), is context only, never a\s+second alignment/);
-  assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
+  assert.match(read('skills/htf-to-ltf/SKILL.md'), /A plan's alignment and trend rule are the briefing's \(intraday frames\); a\s+daily read \(premarket's\) is context, never a second alignment\./);
+  assert.match(read('skills/autonomous-trading/SKILL.md'), /`bar_briefing` is the runner's file for this bar: read it once per\s+role, reuse it \(it doesn't change in the cycle\)/);
   const ht = read('skills/bar-briefing/SKILL.md');
-  // The briefing's m3 cisd (briefing.js cisdBlock), after the trend rule as m3 builds it; a frame points to it.
-  assert.match(ht, /`location`, `candidates` \(each with[^]*?\), `trendRule`, `cisd` \(the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles:[^)]*; a read, not a signal\), `candles` \(per timeframe,[^]*?`swingTargets` \([^)]*\)\. `m15`/);
-  assert.match(ht, /with a pointer to the runner's `candles`, `swingTargets` and `cisd`/);
-  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the next swing targets, the latest CISD per timeframe, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
-  assert.match(ht, /`candidates` \(each with its stop, exit, the first level in its way in R, the room it needs, and its context as `facts`[^;]*; `null`: the scan failed or the bar wasn't scanned/);
-  assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile\. Each part has a version and changes only on expiry/);
-  assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
+  // The briefing's m3 cisd (briefing.js cisdBlock), after the trend rule as m3 builds it; a frame points to it. The m3
+  // fields are one bullet each: the order is enforced across the bullets.
+  assert.match(ht, /`location`\s*-\s*`candidates`: each with [^\n]*\s*-\s*`trendRule`\s*-\s*`cisd`: latest CISD per timeframe \(3m, 5m, 15m, 1h; completed candles\): [^\n]*; a read, not a signal\s*-\s*`candles`: per timeframe \(3m, 5m, 15m, 1h, 4h\)[^]*?\s*-\s*`swingTargets`: [^\n]*\s*`m15`, until the next 15m close:/);
+  assert.match(ht, /points to the runner's `candles`, `swingTargets`, `cisd` \(session levels, one value each\)/);
+  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `timeframe`\?, `json`\? \| the runner's briefing for the bar this cycle decides \(parts below\)\. Opens with a summary: price and 1R, trend rule, alignment, regime, VWAP, news, room above and below, each timeframe's last completed candle, next swing targets, latest CISD per timeframe, each setup with its facts\. Times ET; distances in points and R \(1R: a setup's own stop, else the reference stop, 0\.5 x ATR\(20\) of its own bars, named by timeframe: `oneR`\) \|/);
+  assert.match(ht, /`candidates`: each with stop, exit, first level in its way in R, room needed, `facts` \(trend rule and MTF read for its side, room, confluence, VWAP side, window\); `null`: scan failed or bar not scanned/);
+  assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile\./);
+  assert.match(ht, /Each part has a version and changes only on expiry; reuse it, never\s+recompute it\./);
+  assert.match(ht, /No current briefing \(or it\s+says old\): read the bars yourself/);
   assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the plan the caller gives you and the analysts'\s+reports instead; don't fetch bars for them\./);
   assert.match(read('agents/market-structure-analyst.md'), /the latest BOS or CHoCH with how many candles ago \(the\s+briefing's `lastBreak` in `m3`, `m15` and `h1`: computed from confirmed\s+swings, never by eye\)/);
   assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
@@ -374,7 +377,7 @@ test('the session hours read unambiguously (a small local model read "18:00 ET t
   assert.match(read('skills/session-timing/SKILL.md'), /The harness follows the\s+prop firm's trading day, not CME's: it starts at 18:00 ET \(the firm's\s+daily reset\), and the harness trades it until 16:00 ET the next day[^]*?stopping before\s+the firm's own flatten deadline, which comes after 16:00 ET/);
   assert.match(read('workspace/AGENTS.md'), /runs overnight until 16:00 ET the next day/, 'the generated operator instructions carry it');
   assert.match(require('../../scripts/lib/trading/clock').MARKET_HOURS_LABEL, /^the harness's hours inside the Topstep trading day \(17:00 CT reset\): from 18:00 ET until 16:00 ET the next day[^]*09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; Topstep's own flatten is 16:10 ET$/);
-  assert.match(read('skills/role-round/SKILL.md'), /A role's call is that\s+role's own analysis \(the order gate counts it as its report\): never ask a role\s+to read, load or summarize skills or files for you; load skills yourself \(your\s+skill tool; none: skill_lookup or `SKILL\.md`\)\./);
+  assert.match(read('skills/role-round/SKILL.md'), /A role's call is its own analysis \(the order gate counts it as its\s+report\): never ask a role to read, load or summarize skills or files;\s+load skills yourself \(skill tool; none: skill_lookup or `SKILL\.md`\)\./);
   assert.match(read('workspace/AGENTS.md'), /load the skill you need yourself \(your skill tool; without one,\s+the `skill_lookup` tool or `<root>\/skills\/<name>\/SKILL\.md`\), never through a\s+role/);
   assert.match(read('skills/strategy-authoring/SKILL.md'), /the whole market session, from 18:00 ET until 16:00 ET the next day \(closed only 16:00-18:00 ET/);
   assert.match(read('skills/premarket/SKILL.md'), /^description: .*Use at the start of the trading day \(just after the 18:00 ET open\)/m);
@@ -444,7 +447,7 @@ test('the priority order is written once, in strategy-library, and every role th
   for (const f of docs) for (const re of RULE) assert.doesNotMatch(read(f), re, `${f} restates the priority order (${re}): point to strategy-library instead`);
   // Who decides has it: trade-session names it (a rules entry loads strategy-library); the roles that judge a setup carry
   // it. A trade_lifecycle entry is sized by the model under the caps: no priority order halves it (the owner's D1).
-  assert.match(read('skills/trade-session/SKILL.md'), /The priority order\*\* \(the `strategy-library` skill, "The priority order"\)/);
+  assert.match(read('skills/trade-session/SKILL.md'), /The priority order \(the `strategy-library` skill\) decides every setup, a\s+policy verdict too, step by step\./);
   assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding/);
   for (const role of ['risk-manager', 'market-structure-analyst', 'trend-momentum-analyst']) {
     // Its core (role-skills): never only in its index (role-index).
@@ -458,7 +461,7 @@ test('the priority order is written once, in strategy-library, and every role th
 test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
   // Line breaks fall differently in each document: compare with the whitespace collapsed.
   const flat = text => text.replace(/\s+/g, ' ');
-  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>(?:\\n<your FACTS line>)?"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE: name it, drop it, and decide again from the facts\. Check UNCHECKED and UNPARSED reasons yourself[^.]*?; they aren't false for that alone\./;
+  const step = /\*\*Check every reason\*\* before any decision \(plan, skip, no trade\): state it with reasons, then call once `reason_check \{"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"\}`\. It checks each reason against the briefing \(window and entries, trend rule per side, candidates and verdict, room vs needed, the side's MTF read\) and the attempt line, and lists each setup's priority-order steps: judge each step on its own\. - FALSE: name it, drop it, decide again from the facts\. - UNCHECKED, UNPARSED: check yourself; not false for that alone\./;
   // Only a FALSE reason is dropped: a true one the checker can't read (UNPARSED) stays.
   for (const doc of ['agents/risk-manager.md', ...TRADE_SESSION_SPLIT, 'skills/autonomous-trading/SKILL.md']) assert.doesNotMatch(flat(read(doc)), /no fact supports/, doc);
   const rm = read('agents/risk-manager.md');
@@ -476,11 +479,11 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   // The head trader's step 3 checks are the setup-judgment skill (trade-session-split.test.js), which step 3 names.
   const sj = read('skills/setup-judgment/SKILL.md');
   assert.match(flat(sj), step);
-  assert.match(flat(sj), /The order gate's checks still come first and don't change\./);
+  assert.match(flat(sj), /The order gate's checks still come first, unchanged\./);
   // In step 3, before the no-trade note and the plan.
   const ts = read('skills/trade-session/SKILL.md');
   assert.ok(ts.indexOf('### 3. Head-trader synthesis') < ts.indexOf('the `setup-judgment`') && ts.indexOf('the `setup-judgment`') < ts.indexOf('unanswered red flag → **no trade**'));
-  assert.match(read('skills/autonomous-trading/SKILL.md'), /Check its reasons against the facts before you write it \(`reason_check`,\s+setup-judgment\): a reason marked FALSE is dropped and the decision\s+made again\./);
+  assert.match(read('skills/autonomous-trading/SKILL.md'), /Check its reasons with\s+`reason_check` \(setup-judgment\) first: drop a FALSE one, decide again\./);
   assert.match(read('skills/reason-check/SKILL.md'), /\| `reason_check` \| `symbol`, `reasons` [^\n]*\| `reason-check\.js --symbol MNQ --reasons "<line>" \[--json\]` \|/);
   // Wired: Codex's and Qwen's risk manager, opencode's risk manager and head trader; no other role holds it.
   assert.match(read('.codex/agents/risk-manager.toml'), /harness MCP tools you may use: [^\n]*\breason_check\b/);
@@ -518,7 +521,7 @@ test('fact-checked reasons: phase 2 states its FACTS in the forms the code check
     assert.match(flat(text), /\*\*State the facts your verdict rests on\*\* in one `FACTS:` line/);
   }
   // The head trader hands the line on and reads the gate's refusal.
-  assert.match(flat(read('skills/role-round/SKILL.md')), /checks the `FACTS:` line of the phase-2 report that approved the entry against the bar briefing \(`\[phase2-facts\]`\)/);
+  assert.match(flat(read('skills/role-round/SKILL.md')), /`\[phase2-facts\]`: the gate checks the approving phase-2 `FACTS:` line against the briefing: a contradicted fact, under two checked facts \(current briefing\), or uncheckable facts refuse\./);
   assert.match(read('skills/gate-refusals-cycle/SKILL.md'), /\| `\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: <fact>` \|/);
 });
 

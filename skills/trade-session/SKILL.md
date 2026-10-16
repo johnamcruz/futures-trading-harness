@@ -5,18 +5,16 @@ description: Use when running one trading cycle - /trade-session, an autonomous 
 
 # Trade Session
 
-One decision cycle for a symbol (default MNQ). In autonomous mode a cycle
-starts after every closed bar of the configured timeframe (1 or 3 minutes),
-so finish well inside one bar. Run it again for the next cycle; never loop
-inside one run.
+One decision cycle per symbol (default MNQ), one run per cycle: never loop.
+Autonomous: after every closed bar (1 or 3 min); finish well inside it.
 
 ## When to Use
 
 - The user asks to trade, or the autonomous runner starts a cycle.
-- Plan-only mode (`paper`, `plan only`, or trading disabled): stop after the verdict.
-  The `paper` tag on a journal entry does not stop an order; only
-  `FTH_PAPER=1` (or trading disabled on the server) makes the gate refuse live
-  entries. In plan-only mode never call an order tool.
+- Plan-only (`paper`, `plan only`, trading disabled): stop after the
+  verdict; never call an order tool. A `paper` journal tag stops no order;
+  only `FTH_PAPER=1` (or trading disabled on the server) makes the gate
+  refuse live entries.
 
 ## How It Works
 
@@ -25,134 +23,113 @@ inside one run.
 Before any decision, load `trade-session` (this skill),
 `multi-timeframe-analysis` and `trade-lifecycle` with the skill tool (a
 rules entry: `strategy-library`, `strategy-scan`, `strategy-gate-checks`
-too). The order gate refuses an entry until each is loaded (an errored load doesn't
-count); one already in your prompt counts: don't reload it (no skill tool:
-skill_lookup). Load `trader-process`
-too: its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
-well: the alignment labels for each side and the reversal rule. Load the others
-as a step names them.
+too). The gate refuses an entry until each is loaded (an errored load
+doesn't count); one in your prompt counts: don't reload (no skill tool:
+skill_lookup). Load `trader-process` too: your decision order. Load
+`htf-to-ltf` every cycle as well: alignment labels per side, the reversal
+rule. Others as a step names them.
 
 ### 1. State first
 
-- `get_server_config`. Trading disabled → plan-only mode. The harness
-  records its `maxOrderSize`: the gate refuses any entry until it has, and
-  any entry over it (exits and stops are never held back by it).
-- **Know the account before deciding anything**: balance, today's realized
-  P&L and room to the daily limits, open positions, working orders, and, if a
-  prop attempt is running, its floor, cushion, progress to the target,
-  sessions left, and size budget. The autonomous prompt states the balance,
-  positions, working orders, and any attempt's numbers (as read just before
-  the run); it does not carry today's P&L or the room to the daily limit, so
-  read `get_account_snapshot` (`remainingBeforeLimit`) every cycle that may
-  enter, and the harness tool `combine_status` for an attempt. Every
-  decision below (take, skip, size, manage, stand down) is made with these
-  numbers.
-- **A position is open**: manage it by the `manage-position` skill, and end
-  the cycle.
-- **Fresh data or no decision**: the last closed bar in the bars file must be
-  no older than one bar of its timeframe (plus a minute) at the cycle's time,
-  and the file's timeframe must be the one you are trading (a scan of 1m bars
-  says nothing about a 3m strategy). Stale or mismatched bars → manage open
-  positions only, journal a note, end. On interactive use, check the contract
-  is the front month (`search_contracts` / the roll guidance in
-  `contract-roll`) before planning.
+- `get_server_config`. Trading disabled → plan-only. The gate refuses any
+  entry until its `maxOrderSize` is recorded, and any over it (never exits
+  or stops).
+- **Know the account first** (every take, skip, size, manage, stand down
+  uses it): balance, today's realized P&L, room to the daily limits,
+  positions, working orders; an attempt's floor, cushion, progress, sessions
+  left, size budget. The autonomous prompt states balance, positions,
+  working orders and attempt numbers; it lacks today's P&L and room: a
+  cycle that may enter reads `get_account_snapshot` (`remainingBeforeLimit`),
+  and `combine_status` for an attempt.
+- **Position open**: the `manage-position` skill, then end.
+- **Stale data, no decision**: the bars file's last closed bar over one bar
+  (plus a minute) old, or not your timeframe → manage open positions only,
+  journal a note, end. Interactively, check the front month
+  (`search_contracts` / the roll guidance in `contract-roll`) first.
 - **Flat with working orders**: the `leftover-orders` skill.
-- **Flat, with an earlier entry today that has no review** (it closed or was
-  cancelled between cycles): run trade-review (`trade-reviewer` role) first.
-  The order gate refuses the next entry until every entry is reviewed.
-- Daily stop or loss-streak cooldown in risk-manager phase 1, the prompt, or the journal → report and end.
-  The gate also refuses entries after `FTH_MAX_ENTRIES_PER_DAY` (default 6)
-  entries in a day; at the cap, manage and end.
-- **A tool fails** (timeout, 429, 5xx, an empty reply): retry a read once
-  after a few seconds; never retry an order call blindly. After a failed or
-  timed-out order call, read `list_open_orders` and `get_account_snapshot`
-  first: the order may have reached the exchange. `get_bars` allows 50
-  requests per 30 s across all agents: use the bars file, don't refetch. If
-  account state can't be read, place nothing new; report and end.
-- **Bars, interactively** (no runner bars file): the harness tool
-  `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <3 or 1>, "record": true}`)
-  writes the runner's default count of closed bars (5000 3-minute, 15000
-  1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness
-  home's own; use the path it returns) and records the
-  multi-timeframe read for the gate (the `bar-briefing` skill). Never paste
-  a long `get_bars` reply into a file.
+- **Flat, an earlier entry today unreviewed**: trade-review
+  (`trade-reviewer` role) first; the gate refuses the next entry until
+  every entry is reviewed.
+- Daily stop or loss-streak cooldown (risk-manager phase 1, the prompt, the
+  journal) → report, end. Past `FTH_MAX_ENTRIES_PER_DAY` (default 6) entries
+  a day the gate refuses: manage and end.
+- **A tool fails** (timeout, 429, 5xx, empty reply): retry a read once after
+  a few seconds; an order call never blindly: read `list_open_orders` and
+  `get_account_snapshot` first (it may have reached the exchange).
+  `get_bars`: 50 requests per 30 s across all agents; use the bars file.
+  Account unreadable → nothing new; report, end.
+- **Bars, interactively**: `bars_fetch`
+  (`{"symbol": "<SYMBOL>", "timeframe": <3 or 1>, "record": true}`) writes
+  the runner's default count (5000 3-minute, 15000 1-minute) to
+  `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (use the returned path) and
+  records the multi-timeframe read for the gate (`bar-briefing`). Never
+  paste a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 
-**Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
-the `bar-briefing` skill): this bar's analysis by timeframe, computed once by
-the runner (the multi-timeframe read with the alignment per side, the trend
-rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
-participation and liquidity, the session window), each part with its version
-and how long it holds. Read it once per role and reuse it: no role re-runs
-`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without a current briefing (interactively, or when the tool says none or old), the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced:** a trend strategy never enters
-against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
-only a strategy with `mtf: reversal` may fade it. The scan already drops
-such candidates and the order gate refuses them. In autonomous runs the
-prompt states the recorded rule; interactively, `bars_fetch` with `record`
-(or `mtf_read` with `record` and `symbol`) records it (the gate refuses
-trend entries unless the recorded bar closed less than 15 minutes ago: fetch
-fresh bars, re-recording an old file doesn't help). Never
-argue a trend strategy into a counter-trend trade; a composed one goes
-against it only with a true CHoCH its way at or above the trend's
-frame (`trade-lifecycle`). Put the read for the side in the plan entry. A policy
-verdict is a ceiling, never an order.
+**Every cycle, first:** `bar_briefing {"symbol": "<SYMBOL>"}` (the
+`bar-briefing` skill): the runner's analysis of this bar per timeframe
+(alignment, trend rule, candidates, levels, VWAP, liquidity, window;
+versioned). Once per role, reused: no role re-runs `market_snapshot`,
+`mtf_read` or `strategies_scan` for it. No current briefing (none or old):
+`mtf_read` on the bars file (the `timeframe-sources` skill).
 
-**The trigger is checked too.** The scan's `candidate` is the trigger: the
-gate refuses a rules strategy's entry unless that strategy fired, on that
-side, on a bar that closed at most 3 bars of its own timeframe ago, and
-never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min on 15m
-and 1h), per the signal record
-(the runner records every bar; interactively, `strategies_scan` with the
-bars file, `symbol`, and `record: true`). A different setup tag on the
-same trade is refused: enter only on the strategy that fired. A composed
-entry's trigger is this bar's compose record (`trade-lifecycle`).
+**The trend rule is enforced:** a trend strategy never enters against the
+prevailing trend (the highest of 4h, 1h, 15m with a trend); never argue one
+into it. Only `mtf: reversal` fades it; a composed entry only with a true
+CHoCH its way at or above the trend's frame (`trade-lifecycle`). The scan
+drops such candidates; the gate refuses them. Autonomous: the prompt states the
+recorded rule. Interactively, `bars_fetch` (or `mtf_read` with `symbol`)
+with `record` records it; trend entries need it under 15 minutes old
+(fetch fresh bars; re-recording an old file doesn't help). The side's read
+goes in the plan entry. A policy verdict is a ceiling, never an order.
 
-**Lean cycle** (the prompt says "lean"): the `lean-cycle` skill.
+**The trigger is checked too.** A rules entry needs that strategy's
+`candidate`, that side, on a bar closed at most 3 bars of its own timeframe
+ago, and never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min
+on 15m and 1h), per the signal record (the runner records every bar;
+interactively `strategies_scan` with the bars file, `symbol`,
+`record: true`). Only the strategy that fired: another tag is refused. A
+composed entry's trigger is this bar's compose record (`trade-lifecycle`).
 
-**Full cycle** (default): read the `role-round` skill (the roles, their
-reports, `[roles-ran]`; an analyst on its own timeframe: `runner-lanes`).
+**Lean cycle** (prompt says "lean"): the `lean-cycle` skill. **Full cycle**
+(default): the `role-round` skill (roles, reports, `[roles-ran]`; own
+timeframe: `runner-lanes`).
 
 ### 3. Head-trader synthesis (you)
 
-Decide top-down in the `trader-process` skill's order (HTF, context,
-location, setup, confluence, entry, risk, decision, management) and write
-its PLAN block before your result line; the checks below fill its lines.
-It orders the thinking and adds no filter: the priority order decides.
+Decide in the `trader-process` skill's order and write its PLAN block
+before your result line; the checks below fill it. It adds no filter.
 
-- **The priority order** (the `strategy-library` skill, "The priority order"):
-  the rule for every setup, a policy verdict too. Apply its steps in order.
-- **Every decision**: read the `setup-judgment` and `day-context` skills;
-  before an entry, `trade-plan` too (the order gate refuses an entry until
-  `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.
-- No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an
-  unanswered red flag → **no trade**: journal a short `note` with the reason
-  and what would change it, and end.
+- The priority order (the `strategy-library` skill) decides every setup, a
+  policy verdict too, step by step.
+- Every decision: the `setup-judgment` and `day-context` skills; before an
+  entry, `trade-plan` too (the order gate refuses an entry until
+  `setup-judgment` and `trade-plan` were read). Open trade: `manage-position`.
+- No setup (no candidate, no `compose_check` OK), a failed skip rule, an
+  event within 15 minutes, or an unanswered red flag → **no trade**:
+  journal a short `note` (reason, what would change it); end.
 
 ### 4. Plan
 
-The `trade-plan` skill: the plan entry, the exit, ticks, and `order_plan`.
+The `trade-plan` skill: plan entry, exit, ticks, `order_plan`.
 
 ### 5. Verdict
 
-`risk-manager` phase 2 with the plan. `VETO` → journal a note, end. In
-plan-only mode, report the plan and verdict and end. Its report ends with a
-`FACTS:` line (the briefing facts its verdict rests on); hand it on with the
-verdict line, unchanged.
+`risk-manager` phase 2 on the plan. `VETO` → journal a note, end.
+Plan-only: report plan and verdict, end. Pass its `FACTS:` line on with
+the verdict line, unchanged.
 
 ### 6. Execute
 
-On `APPROVE`, hand the plan and verdict line to `trade-executor`. If the order
-gate, the MCP gateway, or the server blocks it, report the block and end.
-Never retry around a block.
-
-After placing: the `entry-outcome` skill.
+`APPROVE` → plan and verdict line to `trade-executor`. Blocked by the gate,
+the MCP gateway or the server: report, end; never retry around it. After
+placing: the `entry-outcome` skill.
 
 ### 7. Report
 
-Decision, plan, verdict, execution result, protective stop status, and what
-to watch next. After the position closes, run trade-review.
+Decision, plan, verdict, execution, stop status, what to watch. After the
+position closes, trade-review.
 
 ## Examples
 

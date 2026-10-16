@@ -13,7 +13,7 @@ description: Trader-process step 5 - count what is for, against or neutral, each
 
 A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. The counts never
-overrule it. A missing field is `unknown` and counts neutral.
+overrule it. A missing field is `unknown`: neutral.
 
 **Six items**, each in exactly one bucket, so for + against + neutral = 6:
 
@@ -26,20 +26,18 @@ overrule it. A missing field is `unknown` and counts neutral.
 | 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
 | 6 | Other reads of a fact already counted | - | - | always |
 
-**Rules.**
-
-- **Other reads of the same fact count once** (item 6): a pattern on the
-  candle that made item 4's rejection, a CISD or a sweep on that candle, a
-  second timeframe of the same reaction.
+- **Other reads of the same fact count once** (item 6): a pattern on item
+  4's rejection candle, a CISD or sweep on it, a second timeframe of the
+  same reaction.
 - **Indicators together are one item**: EMA, ADX and SuperTrend readings
   count together in item 5, never separately.
-- **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
-  `m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
-  the HTF read, never an item of its own.
+- **An HTF structure break is read in item 1**: a 15m or 1h break its way
+  (`bos-vs-choch`; `m15.lastBreak.last`, `h1.lastBreak.last`), or none, is
+  part of the HTF read, never its own item.
 - **A reaction counts once in item 4.** A rejection on several timeframes
   is one reaction, not one per timeframe.
 - **Not counted**: the trend rule, the regime fit, the room, the window,
-  the news: the priority order's own steps or the gate's.
+  the news (the priority order's or the gate's steps).
 
 ## Examples
 
