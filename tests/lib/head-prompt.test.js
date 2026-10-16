@@ -49,10 +49,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // explicit exception to the no-growth rule (perf/head-core-composed-skills); 72455 with the owner's approved
   // trade-lifecycle sentences (plan validity, CISD timing, the library display: +312); 72636 with the owner's approved
   // management row (feat/prop-portfolio-missing: the exit mode may let a winner run past its target: +181); 73246 with the
-  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610); 61869 with the
-  // owner's approved terse rewrite of the embedded skills (docs/terse-head-skills: -11377). It may shrink;
+  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610); 61898 with the
+  // owner's approved terse rewrite of the embedded skills (docs/terse-head-skills: -11348). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 61869, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 61898, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

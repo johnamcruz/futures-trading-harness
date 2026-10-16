@@ -26,8 +26,8 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 15m | the working structure and the session levels | more |
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6),
-with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
+**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (PLAN step 6),
+with the HTF bias (PLAN step 1); a lone 3m or 5m one against it is counter-trend.
 
 By PLAN step:
 

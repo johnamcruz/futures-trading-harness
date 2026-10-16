@@ -43,6 +43,6 @@ Highest timeframe down, per side (`m15.alignment`; read
 ## Examples
 
 ```text
-1h UP, 15m DOWN, 3m CHoCH up at 21600.25: long pullback, the trigger turned back -> step 4 sizes it.
+1h UP, 15m DOWN, 3m CHoCH up at 21600.25: long pullback, the trigger turned back -> priority step 4 sizes it.
 Target the 1h swing high 21652.75: 52.50 points (210 ticks, $105.00 per MNQ).
 ```
