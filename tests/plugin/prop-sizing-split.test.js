@@ -68,6 +68,10 @@ const SPLITS = {
       { from: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then exactly as given: rationale `setup:<policy strategy> ...`, that contract and side, at most that size, `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the policy strategy's name, the bars file and its `symbol`, the micro whose bars the runner scans, gives exactly these arguments, or refuses with the gate's reason).",
         to: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then as given: rationale `setup:<policy strategy> ...`, the record's contract and side, at most the lower of the verdict's size and the composed cap, the record's ticks (`order_plan` for `trade_lifecycle` gives exactly these arguments, or refuses with the gate's reason).",
         reason: "review of #169: as the merged code does it (#172-#174): the record's contract, side and ticks, at most the lower of the verdict and the composed cap" },
+      { from: "Ask the user for the account's current rules; don't assume them.", to: "Interactive: ask the user for the account's current rules; don't assume them.",
+        reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "Track these numbers each morning (from `get_account_snapshot` and the user):", to: "Track these numbers each morning (from `get_account_snapshot`, and interactively the user):",
+        reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
     ],
     moved: {
       // "Scoring a policy strategy on history (the evaluator)", its body.
@@ -132,7 +136,7 @@ const SPLITS = {
         to: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (a rules component's caps don't apply; `trade_lifecycle`'s cap does: the lower of it and the verdict).",
         reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap applies under the verdict (lifecycle-order.js)" },
       { from: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).",
-        to: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade it plans the compose record (`trade-lifecycle`; refused over its cap).",
+        to: "**The arithmetic from `order_plan`** (the `order-plan` skill): steps 2 and 4 for a compose record (refused over its cap), a policy verdict or a rules candidate; use its numbers, never your own.",
         reason: "review of #169: as the merged code does it (#172-#174): order_plan plans the compose record (#173)" },
       { from: "risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick",
         to: "risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick",
@@ -140,6 +144,12 @@ const SPLITS = {
       { from: "(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)",
         to: "(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)",
         reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
+      { from: "**Risk budget** = the smallest of: - the strategy / plan $ risk, - 25% of `remainingBeforeLimit` from `get_account_snapshot`, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor).", to: "**Risk budget** = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor), when known (no attempt: none shown).",
+        reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "Use its numbers instead of computing them by hand.", to: null,
+        reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "The budget (step 3) and the caps are still your judgement: a budget below its risk is a skip, and a size you are allowed to raise (30+ reviewed trades) changes only `size`, with the risk scaling by it.", to: "The budget (step 3) and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
+        reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
     ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.

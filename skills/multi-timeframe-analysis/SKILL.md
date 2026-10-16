@@ -46,24 +46,24 @@ in the last 20 candles' range, and the swing high and low.
 The prevailing trend is the highest of 4h, 1h, and 15m (built from the
 trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
 
-- **Trend strategies** (every strategy unless its STRATEGY.md says
-  `mtf: reversal`): never enter against the prevailing trend, and wait while
-  the 4h has fewer than 3 completed candles. With no trend on any of the three,
-  both sides are open.
-- **Reversal strategies** (`mtf: reversal`): may fade it. That is their setup, a raid at a
-  higher-timeframe level; when they do, the priority order (strategy-library,
-  step 2) decides them: level, size, target.
+- **Every entry**, long or short alike (`trade_lifecycle`, and a rules
+  strategy without `mtf: reversal`): never against the prevailing trend;
+  wait while the 4h has fewer than 3 completed candles. With no trend on
+  any of the three, both sides are open.
+- **Against it**: a composed entry only on its CHoCH tier
+  (`trade-lifecycle`); a rules `mtf: reversal` strategy (none active) at a
+  higher-timeframe level, decided by the priority order (step 2).
 
 Where it is enforced:
 
-- `strategies_scan`: a trend strategy that fires against it is not a
+- `strategies_scan` (rules strategies): one that fires against it is not a
   candidate; its why-not (`filtersFailed` in its full result) says `mtf:
   against the prevailing 4h down trend ...`. The summary names the frames
   and the prevailing trend; every full result has `mtf` (frames,
   `prevailing`, `longAllowed`, `shortAllowed`).
 - The backtester uses the same scan, so its trades obey it.
-- The order gate (`mtf-trend`, hard: nothing switches it off) refuses a trend
-  strategy's entry against the trend recorded in
+- The order gate (`mtf-trend`, hard: nothing switches it off) refuses an
+  entry against the trend recorded in
   `<FTH_HOME>/mtf/<ROOT>.json`, or with no record or one more than 15 minutes
   (`FTH_MTF_MAX_AGE_MIN`) past its last bar's close. The autonomous runner
   records it every bar and puts its line in the cycle prompt. Interactively,

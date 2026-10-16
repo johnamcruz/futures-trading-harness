@@ -19,8 +19,10 @@ Only while no harness-tracked attempt is running (`combine_status` lists none): 
 running attempt is paced by its verdicts (the `prop-challenge-pacing` skill), never
 by these rules.
 
-Ask the user for the account's current rules; don't assume them. Track these
-numbers each morning (from `get_account_snapshot` and the user):
+Interactive: ask the user for the account's current rules; don't assume
+them. Autonomous: never ask; with no cushion known, a composed trade's
+budget is its $300 cap. Track these numbers each morning (from
+`get_account_snapshot`, and interactively the user):
 
 - **Target remaining** = profit target − profit so far.
 - **Cushion** = balance − trailing loss floor. The floor trails the end-of-day

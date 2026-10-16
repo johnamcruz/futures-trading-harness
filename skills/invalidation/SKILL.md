@@ -23,8 +23,8 @@ long after a sweep, beyond its extreme (`m3.sweeps[].wick`). Shorts: the
 mirror.
 
 **The stop read** (step stop) names that level: `stop <tf> low|high
-<price>` (a completed candle's), `stop [<tf>] swing low|high <price>` (a
-confirmed swing: `m3.swings`, `m3.liquidity`, `m3.htfLevels`) or `stop
+<price>` (a completed candle's), `stop <tf> swing low|high <price>` (a
+confirmed swing, tf optional: `m3.swings`, `m3.liquidity`, `m3.htfLevels`) or `stop
 <level> <price>`. Code places the stop one tick beyond it, at least the
 larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never
 widened: name a farther level, or pass. This skill never moves, widens or

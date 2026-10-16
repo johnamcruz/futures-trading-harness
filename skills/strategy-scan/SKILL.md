@@ -7,7 +7,8 @@ description: Read strategy scans - candidates, why not, trend flags, confluence.
 
 ## When to Use
 
-- Reading a scan or recent fires.
+- Reading a scan or recent fires. No rules strategy is active: the scan
+  is expected empty; never run it for a decision (compose: `trade-lifecycle`).
 
 ## How It Works
 
@@ -25,10 +26,8 @@ strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fi
 ```
 
 `recent` answers the skip rules about recent signals ("fired the other way
-in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
-a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
-fire, and a `cisd(15)` detector's: the CISD level, the leg, the zone, the stop
-and the swept level.
+in the last 5 bars"). A strategy's full scan result (`name`) has `detail`,
+its detectors' state.
 
 `strategies_scan` judges sessions at the current time (the harness clock: a
 replay broker's replayed time when `FTH_REPLAY_NOW` is set); it takes no time
@@ -49,12 +48,9 @@ The scan's summary gives the bar, the higher-timeframe trends, the
 candidates first (side, entry reference, stop distance, min R:R, exit,
 confluence), then one line per strategy: status, timeframe, direction,
 candidate, and why not (the rules that did not hold, outside its sessions,
-the regime, or what failed). The values that rules reading a broker field
-saw on the bar appear in two places only: a candidate's `values:` (its side's
-rules that held; for an `any(...)` group, the branches that held), and, when
-no rule set fired, next to each rule that did not hold, `[field("a.b")=0.42]`
-(`missing` when the bar has none; at most 6 per strategy, the rest counted).
-A strategy that fired but failed a filter shows none. A field's meaning and
+the regime, or what failed). A rule reading a broker field shows its value
+on the bar: a candidate's `values:`, or `[field("a.b")=0.42]` beside a rule
+that did not hold. A field's meaning and
 units are in the strategy's own document (`strategies_show`); never guess them. For one strategy's full result, call it with
 `name`; `detail: true` returns every strategy's (large). The scan runs
 market-snapshot with each strategy's `params`, and a full result reports:

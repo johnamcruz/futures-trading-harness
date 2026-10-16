@@ -67,7 +67,7 @@ const PINS = {
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
     'A lower-timeframe CHoCH inside an intact higher-timeframe structure is a pullback.',
     'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
-    'a lower-timeframe CHoCH back the HTF way at a level times the entry.',
+    'a lower-timeframe CHoCH back the HTF way at a level times the entry; the setup there: `rejection`, `breakout`, `fair-value-gaps`.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -475,7 +475,7 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   // Step 5 counts confluence-counting's six items.
   assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
-  assert.match(flat(step(4)), /setups: `rejection`, `breakout`\./);
+  assert.match(flat(step(4)), /setups: `rejection`, `breakout`, `fair-value-gaps`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.
   // (market-structure and liquidity-concepts are retired; their content's homes: skill-retire.test.js.)
   assert.ok(read(file('levels-and-reactions')).includes('`fair-value-gaps`'), 'levels-and-reactions points to fair-value-gaps');

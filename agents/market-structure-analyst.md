@@ -90,13 +90,12 @@ never paste a long `get_bars` reply into a file.
    value gaps (`liquidity.openFvgs`) and partly filled ones
    (`liquidity.partlyFilledFvgs`, the unfilled part), untested 1h swings (`m3`
    `untested1hSwings`).
-5. Which structure strategies are live for this symbol (`strategies_list`),
-   with the trigger condition and price
-   that would fire each. Manual strategies (`signal: manual`) are yours to
-   evaluate from their STRATEGY.md body (`strategies_show`) against the
-   briefing's numbers; what no tool computes, say is not computed. The
-   steps from level to entry: the `top-down-entry` skill (`skill_lookup`
-   when a setup forms at a level).
+5. Your PLAN lines carry the compose facts: each frame's trend and last
+   break, each candle's level relations and close (`m3` `candles`). A rules
+   strategy (one active only): which are live (`strategies_list`) and the
+   trigger price of each. What no tool computes, say is not computed. The steps from level to
+   entry: the `top-down-entry` skill (`skill_lookup` when a setup forms at
+   a level).
 
 ## Output (keep it under 250 words)
 
@@ -107,7 +106,7 @@ Data: bar_briefing m3@<...>, m15@<...>, h1@<...>, day@<...> (the versions you us
 Bias: long | short | neutral (confidence: low | medium | high)
 1h / 15m / 3m: <one line each with swing prices>
 Key levels: <price - what - why it matters>, nearest first
-Live setups: setup:<name> - <trigger condition with price> | none
+Live setups (only with a rules strategy active): setup:<name> - <trigger with price>
 Invalidation of bias: <price and condition>
 Red flags: <conflicts, sweeps, chop>
 ```

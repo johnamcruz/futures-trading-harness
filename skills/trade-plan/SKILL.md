@@ -28,9 +28,13 @@ and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the
 tag `paper` in plan-only mode.
 
-The exit: a composed trade's target is the record's level (`trade-lifecycle`);
-a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):
+The exit: a composed trade sends the record's stop and target
+(`trade-lifecycle`); its policy's `exit` (the rulebook; a rules strategy's:
+the scan's) manages it:
 
+- **Target then trail** (today's policy mode, in an attempt or not): the
+  runner cancels the target order once it manages the trade, holds the stop
+  until the target, then locks and trails it. You never move it.
 - **Trailing:** stop only, no target order. The runner (or you, without one)
   trails it from `trailActivateR` with `trailGivebackR` give-back; read both
   from its `exit`, don't assume them.

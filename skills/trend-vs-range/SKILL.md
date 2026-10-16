@@ -52,7 +52,7 @@ behind structure (a swing), not at an arbitrary distance (`invalidation`).
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend`, `m15.frame.trend`;
 `m3.trendRule` wins where they differ. Indicators (EMAs, ADX) confirm the
 structure read, never override it (`momentum-and-volume`). A 3m range inside a 15m trend is a
-pause (`pullback-vs-reversal`), not a range day.
+pause, not a range day. The side and the pullback: `htf-to-ltf`.
 
 ## Examples
 
