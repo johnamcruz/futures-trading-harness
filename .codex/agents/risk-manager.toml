@@ -35,17 +35,15 @@ writes no PLAN line; its output below stays as it is.
    sessions left, any entry block) and the live verdicts. Report each attempt
    exactly as it lists it: an `active` attempt is running, so never say no
    attempt is running when it lists one. The gate enforces these numbers;
-   plan within them. Otherwise read the cushion to the trailing loss floor
-   from the latest plan if you can't derive it (interactive: ask for it;
-   autonomous: never ask).
-   With no running attempt (`combine_status` lists none), pace by the
-   `prop-pacing-judgment` skill.
+   plan within them. No running attempt (no policy strategy in play, or
+   `combine_status` lists none): pace
+   by `prop-pacing-judgment`; no cushion cap, never $0; the other caps bound
+   size, a ceiling (a policy strategy's entries need an attempt: the gate).
 6. Approve a policy strategy's entry only as its verdict says: that contract
    (the selected one) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
-   refuses it). The verdict's size replaces the position-sizing caps (25% of
-   the daily allowance, 10% of the cushion, size 1); the budget it was sized
-   from is the attempt's, and the gate enforces it. While an attempt runs,
+   refuses it). The verdict's size replaces the position-sizing caps; its
+   budget is the attempt's, and the gate enforces it. While an attempt runs,
    veto any entry that isn't the policy strategy's verdict.
 
 Output:
@@ -53,7 +51,7 @@ Output:
 ```text
 ## Risk state: account <id> @ <time ET>
 Tradable: yes | no (<reason>)
-P&L today <$>, remaining before daily limit <$>, cushion <$ or unknown>
+P&L today <$>, remaining before daily limit <$>, cushion <$> | none (no attempt)
 Open: <positions and working orders, with protective stops yes/no>
 Streak: <n> losses in a row, <n> losses today; cooldown until <time> | none
 Attempt: <account> <status, exactly as combine_status lists it>, cushion <$>, budget <$> | none listed
