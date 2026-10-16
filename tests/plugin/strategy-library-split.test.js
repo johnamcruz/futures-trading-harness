@@ -146,6 +146,10 @@ const LATE = [
     reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
   { from: "A trade needs, in order (and then the priority order below sizes or skips it): the trigger has fired on a closed bar (scan lists it as a candidate, or the manual trigger described in the body), every context filter holds, no \"Skip when\" rule applies, and planned R:R \u2265 `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` \u2265 `min_rr` stands in for it).", to: "A trade needs, in order (then the priority order sizes or skips it): the trigger fired on a closed bar (a scan candidate, or the body's manual trigger), every context filter holds, no \"Skip when\" rule applies, and planned R:R \u2265 `risk.min_rr` (a trailing exit: `trailActivateR` \u2265 `min_rr`).",
     reason: "fix/skills-match-code: the rules-only steps, shorter and labelled (no rules strategy is active)" },
+  { from: "The values that rules reading a broker field saw on the bar appear in two places only: a candidate's `values:` (its side's rules that held; for an `any(...)` group, the branches that held), and, when no rule set fired, next to each rule that did not hold, `[field(\"a.b\")=0.42]` (`missing` when the bar has none; at most 6 per strategy, the rest counted).", to: "A rule reading a broker field shows its value on the bar: a candidate's `values:`, or `[field(\"a.b\")=0.42]` beside a rule that did not hold.",
+    reason: "fix/skills-match-code review: the scan's broker-field values, shorter (rules strategies only; none active)" },
+  { from: "A strategy that fired but failed a filter shows none.", to: null,
+    reason: "fix/skills-match-code review: the scan's broker-field values, shorter (rules strategies only; none active)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

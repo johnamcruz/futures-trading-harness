@@ -81,10 +81,10 @@ test('trader-process: it orders the thinking and adds no filter; the priority or
     'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
-    '**Setup.** The setup reads (`trade-lifecycle`): a pullback\'s end with the trend; against it, its CHoCH tier only.',
+    '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',
     '**Risk.** Stop (`invalidation`), target (`take-profit`), size, the room; the numbers from `order_plan` or the compose record.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
-    'The prevailing trend (`Trend rule:`) and the regime set the side, long or short alike.',
+    'The side rule (`htf-to-ltf`) sets the side, long or short alike.',
     'The three market analysts never write step 2: a cached report would carry a stale window.',
     "In a cached report, take this bar's 3m facts from the briefing.",
     "Phase 2 writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.",

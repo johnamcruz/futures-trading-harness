@@ -53,9 +53,8 @@ stated size stands under the code's caps.
 4. **The multi-timeframe read for its side**: a rules strategy:
    `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the
    bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a
-   non-reversal setup → no trade. Composed: the side rule of
-   `htf-to-ltf` (a pullback is an entry; `counter`: pass unless step 2's
-   tier allows it).
+   non-reversal setup → no trade. Composed: the side rule
+   (`htf-to-ltf`).
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
 6. **Confluence** (rules strategies): another firing the other side → no trade;

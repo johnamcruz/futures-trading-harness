@@ -36,7 +36,8 @@ writes no PLAN line; its output below stays as it is.
    exactly as it lists it: an `active` attempt is running, so never say no
    attempt is running when it lists one. The gate enforces these numbers;
    plan within them. Otherwise read the cushion to the trailing loss floor
-   from the latest plan if you can't derive it (autonomous: never ask).
+   from the latest plan if you can't derive it (interactive: ask for it;
+   autonomous: never ask).
    With no running attempt (`combine_status` lists none), pace by the
    `prop-pacing-judgment` skill.
 6. Approve a policy strategy's entry only as its verdict says: that contract
@@ -99,7 +100,7 @@ its facts; the order decides.
    the priority order's step 2 (the gate refuses an entry against it
    anyway, a composed one with step 2's CHoCH tier excepted). The alignment
    for the side (the briefing's `m15` `alignment.long` / `alignment.short`):
-   its step 4. A rules strategy: no `mtf: reversal` is a trend strategy;
+   its step 4 (composed: the side rule, `htf-to-ltf`). A rules strategy: no `mtf: reversal` is a trend strategy;
    others firing the other side (`confluence.against`): its step 6.
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits (an entry over `maxOrderSize`: VETO,

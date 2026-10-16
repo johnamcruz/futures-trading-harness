@@ -20,11 +20,11 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    | Step | Read forms | The skill for the fact |
    | --- | --- | --- |
-   | bias | the side: the prevailing HTF trend and the regime (`1h up`, `regime trend up`); bos/choch, prior RTH range, trend rule, read, day type | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
+   | bias | the side, by the side rule (`htf-to-ltf`): trend (`1h up`), regime (`regime trend up`), bos/choch, prior RTH range, trend rule, read, day type | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
    | location | the pullback into a key level in that trend (`htf-to-ltf`): `at <level>`, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
-   | setup | the reaction ending the pullback, a "Setups to check" read: rejected/broke/touched a level or gap edge (a bullish gap holds `15m rejected 15m fvg high up`, fails `15m broke 15m fvg low down`, a close inside is `15m touched 15m fvg low`; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
+   | setup | the reaction ending the pullback, a "Setups to check" read: rejected/broke/touched a level or gap edge (a bullish gap holds `15m rejected 15m fvg high up`, fails `15m broke 15m fvg low down`, a close inside: `15m touched 15m fvg high`, the near edge, `low` only when the candle reached it; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
    | entry | confirmation on a later close: close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `3m volume high`, `participation high`, `3m absorption at <level> up` (short: down) | `candle-reading`, `momentum-and-volume`, `absorption` |
-   | stop | `stop <tf> low <price>`: where the trend thesis fails | `invalidation` |
+   | stop | `stop <tf> low <price>` (short: high): where the trend thesis fails | `invalidation` |
    | target | `target <tf> swing <price>`: the next swing; past it the runner trails | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled: the record's stop and target are the exit; the policy's exit mode (in an attempt or not) may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
@@ -83,12 +83,12 @@ never a forecast for this trade. A rule from code always overrides it.
 
 ```text
 compose_check {"symbol": "MNQ", "side": "long", "size": 5, "reads": [
-  {"step": "bias", "skill": "multi-timeframe-analysis", "read": "1h up"},
-  {"step": "location", "skill": "vwap-volume-profile", "read": "vwap above"},
-  {"step": "setup", "skill": "rejection", "read": "15m rejected prior vah up"},
-  {"step": "entry", "skill": "candle-reading", "read": "3m close top"},
-  {"step": "stop", "skill": "invalidation", "read": "stop 15m low 21512.75"},
-  {"step": "target", "skill": "take-profit", "read": "target 1h swing 21598"}]}
+{"step": "bias", "skill": "multi-timeframe-analysis", "read": "1h up"},
+{"step": "location", "skill": "vwap-volume-profile", "read": "vwap above"},
+{"step": "setup", "skill": "rejection", "read": "15m rejected prior vah up"},
+{"step": "entry", "skill": "candle-reading", "read": "3m close top"},
+{"step": "stop", "skill": "invalidation", "read": "stop 15m low 21512.75"},
+{"step": "target", "skill": "take-profit", "read": "target 1h swing 21598"}]}
 -> ok, entry 21540.25, stop 111 ticks ($277.50), target 231 ticks ($577.50, 2.08R).
 -> place_order MNQ buy 5 limit 21540.25, stopLossBracket.ticks 111,
    takeProfitBracket.ticks 231, rationale "setup:trade_lifecycle long ...".

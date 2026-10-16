@@ -26,15 +26,17 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 | Label | Means | What to do |
 |---|---|---|
 | `aligned` | no timeframe against it, most with it | Priority step 4 (strategy-library) sets the size; with room and confluence it is the opportunity |
-| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sets the size; never enter while it still moves against you |
+| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 |
 | `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why |
 
-**The side rule** (composed, long and short alike): the prevailing trend
-and the regime (`m3` `regime`) set it. `pullback` or `mixed` inside the
-trend: an entry, named in the plan. `counter`, or against a trend regime:
-pass, unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it:
-name the tier. A range or transition regime: the trend rule decides.
+**The side rule** (composed, long and short alike): the prevailing HTF
+trend sets the side. `pullback` or `mixed` inside it: an entry at the
+pullback's end; while the `m3` regime still trends against the side it
+hasn't ended: wait for the setup reaction at the level and an entry close
+the trend's way (`pullback-vs-reversal`). `counter` (the HTF against): pass
+unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it; name the
+tier. Range or transition: the trend rule decides.
 
 ### 2. Levels flow down
 

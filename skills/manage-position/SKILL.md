@@ -17,7 +17,8 @@ description: Use when a position is open - its stop, the plan's management, the 
   is open. Protective stops move toward the market only. A rules strategy
   (none active) whose exit trails (`exit` in the scan): the runner already
   moved the stop on this bar: don't touch it unless you are exiting.
-  **Interactive, no runner** (rules): run this
+  **Interactive, no runner**: the brackets are the whole exit, a composed
+  trade's too; nothing moves them. A rules trailing exit: run this
   skill again after every closed bar while the position is open (fetch the
   bar with `bars_fetch`). On each: from `trailActivateR` of open profit, move the
   stop to `trailGivebackR` behind the best price since entry, rounded to the

@@ -22,8 +22,7 @@ like 10:00 ET is inside the session, not before it, and so is 08:00 ET (the
 16:00 to 18:00 ET is treated as closed (no entries, no positions), and so
 are weekends. Every position is flat by the runner's end of day (`eodAt`,
 15:50 ET by default), well before the firm's own flatten deadline.
-(Background only: CME's Globex keeps trading until 17:00 ET; the harness
-never trades 16:00-18:00 ET.) Bar data still comes from the Globex session,
+Bar data still comes from the Globex session,
 so the session VWAP, session volume profile and overnight range start at
 18:00 ET.
 Named sessions: `asia` 18:00–03:00, `london` 03:00–09:30,
@@ -36,7 +35,7 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | Window (ET) | Character | Harness |
 |---|---|---|
 | 18:00 (Sun–Thu) | The firm's trading day starts (its daily reset); Globex open | Session opens; daily counters reset |
-| 18:00–03:00 | Asia (`asia`), thinner | Entries allowed; only a clean setup |
+| 18:00–03:00 | Asia (`asia`), thinner | Entries allowed; overnight setups ran negative (Train, docs/research/mtf-setup-catalog.md): full confluence only |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
 | 09:35–11:00 | Opening drive; best trend window (`ny` from 09:30) | Entries allowed |

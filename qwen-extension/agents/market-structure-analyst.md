@@ -104,7 +104,7 @@ never paste a long `get_bars` reply into a file.
 5. Your PLAN lines carry the compose facts: each frame's trend and last
    break, each candle's level relations and close (`m3` `candles`). A rules
    strategy (one active only): which are live (`strategies_list`) and the
-   trigger price of each. The steps from level to
+   trigger price of each. What no tool computes, say is not computed. The steps from level to
    entry: the `top-down-entry` skill (`skill_lookup` when a setup forms at
    a level).
 

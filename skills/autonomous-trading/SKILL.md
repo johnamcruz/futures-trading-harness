@@ -52,8 +52,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    cycles, and once one succeeds the next cycles carry the plan; on very
    short bars, such as 1-minute, a retry rarely fits between cycles, so a
    failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the
-   "day:" line; outside RTH the "overnight" line), each fired rules strategy's track
-   record (none active), and each open trade's state
+   "day:" line; outside RTH the "overnight" line), and each open trade's state
    (setup, initial risk, stop, target, R now, best and worst): the
    `trade-session` skill says how to weigh them. Times are New York time. A
    "Context unavailable" line names what couldn't be read this cycle: that is

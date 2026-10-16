@@ -16,7 +16,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
   rules candidate's (none active), `facts`, `inTheWay`, `needR` and
   `blocked` in `m3` `candidates`. They are context, not a verdict: judge by
-  `htf-to-ltf`'s side rule and alignment table, and the min R:R (a rules
+  the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules
   strategy: also its STRATEGY.md). A setup on that side, with room past
   what it needs and confluence with it is the opportunity this
   harness looks for, when the rest of this skill agrees and it isn't

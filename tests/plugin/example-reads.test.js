@@ -39,7 +39,7 @@ test('example reads: every read a skill example lists parses as one of compose_c
 
 // Every read a skill or a role teaches in its text, not only its examples' "Reads:" lists: a backticked read form
 // (`15m rejected prior vah up`, `<tf> absorption at <level> up|down`) and a compose_check call's `"read": "..."`. Each must parse: a read form the checker doesn't have would teach a read that never
-// verifies. Templates are instantiated (<tf> 15m, <level> prior vah, <price> 21500, <name> hammer) and every
+// verifies. It checks that each parses, not what it means. Templates are instantiated (<tf> 15m, <level> prior vah, <price> 21500, <name> hammer) and every
 // alternative (`a|b`, `<5m|15m>`) is checked.
 const TF = '(?:1m|3m|5m|15m|1h|4h|60m)';
 const TF_SLOT = `(?:${TF}|<tf>|<${TF}(?:\\|${TF})*>)`;

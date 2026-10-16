@@ -30,11 +30,13 @@ const HOMES = ['session-timing', 'news-blackouts', 'exchange-holidays', 'contrac
 const ALLOWED = [
   // The news rows of the windows table moved to news-blackouts, which carries the table's header for them.
   ...['Window (ET)', 'Character', 'Harness'].map(old => ({ old, copies: 2, reason: 'the windows table header, in session-timing and news-blackouts' })),
+  { old: "(Background only: CME's Globex keeps trading until 17:00 ET; the harness never trades 16:00-18:00 ET.) Bar data still comes from the Globex session, so the session VWAP, session volume profile and overnight range start at 18:00 ET.", now: "Bar data still comes from the Globex session, so the session VWAP, session volume profile and overnight range start at 18:00 ET.",
+    reason: 'fix/skills-match-code review: the background sentence restated the closed 16:00-18:00 ET break, which the paragraph states' },
   { old: "Before any entry: is this a good time for this strategy?", now: "Before any entry: is this a good time for this setup?",
     reason: "fix/skills-match-code: orb is retired (strategies/retired.json) and no rules strategy is active; entries are allowed in asia and london unless a no-entry window says otherwise (config/runner.json noEntryWindows)" },
   { old: "Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30, `ny` 09:30–16:00.", now: "Named sessions: `asia` 18:00–03:00, `london` 03:00–09:30, `ny` 09:30–16:00.",
     reason: "fix/skills-match-code: orb is retired (strategies/retired.json) and no rules strategy is active; entries are allowed in asia and london unless a no-entry window says otherwise (config/runner.json noEntryWindows)" },
-  { old: "Trade only strategies built for it", now: "Entries allowed; only a clean setup",
+  { old: "Trade only strategies built for it", now: "Entries allowed; overnight setups ran negative (Train, docs/research/mtf-setup-catalog.md): full confluence only",
     reason: "fix/skills-match-code: orb is retired (strategies/retired.json) and no rules strategy is active; entries are allowed in asia and london unless a no-entry window says otherwise (config/runner.json noEntryWindows)" },
   { old: "Opening drive; best trend and ORB window (`ny` from 09:30)", now: "Opening drive; best trend window (`ny` from 09:30)",
     reason: "fix/skills-match-code: orb is retired (strategies/retired.json) and no rules strategy is active; entries are allowed in asia and london unless a no-entry window says otherwise (config/runner.json noEntryWindows)" },

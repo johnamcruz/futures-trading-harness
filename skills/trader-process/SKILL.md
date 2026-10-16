@@ -27,15 +27,15 @@ It adds no filter and no veto:
 ### The steps
 
 1. **HTF.** The 4h, 1h and 15m trends and structure frame everything
-   below. The prevailing trend (`Trend rule:`) and the regime set the
-   side, long or short alike.
+   below. The side rule (`htf-to-ltf`) sets the side, long or short
+   alike.
    Read: `trend-vs-range`, `htf-to-ltf`.
 2. **Context.** Window, news, regime, account (phase 1's Budget,
    Attempt).
 3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
    Read: `levels-and-reactions`, `breakout-vs-fakeout`.
-4. **Setup.** The setup reads (`trade-lifecycle`): a pullback's end with
-   the trend; against it, its CHoCH tier only.
+4. **Setup.** The setup reads (`trade-lifecycle`), on the side rule's
+   side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** Count the six items of `confluence-counting`.
 6. **Entry.** A closed bar's entry reads; never anticipate.
