@@ -185,7 +185,13 @@ false. An explicit value that contradicts the preset (`"learning": false`,
 `"latency": false`, `"libraryDisplay": true`, `"riskRecordDisplay": true`, or
 a `prop` in stage 1) is refused, never silently changed. `stage` is part of the run's hashes.
 
-**A practice run:**
+**A practice run.** The run's window must hold every moment of the list
+(its start at or before the list's first window), and lie in one window of
+the split: here to just before practice-validate. A start in the bars' first
+days fails the preflight's facts check (no completed 4h candle and no VWAP in
+its sample briefing yet), so start once the bars have that history. The run
+trades the runner's default sessions, the ones the scan used. A narrower
+`sessions` leaves windows with no decision time, and the run is refused.
 
 ```json
 {
@@ -193,15 +199,15 @@ a `prop` in stage 1) is refused, never silently changed. `stage` is part of the 
   "workDir": "~/fth-replays",
   "broker": "backtester",
   "stage": 1,
-  "start": "2022-03-01T00:00:00Z",
-  "end": "2022-04-01T00:00:00Z",
+  "start": "2021-05-03T00:00:00Z",
+  "end": "2024-06-29T00:00:00Z",
   "practice": { "mode": "setup-focus", "setupTf": 15, "quietSample": 0.15, "seed": 1 },
   "curatedList": { "file": "~/.futures-trading-harness/experience/curated-practice-<fingerprint>.json", "list": "mix" },
   "experienceIndex": "~/.futures-trading-harness/experience/index-<hash>.json",
   "autotrader": {
     "harness": "opencode", "model": "", "symbols": ["MNQ"], "account": "1", "timeframe": 3,
     "lanes": [{ "timeframe": 3, "trigger": "bar" }, { "timeframe": 1, "trigger": "data" }],
-    "sessions": ["09:30-15:50@America/New_York"], "premarketAt": "08:00@America/New_York", "eodAt": "15:50@America/New_York"
+    "premarketAt": "08:00@America/New_York", "eodAt": "15:50@America/New_York"
   }
 }
 ```
@@ -210,8 +216,9 @@ a `prop` in stage 1) is refused, never silently changed. `stage` is part of the 
 node scripts/replay.js run --config s1-practice.json --bars MNQ=<1m bars>
 ```
 
-**A validate run:** the same, with a window in practice-validate (for
-example `"start": "2024-07-01T00:00:00Z"`, `"end": "2024-10-01T00:00:00Z"`),
+**A validate run:** the same, with a window in practice-validate that holds
+the validate list (for example `"start": "2024-07-01T00:00:00Z"`,
+`"end": "2024-12-31T00:00:00Z"`),
 the validate list (`curated-validate-<fingerprint>.json`), `--validate` and
 `--candidate <name>`, the name of the skill version being validated. Every
 validate run is a look, logged in the ledger and counted.
@@ -288,14 +295,17 @@ It is on when the loop config has a `probe` block
 ```json
 "probe": {
   "replay": "s1-practice.json",
-  "windows": [{ "from": "2022-03-01", "to": "2022-04-01" }],
+  "windows": [{ "from": "2021-05-03", "to": "2024-06-29" }],
   "k": 4,
   "parallel": 1
 }
 ```
 
 `replay` is a stage-1 practice config with a curated practice list (as in
-"A practice run" above), and `windows` lie in practice-train. Its
+"A practice run" above), and `windows` lie in practice-train. Each window is
+a run of that list, so it must hold every moment of the list (a run refuses
+a list with moments outside its window): with a list over all of
+practice-train, that is one window spanning the list, as here. Its
 `autotrader` must be the loop's (leave it out to use the loop's), so the
 probes and the keep rule run the same model and runner config. Each
 iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
