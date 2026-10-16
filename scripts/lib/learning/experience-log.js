@@ -127,9 +127,10 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
  * open, which came before the fill) and the target never is. Every later bar: the stop first (the stop's fill, or the
  * open when the bar gapped through it), then the target, then the end of day (the session's change, or the bar closing
  * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod, maeR, mfeR }, or null when
- * the bars end first. maeR (<= 0) and mfeR (>= 0): the worst and best move from the fill while held, in R of `risk`, the
- * worse taken as above: the fill bar's adverse extreme counts and its favorable one doesn't; a stop bar counts its stop
- * fill alone, a target bar its target and its adverse extreme; every other bar held both extremes; the exit price too.
+ * the bars end first. maeR (<= 0) and mfeR (>= 0): the worst and best move from the fill while held, in R of `risk`,
+ * measured as tripOutcome measures a real trade's (only the outcome takes the worse case): the bars held whole (a fill
+ * inside bar i leaves it out, its order unknown; a stop or target inside a bar leaves that bar out; an exit at a
+ * bar's close, the trail's or end of day's, keeps it) and the exit price.
  */
 function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetDist = null, eodMs = Infinity, tick, plan = null, swingAt = null }) {
   const s = sgn(side);
@@ -159,9 +160,12 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
     if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
     const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
     if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, stopPx === initial ? 'stop' : 'trail');
-    adv = Math.min(adv, move(s > 0 ? b.l : b.h));
     if (!fillBar && !after && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
-    if (!fillBar) fav = Math.max(fav, move(s > 0 ? b.h : b.l));
+    // Held the whole bar (no exit inside it, the fill before it): both extremes count, as tripOutcome's bars inside.
+    if (!fillBar) {
+      adv = Math.min(adv, move(s > 0 ? b.l : b.h));
+      fav = Math.max(fav, move(s > 0 ? b.h : b.l));
+    }
     // The trail on this closed bar (the fill bar's prices after the fill can't be told: none, the worse taken).
     if (!fillBar && (after || trails)) {
       const t = { sign: s, entry: fill, risk, stop: stopPx, peakR, armed, target: targetPx };

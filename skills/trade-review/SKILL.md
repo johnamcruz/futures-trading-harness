@@ -32,9 +32,9 @@ description: Use after every closed or cancelled entry (the gate blocks the next
      `mistake:*` tag appears twice in the last 10 trades, write the lesson
      **now** (with the trades as evidence), not at end of day.
 3. **Compute.** Planned risk $ = |entry − stop| ÷ tickSize × tickValue × size.
-   R = net P&L ÷ planned risk. MAE/MFE (R) from `get_bars` over the hold:
-   deep MAE on a win = poor entry; high MFE on a loss = good setup, wasted
-   exit; shallow MAE, MFE ≥ 2R = clean trend setup.
+   R = net P&L ÷ planned risk. MAE <= 0, MFE >= 0 (R) from `get_bars` over
+   the hold: MAE near -1R on a win = poor entry; high MFE on a loss = good
+   setup, wasted exit; MAE near 0, MFE >= 2R = clean trend setup.
 4. **Grade the process (A–F)** independently of the result:
    - Was the trigger real (the plan's condition actually happened)?
    - Entry at the planned price ± slippage? Stop placed at the exchange at once?
@@ -50,8 +50,8 @@ description: Use after every closed or cancelled entry (the gate blocks the next
    The `lessons` tool turns these tags into instincts each later cycle
    sees: without them a review teaches nothing.
 6. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
-   one rule, the evidence count, and the condition. Don't write a lesson from a
-   single trade unless it's a rule break.
+   one rule, its evidence count and condition. No lesson from a single trade
+   unless it's a rule break.
 7. Also review blocked orders: the server's (`order_blocked` journal
    entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, FTH_HOME defaulting to `~/.futures-trading-harness`, with the
    checks that refused each). A block means the plan or sizing was wrong

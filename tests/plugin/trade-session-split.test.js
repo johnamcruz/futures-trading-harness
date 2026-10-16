@@ -311,8 +311,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target);
 // then every size tightened to its exact bytes (feat/experience-mae-mfe: trade-review's MAE/MFE reading replaced text).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 87097, 'news-calendar-analyst': 10203, 'risk-manager': 90547, 'strategy-researcher': 25690, 'trade-executor': 30086, 'trade-reviewer': 9181, 'trend-momentum-analyst': 55002, 'volume-liquidity-analyst': 48648 },
-  index: { 'market-structure-analyst': 42920, 'news-calendar-analyst': 10203, 'risk-manager': 76067, 'strategy-researcher': 25690, 'trade-executor': 30075, 'trade-reviewer': 9181, 'trend-momentum-analyst': 40369, 'volume-liquidity-analyst': 33157 },
+  full: { 'market-structure-analyst': 87097, 'news-calendar-analyst': 10203, 'risk-manager': 90547, 'strategy-researcher': 25690, 'trade-executor': 30086, 'trade-reviewer': 9178, 'trend-momentum-analyst': 55002, 'volume-liquidity-analyst': 48648 },
+  index: { 'market-structure-analyst': 42920, 'news-calendar-analyst': 10203, 'risk-manager': 76067, 'strategy-researcher': 25690, 'trade-executor': 30075, 'trade-reviewer': 9178, 'trend-momentum-analyst': 40369, 'volume-liquidity-analyst': 33157 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

@@ -14,10 +14,11 @@
  * Output, plain text, at most MAX_BYTES: the signatures and context; the cells, exact first (the read signature in
  * the full context), then the skill signature in the full context, one context key at a time, and alone; each with
  * n, days, the win rate and mean R with their 90% intervals (each cell one of many: an interval describes, it
- * proves nothing alone), the median MAE and MFE in R with their intervals and count (`insufficient` under the minimum), last
+ * proves nothing alone), the median MAE and MFE in R and their count (`too few` under the minimum; no interval, so the
+ * cap keeps the past decisions), last
  * seen, `shifted` with its latest year's n, or `too few samples`; then up to three past decisions of the same skill
  * signature, the closest context first, with their reads, why, decision and outcome (R, grade, MAE and MFE); a cell's
- * count of curated runs' decisions (reweighted to natural rates: its effective n, and the unrated ones without a weight)
+ * effective n when it holds curated runs' decisions (reweighted to natural rates; the unrated ones, without a weight)
  * and an example's `(curated)`, with one line saying what that means (CURATED_NOTE);
  * and the index's hash and the days it showed. With no index pinned, or no match, it says so. It never says what
  * to do.
@@ -63,19 +64,19 @@ const SIMILAR = require('../tunables').training().experienceTool.similar;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^[a-z][a-z-]{0,31}$/;
 
-const CURATED_NOTE = 'curated: decisions from curated runs (picked outcome-balanced), reweighted to natural rates; n_eff: the weighted sample size; unrated: curated decisions without their list\'s natural counts, counted, never in a rate or median.';
+const CURATED_NOTE = 'n_eff: curated runs reweighted to natural rates; unrated: not weighable, never rated.';
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
-/** A cell's median MAE and MFE in R with their 90% intervals and count, or `insufficient` with it under the minimum (index: medianOf). */
+/** A cell's median MAE and MFE in R and their count (no interval: the cap keeps the examples), or `too few` (index: medianOf). */
 function excursionText(c) {
   const { mae, mfe } = c;
   if (!mae || !mfe) return '';
-  if (mae.median === null || mfe.median === null) return `, MAE/MFE insufficient (n ${Math.min(mae.n, mfe.n)})`;
-  return `, median MAE ${f2(mae.median)}R [${f2(mae.lo)}, ${f2(mae.hi)}] MFE ${f2(mfe.median)}R [${f2(mfe.lo)}, ${f2(mfe.hi)}] (n ${mae.n === mfe.n ? mae.n : `${mae.n}/${mfe.n}`})`;
+  if (mae.median === null || mfe.median === null) return `, MAE/MFE too few (n ${Math.min(mae.n, mfe.n)})`;
+  return `, MAE ${f2(mae.median)} MFE ${f2(mfe.median)} (n ${mae.n === mfe.n ? mae.n : `${mae.n}/${mfe.n}`})`;
 }
 
-/** A cell's curated count, its unrated ones and its effective n (the rates and medians are weighted), or nothing. */
-const curatedText = c => (c.curated ? `; ${c.curated} curated${c.unweighted ? `, ${c.unweighted} unrated` : ''}, n_eff ${Number(c.nEff).toFixed(1)}` : '');
+/** With curated decisions, a cell's effective n (its rates and medians weighted) and its unrated ones, or nothing. */
+const curatedText = c => (c.curated ? `; n_eff ${Number(c.nEff).toFixed(1)}${c.unweighted ? `, ${c.unweighted} unrated` : ''}` : '');
 
 function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
@@ -98,7 +99,7 @@ const closeness = (a, b) => CONTEXT_KEYS.filter(k => a && b && a[k] !== null && 
 
 function exampleLines(ex) {
   const reads = ex.reads.map(r => `${r.step} ${r.read}${r.why ? ` (${r.why})` : ''}`).join('; ');
-  const x = Number.isFinite(ex.maeR) && Number.isFinite(ex.mfeR) ? `, MAE ${f2(ex.maeR)}R MFE ${f2(ex.mfeR)}R` : '';
+  const x = Number.isFinite(ex.maeR) && Number.isFinite(ex.mfeR) ? `, MAE ${f2(ex.maeR)} MFE ${f2(ex.mfeR)}` : '';
   return `- ${ex.day} ${ex.side || ''} ${ex.decision}${ex.curated ? ' (curated)' : ''}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}${x}: ${reads}`;
 }
 
@@ -214,7 +215,7 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
     .sort((a, b) => b.near - a.near || a.i - b.i).slice(0, SIMILAR).map(x => x.e);
   const examples = picked.map(exampleLines);
   const similar = ['Similar past decisions (same skills, closest context):', ...(examples.length ? examples : ['- none'])];
-  const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic.`];
+  const tail = [`Index ${index.hash.slice(0, 16)}: practice-train days before ${before} only; 90% intervals, each cell one of many (an interval describes, it proves nothing alone); at least ${index.minN} decisions over ${index.minDays} days per statistic; MAE <= 0 worst against, MFE >= 0 best for, while held (R).`];
   // Curated runs' decisions are outcome-balanced (experience-index.js): said once, kept by the cap, when any is shown.
   if (curated || picked.some(e => e.curated)) tail.push(CURATED_NOTE);
   return { text: capped([...head, 'Cells:'], cells, similar, [...tail, ...libraryError(library), ...riskError(risk)], librarySection(library, rec, before), riskSection(risk, before)) };
