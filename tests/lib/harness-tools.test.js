@@ -186,6 +186,16 @@ test('combine: status only (start, stop, record-day stay the user\'s, in scripts
   assert.match(combine.status({ account: 'nope' }, ctx).text, /^no account profile named nope: every started attempt\n/);
   require('../../scripts/lib/trading/prop-state').startAttempt(home, require('../../scripts/lib/trading/accounts').accountNamed(ROOT, 'topstep_50k', {}), AT);
   assert.match(combine.status({}, ctx).text, /^topstep_50k: active, balance \$50000 .*entries blocked/);
+  // To the agent: no attempt blocks no composed entry, said only while none runs anywhere (a running attempt, even
+  // another account's, refuses every entry but its policy's), never to the CLI.
+  const tool = { ...ctx, tool: true };
+  const P = require('../../scripts/lib/trading/prop-state');
+  const other = require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {}).accounts.find(a => a.valid && !P.readAttempt(home, a.name)).name;
+  assert.doesNotMatch(combine.status({ account: other }, tool).text, /not blocked by this/, 'another account\'s attempt runs');
+  assert.doesNotMatch(combine.status({}, tool).text, /not blocked by this/);
+  const fresh = { ...tool, env: { FTH_HOME: tmpDir() } };
+  assert.match(combine.status({}, fresh).text, /\nentries: not blocked by this; a composed entry trades under its own strategy's cap; a policy strategy sizes entries only in an attempt\n$/);
+  assert.match(combine.status({ account: other }, fresh).text, new RegExp(`^${other}: no attempt started\nentries: not blocked by this;`));
   assert.strictEqual(JSON.parse(combine.status({ json: true }, ctx).text).attempts[0].startedAt, AT.toISOString());
   assert.deepStrictEqual(Object.keys(combine.OPS), ['status']);
   // A live verdict names its stop as the whole bracket the gate requires: ticks and type "stop".

@@ -63,7 +63,11 @@ function status({ account: name, json = false } = {}, ctx) {
   const rows = accounts.map(a => statusOf(home, a, now, strategies)).filter(r => known || r.started);
   const verdicts = liveVerdicts(home, now);
   if (json) return { text: `${JSON.stringify({ attempts: rows, verdicts, ...(note ? { note: note.trim() } : {}) }, null, 2)}\n` };
-  if (!rows.length) return { text: note + say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') };
+  // To the agent, with no attempt running: what that blocks and what it doesn't (a model read "no attempt" as "no
+  // entries" and passed every setup): a composed entry trades under its own strategy's cap; a policy sizes none.
+  // Only with none running anywhere: while any attempt runs, the gate refuses every entry but its policy's.
+  const noneNote = prop.runningAttempts(home).length ? '' : say(c, '', NO_ATTEMPT_ENTRIES);
+  if (!rows.length) return { text: note + say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') + noneNote };
   let text = note;
   for (const r of rows) {
     text += !r.started ? `${r.account}: no attempt started\n`
@@ -71,6 +75,7 @@ function status({ account: name, json = false } = {}, ctx) {
         + `day $${r.dayPnl}, ${r.sessionsDone} sessions done, ${r.sessionsLeft} left; ${budgetText(r)}; `
         + `${r.entryBlock ? `entries blocked: ${r.entryBlock}` : 'entries allowed'}\n`;
   }
+  text += noneNote;
   for (const v of verdicts) {
     text += v.action === 'skip'
       ? `${v.strategy}: ${v.direction} setup from ${v.component} skipped (${v.reason || 'the policy'}), until ${v.expiresAt}\n`
@@ -80,6 +85,9 @@ function status({ account: name, json = false } = {}, ctx) {
   return { text };
 }
 
+/** What no running attempt means for entries, as the agent reads it (combine_status with none running). */
+const NO_ATTEMPT_ENTRIES = 'entries: not blocked by this; a composed entry trades under its own strategy\'s cap; a policy strategy sizes entries only in an attempt\n';
+
 const OPS = { status };
 
-module.exports = { OPS, liveVerdicts, statusOf, status };
+module.exports = { OPS, liveVerdicts, statusOf, status, NO_ATTEMPT_ENTRIES };

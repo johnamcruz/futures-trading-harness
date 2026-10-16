@@ -215,7 +215,7 @@ function agentChecks(cfg, agents) {
 function propChecks({ profiles, home }) {
   return profiles.map(p => (readAttempt(home, p.name)
     ? r(`prop attempt (${p.name})`, 'ok', 'started')
-    : r(`prop attempt (${p.name})`, 'fail', `no attempt started, so the gate refuses its strategies' entries: node scripts/combine.js start --account ${p.name}`)));
+    : r(`prop attempt (${p.name})`, 'fail', `no attempt started, so the gate refuses the entries its policy strategies size: node scripts/combine.js start --account ${p.name}`)));
 }
 
 /** The field("a.b") paths in a strategy's rules. */
