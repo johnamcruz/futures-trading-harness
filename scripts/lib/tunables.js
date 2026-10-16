@@ -79,7 +79,7 @@ const TRAINING = {
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1) },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1) },
-  probeEdit: { maxLine: int(1) },
+  probeEdit: { maxLine: int(1), growBytes: int(0) },
   skillUsage: { top: int(1) },
 };
 
