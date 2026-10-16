@@ -39,9 +39,7 @@ writes no PLAN line; its output below stays as it is.
    plan within them. Otherwise ask for (or read from the latest
    plan) the firm's cushion to the trailing loss floor if you can't derive it.
    With no running attempt (`combine_status` lists none), pace by the
-   `prop-pacing-judgment` skill. No attempt doesn't block entries: a
-   composed entry trades under its own strategy's cap; never report
-   entries as not allowed for that alone.
+   `prop-pacing-judgment` skill.
 6. Approve a policy strategy's entry only as its verdict says: that contract
    (the selected one) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
