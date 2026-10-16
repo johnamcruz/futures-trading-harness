@@ -485,6 +485,10 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   assert.strictEqual(probeRuns[0].practice.seed, 7, 'the probe config\'s seed, on every side');
   // The keep rule's runs are the loop's own full-day replay config, never the probes'.
   assert.ok(w.calls.runs.filter(r => r.runId.endsWith('-t0')).every(r => r.practice === null));
+  // Probes first: the champion's tuning replays run once, after every probe, only because a proposal reached the keep rule.
+  const at = id => w.calls.runs.findIndex(r => r.runId === id);
+  assert.strictEqual(w.calls.runs.filter(r => r.runId === 'l1-champion-t0').length, 1);
+  assert.ok(at('l1-champion-t0') > Math.max(...probeRuns.map(r => at(r.runId))), w.calls.runs.map(r => r.runId).join(', '));
   assert.strictEqual(probeRuns[0].tree, 'champion');
   assert.deepStrictEqual(probeRuns.slice(1, 5).map(r => r.runId).sort(), report.probes.map(p => `l1-p-${p.id}-p0`).sort());
   // The two helpful edits touch the same line: the larger gain (GOOD) kept, the conflict reported.
@@ -581,6 +585,8 @@ test('nothing passes the screen: no proposal reaches the keep rule; the next rou
   await run(w);
   assert.strictEqual(w.calls.verifier.length, 0);
   assert.deepStrictEqual(readArchive(w.paths.archive), []);
+  // Nothing to judge: the champion's tuning replays (the costly full-day windows) never ran, in either round.
+  assert.deepStrictEqual(w.calls.runs.filter(r => /-champion-t\d+$/.test(r.runId)), []);
   assert.strictEqual(w.calls.proposeProbes.length, 2);
   const second = w.calls.proposeProbes[1].lessons;
   assert.match(second, /^Evidence only, from practice-train probes/);
@@ -589,6 +595,64 @@ test('nothing passes the screen: no proposal reaches the keep rule; the next rou
   const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(2), 'probe-report.json'), 'utf8'));
   assert.deepStrictEqual(report.edits.map(x => x.probedBefore), [true]);
   assert.strictEqual(report.probes.length, 0);
+});
+
+test('probes first, the panel still stops the loop early: once the champion has run, nothing flagged left stops a round before its probes', async () => {
+  const w = world({
+    proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')],
+    loop: { maxFlagged: 40, limits: { maxIterations: 3, maxModelCalls: 10000, maxWallMinutes: 30 } },
+  });
+  await run(w);
+  // Round 1 probed, kept, and targeted every flagged decision; round 2 found none left before any probe or model call.
+  assert.strictEqual(w.calls.proposeProbes.length, 1);
+  const st = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  assert.deepStrictEqual(st.iterations.map(x => [x.n, x.done, Boolean(x.nothing)]), [[1, true, false], [2, true, true]]);
+  assert.match(st.stopped, /nothing flagged left to work on/);
+  assert.strictEqual(w.calls.runs.filter(r => r.runId === 'l1-champion-t0').length, 1);
+  // A resume stops at once too: no probe round runs again.
+  await run(w);
+  assert.strictEqual(w.calls.proposeProbes.length, 1);
+});
+
+test('probes first: a runnable proposal the champion\'s first replays leave no panel to judge is archived as blocked, never dropped', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  // The champion's tuning decisions all right: its panel has nothing flagged.
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => score(opts).map(d => (/champion-t\d+$/.test(opts.runDir) ? { ...d, category: 'right' } : d));
+  await run(w);
+  assert.strictEqual(w.calls.verifier.length, 0, 'never judged');
+  const [e] = readArchive(w.paths.archive);
+  assert.strictEqual(e.verdict, 'blocked');
+  assert.match(e.reasons[0], /^not judged: nothing flagged left to work on/);
+  assert.strictEqual(e.source, 'propose-probe-compose');
+  const keep = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => typeof l.keep === 'string');
+  assert.deepStrictEqual(keep.map(l => [l.proposalId, l.keep]), [[e.proposalId, 'blocked']]);
+  const st = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  assert.match(st.stopped, /nothing flagged left to work on/);
+  assert.deepStrictEqual(st.iterations.map(x => [x.done, Boolean(x.nothing)]), [[true, true]]);
+});
+
+test('probes first: a crash after the champion\'s first replays and before the archive never drops the round\'s proposal on resume', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => score(opts).map(d => (/champion-t\d+$/.test(opts.runDir) ? { ...d, category: 'right' } : d));
+  // The panel's first build dies once: the champion's scorecard is done, the round's proposals are recorded, nothing archived.
+  const D = require('../../scripts/lib/train/decision-points');
+  const choose = D.choosePanel;
+  let failed = false;
+  D.choosePanel = (...a) => { if (!failed) { failed = true; throw new Error('killed'); } return choose(...a); };
+  try {
+    await assert.rejects(run(w), /killed/);
+    const mid = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+    assert.deepStrictEqual([mid.done['scorecard:t'], mid.done['1:propose']], [true, true]);
+    assert.deepStrictEqual(readArchive(w.paths.archive), []);
+    await run(w);
+  } finally {
+    D.choosePanel = choose;
+  }
+  const [e] = readArchive(w.paths.archive);
+  assert.deepStrictEqual([e && e.verdict, e && e.source], ['blocked', 'propose-probe-compose']);
+  assert.strictEqual(w.calls.proposeProbes.length, 1, 'the resume proposes nothing new');
 });
 
 test('a probe edit that breaks its tag or the owner\'s style never runs', async () => {

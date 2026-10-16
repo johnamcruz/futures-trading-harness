@@ -9,6 +9,9 @@
  *              before every trade decision (decision-points.js); a tuning look, logged (prop/looks.js)
  *   scorecard  the champion's decisions, scored (step 2's scorecard; a failure category per decision)
  *
+ * (with `probe`: the champion's replays and scorecard run once a round first has a runnable proposal, after its
+ * probes, never before: the same runs, only later, so a round whose probes pass nothing never pays for them)
+ *
  * then each iteration n:
  *
  *   panel      (c) the flagged decisions not targeted before, plus a seeded control sample of right ones
@@ -388,26 +391,35 @@ async function proposalsFor(ctx, { n, flagged, champion }) {
   return res.proposals.map(p => ({ ...p, source: 'proposer' }));
 }
 
-async function iteration(ctx, n, { champion, champ }) {
+async function iteration(ctx, n, { champion, champOf }) {
   const it = ctx.state.iterations.find(x => x.n === n) || (ctx.state.iterations.push({ n, done: false }), ctx.state.iterations[ctx.state.iterations.length - 1]);
   const dir = ctx.paths.iter(n);
   const work = path.join(W(ctx), `iter-${n}`);
   const used = ctx.state.iterations.filter(x => x.n < n).flatMap(x => x.targeted || []);
-  const panel = await phase(ctx, `${n}:panel`, path.join(dir, 'panel.json'), async () => {
-    const p = D.choosePanel({ decisions: champ.decisions, used, maxFlagged: ctx.loop.maxFlagged, control: ctx.loop.controlPoints, seed: `${ctx.loop.seed}|${n}`, failures: P.FAILURES });
-    return withRuns(p, champ.decisions);
-  });
-  if (!panel.flagged.length) {
-    it.done = true;
-    it.nothing = true;
+  // The panel: the champion's flagged and control decisions on its tuning replays (champOf). It comes first (the
+  // proposer works on its flagged decisions; nothing flagged stops the loop before any model call), except with probe
+  // before the champion's replays ever ran: then only once a proposal is runnable (lazy: an empty panel is returned).
+  let champ = null;
+  const NOTHING = 'nothing flagged left to work on: the champion\'s scored decisions are all right, unchecked or already targeted';
+  const panelOf = async ({ lazy = false } = {}) => {
+    champ = await champOf();
+    const p = await phase(ctx, `${n}:panel`, path.join(dir, 'panel.json'), async () => withRuns(D.choosePanel({ decisions: champ.decisions, used, maxFlagged: ctx.loop.maxFlagged, control: ctx.loop.controlPoints, seed: `${ctx.loop.seed}|${n}`, failures: P.FAILURES }), champ.decisions));
+    if (!p.flagged.length) {
+      if (lazy) return p;
+      it.done = true;
+      it.nothing = true;
+      ctx.save();
+      throw new Stop(NOTHING);
+    }
+    it.targeted = p.flagged.map(d => d.key);
     ctx.save();
-    throw new Stop('nothing flagged left to work on: the champion\'s scored decisions are all right, unchecked or already targeted');
-  }
-  it.targeted = panel.flagged.map(d => d.key);
-  ctx.save();
+    return p;
+  };
+  // Lazy also on a resume of a round that already proposed: its proposals are archived (blocked if no panel), never dropped.
+  let panel = !ctx.loop.probe || (ctx.state.done['scorecard:t'] && !ctx.state.done[`${n}:propose`]) ? await panelOf() : null;
   const archive = A.readArchive(ctx.paths.archive);
   const proposals = await phase(ctx, `${n}:propose`, path.join(dir, 'proposals.json'), async () => {
-    const raw = await proposalsFor(ctx, { n, flagged: panel.flagged, champion });
+    const raw = await proposalsFor(ctx, { n, flagged: panel ? panel.flagged : [], champion });
     const ids = [];
     return raw.map(x => {
       if (x.error) return { id: null, source: x.source, errors: [x.error], line: x.line, imported: x.imported };
@@ -425,9 +437,14 @@ async function iteration(ctx, n, { champion, champ }) {
     if (fs.existsSync(f)) fs.renameSync(f, `${f}.used-${n}`);
   }
   const runnable = proposals.filter(x => x.id && !x.errors.length && x.duplicateOf === null);
-  const baseline = runnable.length ? await phase(ctx, `${n}:baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs })) : [];
-  const verdicts = [];
-  for (const x of runnable) {
+  // The champion's first tuning replays, for this round's runnable proposals. Left with nothing flagged, no panel can
+  // judge them: they are archived as blocked (never dropped), then the loop stops as it does with nothing flagged.
+  if (runnable.length && !panel) panel = await panelOf({ lazy: true });
+  const unjudged = runnable.length && !panel.flagged.length;
+  const judged = unjudged ? [] : runnable;
+  const baseline = judged.length ? await phase(ctx, `${n}:baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs })) : [];
+  const verdicts = unjudged ? runnable.map(x => ({ x, cand: { files: [] }, v: { verdict: 'blocked', reasons: [`not judged: ${NOTHING}`] } })) : [];
+  for (const x of judged) {
     const cand = await phase(ctx, `${n}:candidate:${x.id}`, path.join(dir, `candidate-${x.id}.json`), async () => {
       const tree = await candidateTree(ctx, { dir: work, id: x.id, proposal: x.proposal, champion });
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
@@ -443,7 +460,7 @@ async function iteration(ctx, n, { champion, champ }) {
   }
   await phase(ctx, `${n}:archive`, path.join(dir, 'archived.json'), async () => {
     const already = new Set(A.readArchive(ctx.paths.archive).filter(e => e.iteration === n).map(e => e.proposalId));
-    const common = { iteration: n, windows: ctx.loop.tuningWindows, seed: ctx.loop.seed, repeats: ctx.loop.repeats, baseCommit: champion.baseCommit, panel: { flagged: panel.flagged.length, control: panel.control.length, points: panel.points.map(p => p.t) } };
+    const common = { iteration: n, windows: ctx.loop.tuningWindows, seed: ctx.loop.seed, repeats: ctx.loop.repeats, baseCommit: champion.baseCommit, panel: panel ? { flagged: panel.flagged.length, control: panel.control.length, points: panel.points.map(p => p.t) } : null };
     for (const x of proposals.filter(y => !runnable.includes(y))) {
       const id = x.id || `invalid-${n}-${proposals.indexOf(x)}`;
       if (!already.has(id)) A.appendEntry(ctx.paths.archive, { ...common, proposalId: id, source: x.source, proposal: x.proposal || null, verdict: x.duplicateOf !== null && x.duplicateOf !== undefined ? 'duplicate' : 'invalid', reasons: x.errors.length ? x.errors : [`judged before, in iteration ${x.duplicateOf}`] });
@@ -461,7 +478,9 @@ async function iteration(ctx, n, { champion, champ }) {
     return { at: new Date().toISOString() };
   });
   it.done = true;
+  if (unjudged) it.nothing = true;
   ctx.save();
+  if (unjudged) throw new Stop(NOTHING);
 }
 
 /** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
@@ -498,7 +517,12 @@ async function runLoop({ loop, env = process.env, root, steps, dryRun = false, l
     const v = checkLook({ candidate: `${loop.loopId}/plan`, purpose: 'tuning', ranges: loop.tuningWindows }, S.readLedger(ctx.paths.ledger));
     if (!v.ok) throw new Error(`look refused:\n- ${v.refusals.join('\n- ')}`);
     const champion = await championTree(ctx);
-    const champ = await windowRuns(ctx, { tag: 't', windows: loop.tuningWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/champion`, purpose: 'tuning', ranges: loop.tuningWindows, what: 'training loop: the champion\'s tuning replays' } });
+    // The champion's tuning replays, which every proposal is judged against. Propose-Probe-Compose screens its edits
+    // on its own curated runs first, so it runs these only once it has a runnable proposal: the same runs, seed and
+    // windows, only later (an iteration whose probes find nothing never pays for them). Without probe: first, as before.
+    let champRuns = null;
+    const champOf = () => champRuns || (champRuns = windowRuns(ctx, { tag: 't', windows: loop.tuningWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/champion`, purpose: 'tuning', ranges: loop.tuningWindows, what: 'training loop: the champion\'s tuning replays' } }));
+    if (!loop.probe) await champOf();
     for (;;) {
       const open1 = ctx.state.iterations.find(x => !x.done);
       if (!open1) {
@@ -511,7 +535,7 @@ async function runLoop({ loop, env = process.env, root, steps, dryRun = false, l
         ctx.state.done[`look:iter-${n}`] = true;
         ctx.save();
       }
-      await iteration(ctx, n, { champion, champ });
+      await iteration(ctx, n, { champion, champOf });
     }
   } catch (err) {
     if (!(err instanceof Stop)) throw err;

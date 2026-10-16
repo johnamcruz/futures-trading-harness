@@ -73,7 +73,9 @@ needs `modelScore`), each iteration's proposal comes from a probe round:
 same curated moments and seed as the champion and screened by code, the
 ones that helped combined by code and probed once more, then the full keep
 rule. Edits are screened on one half of the moments (split by session
-date, seeded) and the combined change judged on the other. The
+date, seeded) and the combined change judged on the other. With `probe`,
+the champion's tuning-window replays run only once a round first has a
+runnable proposal: a round whose probes pass nothing never pays for them. The
 iteration's `probe-report.json` and the loop's `lessons.jsonl` say what
 each probe showed, and the keep rule's verdict on each combined change
 (`docs/TRAINING.md`, "Propose–Probe–Compose"). Keep `parallel` at 1
