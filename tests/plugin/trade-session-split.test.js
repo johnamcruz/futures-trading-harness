@@ -373,7 +373,7 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 // Then tightened to the exact sizes when the skills were matched to the code (fix/skills-match-code): every role shrank.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86884, 'news-calendar-analyst': 10149, 'risk-manager': 89973, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9183, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48597 },
+  full: { 'market-structure-analyst': 86912, 'news-calendar-analyst': 10149, 'risk-manager': 89973, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9183, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48584 },
   index: { 'market-structure-analyst': 42742, 'news-calendar-analyst': 10149, 'risk-manager': 75850, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9183, 'trend-momentum-analyst': 39880, 'volume-liquidity-analyst': 32877 },
 };
 

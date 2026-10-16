@@ -68,9 +68,9 @@ positive on 38 trades, interval straddling zero. Not a finding.
 
 ```text
 Take: at the prior RTH low 21385.00, 1h and 15m down: on the 15m close a body beyond, close 21375.25
-  (bottom third); on the 3m close a retest high 21385.25 held with a shooting star. Reads: 1h down,
-  below prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high
-  21385.25, target 1h swing 21332.00. Priority order -> take.
+  (bottom third); 3m retest high 21386.50 held (shooting star), close 21381.00. Reads: 1h down, below
+  prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50,
+  target 1h swing 21368.00. short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ), 2.26R -> take.
 Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (touched, no broke
   read); the session VAH 0.5R in the way. Priority order (step 3, room): skip.
 Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a

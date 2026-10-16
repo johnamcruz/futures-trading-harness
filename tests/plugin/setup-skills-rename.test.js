@@ -219,7 +219,7 @@ const LATE = {
       to: "Aim for the next swing (`m3.swingTargets`); the room to the next level (`inTheWay`) is step 3's.",
       reason: "the stop is the stop read (invalidation), not a candidate's (fix/skills-composed-process X2, fix/skills-stale-examples)" },
     { from: "(top third); on the 3m close a retest low 21615.75 held with a hammer. orb long fired. Priority order -> take.",
-      to: ["(bottom third); on the 3m close a retest high 21385.25 held with a shooting star. Reads: 1h down,", "below prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high", "21385.25, target 1h swing 21332.00. Priority order -> take."],
+      to: ["(bottom third); 3m retest high 21386.50 held (shooting star), close 21381.00. Reads: 1h down, below", "prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50,", "target 1h swing 21368.00. short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ), 2.26R -> take."],
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
     { from: "Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (no acceptance);",
       to: "Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (touched, no broke",

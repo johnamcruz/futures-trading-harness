@@ -46,8 +46,8 @@ retest of its gap is the liquidity-grab entry read: it lives here.
 **The read forms**, on the `m3.fvgs` gaps (the base bars' own: none):
 location `at 15m fvg`; setup `15m rejected 15m fvg high up` (a bullish gap
 held), `15m broke 15m fvg low down` (it failed) or, a close inside,
-`15m touched 15m fvg high` (the near edge; `low` only when the candle
-reached it); bearish mirrored.
+`15m touched 15m fvg high` (it reached the high edge, closed inside);
+bearish mirrored.
 
 **Ahead of a setup**: the unfilled part beyond `m3.price` its way. The
 briefing does not rank gaps among the levels in a setup's way
