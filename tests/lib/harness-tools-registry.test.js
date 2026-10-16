@@ -123,3 +123,14 @@ test('registry: arguments map to the operation\'s own', () => {
   assert.deepStrictEqual(args('market_snapshot', { bars: '/b.json' }), { file: '/b.json', params: {}, compact: true });
   assert.deepStrictEqual(args('reconcile', { day: '2026-10-07' }), { day: '2026-10-07', json: false });
 });
+
+test('registry: every module OPERATIONS loads lazily loads under the committed config, and exports its function (a broken module fails here, not on the first live call)', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'harness-tools', 'index.js'), 'utf8');
+  const named = [...src.matchAll(/lazy\('([\w-]+)', '(\w+)'\)/g)].map(m => [m[1], m[2]]);
+  assert.strictEqual(named.length, Object.keys(OPERATIONS).length, 'every operation names its module and function');
+  for (const [file, name] of named) {
+    let mod;
+    assert.doesNotThrow(() => { mod = require(`../../scripts/lib/harness-tools/${file}`); }, `${file} loads`);
+    assert.strictEqual(typeof mod[name], 'function', `${file}.${name}`);
+  }
+});

@@ -8,10 +8,17 @@
 //   table, a parse or input limit, an interface fact, a float tolerance, the exchange hours, a schema, a function's
 //   local, a definition the skills teach, a document's code ceiling, contract facts) or the frozen promotion gate;
 //   A lower-case constant stated as numbers (const half = 0.5) is one too;
-// - a numeric literal other than 0 and 1 in a comparison, a default value, an object literal's value, Math.max /
-//   Math.min arguments or a fractional factor (x * 0.35): counted per file, and the count may not grow (a new threshold
+// - a numeric literal other than 0 and 1 in a comparison, a default value, a fallback (x || 5, x ?? 5), an object literal's
+//   value, a number assigned to a property (this.k = 5), a bare numeric call argument (setTimeout(f, 5000), list.slice(0, 20)),
+//   Math.max / Math.min arguments or a fractional factor (x * 0.35): counted per file, and the count may not grow (a new threshold
 //   goes into a config file, and the code reads it). A listed mechanical form (`mechanics`: a protocol's code, each with
 //   its reason) is not counted.
+//
+// The pins are regenerated, not edited: node scripts/regen-tunable-pins.js (scripts/lib/tunable-pins.js). `scan` is the
+// scanner's version and `scanHash` the hash of tests/plugin/tunable-scan.js: a scanner whose hash differs from the pinned
+// one fails (regenerate), a scanner whose hash differs from the base branch's needs a higher `scan` than the base's, and
+// a `scan` higher than the base's (counts and mechanics start over) needs the committed counts to EQUAL what the scanner
+// counts now, so a restart can't pad them. The constants list stays shrink-only and is never reset.
 //
 // The pins only shrink: a constant moved to config leaves the list, a file whose count fell lowers its pin, and the
 // list is checked against the base branch's (a new name, an edited reason or a higher count there is refused).
@@ -21,23 +28,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const S = require('./tunable-scan');
+const { scanHash, counts } = require('../../scripts/lib/tunable-pins');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const PINS_REL = 'tests/plugin/no-tunable-literals.pins.json';
 const PINS = JSON.parse(fs.readFileSync(path.join(REPO, PINS_REL), 'utf8'));
 
-function current() {
-  const constants = {};
-  const literals = {};
-  for (const f of S.scriptFiles(REPO)) {
-    const text = fs.readFileSync(path.join(REPO, f), 'utf8');
-    const names = [...new Set(S.constantsIn(text).map(c => c.name))];
-    if (names.length) constants[f] = names.sort();
-    const n = S.literalCount(text, { mechanics: Object.keys(PINS.mechanics || {}) });
-    if (n) literals[f] = n;
-  }
-  return { constants, literals };
-}
+const current = () => counts(REPO, Object.keys(PINS.mechanics || {}));
 
 /** The base branch's pins (git merge-base HEAD origin/main), or null when the base has no such file yet. */
 function basePins() {
@@ -88,6 +85,9 @@ function againstBase(pins, base) {
       else if (was !== why) problems.push(`${f}: ${n}'s reason differs from the base branch's ("${was}"): a reason is not edited in place`);
     }
   }
+  // A wider scan (a higher `scan` number in the pins, raised in a reviewed change that says why) counts what the base's
+  // scan did not see: its mechanics and per-file counts start over. The constants' list still only shrinks.
+  if ((pins.scan || 1) > (base.scan || 1)) return problems; // equality with the scanner's counts: the test below
   for (const [form, why] of Object.entries(pins.mechanics || {})) {
     const was = (base.mechanics || {})[form];
     if (!was) problems.push(`mechanics: ${form} is not listed on the base branch: the list may only shrink`);
@@ -103,6 +103,30 @@ test('guard: the pins only shrink against the base branch, and a listed reason i
   assert.deepStrictEqual(againstBase(PINS, base), []);
 });
 
+/** The scan version against the base's: a changed scanner needs a higher `scan`. */
+function scanAgainstBase(pins, base) {
+  if (pins.scanHash === base.scanHash) return [];
+  return (pins.scan || 1) > (base.scan || 1) ? [] : [`the scanner (tests/plugin/tunable-scan.js) differs from the base branch's but scan is ${pins.scan || 1}, not above the base's ${base.scan || 1}: run node scripts/regen-tunable-pins.js`];
+}
+
+test('guard: the pinned scanner hash is the scanner\'s (a changed scanner needs its pins regenerated)', () => {
+  assert.strictEqual(PINS.scanHash, scanHash(REPO), 'tests/plugin/tunable-scan.js changed: run node scripts/regen-tunable-pins.js (it raises scan and rewrites the counts)');
+});
+
+test('guard: a changed scanner raises `scan` above the base\'s, and a raised `scan` pins exactly the scanner\'s counts', () => {
+  const base = basePins();
+  if (base === null) return;
+  assert.deepStrictEqual(scanAgainstBase(PINS, base), []);
+  if ((PINS.scan || 1) > (base.scan || 1)) assert.deepStrictEqual(current().literals, PINS.literals, 'a restart of the counts equals what the scanner counts now');
+  // The rules themselves.
+  const was = { scan: 2, scanHash: 'aa' };
+  assert.deepStrictEqual(scanAgainstBase(was, was), []);
+  assert.match(scanAgainstBase({ scan: 2, scanHash: 'bb' }, was).join(), /differs from the base branch's but scan is 2/);
+  assert.deepStrictEqual(scanAgainstBase({ scan: 3, scanHash: 'bb' }, was), []);
+  assert.match(scanAgainstBase({ scan: 1, scanHash: 'bb' }, { constants: {} }).join(), /but scan is 1/);
+  assert.deepStrictEqual(scanAgainstBase({ scan: 2, scanHash: 'bb' }, { constants: {} }), [], 'a base without scan counts as 1');
+});
+
 test('guard: the base comparison catches a name added, a reason edited and a count raised', () => {
   const base = { constants: { 'a.js': { X: 'a unit (milliseconds in a minute)' } }, literals: { 'a.js': 3 } };
   assert.deepStrictEqual(againstBase(base, base), []);
@@ -110,6 +134,10 @@ test('guard: the base comparison catches a name added, a reason edited and a cou
   assert.match(againstBase({ ...base, constants: { 'a.js': { ...base.constants['a.js'], Y: 'a unit, honestly' } } }, base).join(), /Y is not listed on the base branch/);
   assert.match(againstBase({ ...base, constants: { 'a.js': { X: 'a unit, and a threshold now' } } }, base).join(), /X's reason differs from the base branch's/);
   assert.match(againstBase({ ...base, literals: { 'a.js': 4 } }, base).join(), /pinned at 4, above the base's 3/);
+  // A wider scan (scan raised) restarts the counts and the mechanics, never the constants.
+  assert.deepStrictEqual(againstBase({ ...base, scan: 2, literals: { 'a.js': 9 }, mechanics: { 'x\\(1\\)': 'a fixed protocol field' } }, base), []);
+  assert.match(againstBase({ ...base, scan: 2, constants: { 'a.js': { ...base.constants['a.js'], Y: 'a unit, honestly' } } }, base).join(), /Y is not listed on the base branch/);
+  assert.match(againstBase({ ...base, scan: 1, literals: { 'a.js': 9 } }, base).join(), /pinned at 9/);
   const withForm = { ...base, mechanics: { 'exitCode:\\s*2\\b': 'the hook protocol\'s block exit code' } };
   assert.deepStrictEqual(againstBase(withForm, withForm), []);
   assert.match(againstBase(withForm, base).join(), /mechanics: .* is not listed on the base branch/);
@@ -139,6 +167,10 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
     ['const stop = atr * 0.35;', 1], ['const t = 1.5 * range;', 1], ['const p = 2 ** 0.5;', 0], ['const q = x * 2;', 0], ['const r = x * .5;', 1],
     // One literal two patterns see counts once.
     ['f({ k: 0.5 * x });', 1],
+    // A fallback default (x || 5, x ?? 0.5), a number assigned to a property, a bare numeric call argument.
+    ['const n = opts.n || 5;', 1], ['const w = cfg.w ?? 0.5;', 1], ['const z = a || 0;', 0], ['const o = a ?? 1;', 0],
+    ['this.limit = 40;', 1], ['state.retries = 3;', 1], ['state.flags[k] = 9;', 1], ['this.n = 0;', 0], ['state.on = 1;', 0], ['this.n += 4;', 0],
+    ['setTimeout(done, 5000);', 1], ['const top = list.slice(0, 20);', 1], ['const tail = list.slice(-4);', 1], ['go(f(0), 1);', 0], ['if (ready) setTimeout(g, 0);', 0],
   ]) assert.strictEqual(S.literalCount(line), n, line);
   // A listed mechanical form (with its reason in the pins) is not counted; any other number on the line still is.
   const mechanics = ['exitCode:\\s*2\\b'];
@@ -146,6 +178,11 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
   assert.strictEqual(S.literalCount('return { stderr: m, exitCode: 2 };', { mechanics }), 0);
   assert.strictEqual(S.literalCount('return { exitCode: 2, retries: 5 };', { mechanics }), 1);
   assert.strictEqual(S.literalCount('return { exitCode: 3 };', { mechanics }), 1, 'only the listed form');
+  // The reasoned mechanics are the pins' (PINS.mechanics: digits of a printed number, a timestamp's field positions, a
+  // process exit code, ...): each listed form passes, its neighbour that states a count does not.
+  const real = Object.keys(PINS.mechanics);
+  for (const [line, n] of [['x.toFixed(2);', 0], ['x.padStart(2, "0");', 0], ['JSON.stringify(v, null, 2);', 0], ['d.toISOString().slice(0, 10);', 0], ['process.exit(2);', 0], ['argv.slice(2);', 0],
+    ['round(x, 3);', 0], ['list.slice(0, 10);', 1], ['setTimeout(f, 30);', 1], ['x.toFixed(2) + (y || 30);', 1]]) assert.strictEqual(S.literalCount(line, { mechanics: real }), n, line);
   // A named constant's own statement is not counted (the constant is listed with its reason instead).
   assert.strictEqual(S.literalCount('const T = Object.freeze({\n  a: 7,\n  b: x * 0.5,\n});\nif (y > 9) z();'), 1);
   // A planted threshold in a real file raises its count past the pin.
@@ -154,7 +191,8 @@ test('guard: the scan catches what it claims (planted tunables) and passes what 
   assert.strictEqual(S.literalCount(`${text}\nif (adx >= 25) trend = true;\n`), S.literalCount(text) + 1);
   assert.ok(S.constantsIn(`${text}\nconst TREND_ADX = 25;\n`).some(c => c.name === 'TREND_ADX'));
   // Each new pattern, planted in the real file, raises its count too.
-  for (const planted of ['const cut = { trendAdx: 25 };', 'const lo = Math.max(18, adx);', 'const slope = atr * 0.3;']) {
+  for (const planted of ['const cut = { trendAdx: 25 };', 'const lo = Math.max(18, adx);', 'const slope = atr * 0.3;', 'const a = opts.adx || 25;', 'const b = opts.adx ?? 25;',
+    'this.adxCut = 25;', 'cfg.adxCut = 25;', 'setTimeout(check, 2500);', 'const first = list.slice(0, 25);']) {
     assert.strictEqual(S.literalCount(`${text}\n${planted}\n`), S.literalCount(text) + 1, planted);
   }
   assert.ok(S.constantsIn(`${text}\nconst trendAdx = 25;\n`).some(c => c.name === 'trendAdx'));

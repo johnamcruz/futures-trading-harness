@@ -233,7 +233,7 @@ test('volatility cutoffs: the trade stream\'s day regimes use the live regime\'s
   assert.strictEqual(at(REGIME_PARAMS.lowVol + 0.01), 'normal');
 });
 
-test('strategy numbers: the shipped trade_lifecycle keeps the owner\'s risk ceilings (pinned; the value\'s one home is its STRATEGY.md)', () => {
+test('strategy numbers: the shipped trade_lifecycle keeps the owner\'s risk ceilings and stop floor (pinned; the value\'s one home is its STRATEGY.md)', () => {
   const { loadStrategyFile } = require('../../scripts/lib/trading/strategies');
   const s = loadStrategyFile(path.join(REPO, 'strategies', 'trade_lifecycle', 'STRATEGY.md'));
   assert.deepStrictEqual(s.errors || [], []);
@@ -241,6 +241,9 @@ test('strategy numbers: the shipped trade_lifecycle keeps the owner\'s risk ceil
   assert.ok(d.risk.max_risk_usd <= 300, `max_risk_usd ${d.risk.max_risk_usd} is above the owner's $300 cap`);
   assert.ok(d.risk.min_rr >= 2, `min_rr ${d.risk.min_rr} is under 2`);
   assert.ok(d.valid_bars <= 3, `valid_bars ${d.valid_bars} is above 3`);
+  // The stop's floor tightens as it grows: a smaller floor lets a closer stop through (a looser rule), so it may only rise.
+  assert.ok(d.risk.stop_floor_ticks >= 8, `stop_floor_ticks ${d.risk.stop_floor_ticks} is under 8 (a smaller floor loosens the stop)`);
+  assert.ok(d.risk.stop_floor_atr >= 0.25, `stop_floor_atr ${d.risk.stop_floor_atr} is under 0.25 (a smaller floor loosens the stop)`);
 });
 
 // ---- The guard: a removed copy never comes back ----

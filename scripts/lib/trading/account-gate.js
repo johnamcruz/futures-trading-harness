@@ -297,11 +297,52 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
 }
 
 /**
+ * Under a refused config file: is this change to an order that works no position only a risk cut on the bracket leg of a
+ * still-working entry? The entry is an earlier working order (a lower id: a leg is placed with or after its entry) on the other side of the
+ * same contract with a price; the leg sits on
+ * its protective side (a stop beyond it, a target past it). Allowed: a smaller size (a stop's cut must leave the stops
+ * covering the entry's size), and a stop's price moved toward the entry price, no further. Anything else (a larger
+ * size, a target's price, the order not being a leg) is refused: `{ ok: false, why }`.
+ */
+function bracketLegChange({ input, order, orders, isStop }) {
+  const sign = Number(order.side) === 0 ? 1 : -1; // the leg's side; the entry is on the other
+  const priceOf = o => { const v = STOP_TYPES.has(Number(o.type)) ? o.stopPrice : o.limitPrice; return v === null || v === undefined ? NaN : Number(v); };
+  const entries = orders.filter(o => o !== order && Number(o.id) < Number(order.id) && o.contractId === order.contractId && (Number(o.side) === 0 ? 1 : -1) === -sign && Number.isFinite(priceOf(o)));
+  const legPrice = priceOf(order);
+  // A stop leg sits beyond the entry (a long's sell stop below it), a target leg past it (a sell limit above).
+  const beyond = e => (isStop ? sign : -sign) * (legPrice - priceOf(e)) > 0;
+  const mine = Number.isFinite(legPrice) ? entries.filter(beyond) : [];
+  if (!mine.length) return { ok: false, why: 'it is no bracket leg of a working entry' };
+  const given = ['limitPrice', 'stopPrice', 'trailPrice'].filter(f => input[f] !== undefined && input[f] !== null);
+  const sized = input.size !== undefined && input.size !== null;
+  if (!sized && !given.length) return { ok: false, why: 'nothing to cut or move' };
+  if (sized) {
+    const size = Number(input.size);
+    if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) return { ok: false, why: 'only a smaller size' };
+    if (isStop) {
+      const others = restingSize(orders.filter(o => o !== order), order.contractId, sign, STOP_TYPES);
+      const entrySize = Math.max(...mine.map(e => Number(e.size || 0)));
+      if (size + others < entrySize) return { ok: false, why: `the cut would leave the entry's ${entrySize} without a full stop` };
+    }
+  }
+  if (given.length) {
+    if (!isStop || given.some(f => f !== 'stopPrice') || !Number.isFinite(Number(order.stopPrice))) return { ok: false, why: 'only a stop moves, by its stopPrice' };
+    const level = Number(input.stopPrice);
+    const entry = sign === 1 ? Math.max(...mine.map(priceOf)) : Math.min(...mine.map(priceOf)); // the entry nearest the stop
+    const towardsEntry = Number.isFinite(level) && -sign * (level - Number(order.stopPrice)) > 0 && -sign * (level - entry) <= 0;
+    if (!towardsEntry) return { ok: false, why: 'a stop moves toward the entry price only, not past it' };
+  }
+  return { ok: true };
+}
+
+/**
  * modify_order checks that need the account. An order "works" an open
  * position when it sits on the opposite side of a position in its own
  * contract month (a protective stop or a target).
  * - size: only a decrease; a protective stop's cut must leave the stops
  *   covering the position (cut it after a partial exit, not before);
+ * - a refused config file (CRITICAL): an entry order is not modified at all (a bracket leg of a working entry may be
+ *   cut, its stop moved toward the entry: bracketLegChange);
  * - price: only orders that work an open position may be repriced (moving
  *   an entry or a leftover order would open a trade past the entry checks:
  *   cancel it and place a new order through the gate), and a protective
@@ -333,6 +374,17 @@ function evaluateModifyAccount({ input = {}, positions, orders, config, ledger =
   const pendingNote = observed === projected ? '' : ` once recent orders fill (net ${projected})`;
   const isStop = STOP_TYPES.has(Number(order.type));
   const root = contractRoot(order.contractId);
+
+  // A refused config file (config.configCritical, tunables.js): an entry order (one that works no open position) is not
+  // changed at all, in size or price; a protective stop or a target is, as usual (those reduce risk). Never skippable.
+  if (config && config.configCritical && !works) {
+    // The one exception: a bracket leg of a still-working entry (a stop or target on the other side of the entry, on the
+    // protective side of its price) may be cut, and its stop moved toward the entry: both only reduce the entry's risk.
+    const leg = bracketLegChange({ input, order, orders, isStop });
+    if (leg.ok) return violations;
+    violations.push({ check: 'config-critical', message: `${config.configCritical} Order ${order.id} is an entry (it works no open ${root} position): it can't be resized or repriced${leg.why ? ` (${leg.why})` : ''}. Cancel it, or leave it. Protective stops and targets can still be modified, and a bracket stop or target of a working entry can be cut, its stop moved toward the entry.` });
+    return violations;
+  }
 
   if (input.size !== undefined && input.size !== null) {
     const size = Number(input.size);
