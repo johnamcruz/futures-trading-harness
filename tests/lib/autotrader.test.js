@@ -1166,6 +1166,13 @@ test('the runner\'s opencode plugin: loaded by every run config from the harness
     }
     delete process.env.FTH_DENIED_ROLES;
     await assert.doesNotReject(before({ tool: 'task' }, { args: { subagent_type: 'market-structure-analyst' } }), 'no list: nothing refused by it');
+    // A task_id naming no session is dropped before opencode reads it (it would fail the call); a session id stays.
+    const invented = { args: { subagent_type: 'risk-manager', prompt: 'p', task_id: 'rm1' } };
+    await before({ tool: 'task' }, invented);
+    assert.deepStrictEqual(invented.args, { subagent_type: 'risk-manager', prompt: 'p' });
+    const resume = { args: { subagent_type: 'risk-manager', task_id: 'ses_eb993c3b1ffekqL45GDgHQpdeZ' } };
+    await before({ tool: 'task' }, resume);
+    assert.strictEqual(resume.args.task_id, 'ses_eb993c3b1ffekqL45GDgHQpdeZ');
   } finally {
     if (saved === undefined) delete process.env.FTH_DENIED_ROLES; else process.env.FTH_DENIED_ROLES = saved;
   }

@@ -375,3 +375,19 @@ test('the run\'s config denies the skill tool to the roles holding skill_lookup 
   const env = oc.runEnv({}, { root: '/r', dataDir: '/d', stateDir: '/s', agents, dir: '/r/workspace', mode: 'index' });
   assert.deepStrictEqual(JSON.parse(env.OPENCODE_CONFIG_CONTENT), index);
 });
+
+test('dropInventedTaskId: a task call\'s task_id that names no session (a label, a number, null, an object) is dropped in place; a session id, another tool, or no task_id is left as it is', () => {
+  const { dropInventedTaskId } = require('../../scripts/lib/opencode');
+  for (const id of ['msa', 'rm1', '', 7, null, {}, ['ses_x']]) {
+    const args = { subagent_type: 'risk-manager', prompt: 'p', task_id: id };
+    assert.strictEqual(dropInventedTaskId('task', args), true, JSON.stringify(id));
+    assert.deepStrictEqual(args, { subagent_type: 'risk-manager', prompt: 'p' }, JSON.stringify(id));
+  }
+  const resume = { subagent_type: 'risk-manager', task_id: 'ses_eb993c3b1ffekqL45GDgHQpdeZ' };
+  assert.strictEqual(dropInventedTaskId('task', resume), false);
+  assert.strictEqual(resume.task_id, 'ses_eb993c3b1ffekqL45GDgHQpdeZ');
+  const other = { task_id: 'msa' };
+  assert.strictEqual(dropInventedTaskId('read', other), false);
+  assert.strictEqual(other.task_id, 'msa');
+  for (const args of [{ subagent_type: 'risk-manager' }, null, undefined, 'task_id']) assert.strictEqual(dropInventedTaskId('task', args), false);
+});
