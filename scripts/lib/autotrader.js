@@ -404,7 +404,10 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   // No scan: the reason is in the "Context unavailable" line.
   if (!Array.isArray(scan)) return '';
   const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
-  if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
+  // No candidate is no rules signal, never no setup: a composed setup is the model's to read (a model read "no
+  // candidates" as "no setup" and composed on 2 of 80 cycles). With no rules strategy at all, the scan is empty by design.
+  if (!fired.length && !scan.some(r => r.signal === 'rules')) return ` ${symbol}: no rules strategy is active, so the scan lists no candidates; every setup is one you compose and check (trade-lifecycle, compose_check).`;
+  if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
     // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).

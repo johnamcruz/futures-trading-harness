@@ -28,7 +28,7 @@ Summary (MNQ 1m, 20:11 ET):
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
 - 5m structure: CHoCH down through 27087 (known 20:05, 1 candle ago); swing high 27091.5, swing low 27087.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong, engulfing), no key-level sweep, zone void; 15m none; 1h none.
-- Setups: none fired on this bar.
+- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:
 [m3] version m3@2026-04-23T00:11:00.000Z, valid until 20:12 ET
@@ -113,6 +113,7 @@ Summary (MNQ 1m, 08:47 ET):
 - Prior candle range (R = the 1m reference stop): 1h (closed 08:00) high 27048.5 (91.75 above, 15.71R), mid 26995.125 (38.25 above, 6.55R), low 26941.75 (15 below, 2.57R), high taken, closed back inside; 4h (closed 06:00) high 27013.5 (56.75 above, 9.72R), mid 26951.75 (5 below, 0.86R), low 26890 (66.75 below, 11.43R), high taken, closed back inside.
 - FVGs near price or retested (completed candles): 5m bearish 27035.75-27061.25 (08:15) filled to 27049.5, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27032.5 (closed 08:24, weak), no key-level sweep, a weak displacement: no zone; 5m bullish at 27032.25 (closed 08:45, weak, engulfing), no key-level sweep, a weak displacement: no zone; 15m bullish at 26948.75 (closed 06:45, weak), no key-level sweep, a weak displacement: no zone; 1h none.
+- Setups to check (the 15m candle closed 08:45): rejected 5m fvg low 27035.75 -> short; a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
 - Setups:
   - fx_ofi_absorption short: a reversal strategy, no prevailing trend read; multi-timeframe read for a short: mixed; first level in its way: 15m swing low at 1.28R; it needs 2R (the level comes first); confluence: none with it; the VWAP unknown. Stop 11.68 pts (its own 1R); needs 2R of room; levels ahead in its R: 15m swing low 26941.75 (15 pts, 1.28R), 15m swing low 26916.25 (40.5 pts, 3.47R), round number 26900 (56.75 pts, 4.86R). Values: field("flow.windows.5.ofiTrade")=0.286, field("flow.ofiTrade")=-0.819.
 
@@ -197,7 +198,8 @@ Summary (MNQ 1m, 22:19 ET):
 - Next swing above (R = the 1m reference stop): 3m 27542.5 (4.5 pts, 18 ticks, 1.63R); below: 3m 27518.5 (19.5 pts, 78 ticks, 7.08R), 15m 27366.75 (171.25 pts, 685 ticks, 62.18R), 1h 27344.25 (193.75 pts, 775 ticks, 70.35R), 4h 26681.75 (856.25 pts, 3425 ticks, 310.91R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 22:00) high 27540 (2 above, 0.73R), mid 27498 (40 below, 14.52R), low 27456 (82 below, 29.77R), high taken, closed back inside; 4h (closed 22:00) high 27540 (2 above, 0.73R), mid 27442.125 (95.75 below, 34.77R), low 27344.25 (193.75 below, 70.35R), high taken, closed back inside.
 - CISD (completed candles; a read, not a signal): 3m bullish at 27518.75 (closed 21:51, strong), no key-level sweep, OTE 27517.25-27522.75 (mid 27520), bounced; 5m bullish at 27377.25 (closed 20:00, weak), no key-level sweep, a weak displacement: no zone; 15m bearish at 27414.5 (closed 18:15, weak), no key-level sweep, a weak displacement: no zone; 1h bullish at 27403.25 (closed 21:00, strong), no key-level sweep, OTE 27386-27419.5 (mid 27402.75), waiting.
-- Setups: none fired on this bar.
+- Setups to check (the 15m candle closed 22:15): rejected overnight high 27540 -> short; rejected 5m fvg low 27521.25 -> long; rejected 5m fvg high 27524.25 -> long; a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
+- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:
 [m3] version m3@2026-04-27T02:19:00.000Z, valid until 22:20 ET

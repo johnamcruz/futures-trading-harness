@@ -43,6 +43,8 @@
  *   quietPick({ seed, symbol, bar, rate })     whether a bar is in the quiet sample
  *   selectBar({ practice, candles, symbol, bar, barClose, open })   { run, why, moment, reason }
  *   practiceLine(practice)                     one line naming the mode, for reports
+ *   checkLine(candles, { barClose, et, setupTf })   the briefing's "Setups to check" line (the setup moment, as the model
+ *                                             reads it), or null: no moment, or no completed setup candle
  */
 
 const crypto = require('crypto');
@@ -144,4 +146,20 @@ function practiceLine(p) {
   return `setup-focused practice: cycles only at ${tfLabel(p.setupTf)} candles that ${(p.reactions || DEFAULTS.reactions).join(' or ')} a ${p.levels === 'wide' ? 'key or moving level' : 'fixed key level or the VWAP'}, and their confirmation window, a ${Math.round(p.quietSample * 100)}% quiet sample (seed ${p.seed}), every bar with something open, premarket and end of day; not comparable bar for bar with a full-day run`;
 }
 
-module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel };
+/**
+ * The setup moment as the model reads it in the bar briefing: the setup timeframe's last completed candle's reactions
+ * at key levels, each with the side it points, and whether this bar is the reaction (an entry read needs a later close:
+ * the gate's same-candle rule) or a confirmation close. The same moment setup-focused practice and the curated lists
+ * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
+ * composes and checks it, and passes unless every read is true.
+ */
+function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf } = {}) {
+  const m = setupMoment(candles, { setupTf, barClose });
+  if (!m.moment) return null;
+  const side = d => (d === 'up' ? ' -> long' : d === 'down' ? ' -> short' : '');
+  const what = m.reactions.map(r => `${r.rel} ${r.name}${Number.isFinite(r.price) ? ` ${r.price}` : ''}${side(r.dir)}`).join('; ');
+  const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
+  return `- Setups to check (the ${tfLabel(setupTf)} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
+}
+
+module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine };

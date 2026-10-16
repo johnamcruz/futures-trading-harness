@@ -787,7 +787,7 @@ test('lanes: with a position open and the 1m briefing failing, only the 1m lane 
     assert.strictEqual(c.context.manageOnly, false, 'the 3m lane trades in the same cycle');
     // The prompt lists the 3m lane's setup, never the blocked 1m lane's.
     assert.match(c.prompt, /MNQ fired on this bar \(scan candidates[^)]*\): s1 long/);
-    assert.match(c.prompt, /MNQ 1m: no rules strategy fired on this bar/);
+    assert.match(c.prompt, /MNQ 1m: no rules strategy is active, so the scan lists no candidates; every setup is one you compose and check/);
     assert.doesNotMatch(c.prompt, /MNQ 1m fired on this bar/);
     assert.match(c.prompt, /MNQ 1m: the 1m lane's bar briefing can't be built \(boom\): no entry on this bar, only managing what is open \(no MNQ entry on 1m bars this cycle; its other lanes and the other symbols as usual\)/);
   }

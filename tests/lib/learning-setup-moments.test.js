@@ -123,3 +123,31 @@ test('causal: a bar\'s selection never changes when the bars after it change (cu
     assert.deepStrictEqual(b, a, `bar ${i}`);
   }
 });
+
+test('checkLine: the setup moment as the briefing says it: each reaction, the side it points, reaction or confirmation; none without a moment', () => {
+  const candles = { '15m': candle({ relations: [{ name: 'overnight high', price: 21650.25, rel: 'rejected', dir: 'down' }], fvgRelations: [{ name: '1h fvg low', price: 21600.5, rel: 'rejected', dir: 'up' }] }) };
+  const et = iso => new Date(iso).toISOString().slice(11, 16);
+  // The reaction bar: the 15m candle closed with this bar, so an entry read needs a later close (the same-candle rule).
+  assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et }),
+    '- Setups to check (the 15m candle closed 14:45): rejected overnight high 21650.25 -> short; rejected 1h fvg low 21600.5 -> long; this bar is the reaction: an entry read needs a later close. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.');
+  // A later close inside the same 15m candle's window: a confirmation close.
+  assert.match(M.checkLine(candles, { barClose: CLOSE + 3 * 60000, et }), /a confirmation close: the entry reads from this bar\./);
+  // No reaction at a key level, or no completed setup candle: no line (never an invented setup).
+  assert.strictEqual(M.checkLine({ '15m': candle() }, { barClose: CLOSE, et }), null);
+  assert.strictEqual(M.checkLine({}, { barClose: CLOSE, et }), null);
+  // It is the moment practice selects: the line exists exactly when setupMoment finds one.
+  assert.strictEqual(Boolean(M.checkLine(candles, { barClose: CLOSE })), M.setupMoment(candles, { barClose: CLOSE }).moment);
+});
+
+test('the bar briefing shows the setup moment practice selects, on the golden bars', () => {
+  const { renderBriefing } = require('../../scripts/lib/trading/briefing');
+  let shown = 0;
+  for (let i = 520; i < BARS.length && shown < 3; i += 1) {
+    const b = buildBriefing({ symbol: 'MNQ', bars: BARS.slice(i - 500, i + 1), minutes: 3, now: new Date(closeOf(BARS, i)) });
+    const moment = M.setupMoment(b.sections.m3.data.candles, { barClose: closeOf(BARS, i) }).moment;
+    const line = renderBriefing(b).split('\n').find(l => l.startsWith('- Setups to check'));
+    assert.strictEqual(Boolean(line), moment, BARS[i].t);
+    if (line) shown += 1;
+  }
+  assert.ok(shown > 0, 'the golden bars hold a setup moment');
+});
