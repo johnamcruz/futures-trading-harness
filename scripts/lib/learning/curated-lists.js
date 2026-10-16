@@ -12,8 +12,8 @@
  * counter-trend (mostly passes, plus the few D2 allows). A training document is built from practice-train moments only
  * (use 'practice'), a validation document from practice-validate moments only (use 'validate'): never mixed, and a
  * validation document never runs on practice-train (curatedForRun). Neither feeds the experience index (it is built
- * from practice-train runs' experience logs, learning/experience-index.js); a curated run's log does, labelled: its
- * moments are outcome-balanced, not natural rates (experience-index.js curatedLog). A document is one market's: its root(s),
+ * from practice-train runs' experience logs, learning/experience-index.js); a curated run's log does, weighted back
+ * to natural rates by its document's candidate outcomes (curated-weights.js), or counted only without them. A document is one market's: its root(s),
  * bar and setup timeframes (`market`), and a run on another is refused.
  *
  * Selection (selectList), per list, of its share of `total` (mix), one moment at a time, the best candidate by, in order:
@@ -34,7 +34,8 @@
  *                                            read is open) or a working order
  *   buildLists(moments, { use, seed, total, mix, minSkill, passShare, sources })   the document, fingerprinted
  *   selectList(candidates, { name, size, seed, minSkill, passShare })   [moment]
- *   coverageOf(selected, candidates, { minSkill })   per skill (count, available, combinations, under), outcomes, years,
+ *   coverageOf(selected, candidates, { minSkill })   per skill (count, available, combinations, under), outcomes (the
+ *                                            chosen's, and candidateOutcomes, every candidate's), years,
  *                                            and per reaction kind (rejection, breakout, at a level or a gap's edge)
  *   coverageText(doc)                        the coverage report, as text
  *   fingerprintOf(doc), writeLists(dir, doc), readLists(file)
@@ -147,7 +148,8 @@ function coverageOf(selected, candidates, { minSkill = DEFAULTS.minSkill } = {})
   }
   return {
     n: selected.length, candidates: candidates.length, skills,
-    outcomes: tally(selected, m => m.outcome.result), expected: tally(selected, m => m.expected), years: tally(selected, m => m.year),
+    // The candidates' own outcomes: the natural mix the selection balanced away (curated-weights.js weighs it back).
+    outcomes: tally(selected, m => m.outcome.result), candidateOutcomes: tally(candidates, m => m.outcome.result), expected: tally(selected, m => m.expected), years: tally(selected, m => m.year),
     d2Allowed: selected.filter(m => m.gate && m.gate.d2 && m.gate.d2.allowed).length,
     under: SKILLS.filter(s => skills[s].under),
     reactions: Object.fromEntries(Object.keys(tally(selected, m => m.reactionKind)).map(k => {

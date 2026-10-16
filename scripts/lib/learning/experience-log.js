@@ -37,7 +37,7 @@
  *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
  *   size (fills only: the contracts opened), exitTime, exitReason, R, maeR, mfeR (the worst and best move while held,
  *   in R; null unknown; lines written before them lack them) }, and `curated: true` on a curated run's lines
- *   (run-experience.js: outcome-balanced, the experience index labels them), grade, settledDay (the later of its bar's session and its exit's: the index
+ *   (run-experience.js: outcome-balanced, the experience index weighs them to natural rates: curated-weights.js), grade, settledDay (the later of its bar's session and its exit's: the index
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *

@@ -28,7 +28,7 @@ function home({ pin = true, n = 24, records = [record({ at: AT })], transcript =
     const days = Array.from({ length: 12 }, (_, i) => `2022-03-${String(i + 1).padStart(2, '0')}`);
     const past = Array.from({ length: n }, (_, i) => ({
       id: `p${i}`, day: days[i % 12], decision: i % 2 ? 'entered' : 'passed', side: 'long', signatures: r.signatures, reads: r.reads,
-      context: i % 3 ? r.context : { ...r.context, regime: 'range' }, outcome: { R: i % 2 ? 2 : -1, ...(excursion(i) || {}) }, grade: i % 2 ? 'win' : 'good-pass', ...(curated(i) ? { curated: true } : {}),
+      context: i % 3 ? r.context : { ...r.context, regime: 'range' }, outcome: { R: i % 2 ? 2 : -1, ...(excursion(i) || {}) }, grade: i % 2 ? 'win' : 'good-pass', ...(curated(i) ? { curated: true, weight: curated(i) === true ? null : curated(i) } : {}),
     }));
     const file = X.writeIndex(path.join(h, 'built'), X.buildIndex(past, { reps: 200 }));
     X.pinIndex(h, file);
@@ -201,13 +201,18 @@ test('experience_lookup: each cell with enough samples shows its median MAE and 
   assert.doesNotMatch(t3, /median MAE|, MAE -/);
 });
 
-test('experience_lookup: curated runs\' decisions are counted in each cell and marked on an example, with one line saying they are outcome-balanced', () => {
+test('experience_lookup: curated runs\' decisions weighted to natural rates: each cell its curated count and effective n, unrated ones named, one line saying so', () => {
   const plain = H.experienceLookup({ symbol: 'MNQ' }, home().ctx).text;
-  assert.doesNotMatch(plain, /curated/, 'no curated decision: no label');
-  const { text } = H.experienceLookup({ symbol: 'MNQ' }, home({ curated: i => i % 2 === 1 }).ctx);
-  assert.match(text, /- skill signature, any context: n 24 \(12 days; 12 entered, 12 passed; 12 curated\), win/);
+  assert.doesNotMatch(plain, /curated|n_eff/, 'no curated decision: no label');
+  // The 12 winners curated, each weighing 0.6 (a list whose natural win share is below its built one): win 7.2 / 19.2.
+  const { text } = H.experienceLookup({ symbol: 'MNQ' }, home({ curated: i => (i % 2 === 1 ? 0.6 : false) }).ctx);
+  assert.match(text, /- skill signature, any context: n 24 \(12 days; 12 entered, 12 passed; 12 curated, n_eff 22\.\d\), win 0\.38 \[/);
   assert.match(text, /- 2022-03-12 long entered \(curated\), 2\.00R win: /);
   assert.match(text, /- 2022-03-11 long passed, -1\.00R good-pass: /);
-  assert.match(text, /\ncurated: decisions from curated runs, picked outcome-balanced, not at natural rates: their win rate, mean R and MAE\/MFE show the lists' mix, not the market's\.\n/);
+  assert.match(text, /\ncurated: decisions from curated runs \(picked outcome-balanced\), reweighted to natural rates; n_eff: the weighted sample size; unrated: curated decisions without their list's natural counts, counted, never in a rate or median\.\n/);
   assert.ok(Buffer.byteLength(text) <= H.MAX_BYTES);
+  // Without a weight (no document with the candidates' outcomes): counted, never rated; too few rated, no rate.
+  const un = H.experienceLookup({ symbol: 'MNQ' }, home({ curated: i => i % 2 === 1 }).ctx).text;
+  assert.match(un, /- skill signature, any context: too few samples \(n=24, n_eff 12\.0, 6 days\)/);
+  assert.match(un, /\ncurated: decisions from curated runs/);
 });

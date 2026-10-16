@@ -44,8 +44,8 @@ test('index: the cells per signature, per context key and the full context; coun
   assert.ok(doc.cells[X.cellKey('read', READ, X.contextKey(CTX))], 'the full context');
   assert.strictEqual(X.contextKey(CTX), 'regime=trend-up;volatility=normal;window=ny-am;biasSide=with;alignment=aligned;dayType=normal');
   assert.deepStrictEqual([doc.minN, doc.minDays, doc.roles, doc.decisions, doc.walkForward, doc.shuffle], [20, 10, ['practice-train'], 30, true, null]);
-  // The cell keeps rows, not statistics: [day, R, entered, regime, maeR, mfeR, curated] (no excursion here: null, never invented).
-  assert.deepStrictEqual(doc.cells[ALL][0], ['2022-03-01', -1, 1, 'trend-up', null, null, 0]);
+  // The cell keeps rows, not statistics: [day, R, entered, regime, maeR, mfeR, curated, weight] (no excursion: null, never invented).
+  assert.deepStrictEqual(doc.cells[ALL][0], ['2022-03-01', -1, 1, 'trend-up', null, null, 0, 1]);
   // Reproducible: the same decisions and seed, the same hash and the same intervals, whenever built.
   assert.strictEqual(X.buildIndex(ds, { seed: 7, reps: 500, now: new Date('2027-01-01T00:00:00Z') }).hash, doc.hash);
   assert.deepStrictEqual(X.cellAt(X.buildIndex(ds, { seed: 7, reps: 500 }), ALL), all);
@@ -90,7 +90,7 @@ test('index: one day\'s cluster counts once; shifted needs a latest year of its 
   assert.ok(c.winRate.lo < 0.5, 'the win rate by day too');
   // A latest year of 10 decisions over 5 days: too few to call a shift.
   const thin = X.cellAt(X.buildIndex([...decisions(25, 12, () => 1, { tag: 'x' }), ...decisions(10, 5, () => -1, { tag: 'y', from: '2023-03-01T00:00:00Z' })], { reps: 100 }), ALL);
-  assert.deepStrictEqual([thin.byYear['2023'].meanR, thin.shifted, thin.latestYear], [-1, false, { year: '2023', n: 10, days: 5, meanR: -1 }]);
+  assert.deepStrictEqual([thin.byYear['2023'].meanR, thin.shifted, thin.latestYear], [-1, false, { year: '2023', n: 10, nEff: 10, days: 5, meanR: -1 }]);
   const shift = X.cellAt(X.buildIndex([...decisions(60, 30, () => 1, { tag: 'x' }), ...decisions(25, 12, () => -1, { tag: 'y', from: '2023-03-01T00:00:00Z' })], { reps: 100 }), ALL);
   assert.deepStrictEqual([shift.shifted, shift.latestYear.n, shift.latestYear.days], [true, 25, 12]);
 });
@@ -264,8 +264,8 @@ test('MAE/MFE: each decision\'s maeR and mfeR recorded in its rows and examples 
   ds[3] = { ...ds[3], outcome: { R: null, maeR: -0.5, mfeR: 1 } }; // unfilled: no R, so no excursion either
   const doc = X.buildIndex(ds, { reps: 50 });
   const row = id => doc.cells[ALL].find(r => r[0] === ds[id].day && r[1] === ds[id].outcome.R && r[4] === (Number.isFinite(ds[id].outcome.maeR) ? ds[id].outcome.maeR : null));
-  assert.deepStrictEqual(doc.cells[ALL][0], ['2022-03-01', -1, 1, 'trend-up', -0, 0, 0]);
-  assert.deepStrictEqual(row(5).slice(4), [-0.25, 0, 0]);
+  assert.deepStrictEqual(doc.cells[ALL][0], ['2022-03-01', -1, 1, 'trend-up', -0, 0, 0, 1]);
+  assert.deepStrictEqual(row(5).slice(4), [-0.25, 0, 0, 1]);
   assert.ok(doc.cells[ALL].some(r => r[0] === ds[1].day && r[4] === null && r[5] === null), 'no excursion in the outcome: null');
   assert.ok(doc.cells[ALL].some(r => r[0] === ds[2].day && r[4] === null && r[5] === null), 'not a number: null');
   assert.ok(doc.cells[ALL].some(r => r[0] === ds[3].day && r[1] === null && r[4] === null), 'an unfilled pass carries none');
@@ -284,7 +284,7 @@ test('MAE/MFE: the medians with their counts, each only from at least MIN_N deci
   // Enough decisions, but only 19 with an excursion (lines written before they were recorded): the counts, no median.
   const old = withExcursion(decisions(25, 12, () => 1), i => (i < X.MIN_N - 1 ? [-0.5, 1] : undefined));
   const o = X.cellAt(X.buildIndex(old, { reps: 50 }), ALL);
-  const none = (n, days) => ({ n, days, median: null, lo: null, hi: null });
+  const none = (n, days) => ({ n, nEff: n, days, median: null, lo: null, hi: null });
   assert.deepStrictEqual([o.enough, o.mae, o.mfe], [true, none(X.MIN_N - 1, 12), none(X.MIN_N - 1, 12)]);
   // Enough with an excursion, but over fewer than MIN_DAYS days: no median either.
   const clumped = withExcursion(decisions(30, 12, () => 1), i => (i % 12 < X.MIN_DAYS - 1 ? [-0.5, 1] : undefined));
@@ -304,7 +304,7 @@ test('MAE/MFE walk-forward: the medians at a day count only the outcomes known b
   const doc = X.buildIndex([...early, ...later], { reps: 50 });
   const mid = X.cellAt(doc, ALL, '2022-06-01');
   assert.deepStrictEqual([mid.mae.n, mid.mae.median, mid.mae.lo, mid.mae.hi, mid.mfe.median], [25, -0.1, -0.1, -0.1, 3], 'none of 2023');
-  assert.deepStrictEqual(X.cellAt(doc, ALL, '2022-03-01').mae, { n: 0, days: 0, median: null, lo: null, hi: null }, 'nothing before the first day');
+  assert.deepStrictEqual(X.cellAt(doc, ALL, '2022-03-01').mae, { n: 0, nEff: 0, days: 0, median: null, lo: null, hi: null }, 'nothing before the first day');
   assert.strictEqual(X.cellAt(doc, ALL, null).mae.n, 50);
   // A trade carried into the next session counts only after its exit's session.
   const carried = withExcursion(decisions(25, 12, () => 1), () => [-0.2, 1]);
@@ -352,13 +352,18 @@ test('MAE/MFE look-ahead: an excursion is dated by its exit\'s session (knownDay
   assert.strictEqual(X.cellAt(doc, ALL, weekdays(`${firstExit}T00:00:00Z`, 2)[1]).mae.n, 2, 'the day after: the two that exited');
 });
 
-test('curated runs: outcome-balanced, so labelled: each row, each cell\'s count (walk-forward), each example and the index total', () => {
+test('curated runs without a weight: counted (rows, cells walk-forward, examples, totals), never in a rate or median', () => {
   const natural = withExcursion(decisions(25, 12, i => (i % 4 ? -1 : 2), { tag: 'n' }), () => [-0.8, 0.5]);
   const curated = withExcursion(decisions(25, 12, () => 2, { tag: 'c', from: '2022-06-01T00:00:00Z' }), () => [-0.1, 3]).map(d => ({ ...d, curated: true }));
   const doc = X.buildIndex([...natural, ...curated], { reps: 50 });
-  assert.deepStrictEqual([X.cellAt(doc, ALL).n, X.cellAt(doc, ALL).curated, doc.decisions, doc.curated], [50, 25, 50, 25]);
-  assert.deepStrictEqual(doc.cells[ALL][0].slice(-1), [0]);
-  assert.deepStrictEqual(doc.cells[ALL].slice(-1)[0].slice(-1), [1]);
+  const all = X.cellAt(doc, ALL);
+  assert.deepStrictEqual([all.n, all.curated, all.unweighted, all.nEff, doc.decisions, doc.curated, doc.curatedUnweighted], [50, 25, 25, 25, 50, 25, 25]);
+  // The rates and medians are the 25 natural decisions' alone (7 wins of 25: 0.28), as without the curated ones.
+  const alone = X.cellAt(X.buildIndex(natural, { reps: 50 }), ALL);
+  assert.deepStrictEqual([all.winRate.rate, all.meanR.mean, all.mae.median, all.mfe.median, all.mae.n, all.mae.nEff], [alone.winRate.rate, alone.meanR.mean, -0.8, 0.5, 50, 25]);
+  assert.strictEqual(alone.winRate.rate, 0.28);
+  assert.deepStrictEqual(doc.cells[ALL][0].slice(-2), [0, 1]);
+  assert.deepStrictEqual(doc.cells[ALL].slice(-1)[0].slice(-2), [1, null]);
   assert.strictEqual(X.cellAt(doc, ALL, '2022-06-01').curated, 0, 'only the curated rows known before the day');
   const ex = Object.values(doc.examples).flat();
   assert.ok(ex.some(e => e.curated === true) && ex.every(e => e.curated === (e.day >= '2022-06-01')));
@@ -374,11 +379,11 @@ test('curated runs: outcome-balanced, so labelled: each row, each cell\'s count 
   fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ ...pin, hash }));
   assert.strictEqual(X.curatedLog(log), true);
   fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ ...pin, hash: 'x' }));
-  assert.strictEqual(X.curatedLog(log), true, 'a broken pin: left out, never counted');
-  // The CLI labels every line of such a log, tagged or written before the tag.
+  assert.strictEqual(X.curatedLog(log), true, 'a broken pin: a curated run\'s still');
+  // The CLI tags every line of such a log, tagged or written before the tag; without its --lists document, no weight.
   fs.writeFileSync(log, natural.map(d => `${JSON.stringify(d)}\n`).join(''));
   const out = path.join(tmpHome(), 'out');
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'experience-index.js'), 'build', home, '--out', out], { encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
-  assert.match(r.stdout, /25 decision\(s\) from 1 run\(s\).*25 curated-run decision\(s\), labelled \(outcome-balanced, not natural rates\)/);
+  assert.match(r.stdout, /25 decision\(s\) from 1 run\(s\).*25 curated-run decision\(s\) weighted to natural rates, 25 without a weight \(counted, never rated: give its --lists document/);
 });

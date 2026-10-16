@@ -124,7 +124,7 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
   let { decisions } = run;
   // A reasoning-fix look: the decisions without what came after them.
   if (gate.hideOutcomes) decisions = decisions.map(d => ({ ...d, outcome: null, grade: null, hidden: true }));
-  // A curated run's moments are outcome-balanced: tagged, so the experience index labels them (experience-index.js).
+  // A curated run's moments are outcome-balanced: tagged, so the experience index weighs them (curated-weights.js).
   if (curatedLog(logFile(home))) decisions = decisions.map(d => ({ ...d, curated: true }));
   const file = logFile(home);
   const { added, kept } = appendDecisions(file, decisions);

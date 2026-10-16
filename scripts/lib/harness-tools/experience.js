@@ -17,7 +17,8 @@
  * proves nothing alone), the median MAE and MFE in R with their intervals and count (`insufficient` under the minimum), last
  * seen, `shifted` with its latest year's n, or `too few samples`; then up to three past decisions of the same skill
  * signature, the closest context first, with their reads, why, decision and outcome (R, grade, MAE and MFE); a cell's
- * count of curated runs' decisions and an example's `(curated)`, with one line saying what that means (CURATED_NOTE);
+ * count of curated runs' decisions (reweighted to natural rates: its effective n, and the unrated ones without a weight)
+ * and an example's `(curated)`, with one line saying what that means (CURATED_NOTE);
  * and the index's hash and the days it showed. With no index pinned, or no match, it says so. It never says what
  * to do.
  *
@@ -62,7 +63,7 @@ const SIMILAR = require('../tunables').training().experienceTool.similar;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^[a-z][a-z-]{0,31}$/;
 
-const CURATED_NOTE = 'curated: decisions from curated runs, picked outcome-balanced, not at natural rates: their win rate, mean R and MAE/MFE show the lists\' mix, not the market\'s.';
+const CURATED_NOTE = 'curated: decisions from curated runs (picked outcome-balanced), reweighted to natural rates; n_eff: the weighted sample size; unrated: curated decisions without their list\'s natural counts, counted, never in a rate or median.';
 const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 
 /** A cell's median MAE and MFE in R with their 90% intervals and count, or `insufficient` with it under the minimum (index: medianOf). */
@@ -73,11 +74,14 @@ function excursionText(c) {
   return `, median MAE ${f2(mae.median)}R [${f2(mae.lo)}, ${f2(mae.hi)}] MFE ${f2(mfe.median)}R [${f2(mfe.lo)}, ${f2(mfe.hi)}] (n ${mae.n === mfe.n ? mae.n : `${mae.n}/${mfe.n}`})`;
 }
 
+/** A cell's curated count, its unrated ones and its effective n (the rates and medians are weighted), or nothing. */
+const curatedText = c => (c.curated ? `; ${c.curated} curated${c.unweighted ? `, ${c.unweighted} unrated` : ''}, n_eff ${Number(c.nEff).toFixed(1)}` : '');
+
 function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
   if (!c.enough) return `- ${label}: ${c.note}`;
   const shift = c.shifted ? `, shifted (${c.latestYear.year}: mean R ${f2(c.latestYear.meanR)} over n ${c.latestYear.n}, the other sign)` : '';
-  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${c.curated ? `; ${c.curated} curated` : ''}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
+  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
 }
 
 /** The skill signature with one step's skills replaced. */
@@ -190,7 +194,7 @@ function experienceLookup({ symbol, alternative = [], role = null } = {}, ctx) {
   let curated = false;
   const at = key => {
     const c = cellAt(index, key, before);
-    if (c && c.enough && c.curated) curated = true;
+    if (c && c.curated) curated = true;
     return c;
   };
   const full = contextKey(rec.context);

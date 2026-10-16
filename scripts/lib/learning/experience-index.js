@@ -5,7 +5,7 @@
  * (experience-log.js), per signature and context, which experience_lookup shows the model. Built between sessions,
  * never by the runner; frozen per run (pinIndex: the run home holds its own copy and its hash).
  *
- * Walk-forward: the index keeps each cell's decisions as rows (ROW: [day, R, entered, regime, maeR, mfeR, curated]), not statistics,
+ * Walk-forward: the index keeps each cell's decisions as rows (ROW: [day, R, entered, regime, maeR, mfeR, curated, weight]),
  * and every statistic is computed for a day (cellStats `before`): only from trading days strictly before it. A
  * practice run in 2022 is shown what happened before its bar's session, never after, though the index spans
  * 2020-2024. The examples are kept with their days and filtered the same way.
@@ -27,12 +27,15 @@
  * Shuffled (the paired replay's third arm): `shuffle` (a seed) permutes the cells' rows across cells and the
  * examples across signatures, so the record shows numbers that belong to other combinations; it is part of the hash.
  *
- * Curated runs, labelled: a curated run's moments are picked outcome-balanced (learning/curated-lists.js: winners and
- * losers kept level), so its win rate, mean R and MAE/MFE are the list's mix, not the market's, and no reweighting to
- * natural rates undoes that (prop/model-score.js refuseCurated). Its decisions (tagged `curated` by run-experience.js, or
- * every line of a log whose run home pinned a curated list: curatedLog) are kept (stage 1's practice is curated) and
- * labelled: each row's `curated` column, each cell's `curated` count (walk-forward like the rest), each example's flag,
- * and the index's `curated` total.
+ * Curated runs, weighted to natural rates: a curated run's moments are picked outcome-balanced (learning/curated-lists.js:
+ * winners and losers kept level), so as they stand its win rate, mean R and MAE/MFE are the list's mix, not the
+ * market's. Its decisions (tagged `curated` by run-experience.js, or every line of a log whose run home pinned a curated
+ * list) carry the inverse-probability weight of their moment's list and standard outcome (learning/curated-weights.js:
+ * the build CLI's --lists document); every other decision weighs 1. The rates, means and medians and their day
+ * bootstraps are weighted, and MIN_N applies to the effective n (Kish). A curated decision without a weight (its
+ * document not given, built before it recorded the candidates' outcomes, or no single moment holding it) is counted,
+ * never rated. Each row's `curated` and `weight` columns, each cell's counts, each example's flag and the index's
+ * `curated` and `curatedUnweighted` totals say so.
  *
  * No leakage: an index is built only from practice-train decisions (learning/splits.js), the day recomputed from
  * the decision's bar (its cycle for a plain pass), never the line's own label, and the day its outcome came (its
@@ -57,7 +60,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { streamFor, pick, quantile, median, round4 } = require('../prop/stats');
+const { streamFor, pick, quantile, round4 } = require('../prop/stats');
 const { roleOf, sessionDate } = require('./splits');
 const { CONTEXT_KEYS } = require('./lifecycle-record');
 
@@ -69,10 +72,11 @@ const MIN_DAYS = EI.minDays;
 const LEVEL = EI.level;
 const KINDS = Object.freeze(['skill', 'read']);
 /** A cell row's columns; the excursions' by name, so no index is a bare number. */
-const ROW = Object.freeze(['day', 'R', 'entered', 'regime', 'maeR', 'mfeR', 'curated']);
+const ROW = Object.freeze(['day', 'R', 'entered', 'regime', 'maeR', 'mfeR', 'curated', 'weight']);
 const MAE = ROW.indexOf('maeR');
 const MFE = ROW.indexOf('mfeR');
 const CURATED = ROW.indexOf('curated');
+const WEIGHT = ROW.indexOf('weight');
 const PINNED = 'pinned.json';
 /** Examples kept per skill signature and month (the latest of each), so a lookup on any day finds some before it. */
 const EXAMPLES_PER_MONTH = EI.examplesPerMonth;
@@ -82,6 +86,8 @@ const ctxVal = (ctx, k) => (ctx && ctx[k] !== null && ctx[k] !== undefined ? ctx
 const contextKey = ctx => CONTEXT_KEYS.map(k => `${k}=${ctxVal(ctx, k)}`).join(';');
 const cellKey = (kind, sig, ctx = '*') => `${kind}|${sig}|${ctx}`;
 const hasR = d => d.outcome && Number.isFinite(d.outcome.R);
+/** A decision's weight: 1, or a curated one's natural-rate weight (curated-weights.js; none given: null, never rated). */
+const weightFor = d => (d.curated !== true ? 1 : Number.isFinite(d.weight) && d.weight >= 0 ? d.weight : null);
 /** An outcome's maeR or mfeR when it has one (a number), else null: never invented. */
 const excursion = (d, k) => (hasR(d) && Number.isFinite(d.outcome[k]) ? d.outcome[k] : null);
 
@@ -123,95 +129,120 @@ function dayBootstrap(days, num, den, { reps, rand }) {
   return { lo: round4(quantile(ratios, tail)), hi: round4(quantile(ratios, 1 - tail)) };
 }
 
+/** A row's weight: its `weight` column (null: a curated decision counted, never rated); a row without one weighs 1. */
+const weightOf = r => (r.length > WEIGHT ? r[WEIGHT] : 1);
+const rated = r => Number.isFinite(weightOf(r));
+/** The effective sample size of weights (Kish: (sum w)^2 / sum w^2): their count when every weight is 1. */
+const effective = ws => {
+  const s = ws.reduce((a, w) => a + w, 0);
+  const q = ws.reduce((a, w) => a + w * w, 0);
+  return q > 0 ? (s * s) / q : 0;
+};
+
 const sumBy = (rows, f) => {
   const g = {};
   for (const r of rows) {
     const k = f(r);
-    g[k] = g[k] || { n: 0, sum: 0, days: new Set() };
+    g[k] = g[k] || { n: 0, sum: 0, w: 0, ws: [], days: new Set() };
     g[k].n += 1;
-    g[k].sum += r[1];
+    g[k].sum += weightOf(r) * r[1];
+    g[k].w += weightOf(r);
+    g[k].ws.push(weightOf(r));
     g[k].days.add(r[0]);
   }
   return g;
 };
 
 /**
- * The median (stats.js: the upper middle) of the rows' column k (MAE, MFE), its count and distinct days, and its
- * interval at LEVEL from resampling whole days (as dayBootstrap: a day's cluster counts once); the median and its
- * interval only from at least MIN_N values over MIN_DAYS days. Each resample's median by counting ranks (no sort per draw).
+ * The weighted median (the first value whose cumulative weight passes half: stats.js median's upper middle when every
+ * weight is 1) of the rated rows' column k (MAE, MFE), its count, effective n and distinct days, and its interval at
+ * LEVEL from resampling whole days (as dayBootstrap: a day's cluster counts once); the median and its interval only from
+ * an effective n of at least MIN_N over MIN_DAYS days. Each resample's median by summing weights on ranks (no sort per draw).
  */
 function medianOf(rows, k, { reps, rand }) {
-  const vals = rows.filter(r => Number.isFinite(r[k]));
+  const vals = rows.filter(r => Number.isFinite(r[k]) && rated(r));
   const dayList = [...new Set(vals.map(r => r[0]))];
-  const out = { n: vals.length, days: dayList.length, median: null, lo: null, hi: null };
-  if (vals.length < MIN_N || dayList.length < MIN_DAYS) return out;
+  const nEff = effective(vals.map(weightOf));
+  const out = { n: rows.filter(r => Number.isFinite(r[k])).length, nEff: round4(nEff), days: dayList.length, median: null, lo: null, hi: null };
+  if (nEff < MIN_N || dayList.length < MIN_DAYS) return out;
   const order = vals.map((r, i) => i).sort((a, b) => vals[a][k] - vals[b][k]);
   const sorted = order.map(i => vals[i][k]);
+  const wSorted = order.map(i => weightOf(vals[i]));
   const rank = new Array(vals.length);
   order.forEach((i, j) => { rank[i] = j; });
   const ranksOf = new Map(dayList.map(d => [d, []]));
   vals.forEach((r, i) => ranksOf.get(r[0]).push(rank[i]));
   const byDay = dayList.map(d => ranksOf.get(d));
-  const counts = new Int32Array(sorted.length);
-  const meds = new Array(reps);
-  for (let q = 0; q < reps; q += 1) {
-    counts.fill(0);
-    let total = 0;
-    for (let j = 0; j < byDay.length; j += 1) {
-      const list = byDay[pick(rand, byDay.length)];
-      for (const x of list) counts[x] += 1;
-      total += list.length;
-    }
-    const at = Math.floor(total / 2);
+  const at = (mass, totalW) => {
     let c = 0;
     let m = 0;
-    while (c + counts[m] <= at) { c += counts[m]; m += 1; }
-    meds[q] = sorted[m];
+    while (m < mass.length - 1 && c + mass[m] <= totalW / 2) { c += mass[m]; m += 1; }
+    return sorted[m];
+  };
+  const mass = new Float64Array(sorted.length);
+  const meds = new Array(reps);
+  for (let q = 0; q < reps; q += 1) {
+    mass.fill(0);
+    let totalW = 0;
+    for (let j = 0; j < byDay.length; j += 1) {
+      for (const x of byDay[pick(rand, byDay.length)]) { mass[x] += wSorted[x]; totalW += wSorted[x]; }
+    }
+    meds[q] = at(mass, totalW);
   }
   meds.sort((a, b) => a - b);
   const tail = (1 - LEVEL) / 2;
-  return { ...out, median: round4(median(sorted)), lo: round4(quantile(meds, tail)), hi: round4(quantile(meds, 1 - tail)), level: LEVEL, by: 'day' };
+  return { ...out, median: round4(at(wSorted, wSorted.reduce((a, w) => a + w, 0))), lo: round4(quantile(meds, tail)), hi: round4(quantile(meds, 1 - tail)), level: LEVEL, by: 'day' };
 }
 
-/** A cell's statistics from its rows (ROW) on days strictly before `before` (null: all); `curated`: how many of n are curated runs'. */
+/**
+ * A cell's statistics from its rows (ROW) on days strictly before `before` (null: all). The rates, means and medians are
+ * weighted (a curated decision by its natural-rate weight, every other 1: curated-weights.js) and need an effective n
+ * (`nEff`) of MIN_N; `n` counts every decision with an R, `curated` how many of them are curated runs', `unweighted`
+ * how many of those had no weight (counted, never rated).
+ */
 function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = '' } = {}) {
   const seen = (rows || []).filter(r => before === null || r[0] < before);
   const withR = seen.filter(r => Number.isFinite(r[1]));
   const n = withR.length;
+  const used = withR.filter(rated);
   const byDay = new Map();
-  for (const r of withR) {
+  for (const r of used) {
+    const w = weightOf(r);
     const x = byDay.get(r[0]) || { sum: 0, n: 0, wins: 0 };
-    x.sum += r[1];
-    x.n += 1;
-    x.wins += r[1] > 0 ? 1 : 0;
+    x.sum += w * r[1];
+    x.n += w;
+    x.wins += r[1] > 0 ? w : 0;
     byDay.set(r[0], x);
   }
   const days = [...new Set(seen.map(r => r[0]))].sort();
   const wins = withR.filter(r => r[1] > 0).length;
-  const years = sumBy(withR, r => r[0].slice(0, 4));
-  const fmt = g => Object.fromEntries(Object.entries(g).sort().map(([k, v]) => [k, { n: v.n, meanR: round4(v.sum / v.n) }]));
+  const nEff = effective(used.map(weightOf));
+  const weighted = used.some(r => weightOf(r) !== 1) || used.length < n;
+  const years = sumBy(used, r => r[0].slice(0, 4));
+  const fmt = g => Object.fromEntries(Object.entries(g).sort().map(([k, v]) => [k, { n: v.n, meanR: round4(v.sum / v.w) }]));
   const cell = {
-    n, entries: withR.filter(r => r[2] === 1).length, passes: withR.filter(r => r[2] !== 1).length, unfilled: seen.length - n,
-    curated: withR.filter(r => r[CURATED] === 1).length, days: byDay.size, wins, firstSeen: days[0] || null, lastSeen: days[days.length - 1] || null,
-    byYear: fmt(years), byRegime: fmt(sumBy(withR, r => r[3] || '-')), before,
+    n, nEff: round4(nEff), weighted, entries: withR.filter(r => r[2] === 1).length, passes: withR.filter(r => r[2] !== 1).length, unfilled: seen.length - n,
+    curated: withR.filter(r => r[CURATED] === 1).length, unweighted: n - used.length, days: byDay.size, wins, firstSeen: days[0] || null, lastSeen: days[days.length - 1] || null,
+    byYear: fmt(years), byRegime: fmt(sumBy(used, r => r[3] || '-')), before,
   };
   const counted = k => {
     const v = withR.filter(r => Number.isFinite(r[k]));
-    return { n: v.length, days: new Set(v.map(r => r[0])).size, median: null, lo: null, hi: null };
+    return { n: v.length, nEff: round4(effective(v.filter(rated).map(weightOf))), days: new Set(v.filter(rated).map(r => r[0])).size, median: null, lo: null, hi: null };
   };
-  if (n < MIN_N || byDay.size < MIN_DAYS) {
-    return { ...cell, enough: false, note: `too few samples (n=${n}, ${byDay.size} days)`, winRate: null, meanR: null, shifted: false, latestYear: null,
-      mae: counted(MAE), mfe: counted(MFE) };
+  if (nEff < MIN_N || byDay.size < MIN_DAYS) {
+    const note = weighted ? `too few samples (n=${n}, n_eff ${nEff.toFixed(1)}, ${byDay.size} days)` : `too few samples (n=${n}, ${byDay.size} days)`;
+    return { ...cell, enough: false, note, winRate: null, meanR: null, shifted: false, latestYear: null, mae: counted(MAE), mfe: counted(MFE) };
   }
-  const mean = withR.reduce((a, r) => a + r[1], 0) / n;
   const list = [...byDay.values()];
+  const wsum = list.reduce((a, d) => a + d.n, 0);
+  const mean = list.reduce((a, d) => a + d.sum, 0) / wsum;
   const rand = streamFor(seed, `${key}|${before}`);
   const meanR = { mean: round4(mean), ...dayBootstrap(list, list.map(d => d.sum), list.map(d => d.n), { reps, rand }), level: LEVEL, by: 'day' };
-  const winRate = { rate: round4(wins / n), ...dayBootstrap(list, list.map(d => d.wins), list.map(d => d.n), { reps, rand }), level: LEVEL, by: 'day' };
+  const winRate = { rate: round4(list.reduce((a, d) => a + d.wins, 0) / wsum), ...dayBootstrap(list, list.map(d => d.wins), list.map(d => d.n), { reps, rand }), level: LEVEL, by: 'day' };
   const ys = Object.keys(years).sort();
   const y = ys.length > 1 ? years[ys[ys.length - 1]] : null;
-  const latestYear = y ? { year: ys[ys.length - 1], n: y.n, days: y.days.size, meanR: round4(y.sum / y.n) } : null;
-  const shifted = Boolean(latestYear && latestYear.n >= MIN_N && latestYear.days >= MIN_DAYS && latestYear.meanR !== 0 && mean !== 0 && Math.sign(latestYear.meanR) !== Math.sign(mean));
+  const latestYear = y ? { year: ys[ys.length - 1], n: y.n, nEff: round4(effective(y.ws)), days: y.days.size, meanR: round4(y.sum / y.w) } : null;
+  const shifted = Boolean(latestYear && latestYear.nEff >= MIN_N && latestYear.days >= MIN_DAYS && latestYear.meanR !== 0 && mean !== 0 && Math.sign(latestYear.meanR) !== Math.sign(mean));
   // Drawn after the win rate's and the mean's, from the same stream: their intervals are unchanged by these.
   const mae = medianOf(withR, MAE, { reps, rand });
   const mfe = medianOf(withR, MFE, { reps, rand });
@@ -313,7 +344,7 @@ function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuf
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
   for (const d of scored) {
-    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-', excursion(d, 'maeR'), excursion(d, 'mfeR'), d.curated === true ? 1 : 0];
+    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-', excursion(d, 'maeR'), excursion(d, 'mfeR'), d.curated === true ? 1 : 0, weightFor(d)];
     for (const kind of KINDS) {
       const sig = d.signatures[kind];
       if (!sig) continue;
@@ -338,7 +369,7 @@ function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuf
     v: VERSION, builtAt: now.toISOString(), minN: MIN_N, minDays: MIN_DAYS, level: LEVEL, seed, reps, shuffle, walkForward: true, exit, exitPlan,
     runs: runs.map(r => ({ runId: r.runId || null, file: r.file ? path.basename(r.file) : null, sha256: r.sha256 || null })),
     roles: ['practice-train'], months: { from: days[0] || null, to: days[days.length - 1] || null },
-    decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, curated: scored.filter(d => d.curated === true).length, cells, examples,
+    decisions: scored.length, plainPasses: decisions.filter(d => d && d.decision === 'none').length, curated: scored.filter(d => d.curated === true).length, curatedUnweighted: scored.filter(d => d.curated === true && weightFor(d) === null).length, cells, examples,
   };
   return { ...doc, hash: indexHash(doc) };
 }
