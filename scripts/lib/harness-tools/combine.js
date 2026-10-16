@@ -65,7 +65,8 @@ function status({ account: name, json = false } = {}, ctx) {
   if (json) return { text: `${JSON.stringify({ attempts: rows, verdicts, ...(note ? { note: note.trim() } : {}) }, null, 2)}\n` };
   // To the agent, with no attempt running: what that blocks and what it doesn't (a model read "no attempt" as "no
   // entries" and passed every setup): a composed entry trades under its own strategy's cap; a policy sizes none.
-  const noneNote = say(c, '', NO_ATTEMPT_ENTRIES);
+  // Only with none running anywhere: while any attempt runs, the gate refuses every entry but its policy's.
+  const noneNote = prop.runningAttempts(home).length ? '' : say(c, '', NO_ATTEMPT_ENTRIES);
   if (!rows.length) return { text: note + say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') + noneNote };
   let text = note;
   for (const r of rows) {
@@ -74,7 +75,7 @@ function status({ account: name, json = false } = {}, ctx) {
         + `day $${r.dayPnl}, ${r.sessionsDone} sessions done, ${r.sessionsLeft} left; ${budgetText(r)}; `
         + `${r.entryBlock ? `entries blocked: ${r.entryBlock}` : 'entries allowed'}\n`;
   }
-  if (!rows.some(r => r.started)) text += noneNote;
+  text += noneNote;
   for (const v of verdicts) {
     text += v.action === 'skip'
       ? `${v.strategy}: ${v.direction} setup from ${v.component} skipped (${v.reason || 'the policy'}), until ${v.expiresAt}\n`
