@@ -67,6 +67,7 @@
  *   runEnv(base, { ... })        the run's environment for opencode; `refusedRoles`: this cycle's other denied roles
  *                                (FTH_DENIED_ROLES, with `deniedRoles`), refused by the plugin
  *   deniedTaskRefusal(tool, args, env)   the plugin's refusal of a task call naming a denied role, or null
+ *   dropInventedTaskId(tool, args)  the plugin's repair of a task call: a task_id that names no session is dropped
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
  */
@@ -326,6 +327,21 @@ function deniedTaskRefusal(tool, args, env) {
   return `[denied-role] ${role} is not launched this cycle (the cycle prompt gives its cached report, the role is off the desk, or it reaches the web, which a replay never does): don't call it again; go on with the reports you have.`;
 }
 
+/**
+ * The plugin's repair of a task call's arguments, in place: a `task_id` that is not an opencode session id (SESSION_ID)
+ * is dropped, so the role starts a fresh session, as a first launch does. opencode reads task_id as a session to
+ * resume and fails the whole call on one that names none; a model inventing a label for its call ("msa", "rm1") lost
+ * the role that cycle (the PPC run of 2026-10-16: 4 of 4 analysts in one cycle). A real session id (a resume) is left
+ * as it is. True when it dropped one.
+ */
+const SESSION_ID = /^ses/;
+function dropInventedTaskId(tool, args) {
+  if (tool !== 'task' || !args || typeof args !== 'object' || !('task_id' in args)) return false;
+  if (typeof args.task_id === 'string' && SESSION_ID.test(args.task_id)) return false;
+  delete args.task_id;
+  return true;
+}
+
 /** The web's permission keys: a replay denies both to every agent (WEB_KEYS), and launching a role that holds one. */
 const WEB_KEYS = Object.freeze(['websearch', 'webfetch']);
 /** The roles whose tools reach the web (WebSearch, WebFetch): a replay never launches them. */
@@ -425,4 +441,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId };
