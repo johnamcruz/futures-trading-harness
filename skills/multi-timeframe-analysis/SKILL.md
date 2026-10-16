@@ -83,7 +83,9 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal 
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
-1h: RANGE (... structure mixed), ...
+1h: RANGE (... structure mixed), ADX 14.14, ...
+15m: DOWN (... structure LH/LL), ADX 22.59, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
+Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 -> Long: mixed (step 4 sizes it). Short: against the 4h, refused for trend strategies.
 ```

@@ -37,7 +37,8 @@ rule. Others as a step names them.
 - **Know the account first** (every take, skip, size, manage, stand down
   uses it): balance, today's realized P&L, room to the daily limits,
   positions, working orders; an attempt's floor, cushion, progress, sessions
-  left, size budget. The autonomous prompt lacks today's P&L and room: a
+  left, size budget. The autonomous prompt states balance, positions,
+  working orders and attempt numbers; it lacks today's P&L and room: a
   cycle that may enter reads `get_account_snapshot` (`remainingBeforeLimit`),
   and `combine_status` for an attempt.
 - **Position open**: the `manage-position` skill, then end.

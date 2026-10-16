@@ -202,7 +202,10 @@ const LATE_STALE = (() => {
   return r.stale.map(l => l.from);
 })();
 
-const homeTexts = () => HOMES.map(skill);
+// The split as merged; later rewrites are checked by content pins and review (skill-split-frozen.js). The core's steps,
+// trade-plan's step 4 and the per-cycle budgets below are checked on the skills as they are now.
+const { atSplit } = require('./skill-split-frozen');
+const homeTexts = () => HOMES.map(atSplit);
 
 test('trade-session split: every unit of the old skill is in exactly one new home, its own, in its old order', () => {
   assert.strictEqual(sha256(read(BEFORE)), BEFORE_SHA256, 'the fixture is the old skill, unchanged');
@@ -250,7 +253,7 @@ test('trade-session split: the core keeps its numbered steps, step 0 as it was, 
   assert.match(step3, /before an entry, `trade-plan` too \(the order gate refuses an entry until `setup-judgment` and `trade-plan` were read\)/);
   // The refusal labels the gate's messages cite stay in trade-session (gate-refusals-split.test.js POINTERS).
   assert.ok(ts.includes('`[roles-ran]`'));
-  assert.match(f, /### 6\. Execute On `APPROVE`, hand the plan and verdict line to `trade-executor`\. If the order gate, the MCP gateway, or the server blocks it, report the block and end\./);
+  assert.match(f, /### 6\. Execute `APPROVE` → plan and verdict line to `trade-executor`\. Blocked by the gate, the MCP gateway or the server: report, end; never retry around it\./);
   // Each piece says which step of trade-session it serves, and each has a short "Use when" index line.
   for (const s of PIECES) {
     assert.match(skill(s), /## When to Use\n\n- [^\n]*`trade-session` steps? \d/, s);
@@ -308,10 +311,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // on merging feat/prop-mc-model (#196, owner-approved) with it: prop-challenge-pacing's reading of the attempt line's facts
 // to stand down before the gate refuses (the session's losing streak among them), both sides' text kept; then +577 bytes
 // each mode for the risk manager (feat/practice-account-states, owner-approved): prop-challenge-pacing's counts carried
-// from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
+// from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target);
+// then lowered to their sizes after the owner-approved terse rewrite of the head trader's embedded skills
+// (docs/terse-head-skills: the roles that embed any of them).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90547, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
-  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 76067, 'strategy-researcher': 25690, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
+  full: { 'market-structure-analyst': 83933, 'news-calendar-analyst': 9875, 'risk-manager': 89310, 'strategy-researcher': 25690, 'trade-executor': 30086, 'trade-reviewer': 9183, 'trend-momentum-analyst': 53846, 'volume-liquidity-analyst': 47492 },
+  index: { 'market-structure-analyst': 39987, 'news-calendar-analyst': 9875, 'risk-manager': 74830, 'strategy-researcher': 25690, 'trade-executor': 30075, 'trade-reviewer': 9183, 'trend-momentum-analyst': 39213, 'volume-liquidity-analyst': 32001 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

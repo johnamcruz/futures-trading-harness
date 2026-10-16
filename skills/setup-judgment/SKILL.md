@@ -52,7 +52,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`.
   It checks each reason against the briefing (window and entries, trend rule per side,
   candidates and verdict, room vs needed, the side's MTF read) and the
-  attempt line, and lists each setup's priority-order steps: judge each.
+  attempt line, and lists each setup's priority-order steps: judge each step on its own.
   - FALSE: name it, drop it, decide again from the facts.
   - UNCHECKED, UNPARSED: check yourself; not false for that alone.
   - The order gate's checks still come first, unchanged.

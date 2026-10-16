@@ -77,7 +77,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
      role call; a role you play counts as it): `strategies_scan` (with
      `name`: a separate read), `mtf_read` (one call, `daily` if you have the
      daily file), `get_account_snapshot`, `get_quote`, `get_bars`.
-   - Analysts still run in parallel, except those under "Cached reports"
+   - A full cycle still runs its analysts in parallel, except those under "Cached reports"
      (role-round): don't relaunch them.
    - Don't re-read what the prompt or a role gave (the trade-executor's
      report is trade-session step 6's after-order read), except:
