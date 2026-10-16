@@ -1379,3 +1379,98 @@ test('replay config: setup-focused practice is the replay config\'s own field, v
   const auto = { ...replayConfig(dir).autotrader, practice: {} };
   assert.throws(() => resolveReplay(replayConfig(dir, { autotrader: auto }), { env: {}, home: dir, root: ROOT }), /practice: set in the replay config/);
 });
+
+test('replay env: the account\'s limits go into the variables the replay broker\'s brokers.json entry names; a live broker and a run with no account get none', () => {
+  const at = iso('2026-10-07T13:33:02Z');
+  const ACCT = require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {}).accounts.find(a => a.valid && a.daily_loss_limit > 0).name;
+  const names = { dailyLoss: 'SIM_DAILY', maxOrderSize: 'SIM_ORDER', maxPositionSize: 'SIM_POSITION' };
+  const withLimits = w => fs.writeFileSync(path.join(w.live, 'brokers.json'), JSON.stringify({ brokers: {
+    sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL', env: ['SIM_DATA'], limits: names },
+    live: { command: [process.execPath, '/opt/live/server.js'], env: ['LIVE_API_KEY'], entryEnv: 'LIVE_ENTRY', journalEnv: 'LIVE_JOURNAL', limits: names },
+  } }));
+  const w = userWorld({ prop: ACCT });
+  withLimits(w);
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const { accountLimits, accountNamed } = require('../../scripts/lib/trading/accounts');
+  const want = accountLimits(accountNamed(ROOT, ACCT, w.env), w.run.cfg.symbols);
+  assert.ok(want.maxOrderSize > 1 && want.dailyLoss > 0, JSON.stringify(want));
+  const env = replayEnv(w.env, w.run, { at });
+  assert.deepStrictEqual([env.SIM_DAILY, env.SIM_ORDER, env.SIM_POSITION], [String(want.dailyLoss), String(want.maxOrderSize), String(want.maxPositionSize)]);
+  // No prop account: the policy strategy's account (a learning run's own) gives them.
+  const plain = userWorld();
+  withLimits(plain);
+  seedRunHome(plain.run, { root: ROOT, userEnv: plain.env });
+  const own = replayEnv(plain.env, plain.run, { at });
+  assert.ok(Number(own.SIM_DAILY) > 0 && Number(own.SIM_ORDER) > 1 && own.SIM_ORDER === own.SIM_POSITION, JSON.stringify(own));
+  // No mapping in the broker's entry: nothing is set.
+  const unmapped = userWorld({ prop: ACCT });
+  seedRunHome(unmapped.run, { root: ROOT, userEnv: unmapped.env });
+  const bare = replayEnv(unmapped.env, unmapped.run, { at });
+  assert.deepStrictEqual([bare.SIM_DAILY, bare.SIM_ORDER, bare.SIM_POSITION], [undefined, undefined, undefined]);
+  // A live broker is unaffected: the account's limits are never put into its variables (the driver refuses a live broker).
+  const liveEnv = replayEnv(w.env, { ...w.run, broker: 'live' }, { at });
+  assert.deepStrictEqual([liveEnv.SIM_DAILY, liveEnv.SIM_ORDER, liveEnv.SIM_POSITION], [undefined, undefined, undefined]);
+});
+
+test('replay config: the limits are the run\'s account\'s (prop, else the policy\'s), taken once; per-symbol caps give the strictest', () => {
+  const { accountLimits, loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const accounts = loadAccounts(ROOT, {}).accounts.filter(a => a.valid && a.daily_loss_limit > 0);
+  const policy = require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, {}).strategies.find(s => s.signal === 'policy' && s.status === 'active');
+  const mine = accounts.find(a => a.name === policy.account);
+  const other = accounts.find(a => a.name !== mine.name && a.daily_loss_limit !== mine.daily_loss_limit);
+  assert.ok(mine && other);
+  // --prop X with a policy on account Y: X's limits, not Y's.
+  const viaProp = userWorld({ prop: other.name }).run;
+  assert.deepStrictEqual(viaProp.limits, accountLimits(other, viaProp.cfg.symbols));
+  assert.strictEqual(viaProp.limits.dailyLoss, other.daily_loss_limit);
+  // No prop: the policy's account.
+  const plain = userWorld().run;
+  assert.strictEqual(plain.limits.dailyLoss, mine.daily_loss_limit);
+  assert.notStrictEqual(plain.limits.dailyLoss, viaProp.limits.dailyLoss);
+});
+
+test('replay config: more than one active policy naming different accounts is refused, so load order never decides', () => {
+  const root = tmpDir();
+  fs.cpSync(path.join(ROOT, 'accounts'), path.join(root, 'accounts'), { recursive: true });
+  const src = path.join(ROOT, 'strategies', 'prop_portfolio');
+  fs.cpSync(src, path.join(root, 'strategies', 'prop_portfolio'), { recursive: true });
+  fs.cpSync(src, path.join(root, 'strategies', 'prop_portfolio_two'), { recursive: true });
+  const two = path.join(root, 'strategies', 'prop_portfolio_two', 'STRATEGY.md');
+  const first = fs.readFileSync(path.join(src, 'STRATEGY.md'), 'utf8');
+  const acct = /^account:\s*(\S+)/m.exec(first)[1];
+  const another = fs.readdirSync(path.join(ROOT, 'accounts')).find(n => n !== acct && fs.existsSync(path.join(ROOT, 'accounts', n, 'ACCOUNT.md')));
+  fs.writeFileSync(two, first.replace(/^name:.*$/m, 'name: prop_portfolio_two').replace(/^account:.*$/m, `account: ${another}`));
+  const dir = tmpDir();
+  const env = { FTH_HOME: path.join(dir, 'live') };
+  assert.throws(() => resolveReplay(replayConfig(dir), { env, home: dir, root }), /more than one active policy strategy names an account/);
+  // The run's own account settles it: the policies are not consulted.
+  assert.doesNotThrow(() => resolveReplay(replayConfig(dir, { prop: another }), { env, home: dir, root }));
+  // The same account on both is not a conflict.
+  fs.writeFileSync(two, first.replace(/^name:.*$/m, 'name: prop_portfolio_two'));
+  assert.strictEqual(resolveReplay(replayConfig(dir), { env, home: dir, root }).limits.dailyLoss > 0, true);
+});
+
+test('config hash: the limits mapping in brokers.json and the account file (accounts/) are part of the run', () => {
+  const w = userWorld({ prop: require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {}).accounts.find(a => a.valid && a.daily_loss_limit > 0).name });
+  const names = { dailyLoss: 'SIM_DAILY', maxOrderSize: 'SIM_ORDER', maxPositionSize: 'SIM_POSITION' };
+  const write = limits => fs.writeFileSync(path.join(w.live, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL', env: ['SIM_DATA'], limits } } }));
+  write(names);
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const runBrokers = path.join(w.run.paths.runHome, 'brokers.json');
+  const before = configHash(w.run, w.env);
+  const seeded = JSON.parse(fs.readFileSync(runBrokers, 'utf8'));
+  seeded.brokers.sim.limits = { ...names, maxOrderSize: 'SIM_ORDER_2' };
+  fs.writeFileSync(runBrokers, JSON.stringify(seeded));
+  assert.notStrictEqual(configHash(w.run, w.env), before, 'a different variable for a limit is another run');
+  seeded.brokers.sim.limits = names;
+  fs.writeFileSync(runBrokers, JSON.stringify(seeded));
+  assert.strictEqual(configHash(w.run, w.env), before);
+  // The limits come from the account file, which accounts/ puts in the hash: an edit there is another run.
+  const root = tmpDir();
+  fs.cpSync(path.join(ROOT, 'accounts'), path.join(root, 'accounts'), { recursive: true });
+  const file = path.join(root, 'accounts', fs.readdirSync(path.join(root, 'accounts'))[0], 'ACCOUNT.md');
+  const run = { ...w.run, root };
+  const h = configHash(run, w.env);
+  fs.appendFileSync(file, '\n<!-- edited -->\n');
+  assert.notStrictEqual(configHash(run, w.env), h, 'the account file is in the hash');
+});

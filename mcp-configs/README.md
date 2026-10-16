@@ -2,7 +2,7 @@
 
 | File | Use |
 |---|---|
-| `brokers.json` | The broker MCP servers the harness can use and the one it uses (its `broker`): the one link between the harness and broker servers. Each server lives in its own repo and implements the broker MCP interface (`docs/BROKER-MCP-INTERFACE.md`). Override or add brokers in `~/.futures-trading-harness/brokers.json`; `FTH_BROKER` picks one. |
+| `brokers.json` | The broker MCP servers the harness can use and the one it uses (its `broker`): the one link between the harness and broker servers. Each server lives in its own repo and implements the broker MCP interface (`docs/BROKER-MCP-INTERFACE.md`). Override or add brokers in `~/.futures-trading-harness/brokers.json`; `FTH_BROKER` picks one. A replay broker's `limits` (`dailyLoss`, `maxOrderSize`, `maxPositionSize`) name the env variable of each limit: the replay driver sets them from the account (`daily_loss_limit`, `max_contracts`), so a limit is changed in the account file; live brokers keep their own. |
 | `broker.example.json` | The `broker` MCP server behind the order gateway, in the `mcpServers` JSON shape used by Claude Code, Qwen Code, Cursor, and most MCP clients. The gateway starts the server named in `brokers.json`. Codex uses TOML; `scripts/install.js --target codex` writes it. |
 | `settings.example.json` | Claude Code settings: order-gate variables and permissions (order tools on "ask" for interactive use). |
 | `autotrader.example.json` | Autonomous runner config: harness, symbols, paper mode, schedule, caps. |

@@ -41,12 +41,12 @@ function raw(over = {}) {
   const user = tmp();
   return { user, raw: { runId: 'a', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2022-03-07T14:30:00Z', end: '2022-03-07T15:00:00Z', premarket: false, autotrader: PF.AUTOTRADER, practice: PF.PRACTICE, ...over } };
 }
-const env = user => ({ PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live') });
+const env = user => ({ PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'live'), FAKE_REPLAY_NOW: '2022-03-07T14:30:00Z' });
 
 test('resolveReplay: stage is kept, refused when contradicted, and part of both hashes (absent: the hash it had)', () => {
   const a = raw();
   fs.mkdirSync(path.join(a.user, 'live'));
-  fs.writeFileSync(path.join(a.user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+  fs.writeFileSync(path.join(a.user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')], replay: true, limits: { dailyLoss: 'FAKE_MAX_DAILY', maxOrderSize: 'FAKE_MAX_ORDER', maxPositionSize: 'FAKE_MAX_POSITION' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL', 'FAKE_REPLAY_NOW'] } } }));
   const res = over => resolveReplay({ ...a.raw, ...over }, { baseDir: a.user, env: env(a.user), root: ROOT });
   assert.strictEqual(res({}).stage, null);
   assert.strictEqual(res({ stage: 1 }).stage, 1);
@@ -283,7 +283,7 @@ test('scripts/replay.js run: a finished stage-1 validate run prints its stage re
   const user = tmp();
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
-  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE'] } } }));
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE'] } } }));
   // The parity week moved onto Monday 2024-08-05 (practice-validate), served by the mock exchange at 3m and 1m, and given
   // to the preflight as one-minute bars.
   const minute = PF.writeMinuteBars(path.join(user, 'MNQ-1m.csv'), '2024-08-05');
@@ -327,7 +327,7 @@ test('the risk record: stage 1 refuses its display; stage 2 takes it only on a r
 test('resolveReplay: comparisonArm is a boolean declaration, in no hash; stage 2 refuses the display without it', () => {
   const a = raw();
   fs.mkdirSync(path.join(a.user, 'live'));
-  fs.writeFileSync(path.join(a.user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL'] } } }));
+  fs.writeFileSync(path.join(a.user, 'live', 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')], replay: true, limits: { dailyLoss: 'FAKE_MAX_DAILY', maxOrderSize: 'FAKE_MAX_ORDER', maxPositionSize: 'FAKE_MAX_POSITION' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_JOURNAL', 'FAKE_REPLAY_NOW'] } } }));
   const res = over => resolveReplay({ ...a.raw, ...over }, { baseDir: a.user, env: env(a.user), root: ROOT });
   assert.strictEqual(res({}).comparisonArm, false);
   assert.strictEqual(res({ comparisonArm: true }).comparisonArm, true);

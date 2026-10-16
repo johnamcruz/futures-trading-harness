@@ -87,7 +87,7 @@ const MOCK_EXCHANGE = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server
 function passAt(at) {
   const home = tmpDir();
   const brokers = path.join(home, 'brokers.json');
-  fs.writeFileSync(brokers, JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, MOCK_EXCHANGE], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } } }));
+  fs.writeFileSync(brokers, JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, MOCK_EXCHANGE], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } } }));
   fs.mkdirSync(path.join(home, 'state'));
   fs.writeFileSync(path.join(home, 'clock.json'), JSON.stringify({ now: at }));
   const config = path.join(home, 'auto.json');

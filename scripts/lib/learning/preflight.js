@@ -15,7 +15,7 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo. The fine-tuning adapter
+ * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
  * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): the account states on a
@@ -533,6 +533,34 @@ function monteCarlo(ctx) {
 }
 
 /**
+ * The replay broker's limits against the account's (learning/broker-limits.js): its order and position size at least the
+ * account's max_contracts and its daily loss limit the account's daily_loss_limit, else practice would not equal live.
+ * A limit the broker's get_server_config does not give is N/A, never guessed; a replay broker that can't be read is a FAIL on a
+ * learning run (a WARN on any other); a live broker is N/A without starting its server. The account is the run's own (`run.limits`).
+ */
+function brokerLimits(ctx) {
+  const entry = ctx.read.brokerEntry(ctx.run);
+  // The account the run itself uses (the replay config's `limits`: prop, account states, else the policy's), never another.
+  const want = ctx.run.limits || null;
+  const learning = ctx.run.learning === true || (ctx.gate || {}).learning === true;
+  const { compareLimits } = require('./broker-limits');
+  // A replay broker whose brokers.json entry maps no limit variable can't be given the account's: FAIL, read or not.
+  const mapped = compareLimits({ config: null, want, entry, learning });
+  if (mapped.status === FAIL) return r('broker-limits', FAIL, mapped.detail);
+  // A live broker's limits are its own: its server is not started to ask.
+  if (entry && entry.replay !== true) return r('broker-limits', NA, 'the broker is not a replay server: its limits are its own');
+  const config = ctx.read.brokerConfig(ctx.run);
+  if (config && config.error) {
+    // Practice equals live: a learning run on a replay broker whose limits can't be read is not known to have the account's.
+    return learning && entry && entry.replay === true
+      ? r('broker-limits', FAIL, `the replay broker's configuration could not be read (${config.error}): a learning run needs its limits confirmed to be the account's`)
+      : r('broker-limits', WARN, `the broker's configuration could not be read (${config.error}): its limits are not checked`);
+  }
+  const x = compareLimits({ config, want, entry, learning });
+  return r('broker-limits', x.status, x.detail);
+}
+
+/**
  * The fine-tuning adapter the runner config declares (learning/adapter.js adapterCheck): N/A with none; FAIL on a
  * missing or invalid manifest, a stale one (its skills or prompt digest not the harness's now), or no validation result.
  */
@@ -544,7 +572,7 @@ function adapter(ctx) {
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -654,6 +682,27 @@ function attemptLine(root, env, name, state, at = new Date()) {
 }
 
 function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
+  // The run's broker with the account's limits in the variables the driver would set them in (limitsEnv): its entry.
+  const runEnv = run => {
+    if (!(run && run.broker)) return env;
+    const base = { ...env, FTH_BROKER: run.broker };
+    return { ...base, ...require('../replay/config').limitsEnv(run, require('../broker/config').activeBroker(base)) };
+  };
+  // The broker's own answer, from a server started as the driver starts it (replayEnv) but on a scratch run home, since
+  // the run's is not seeded yet; the user's own harness home and brokers file stay, so the same broker entry is found.
+  const readConfig = run => {
+    if (!(run && run.broker && run.paths)) return require('./broker-limits').readBrokerConfig(root, env);
+    const scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-broker-limits-'));
+    try {
+      fs.mkdirSync(path.join(scratch, 'broker'));
+      const paths = { clockFile: path.join(scratch, 'clock.json'), brokerDir: path.join(scratch, 'broker'), journal: path.join(scratch, 'broker', 'journal.jsonl') };
+      fs.writeFileSync(paths.clockFile, JSON.stringify({ now: run.start.toISOString() })); // the driver's clock file (replay/driver.js writeClock)
+      const driven = require('../replay/config').serverEnv(env, run, paths);
+      return require('./broker-limits').readBrokerConfig(root, driven);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  };
   const exists = rel => fs.existsSync(path.join(root, rel));
   return {
     strategies: once(() => require('../trading/strategies').loadStrategies(root, env).strategies),
@@ -701,6 +750,10 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     statesDoc: file => require('../prop/account-states').readDocument(file),
     gateLimits: () => ({ ...require('../prop/attempts').gateLimits(env) }),
     accountProfile: name => { try { return require('../trading/accounts').accountNamed(root, name, env); } catch (_err) { return null; } },
+    // The broker the run uses, in the environment the replay driver gives it (replay/config.js replayEnv: its run variables
+    // and the account's limits), as the driver would start it.
+    brokerEntry: run => { const b = require('../broker/config').activeBroker(runEnv(run)); return { name: b.name, replay: b.replay === true, limits: b.limits }; },
+    brokerConfig: once(readConfig),
     attemptLine: (name, state, at) => attemptLine(root, env, name, state, at),
     // The selected fine-tuning adapter's manifest, the training spec, and the harness's skills and prompt digests now.
     adapterManifest: file => require('./adapter').readJsonFile(file),
@@ -757,6 +810,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
 };

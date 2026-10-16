@@ -134,4 +134,23 @@ function requireFee(account, root) {
   return f;
 }
 
-module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed, feePerSide, requireFee };
+/**
+ * The limits a replay broker is run with, from the account (the one home of a limit): { dailyLoss (the daily_loss_limit,
+ * 0 for none), maxOrderSize, maxPositionSize, symbol, caps, missing }. The broker has one size limit for every symbol
+ * (docs/BROKER-MCP-INTERFACE.md get_server_config), so with different caps among the run's symbols it is the SMALLEST
+ * cap (the strict choice: no symbol is sized past its own); `symbol` is the one that cap is for, `caps` every stated cap
+ * ({ symbol: n }), `missing` the run's symbols the account states none for. No cap for any: both sizes null (none is guessed).
+ */
+function accountLimits(account, symbols) {
+  const caps = account && account.max_contracts && typeof account.max_contracts === 'object' ? account.max_contracts : {};
+  const names = [...new Set((symbols || []).map(s => String(s).toUpperCase()))];
+  const found = names.map(s => [s, caps[s]]).filter(([, n]) => Number.isInteger(n) && n > 0);
+  const low = found.reduce((a, b) => (a && a[1] <= b[1] ? a : b), null);
+  return {
+    dailyLoss: Number(account && account.daily_loss_limit) || 0,
+    maxOrderSize: low ? low[1] : null, maxPositionSize: low ? low[1] : null, symbol: low ? low[0] : null,
+    caps: Object.fromEntries(found), missing: names.filter(s => !found.some(([n]) => n === s)),
+  };
+}
+
+module.exports = { KEYS, accountDirs, validateAccount, loadAccountFile, loadAccounts, accountNamed, feePerSide, requireFee, accountLimits };

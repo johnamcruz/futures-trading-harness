@@ -85,7 +85,7 @@ function world() {
   fs.mkdirSync(bin);
   // The replay broker: the mock exchange as a replay server (its clock the driver's clock file), its prices following the bars.
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({
-    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE', 'MOCK_PRICE_FROM_BARS', 'MOCK_BALANCE_SCHEDULE'] } },
+    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE', 'MOCK_PRICE_FROM_BARS', 'MOCK_BALANCE_SCHEDULE', 'MOCK_MAX_ORDER_SIZE', 'MOCK_MAX_POSITION_SIZE', 'MOCK_MAX_DAILY_LOSS'], limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' } } },
   }));
   // The harness CLI by name: the scripted model, playing the script file.
   fs.writeFileSync(path.join(bin, 'opencode'), `#!/bin/sh\nexec "${process.execPath}" "${STANDIN}" "$@"\n`, { mode: 0o755 });
