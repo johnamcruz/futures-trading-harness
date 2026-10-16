@@ -132,6 +132,7 @@ test('preflight account: exists, can trade, balance read, and within the prop pr
 test('preflight prop: every profile a policy strategy trades has its attempt started', () => {
   const home = tmpDir();
   assert.match(P.propChecks({ profiles: [PROFILE], home })[0].detail, /combine\.js start --account p100/);
+  assert.match(P.propChecks({ profiles: [PROFILE], home })[0].detail, /refuses the entries its policy strategies size/);
   prop.startAttempt(home, PROFILE, NOW);
   assert.strictEqual(P.propChecks({ profiles: [PROFILE], home })[0].status, 'ok');
   assert.deepStrictEqual(P.propChecks({ profiles: [], home }), []);

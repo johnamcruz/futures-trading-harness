@@ -323,9 +323,10 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
   const viaTool = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10, name: 'mine' }, { env: { ...process.env, FTH_HOME: fakeHome, FTH_ENV_FILE: path.join(fakeHome, 'none.env'), FTH_REPLAY_NOW: '' } });
   assert.strictEqual(viaTool.isError, true);
   assert.ok(viaTool.content[0].text.includes(`[bars] the bars file: a .json file under ${path.join(fakeHome, 'bars-scratch')}/ (not a regular file: `), viaTool.content[0].text);
-  // combine_status with no attempt: starting one is the user's (the script's own line stays as it was).
+  // combine_status with no attempt: starting one is the user's, and it blocks no composed entry (the script's own
+  // line stays as it was); a model read "no attempt" as "no entries" without the second line.
   const none = await callTool('combine_status', {}, { env: { FTH_HOME: home } });
-  assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n');
+  assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\nentries: not blocked by this; a composed entry trades under its own strategy\'s cap; a policy strategy sizes entries only in an attempt\n');
   // The scripts keep their own wording.
   const mtf = require('../../scripts/lib/harness-tools/mtf');
   assert.throws(() => mtf.mtf({ file: bars, record: true }, { env: { FTH_HOME: home } }), /^Error: --record needs --symbol=<ROOT> \(e\.g\. MNQ\)$/);
