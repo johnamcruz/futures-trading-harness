@@ -22,8 +22,9 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 3. **Risk budget** = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
-   - 10% of the trailing-drawdown cushion (balance − loss floor), when
-     known (no attempt: none shown). Never ask for one in an autonomous run.
+   - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
+     None shown (no attempt): skip this cap, never $0. Never ask when
+     autonomous.
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
    wide for the budget: skip, or find a tighter, structure-based stop. Never
    shrink the stop to make the size work.
