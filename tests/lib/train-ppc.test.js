@@ -597,6 +597,41 @@ test('nothing passes the screen: no proposal reaches the keep rule; the next rou
   assert.strictEqual(report.probes.length, 0);
 });
 
+test('probes first, the panel still stops the loop early: once the champion has run, nothing flagged left stops a round before its probes', async () => {
+  const w = world({
+    proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')],
+    loop: { maxFlagged: 40, limits: { maxIterations: 3, maxModelCalls: 10000, maxWallMinutes: 30 } },
+  });
+  await run(w);
+  // Round 1 probed, kept, and targeted every flagged decision; round 2 found none left before any probe or model call.
+  assert.strictEqual(w.calls.proposeProbes.length, 1);
+  const st = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  assert.deepStrictEqual(st.iterations.map(x => [x.n, x.done, Boolean(x.nothing)]), [[1, true, false], [2, true, true]]);
+  assert.match(st.stopped, /nothing flagged left to work on/);
+  assert.strictEqual(w.calls.runs.filter(r => r.runId === 'l1-champion-t0').length, 1);
+  // A resume stops at once too: no probe round runs again.
+  await run(w);
+  assert.strictEqual(w.calls.proposeProbes.length, 1);
+});
+
+test('probes first: a runnable proposal the champion\'s first replays leave no panel to judge is archived as blocked, never dropped', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  // The champion's tuning decisions all right: its panel has nothing flagged.
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => score(opts).map(d => (/champion-t\d+$/.test(opts.runDir) ? { ...d, category: 'right' } : d));
+  await run(w);
+  assert.strictEqual(w.calls.verifier.length, 0, 'never judged');
+  const [e] = readArchive(w.paths.archive);
+  assert.strictEqual(e.verdict, 'blocked');
+  assert.match(e.reasons[0], /^not judged: nothing flagged left to work on/);
+  assert.strictEqual(e.source, 'propose-probe-compose');
+  const keep = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => typeof l.keep === 'string');
+  assert.deepStrictEqual(keep.map(l => [l.proposalId, l.keep]), [[e.proposalId, 'blocked']]);
+  const st = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  assert.match(st.stopped, /nothing flagged left to work on/);
+  assert.deepStrictEqual(st.iterations.map(x => [x.done, Boolean(x.nothing)]), [[true, true]]);
+});
+
 test('a probe edit that breaks its tag or the owner\'s style never runs', async () => {
   const w = world({ proposals: [tagged('a', 'F7', 'rule', '- line one', '- line one\n- GOOD'), tagged('a', 'F1', 'rule', '- line one', '- wait 5 bars GOOD'), { error: 'not JSON', line: 'PROPOSAL {' }] });
   await run(w);

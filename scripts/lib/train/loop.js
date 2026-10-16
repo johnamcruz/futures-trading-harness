@@ -396,23 +396,26 @@ async function iteration(ctx, n, { champion, champOf }) {
   const dir = ctx.paths.iter(n);
   const work = path.join(W(ctx), `iter-${n}`);
   const used = ctx.state.iterations.filter(x => x.n < n).flatMap(x => x.targeted || []);
-  // The panel: the champion's flagged and control decisions on its tuning replays (champOf). Without probe it comes
-  // first (the proposer works on its flagged decisions); with probe, only once a proposal is runnable.
+  // The panel: the champion's flagged and control decisions on its tuning replays (champOf). It comes first (the
+  // proposer works on its flagged decisions; nothing flagged stops the loop before any model call), except with probe
+  // before the champion's replays ever ran: then only once a proposal is runnable (lazy: an empty panel is returned).
   let champ = null;
-  const panelOf = async () => {
+  const NOTHING = 'nothing flagged left to work on: the champion\'s scored decisions are all right, unchecked or already targeted';
+  const panelOf = async ({ lazy = false } = {}) => {
     champ = await champOf();
     const p = await phase(ctx, `${n}:panel`, path.join(dir, 'panel.json'), async () => withRuns(D.choosePanel({ decisions: champ.decisions, used, maxFlagged: ctx.loop.maxFlagged, control: ctx.loop.controlPoints, seed: `${ctx.loop.seed}|${n}`, failures: P.FAILURES }), champ.decisions));
     if (!p.flagged.length) {
+      if (lazy) return p;
       it.done = true;
       it.nothing = true;
       ctx.save();
-      throw new Stop('nothing flagged left to work on: the champion\'s scored decisions are all right, unchecked or already targeted');
+      throw new Stop(NOTHING);
     }
     it.targeted = p.flagged.map(d => d.key);
     ctx.save();
     return p;
   };
-  let panel = ctx.loop.probe ? null : await panelOf();
+  let panel = !ctx.loop.probe || ctx.state.done['scorecard:t'] ? await panelOf() : null;
   const archive = A.readArchive(ctx.paths.archive);
   const proposals = await phase(ctx, `${n}:propose`, path.join(dir, 'proposals.json'), async () => {
     const raw = await proposalsFor(ctx, { n, flagged: panel ? panel.flagged : [], champion });
@@ -433,10 +436,14 @@ async function iteration(ctx, n, { champion, champOf }) {
     if (fs.existsSync(f)) fs.renameSync(f, `${f}.used-${n}`);
   }
   const runnable = proposals.filter(x => x.id && !x.errors.length && x.duplicateOf === null);
-  if (runnable.length && !panel) panel = await panelOf();
-  const baseline = runnable.length ? await phase(ctx, `${n}:baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs })) : [];
-  const verdicts = [];
-  for (const x of runnable) {
+  // The champion's first tuning replays, for this round's runnable proposals. Left with nothing flagged, no panel can
+  // judge them: they are archived as blocked (never dropped), then the loop stops as it does with nothing flagged.
+  if (runnable.length && !panel) panel = await panelOf({ lazy: true });
+  const unjudged = runnable.length && !panel.flagged.length;
+  const judged = unjudged ? [] : runnable;
+  const baseline = judged.length ? await phase(ctx, `${n}:baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs })) : [];
+  const verdicts = unjudged ? runnable.map(x => ({ x, cand: { files: [] }, v: { verdict: 'blocked', reasons: [`not judged: ${NOTHING}`] } })) : [];
+  for (const x of judged) {
     const cand = await phase(ctx, `${n}:candidate:${x.id}`, path.join(dir, `candidate-${x.id}.json`), async () => {
       const tree = await candidateTree(ctx, { dir: work, id: x.id, proposal: x.proposal, champion });
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
@@ -470,7 +477,9 @@ async function iteration(ctx, n, { champion, champOf }) {
     return { at: new Date().toISOString() };
   });
   it.done = true;
+  if (unjudged) it.nothing = true;
   ctx.save();
+  if (unjudged) throw new Stop(NOTHING);
 }
 
 /** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
