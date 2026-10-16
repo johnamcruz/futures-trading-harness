@@ -128,6 +128,24 @@ const LATE = [
   { from: "strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)",
     to: "strategies_scan → <name> long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)",
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },
+  { from: "Apply a strategy", to: "Apply a rules strategy (none active; composed: `trade-lifecycle`)",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "Round the stop away from the entry to the tick (a long's stop down, a short's up), the target toward it; bracket ticks = `ceil(distance / tickSize)`.", to: "Round the stop away from the entry to the tick, the target toward it; bracket ticks = `ceil(distance / tickSize)`.",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "`atr:<k>` means k \u00d7 ATR(20) on the strategy's bars.", to: null,
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "**The multi-timeframe read for its side**: `aligned` \u2192 full; `pullback` \u2192 no trade until the trigger timeframe turns back with the bias (a shift, a reclaim), then full; `mixed` \u2192 half; `counter` on a non-reversal setup \u2192 no trade.", to: "**The multi-timeframe read for its side**: a rules strategy: `aligned` \u2192 full; `pullback` \u2192 no trade until the trigger timeframe turns back with the bias (a shift, a reclaim), then full; `mixed` \u2192 half; `counter` on a non-reversal setup \u2192 no trade.",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "Stop from `risk.stop`: `atr:<k>` or a distance expression \u2192 the scan's `stopDistance`; `structure`/`swing` \u2192 beyond the level the body names.", to: "Stop from `risk.stop`: `atr:<k>` (k \u00d7 ATR(20) on its bars) or a distance expression \u2192 the scan's `stopDistance`; `structure`/`swing` \u2192 beyond the level the body names.",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "The rule for every setup.", to: null,
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "**Confluence**: another strategy firing the other side \u2192 no trade; confluence with it supports the full size.", to: "**Confluence** (rules strategies): another firing the other side \u2192 no trade; confluence with it supports the full size.",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "A strategy's full scan result (`name`) has `detail`, the detectors' state: a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't fire, and a `cisd(15)` detector's: the CISD level, the leg, the zone, the stop and the swept level.", to: "A strategy's full scan result (`name`) has `detail`, its detectors' state.",
+    reason: "fix/skills-match-code: no rules strategy is active (labelled); composed: the htf-to-ltf side rule (the owner's trend-following decision: pullback an entry, counter a pass unless the D2 tier); retired CRT detail dropped" },
+  { from: "A trade needs, in order (and then the priority order below sizes or skips it): the trigger has fired on a closed bar (scan lists it as a candidate, or the manual trigger described in the body), every context filter holds, no \"Skip when\" rule applies, and planned R:R \u2265 `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` \u2265 `min_rr` stands in for it).", to: "A trade needs, in order (then the priority order sizes or skips it): the trigger fired on a closed bar (a scan candidate, or the body's manual trigger), every context filter holds, no \"Skip when\" rule applies, and planned R:R \u2265 `risk.min_rr` (a trailing exit: `trailActivateR` \u2265 `min_rr`).",
+    reason: "fix/skills-match-code: the rules-only steps, shorter and labelled (no rules strategy is active)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -242,7 +260,7 @@ test('strategy-library split: each skill answers one question in a short index l
   const body = t => pf(t).body.trim().length;
   const pieces = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'].reduce((n, x) => n + body(read(`skills/${x}/SKILL.md`)), 0);
   assert.ok(pieces <= body(read(BEFORE)), `the three pieces are ${pieces} characters, over the old skill's ${body(read(BEFORE))}`);
-  assert.match(sl, /### Apply a strategy/);
+  assert.match(sl, /### Apply a rules strategy \(none active; composed: `trade-lifecycle`\)/);
   assert.match(sl, /### The priority order: the rule for every setup/);
   assert.doesNotMatch(sl, /### (Read the library|What the code enforces|Find the harness root)|retired-lane|trigger-fired|FTH_ROOT|filtersFailed/);
   // The priority order is in strategy-library only (the content test holds the rest of the priority-order guard).

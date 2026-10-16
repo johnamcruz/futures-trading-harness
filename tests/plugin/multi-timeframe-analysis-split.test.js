@@ -103,6 +103,30 @@ const LATE = [
   { from: "level, size, target).",
     to: null,
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples); owner decision D2: a composed short against the trend needs a 15m or 1h CHoCH down" },
+  { from: "**Trend strategies** (every strategy unless its STRATEGY.md says `mtf: reversal`): never enter against the prevailing trend, and wait while the 4h has fewer than 3 completed candles.", to: "**Every entry**, long or short alike (`trade_lifecycle`, and a rules strategy without `mtf: reversal`): never against the prevailing trend; wait while the 4h has fewer than 3 completed candles.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "That is their setup, a raid at a higher-timeframe level; when they do, the priority order (strategy-library, step 2) decides them: level, size, target.", to: "**Against it**: a composed entry only on its CHoCH tier (`trade-lifecycle`); a rules `mtf: reversal` strategy (none active) at a higher-timeframe level, decided by the priority order (step 2).",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "`strategies_scan`: a trend strategy that fires against it is not a candidate; its why-not (`filtersFailed` in its full result) says `mtf: against the prevailing 4h down trend ...`.", to: "`strategies_scan` (rules strategies): one that fires against it is not a candidate; its why-not (`filtersFailed` in its full result) says `mtf: against the prevailing 4h down trend ...`.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "The order gate (`mtf-trend`, hard: nothing switches it off) refuses a trend strategy's entry against the trend recorded in `<FTH_HOME>/mtf/<ROOT>.json`, or with no record or one more than 15 minutes (`FTH_MTF_MAX_AGE_MIN`) past its last bar's close.", to: "The order gate (`mtf-trend`, hard: nothing switches it off) refuses an entry against the trend recorded in `<FTH_HOME>/mtf/<ROOT>.json`, or with no record or one more than 15 minutes (`FTH_MTF_MAX_AGE_MIN`) past its last bar's close.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "Step 4 of the priority order (strategy-library) sets the size; with room to its trail activation and confluence it is the opportunity (the briefing's candidate `facts` show both)", to: "Priority step 4 (strategy-library) sets the size; with room and confluence it is the opportunity",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then step 4 of the priority order (strategy-library) sets the size. Do not enter while it is still moving against you", to: "The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sets the size; never enter while it still moves against you",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "Step 4 of the priority order (strategy-library) sets the size. Target the nearest opposing level; skip in a quiet session", to: "Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "Step 4 of the priority order (strategy-library); a reversal at a higher-timeframe level is its step 2, and the plan says why", to: "Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "The daily and 4-hour swing highs and lows are not in it: take them from `mtf_read` (premarket's daily read).", to: "The prior RTH day's high and low and the 4h swings are in the briefing (`timeframe-sources`, `m3.swingTargets`); the daily swings only in `mtf_read`: no target read.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "For a composed trade the label is a reason in its plan, never a cut (the priority order, strategy-library).", to: "**The side rule** (composed, long and short alike): the prevailing trend and the regime (`m3` `regime`) set it.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "A composed entry against the prevailing trend needs the CHoCH tier of `trade-lifecycle` (strategy-library: the priority order, step 2).", to: "`counter`, or against a trend regime: pass, unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it: name the tier.",
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "**Reversal strategies** (`mtf: reversal`): may fade it.", to: null,
+    reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -172,14 +196,14 @@ test('multi-timeframe-analysis split: the comparison catches a lost, a doubled, 
   assert.notDeepStrictEqual(differences(old, swap(['multi-timeframe-analysis', core.replace('fewer than 3 completed candles', 'fewer than 2 completed candles')]), ALLOWED), []);
   // Misplaced: the trend-rule bullet moved into mtf-bias-filter, or the reversal paragraph out of htf-to-ltf into the
   // core: nothing is lost or doubled, but it left its home.
-  const BULLET = /- \*\*Trend strategies\*\*[^]*?both sides are open\.\n/.exec(core)[0];
+  const BULLET = /- \*\*Every entry\*\*[^]*?both sides are open\.\n/.exec(core)[0];
   const f = homes[at('mtf-bias-filter')];
   const moved1 = swap(['multi-timeframe-analysis', core.replace(BULLET, '')], ['mtf-bias-filter', `${f}\n${BULLET}`]);
   assert.deepStrictEqual(differences(old, moved1, ALLOWED), [], 'the move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved1), [], 'but the trend rule left the core');
   const h = homes[at('htf-to-ltf')];
-  // The reversal paragraph (now the composed entry's, owner decision D2).
-  const REV = /A composed entry against the prevailing trend[^]*?step 2\)\.\n/.exec(h)[0];
+  // The reversal paragraph (now the side rule: owner decision D2 and the trend-following side rule).
+  const REV = /\*\*The side rule\*\*[^]*?the trend rule decides\.\n/.exec(h)[0];
   const moved2 = swap(['htf-to-ltf', h.replace(REV, '')], ['multi-timeframe-analysis', `${core}\n${REV}`]);
   assert.deepStrictEqual(differences(old, moved2, ALLOWED), [], 'the move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved2), [], 'but the reversal paragraph left htf-to-ltf');
@@ -254,7 +278,7 @@ test('multi-timeframe-analysis split: the market-structure analyst loads what it
   assert.match(read('skills/premarket/SKILL.md').replace(/\s+/g, ' '), /see the `timeframe-sources` and `daily-bias` skills/);
   assert.match(read('skills/trade-session/SKILL.md'), /\(`mtf_read` with the bars file, the `timeframe-sources` skill\)/);
   // In setup-judgment since the trade-session split (trade-session-split.test.js).
-  assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /the alignment table in `htf-to-ltf`/);
+  assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /`htf-to-ltf`'s side rule and alignment table/);
   assert.match(read('skills/pullback-vs-reversal/SKILL.md'), /shift or reclaim of `htf-to-ltf`/);
 });
 

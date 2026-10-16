@@ -11,6 +11,9 @@ description: Use when calling a strategies_* harness tool.
 
 ## How It Works
 
+No rules strategy is active: `strategies_scan` and `strategies_recent` are
+expected empty; never run them for a decision (`trade-lifecycle`).
+
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
 | `strategies_list` | `json`? | the registered strategies, one line each; `json`: every field (timeframe, sessions, file) as JSON on one line | `strategies.js list [--json]` |

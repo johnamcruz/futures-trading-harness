@@ -57,8 +57,8 @@ writes no PLAN line; its output below stays as it is.
    sessions left, any entry block) and the live verdicts. Report each attempt
    exactly as it lists it: an `active` attempt is running, so never say no
    attempt is running when it lists one. The gate enforces these numbers;
-   plan within them. Otherwise ask for (or read from the latest
-   plan) the firm's cushion to the trailing loss floor if you can't derive it.
+   plan within them. Otherwise read the cushion to the trailing loss floor
+   from the latest plan if you can't derive it (autonomous: never ask).
    With no running attempt (`combine_status` lists none), pace by the
    `prop-pacing-judgment` skill.
 6. Approve a policy strategy's entry only as its verdict says: that contract
@@ -116,14 +116,13 @@ strategy-library skill, "The priority order"): a step that says no trade is
 a VETO; a step that halves sets the size. The checks below say where to read
 its facts; the order decides.
 
-1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
-   on the side the prevailing trend allows (the briefing's `m3` `trendRule`;
-   without a current briefing, the `Trend rule:` line the plan quotes, or the
-   scan's `mtf`): the priority order's step 2 (the gate refuses a trend
-   strategy against it anyway, a composed trade with step 2's CHoCH excepted). The alignment for the side (the briefing's
-   `m15` `alignment.long` / `alignment.short`): its step 4. Other strategies
-   fired the other side on the same bar (the scan's `confluence.against`):
-   its step 6.
+1. The trend rule (the briefing's `m3` `trendRule`; without a current
+   briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):
+   the priority order's step 2 (the gate refuses an entry against it
+   anyway, a composed one with step 2's CHoCH tier excepted). The alignment
+   for the side (the briefing's `m15` `alignment.long` / `alignment.short`):
+   its step 4. A rules strategy: no `mtf: reversal` is a trend strategy;
+   others firing the other side (`confluence.against`): its step 6.
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits (an entry over `maxOrderSize`: VETO,
    the gate refuses it anyway).

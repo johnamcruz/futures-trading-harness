@@ -7,7 +7,8 @@ description: Read strategy scans - candidates, why not, trend flags, confluence.
 
 ## When to Use
 
-- Reading a scan or recent fires.
+- Reading a scan or recent fires. No rules strategy is active: the scan
+  is expected empty; never run it for a decision (compose: `trade-lifecycle`).
 
 ## How It Works
 
@@ -25,10 +26,8 @@ strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fi
 ```
 
 `recent` answers the skip rules about recent signals ("fired the other way
-in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
-a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
-fire, and a `cisd(15)` detector's: the CISD level, the leg, the zone, the stop
-and the swept level.
+in the last 5 bars"). A strategy's full scan result (`name`) has `detail`,
+its detectors' state.
 
 `strategies_scan` judges sessions at the current time (the harness clock: a
 replay broker's replayed time when `FTH_REPLAY_NOW` is set); it takes no time

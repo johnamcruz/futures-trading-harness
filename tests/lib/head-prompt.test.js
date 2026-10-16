@@ -49,9 +49,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // explicit exception to the no-growth rule (perf/head-core-composed-skills); 72455 with the owner's approved
   // trade-lifecycle sentences (plan validity, CISD timing, the library display: +312); 72636 with the owner's approved
   // management row (feat/prop-portfolio-missing: the exit mode may let a winner run past its target: +181); 73246 with the
-  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610). It may shrink;
-  // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 73246, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610); 72767 with the
+  // skills matched to the code (fix/skills-match-code: -479). It may shrink; it grows only on an owner's OK.
+  assert.ok(Buffer.byteLength(prompt) <= 72767, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

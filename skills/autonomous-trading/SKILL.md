@@ -27,11 +27,8 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
 3. **Positions first.** If a position is open, only manage it this cycle.
    Before your cycle, the runner has already:
    - cancelled leftover orders on a flat contract;
-   - for strategies whose exit trails, applied the trailing stop: the initial
-     stop until `trailActivateR`, then `trailGivebackR` behind the best price
-     (both in the scan's `exit`);
-   - for strategies with a time stop (`exit.max_bars`), closed a trade that
-     has been open that long.
+   - managed each open trade's exit: a composed one by its policy's exit
+     mode (`trade-plan`); a rules one's trail or time stop (none active).
    Don't loosen a stop it set. Why a setup did or didn't fire, and what
    earlier cycles saw: the `runner-logs` skill. The prompt also carries the last 10
    closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don't reverse a
@@ -56,7 +53,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    short bars, such as 1-minute, a retry rarely fits between cycles, so a
    failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the
    "day:" line; outside RTH the "overnight" line), each fired rules strategy's track
-   record (a `paper` one is marked: plan it only), and each open trade's state
+   record (none active), and each open trade's state
    (setup, initial risk, stop, target, R now, best and worst): the
    `trade-session` skill says how to weigh them. Times are New York time. A
    "Context unavailable" line names what couldn't be read this cycle: that is
@@ -110,8 +107,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
      today's P&L): a cycle that may enter reads `get_account_snapshot` once
      (trade-session step 1). It gives only a count of working orders, the
      trend rule, and no scan details: read `list_open_orders` once; take the
-     alignment and the scan's candidates from the bar briefing (`m15`
-     `alignment`, `m3` `candidates`), and run `mtf_read` or `strategies_scan`
+     alignment from the bar briefing (`m15` `alignment`), and run `mtf_read`
      only when it says there is no current briefing. Anything under "Context unavailable", read
      once yourself.
    - Read the account and open orders once after each `place_order`,

@@ -20,14 +20,14 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    | Step | Read forms | The skill for the fact |
    | --- | --- | --- |
-   | bias | trend, bos/choch, prior RTH range, trend rule, read, regime, day type | `multi-timeframe-analysis`, `daily-bias`, `bos-vs-choch`, `trend-vs-range` |
-   | location | at a level, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
-   | setup | rejected/broke/touched a level or gap edge (a bullish gap holds `rejected 15m fvg low up`, fails `broke 15m fvg low down`, a close inside is touched; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `breakout-vs-fakeout`, `pullback-vs-reversal`, `cisd`, `candle-reading`, `fair-value-gaps` |
-   | entry | close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `volume high`, `participation high`, absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
-   | stop | stop at a level | `invalidation` |
-   | target | target at a level | `take-profit` |
+   | bias | the side: the prevailing HTF trend and the regime (`1h up`, `regime trend up`); bos/choch, prior RTH range, trend rule, read, day type | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
+   | location | the pullback into a key level in that trend (`htf-to-ltf`): `at <level>`, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
+   | setup | the reaction ending the pullback, a "Setups to check" read: rejected/broke/touched a level or gap edge (a bullish gap holds `15m rejected 15m fvg high up`, fails `15m broke 15m fvg low down`, a close inside is `15m touched 15m fvg low`; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
+   | entry | confirmation on a later close: close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `3m volume high`, `participation high`, `3m absorption at <level> up` (short: down) | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | stop | `stop <tf> low <price>`: where the trend thesis fails | `invalidation` |
+   | target | `target <tf> swing <price>`: the next swing; past it the runner trails | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled: the record's stop and target are the exit; in an attempt the rulebook's exit mode may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
+   | management | once filled: the record's stop and target are the exit; the policy's exit mode (in an attempt or not) may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
 
    The setup is the reaction on a closed candle (often 15m); an entry read
    your way must be on a candle that closed after it (often the next 3m).
@@ -56,8 +56,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    refuses a size over code's caps ($300, the broker's max, in an attempt
    the verdict). No priority order halves a composed trade.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
-   (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level>` your
-   way, a key level, not a gap edge); else the trend rule refuses it.
+   (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level> up|down`
+   your way, a key level, not a gap edge); else the trend rule refuses it.
 5. **`[composed-reads]` refusals**: no record for this bar and side, or
    expired (compose again); an entry already placed on this bar and side;
    another contract; a read false, unverifiable or against your side now
@@ -82,10 +82,14 @@ never a forecast for this trade. A rule from code always overrides it.
 ## Examples
 
 ```text
-compose_check MNQ long: bias "1h up", location "vwap above", setup
-"15m rejected prior VAH up", entry "3m close top", stop "stop 15m low 21512.75",
-target "target 1h swing 21598.00", size 5 -> ok, entry 21540.25,
-stop 111 ticks ($277.50), target 231 ticks ($577.50, 2.08R).
+compose_check {"symbol": "MNQ", "side": "long", "size": 5, "reads": [
+  {"step": "bias", "skill": "multi-timeframe-analysis", "read": "1h up"},
+  {"step": "location", "skill": "vwap-volume-profile", "read": "vwap above"},
+  {"step": "setup", "skill": "rejection", "read": "15m rejected prior vah up"},
+  {"step": "entry", "skill": "candle-reading", "read": "3m close top"},
+  {"step": "stop", "skill": "invalidation", "read": "stop 15m low 21512.75"},
+  {"step": "target", "skill": "take-profit", "read": "target 1h swing 21598"}]}
+-> ok, entry 21540.25, stop 111 ticks ($277.50), target 231 ticks ($577.50, 2.08R).
 -> place_order MNQ buy 5 limit 21540.25, stopLossBracket.ticks 111,
    takeProfitBracket.ticks 231, rationale "setup:trade_lifecycle long ...".
 ```

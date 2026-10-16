@@ -25,16 +25,16 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 
 | Label | Means | What to do |
 |---|---|---|
-| `aligned` | no timeframe against it, most with it | Step 4 of the priority order (strategy-library) sets the size; with room to its trail activation and confluence it is the opportunity (the briefing's candidate `facts` show both) |
-| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then step 4 of the priority order (strategy-library) sets the size. Do not enter while it is still moving against you |
-| `mixed` | timeframes disagree without a clear pullback | Step 4 of the priority order (strategy-library) sets the size. Target the nearest opposing level; skip in a quiet session |
-| `counter` | the highest timeframe is against it | Step 4 of the priority order (strategy-library); a reversal at a higher-timeframe level is its step 2, and the plan says why |
+| `aligned` | no timeframe against it, most with it | Priority step 4 (strategy-library) sets the size; with room and confluence it is the opportunity |
+| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 sets the size; never enter while it still moves against you |
+| `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session |
+| `counter` | the highest timeframe is against it | Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why |
 
-For a composed trade the label is a reason in its plan, never a cut (the
-priority order, strategy-library).
-
-A composed entry against the prevailing trend needs the CHoCH tier of
-`trade-lifecycle` (strategy-library: the priority order, step 2).
+**The side rule** (composed, long and short alike): the prevailing trend
+and the regime (`m3` `regime`) set it. `pullback` or `mixed` inside the
+trend: an entry, named in the plan. `counter`, or against a trend regime:
+pass, unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it:
+name the tier. A range or transition regime: the trend rule decides.
 
 ### 2. Levels flow down
 

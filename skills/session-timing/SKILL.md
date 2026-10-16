@@ -7,7 +7,7 @@ description: Use when timing an entry - the trading day, its sessions, and the w
 
 ## When to Use
 
-- Before any entry: is this a good time for this strategy?
+- Before any entry: is this a good time for this setup?
 
 ## How It Works
 
@@ -26,7 +26,7 @@ are weekends. Every position is flat by the runner's end of day (`eodAt`,
 never trades 16:00-18:00 ET.) Bar data still comes from the Globex session,
 so the session VWAP, session volume profile and overnight range start at
 18:00 ET.
-Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
+Named sessions: `asia` 18:00–03:00, `london` 03:00–09:30,
 `ny` 09:30–16:00. One (the firm's) trading day runs from the 18:00 ET open to the 16:00 ET
 close and is named by the date it ends on (Sunday evening and Monday are
 Monday's day); midnight changes nothing. Everything counted by the day uses
@@ -36,10 +36,10 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | Window (ET) | Character | Harness |
 |---|---|---|
 | 18:00 (Sun–Thu) | The firm's trading day starts (its daily reset); Globex open | Session opens; daily counters reset |
-| 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
+| 18:00–03:00 | Asia (`asia`), thinner | Entries allowed; only a clean setup |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
-| 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Entries allowed; primary window for ORB |
+| 09:35–11:00 | Opening drive; best trend window (`ny` from 09:30) | Entries allowed |
 | 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |

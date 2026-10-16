@@ -29,6 +29,8 @@ the cycle's roles and FACTS in `gate-refusals-cycle`.
 | `[contract-specs] no tick specs from the broker for <ROOT> yet` | The harness has no tick size and value from the broker for that contract (or, for a prop entry, for the other contract of its micro/mini family, e.g. NQ for MNQ): no entry is checked or sized without them | `search_contracts {searchText:"<ROOT>"}` (or `get_contract`) for the contract it names, then send the entry again. Exits, `[protect]` stops, stop moves, cancels and `close_position` never need them. |
 | `[contract-specs] the replayed day's <ROOT> front month (<day>) is not looked up yet` | Replay only: that day's lookup of the contract hasn't succeeded (a lookup by month alone recorded its tick specs), so no entry is trusted on it | `search_contracts {searchText:"<ROOT>"}`, then send the entry again; if the lookup fails, stand aside. Exits, `[protect]` stops and `close_position` never need it. |
 | `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min; while `search_orders` fails it holds (tell the user), and an unreadable record named in the message is deleted by hand after checking the broker's orders. |
+| `[loss-streak] N losses in a row. Cooling down for M min more` | Losses in a row today: a cooldown | Stand aside until it ends; write a lesson. Exits and stops still go. |
+| `[briefing-age] Stale data: …` (or no bar briefing) | The briefing's bar is past the signal age | End the cycle (trade-session step 6); the next bar decides. Exits and stops still go. |
 
 ## Examples
 

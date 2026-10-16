@@ -13,38 +13,39 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 It adds no filter and no veto:
 
-- **The priority order decides** (strategy-library, "The priority
-  order"): take, skip and size. Only its hard stops and the gate's end a
+- **The priority order decides** (strategy-library): take, skip and
+  size. Only its hard stops and the gate's end a
   plan early.
 - **A setup is a combination of reads** you state, step by step, and
   `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
-- **Management always runs.** Protecting, managing and exiting an open
-  position, and the end-of-day flatten, go ahead whatever steps 1-8 say;
-  a no-entry window or a wait never blocks an exit or a risk reduction.
+- **Management always runs.** Managing and exiting a position, and the
+  end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait
+  blocks an exit or a risk reduction.
 - **`unknown`, never invented.** A value the briefing or a report doesn't
-  give is written `unknown` (or `unavailable`); never estimate one.
+  give is `unknown` (or `unavailable`); never estimate one.
 
 ### The steps
 
 1. **HTF.** The 4h, 1h and 15m trends and structure frame everything
-   below. The bias agrees with the gate's `Trend rule:` line; where they
-   differ, the Trend rule wins, and the plan says so. Read: `trend-vs-range`.
-2. **Context.** Window, news, regime, account (phase 1's Budget and
-   Attempt lines).
+   below. The prevailing trend (`Trend rule:`) and the regime set the
+   side, long or short alike.
+   Read: `trend-vs-range`, `htf-to-ltf`.
+2. **Context.** Window, news, regime, account (phase 1's Budget,
+   Attempt).
 3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
    Read: `levels-and-reactions`, `breakout-vs-fakeout`.
-4. **Setup.** The setup reads and the side (`trade-lifecycle`), with the
-   trend or against it. Read: `pullback-vs-reversal`, `cisd`; setups:
-   `rejection`, `breakout`.
+4. **Setup.** The setup reads (`trade-lifecycle`): a pullback's end with
+   the trend; against it, its CHoCH tier only.
+   Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** Count the six items of `confluence-counting`.
 6. **Entry.** A closed bar's entry reads; never anticipate.
-   Read: `candle-reading`.
-7. **Risk.** Stop (`invalidation`), size, exit (target or trail), the
+   Read: `candle-reading`, `momentum-and-volume`.
+7. **Risk.** Stop (`invalidation`), target (`take-profit`), size, the
    room; the numbers from `order_plan` or the compose record.
 8. **Decision.** Take, skip or wait, decided with the priority order;
    write its ONE main reason. The counts never overrule it.
-9. **Management.** What invalidates the trade; its exit. Never loosen the
-   stop. Read: `invalidation`.
+9. **Management.** What invalidates the trade; its exit
+   (`manage-position`). Never loosen the stop. Read: `invalidation`.
 
 ### Roles
 
@@ -101,6 +102,6 @@ PLAN:
 5 Confluence: for 4, against 0, neutral 2: aligned, VWAP, level, momentum
 6 Entry: 3m close top, 3m momentum up
 7 Risk: stop 111 ticks, size 1, exit target 2.08R, room enough
-8 Decision: take - aligned continuation with room, compose_check OK
+8 Decision: take - continuation with room, compose_check OK
 9 Manage: flat
 ```

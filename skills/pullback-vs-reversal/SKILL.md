@@ -8,7 +8,7 @@ description: Trader-process step 4, price moving against the higher-timeframe tr
 ## When to Use
 
 - Trader-process step 4, when price moves against the higher-frame trend
-  (`trend-vs-range`). The step's label stays the strategy's own `mtf`.
+  (`trend-vs-range`). The side stays `htf-to-ltf`'s side rule.
 
 ## How It Works
 
@@ -33,7 +33,8 @@ developing. A 15m or 1h CHoCH against the trend weighs most: then the
 read is a reversal attempt. The pullback ends when its own minor
 structure breaks back: `m3.lastBreak.last` turns the trend's way (the
 shift or reclaim of `htf-to-ltf`): a lower-timeframe CHoCH
-back the HTF way at a level times the entry. A CISD (`cisd`) is an earlier
+back the HTF way at a level times the entry; the setup there: `rejection`,
+`breakout`, `fair-value-gaps`. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
 
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount

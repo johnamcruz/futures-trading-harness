@@ -13,13 +13,12 @@ description: Use when the prompt says lean - a 1-minute cycle with no parallel a
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
-order: step 1, the bar briefing (without one: the multi-timeframe read,
-`market_snapshot` and `strategies_scan` on the bars file), and the blackouts
-(`blackouts_list`). No candidate and no setup you compose (`trade-lifecycle`)
-→ note and end (`candidates: null`, the scan failed or the bar wasn't
-scanned, counts as none). A candidate or a composed setup → `risk-manager`
+order: step 1, the bar briefing (without one: the multi-timeframe read
+and `market_snapshot` on the bars file), and the blackouts
+(`blackouts_list`). No setup you compose (`trade-lifecycle`; a rules
+candidate: none active) → note and end. A composed setup → `risk-manager`
 phase 1 and 2, then execute. Steps 3-7 apply, with "the
-analysts" read as the bar briefing (without one, your own snapshot, scan and
+analysts" read as the bar briefing (without one, your own snapshot and
 multi-timeframe read); the two-of-three-analysts rule in step 3 doesn't
 apply: the briefing's alignment for the side and the trend rule decide.
 In an autonomous run the order gate refuses an entry (`[roles-ran]`) until

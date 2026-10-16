@@ -72,18 +72,19 @@ test('trader-process: it orders the thinking and adds no filter; the priority or
   const t = flat(read(SKILL));
   const pins = [
     'It adds no filter and no veto',
-    '**The priority order decides** (strategy-library, "The priority order"): take, skip and size.',
+    '**The priority order decides** (strategy-library): take, skip and size.',
     "Only its hard stops and the gate's end a plan early.",
     // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
     '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
-    '**Management always runs.** Protecting, managing and exiting an open position, and the end-of-day flatten, go ahead whatever steps 1-8 say; a no-entry window or a wait never blocks an exit or a risk reduction.',
-    "**`unknown`, never invented.** A value the briefing or a report doesn't give is written `unknown` (or `unavailable`); never estimate one.",
+    '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
+    "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
     'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
     'Never loosen the stop.',
-    '**Setup.** The setup reads and the side (`trade-lifecycle`), with the trend or against it.',
-    '**Risk.** Stop (`invalidation`), size, exit (target or trail), the room; the numbers from `order_plan` or the compose record.',
+    // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
+    '**Setup.** The setup reads (`trade-lifecycle`): a pullback\'s end with the trend; against it, its CHoCH tier only.',
+    '**Risk.** Stop (`invalidation`), target (`take-profit`), size, the room; the numbers from `order_plan` or the compose record.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
-    "The bias agrees with the gate's `Trend rule:` line; where they differ, the Trend rule wins, and the plan says so.",
+    'The prevailing trend (`Trend rule:`) and the regime set the side, long or short alike.',
     'The three market analysts never write step 2: a cached report would carry a stale window.',
     "In a cached report, take this bar's 3m facts from the briefing.",
     "Phase 2 writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.",

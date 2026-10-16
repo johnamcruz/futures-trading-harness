@@ -16,10 +16,16 @@ candidate's: the first level in its direction in points and R, where 1R is
 its own stop: check there is room to the target or the trail's
 activation), and the session window`,
   reason: 'a composed trade\'s room is its compose record\'s inTheWay; the skip rules that named it were the retired rules strategies\'' },
-  { old: 'The exit follows the strategy\'s `exit` (shown in the scan):',
-    now: `The exit: a composed trade's target is the record's level (\`trade-lifecycle\`);
-a policy's or a rules strategy's follows its \`exit\` (the rulebook, the scan):`,
-    reason: 'a composed trade\'s exit is its record\'s target level; a policy trails by its rulebook' },
+  { old: 'The exit follows the strategy\'s `exit` (shown in the scan):\n\n- **Trailing:**',
+    now: `The exit: a composed trade sends the record's stop and target
+(\`trade-lifecycle\`); its policy's \`exit\` (the rulebook; a rules strategy's:
+the scan's) manages it:
+
+- **Target then trail** (today's policy mode, in an attempt or not): the
+  runner cancels the target order once it manages the trade, holds the stop
+  until the target, then locks and trails it. You never move it.
+- **Trailing:**`,
+    reason: 'a composed trade\'s exit is its record\'s stop and target, managed by its policy\'s exit mode (evaluator.js composedExit, in an attempt or not; today target_then_trail, the rulebook)' },
   { old: '  from the scan\'s `exit`, don\'t assume them.', now: '  from its `exit`, don\'t assume them.', reason: 'a policy\'s exit is its rulebook\'s, not the scan\'s' },
   { old: `- **Target level:** with \`exit.target\` the scan gives \`targetDistance\`: the
   target is the signal bar's close ± that distance (e.g. a CRT range's far
