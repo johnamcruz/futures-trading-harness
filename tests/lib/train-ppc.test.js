@@ -485,6 +485,10 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   assert.strictEqual(probeRuns[0].practice.seed, 7, 'the probe config\'s seed, on every side');
   // The keep rule's runs are the loop's own full-day replay config, never the probes'.
   assert.ok(w.calls.runs.filter(r => r.runId.endsWith('-t0')).every(r => r.practice === null));
+  // Probes first: the champion's tuning replays run once, after every probe, only because a proposal reached the keep rule.
+  const at = id => w.calls.runs.findIndex(r => r.runId === id);
+  assert.strictEqual(w.calls.runs.filter(r => r.runId === 'l1-champion-t0').length, 1);
+  assert.ok(at('l1-champion-t0') > Math.max(...probeRuns.map(r => at(r.runId))), w.calls.runs.map(r => r.runId).join(', '));
   assert.strictEqual(probeRuns[0].tree, 'champion');
   assert.deepStrictEqual(probeRuns.slice(1, 5).map(r => r.runId).sort(), report.probes.map(p => `l1-p-${p.id}-p0`).sort());
   // The two helpful edits touch the same line: the larger gain (GOOD) kept, the conflict reported.
@@ -581,6 +585,8 @@ test('nothing passes the screen: no proposal reaches the keep rule; the next rou
   await run(w);
   assert.strictEqual(w.calls.verifier.length, 0);
   assert.deepStrictEqual(readArchive(w.paths.archive), []);
+  // Nothing to judge: the champion's tuning replays (the costly full-day windows) never ran, in either round.
+  assert.deepStrictEqual(w.calls.runs.filter(r => /-champion-t\d+$/.test(r.runId)), []);
   assert.strictEqual(w.calls.proposeProbes.length, 2);
   const second = w.calls.proposeProbes[1].lessons;
   assert.match(second, /^Evidence only, from practice-train probes/);

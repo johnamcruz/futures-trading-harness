@@ -392,7 +392,10 @@ refused, and no validate, test or final outcome is ever in it.
 **Cost.** K probes multiply model time. The champion replays the probe
 windows once per loop. Each round then replays them k + 1 times: each of
 the k edits and the combined change. That is about k + 1 times the model
-time of one practice run a round, on top of the keep rule's runs. Probes
+time of one practice run a round, on top of the keep rule's runs. The keep
+rule's champion runs (its full-day tuning windows, the costliest part) run
+once, and only when a round first has a combined change to judge: rounds
+whose probes pass nothing never pay for them. Probes
 run one after another by default (`parallel: 1`). `parallel` above 1 is
 refused unless `probe.replay` sets `latency: false`: a replay that
 charges each cycle's real time would charge probes queued at the model
