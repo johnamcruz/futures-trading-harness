@@ -72,6 +72,8 @@ const SPLITS = {
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
       { from: "Track these numbers each morning (from `get_account_snapshot` and the user):", to: "Track these numbers each morning (from `get_account_snapshot`, and interactively the user):",
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "**Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk ≤ 10% of the cushion.", to: "**Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk ≤ 10% of the cushion (none known: no cap, never $0).",
+        reason: "fix/no-attempt-cushion: an unknown cushion is no cap, never $0 (a model vetoed a $31.50 trade reading it as $0)" },
     ],
     moved: {
       // "Scoring a policy strategy on history (the evaluator)", its body.
@@ -144,7 +146,7 @@ const SPLITS = {
       { from: "(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)",
         to: "(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)",
         reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
-      { from: "**Risk budget** = the smallest of: - the strategy / plan $ risk, - 25% of `remainingBeforeLimit` from `get_account_snapshot`, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor).", to: "**Risk budget** = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor), when known (no attempt: none shown).",
+      { from: "**Risk budget** = the smallest of: - the strategy / plan $ risk, - 25% of `remainingBeforeLimit` from `get_account_snapshot`, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor).", to: "**Risk budget** = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance \u2212 loss floor), when shown.",
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
       { from: "Use its numbers instead of computing them by hand.", to: null,
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
@@ -323,7 +325,12 @@ test('prop and sizing splits: each new skill answers one question in a short ind
   assert.match(rm, /^role-skills: \[position-sizing, prop-challenge-pacing, prop-pacing-judgment,/m);
   assert.match(rm, /^role-index: \[[^\]]*\bmicro-mini-specs\b/m);
   assert.doesNotMatch(rm, /^role-index: \[[^\]]*\bprop-pacing-judgment\b/m);
-  assert.match(rm.replace(/\s+/g, ' '), /no running attempt \(`combine_status` lists none\), pace by the `prop-pacing-judgment` skill\./);
+  // No attempt (stage 1): pace by judgment, and the cushion cap never reads as $0 (a model vetoed a $31.50 trade on it).
+  assert.match(rm.replace(/\s+/g, ' '), /No running attempt \(no policy strategy in play, or `combine_status` lists none\): pace by `prop-pacing-judgment`; no cushion cap, never \$0; the other caps bound size, a ceiling \(a policy strategy's entries need an attempt: the gate\)\./);
+  const ps = skill('position-sizing').replace(/\s+/g, ' ');
+  assert.match(ps, /10% of the trailing-drawdown cushion \(balance \u2212 loss floor\), when shown\. None shown \(no attempt\): skip this cap, never \$0\./);
+  assert.match(pj, /≤ 10% of the cushion \(none known: no cap, never \$0\)/);
+  assert.doesNotMatch(pj, /budget is its \$300 cap/);
   for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) assert.doesNotMatch(read(`agents/${f}`), /prop-evaluator/, f);
 });
 

@@ -20,8 +20,7 @@ running attempt is paced by its verdicts (the `prop-challenge-pacing` skill), ne
 by these rules.
 
 Interactive: ask the user for the account's current rules; don't assume
-them. Autonomous: never ask; with no cushion known, a composed trade's
-budget is its $300 cap. Track these numbers each morning (from
+them. Autonomous: never ask. Track these numbers each morning (from
 `get_account_snapshot`, and interactively the user):
 
 - **Target remaining** = profit target − profit so far.
@@ -33,7 +32,7 @@ budget is its $300 cap. Track these numbers each morning (from
 Rules of thumb (the PropEvolve objective: pass without blowing the account):
 
 1. **Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk
-   ≤ 10% of the cushion. A small cushion means smaller size, not "make it back".
+   ≤ 10% of the cushion (none known: no cap, never $0). A small cushion means smaller size, not "make it back".
 2. **Pace, don't sprint.** Aim for the target remaining ÷ 10–15 days per day. Stop for the
    day at +1.5× the daily pace; protecting a green day is worth more than
    stretching it.
