@@ -324,6 +324,10 @@
    "value": 120,
    "from": "train/probe-edit.js MAX_LINE"
   },
+  "probeEdit.growBytes": {
+   "value": 150,
+   "from": "new in feat/probe-edit-growth (before it, train/probe-edit.js allowed no growth past the cap: 0); owner-approved 150"
+  },
   "skillUsage.top": {
    "value": 3,
    "from": "learning/skill-usage.js TOP"
