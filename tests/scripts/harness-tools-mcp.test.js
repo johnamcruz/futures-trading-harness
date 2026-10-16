@@ -91,7 +91,7 @@ const TOOL_WORDING = {
   'strategies recent lines': s => recentLines(JSON.parse(s), { symbol: 'MNQ' }),
   'market snapshot': oneLine,
   'market snapshot params': oneLine,
-  'combine status none': () => 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n',
+  'combine status none': () => 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\nentries: not blocked by this; a composed entry trades under its own strategy\'s cap; a policy strategy sizes entries only in an attempt\n',
   'mtf record no symbol': s => s.replace('--record needs --symbol=<ROOT> (e.g. MNQ)', 'record needs symbol (a contract root, e.g. MNQ)'),
   'bars fetch daily record': s => s.replace('--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'),
 };
