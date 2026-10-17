@@ -26,6 +26,7 @@ test('names: one canonical name per tool, from and back to opencode\'s and Claud
   assert.strictEqual(N.fromOpencode('task'), 'task');
   assert.strictEqual(N.toOpencode('harness.compose_check'), 'harness_compose_check');
   assert.strictEqual(N.fromClaude('mcp__harness__compose_check'), 'harness.compose_check');
+  assert.strictEqual(N.fromClaude('mcp__plugin_fth_broker__place_order'), 'broker.place_order', 'a plugin\'s server form');
   assert.strictEqual(N.fromClaude('Agent'), 'task');
   assert.strictEqual(N.fromClaude('Read'), 'read');
   assert.strictEqual(N.toClaude('broker.close_position'), 'mcp__broker__close_position');
@@ -166,8 +167,25 @@ test('the call log: one state per rule and session, kept in a file across proces
   const b = createCallLog({ file });
   assert.strictEqual(b.state('repeat', 's').n, 3);
   assert.deepStrictEqual(b.state('repeat', 'other'), {});
+  b.save(); // a log holds its lock until saved (the pipeline always saves)
   fs.writeFileSync(file, 'not json');
-  assert.deepStrictEqual(createCallLog({ file }).state('repeat', 's'), {}, 'an unreadable log is an empty one');
+  const bad = createCallLog({ file });
+  assert.deepStrictEqual(bad.state('repeat', 's'), {}, 'an unreadable log is an empty one');
+  bad.save();
+  // Locked while held: three processes at once each wait for the other's save, so no update is lost.
+  const { spawn } = require('child_process');
+  const lib = path.join(ROOT, 'scripts', 'lib', 'toolcall', 'call-log.js');
+  const writer = role => [
+    `const { createCallLog } = require(${JSON.stringify(lib)});`,
+    `const l = createCallLog({ file: ${JSON.stringify(file)} });`,
+    "const st = l.state('desk', 's');",
+    'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);',
+    `st.reported = [...(st.reported || []), ${JSON.stringify(role)}];`,
+    'l.save();',
+  ].join(' ');
+  return Promise.all(['a', 'b', 'c'].map(r => new Promise(res => spawn(process.execPath, ['-e', writer(r)]).on('exit', res)))).then(() => {
+    assert.deepStrictEqual(createCallLog({ file }).state('desk', 's').reported.sort(), ['a', 'b', 'c']);
+  });
 });
 
 test('hooks.json declares the layer: PreToolUse and PostToolUse entries that run the dispatcher; no file, no rules', () => {

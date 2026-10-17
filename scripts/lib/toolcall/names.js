@@ -8,7 +8,8 @@
  *
  *   fromOpencode(name)      opencode names a server's tool `<server>_<tool>` (opencode.js permissionKeys)
  *   toOpencode(canonical)   the name the model calls there
- *   fromClaude(name)        Claude Code names it `mcp__<server>__<tool>`; its role launch is `Task` or `Agent`
+ *   fromClaude(name)        Claude Code names it `mcp__<server>__<tool>` (a plugin's `mcp__plugin_<p>_<server>__<tool>`);
+ *                           its role launch is `Task` or `Agent`
  *   toClaude(canonical)
  */
 
@@ -30,8 +31,12 @@ function toOpencode(canonical) {
 
 function fromClaude(name) {
   const n = String(name || '');
-  const m = /^mcp__([a-z0-9-]+)__(.+)$/.exec(n);
-  if (m) return `${m[1]}.${m[2]}`;
+  // `mcp__<server>__<tool>`, or a plugin's `mcp__plugin_<plugin>_<server>__<tool>` (the order gate's matcher takes both).
+  const m = /^mcp__(.+?)__(.+)$/.exec(n);
+  if (m) {
+    const server = SERVERS.find(s => m[1] === s || m[1].endsWith(`_${s}`)) || m[1];
+    return `${server}.${m[2]}`;
+  }
   if (n === 'Task' || n === 'Agent') return 'task';
   return n.toLowerCase();
 }

@@ -10,7 +10,7 @@ const { tmpDir } = require('../helpers');
 
 test('toolcall hook: compose_check before the desk reported is refused (exit 2) in Claude\'s names; a role report after it, then it goes', () => {
   const home = tmpDir();
-  const env = { FTH_HOME: home, FTH_CYCLE_DESK: 'risk-manager' };
+  const env = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE_DESK: 'risk-manager' };
   const pre = (tool, input) => run(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'abc', tool_name: tool, tool_input: input, tool_use_id: 't1' }), {}, { env });
   const blocked = pre('mcp__harness__compose_check', { symbol: 'MNQ' });
   assert.strictEqual(blocked.exitCode, 2);
@@ -21,10 +21,12 @@ test('toolcall hook: compose_check before the desk reported is refused (exit 2) 
   // An exit is never refused; bad input is no decision.
   assert.strictEqual(pre('mcp__broker__close_position', { contractId: 'MNQ' }), '');
   assert.strictEqual(run('not json', {}, { env }), '');
+  // A person's own session (not the runner's): never held.
+  assert.strictEqual(run(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'abc', tool_name: 'mcp__harness__compose_check', tool_input: {} }), {}, { env: { FTH_HOME: home, FTH_CYCLE_DESK: 'risk-manager' } }), '');
 });
 
 test('toolcall hook: a repeated identical result gets the reminder as added context', () => {
-  const env = { FTH_HOME: tmpDir() };
+  const env = { FTH_HOME: tmpDir(), FTH_AUTONOMOUS: '1' };
   let t = 0;
   const now = () => t;
   let out = '';
