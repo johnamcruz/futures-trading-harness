@@ -1280,3 +1280,18 @@ test('childEnv: several lanes, the gate learns each symbol\'s lanes whose bar cl
   assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }, { symbols: [{ symbol: 'MNQ', bar: { t: 'x' } }] }).FTH_CYCLE_LANE_BARS, undefined);
   assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }).FTH_CYCLE_LANE_BARS, undefined);
 });
+
+test('the runner\'s opencode plugin answers an unknown tool name with the name meant, refuses a repeated failed call with the reminder, and appends the reminder to a repeated result', async () => {
+  const plugin = require('../../scripts/opencode-plugin');
+  const hooks = await plugin.server({}, {});
+  await assert.rejects(hooks['tool.execute.before']({ tool: 'invalid', sessionID: 's' }, { args: { tool: 'compose_check', error: 'e' } }), /call harness_compose_check with the same arguments/);
+  const call = () => hooks['tool.execute.before']({ tool: 'harness_market_snapshot', sessionID: 's' }, { args: { bars: '/workspace/x.json' } });
+  await call(); await call();
+  await assert.rejects(call(), /\[repeat\] You are repeating the exact same tool call/);
+  const res = { output: 'briefing' };
+  for (let i = 0; i < 3; i += 1) {
+    await hooks['tool.execute.before']({ tool: 'harness_bar_briefing', sessionID: 't' }, { args: { symbol: 'MNQ' } });
+    await hooks['tool.execute.after']({ tool: 'harness_bar_briefing', sessionID: 't', args: { symbol: 'MNQ' } }, res);
+  }
+  assert.match(res.output, /^briefing\n\n\[repeat\] You are repeating/);
+});

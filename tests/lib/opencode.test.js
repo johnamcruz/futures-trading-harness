@@ -409,3 +409,50 @@ test('stepCap: every role is capped at config/runner.json limits.roleSteps but a
   }
   assert.strictEqual(run.agent[oc.HEAD_AGENT].steps, undefined, 'the head trader is the run: its timeout bounds it');
 });
+
+test('toolNameHint: a call opencode sent to its invalid tool names the harness or broker tool meant; anything else is opencode\'s own answer', () => {
+  const { toolNameHint, INVALID_TOOL } = require('../../scripts/lib/opencode');
+  assert.strictEqual(toolNameHint(INVALID_TOOL, { tool: 'compose_check', error: 'x' }), '[tool-name] "compose_check" is not a tool here: call harness_compose_check with the same arguments.');
+  assert.match(toolNameHint(INVALID_TOOL, { tool: 'mcp__harness__bar_briefing' }), /call harness_bar_briefing /);
+  assert.match(toolNameHint(INVALID_TOOL, { tool: 'harness.order_plan' }), /call harness_order_plan /);
+  assert.match(toolNameHint(INVALID_TOOL, { tool: 'get_account_snapshot' }), /call broker_get_account_snapshot /);
+  for (const args of [{ tool: 'nope' }, { tool: 'harness_compose_check' }, {}, null, { tool: 7 }]) assert.strictEqual(toolNameHint(INVALID_TOOL, args), null, JSON.stringify(args));
+  assert.strictEqual(toolNameHint('read', { tool: 'compose_check' }), null, 'only the invalid tool');
+});
+
+test('opencode\'s invalid tool (its repair of an unknown name) is allowed to the session, the head trader and every role, so the plugin can answer it', () => {
+  const { INVALID_TOOL, runConfig } = require('../../scripts/lib/opencode');
+  const agents = loadAgents(path.resolve(__dirname, '..', '..'));
+  const run = runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents });
+  assert.strictEqual(run.permission[INVALID_TOOL], 'allow');
+  for (const name of [oc.HEAD_AGENT, ...agents.map(a => a.name)]) assert.strictEqual(run.agent[name].permission[INVALID_TOOL], 'allow', name);
+  const ws = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'workspace', 'opencode.json'), 'utf8'));
+  for (const a of agents) assert.strictEqual(ws.agent[a.name].permission[INVALID_TOOL], 'allow', `workspace ${a.name}`);
+});
+
+test('repeatGuard: an identical call that failed is answered with the reminder from the first count on; one that succeeds gets it after its result at each count; per session; order tools and launches untouched', () => {
+  const { repeatGuard } = require('../../scripts/lib/opencode');
+  const g = repeatGuard([3, 5, 8]);
+  const failing = Array.from({ length: 6 }, () => g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's1'));
+  assert.deepStrictEqual(failing.map(Boolean), [false, false, true, true, true, true]);
+  assert.match(failing[2], /^\[repeat\] You are repeating the exact same tool call with identical arguments/);
+  assert.match(failing[3], /^\[repeat\] You have called harness_market_snapshot 4 times in a row with the same arguments \(\{"bars":"\/workspace\/x\.json"\}\)/);
+  assert.strictEqual(g.before('harness_market_snapshot', { bars: '/right.json' }, 's1'), null, 'new arguments run');
+  assert.strictEqual(g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's2'), null, 'another session counts its own');
+  // Succeeding: it always runs; the reminder follows its result at 3, 5 and 8 only. Argument order doesn't matter.
+  const ok = repeatGuard([3, 5, 8]);
+  const notes = [];
+  for (let i = 0; i < 8; i += 1) {
+    assert.strictEqual(ok.before('harness_bar_briefing', i % 2 ? { json: true, symbol: 'MNQ' } : { symbol: 'MNQ', json: true }, 's'), null);
+    notes.push(ok.after('harness_bar_briefing', {}, 's'));
+  }
+  assert.deepStrictEqual(notes.map(n => Boolean(n)), [false, false, true, false, true, false, false, true]);
+  assert.match(notes[2], /^\n\n\[repeat\] You are repeating/);
+  // An order tool and a role launch: never refused, never reminded.
+  const ord = repeatGuard([3, 5, 8]);
+  for (let i = 0; i < 6; i += 1) {
+    assert.strictEqual(ord.before('broker_close_position', { contractId: 'MNQ' }, 's'), null);
+    assert.strictEqual(ord.before('task', { subagent_type: 'risk-manager' }, 's'), null);
+  }
+  assert.strictEqual(ord.after('broker_close_position', {}, 's'), null);
+});
