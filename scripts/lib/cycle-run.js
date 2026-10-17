@@ -55,7 +55,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const { result, reportedResult, resultNote } = scoreRun(res, { action, harness: cfg.harness });
   // When it acted against its bar (cycle-timing.js): measurement only.
-  const timing = runTiming({ res, cfg, context, env, startedMs, endedMs, now, result });
+  // The runner's desk ran before this run (runner.js): its time counts in the cycle's (context.desk.ms).
+  const deskMs = context && context.desk && Number.isFinite(context.desk.ms) ? context.desk.ms : 0;
+  const timing = runTiming({ res, cfg, context, env, startedMs: startedMs - deskMs, endedMs, now, result });
   // Did the desk run (desk-check.js)? Only where the transcript shows the roles' calls (ROLES_CHECKED).
   const desk = ROLES_CHECKED.has(cfg.harness) ? deskCheck({
     expected: expectedRoles({ action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: (context && context.cachedRoles) || [] }),
@@ -77,4 +79,27 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   return cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote });
 }
 
-module.exports = { runCycle, runOnce };
+/**
+ * One desk role's run, as the runner's orchestration engine runs it (orchestrate/engine.js; the desk workflow): the
+ * role as its own harness run (`buildCommand`'s `agent`), with the cycle's environment (its bars, cached roles, the
+ * transcript live), within `timeoutMs`. Its result for the engine: { ok, timedOut, output, transcript, text, tools,
+ * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up: what the
+ * order gate credits a report with, as a cached one's). opencode only (opencode.js runResult reads its events).
+ */
+async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, deps = {}) {
+  if (cfg.harness !== 'opencode') throw new Error(`cycle-run: the runner's desk runs on opencode only (harness ${cfg.harness})`);
+  const env = deps.env || process.env;
+  const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, context), { agent: role });
+  const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
+  const { runResult } = require('./opencode');
+  const { text, tools } = runResult(res.output);
+  let lookups;
+  try {
+    const { readLookups, lookupsFile } = require('./trading/skill-lookups');
+    lookups = [...new Set(readLookups(res.transcript).map(r => r && r.skill).filter(s => typeof s === 'string'))].sort();
+    try { require('fs').unlinkSync(lookupsFile(res.transcript)); } catch (_err) { /* none */ }
+  } catch (_err) { lookups = []; }
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups };
+}
+
+module.exports = { runCycle, runOnce, runRole };

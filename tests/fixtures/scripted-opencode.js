@@ -40,8 +40,21 @@ function stepsFor(script, bar, w) {
   return [...D.roundSteps(w, { lookups: C.roleLookups(w) }), ...D.entryLoads(w).map(x => ({ load: x })), { result: `CYCLE RESULT: no-trade - ${step.why || 'pass'}` }];
 }
 
+/**
+ * A desk role's own run (the runner's desk: `--agent <role>`, any role but the head trader): one data read and its
+ * report, as a role's run prints them (the read the desk's read-data check counts, the report shape report-shape does).
+ */
+function roleRun(role) {
+  const ev = (type, part) => process.stdout.write(`${JSON.stringify({ type, timestamp: Date.now(), sessionID: `ses_${role}`, part: { sessionID: `ses_${role}`, ...part } })}\n`);
+  const risk = role === 'risk-manager';
+  ev('tool_use', { type: 'tool', tool: risk ? 'broker_get_account_snapshot' : 'harness_bar_briefing', state: { status: 'completed', input: {}, output: '{}' } });
+  ev('text', { type: 'text', text: risk ? '## Risk state: account 7 @ the bar\nTradable: yes' : `## ${role}: MNQ\nData: bar_briefing m3@the bar\nBias: neutral`, time: { start: Date.now(), end: Date.now() } });
+}
+
 async function main() {
   const env = process.env;
+  const agent = process.argv[process.argv.indexOf('--agent') + 1];
+  if (process.argv.includes('--agent') && agent && agent !== 'fth-head-trader') { roleRun(agent); return; }
   const script = JSON.parse(fs.readFileSync(env.SMOKE_MODEL_SCRIPT, 'utf8'));
   const bar = (JSON.parse(env.FTH_CYCLE_BARS || '{}')).MNQ || null;
   // A bar with no step is quiet: the model answers at once, as opencode prints a final message (nothing else loads).

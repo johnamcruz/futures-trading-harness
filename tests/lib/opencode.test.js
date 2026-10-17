@@ -120,7 +120,8 @@ test('roles: everything denied, then their own tools; only trade-executor holds 
   assert.deepStrictEqual(Object.keys(config.agent).sort(), [...oc.DISABLED_AGENTS, oc.HEAD_AGENT, ...roles].sort());
   for (const a of agents) {
     const entry = config.agent[a.name];
-    assert.strictEqual(entry.mode, 'subagent');
+    // The desk's roles are 'all': the runner runs each on its own (`run --agent`), the head trader still launches them.
+    assert.strictEqual(entry.mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(a.name) ? 'all' : 'subagent', a.name);
     assert.strictEqual(entry.description, a.description);
     // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills, in the default
     // mode (role-skills.js: index, its core embedded and its index listed).
@@ -170,7 +171,7 @@ test('the run\'s config: the session locked down again, and the runner\'s direct
     for (const a of agents) {
       const r = a.name;
       const role = [...rules(merged.permission), ...rules(merged.agent[r].permission)];
-      assert.strictEqual(merged.agent[r].mode, 'subagent');
+      assert.strictEqual(merged.agent[r].mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(r) ? 'all' : 'subagent', r);
       for (const d of ['/data/bars/*', '/r/strategies/orb/*', '/s/logs/*', '/s/bars-scratch/*']) assert.strictEqual(decide(role, 'external_directory', d), 'allow', `${r}: ${d}`);
       for (const d of ['/home/u/*', '/s/*', '/home/u/.ssh/*']) assert.strictEqual(decide(role, 'external_directory', d), 'deny', `${r}: ${d}`);
       assert.strictEqual(decide(role, 'read', '../../s/.env'), 'deny', r);
@@ -503,4 +504,20 @@ test('deskGate: the head trader\'s compose_check waits until every role FTH_CYCL
   assert.match(both.before('harness_compose_check', 'h'), /launch risk-manager first/);
   both.returned('task', { subagent_type: 'risk-manager' }, 'h');
   assert.strictEqual(both.before('harness_compose_check', 'h'), null);
+});
+
+test('runResult: one run\'s final message and the tools it completed, from opencode\'s events; roleMode: the desk\'s roles are "all"', () => {
+  const { runResult, roleMode } = require('../../scripts/lib/opencode');
+  const out = [
+    'noise', '{bad',
+    JSON.stringify({ type: 'text', part: { type: 'text', text: 'thinking' } }),
+    JSON.stringify({ type: 'tool_use', part: { tool: 'harness_bar_briefing', state: { status: 'completed' } } }),
+    JSON.stringify({ type: 'tool_use', part: { tool: 'harness_mtf_read', state: { status: 'error' } } }),
+    JSON.stringify({ type: 'text', part: { type: 'text', text: '  Data: bar_briefing m3@1  ' } }),
+    JSON.stringify({ type: 'text', part: { type: 'text', text: '  ' } }),
+  ].join('\n');
+  assert.deepStrictEqual(runResult(out), { text: 'Data: bar_briefing m3@1', tools: ['harness_bar_briefing'] });
+  assert.deepStrictEqual(runResult(''), { text: '', tools: [] });
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) assert.strictEqual(roleMode({ name: r }), 'all', r);
+  for (const r of ['trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(roleMode({ name: r }), 'subagent', r);
 });

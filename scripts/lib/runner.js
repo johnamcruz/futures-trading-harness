@@ -87,6 +87,7 @@ const MAX_RETRY_MS = RUN.maxRetryMs;
 const CLOSE_SETTLE_MS = RUN.closeSettleMs;
 // End of day that reads the account but doesn't find it flat yet counts as failed runs (kill switch) only after this long.
 const { ORDER_GRACE_MS } = require('./trading/gate-timing');
+const { expectedRoles } = require('./trading/desk-check');
 const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
 const FILL_GRACE_MS = RUN.fillGraceMs;
 // The account read for a run's prompt never holds a run up longer than this.
@@ -135,6 +136,10 @@ function createRunner(deps) {
     // The report cache (trading/report-cache.js): serve({ symbols, account, now }) -> { roles, reports } still valid,
     // record({ symbols, account, now, output, served }) after the cycle. null: every role runs every cycle.
     reportCache = null,
+    // The runner's desk (runner-wiring.js deskFor: workflows/desk/WORKFLOW.md run by the orchestration engine):
+    // run({ symbols, roles, now, laneBars, at }) -> { reports, missing, results }, the roles the cache didn't serve, run
+    // by the runner before the head trader decides. null: the head trader launches its desk itself, as before.
+    desk = null,
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -1468,7 +1473,44 @@ function createRunner(deps) {
           // Several lanes: an analyst's report is served only until its parts' time (`until`, the next 15m close): a
           // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
-          const served = multi && fromCache ? { ...fromCache, roles: fromCache.reports.filter(live).map(r => r.role), reports: fromCache.reports.filter(live) } : fromCache;
+          const cached = multi && fromCache ? { ...fromCache, roles: fromCache.reports.filter(live).map(r => r.role), reports: fromCache.reports.filter(live) } : fromCache;
+          // The desk, run by the runner (docs/TOOL-CALLS-AND-ORCHESTRATION.md): the roles the cache didn't serve, before the
+          // head trader decides; their reports join the cached ones (the prompt, FTH_CYCLE_CACHED: the gate counts them).
+          // A role whose run didn't count is missing: the head trader may launch it, the gate refuses an entry without it.
+          // One-symbol cycles only (a desk report's lookups are credited under one symbol's facts key): with several, the
+          // head trader launches its desk, as before.
+          const deskRoles = desk && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
+          let deskRun = null;
+          let deskMs = 0;
+          if (deskRoles.length) {
+            // The desk's time is the cycle's: it runs within the cycle's budget, leaving the head trader its minimum,
+            // and what it took comes off the head trader's limit and counts in the cycle's timing (cycle-timing.js).
+            const deskStart = clock.now().getTime();
+            const minHeadMs = TUN.cycle.timeoutMinMinutes * 60000;
+            const stop = new AbortController();
+            const deskBudgetMs = Math.max(0, timeoutMs - minHeadMs);
+            const timer = setTimeout(() => stop.abort(), deskBudgetMs);
+            // The roles' runs get the cycle's own context (its bars, lanes and start), as the head trader's does.
+            const deskContext = {
+              action: 'trade', manageOnly: false, cachedRoles: [],
+              symbols: items.map(x => ({ symbol: x.symbol, bar: { t: x.bar.t, contractId: x.bar.contractId, file: x.bar.file }, ...(multi ? { lane: `${x.minutes}m` } : {}) })),
+              ...(multi ? { cycleBars: Object.fromEntries(cacheSymbols.map(s => [s.symbol, s.bar])) } : {}),
+              ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
+            };
+            try {
+              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), bars: (items.find(x => x.minutes === cfg.timeframe) || items[0] || { bar: {} }).bar.file || null, context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs });
+            } catch (err) {
+              failed('the desk: the head trader launches it', err);
+            } finally {
+              clearTimeout(timer);
+            }
+            deskMs = Math.max(0, clock.now().getTime() - deskStart);
+            // Never past the cycle's own limit (limitFor: the end of day's cap): what the desk took, else the head's minimum.
+            timeoutMs = Math.max(timeoutMs - deskMs, Math.min(minHeadMs, timeoutMs));
+          }
+          const served = deskRun && deskRun.reports.length
+            ? { roles: [...(cached ? cached.roles : []), ...deskRun.reports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskRun.reports] }
+            : cached;
           // The entered decisions with their real positions (decision-history.js withPositions): an open trade's fill
           // and R; a position gone since its last cycle, closed (a failed account read closes nothing).
           const positionsKnown = Boolean(acct && !acct.error && !acct.openTradesError && Array.isArray(acct.positions));
@@ -1510,6 +1552,7 @@ function createRunner(deps) {
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             action: again.action, cachedRoles: served ? served.roles : [],
+            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs } } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: served ? Object.fromEntries(served.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},
@@ -1532,7 +1575,7 @@ function createRunner(deps) {
           }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [], lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskRun ? deskRun.reports : [], lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).

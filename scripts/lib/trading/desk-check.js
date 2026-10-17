@@ -22,11 +22,13 @@
 const { ANALYSTS } = require('./roles-ran');
 
 const RISK_MANAGER = 'risk-manager';
+/** The desk: the roles a full trade cycle runs before its decision. */
+const DESK_ROLES = Object.freeze([...ANALYSTS, RISK_MANAGER]);
 
 function expectedRoles({ action, cycle, manageOnly = false, paper = false, cachedRoles = [] } = {}) {
   if (action !== 'trade' || cycle !== 'full' || manageOnly || paper) return [];
   const cached = Array.isArray(cachedRoles) ? cachedRoles : [];
-  return [...ANALYSTS, RISK_MANAGER].filter(r => !cached.includes(r));
+  return DESK_ROLES.filter(r => !cached.includes(r));
 }
 
 function deskCheck({ expected = [], calls = [], failed = [], decided = true } = {}) {
@@ -44,4 +46,4 @@ function deskWarning(desk) {
   return `[desk] this cycle was decided without ${desk.missing.join(', ')} (no launch returned)${failed}`;
 }
 
-module.exports = { RISK_MANAGER, expectedRoles, deskCheck, deskWarning };
+module.exports = { RISK_MANAGER, DESK_ROLES, expectedRoles, deskCheck, deskWarning };

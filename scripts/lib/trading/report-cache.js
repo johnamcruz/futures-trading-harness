@@ -213,28 +213,31 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
  * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
  * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
+function recordReports({ prev, output, served = [], fresh = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
   const { lookupsInCall } = require('./skill-lookups');
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
   const { calls, launches } = roleCalls(output);
   const fits = t => typeof t === 'string' && t.length <= MAX_TEXT;
+  // The desk's reports this cycle (the runner ran those roles): each is that role's report, with its own run's lookups.
+  const ran = role => (Array.isArray(fresh) ? fresh : []).find(f => f && f.role === role && typeof f.text === 'string') || null;
+  const ownLookups = (role, call) => { const f = ran(role); return f ? [...new Set(f.lookups || [])].sort() : lookupsInCall(lookups, role, call); };
   for (const role of ANALYSTS) {
     const mine = calls.filter(c => c.role === role);
-    const last = mine.sort((a, b) => a.end - b.end)[mine.length - 1];
+    const last = ran(role) ? { text: ran(role).text } : mine.sort((a, b) => a.end - b.end)[mine.length - 1];
     const m = (frames || {})[role];
     if (m) {
       // On its own timeframe: built on its briefing's bar and the shared parts current now, reusable while they hold.
       const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, now });
       const named = f && last ? reportVersions(last.text, f.versions, frameParts(m)) : null;
-      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
+      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
       else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && keep.analysts[role].tf === m) cache.analysts[role] = keep.analysts[role];
       continue;
     }
     const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
-    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: lookupsInCall(lookups, role, last), lookupsKey };
+    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
     else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && !keep.analysts[role].tf) cache.analysts[role] = keep.analysts[role];
   }
   const key = accountKey(account);
@@ -242,7 +245,7 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
   if (launches.length) cache.phase1 = null;
   else if (served.includes(PHASE1)) cache.phase1 = keep ? keep.phase1 : null;
   else {
-    const rm = calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
+    const rm = ran(PHASE1) ? { text: ran(PHASE1).text } : calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
     // A report with a verdict is a plan's review (phase 2), never the account's state: not cached as phase 1.
     // Nor one that doesn't confirm an active attempt (or denies it): served on every unchanged bar, it would block the day.
     if (rm && key && fits(rm.text) && verdictOf(rm.text) === null && phase1Holds(rm.text, account)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };

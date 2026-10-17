@@ -61,7 +61,7 @@ const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFile
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
-const { runCycle: runCycleWith } = require('./lib/cycle-run');
+const { runCycle: runCycleWith, runRole: runRoleWith } = require('./lib/cycle-run');
 const { lockHolderAlive } = require('./lib/runner-lock');
 const { passTap, noDecision } = require('./lib/session/record');
 const { createLiveSession } = require('./lib/session/live');
@@ -104,6 +104,7 @@ function releaseLock() {
 }
 
 let activeChild = null;
+const roleChildren = new Set(); // the runner's desk runs its roles at once: each tracked until it exits
 
 function appendLog(now, text) {
   const dir = path.join(HOME_DIR, 'logs');
@@ -201,9 +202,9 @@ function writeQwenSettings(cfg, dataDir, opts) {
 function holdLock() {
   acquireLock();
   const stop = sig => {
-    if (activeChild) {
+    for (const c of [activeChild, ...roleChildren].filter(Boolean)) {
       try {
-        process.kill(-activeChild.pid, sig);
+        process.kill(-c.pid, sig);
       } catch (_err) {
         // already exited
       }
@@ -233,6 +234,7 @@ function buildRunner(cfg, dataDir, opts, client, log, event, tap) {
   return wireRunner({
     cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event, onBarClosed: tap.bar,
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
+    runRole: (role, request, limits) => runRoleWith(cfg, role, request, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: c => { if (c) { roleChildren.add(c); c.once('exit', () => roleChildren.delete(c)); } } }),
     loadState: () => loadState(cfg), saveState: s => writeJsonAtomic(STATE_FILE, s), killSwitchFile: loadConfig(process.env).killSwitchFile,
   });
 }
