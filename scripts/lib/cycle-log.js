@@ -305,7 +305,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
 function cycleLookups({ home, output, transcript, context, roleSkills, at, laneBars = {} }) {
   try {
     const { readLookups, rolesOwn, lookupsFile, briefingFacts, requiredFor, lookupStats } = require('./trading/skill-lookups');
-    const { roleCalls } = require('./trading/roles-ran');
+    const { cycleCalls } = require('./trading/roles-ran');
     const symbol = ((context && context.symbols) || []).map(x => x && x.symbol).find(Boolean);
     const m3 = symbol ? briefingFacts(home, symbol, at, laneBars) : null;
     const required = roleSkills === 'index' ? requiredFor(path.resolve(__dirname, '..', '..')) : new Map();
@@ -313,7 +313,7 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
     const records = rolesOwn(readLookups(transcript), transcript);
     // The run's own file, read once: removed with its transcript (harness-run.js).
     try { fs.unlinkSync(lookupsFile(transcript)); } catch (_err) { /* none */ }
-    return { mode: roleSkills || 'full', ...lookupStats({ calls: roleCalls(output).calls, records, required, m3 }) };
+    return { mode: roleSkills || 'full', ...lookupStats({ calls: cycleCalls(output, (context && context.rolesFile) || null).calls, records, required, m3 }) };
   } catch (_err) {
     return null;
   }

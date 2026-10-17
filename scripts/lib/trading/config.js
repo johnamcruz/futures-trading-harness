@@ -171,6 +171,9 @@ function loadConfig(env = process.env) {
     // The cycle's transcript as the harness streams it (FTH_CYCLE_TRANSCRIPT, set by the runner): the gateway's
     // view of which skills loaded and which roles ran (a hook passes its own transcript_path instead).
     cycleTranscript: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null,
+    // The runner's record of the roles it ran itself this cycle (FTH_CYCLE_ROLES, set by the runner; runner-roles.js):
+    // roles-ran judges them with the transcript's calls. Unset: none.
+    cycleRoles: String(env.FTH_CYCLE_ROLES || '').trim() || null,
     // The runner's attestation of the skills opencode's head trader has embedded in its prompt (FTH_HEAD_PROMPT, index
     // mode only; head-prompt.js), as given: the gate parses and checks it against the run's config file per entry.
     headPromptAttestation: String(env.FTH_HEAD_PROMPT || '').trim() || null,

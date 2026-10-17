@@ -129,7 +129,8 @@ test('runRole: one desk role\'s own harness run (`--agent <role>`, the request i
     seen.push({ argv, o });
     fs.mkdirSync(path.dirname(o.liveFile), { recursive: true });
     const { lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
-    fs.writeFileSync(lookupsFile(o.liveFile), `${JSON.stringify({ at: 1, role: 'risk-manager', skill: 'position-sizing' })}\n`);
+    // A lookup naming another role is no lookup of this one's (as the gate's rule reads them).
+    fs.writeFileSync(lookupsFile(o.liveFile), `${JSON.stringify({ at: 1, role: 'risk-manager', skill: 'position-sizing' })}\n${JSON.stringify({ at: 2, role: 'market-structure-analyst', skill: 'breakout' })}\n`);
     const output = [
       JSON.stringify({ type: 'tool_use', part: { tool: 'broker_get_account_snapshot', state: { status: 'completed' } } }),
       JSON.stringify({ type: 'tool_use', part: { tool: 'harness_combine_status', state: { status: 'error' } } }),

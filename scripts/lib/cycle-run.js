@@ -22,6 +22,7 @@ const { writeCycleLog } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
 const { loadConfig } = require('./trading/config');
 const { roleCalls } = require('./trading/roles-ran');
+const { readRoleRuns, roleRunsFile, asRoleCalls } = require('./trading/runner-roles');
 const { expectedRoles, deskCheck, deskWarning } = require('./trading/desk-check');
 
 /** One run of the harness with the cycle's environment: its result, the transcript file, the role-skills mode and the env (the cycle log reads its clock and lanes there, as the gate). */
@@ -58,11 +59,13 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // The runner's desk ran before this run (runner.js): its time counts in the cycle's (context.desk.ms).
   const deskMs = context && context.desk && Number.isFinite(context.desk.ms) ? context.desk.ms : 0;
   const timing = runTiming({ res, cfg, context, env, startedMs: startedMs - deskMs, endedMs, now, result });
-  // Did the desk run (desk-check.js)? Only where the transcript shows the roles' calls (ROLES_CHECKED).
+  // Did the desk run (desk-check.js)? Only where the transcript shows the roles' calls (ROLES_CHECKED). The roster less
+  // the roles served from the cache; a role ran when the runner's record (runner-roles.js) or the transcript has it.
+  const ranByRunner = readRoleRuns(roleRunsFile(res.env || {}));
   const desk = ROLES_CHECKED.has(cfg.harness) ? deskCheck({
     expected: expectedRoles({ action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: (context && context.cachedRoles) || [] }),
-    calls: roleCalls(res.output).calls,
-    failed: ((timing && timing.roles) || []).filter(r => r && r.ok === false).map(r => r.role),
+    calls: [...asRoleCalls(ranByRunner).calls, ...roleCalls(res.output).calls],
+    failed: [...((timing && timing.roles) || []).filter(r => r && r.ok === false).map(r => r.role), ...ranByRunner.filter(r => !r.ok).map(r => r.role)],
     decided: Boolean(res.ok) && !res.timedOut && outcomeOf(result) !== 'blocked',
   }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
@@ -83,8 +86,8 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
  * One desk role's run, as the runner's orchestration engine runs it (orchestrate/engine.js; the desk workflow): the
  * role as its own harness run (`buildCommand`'s `agent`), with the cycle's environment (its bars, cached roles, the
  * transcript live), within `timeoutMs`. Its result for the engine: { ok, timedOut, output, transcript, text, tools,
- * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up: what the
- * order gate credits a report with, as a cached one's). opencode only (opencode.js runResult reads its events).
+ * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
+ * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). opencode only (opencode.js runResult reads its events).
  */
 async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, deps = {}) {
   if (cfg.harness !== 'opencode') throw new Error(`cycle-run: the runner's desk runs on opencode only (harness ${cfg.harness})`);
@@ -96,7 +99,8 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
   let lookups;
   try {
     const { readLookups, lookupsFile } = require('./trading/skill-lookups');
-    lookups = [...new Set(readLookups(res.transcript).map(r => r && r.skill).filter(s => typeof s === 'string'))].sort();
+    // Its own lookups naming its role (a lookup naming another role is no lookup of this one's, as in the gate's rule).
+    lookups = [...new Set(readLookups(res.transcript).filter(r => r && r.role === role).map(r => r.skill).filter(s => typeof s === 'string'))].sort();
     try { require('fs').unlinkSync(lookupsFile(res.transcript)); } catch (_err) { /* none */ }
   } catch (_err) { lookups = []; }
   return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups };

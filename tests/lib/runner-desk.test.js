@@ -6,6 +6,7 @@ const path = require('path');
 const { deskFor, lookupsKeyOf } = require('../../scripts/lib/runner-wiring');
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
+const RR = require('../../scripts/lib/trading/runner-roles');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const cfg = (o = {}) => validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'], ...o });
@@ -28,7 +29,9 @@ test('the desk runs the roles still to run with their request; a report counts o
     return { ok: true, text: 'Data: bar_briefing m3@1\nBias: long', tools: ['harness_bar_briefing'] };
   };
   const logs = [];
-  const desk = deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT, runRole, log: m => logs.push(m) });
+  const home = tmpDir();
+  const t0 = Date.now();
+  const desk = deskFor({ home, cfg: cfg(), root: ROOT, runRole, log: m => logs.push(m) });
   const now = new Date('2026-10-07T14:03:02Z');
   const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
   const d = await desk.run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: ['trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], now, at: now.toISOString(), context });
@@ -39,6 +42,14 @@ test('the desk runs the roles still to run with their request; a report counts o
   assert.deepStrictEqual(d.reports[1].lookups, [], 'no lookups key (no briefing): no lookups credited');
   assert.deepStrictEqual(d.missing, [{ role: 'trend-momentum-analyst', stop: 'invalid', why: 'read no data' }]);
   assert.ok(logs.some(l => /the desk: trend-momentum-analyst invalid \(read no data\)/.test(l)));
+  // Each role's run is in the cycle's role record (runner-roles.js), for the gate: its last attempt's wall-clock times,
+  // its report and lookups, and whether it counted; `recorded` the roles it credits.
+  const runs = RR.readRoleRuns(d.rolesFile);
+  assert.strictEqual(path.dirname(d.rolesFile), path.join(home, 'logs'));
+  assert.deepStrictEqual(runs.map(r => [r.role, r.ok]).sort(), [['risk-manager', true], ['trend-momentum-analyst', false], ['volume-liquidity-analyst', true]]);
+  assert.deepStrictEqual(runs.find(r => r.role === 'risk-manager').lookups, ['position-sizing'], 'its own lookups, whatever the facts key');
+  assert.ok(runs.every(r => r.start >= t0 && r.end >= r.start && r.end <= Date.now()), 'wall-clock ms');
+  assert.deepStrictEqual(d.recorded.slice().sort(), ['risk-manager', 'volume-liquidity-analyst']);
   // The cycle's budget, spent: a role not yet started is cancelled, never run.
   const stop = new AbortController();
   stop.abort();
@@ -48,4 +59,14 @@ test('the desk runs the roles still to run with their request; a report counts o
   seen.length = 0;
   await desk.run({ symbols: [{ symbol: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString(), budgetMs: 90000 });
   assert.strictEqual(seen[0].timeoutMs, 90000);
+});
+
+test('the desk\'s record that can\'t be written credits none: logged, and the role is not recorded', async () => {
+  const home = tmpDir();
+  require('fs').writeFileSync(path.join(home, 'logs'), 'a file where the logs directory goes');
+  const logs = [];
+  const runRole = async () => ({ ok: true, text: '## Risk state: account 1', tools: ['broker_get_account_snapshot'] });
+  const d = await deskFor({ home, cfg: cfg(), root: ROOT, runRole, log: m => logs.push(m) }).run({ symbols: [{ symbol: 'MNQ' }], roles: ['risk-manager'], now: new Date(), at: new Date().toISOString() });
+  assert.deepStrictEqual([d.reports.length, d.recorded], [1, []]);
+  assert.ok(logs.some(l => /risk-manager's run could not be recorded for the gate/.test(l)));
 });

@@ -2575,6 +2575,19 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\]/, 'control: nothing cached');
   const cached = { ...env, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' };
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, cached).stderr, /roles-ran/);
+  // Roles the runner ran itself (its role record, FTH_CYCLE_ROLES) count with their wall-clock times: phase 2 after them,
+  // timed (opencode's event), passes; a call timed by line position can't be ordered against the record: refused.
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const rolesFile = path.join(dir, 'cycle-roles.jsonl');
+  const T = 1.7e12;
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) RR.appendRoleRun(rolesFile, { role: r, start: T, end: T + 1000, text: `## ${r}`, lookups: [], ok: true });
+  const timedP2 = JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: 'VERDICT: APPROVE - size 1', time: { start: T + 2000, end: T + 3000 } } } });
+  fs.writeFileSync(transcript, [...skills, timedP2].join('\n'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\][^\n]*market-structure-analyst/, 'control: no record');
+  const recorded = { ...env, FTH_CYCLE_ROLES: rolesFile };
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, recorded).stderr, /roles-ran/);
+  fs.writeFileSync(transcript, [...skills, ...role('p2b', 'risk-manager')].join('\n'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, recorded).stderr, /\[roles-ran\][^\n]*without wall-clock times/);
   // An exit is never held for roles.
   fs.writeFileSync(transcript, '');
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);

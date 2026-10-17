@@ -195,12 +195,26 @@ phases:
    desk: the three analysts and risk-manager phase 1, in parallel, each with
    the request built in code.
 2. A report counts only if its run read data (a broker call, a file read, or a
-   market or account tool, not a skill or past-decision lookup) and has its
-   role's report shape. A role that fails is run again once; then it is
-   recorded missing, a process failure for that cycle.
-3. The reports reach the head trader the way cached reports already do: in its
-   prompt, and through `FTH_CYCLE_CACHED` and `FTH_CYCLE_CACHED_LOOKUPS`, so
-   the order gate counts them as returned.
+   market or account tool, not a skill or past-decision lookup), has its
+   role's report shape, and, in index mode, looked up every skill the bar
+   requires of its role (`lookups`: the requirement is the gate's own, and the
+   request names the skills). A role that fails is run again once; then it is
+   recorded missing, a process failure for that cycle, and not given to the
+   head trader, which launches it itself.
+3. The reports reach the head trader in its prompt, beside the cached ones.
+   The order gate learns of them from the runner's role record
+   (`FTH_CYCLE_ROLES`, `scripts/lib/trading/runner-roles.js`): one line per
+   role the runner ran this cycle, with the run's wall-clock start and end,
+   its report, the skills it looked up naming its role, and whether it
+   counted. `roles-ran.js` merges these runs into the transcript's calls, so
+   they are judged by the same rules: the same ordering (phase 2 starts after
+   phase 1 and every analyst ended), the same verdict and veto reading, the
+   same index-mode lookups, and a recorded `trade-executor` run ends the
+   round as a launch does. A missing or unreadable record adds nothing (fails
+   closed). Only reports genuinely served from the cache go through
+   `FTH_CYCLE_CACHED` and `FTH_CYCLE_CACHED_LOOKUPS`. The record lives under
+   the harness home's `logs/` (mode 0600), the cycle log reads it for the
+   desk check, and the runner deletes it when the cycle ends.
 4. The head trader keeps the judgment: synthesis, `compose_check`,
    risk-manager phase 2 and the trade-executor.
 

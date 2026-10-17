@@ -1953,6 +1953,40 @@ test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED
   assert.ok(refused({ ...base, FTH_CYCLE_CACHED: 'risk-manager phase 2,trade-executor,whatever' }));
 });
 
+test('roles-ran: roles the runner ran itself (its role record, FTH_CYCLE_ROLES) count with their times and reports; phase 2 after them in the transcript', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const live = replaySetup({ replay: false });
+  const dir = require('../helpers').tmpDir();
+  const file = path.join(dir, 'cycle-transcript.jsonl');
+  const rolesFile = path.join(dir, 'cycle-roles.jsonl');
+  const T = 1.7e12;
+  for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) {
+    RR.appendRoleRun(rolesFile, { role, start: T, end: T + 1000, text: `## ${role}`, lookups: [], ok: true });
+  }
+  const p2 = ([start, end], verdict = 'APPROVE') => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: `VERDICT: ${verdict} - size 1`, time: { start: T + start, end: T + end } } } });
+  // evaluateOrder: the config's cycleRoles (loadConfig reads FTH_CYCLE_ROLES).
+  const auto = { ...config, autonomous: true, cycle: 'full', cycleTranscript: file, roleSkills: 'full' };
+  const rolesRan = cfg => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: cfg }).violations.find(v => v.check === 'roles-ran');
+  fs.writeFileSync(file, [...ocSkills, p2([2000, 3000])].join('\n'));
+  assert.strictEqual(rolesRan({ ...auto, cycleRoles: rolesFile }), undefined);
+  assert.match(rolesRan(auto).message, /not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst/, 'control: no record');
+  assert.match(rolesRan({ ...auto, cycleRoles: `${rolesFile}.gone` }).message, /not returned yet: market-structure-analyst/, 'a record that isn\'t there adds nothing');
+  // Phase 2 started before the runner's phase 1 ended: not phase 2. A veto: refused.
+  fs.writeFileSync(file, [...ocSkills, p2([500, 3000])].join('\n'));
+  assert.match(rolesRan({ ...auto, cycleRoles: rolesFile }).message, /risk-manager phase 2 \(a second call, started after phase 1/);
+  fs.writeFileSync(file, [...ocSkills, p2([2000, 3000], 'VETO')].join('\n'));
+  assert.match(rolesRan({ ...auto, cycleRoles: rolesFile }).message, /its latest verdict is not "VERDICT: APPROVE"/);
+  // The gateway (checkOrder) reads the record from the runner's environment.
+  assert.strictEqual(loadConfig({ FTH_CYCLE_ROLES: ` ${rolesFile} ` }).cycleRoles, rolesFile);
+  assert.strictEqual(loadConfig({}).cycleRoles, null);
+  fs.writeFileSync(file, [...ocSkills, p2([2000, 3000])].join('\n'));
+  const env = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ', FTH_ROLE_SKILLS: 'full' };
+  const refused = e => checkOrder(ANYTIME, { env: e, pluginRoot: live.root }).violations.find(v => v.check === 'roles-ran');
+  assert.match(refused(env).message, /not returned yet: market-structure-analyst/);
+  assert.strictEqual(refused({ ...env, FTH_CYCLE_ROLES: rolesFile }), undefined);
+});
+
 test('allowed accounts: an override can\'t change a shipped broker\'s paper settings or allow-list variable (the gate trusts them); a broker of the user\'s own keeps its own', () => {
   const fs = require('fs');
   const path = require('path');

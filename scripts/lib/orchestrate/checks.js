@@ -2,9 +2,11 @@
 
 /**
  * The orchestration layer's named acceptance checks (docs/TOOL-CALLS-AND-ORCHESTRATION.md): what a role's result must
- * pass to count, named in a workflow document (`accept:`), each `(role, result) -> null | why`. A result is the
- * engine's: { text, tools } (its final message, the tools its run completed). Harness-neutral: the engine adapter reads
- * the tools from its harness's own output.
+ * pass to count, named in a workflow document (`accept:`), each `(role, result, ctx) -> null | why`. A result is the
+ * engine's: { text, tools, lookups } (its final message, the tools its run completed, the skills it looked up naming its
+ * role). `ctx` the workflow's (`lookups`: role -> the skills the bar requires it to look up, the runner's from the gate's
+ * own source, runner-wiring.js lookupNeeds). Harness-neutral: the engine adapter reads the tools from its harness's own
+ * output.
  *
  *   CHECKS                     name -> check
  *   READS_NO_DATA              the harness tools that read no market or account data (skills, past decisions)
@@ -31,6 +33,14 @@ const CHECKS = Object.freeze({
     if (ANALYSTS.includes(role) && !/^\s*Data:/m.test(text)) return 'no Data line (its report names what it rests on)';
     if (role === RISK_MANAGER && !/Risk state/i.test(text)) return 'not a phase 1 risk state';
     return null;
+  },
+  // Index mode: it looked up every skill its bar requires of its role (the order gate counts its report only then:
+  // roles-ran.js, skill-lookups.js unmetLookups, which reads the same recorded lookups). None required: nothing to check.
+  lookups: (role, r, ctx) => {
+    const need = ctx && ctx.lookups && Array.isArray(ctx.lookups[role]) ? ctx.lookups[role] : [];
+    const have = r && Array.isArray(r.lookups) ? r.lookups : [];
+    const missing = need.filter(s => !have.includes(s));
+    return missing.length ? `didn't look up ${missing.join(', ')} (this bar requires it of its role)` : null;
   },
 });
 

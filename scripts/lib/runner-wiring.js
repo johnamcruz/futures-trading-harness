@@ -365,12 +365,16 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
  * config/runner.json desk.concurrency, each within desk.timeoutMinutes. null (the model launches its desk, as before)
  * without a `runRole`, on another harness than opencode, on a lean cycle, or without a valid desk workflow.
- *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results }: `context` the
- *     cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget for the desk,
- *     `budgetMs` its length: no role's own run outlasts it; each report as a cached one is given
- *     ({ role, text, at, until, lookups, lookupsKey, source: 'desk' }); `missing` the roles whose result didn't count.
+ *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results, rolesFile, recorded }:
+ *     `context` the cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget
+ *     for the desk, `budgetMs` its length: no role's own run outlasts it; each report as the prompt and the report cache
+ *     take it ({ role, text, at, until, lookups, lookupsKey, source: 'desk' }); `missing` the roles whose result didn't
+ *     count. Each role's run (its last attempt's wall-clock start and end, `wallNow`, its report, its lookups, whether it
+ *     counted) is written to the cycle's role record (`rolesFile`, runner-roles.js), which the head trader's run gets as
+ *     FTH_CYCLE_ROLES: the order gate credits the desk from it. `recorded`: the roles whose counted run it holds (a
+ *     record that can't be written credits none: logged, and the head trader may launch them).
  */
-function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
+function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Date.now, env = process.env }) {
   if (typeof runRole !== 'function' || cfg.harness !== 'opencode' || cfg.cycle !== 'full') return null;
   const { workflowNamed, runWorkflow } = require('./orchestrate/workflows');
   const { createRun } = require('./orchestrate/engine');
@@ -382,12 +386,33 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
       const key = lookupsKeyOf(home, b, symbols, now, laneBars);
       const perRoleMs = timeoutMinutes * 60000;
-      const engine = { run: (role, request, { timeoutMs }) => runRole(role, request, { timeoutMs, context }) };
-      const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars };
+      // Each role's last attempt's wall-clock times (the engine retries a role in turn; roles run at once are distinct).
+      const times = new Map();
+      const engine = {
+        run: async (role, request, { timeoutMs }) => {
+          const start = wallNow();
+          try { return await runRole(role, request, { timeoutMs, context }); } finally { times.set(role, { start, end: wallNow() }); }
+        },
+      };
+      // The lookups the bar requires of each role (index mode), as the gate reads them: the request names them and the
+      // desk's `lookups` check holds a run that missed one (retried, then missing, never served).
+      const lookups = lookupNeeds(b, now, env, { home, laneBars });
+      const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars, lookups };
       const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
       const results = res.phases.flatMap(p => p.results);
       const reports = results.filter(r => r.ok).map(r => ({ role: r.role, text: r.text, at: now.toISOString(), until: null, lookups: key ? (r.lookups || []) : [], lookupsKey: key && (r.lookups || []).length ? key : null, source: 'desk' }));
-      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms })) };
+      const RR = require('./trading/runner-roles');
+      const rolesFile = RR.newRoleRunsFile(home);
+      const recorded = [];
+      for (const r of results.filter(x => times.has(x.role))) {
+        try {
+          RR.appendRoleRun(rolesFile, { role: r.role, ...times.get(r.role), text: r.text || '', lookups: r.lookups || [], ok: r.ok });
+          if (r.ok && String(r.text || '').trim()) recorded.push(r.role);
+        } catch (err) {
+          log(`the desk: ${r.role}'s run could not be recorded for the gate (${err.message}): the head trader may launch it`);
+        }
+      }
+      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms })), rolesFile, recorded };
     },
   };
 }
@@ -569,7 +594,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     recordFineBars: recorder.fine,
     reportCache: reportCacheFor(home, cfg, frames, env),
     // The desk run by the runner (deskFor): on `runRole` (cycle-run.js, the caller's), else null.
-    desk: deskFor({ home, cfg, root, runRole, log }),
+    desk: deskFor({ home, cfg, root, runRole, log, env }),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),
