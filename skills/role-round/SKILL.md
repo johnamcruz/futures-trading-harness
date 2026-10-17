@@ -46,6 +46,7 @@ holds: in a one-symbol cycle, an analyst's report while the bar briefing
 parts it was built on are current (until the next 15m close); `risk-manager`
 phase 1 while the account is unchanged (no fill, order, balance or attempt
 change, same day, and no `trade-executor` call in the cycle that wrote it).
+`[desk]` (`compose_check` refused): launch the roles it names, then compose.
 Don't launch a role whose report the prompt gives (where the harness can, it
 refuses the launch; in a trade cycle it also refuses roles outside the desk,
 such as `strategy-researcher`): use that report for its

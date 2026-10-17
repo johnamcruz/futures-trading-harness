@@ -373,7 +373,9 @@ function dropInventedTaskId(tool, args) {
  *   before(tool, sessionID)           the refusal naming the roles still to launch, or null
  */
 function deskGate(env = process.env) {
-  const desk = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).filter(Boolean);
+  // A role the run denies (FTH_DENIED_ROLES) is never waited for: it can't be launched.
+  const denied = deniedRolesOf(env);
+  const desk = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).filter(r => r && !denied.includes(r));
   const reported = new Map();
   return {
     returned(tool, args, sessionID) {
