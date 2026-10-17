@@ -35,16 +35,9 @@ const path = require('path');
 const { parseFrontmatter } = require('./frontmatter');
 const { isOpencodeEvent } = require('./transcript');
 const { REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, describeTrigger } = require('./trading/skills-loaded');
-const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
-const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 
 const HEAD_AGENT = 'fth-head-trader';
 const ATTEST_ENV = 'FTH_HEAD_PROMPT';
-/*
- * How opencode names a server's tools (`<server>_<tool>`, opencode.js permissionKeys), which the skills write bare
- * (`bar_briefing`): a bare name was a failed call and a retry step (the PPC run of 2026-10-16: about 1.3 a cycle).
- */
-const TOOL_NAMES = `Tool names: call a harness tool \`${HARNESS_SERVER}_<name>\` (\`${HARNESS_SERVER}_bar_briefing\`), a broker tool \`${BROKER_SERVER}_<name>\`; entries go via the trade-executor role.`;
 /** The prompt's first sentence: how a config's head trader is seen to have this prompt (preflight.js roleSkillsMismatch). */
 const HEAD_MARK = 'You are the head trader of the futures trading harness.';
 /*
@@ -93,8 +86,6 @@ function headPrompt(plan, table = SITUATIONAL) {
     `${HEAD_MARK} Your instructions are the workspace instructions (AGENTS.md, after this prompt): its rules always apply, and it lists the agent roles you delegate to.`,
     '',
     `Your skills ${andList(names)} are below, already loaded (Your skills): every cycle reads them. Read them here; don't load them again. They name other skills a step needs (\`manage-position\` for an open position, \`leftover-orders\`, \`lean-cycle\`, \`entry-outcome\`, ...), all in the Skills list of AGENTS.md: read one whole with \`skill_lookup {"skill": "<name>"}\` (no role: that is the roles') only when this cycle needs it. \`skill_lookup {}\` lists every skill. You have no skill tool.`,
-    '',
-    TOOL_NAMES,
     '',
   ];
   const required = headRequired(table);

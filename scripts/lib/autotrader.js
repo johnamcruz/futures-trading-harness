@@ -680,6 +680,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
+  // The roles this cycle must launch before the head trader composes a trade (trading/desk-check.js, the prompt's
+  // roster): the opencode plugin refuses compose_check until they reported (opencode.js deskGate).
+  const desk = require('./trading/desk-check').expectedRoles({ action: context && context.action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles });
+  if (desk.length) env.FTH_CYCLE_DESK = desk.join(',');
+  else delete env.FTH_CYCLE_DESK;
   // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required
   // under, which the gate counts for that role under that key only.
   const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, e]) => cachedRoles.includes(r) && e && Array.isArray(e.skills) && e.skills.length && typeof e.key === 'string' && e.key) : [];
