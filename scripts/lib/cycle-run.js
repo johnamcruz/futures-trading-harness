@@ -10,7 +10,7 @@
  *   runCycle(cfg, action, prompt, opts, limits, deps)   the runner's cycle result ({ ok, timedOut, result, ... })
  *     opts:   { dryRun }: print the argv only
  *     limits: { timeoutMs, context, entry } (runner.js; `entry`: the runner's entry, runner-entry.js, run after the
- *             head trader's run inside the cycle's time and before its log: ({ result, output, env, budgetMs }) ->
+ *             head trader's run inside the cycle's time and before its log: ({ result, output, env, startedWall, budgetMs }) ->
  *             null | { result, entry }: the cycle's result becomes its result, and the cycle log records `entry`)
  *     deps:   { root, home, env, run (runHarness), onChild, out(text), err(text), appendLog(now, text),
  *               guard(killSwitchFile, when) (the workspace guard: false when it tripped; required, never defaulted
@@ -65,7 +65,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     if (!guard(killSwitchFile, 'before the runner\'s entry')) entry = { outcome: 'not-run', why: 'the kill switch is on' };
     else {
       try {
-        const e = await entryHook({ result, output: res.output || '', env: res.env || {}, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
+        const e = await entryHook({ result, output: res.output || '', env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
         if (e) { entry = e.entry || null; if (typeof e.result === 'string' && e.result) result = e.result; }
       } catch (e2) {
         err(`[autotrader] the runner's entry failed (${e2.message}): no order\n`);

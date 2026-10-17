@@ -22,8 +22,9 @@ const { factsLines } = require('../trading/fact-claims');
 const READS_NO_DATA = Object.freeze(['skill_lookup', 'experience_lookup']);
 const RISK_MANAGER = 'risk-manager';
 
-// The trade-executor's own word that nothing was opened (its output format's first line: BLOCKED or ABORTED).
-const ORDER_REFUSED = /^[\s*_`#>]*(BLOCKED|ABORTED)\b/m;
+// The trade-executor's own word that nothing was opened: its report's first line (its output format: BLOCKED or
+// ABORTED first); the words anywhere else in it (a quoted refusal) are no refusal of its own.
+const ORDER_REFUSED = /^[\s*_`#>]*(BLOCKED|ABORTED)\b/;
 
 function readData(tools, { harnessServer = 'harness', brokerServer = 'broker' } = {}) {
   return (Array.isArray(tools) ? tools : []).some(t => typeof t === 'string' && (t.startsWith(`${brokerServer}_`) || t === 'read'

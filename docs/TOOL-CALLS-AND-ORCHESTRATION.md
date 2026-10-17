@@ -237,9 +237,12 @@ head trader's run, before the cycle log; per role `config/runner.json`
 1. **When.** A one-symbol full trade cycle on opencode, not manage-only or
    paper, with the runner's desk wired, that started flat with no working
    orders (the account read before the desk; unknown is not flat), and whose
-   desk is complete in the runner's record or the report cache (the
+   desk is complete in the runner's record or the report cache. A data lane
+   (`trigger: data`) never cycles, so a 3m lane with a 1m data lane is still
+   one item per cycle and runs it; two trading lanes closing together run
+   the old way. (The
    trade-executor is a session of its own: a role the head trader launched
-   itself is only in its transcript, which the executor's gate doesn't read).
+   itself is only in its transcript, which the executor's gate doesn't read.)
    Then the head trader's prompt says the route, its run gets
    `FTH_CYCLE_ENTRY=1`, and the tool-call rule `entry-route` refuses its own
    launch of the trade-executor, and of the risk manager unless phase 1 is
@@ -249,8 +252,9 @@ head trader's run, before the cycle log; per role `config/runner.json`
    (such a cycle has nothing to exit). Any other cycle: as before.
 2. **The decision.** The head trader ends `CYCLE RESULT: planned` after an OK
    `compose_check`. The runner takes the latest compose record on the cycle's
-   bar (`lifecycle-gate.js recordsAt`); not OK, or none, is a process failure:
-   logged, nothing runs. It records the head trader's loaded skills, derived in
+   bar (`lifecycle-gate.js recordsAt`); not OK, or none, or a planned line whose
+   side (or stated size) isn't the record's, is a process failure: logged,
+   nothing runs, the head trader's line kept. It records the head trader's loaded skills, derived in
    code from its transcript (`skills-loaded.js skillsInTranscript`), in the
    role record (`runner-roles.js appendHeadSkills`): the gate counts them for
    the executor's run of the runner's own (`skills-loaded`, `skills-at-entry`),
@@ -269,7 +273,8 @@ head trader's run, before the cycle log; per role `config/runner.json`
    `composed-reads` checks. The journal plan for the bar (`kind: plan`,
    `contractId`) goes through the broker adapter (`journalAdd`); the gate's
    `plan-required` takes, in a runner's cycle, only a plan written since the
-   cycle bar's close.
+   cycle bar's close (a composed entry: its record's bar, never another lane's).
+   A record that expired first is its own outcome, `expired`.
 5. **`execute`.** The trade-executor with those exact arguments and phase 2's
    verdict line (the `execute` request), `orders: true` and `retries: 0`: only
    a workflow's last phase may run the order role, once. Accepted on
@@ -281,9 +286,13 @@ head trader's run, before the cycle log; per role `config/runner.json`
 6. **After the order.** The runner reads the account and open orders through
    the adapter: executed (a position on the family, or the gateway's record of
    this record's entry), blocked (the gate's refusal in its log, or the
-   executor's BLOCKED or ABORTED), or a no-trade naming the failed run. A lost
-   or late reply sends no second entry; the next cycles manage and exit it as
-   any position. The cycle log records the outcome (`entry`), phase 2's facts
+   executor's BLOCKED or ABORTED first line, or a call that completed with
+   nothing on the account), unknown (the gate let it through and its reply
+   never came: reported `executed`, possibly placed), or a no-trade naming the
+   failed run. A lost or late reply sends no second entry; the next cycles manage and exit it as
+   any position. The cycle log records the outcome and its timing (`entry`:
+   ms from the bar's close to the head trader's planned and to the order, and
+   each role's ms), phase 2's facts
    (`factCheck`) and the desk check from the record; the decision history reads
    a veto from it.
 

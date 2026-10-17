@@ -28,12 +28,16 @@
  *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
  *
  *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
+ *   plannedDrift(result, rec)  why the head trader's planned line (its side, its size) isn't the record's, or null
  *   verdictLine(text)        phase 2's VERDICT line, as written
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
  *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, perRoleMs, childEnv, lookups, orderPlan }
  *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in)
- *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs }
+ *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
+ *              startedWall (the wall ms the head trader's run began) }
+ *   The cycle log's `entry.timing`: barClose, headMs (bar close to the head trader's planned), phase2Ms, executorMs,
+ *   orderMs (bar close to the order sent, or to order_plan's refusal); outcome `expired`: the record ran out first.
  */
 
 const fs = require('fs');
@@ -64,6 +68,21 @@ function entryDue(records) {
   return { run: true, record: rec };
 }
 
+/**
+ * Why the head trader's `planned` line isn't the record's decision, or null: the side it names (the first "long" or
+ * "short" in its reason) must be the record's, and a size it states right after the side the record's size. A line
+ * that names no side can't be matched (a model may drift between sides: the record alone never decides).
+ */
+function plannedDrift(result, rec) {
+  const reason = String(result || '').replace(/^[^-]*-/, '');
+  const m = /\b(long|short)\b(?:\s+(\d+)\b)?/i.exec(reason);
+  if (!m) return `the planned line names no side, so it can't be matched to the compose record ${rec.id} (${rec.side})`;
+  if (m[1].toLowerCase() !== rec.side) return `the planned line says ${m[1].toLowerCase()}, the latest OK compose record ${rec.id} is a ${rec.side}`;
+  const size = rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null;
+  if (m[2] !== undefined && Number(m[2]) !== size) return `the planned line says size ${m[2]}, the compose record ${rec.id} states ${size}`;
+  return null;
+}
+
 /** Phase 2's VERDICT line, as written (the first line stating a verdict: "VERDICT: ..." or "Verdict - ..."), or ''. */
 const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict\b[*_`\s]*[:-]/i.test(l)) || '').trim();
 
@@ -72,6 +91,15 @@ const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict
  * cycleId), at or after `sinceMs`: { checks, message } or null. Never throws.
  */
 function gateRefusal(env, id, sinceMs) {
+  const d = gateDecision(env, id, sinceMs);
+  return d && d.decision === 'blocked' ? { checks: d.checks, message: d.message } : null;
+}
+
+/**
+ * The gate's last place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, checks,
+ * message } or null. `allowed` means the order went to the broker (whatever its reply). Never throws.
+ */
+function gateDecision(env, id, sinceMs) {
   try {
     const { gateLogPath } = require('./trading/check-order');
     const file = gateLogPath(env);
@@ -91,12 +119,12 @@ function gateRefusal(env, id, sinceMs) {
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
-      if (!e || e.cycle !== id || e.tool !== 'place_order' || e.decision !== 'blocked' || !(Date.parse(e.ts) >= sinceMs)) continue;
+      if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
       last = e;
     }
     if (!last) return null;
     const v = Array.isArray(last.violations) ? last.violations : [];
-    return { checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
+    return { decision: last.decision, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
   } catch (_err) {
     return null;
   }
@@ -109,10 +137,15 @@ function gateRefusal(env, id, sinceMs) {
  *   report    the executor's report (its BLOCKED or ABORTED line), or ''
  *   failed    the executor's run didn't count (its stop and why), or null
  *   sent      its place_order call completed (the gate let it through): with nothing on the account, the broker took none
+ *   allowed   the gate let a place_order of this cycle through (its log), whatever the broker's reply
+ * The gate let it through and its call never completed (a lost or late reply, a timeout): the order's outcome is
+ * unknown, never a refusal (the gateway's order tracker holds new entries as pending until it settles). The result
+ * word is `executed`, so the next cycles treat it as possibly placed; the outcome is `unknown`.
  */
-function entryOutcome({ entered, filled = false, refusal = null, report = '', failed = null, sent = false, label }) {
+function entryOutcome({ entered, filled = false, refusal = null, report = '', failed = null, sent = false, allowed = false, label }) {
   if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : 'went'})`, why: null };
   if (refusal) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
+  if (allowed && !sent) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (its reply never came and the account doesn't show it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
   if (said) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
@@ -134,6 +167,12 @@ async function runEntry(deps, c) {
     return say('process-failure', c.result, { failure: due.why });
   }
   const rec = due.record;
+  // The decision as the head trader wrote it: its side (and size, when it says one) must be the record's.
+  const drift = plannedDrift(c.result, rec);
+  if (drift) {
+    log(`the entry: ${drift}: a process failure; nothing runs`, 'error');
+    return say('process-failure', c.result, { failure: drift, record: rec.id });
+  }
   const label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
   info.record = rec.id;
   if (!c.rolesFile) {
@@ -153,6 +192,12 @@ async function runEntry(deps, c) {
   // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
   const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}) };
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
+  // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's
+  // start (c.at), then the wall clock since the head trader's run began (c.startedWall).
+  const closeMs = Date.parse(c.bar) + cfg.timeframe * 60000;
+  const lagMs = Number.isFinite(closeMs) && Number.isFinite(Date.parse(c.at)) ? Math.max(0, Date.parse(c.at) - closeMs) : null;
+  const sinceClose = wall => (lagMs !== null && Number.isFinite(c.startedWall) ? lagMs + Math.max(0, wall - c.startedWall) : null);
+  info.timing = { barClose: Number.isFinite(closeMs) ? new Date(closeMs).toISOString() : null, headMs: sinceClose(wallNow()) };
   const times = new Map();
   const engine = {
     run: async (role, request, { timeoutMs }) => {
@@ -194,7 +239,9 @@ async function runEntry(deps, c) {
     try {
       order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
     } catch (err) {
-      stop = { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
+      info.timing.orderMs = sinceClose(wallNow());
+      // The record ran out before the order: its own reason, so it can be counted.
+      stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
     }
     try {
@@ -219,7 +266,15 @@ async function runEntry(deps, c) {
     return say('error', `CYCLE RESULT: no-trade - the runner's entry failed (${short(err.message)}): no order`, { failure: err.message });
   }
   info.phases = res.phases.map(p => ({ name: p.name, roles: p.results.map(r => ({ role: r.role, stop: r.stop })) }));
+  const ran = role => (times.has(role) ? Math.max(0, times.get(role).end - times.get(role).start) : null);
+  info.timing.phase2Ms = ran('risk-manager');
+  info.timing.executorMs = ran('trade-executor');
+  if (times.has('trade-executor')) info.timing.orderMs = sinceClose(times.get('trade-executor').end);
   if (stop) {
+    if (stop.outcome === 'expired') {
+      log(`the entry: ${stop.why}: no order`, 'error');
+      return say('expired', 'CYCLE RESULT: no-trade - the composed record expired before the order', { why: stop.why });
+    }
     if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
     log(`the entry: ${stop.why}: no order`, 'error');
     return say('no-trade', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}: no order`, { why: stop.why });
@@ -248,8 +303,9 @@ async function runEntry(deps, c) {
       account = { error: err.message };
     }
   }
+  const decision = entered ? null : gateDecision(env, id, sentAt - require('./tunables').runner().session.gateSlackMs);
   const out = entryOutcome({
-    entered, filled, refusal: entered ? null : gateRefusal(env, id, sentAt - require('./tunables').runner().session.gateSlackMs), report: exec ? exec.text : '',
+    entered, filled, refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',
     failed: exec && !exec.ok ? { stop: exec.stop, why: exec.why } : null, label,
     sent: Boolean(exec && Array.isArray(exec.tools) && exec.tools.includes(`${require('./broker/config').SERVER_NAME}_place_order`)),
   });
@@ -257,4 +313,4 @@ async function runEntry(deps, c) {
   return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });
 }
 
-module.exports = { STRATEGY, entryDue, verdictLine, gateRefusal, entryOutcome, runEntry };
+module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, entryOutcome, runEntry };

@@ -1595,8 +1595,8 @@ function createRunner(deps) {
           const stopWatch = watchComposed(run);
           // The runner's entry after the head trader's run (cycle-run.js runs it inside the cycle's time, before the cycle
           // log): phase 2 and the trade-executor on the decision's compose record (runner-entry.js).
-          const entryHook = runsEntry ? ({ result, output, env: headEnv, budgetMs }) => entryWorkflow.run({
-            result, output, headEnv, symbol: cacheSymbols[0].symbol, contractId: cacheSymbols[0].contractId || run[0].contractId || null, bar: cacheSymbols[0].bar,
+          const entryHook = runsEntry ? ({ result, output, env: headEnv, startedWall, budgetMs }) => entryWorkflow.run({
+            result, output, headEnv, startedWall, symbol: cacheSymbols[0].symbol, contractId: cacheSymbols[0].contractId || run[0].contractId || null, bar: cacheSymbols[0].bar,
             bars: run[0].bar.file || null, at: cycleNow.toISOString(), now: cycleNow, laneBars: multi ? laneBarsOf(run) : {},
             accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
             context, rolesFile, reports: served ? served.reports.map(x => ({ role: x.role, text: x.text })) : [], budgetMs,

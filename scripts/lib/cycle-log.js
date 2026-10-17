@@ -23,7 +23,8 @@
  *   desk (in both, when the runner gave one): the roles a full cycle had to launch, those that returned, those
  *       missing and the launches that failed (trading/desk-check.js), so a cycle decided without its desk shows
  *   entry (in both, when the runner ran its entry: runner-entry.js): its outcome (executed, blocked, vetoed,
- *       no-trade, process-failure, error, not-run), the roles it ran, the compose record and any failure
+ *       no-trade, expired, unknown, process-failure, error, not-run), the roles it ran, the compose record, any
+ *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms)
  *   timing (in both, when the runner gave one): when the cycle acted against
  *       its bar (cycle-timing.js: the bar's close, the roles' calls, the
  *       decision, the order, the end; latencies, overran, setup caught/missed)
@@ -293,7 +294,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
-      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}) } } : {}),
+      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}) } } : {}),
     })}\n`);
   } catch (_err) {
     // best effort

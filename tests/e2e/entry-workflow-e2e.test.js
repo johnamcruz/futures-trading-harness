@@ -347,8 +347,10 @@ test('entry workflow, live: on a live broker the runner\'s entry judges at the w
   assert.ok(!R.runs.some(x => x.role === 'trade-executor'), 'no trade-executor: nothing to send');
   assert.deepStrictEqual(D.placedAtBroker(w), []);
   assert.deepStrictEqual(journal(w).filter(e => e.kind === 'plan'), [], 'no plan journaled for an order that was never built');
-  assert.match(r.ran[0].result, /^CYCLE RESULT: no-trade - the runner's entry: order_plan refused the composed plan: the order gate would refuse it: \[composed-reads\] .*expired/);
-  assert.strictEqual(D.cycleLines(w).at(-1).entry.outcome, 'no-trade');
+  assert.strictEqual(r.ran[0].result, 'CYCLE RESULT: no-trade - the composed record expired before the order');
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.entry.outcome, 'expired', 'counted as its own outcome');
+  assert.ok(Number.isFinite(line.entry.timing.orderMs) && line.entry.timing.executorMs === null, JSON.stringify(line.entry.timing));
 });
 
 test('entry workflow: a desk the runner couldn\'t complete (an analyst missing) is no entry cycle: the head trader launches the missing role and runs its entry, as before (the executor\'s own run couldn\'t see the head trader\'s launch)', async () => {
@@ -376,4 +378,49 @@ test('entry workflow: the broker refuses the entry (success: false): nothing ope
   assert.strictEqual(D.placedAtBroker(w).length, 1, 'sent once, never again');
   assert.match(r.ran[0].result, /^CYCLE RESULT: blocked - the trade_lifecycle long 1 MNQ was refused by the broker: ABORTED/, JSON.stringify(R.runs.at(-1).calls));
   assert.strictEqual(D.cycleLines(w).at(-1).entry.outcome, 'blocked');
+});
+
+// ---- The owner's runner config: one symbol, the 3m lane and a 1m data lane, a 20-minute cycle ----
+
+/** The world with the owner's lanes: timeframe 3, lanes [{3, bar}, {1, data}], cycleTimeoutMinutes 20. */
+function ownerWorld(o = {}) {
+  const w = D.world({ dataLane: true, ...o });
+  w.cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: w.cfg.dataDir, bars: 1400, cycleTimeoutMinutes: 20, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] });
+  return w;
+}
+
+test('entry workflow, the owner\'s lanes (3m bar lane + 1m data lane, 20 min): the 3m close is one cycle with one item; the runner runs the desk and the entry on the 3m record\'s bar; the gate allows the code-built order; it fills', async () => {
+  const w = ownerWorld();
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at);
+  const r = await D.pass(w, at, headPlanned(w), { runRole: R.runRole });
+  assert.strictEqual(r.ran.length, 1, 'one cycle at the 3m close (the data lane never cycles)');
+  assert.deepStrictEqual(r.ran[0].context.symbols.map(x => [x.symbol, x.bar.t]), [['MNQ', FIRED_BAR]], 'one item: the 3m bar');
+  assert.deepStrictEqual(R.runs.map(x => x.role).slice(0, 4).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'], 'the runner ran the desk');
+  assert.deepStrictEqual(R.runs.map(x => x.role).slice(-2), ['risk-manager phase 2', 'trade-executor'], 'and the entry');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, '1');
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.deepStrictEqual([rec.ok, rec.bar, rec.lane], [true, FIRED_BAR, '3m'], 'the record is on the 3m setup bar');
+  assert.ok(R.runs.at(-2).request.includes(rec.id));
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+  assert.strictEqual(D.position(w).size, 1);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ/);
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.entry.outcome, 'executed');
+  // The budget's timings, from the 3m bar's close.
+  const t = line.entry.timing;
+  for (const k of ['headMs', 'phase2Ms', 'executorMs', 'orderMs']) assert.ok(Number.isFinite(t[k]) && t[k] >= 0, `${k}: ${JSON.stringify(t)}`);
+  assert.ok(t.orderMs >= t.headMs, JSON.stringify(t));
+});
+
+test('entry workflow: the head trader composes a long and writes planned short (the side drifted): a process failure, logged; no phase 2, nothing reaches the broker', async () => {
+  const w = D.world();
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at);
+  const r = await D.pass(w, at, headPlanned(w, { result: 'CYCLE RESULT: planned - trade_lifecycle short 1' }), { runRole: R.runRole });
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor' || x.role === 'risk-manager phase 2'));
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
+  assert.ok(r.logs.some(l => /the planned line says short, the latest OK compose record \S+ is a long: a process failure/.test(l)), r.logs.join('\n'));
+  assert.strictEqual(r.ran[0].result, 'CYCLE RESULT: planned - trade_lifecycle short 1');
+  assert.strictEqual(D.cycleLines(w).at(-1).entry.outcome, 'process-failure');
 });

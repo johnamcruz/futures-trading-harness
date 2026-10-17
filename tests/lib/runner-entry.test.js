@@ -156,7 +156,7 @@ test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing,
     [{ roles: { phase2: { ok: false, timedOut: true, text: '', tools: [], output: '' } } }, /risk-manager phase 2 timed_out \(timed out\)/, 2],
     [{ roles: { phase2: { ok: true, timedOut: false, text: 'VERDICT: APPROVE - size 1', tools: ['harness_order_plan'], output: '' } } }, /risk-manager phase 2 invalid \(no FACTS line/, 2],
     [{ roles: { phase2: { ok: true, timedOut: false, text: P2, tools: ['harness_skill_lookup'], output: '' } } }, /risk-manager phase 2 invalid \(read no data\)/, 2],
-    [{ plan: () => { throw new Error('the order gate would refuse it: [composed-reads] expired'); } }, /order_plan refused the composed plan: the order gate would refuse it: \[composed-reads\] expired/, 1],
+    [{ plan: () => { throw new Error('the order gate would refuse it: [composed-reads] the plan is not the record\'s'); } }, /order_plan refused the composed plan: the order gate would refuse it: \[composed-reads\] the plan is not the record's/, 1],
     [{ journalFails: true }, /the journal plan could not be written \(journal down\)/, 1],
   ];
   for (const [o, why, p2Runs] of cases) {
@@ -203,4 +203,59 @@ test('runEntry: the cycle\'s budget bounds every role\'s run; none left, no role
   const u = setup();
   const r = await E.runEntry(u.deps, u.cycle({ rolesFile: null }));
   assert.deepStrictEqual([u.calls.length, r.entry.outcome], [0, 'process-failure']);
+});
+
+test('plannedDrift: the planned line\'s side, and its size when it states one, must be the record\'s; a line naming no side can\'t be matched', () => {
+  const rec = record();
+  assert.strictEqual(E.plannedDrift('CYCLE RESULT: planned - trade_lifecycle long 1', rec), null);
+  assert.strictEqual(E.plannedDrift('CYCLE RESULT: planned - trade_lifecycle LONG, as composed', rec), null, 'no size stated: the side alone');
+  assert.match(E.plannedDrift('CYCLE RESULT: planned - trade_lifecycle short 1', rec), /says short, the latest OK compose record rec0000000000001 is a long/);
+  assert.match(E.plannedDrift('CYCLE RESULT: planned - trade_lifecycle long 2', rec), /says size 2, the compose record rec0000000000001 states 1/);
+  assert.match(E.plannedDrift('CYCLE RESULT: planned - the composed trade', rec), /names no side/);
+});
+
+test('runEntry: a planned line whose side or size isn\'t the record\'s is a process failure: nothing runs, logged, the head trader\'s line kept', async () => {
+  for (const result of ['CYCLE RESULT: planned - trade_lifecycle short 1', 'CYCLE RESULT: planned - trade_lifecycle long 3', 'CYCLE RESULT: planned - as composed']) {
+    const s = setup();
+    const r = await E.runEntry(s.deps, s.cycle({ result }));
+    assert.deepStrictEqual([r.result, r.entry.outcome, s.calls.length], [result, 'process-failure', 0], result);
+    assert.ok(s.logs.some(l => /^error the entry: the planned line .*a process failure; nothing runs/.test(l)), s.logs.join('\n'));
+  }
+});
+
+test('entryOutcome: the gate let the order through and its call never completed (a lost reply) with nothing on the account: unknown, never blocked; a report quoting BLOCKED below its first line is no refusal', () => {
+  const label = 'trade_lifecycle long 1 MNQ';
+  const lost = E.entryOutcome({ entered: false, allowed: true, sent: false, report: 'ABORTED\nno reply: the outcome is unknown', label });
+  assert.strictEqual(lost.outcome, 'unknown');
+  assert.match(lost.result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ: unknown, the order's outcome couldn't be read/);
+  // The call completed and nothing shows: the broker refused it.
+  assert.strictEqual(E.entryOutcome({ entered: false, allowed: true, sent: true, report: 'ABORTED\nOrderRejected', label }).outcome, 'blocked');
+  // A refusal word only on the report's first line.
+  const quoted = E.entryOutcome({ entered: false, report: 'EXECUTED\nNotes: an earlier order was BLOCKED', label });
+  assert.strictEqual(quoted.outcome, 'no-trade');
+  const { ORDER_REFUSED } = require('../../scripts/lib/orchestrate/checks');
+  assert.ok(ORDER_REFUSED.test('\n  **BLOCKED**\nBlocked by trading harness'));
+  assert.ok(!ORDER_REFUSED.test('EXECUTED\nABORTED earlier'));
+});
+
+test('runEntry: an order the gate let through whose reply was lost, and an account that can\'t be read after it: unknown, never blocked', async () => {
+  const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nno reply: the outcome is unknown', tools: ['broker_get_account_snapshot'], output: '' } }, readFails: true });
+  const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: id, violations: [] })}\n`);
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.entry.account.error], ['unknown', 'no answer']);
+  assert.match(r.result, /^CYCLE RESULT: executed - .*unknown, the order's outcome couldn't be read/);
+});
+
+test('runEntry: a record that expired before the order is its own outcome (expired), counted apart; the timing from the bar\'s close is in the entry', async () => {
+  const s = setup({ plan: () => { throw new Error('the order gate would refuse it: [composed-reads] setup:trade_lifecycle: the compose record expired at 2026-10-07T14:03:00.000Z'); } });
+  let wall = 1e12;
+  s.deps.wallNow = () => (wall += 1000);
+  const r = await E.runEntry(s.deps, s.cycle({ startedWall: 1e12 - 30000 }));
+  assert.deepStrictEqual([r.result, r.entry.outcome], ['CYCLE RESULT: no-trade - the composed record expired before the order', 'expired']);
+  const t = r.entry.timing;
+  // The bar opened 13:54 and closed 13:57; the cycle began 13:57:02 (2 s later) and the head trader ran 30 s and more.
+  assert.strictEqual(t.barClose, '2026-10-07T13:57:00.000Z');
+  assert.ok(t.headMs >= 32000 && t.orderMs > t.headMs && t.phase2Ms > 0, JSON.stringify(t));
+  assert.strictEqual(t.executorMs, null, 'no executor ran');
 });

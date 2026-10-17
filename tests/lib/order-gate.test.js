@@ -3397,3 +3397,19 @@ test('plan-required, in a runner\'s cycle: the plan is this cycle\'s bar\'s (wri
     assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale }), entries: [], now: NOW, config: cfg() }).violations, [], rationale);
   }
 });
+
+test('plan-required, a composed entry: anchored to its own record\'s bar (the setup lane\'s, its briefing\'s close), never to another lane\'s bar that closed this cycle', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const { cyclePlanSince } = require('../../scripts/lib/trading/order-gate');
+  const home = require('../helpers').tmpDir();
+  const BAR = '2026-10-07T13:54:00.000Z'; // the 3m setup bar, closed 13:57
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {} });
+  // A later 1m lane's bar named as the cycle's (FTH_CYCLE_BARS), the briefing's on the 3m bar.
+  const cfg = { ...config, home, autonomous: true, cycleBars: { MNQ: '2026-10-07T13:59:00.000Z' }, cycleBriefingBars: { MNQ: BAR } };
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ'), Date.parse('2026-10-07T13:59:00.000Z'), 'not a composed entry: the lane bar that closed');
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ', { record: { bar: BAR } }), Date.parse('2026-10-07T13:57:00.000Z'), 'composed: its record\'s bar\'s close');
+  // A record on another bar than the briefing's: its own bar's open; an unreadable one fails closed.
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ', { record: { bar: '2026-10-07T13:51:00.000Z' } }), Date.parse('2026-10-07T13:51:00.000Z'));
+  assert.ok(Number.isNaN(cyclePlanSince(cfg, 'MNQ', { record: { bar: 'x' } })));
+  assert.strictEqual(cyclePlanSince({ ...cfg, autonomous: false }, 'MNQ', { record: { bar: BAR } }), null);
+});

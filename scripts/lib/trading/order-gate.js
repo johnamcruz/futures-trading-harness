@@ -216,13 +216,26 @@ function checkConsistency(input, rationale, specOf = () => null) {
 }
 
 /**
+ * `record`: a composed entry's compose record (composed-reads passed): the plan is anchored to its bar, the setup
+ * lane's (its briefing's closedAt), never to the bar of another lane that closed this cycle.
  * In a runner's cycle (autonomous, the cycle names its bar for the root's family: FTH_CYCLE_BARS), the time a plan for
  * this entry must be written at or after: the cycle bar's close (its bar briefing's closedAt when the briefing is on the
  * cycle's briefing bar), never before the bar opened. A plan from an earlier cycle (written while this bar was still
  * forming) is not this bar's. Outside a runner's cycle: null (planMaxAgeMin alone, as before). Entries only.
  */
-function cyclePlanSince(config, root) {
+function cyclePlanSince(config, root, { record = null } = {}) {
   if (!config.autonomous) return null;
+  // A composed entry: anchored to its own record's bar (the setup lane's, the briefing's), never to another lane's bar
+  // that closed with it (a 1m lane's): written since that bar's close.
+  if (record) {
+    const recBar = Date.parse(record.bar);
+    if (!Number.isFinite(recBar)) return NaN;
+    try {
+      const b = readBriefing(config.home, root);
+      if (b && Date.parse(b.asOf) === recBar && Number.isFinite(Date.parse(b.closedAt))) return Math.max(recBar, Date.parse(b.closedAt));
+    } catch (_err) { /* no briefing: the record's bar open */ }
+    return recBar;
+  }
   const bar = (config.cycleBars || {})[familyRoot(root)] || null;
   if (!bar) return null;
   const open = Date.parse(bar);
@@ -237,11 +250,12 @@ function cyclePlanSince(config, root) {
   return Number.isFinite(closed) ? Math.max(open, closed) : open;
 }
 
-function checkPlan(input, dayEntries, now, config) {
+function checkPlan(input, dayEntries, now, config, record = null) {
   const cutoff = now.getTime() - config.planMaxAgeMin * 60000;
   const root = contractRoot(input.contractId);
-  // A runner's cycle: the plan is this cycle's bar's (written since the bar closed), and within planMaxAgeMin.
-  const since = cyclePlanSince(config, root);
+  // A runner's cycle: the plan is this cycle's bar's (written since the bar closed; a composed entry's, its record's
+  // bar), and within planMaxAgeMin.
+  const since = cyclePlanSince(config, root, { record });
   const plan = dayEntries.find(e =>
     e.kind === 'plan' && entryTime(e) >= cutoff && (since === null || entryTime(e) >= since) && planMatches(e, input.contractId, root));
   if (plan) return null;
@@ -478,7 +492,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // the signal age limit of its own bars ago, however long the cycle ran (briefingAgeRefusal).
   const staleMsg = briefingAgeRefusal(config, contractRoot(input.contractId), now);
   if (staleMsg) violations.push({ check: 'briefing-age', message: staleMsg });
-  add('plan-required', checkPlan(input, dayEntries, now, config));
+  add('plan-required', checkPlan(input, dayEntries, now, config, composedCheck && !composedCheck.message ? composedCheck.record : null));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);
   if (closed) violations.push({ check: 'market-hours', message: closed });
