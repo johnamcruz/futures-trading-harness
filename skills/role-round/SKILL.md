@@ -46,7 +46,6 @@ holds: in a one-symbol cycle, an analyst's report while the bar briefing
 parts it was built on are current (until the next 15m close); `risk-manager`
 phase 1 while the account is unchanged (no fill, order, balance or attempt
 change, same day, and no `trade-executor` call in the cycle that wrote it).
-`[desk]` (`compose_check` refused): launch the roles it names, then compose.
 Don't launch a role whose report the prompt gives (where the harness can, it
 refuses the launch; in a trade cycle it also refuses roles outside the desk,
 such as `strategy-researcher`): use that report for its
@@ -61,7 +60,9 @@ Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
 session timing, sizing and pacing), and neither the prompt's facts (the
 trend rule) nor the bar briefing are their reports:
-the briefing is their input, not their analysis. In an autonomous run the order
+the briefing is their input, not their analysis.
+`[desk]` (`compose_check` refused): launch the roles it names, then compose.
+In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
 returned as subagents this cycle or were given under "Cached reports",
