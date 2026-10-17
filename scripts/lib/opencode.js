@@ -461,6 +461,9 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
  *                                             is the role's own session: opencode v1.19 tool/task.ts)
  *   before(tool, sessionID)                   the refusal naming the roles still to launch, or null
  */
+/** The harness tools that read no market or account data: skills and the record of past decisions. */
+const NOT_DATA = Object.freeze(['skill_lookup', 'experience_lookup']);
+
 function deskGate(env = process.env) {
   // A role the run denies (FTH_DENIED_ROLES) is never waited for: it can't be launched.
   const denied = deniedRolesOf(env);
@@ -468,7 +471,10 @@ function deskGate(env = process.env) {
   const reported = new Map();
   const hollow = new Map();
   const read = new Set();
-  const reads = tool => typeof tool === 'string' && (tool.startsWith(`${HARNESS_SERVER}_`) || tool.startsWith(`${BROKER_SERVER}_`) || tool === 'read');
+  // A data read: a broker call, a file read, or a harness tool that reads the market or the account; not a skill or
+  // a lookup of past decisions (a role that only read those invented its facts).
+  const reads = tool => typeof tool === 'string' && (tool.startsWith(`${BROKER_SERVER}_`) || tool === 'read'
+    || (tool.startsWith(`${HARNESS_SERVER}_`) && !NOT_DATA.includes(tool.slice(HARNESS_SERVER.length + 1))));
   const of = (map, key) => { if (!map.has(key)) map.set(key, new Set()); return map.get(key); };
   return {
     saw(tool, sessionID) {
@@ -479,6 +485,8 @@ function deskGate(env = process.env) {
       const key = String(sessionID || '');
       const role = args.subagent_type.trim();
       // The role's own session (the launch result's metadata, else its <task id="ses_..."> line); unknown: counted.
+      // A background launch returns before the role read anything: unknown, counted (the order gate decides an entry).
+      if (result && result.metadata && result.metadata.background) { of(reported, key).add(role); return; }
       const meta = result && result.metadata && typeof result.metadata.sessionId === 'string' ? result.metadata.sessionId : null;
       const m = !meta && result && typeof result.output === 'string' ? /<task id="(ses_[^"]+)"/.exec(result.output) : null;
       const child = meta || (m && m[1]);

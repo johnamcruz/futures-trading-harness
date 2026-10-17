@@ -37,7 +37,8 @@ for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents (interactively), play each role yourself in turn; in an autonomous
 run there is no stand-in: without the roles' reports, no entry. A role sees
-only your request: one role a launch, never "already provided". Pass symbol,
+only your request: never tell it data is already provided; one role a launch.
+Pass symbol,
 contractId, and the current time, and with several lanes every other lane's
 setup that fired this cycle with its trend rule (the `runner-lanes` skill).
 

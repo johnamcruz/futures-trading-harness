@@ -510,7 +510,9 @@ test('deskGate: a role counts only if its own session read data; one that answer
   const g = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,risk-manager' });
   g.saw('harness_bar_briefing', 'ses_a');
   g.returned('task', { subagent_type: 'market-structure-analyst' }, 'h', { metadata: { sessionId: 'ses_a' }, output: 'report' });
-  g.saw('skill', 'ses_b'); // a skill load is no data read
+  g.saw('skill', 'ses_b'); // a skill load, a skill lookup or a lookup of past decisions is no data read
+  g.saw('harness_skill_lookup', 'ses_b');
+  g.saw('harness_experience_lookup', 'ses_b');
   g.returned('task', { subagent_type: 'risk-manager' }, 'h', { metadata: { sessionId: 'ses_b' }, output: 'report' });
   const why = g.before('harness_compose_check', 'h');
   assert.match(why, /risk-manager reported without reading any data \(a role sees only your request: it reads its own\): launch it again with the symbol and the time/);
@@ -525,4 +527,8 @@ test('deskGate: a role counts only if its own session read data; one that answer
   f.returned('task', { subagent_type: 'trend-momentum-analyst' }, 'h', { metadata: { sessionId: 'ses_d' } });
   f.returned('task', { subagent_type: 'volume-liquidity-analyst' }, 'h', {});
   assert.strictEqual(f.before('harness_compose_check', 'h'), null);
+  // A background launch returns before its role read anything: counted, never named as empty.
+  const bg = deskGate({ FTH_CYCLE_DESK: 'risk-manager' });
+  bg.returned('task', { subagent_type: 'risk-manager' }, 'h', { metadata: { sessionId: 'ses_e', background: true } });
+  assert.strictEqual(bg.before('harness_compose_check', 'h'), null);
 });
