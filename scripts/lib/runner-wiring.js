@@ -365,7 +365,8 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
  * config/runner.json desk.concurrency, each within desk.timeoutMinutes. null (the model launches its desk, as before)
  * without a `runRole`, on another harness than opencode, on a lean cycle, or without a valid desk workflow.
- *   run({ symbols, roles, now, laneBars, at }) -> { reports, missing, results }: each report as a cached one is given
+ *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results }: `context` the
+ *     cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget for the desk; each report as a cached one is given
  *     ({ role, text, at, until, lookups, lookupsKey, source: 'desk' }); `missing` the roles whose result didn't count.
  */
 function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
@@ -376,12 +377,12 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
   if (!workflow) return null;
   const { concurrency, timeoutMinutes } = require('./tunables').runner().desk;
   return {
-    run: async ({ symbols, roles, now, laneBars = {}, at }) => {
+    run: async ({ symbols, roles, now, laneBars = {}, at, context = null, signal = null }) => {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
       const key = lookupsKeyOf(home, b, symbols, now, laneBars);
-      const engine = { run: (role, request, { timeoutMs }) => runRole(role, request, { timeoutMs }) };
+      const engine = { run: (role, request, { timeoutMs }) => runRole(role, request, { timeoutMs, context }) };
       const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe };
-      const res = await runWorkflow(workflow, { run: createRun({ engine, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: timeoutMinutes * 60000 });
+      const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: timeoutMinutes * 60000 });
       const results = res.phases.flatMap(p => p.results);
       const reports = results.filter(r => r.ok).map(r => ({ role: r.role, text: r.text, at: now.toISOString(), until: null, lookups: key ? (r.lookups || []) : [], lookupsKey: key && (r.lookups || []).length ? key : null, source: 'desk' }));
       return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms })) };

@@ -1477,14 +1477,34 @@ function createRunner(deps) {
           // The desk, run by the runner (docs/TOOL-CALLS-AND-ORCHESTRATION.md): the roles the cache didn't serve, before the
           // head trader decides; their reports join the cached ones (the prompt, FTH_CYCLE_CACHED: the gate counts them).
           // A role whose run didn't count is missing: the head trader may launch it, the gate refuses an entry without it.
-          const deskRoles = desk && again.action === 'trade' && !manageOnly && !cfg.paper ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
+          // One-symbol cycles only (a desk report's lookups are credited under one symbol's facts key): with several, the
+          // head trader launches its desk, as before.
+          const deskRoles = desk && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
           let deskRun = null;
+          let deskMs = 0;
           if (deskRoles.length) {
+            // The desk's time is the cycle's: it runs within the cycle's budget, leaving the head trader its minimum,
+            // and what it took comes off the head trader's limit and counts in the cycle's timing (cycle-timing.js).
+            const deskStart = clock.now().getTime();
+            const minHeadMs = TUN.cycle.timeoutMinMinutes * 60000;
+            const stop = new AbortController();
+            const timer = setTimeout(() => stop.abort(), Math.max(0, timeoutMs - minHeadMs));
+            // The roles' runs get the cycle's own context (its bars, lanes and start), as the head trader's does.
+            const deskContext = {
+              action: 'trade', manageOnly: false, cachedRoles: [],
+              symbols: items.map(x => ({ symbol: x.symbol, bar: { t: x.bar.t, contractId: x.bar.contractId, file: x.bar.file } })),
+              ...(multi ? { cycleBars: Object.fromEntries(cacheSymbols.map(s => [s.symbol, s.bar])) } : {}),
+              ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
+            };
             try {
-              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString() });
+              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), context: deskContext, signal: stop.signal });
             } catch (err) {
               failed('the desk: the head trader launches it', err);
+            } finally {
+              clearTimeout(timer);
             }
+            deskMs = Math.max(0, clock.now().getTime() - deskStart);
+            timeoutMs = Math.max(minHeadMs, timeoutMs - deskMs);
           }
           const served = deskRun && deskRun.reports.length
             ? { roles: [...(cached ? cached.roles : []), ...deskRun.reports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskRun.reports] }
@@ -1530,7 +1550,7 @@ function createRunner(deps) {
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             action: again.action, cachedRoles: served ? served.roles : [],
-            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing } } : {}),
+            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs } } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: served ? Object.fromEntries(served.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},

@@ -55,7 +55,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const { result, reportedResult, resultNote } = scoreRun(res, { action, harness: cfg.harness });
   // When it acted against its bar (cycle-timing.js): measurement only.
-  const timing = runTiming({ res, cfg, context, env, startedMs, endedMs, now, result });
+  // The runner's desk ran before this run (runner.js): its time counts in the cycle's (context.desk.ms).
+  const deskMs = context && context.desk && Number.isFinite(context.desk.ms) ? context.desk.ms : 0;
+  const timing = runTiming({ res, cfg, context, env, startedMs: startedMs - deskMs, endedMs, now, result });
   // Did the desk run (desk-check.js)? Only where the transcript shows the roles' calls (ROLES_CHECKED).
   const desk = ROLES_CHECKED.has(cfg.harness) ? deskCheck({
     expected: expectedRoles({ action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: (context && context.cachedRoles) || [] }),

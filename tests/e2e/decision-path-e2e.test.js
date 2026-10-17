@@ -102,8 +102,9 @@ test('decision path, the desk: a full cycle whose roles all returned is recorded
 test('decision path, the runner runs the desk: every role run before the head trader, their reports in its prompt, counted as returned; a role that reads nothing is run again', async () => {
   const w = D.world();
   const runs = [];
-  const runRole = async (role, request) => {
+  const runRole = async (role, request, { context: roleContext }) => {
     runs.push(role);
+    assert.ok(roleContext && roleContext.symbols && roleContext.symbols[0].bar.t, `${role} runs with the cycle's bar`);
     const read = role === 'volume-liquidity-analyst' && runs.filter(r => r === role).length === 1 ? [] : [role === 'risk-manager' ? 'broker_get_account_snapshot' : 'harness_bar_briefing'];
     const text = role === 'risk-manager' ? '## Risk state: account 1 @ now\nTradable: yes' : `## ${role}\nData: bar_briefing m3@x\nBias: long`;
     assert.match(request, /MNQ/);
@@ -117,6 +118,7 @@ test('decision path, the runner runs the desk: every role run before the head tr
   assert.match(prompt, /don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned/);
   assert.deepStrictEqual(context.cachedRoles.sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst']);
   assert.deepStrictEqual(context.desk.missing, []);
+  assert.ok(Number.isFinite(context.desk.ms) && context.desk.ms >= 0, 'the desk\'s time is the cycle\'s');
   assert.deepStrictEqual(context.desk.results.find(x => x.role === 'volume-liquidity-analyst').attempts, 2);
   // The head trader launched no role: its desk was complete (nothing left for it to launch).
   const line = D.cycleLines(w).at(-1);
