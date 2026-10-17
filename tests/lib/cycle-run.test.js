@@ -51,7 +51,7 @@ test('cycle run: the injected run gets the cycle\'s argv and environment, the tr
   assert.ok(d.out.some(t => /cycle log .*cycles/.test(t)) && d.out.some(t => /no-trade - nothing fired/.test(t)));
   assert.match(d.logged[0], /===== 2026-10-07T14:03:02.000Z trade opencode/);
   // A full trade cycle that launched no role: decided without its desk, recorded and said (desk-check.js).
-  assert.deepStrictEqual(line.desk, { expected: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], ran: [], missing: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], failed: [], complete: false });
+  assert.deepStrictEqual(line.desk, { expected: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], ran: [], missing: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], failed: [], complete: false, decided: true });
   assert.deepStrictEqual(d.err, ['[autotrader] [desk] this cycle was decided without market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (no launch returned)\n']);
 });
 
@@ -60,9 +60,9 @@ test('cycle run: the desk check counts the roles that returned, names a failed l
   const said = `${JSON.stringify({ type: 'text', timestamp: 99, sessionID: 's', part: { type: 'text', text: 'CYCLE RESULT: no-trade - nothing fired' } })}\n`;
   const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
   const context = (cachedRoles = []) => ({ action: 'trade', cachedRoles, symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] });
-  const cycle = async (output, ctx) => {
+  const cycle = async (output, ctx, res = {}) => {
     const home = tmpDir();
-    const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output, stdout: output }));
+    const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output, stdout: output, ...res }));
     await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 1000, context: ctx }, d.deps);
     return { line: JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim()), err: d.err.join('') };
   };
@@ -76,6 +76,14 @@ test('cycle run: the desk check counts the roles that returned, names a failed l
   // A manage-only cycle has no roster: nothing expected.
   const manage = await cycle(said, { ...context(), manageOnly: true });
   assert.deepStrictEqual([manage.line.desk.expected, manage.line.desk.complete], [[], true]);
+  // A run that timed out decided nothing, and a cycle ended blocked had no entry to decide: recorded, not said.
+  const late = await cycle(said, context(), { ok: false, timedOut: true });
+  assert.deepStrictEqual([late.line.desk.complete, late.line.desk.decided], [false, false]);
+  assert.doesNotMatch(late.err, /\[desk\]/);
+  const blocked = `${JSON.stringify({ type: 'text', timestamp: 99, sessionID: 's', part: { type: 'text', text: 'CYCLE RESULT: blocked - [kill-switch] no new entries' } })}\n`;
+  const stop = await cycle(blocked, context());
+  assert.deepStrictEqual([stop.line.desk.complete, stop.line.desk.decided], [false, false]);
+  assert.doesNotMatch(stop.err, /\[desk\]/);
 });
 
 test('cycle run: a dry run prints the argv only; a tripped workspace guard runs nothing but end of day; an entry without its skills is said', async () => {

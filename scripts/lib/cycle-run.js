@@ -16,7 +16,7 @@
  */
 
 const path = require('path');
-const { buildCommand, childEnv, scoreRun, cycleOutcome, ROLES_CHECKED } = require('./autotrader');
+const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, ROLES_CHECKED } = require('./autotrader');
 const { runHarness } = require('./harness-run');
 const { writeCycleLog } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
@@ -61,6 +61,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     expected: expectedRoles({ action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: (context && context.cachedRoles) || [] }),
     calls: roleCalls(res.output).calls,
     failed: ((timing && timing.roles) || []).filter(r => r && r.ok === false).map(r => r.role),
+    decided: Boolean(res.ok) && !res.timedOut && outcomeOf(result) !== 'blocked',
   }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk });
