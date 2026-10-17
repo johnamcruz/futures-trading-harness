@@ -148,7 +148,8 @@ Its body explains the workflow for people. A tested loader
 (`scripts/lib/orchestrate/workflows.js`) reads and validates it and refuses an
 invalid one, as `strategies.js` does. As with strategies:
 
-- `node scripts/workflows.js validate` joins `npm run verify`;
+- every shipped workflow is validated by its test in `npm test`, which `npm run verify` runs, and by
+  `node scripts/workflows.js validate`;
 - the Layout in `CLAUDE.md` names `workflows/`;
 - the ECC architecture test covers the loader and its CLI.
 
@@ -235,7 +236,9 @@ then tool calling. Each step is its own PR, with its tests:
    fail-closed per rule).
 4. **Classification of MCP failures** in the harness tools server and the
    gateway, and the call log.
-5. **Deleting the rules the desk makes unnecessary**, and closing #236.
+5. **Deleting the rules the desk makes unnecessary**, and closing #236. (Each patch
+   that becomes a rule in step 3 is deleted from its old place in that same PR: one
+   way of doing each thing.)
 
 ## Tests
 
