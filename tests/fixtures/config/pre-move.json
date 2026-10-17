@@ -970,6 +970,14 @@
    "value": 40,
    "from": "new in fix/role-loops (before it, no role had a step cap)"
   },
+  "limits.repeatReminderAt": {
+   "value": [3, 5, 8],
+   "from": "new in fix/tool-name-and-repeat-guard (before it, no repeat reminder)"
+  },
+  "limits.repeatSameStepMs": {
+   "value": 1000,
+   "from": "new in fix/tool-name-and-repeat-guard (identical calls this close are one step's, not a retry)"
+  },
   "limits.historyChunkBars": {
    "value": 10000,
    "from": "broker/adapter.js HISTORY_CHUNK_BARS"

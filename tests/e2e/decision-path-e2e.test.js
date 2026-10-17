@@ -83,6 +83,22 @@ test('decision path, pass: no candidate on the bar, the model passes; nothing re
   assert.ok([...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY].every(s => line.embeddedSkills.includes(s)), JSON.stringify(line));
 });
 
+test('decision path, the desk: a full cycle whose roles all returned is recorded complete; one decided without an analyst, or without its risk manager, is recorded with what was missing', async () => {
+  const lookups = Object.fromEntries(Object.keys(D.REQUIRED_LOOKUPS).map(r => [r, []]));
+  const ALL = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
+  const cycle = async o => {
+    const w = D.world();
+    await D.pass(w, decisionAt(QUIET_BAR), D.passCycle(w, 'nothing fired', { lookups, ...o }));
+    return D.cycleLines(w).at(-1).desk;
+  };
+  const full = await cycle({});
+  assert.deepStrictEqual([full.expected, full.ran, full.missing, full.complete, full.decided], [ALL, ALL, [], true, true]);
+  const noAnalyst = await cycle({ dropRole: 'volume-liquidity-analyst' });
+  assert.deepStrictEqual([noAnalyst.missing, noAnalyst.complete, noAnalyst.decided], [['volume-liquidity-analyst'], false, true]);
+  const noRisk = await cycle({ dropRole: 'phase1' });
+  assert.deepStrictEqual([noRisk.missing, noRisk.complete], [['risk-manager'], false]);
+});
+
 test('decision path, skip: a setup on the table, the model passes; recorded as skipped with its setup, side and 1R, shown with what followed', async () => {
   const w = D.world();
   const r = await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, `${SETUP.strategy} ${SETUP.side} skipped: no room, the first level in its way is under 1R`));

@@ -126,6 +126,8 @@
     "barsFileBytes": 52428800,
     "headPromptConfigBytes": 4194304,
     "roleSteps": 40,
+    "repeatReminderAt": [3, 5, 8],
+    "repeatSameStepMs": 1000,
     "historyChunkBars": 10000,
     "entryOrdersKept": 200,
     "pendingKept": 200,
