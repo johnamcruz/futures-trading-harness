@@ -120,7 +120,8 @@ test('roles: everything denied, then their own tools; only trade-executor holds 
   assert.deepStrictEqual(Object.keys(config.agent).sort(), [...oc.DISABLED_AGENTS, oc.HEAD_AGENT, ...roles].sort());
   for (const a of agents) {
     const entry = config.agent[a.name];
-    assert.strictEqual(entry.mode, 'subagent');
+    // The desk's roles are 'all': the runner runs each on its own (`run --agent`), the head trader still launches them.
+    assert.strictEqual(entry.mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(a.name) ? 'all' : 'subagent', a.name);
     assert.strictEqual(entry.description, a.description);
     // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills, in the default
     // mode (role-skills.js: index, its core embedded and its index listed).
@@ -170,7 +171,7 @@ test('the run\'s config: the session locked down again, and the runner\'s direct
     for (const a of agents) {
       const r = a.name;
       const role = [...rules(merged.permission), ...rules(merged.agent[r].permission)];
-      assert.strictEqual(merged.agent[r].mode, 'subagent');
+      assert.strictEqual(merged.agent[r].mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(r) ? 'all' : 'subagent', r);
       for (const d of ['/data/bars/*', '/r/strategies/orb/*', '/s/logs/*', '/s/bars-scratch/*']) assert.strictEqual(decide(role, 'external_directory', d), 'allow', `${r}: ${d}`);
       for (const d of ['/home/u/*', '/s/*', '/home/u/.ssh/*']) assert.strictEqual(decide(role, 'external_directory', d), 'deny', `${r}: ${d}`);
       assert.strictEqual(decide(role, 'read', '../../s/.env'), 'deny', r);
@@ -376,22 +377,6 @@ test('the run\'s config denies the skill tool to the roles holding skill_lookup 
   assert.deepStrictEqual(JSON.parse(env.OPENCODE_CONFIG_CONTENT), index);
 });
 
-test('dropInventedTaskId: a task call\'s task_id that names no session (a label, a number, null, an object) is dropped in place; a session id, another tool, or no task_id is left as it is', () => {
-  const { dropInventedTaskId } = require('../../scripts/lib/opencode');
-  for (const id of ['msa', 'rm1', '', 7, null, {}, ['ses_x']]) {
-    const args = { subagent_type: 'risk-manager', prompt: 'p', task_id: id };
-    assert.strictEqual(dropInventedTaskId('task', args), true, JSON.stringify(id));
-    assert.deepStrictEqual(args, { subagent_type: 'risk-manager', prompt: 'p' }, JSON.stringify(id));
-  }
-  const resume = { subagent_type: 'risk-manager', task_id: 'ses_eb993c3b1ffekqL45GDgHQpdeZ' };
-  assert.strictEqual(dropInventedTaskId('task', resume), false);
-  assert.strictEqual(resume.task_id, 'ses_eb993c3b1ffekqL45GDgHQpdeZ');
-  const other = { task_id: 'msa' };
-  assert.strictEqual(dropInventedTaskId('read', other), false);
-  assert.strictEqual(other.task_id, 'msa');
-  for (const args of [{ subagent_type: 'risk-manager' }, null, undefined, 'task_id']) assert.strictEqual(dropInventedTaskId('task', args), false);
-});
-
 test('stepCap: every role is capped at config/runner.json limits.roleSteps but a role holding an order tool (the trade-executor), in the workspace config and the run config', () => {
   const { stepCap, runConfig } = require('../../scripts/lib/opencode');
   const steps = require('../../scripts/lib/tunables').runner().limits.roleSteps;
@@ -410,16 +395,6 @@ test('stepCap: every role is capped at config/runner.json limits.roleSteps but a
   assert.strictEqual(run.agent[oc.HEAD_AGENT].steps, undefined, 'the head trader is the run: its timeout bounds it');
 });
 
-test('toolNameHint: a call opencode sent to its invalid tool names the harness or broker tool meant; anything else is opencode\'s own answer', () => {
-  const { toolNameHint, INVALID_TOOL } = require('../../scripts/lib/opencode');
-  assert.strictEqual(toolNameHint(INVALID_TOOL, { tool: 'compose_check', error: 'x' }), '[tool-name] "compose_check" is not a tool here: call harness_compose_check with the same arguments.');
-  assert.match(toolNameHint(INVALID_TOOL, { tool: 'mcp__harness__bar_briefing' }), /call harness_bar_briefing /);
-  assert.match(toolNameHint(INVALID_TOOL, { tool: 'harness.order_plan' }), /call harness_order_plan /);
-  assert.match(toolNameHint(INVALID_TOOL, { tool: 'get_account_snapshot' }), /call broker_get_account_snapshot /);
-  for (const args of [{ tool: 'nope' }, { tool: 'harness_compose_check' }, {}, null, { tool: 7 }]) assert.strictEqual(toolNameHint(INVALID_TOOL, args), null, JSON.stringify(args));
-  assert.strictEqual(toolNameHint('read', { tool: 'compose_check' }), null, 'only the invalid tool');
-});
-
 test('opencode\'s invalid tool (its repair of an unknown name) is allowed to the session, the head trader and every role, so the plugin can answer it', () => {
   const { INVALID_TOOL, runConfig } = require('../../scripts/lib/opencode');
   const agents = loadAgents(path.resolve(__dirname, '..', '..'));
@@ -430,77 +405,18 @@ test('opencode\'s invalid tool (its repair of an unknown name) is allowed to the
   for (const a of agents) assert.strictEqual(ws.agent[a.name].permission[INVALID_TOOL], 'allow', `workspace ${a.name}`);
 });
 
-test('repeatGuard: an identical call that failed is answered with the reminder from the first count on; one that succeeds gets it after its result at each count; per session; order tools and launches untouched', () => {
-  const { repeatGuard } = require('../../scripts/lib/opencode');
-  let t = 0;
-  const clock = () => t;
-  const g = repeatGuard([3, 5, 8], clock, 1000);
-  // Retries a model step apart (5 s): each identical one after a failure.
-  const failing = Array.from({ length: 6 }, () => { t += 5000; return g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's1'); });
-  assert.deepStrictEqual(failing.map(Boolean), [false, false, true, true, true, true]);
-  assert.match(failing[2], /^\[repeat\] You are repeating the exact same tool call with identical arguments/);
-  assert.match(failing[3], /^\[repeat\] You have called harness_market_snapshot 4 times in a row with the same arguments\. It will not change/);
-  assert.strictEqual(g.before('harness_market_snapshot', { bars: '/right.json' }, 's1'), null, 'new arguments run');
-  assert.strictEqual(g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's2'), null, 'another session counts its own');
-  // Identical calls sent together in one step (moments apart, still running): never taken for failed retries.
-  const par = repeatGuard([3, 5, 8], clock, 1000);
-  assert.deepStrictEqual([1, 2, 3, 4].map(i => par.before('harness_bar_briefing', { symbol: 'MNQ' }, 'p', `c${i}`)), [null, null, null, null]);
-  // Two sent together, one returns and one fails: the failed one still counts for the retries that follow.
-  const twin = repeatGuard([3, 5, 8], clock, 1000);
-  twin.before('harness_market_snapshot', { bars: '/x' }, 'w', 'a');
-  twin.before('harness_market_snapshot', { bars: '/x' }, 'w', 'b');
-  twin.after('harness_market_snapshot', {}, 'w', 'b');
-  t += 5000;
-  assert.match(twin.before('harness_market_snapshot', { bars: '/x' }, 'w', 'c'), /^\[repeat\]/, 'a never returned');
-  // Succeeding: it always runs; the reminder follows its result at 3, 5 and 8 only. Argument order doesn't matter.
-  const ok = repeatGuard([3, 5, 8], clock, 1000);
-  const notes = [];
-  for (let i = 0; i < 8; i += 1) {
-    assert.strictEqual(ok.before('harness_bar_briefing', i % 2 ? { json: true, symbol: 'MNQ' } : { symbol: 'MNQ', json: true }, 's'), null);
-    notes.push(ok.after('harness_bar_briefing', {}, 's', null, 'the same briefing'));
-  }
-  assert.deepStrictEqual(notes.map(n => Boolean(n)), [false, false, true, false, true, false, false, true]);
-  assert.match(notes[2], /^\n\n\[repeat\] You are repeating/);
-  // A repeat whose answer moved (a poll that learns something): never reminded.
-  const moving = repeatGuard([3, 5, 8], clock, 1000);
-  const moved = [];
-  for (let i = 0; i < 5; i += 1) {
-    moving.before('harness_skill_lookup', { skill: 'x' }, 'm');
-    moved.push(moving.after('harness_skill_lookup', {}, 'm', null, `answer ${i}`));
-  }
-  assert.deepStrictEqual(moved, [null, null, null, null, null]);
-  // A call recorded without an id still returns when its after hook carries one: never taken for failed.
-  const ids = repeatGuard([3, 5, 8], clock, 1000);
-  for (let i = 0; i < 4; i += 1) { ids.before('harness_bar_briefing', { symbol: 'MNQ' }, 'i'); t += 5000; ids.after('harness_bar_briefing', {}, 'i', `late-${i}`, `b${i}`); }
-  assert.strictEqual(ids.before('harness_bar_briefing', { symbol: 'MNQ' }, 'i'), null);
-  // Every broker tool (an order, or a read whose answer moves while an exit fills) and a role launch: never refused,
-  // never reminded, even after failing.
-  const ord = repeatGuard([3, 5, 8], clock, 1000);
-  for (let i = 0; i < 6; i += 1) {
-    t += 5000;
-    for (const tool of ['broker_close_position', 'broker_get_positions', 'broker_list_open_orders', 'broker_get_account_snapshot', 'task']) assert.strictEqual(ord.before(tool, { contractId: 'MNQ' }, 's'), null, tool);
-  }
-  assert.strictEqual(ord.after('broker_get_positions', {}, 's', null, 'same'), null);
-});
-
-test('deskGate: the head trader\'s compose_check waits until every role FTH_CYCLE_DESK names reported in its session; nothing else is held', () => {
-  const { deskGate } = require('../../scripts/lib/opencode');
-  const g = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
-  assert.match(g.before('harness_compose_check', 'h'), /^\[desk\] compose_check composes the trade from the desk's reports: launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager first/);
-  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) g.returned('task', { subagent_type: r }, 'h');
-  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/);
-  g.returned('task', { subagent_type: 'risk-manager' }, 'other');
-  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/, 'a report in another session is not this one\'s');
-  g.returned('task', { subagent_type: ' risk-manager ' }, 'h');
-  assert.strictEqual(g.before('harness_compose_check', 'h'), null, 'the desk reported');
-  // Never held: the executor, an exit, a stop, a read, the briefing, another harness tool.
-  const fresh = deskGate({ FTH_CYCLE_DESK: 'risk-manager' });
-  for (const t of ['task', 'broker_close_position', 'broker_cancel_order', 'broker_modify_order', 'broker_get_positions', 'harness_bar_briefing', 'harness_order_plan', 'compose_check']) assert.strictEqual(fresh.before(t, 'h'), null, t);
-  // No desk this cycle (lean, manage-only, paper, all cached, another action): nothing held.
-  for (const env of [{}, { FTH_CYCLE_DESK: '' }, { FTH_CYCLE_DESK: ' , ' }, null]) assert.strictEqual(deskGate(env).before('harness_compose_check', 'h'), null, JSON.stringify(env));
-  // A role both expected and denied (it can't be launched) is never waited for, so compose never becomes impossible.
-  const both = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,risk-manager', FTH_DENIED_ROLES: 'market-structure-analyst' });
-  assert.match(both.before('harness_compose_check', 'h'), /launch risk-manager first/);
-  both.returned('task', { subagent_type: 'risk-manager' }, 'h');
-  assert.strictEqual(both.before('harness_compose_check', 'h'), null);
+test('runResult: one run\'s final message and the tools it completed, from opencode\'s events; roleMode: the desk\'s roles are "all"', () => {
+  const { runResult, roleMode } = require('../../scripts/lib/opencode');
+  const out = [
+    'noise', '{bad',
+    JSON.stringify({ type: 'text', part: { type: 'text', text: 'thinking' } }),
+    JSON.stringify({ type: 'tool_use', part: { tool: 'harness_bar_briefing', state: { status: 'completed' } } }),
+    JSON.stringify({ type: 'tool_use', part: { tool: 'harness_mtf_read', state: { status: 'error' } } }),
+    JSON.stringify({ type: 'text', part: { type: 'text', text: '  Data: bar_briefing m3@1  ' } }),
+    JSON.stringify({ type: 'text', part: { type: 'text', text: '  ' } }),
+  ].join('\n');
+  assert.deepStrictEqual(runResult(out), { text: 'Data: bar_briefing m3@1', tools: ['harness_bar_briefing'] });
+  assert.deepStrictEqual(runResult(''), { text: '', tools: [] });
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) assert.strictEqual(roleMode({ name: r }), 'all', r);
+  for (const r of ['trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(roleMode({ name: r }), 'subagent', r);
 });

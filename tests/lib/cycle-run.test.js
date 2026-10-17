@@ -120,3 +120,29 @@ test('cycle run: the workspace guard is required (never defaulted open), and the
   assert.match(cli, /runCycleWith\(cfg, action, prompt, opts, limits, \{[\s\S]*?\bguard: \(killSwitchFile, when\) => guardWorkspace\(cfg, killSwitchFile, when\)/);
   assert.match(cli, /^function guardWorkspace\(cfg, killSwitchFile, when\) \{/m);
 });
+
+test('runRole: one desk role\'s own harness run (`--agent <role>`, the request its prompt), its final text, completed tools and lookups; opencode only', async () => {
+  const { runRole } = require('../../scripts/lib/cycle-run');
+  const home = tmpDir();
+  const seen = [];
+  const run = async (argv, o) => {
+    seen.push({ argv, o });
+    fs.mkdirSync(path.dirname(o.liveFile), { recursive: true });
+    const { lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
+    fs.writeFileSync(lookupsFile(o.liveFile), `${JSON.stringify({ at: 1, role: 'risk-manager', skill: 'position-sizing' })}\n`);
+    const output = [
+      JSON.stringify({ type: 'tool_use', part: { tool: 'broker_get_account_snapshot', state: { status: 'completed' } } }),
+      JSON.stringify({ type: 'tool_use', part: { tool: 'harness_combine_status', state: { status: 'error' } } }),
+      JSON.stringify({ type: 'text', part: { type: 'text', text: '## Risk state: account 1' } }),
+    ].join('\n');
+    return { ok: true, timedOut: false, code: 0, output, stdout: output };
+  };
+  const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const r = await runRole(cfg, 'risk-manager', 'Phase 1, risk state, for MNQ', { timeoutMs: 5000, context: { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home, PATH: process.env.PATH }, run });
+  const { argv, o } = seen[0];
+  assert.deepStrictEqual(argv.slice(argv.indexOf('--agent'), argv.indexOf('--agent') + 2), ['--agent', 'risk-manager']);
+  assert.strictEqual(argv.at(-1), 'Phase 1, risk state, for MNQ');
+  assert.strictEqual(o.timeoutMs, 5000);
+  assert.deepStrictEqual([r.ok, r.text, r.tools, r.lookups], [true, '## Risk state: account 1', ['broker_get_account_snapshot'], ['position-sizing']]);
+  await assert.rejects(runRole(validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] }), 'risk-manager', 'x', {}, { root: ROOT, run }), /opencode only/);
+});

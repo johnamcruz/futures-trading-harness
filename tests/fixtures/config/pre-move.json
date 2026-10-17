@@ -1002,6 +1002,14 @@
    "value": 20000,
    "from": "prop/mc-size.js MC_MAX"
   },
+  "desk.concurrency": {
+   "value": 2,
+   "from": "new in feat/desk-in-runner (the runner's desk: roles at once, the model server's concurrency)"
+  },
+  "desk.timeoutMinutes": {
+   "value": 8,
+   "from": "new in feat/desk-in-runner (one desk role's run)"
+  },
   "gate.factsMinChecked": {
    "value": 2,
    "from": "trading/fact-claims.js MIN_CHECKED"

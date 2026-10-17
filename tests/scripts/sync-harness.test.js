@@ -33,7 +33,7 @@ test('generated files parse in their harness formats', () => {
   // opencode's project config is JSON (no comments), one entry per role.
   const opencode = JSON.parse(files['workspace/opencode.json']);
   assert.deepStrictEqual(Object.keys(opencode.mcp), ['broker', 'harness']);
-  for (const f of fs.readdirSync(path.join(ROOT, 'agents')).filter(n => n.endsWith('.md'))) assert.strictEqual(opencode.agent[f.replace(/\.md$/, '')].mode, 'subagent', f);
+  for (const f of fs.readdirSync(path.join(ROOT, 'agents')).filter(n => n.endsWith('.md'))) assert.strictEqual(opencode.agent[f.replace(/\.md$/, '')].mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(f.replace(/\.md$/, '')) ? 'all' : 'subagent', f);
   const ext = JSON.parse(files['qwen-extension/qwen-extension.json']);
   assert.strictEqual(ext.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version);
   assert.match(ext.mcpServers.broker.args[0], /^\$\{extensionPath\}/);

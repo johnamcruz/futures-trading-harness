@@ -492,7 +492,10 @@ function cachedText(cached) {
   const own = cached.reports.filter(r => r.tf);
   const ownText = own.length ? ` A report on an analyst's own timeframe (${own.map(r => `${r.role} ${r.tf}`).join(', ')}) holds until that timeframe's next bar close, so it may be up to one of its bars old; take this bar's facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : '';
   const from = r => (r.tf ? `${r.tf}, from ${etTime(r.at)}, holds until ${etTime(r.until)}` : `from ${etTime(r.at)}`);
-  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
+  // The desk's reports (the runner ran those roles this cycle: runner-wiring.js deskFor) apart from the cache's.
+  const desk = cached.reports.filter(r => r.source === 'desk').map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
+  const deskText = desk.length ? ` The desk ran for this bar: the runner ran ${desk.join(', ')} this cycle and their reports are below, with any the report cache served.` : '';
+  return `${deskText} Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (${from(r)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
@@ -719,7 +722,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
 }
 
 /** argv for one headless run. */
-function buildCommand(cfg, prompt, root, env = process.env) {
+function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {}) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
   switch (cfg.harness) {
@@ -749,7 +752,8 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       // the model is the user's opencode default unless the config names one (provider/model).
       // --dir: opencode takes its project directory from PWD, not the working directory the runner sets.
       // --agent: the harness's head trader, whose permissions no user config for opencode's own agents changes.
-      return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), '--agent', opencode.HEAD_AGENT, ...(model ? ['--model', model] : []), ...extra, prompt];
+      // `agent`: one of the desk's roles, run on its own by the runner (desk-runner.js).
+      return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), '--agent', agent || opencode.HEAD_AGENT, ...(model ? ['--model', model] : []), ...extra, prompt];
     default:
       return cfg.command.map(a => String(a).replace('{prompt}', prompt));
   }

@@ -18,6 +18,8 @@
  *                loadState, saveState, killSwitchFile, log, event, onBarClosed, agents })   createRunner(...) with every
  *                                         dependency; onBarClosed(symbol, { bar, stale, action, contractId, values }) hears each closed bar the runner polls
  *                                         (barRecorder: its bars archived, the strategies' field values taken)
+ *   deskFor({ home, cfg, root, runRole, log })  the runner's desk (workflows/desk/WORKFLOW.md), or null
+ *   lookupsKeyOf(home, briefings, symbols, now, laneBars)  a one-symbol cycle's lookups facts key, or null
  *   reportCacheFor(home, cfg, frames, env) the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  *   briefingRecorder(home, cfg, now, env, { frames, dataDir, log })   the bar briefing of each bar, and of each
@@ -347,6 +349,49 @@ function lookupNeeds(briefingsBySymbol, now, env = process.env, { home = null, l
 /** Index mode: the roles a situational lookup is required of on these briefings' bars (lookupNeeds' roles). */
 const lookupRoles = (briefingsBySymbol, now, env = process.env, opts = {}) => Object.keys(lookupNeeds(briefingsBySymbol, now, env, opts));
 
+/**
+ * The facts key a one-symbol cycle's lookup requirement comes from (skill-lookups.js factsKey), else null, under which
+ * no cached or desk lookup counts.
+ */
+function lookupsKeyOf(home, b, symbols, now, laneBars) {
+  const { factsKey, lanesFor, composedAt } = require('./trading/skill-lookups');
+  const first = symbols.length === 1 ? b[symbols[0].symbol] : null;
+  return first !== null && first !== undefined ? factsKey(first, now, lanesFor(laneBars, symbols[0].symbol), null, first ? composedAt(home, symbols[0].symbol, first.asOf) : []) : null;
+}
+
+/**
+ * The runner's desk (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The desk, the first workflow"): each full trade cycle the
+ * runner runs the desk's roles the report cache didn't serve, as workflows/desk/WORKFLOW.md says, through the
+ * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
+ * config/runner.json desk.concurrency, each within desk.timeoutMinutes. null (the model launches its desk, as before)
+ * without a `runRole`, on another harness than opencode, on a lean cycle, or without a valid desk workflow.
+ *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results }: `context` the
+ *     cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget for the desk,
+ *     `budgetMs` its length: no role's own run outlasts it; each report as a cached one is given
+ *     ({ role, text, at, until, lookups, lookupsKey, source: 'desk' }); `missing` the roles whose result didn't count.
+ */
+function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
+  if (typeof runRole !== 'function' || cfg.harness !== 'opencode' || cfg.cycle !== 'full') return null;
+  const { workflowNamed, runWorkflow } = require('./orchestrate/workflows');
+  const { createRun } = require('./orchestrate/engine');
+  const workflow = workflowNamed(root, 'desk');
+  if (!workflow) return null;
+  const { concurrency, timeoutMinutes } = require('./tunables').runner().desk;
+  return {
+    run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null }) => {
+      const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
+      const key = lookupsKeyOf(home, b, symbols, now, laneBars);
+      const perRoleMs = timeoutMinutes * 60000;
+      const engine = { run: (role, request, { timeoutMs }) => runRole(role, request, { timeoutMs, context }) };
+      const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars };
+      const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
+      const results = res.phases.flatMap(p => p.results);
+      const reports = results.filter(r => r.ok).map(r => ({ role: r.role, text: r.text, at: now.toISOString(), until: null, lookups: key ? (r.lookups || []) : [], lookupsKey: key && (r.lookups || []).length ? key : null, source: 'desk' }));
+      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms })) };
+    },
+  };
+}
+
 function reportCacheFor(home, cfg, frames = [], env = process.env) {
   if (!['claude', 'opencode'].includes(cfg.harness)) return null;
   const briefings = symbols => Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
@@ -356,11 +401,7 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   const own = symbols => ({ frames: roles, frameBriefings: Object.fromEntries(symbols.map(s => [s.symbol, Object.fromEntries(tfs.map(m => [m, readFrameBriefing(home, s.symbol, m)]))])) });
   // The facts key the cycle's lookup requirement comes from (skill-lookups.js factsKey): one-symbol cycles only (an
   // analyst's report is cached in those alone); else null, under which no cached lookup counts.
-  const keyOf = (b, symbols, now, laneBars) => {
-    const { factsKey, lanesFor, composedAt } = require('./trading/skill-lookups');
-    const first = symbols.length === 1 ? b[symbols[0].symbol] : null;
-    return first !== null ? factsKey(first, now, lanesFor(laneBars, symbols[0].symbol), null, first ? composedAt(home, symbols[0].symbol, first.asOf) : []) : null;
-  };
+  const keyOf = (b, symbols, now, laneBars) => lookupsKeyOf(home, b, symbols, now, laneBars);
   return {
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
     serve: ({ symbols, account, now, laneBars = {} }) => {
@@ -381,10 +422,11 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
     },
     // `lookups`: the cycle's skill_lookup records (skill-lookups.js), so each cached report keeps its own call's, under
     // the cycle's facts key (`laneBars` as serve takes them).
-    record: ({ symbols, account, now, output, served, lookups = [], laneBars = {} }) => {
+    // `fresh`: the desk's reports this cycle (deskFor), recorded as the roles' own calls are.
+    record: ({ symbols, account, now, output, served, fresh = [], lookups = [], laneBars = {} }) => {
       try {
         const b = briefings(symbols);
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars) }));
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars) }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;
@@ -454,7 +496,7 @@ function exitsOnly(env, log, critical = require('./tunables').critical()) {
   return true;
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined }) {
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -526,6 +568,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // A 1m lane's closed bars, noted before the pass's briefings: the runner's briefing builds 5m candles from them.
     recordFineBars: recorder.fine,
     reportCache: reportCacheFor(home, cfg, frames, env),
+    // The desk run by the runner (deskFor): on `runRole` (cycle-run.js, the caller's), else null.
+    desk: deskFor({ home, cfg, root, runRole, log }),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),
@@ -570,4 +614,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { deskFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

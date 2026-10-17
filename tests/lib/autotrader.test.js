@@ -1095,9 +1095,10 @@ test('deniedRoles: the analysts served from the cache, and in a trade or manage 
     for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(task[r], 'allow', r);
   }
   assert.deepStrictEqual(env.FTH_DENIED_ROLES.split(',').sort(), ['market-structure-analyst', 'strategy-researcher', 'trend-momentum-analyst'], 'the run\'s own list, never an inherited one');
-  const { deniedTaskRefusal } = require('../../scripts/lib/opencode');
-  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.match(deniedTaskRefusal('task', { subagent_type: r }, env), /\[denied-role\]/, r);
-  for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(deniedTaskRefusal('task', { subagent_type: r }, env), null, r);
+  // The tool-call layer's denied-role rule (toolcall/rules.js) refuses them, through its pipeline.
+  const denied = r => require('../../scripts/lib/toolcall/pipeline').createPipeline({ log: require('../../scripts/lib/toolcall/call-log').createCallLog(), env }).before({ tool: 'task', name: 'task', args: { subagent_type: r }, session: 's' }).refuse;
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.match(denied(r), /\[denied-role\]/, r);
+  for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(denied(r), null, r);
   // Another cycle with another cache: the same config (the head trader's tools and prompt), only the plugin's list differs.
   const other = childEnv(validateConfig({ harness: 'opencode' }), root, { FTH_HOME: '/srv/fth' }, { ...ctx, cachedRoles: [] });
   assert.strictEqual(other.OPENCODE_CONFIG_CONTENT, env.OPENCODE_CONFIG_CONTENT);

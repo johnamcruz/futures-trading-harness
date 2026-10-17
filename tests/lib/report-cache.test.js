@@ -287,3 +287,18 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   assert.deepStrictEqual(serveAt(new Date(at - 1)), [], 'from the future');
   assert.deepStrictEqual(serveAt(undefined), [], 'no clock');
 });
+
+test('the desk\'s reports (the runner ran those roles) are recorded as the roles\' own, with their own lookups, and served the next bar', () => {
+  const { a, b } = pair();
+  const now = new Date(a.closedAt);
+  const fresh = [
+    { role: ANALYSTS[0], text: `${data(a)}\nBias: long (high)`, lookups: ['rejection', 'breakout', 'rejection'] },
+    { role: 'risk-manager', text: '## Risk state: account 7\nPhase 1: budget 2 trades', lookups: [] },
+  ];
+  const cache = RC.recordReports({ output: '', fresh, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now, lookupsKey: 'k' });
+  assert.deepStrictEqual(Object.keys(cache.analysts), [ANALYSTS[0]]);
+  assert.deepStrictEqual([cache.analysts[ANALYSTS[0]].lookups, cache.analysts[ANALYSTS[0]].lookupsKey], [['breakout', 'rejection'], 'k']);
+  assert.match(cache.phase1.text, /Phase 1: budget 2 trades/);
+  const next = RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) });
+  assert.deepStrictEqual(next.roles, [ANALYSTS[0], 'risk-manager']);
+});

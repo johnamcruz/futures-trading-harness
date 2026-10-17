@@ -130,6 +130,8 @@ async function pass(w, at, script, o = {}) {
   try {
     const runner = wireRunner({
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
+      // `o.runRole`: the runner runs the desk itself (runner-wiring.js deskFor), each role's run scripted.
+      ...(o.runRole ? { runRole: o.runRole } : {}),
       runCycle: async (action, prompt, limits) => {
         const r = await runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: slow ? slow.run : model, guard: () => true, ...(slow ? { wallNow: slow.wallNow } : {}) });
         ran.push({ action, prompt, context: limits && limits.context, ...r });

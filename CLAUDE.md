@@ -66,6 +66,9 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   list, a command shim, or a reasoned allow-list
   (`tests/plugin/skills-indexed.test.js`).
 - `strategies/<name>/STRATEGY.md`: schema in `scripts/lib/trading/strategies.js`.
+- `workflows/<name>/WORKFLOW.md`: a multi-role step the runner runs in code (the desk), schema and loader in
+  `scripts/lib/orchestrate/workflows.js`, run by `orchestrate/engine.js`; `node scripts/workflows.js validate`
+  (docs/TOOL-CALLS-AND-ORCHESTRATION.md).
 - `accounts/<name>/ACCOUNT.md`: prop account profiles (`scripts/lib/trading/accounts.js`);
   combine rules and micro/mini sizing in `scripts/lib/trading/combine.js`, live attempt
   state and the gate's prop checks in `prop-state.js`.
@@ -205,9 +208,11 @@ request, every time, whatever the size of the change:
    `docs/research/cisd-ote-textbook.md` (the census the `cisd` and
    `fib-retracement` skills cite), `docs/COMPOSED-ENTRY.md` (the
    approved design of `trade_lifecycle` that `prop_portfolio`, the
-   rulebook and the retired-strategy list point to), and `docs/TRAINING.md`
+   rulebook and the retired-strategy list point to), `docs/TRAINING.md`
    (the training guide the replay's stages and the training preflight
-   point to).
+   point to), and `docs/TOOL-CALLS-AND-ORCHESTRATION.md` (the tool-call and
+   orchestration design the workflows, the runner's desk and the tool-call
+   rules are built from).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
