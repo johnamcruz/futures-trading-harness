@@ -20,7 +20,9 @@
  * check and the read), and a real path outside the directory. Nothing is read
  * here but metadata, so a refusal never echoes the file's content.
  *
- * barsFile(value, { env, dirs, uid }) -> { file } (the path to read) or { error }
+ * barsFile(value, { env, dirs, uid }) -> { file } (the path to read) or { error }; a path refused as outside them (or
+ *   not absolute) whose file name is a regular file in one of them names that file (sameName), so a model that
+ *   shortened the path ("/workspace/bars-scratch/MNQ-3m.json": 386 retries in the PPC run of 2026-10-16) can copy it
  */
 
 const fs = require('fs');
@@ -64,11 +66,29 @@ function walkError(dir, file, uid) {
   return null;
 }
 
+/**
+ * The regular file of the same name in one of the bars directories, the one whose own name the given path names first
+ * (bars-scratch for ".../bars-scratch/x.json"), else the first; null when none holds it. Metadata only (lstat: no link).
+ */
+function sameName(value, dirs) {
+  const name = path.basename(String(value));
+  if (!name || !EXTENSIONS.includes(path.extname(name).toLowerCase())) return null;
+  const parts = String(value).split(/[\\/]+/);
+  const ordered = [...dirs].sort((a, b) => Number(!parts.includes(path.basename(a))) - Number(!parts.includes(path.basename(b))));
+  for (const d of ordered) {
+    const candidate = path.join(path.resolve(d), name);
+    try {
+      if (fs.lstatSync(candidate).isFile()) return candidate;
+    } catch (_err) { /* not there */ }
+  }
+  return null;
+}
+
 function barsFile(value, { env = process.env, dirs = barsDirs(env), uid = typeof process.getuid === 'function' ? process.getuid() : null } = {}) {
   const shown = String(value).slice(0, 200);
-  const refused = why => ({ error: `a bars file (${EXTENSIONS.join(', ')}, at most ${MAX_BYTES / 1024 / 1024} MB) by absolute path under ${dirs.join(' or ')} (${why}: ${shown})` });
+  const refused = (why, hint = null) => ({ error: `a bars file (${EXTENSIONS.join(', ')}, at most ${MAX_BYTES / 1024 / 1024} MB) by absolute path under ${dirs.join(' or ')} (${why}: ${shown})${hint ? `; that file is ${hint}: pass that path` : ''}` });
   if (typeof value !== 'string' || value === '' || value.includes('\0')) return refused('not a path');
-  if (!path.isAbsolute(value)) return refused('not an absolute path');
+  if (!path.isAbsolute(value)) return refused('not an absolute path', sameName(value, dirs));
   if (!EXTENSIONS.includes(path.extname(value).toLowerCase())) return refused('not a bars file type');
   const given = path.resolve(value);
   for (const d of dirs) {
@@ -95,7 +115,7 @@ function barsFile(value, { env = process.env, dirs = barsDirs(env), uid = typeof
     if (!inside(real, realDir)) return refused('its real path is outside');
     return { file };
   }
-  return refused('outside them');
+  return refused('outside them', sameName(given, dirs));
 }
 
 module.exports = { EXTENSIONS, MAX_BYTES, barsDirs, barsFile };

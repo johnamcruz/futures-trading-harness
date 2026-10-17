@@ -391,3 +391,21 @@ test('dropInventedTaskId: a task call\'s task_id that names no session (a label,
   assert.strictEqual(other.task_id, 'msa');
   for (const args of [{ subagent_type: 'risk-manager' }, null, undefined, 'task_id']) assert.strictEqual(dropInventedTaskId('task', args), false);
 });
+
+test('stepCap: every role is capped at config/runner.json limits.roleSteps but a role holding an order tool (the trade-executor), in the workspace config and the run config', () => {
+  const { stepCap, runConfig } = require('../../scripts/lib/opencode');
+  const steps = require('../../scripts/lib/tunables').runner().limits.roleSteps;
+  assert.ok(Number.isInteger(steps) && steps > 0);
+  assert.deepStrictEqual(stepCap({ tools: ['Read', 'mcp__harness__bar_briefing', 'mcp__broker__get_bars'] }), { steps });
+  for (const t of ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position']) assert.deepStrictEqual(stepCap({ tools: ['Read', `mcp__broker__${t}`] }), {}, t);
+  assert.deepStrictEqual(stepCap({}), { steps });
+  const agents = loadAgents(path.resolve(__dirname, '..', '..'));
+  const run = runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents });
+  const ws = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'workspace', 'opencode.json'), 'utf8'));
+  for (const a of agents) {
+    const want = a.name === 'trade-executor' ? undefined : steps;
+    assert.strictEqual(run.agent[a.name].steps, want, `run ${a.name}`);
+    assert.strictEqual(ws.agent[a.name].steps, want, `workspace ${a.name}`);
+  }
+  assert.strictEqual(run.agent[oc.HEAD_AGENT].steps, undefined, 'the head trader is the run: its timeout bounds it');
+});

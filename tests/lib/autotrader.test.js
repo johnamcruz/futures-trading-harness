@@ -872,6 +872,16 @@ test('opencode: validated, run headless with JSON events in the workspace it nam
   assert.ok(validateConfig({ harness: 'custom', command: ['x', '{prompt}', '--auto'] }));
 });
 
+test('opencode: the run config the runner hands opencode (OPENCODE_CONFIG_CONTENT) caps every role\'s steps but the order role\'s and the head trader\'s, in both modes, live and in a replay', () => {
+  const steps = require('../../scripts/lib/tunables').runner().limits.roleSteps;
+  for (const extra of [{}, { FTH_ROLE_SKILLS: 'full' }, { FTH_REPLAY_NOW: '2026-10-07T14:03:02Z' }]) {
+    const run = JSON.parse(childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth', ...extra }).OPENCODE_CONFIG_CONTENT);
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) assert.strictEqual(run.agent[r].steps, steps, `${r} ${JSON.stringify(extra)}`);
+    assert.strictEqual(run.agent['trade-executor'].steps, undefined, `the order role is never capped ${JSON.stringify(extra)}`);
+    assert.strictEqual(run.agent['fth-head-trader'].steps, undefined, `the head trader is not capped ${JSON.stringify(extra)}`);
+  }
+});
+
 test('opencode: the run\'s environment locks it down and lets it read the runner\'s directories', () => {
   const env = childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), '/r', { FTH_HOME: '/srv/fth', PWD: '/elsewhere', OPENCODE_PERMISSION: '{"*":"allow"}', OPENCODE_DISABLE_PROJECT_CONFIG: '1' });
   assert.deepStrictEqual([env.FTH_ROOT, env.FTH_AUTONOMOUS, env.PWD], ['/r', '1', '/r/workspace']);

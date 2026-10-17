@@ -125,6 +125,7 @@
     "skillUsageBytes": 67108864,
     "barsFileBytes": 52428800,
     "headPromptConfigBytes": 4194304,
+    "roleSteps": 40,
     "historyChunkBars": 10000,
     "entryOrdersKept": 200,
     "pendingKept": 200,
