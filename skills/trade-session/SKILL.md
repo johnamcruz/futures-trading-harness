@@ -123,6 +123,7 @@ It orders the thinking and adds no filter: the priority order decides.
 - No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.
+- Runner runs the entry (prompt says): OK → `planned`, skip 4-6.
 
 ### 4. Plan
 

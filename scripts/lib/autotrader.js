@@ -500,6 +500,14 @@ function cachedText(cached) {
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (${from(r)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
+/**
+ * A cycle where the runner runs the entry (runner-entry.js, workflows/entry: context.entry): the head trader's job ends
+ * at its decision, an OK compose_check then `CYCLE RESULT: planned`; the runner runs risk-manager phase 2 and the
+ * trade-executor, and writes the journal plan. Said in place of the roster's phase 2 and executor (the desk's reports
+ * are in the prompt), and refused by the tool-call layer's entry-route rule (FTH_CYCLE_ENTRY) if launched anyway.
+ */
+const ENTRY_TEXT = ' The runner runs this cycle\'s entry (the desk\'s reports are below): to trade, call compose_check with your reads and size; when it says OK, end with CYCLE RESULT: planned - <setup> <side> <size> (the trade-lifecycle skill). The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don\'t launch risk-manager or the trade-executor, and don\'t write the plan (the harness refuses those launches this cycle). To pass: CYCLE RESULT: no-trade - <why>.';
+
 // How the skills are loaded: Claude, opencode and Qwen Code have a skill tool (which the gate sees, skills-loaded.js);
 // Codex reads them (it carries them in AGENTS.md); a custom harness, either.
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
@@ -568,7 +576,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [] } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -610,7 +618,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -696,6 +704,14 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const desk = require('./trading/desk-check').expectedRoles({ action: context && context.action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: [...cachedRoles, ...(rolesFile ? runnerRoles : [])] });
   if (desk.length) env.FTH_CYCLE_DESK = desk.join(',');
   else delete env.FTH_CYCLE_DESK;
+  // A cycle where the runner runs the entry (runner-entry.js): the tool-call layer's entry-route rule refuses the head
+  // trader's own launch of phase 2 and the trade-executor (toolcall/rules.js). Never inherited.
+  if (context && context.entry === true) env.FTH_CYCLE_ENTRY = '1';
+  else delete env.FTH_CYCLE_ENTRY;
+  // A role the runner runs after the head trader for its cycle (the entry's): the head trader's cycle id, so the gate
+  // log stamps its orders as the cycle's (check-order.js cycleId). Never inherited.
+  if (context && typeof context.cycleId === 'string' && /^[0-9a-f]{16}$/.test(context.cycleId)) env.FTH_CYCLE_ID = context.cycleId;
+  else delete env.FTH_CYCLE_ID;
   // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required
   // under, which the gate counts for that role under that key only.
   const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, e]) => cachedRoles.includes(r) && e && Array.isArray(e.skills) && e.skills.length && typeof e.key === 'string' && e.key) : [];
@@ -1038,6 +1054,7 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
+  ENTRY_TEXT,
   ROLES_CHECKED,
   loadList,
   embedsSkills,

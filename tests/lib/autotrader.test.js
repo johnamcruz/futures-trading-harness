@@ -1365,3 +1365,30 @@ test('the runner\'s opencode plugin answers an unknown tool name with the name m
   }
   assert.match(own.output, /^listing\n\n\[repeat\] You are repeating/);
 });
+
+test('a cycle where the runner runs the entry: FTH_CYCLE_ENTRY for the head trader\'s run (the entry-route rule), its prompt says the route in place of the roster\'s phase 2; a role run after it gets the cycle\'s id (FTH_CYCLE_ID); neither inherited', () => {
+  const full = validateConfig({ harness: 'opencode', dataDir: '/data/bars' });
+  const env = (context, base = {}) => childEnv(full, '/r', { FTH_HOME: '/srv/fth', ...base }, context);
+  assert.strictEqual(env({ action: 'trade', symbols: [], entry: true }).FTH_CYCLE_ENTRY, '1');
+  for (const context of [{ action: 'trade', symbols: [] }, { action: 'trade', symbols: [], entry: 'yes' }, { action: 'trade', symbols: [], entry: false }, null]) {
+    assert.strictEqual(env(context, { FTH_CYCLE_ENTRY: '1' }).FTH_CYCLE_ENTRY, undefined, JSON.stringify(context));
+  }
+  assert.strictEqual(env({ action: 'trade', symbols: [], cycleId: '0123456789abcdef' }).FTH_CYCLE_ID, '0123456789abcdef');
+  for (const cycleId of ['0123', 'not hex at all!!', 7, null]) assert.strictEqual(env({ action: 'trade', symbols: [], cycleId }, { FTH_CYCLE_ID: 'ffffffffffffffff' }).FTH_CYCLE_ID, undefined, String(cycleId));
+  // The prompt: the route, before the desk's reports; not the roster's own phase 2 and executor.
+  const { prompts, ENTRY_TEXT } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', symbols: ['MNQ'] });
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
+  const served = { roles: ['risk-manager'], reports: [{ role: 'risk-manager', text: '## Risk state', at: '2026-10-07T14:03:00.000Z', source: 'desk' }] };
+  const on = prompts(cfg, new Date('2026-10-07T14:03:02Z'), '/r').trade(items, { cached: served, entry: true });
+  assert.ok(on.includes(ENTRY_TEXT));
+  assert.match(ENTRY_TEXT, /when it says OK, end with CYCLE RESULT: planned/);
+  assert.match(ENTRY_TEXT, /don't launch risk-manager or the trade-executor/);
+  assert.ok(on.indexOf(ENTRY_TEXT) < on.indexOf('--- risk-manager phase 1 report'), 'the route, then the reports below');
+  assert.doesNotMatch(on, /then risk-manager phase 2 on your plan, if any/);
+  const off = prompts(cfg, new Date('2026-10-07T14:03:02Z'), '/r').trade(items, { cached: served });
+  assert.ok(!off.includes(ENTRY_TEXT));
+  assert.match(off, /then risk-manager phase 2 on your plan, if any/);
+  // Manage-only or paper: neither.
+  assert.ok(!prompts(cfg, new Date('2026-10-07T14:03:02Z'), '/r').trade(items, { cached: served, entry: true, manageOnly: true }).includes(ENTRY_TEXT));
+});

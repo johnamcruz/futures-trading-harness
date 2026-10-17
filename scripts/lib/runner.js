@@ -140,6 +140,10 @@ function createRunner(deps) {
     // run({ symbols, roles, now, laneBars, at }) -> { reports, missing, results }, the roles the cache didn't serve, run
     // by the runner before the head trader decides. null: the head trader launches its desk itself, as before.
     desk = null,
+    // The runner's entry (runner-wiring.js entryFor: workflows/entry/WORKFLOW.md): run(cycle) after the head trader's
+    // run in a cycle where the runner runs the entry (entryCycle below), recordFile() a role record for a cycle the
+    // desk didn't write one for. null: the head trader runs phase 2 and the trade-executor itself, as before.
+    entry: entryWorkflow = null,
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -1512,6 +1516,18 @@ function createRunner(deps) {
           // The desk's reports the runner's role record holds (runner-roles.js): the gate credits those from it (FTH_CYCLE_ROLES),
           // never as cached; a report it couldn't record isn't given (the head trader may launch that role).
           const deskReports = deskRun ? deskRun.reports.filter(r => (deskRun.recorded || []).includes(r.role)) : [];
+          // The runner runs the entry (runner-entry.js, workflows/entry) when the head trader decides a trade in this
+          // cycle: a one-symbol full trade cycle (not manage-only or paper) with the runner's entry wired, started flat
+          // with no working orders (the account read: unknown is not flat), and its desk complete in the runner's record
+          // or the report cache (the trade-executor is a session of its own: the gate sees the head trader's own launches
+          // only in the head trader's transcript, so a role it launched itself would be missing there). Otherwise the
+          // head trader runs phase 2 and the trade-executor, as before.
+          const startedFlat = Boolean(acct && !acct.error && Array.isArray(acct.positions) && !acct.positions.length && Array.isArray(acct.orders) && !acct.orders.length);
+          const deskDone = expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: [...(cached ? cached.roles : []), ...deskReports.map(r => r.role)] }).length === 0;
+          const entryCycle = Boolean(entryWorkflow) && Boolean(desk) && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 && run.length === 1 && startedFlat && deskDone;
+          // Its runs go in the cycle's role record: the desk's, or a fresh one when the cache served the whole desk.
+          let rolesFile = deskRun && deskRun.rolesFile ? deskRun.rolesFile : null;
+          if (entryCycle && !rolesFile) rolesFile = attempt('the role record for the runner\'s entry', () => entryWorkflow.recordFile(), null);
           const served = deskReports.length
             ? { roles: [...(cached ? cached.roles : []), ...deskReports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskReports] }
             : cached;
@@ -1531,10 +1547,11 @@ function createRunner(deps) {
             : (state && state.history) || [];
           // The recent decisions as the prompt shows them (its own call builds the same lines), for the session record.
           const historyShown = attempt('your recent decisions', () => historyShownLines(shownHistory, multi, marketOf(items, cfg.timeframe)), []);
+          const runsEntry = entryCycle && Boolean(rolesFile);
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
-            cyclesLeft,
+            cyclesLeft, entry: runsEntry,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
             ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
@@ -1558,7 +1575,10 @@ function createRunner(deps) {
             // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
             // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.
             action: again.action, cachedRoles: cached ? cached.roles : [],
-            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs }, runnerRoles: deskReports.map(r => r.role), rolesFile: deskRun.rolesFile || null } : {}),
+            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs }, runnerRoles: deskReports.map(r => r.role) } : {}),
+            ...(rolesFile ? { rolesFile } : {}),
+            // The runner runs the entry this cycle (FTH_CYCLE_ENTRY: the entry-route rule; the prompt says the route).
+            ...(runsEntry ? { entry: true } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: cached ? Object.fromEntries(cached.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},
@@ -1573,17 +1593,31 @@ function createRunner(deps) {
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const stopWatch = watchComposed(run);
+          // The runner's entry after the head trader's run (cycle-run.js runs it inside the cycle's time, before the cycle
+          // log): phase 2 and the trade-executor on the decision's compose record (runner-entry.js).
+          const entryHook = runsEntry ? ({ result, output, env: headEnv, startedWall, budgetMs }) => entryWorkflow.run({
+            result, output, headEnv, startedWall, symbol: cacheSymbols[0].symbol, contractId: cacheSymbols[0].contractId || run[0].contractId || null, bar: cacheSymbols[0].bar,
+            bars: run[0].bar.file || null, at: cycleNow.toISOString(), now: cycleNow, laneBars: multi ? laneBarsOf(run) : {},
+            accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
+            context, rolesFile, reports: served ? served.reports.map(x => ({ role: x.role, text: x.text })) : [], budgetMs,
+          }) : null;
           let r;
+          let ranRuns = [];
           try {
-            r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
-            // The cycle's role record ends with it (the cycle log has read it: cycle-run.js).
-            if (deskRun && deskRun.rolesFile) require('./trading/runner-roles').removeRoleRuns(deskRun.rolesFile);
+            // The cycle's role record ends with it (the cycle log has read it: cycle-run.js); its runs, read first, go to
+            // the report cache and the decision history (a phase 2 or a trade-executor the runner ran).
+            if (rolesFile) {
+              const RR = require('./trading/runner-roles');
+              ranRuns = RR.readRoleRuns(rolesFile);
+              RR.removeRoleRuns(rolesFile);
+            }
           }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).
@@ -1602,7 +1636,7 @@ function createRunner(deps) {
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: composed ? (byOrder => run.map(x => ({ ...x, composed: composed.forItem(x), composedOrders: byOrder })))(composed.byOrder()) : run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
+            entry = decisionEntry({ ...base, items: composed ? (byOrder => run.map(x => ({ ...x, composed: composed.forItem(x), composedOrders: byOrder })))(composed.byOrder()) : run, entries: placed, journalFailed, output: (r && r.transcript) || '', cycle: cfg.cycle, cached: served ? served.roles : [], runs: ranRuns, positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

@@ -120,8 +120,9 @@ test('roles: everything denied, then their own tools; only trade-executor holds 
   assert.deepStrictEqual(Object.keys(config.agent).sort(), [...oc.DISABLED_AGENTS, oc.HEAD_AGENT, ...roles].sort());
   for (const a of agents) {
     const entry = config.agent[a.name];
-    // The desk's roles are 'all': the runner runs each on its own (`run --agent`), the head trader still launches them.
-    assert.strictEqual(entry.mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(a.name) ? 'all' : 'subagent', a.name);
+    // The roles the runner runs on its own (`run --agent`: the desk's, and the entry's trade-executor) are 'all'; the head
+    // trader still launches them where the runner doesn't.
+    assert.strictEqual(entry.mode, oc.RUNNER_RUN_ROLES().includes(a.name) ? 'all' : 'subagent', a.name);
     assert.strictEqual(entry.description, a.description);
     // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills, in the default
     // mode (role-skills.js: index, its core embedded and its index listed).
@@ -171,7 +172,7 @@ test('the run\'s config: the session locked down again, and the runner\'s direct
     for (const a of agents) {
       const r = a.name;
       const role = [...rules(merged.permission), ...rules(merged.agent[r].permission)];
-      assert.strictEqual(merged.agent[r].mode, require('../../scripts/lib/trading/desk-check').DESK_ROLES.includes(r) ? 'all' : 'subagent', r);
+      assert.strictEqual(merged.agent[r].mode, oc.RUNNER_RUN_ROLES().includes(r) ? 'all' : 'subagent', r);
       for (const d of ['/data/bars/*', '/r/strategies/orb/*', '/s/logs/*', '/s/bars-scratch/*']) assert.strictEqual(decide(role, 'external_directory', d), 'allow', `${r}: ${d}`);
       for (const d of ['/home/u/*', '/s/*', '/home/u/.ssh/*']) assert.strictEqual(decide(role, 'external_directory', d), 'deny', `${r}: ${d}`);
       assert.strictEqual(decide(role, 'read', '../../s/.env'), 'deny', r);
@@ -417,6 +418,10 @@ test('runResult: one run\'s final message and the tools it completed, from openc
   ].join('\n');
   assert.deepStrictEqual(runResult(out), { text: 'Data: bar_briefing m3@1', tools: ['harness_bar_briefing'] });
   assert.deepStrictEqual(runResult(''), { text: '', tools: [] });
-  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) assert.strictEqual(roleMode({ name: r }), 'all', r);
-  for (const r of ['trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(roleMode({ name: r }), 'subagent', r);
+  // The desk's roles and the entry's trade-executor (the runner runs each as its own `opencode run --agent`).
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(roleMode({ name: r }), 'all', r);
+  for (const r of ['trade-reviewer', 'news-calendar-analyst', 'strategy-researcher']) assert.strictEqual(roleMode({ name: r }), 'subagent', r);
+  // Every role a workflow runs is one the runner can run on its own.
+  const W = require('../../scripts/lib/orchestrate/workflows');
+  for (const w of W.loadWorkflows(ROOT).filter(x => x.valid)) for (const p of w.workflow.phases) for (const r of p.parallel) assert.strictEqual(roleMode({ name: r }), 'all', `${w.name}: ${r}`);
 });

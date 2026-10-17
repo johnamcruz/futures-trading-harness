@@ -147,3 +147,37 @@ test('runRole: one desk role\'s own harness run (`--agent <role>`, the request i
   assert.deepStrictEqual([r.ok, r.text, r.tools, r.lookups], [true, '## Risk state: account 1', ['broker_get_account_snapshot'], ['position-sizing']]);
   await assert.rejects(runRole(validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] }), 'risk-manager', 'x', {}, { root: ROOT, run }), /opencode only/);
 });
+
+test('cycle run: the runner\'s entry runs after the head trader\'s run, within what is left of the limit and before the cycle log; its result is the cycle\'s; never after a failed run or with the kill switch on', async () => {
+  const home = tmpDir();
+  const out = 'CYCLE RESULT: planned - trade_lifecycle long 1\n';
+  const run = async () => ({ ok: true, timedOut: false, code: 0, output: out, stdout: out });
+  const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
+  const seen = [];
+  const entry = async a => { seen.push(a); return { result: 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ', entry: { outcome: 'executed', ran: [{ role: 'risk-manager' }, { role: 'trade-executor' }], record: 'r1' } }; };
+  let wall = 1e12;
+  const d = deps(home, async (...x) => { wall += 4000; return run(...x); }, { wallNow: () => wall });
+  const r = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, d.deps);
+  assert.deepStrictEqual([r.ok, r.result], [true, 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ']);
+  assert.strictEqual(seen[0].result, 'CYCLE RESULT: planned - trade_lifecycle long 1', 'the head trader\'s own decision');
+  assert.strictEqual(seen[0].output, out);
+  assert.strictEqual(seen[0].budgetMs, 6000, 'the cycle\'s limit less what the head trader took');
+  assert.ok(seen[0].env.FTH_CYCLE_TRANSCRIPT, 'the head trader\'s run\'s environment');
+  const line = JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim());
+  assert.deepStrictEqual([line.result, line.entry], ['CYCLE RESULT: executed - trade_lifecycle long 1 MNQ', { outcome: 'executed', ran: ['risk-manager', 'trade-executor'], record: 'r1' }]);
+  // A failed head run, or the kill switch on before it: the entry never runs.
+  seen.length = 0;
+  const failed = deps(home, async () => ({ ok: false, timedOut: true, code: null, output: '', stdout: '' }));
+  await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, failed.deps);
+  let guards = 0;
+  const tripped = deps(home, run, { guard: () => (guards += 1) === 1 });
+  const r2 = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, tripped.deps);
+  assert.deepStrictEqual(seen, []);
+  assert.strictEqual(r2.result, 'CYCLE RESULT: planned - trade_lifecycle long 1');
+  // An entry that throws: logged, the head trader's result kept, no order.
+  const boom = deps(home, run);
+  const r3 = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry: async () => { throw new Error('x'); } }, boom.deps);
+  assert.strictEqual(r3.result, 'CYCLE RESULT: planned - trade_lifecycle long 1');
+  assert.ok(boom.err.some(t => /the runner's entry failed \(x\): no order/.test(t)));
+});

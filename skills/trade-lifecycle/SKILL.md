@@ -48,7 +48,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `skill_lookup`; in index mode the gate requires them). The gate requires
    the journal plan (`[plan-required]`), `setup-judgment` and `trade-plan`
    (`[skills-at-entry]`) and the role round (`[roles-ran]`).
-3. **Send it as the record says**: `place_order` `limit` at the record's
+3. **Send it as the record says** (runner runs the entry: `planned`): `place_order` `limit` at the record's
    entry (or better), with its `stopLossBracket.ticks`,
    `takeProfitBracket.ticks`, size and contract, rationale
    `setup:trade_lifecycle long|short ...`

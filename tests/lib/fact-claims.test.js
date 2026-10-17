@@ -500,3 +500,20 @@ test('facts: the cycle log\'s record - every phase-2 report checked against its 
   assert.deepStrictEqual(F.cycleFactChecks({ home, output: 'plain text', context: null }).counts, { reports: 0, claims: 0, true: 0, false: 0, unchecked: 0 });
   assert.ok(F.cycleFactChecks({ home, output: { toString() { throw new Error('x'); } } }).error);
 });
+
+test('cycleFactChecks: phase 2 the runner ran itself (its role record, context.rolesFile) is checked and logged as a transcript\'s is; no record, or another\'s, adds none', () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const home = tmpDir();
+  B.writeBriefing(home, briefing());
+  const rolesFile = path.join(home, 'logs', 'cycle-roles.jsonl');
+  const T = 1.7e12;
+  RR.appendRoleRun(rolesFile, { role: 'risk-manager', start: T, end: T + 1, text: '## Risk state: account 7', lookups: [], ok: true });
+  RR.appendRoleRun(rolesFile, { role: 'risk-manager', start: T + 10, end: T + 20, text: 'VERDICT: APPROVE - size 1\nFACTS: trend long blocked; read long aligned', lookups: [], ok: true });
+  RR.appendRoleRun(rolesFile, { role: 'risk-manager', start: T + 30, end: T + 40, text: 'VERDICT: APPROVE - size 1\nFACTS: vwap above', lookups: [], ok: false });
+  const context = { symbols: [{ symbol: 'MNQ', bar: { t: AS_OF } }], rolesFile };
+  const r = F.cycleFactChecks({ home, output: '', context, now: new Date('2026-06-10T13:58:00.000Z') });
+  assert.deepStrictEqual(r.counts, { reports: 1, claims: 2, true: 1, false: 1, unchecked: 0 }, 'the counted run only (a run that didn\'t count is no report)');
+  assert.strictEqual(r.reports[0].verdict, 'APPROVE');
+  assert.deepStrictEqual(F.cycleFactChecks({ home, output: '', context: { ...context, rolesFile: null } }).counts.reports, 0);
+  assert.deepStrictEqual(F.cycleFactChecks({ home, output: '', context: { ...context, rolesFile: path.join(home, 'gone.jsonl') } }).counts.reports, 0);
+});

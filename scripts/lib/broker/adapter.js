@@ -19,6 +19,7 @@
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
  *   cancelOrder / modifyStop / closePosition
+ *   journalAdd(entry)                      journal_add (a plan, a note): the entry the broker wrote
  *   serverConfig()                         get_server_config
  *   close()
  *
@@ -250,6 +251,16 @@ function createAdapter({ mcp, writeMcp = mcp }) {
     /** Flatten a contract's position at market. */
     async closePosition(accountId, contractId) {
       return outcome(await order('close_position', { accountId: Number(accountId), contractId, reason: '[exit] runner' }), `close ${contractId}`);
+    },
+
+    /**
+     * Add a journal entry (journal_add: { kind, text, contractId?, accountId?, orderId?, tags? }): the broker writes it
+     * with its own time, where the order gate reads it (the runner's entry writes its plan this way: runner-entry.js).
+     */
+    async journalAdd(entry) {
+      const r = await call('journal_add', entry);
+      if (!r || typeof r !== 'object' || typeof r.ts !== 'string') throw new BrokerError('journal_add returned no entry');
+      return r;
     },
 
     /** The server's own config: whether it trades at all, and its guardrails (get_server_config). */

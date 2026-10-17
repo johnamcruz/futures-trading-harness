@@ -22,6 +22,9 @@
  *       reads its own reasonChecks, not this record)
  *   desk (in both, when the runner gave one): the roles a full cycle had to launch, those that returned, those
  *       missing and the launches that failed (trading/desk-check.js), so a cycle decided without its desk shows
+ *   entry (in both, when the runner ran its entry: runner-entry.js): its outcome (executed, blocked, vetoed,
+ *       no-trade, expired, unknown, process-failure, error, not-run), the roles it ran, the compose record, any
+ *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms)
  *   timing (in both, when the runner gave one): when the cycle acted against
  *       its bar (cycle-timing.js: the bar's close, the roles' calls, the
  *       decision, the order, the end; latencies, overran, setup caught/missed)
@@ -233,7 +236,7 @@ function cycleClock(env, at, wallMs = at.getTime()) {
  * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
  * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
  */
-function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null }) {
+function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
@@ -268,7 +271,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     fs.mkdirSync(dir, { recursive: true });
     const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
-      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}),
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}),
       ...(composed.length ? { composed } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
@@ -291,6 +294,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
+      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}) } } : {}),
     })}\n`);
   } catch (_err) {
     // best effort
