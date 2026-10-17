@@ -69,6 +69,8 @@
  *   deniedTaskRefusal(tool, args, env)   the plugin's refusal of a task call naming a denied role, or null
  *   dropInventedTaskId(tool, args)  the plugin's repair of a task call: a task_id that names no session is dropped
  *   stepCap(agent)               a role's step cap ({ steps }, config/runner.json limits.roleSteps), {} for an order role
+ *   toolNameHint(tool, args)     the plugin's answer to a call to an unknown name: the harness or broker tool meant
+ *   repeatGuard(at)              the plugin's repeat guard: before() a refusal of a repeated failed call, after() a reminder
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
  */
@@ -131,9 +133,17 @@ const deniesSkillTool = (tools, mode) => mode === 'index' && permissionKeys(tool
  * the rest denied, so a user's rule for the role can't grant one), then its other tools; the skill tool
  * denied where deniesSkillTool says.
  */
+/**
+ * opencode's repair of a call to a tool name it doesn't have: the call goes to its built-in `invalid` tool (which only
+ * returns an error), so the plugin can answer it (toolNameHint). Denied by a role's "*", the model got opencode's list
+ * of every tool instead (the PPC run of 2026-10-16: about 1.3 such retries a cycle, `compose_check` for
+ * `harness_compose_check`).
+ */
+const INVALID_TOOL = 'invalid';
+
 function agentPermission(tools, mode = null) {
   const own = permissionKeys(tools);
-  const permission = { '*': 'deny', ...Object.fromEntries(ROLE_DENIED.map(k => [k, 'deny'])) };
+  const permission = { '*': 'deny', ...Object.fromEntries(ROLE_DENIED.map(k => [k, 'deny'])), [INVALID_TOOL]: 'allow' };
   for (const k of MCP_KEYS()) permission[k] = own.includes(k) ? 'allow' : 'deny';
   for (const k of own) if (!(k in permission)) permission[k] = k === 'read' ? { ...READ } : 'allow';
   if (deniesSkillTool(tools, mode)) permission.skill = 'deny';
@@ -252,6 +262,7 @@ function sessionPermission(roles, denied = [], mode = null, replay = false) {
   return {
     '*': 'deny',
     ...Object.fromEntries(DENIED.map(k => [k, 'deny'])),
+    [INVALID_TOOL]: 'allow',
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
     // A replay: no web search (what the market did on a replayed date is on the web).
     skill: index ? 'deny' : 'allow', todowrite: 'allow', websearch: replay ? 'deny' : 'allow',
@@ -361,6 +372,79 @@ function dropInventedTaskId(tool, args) {
   return true;
 }
 
+/**
+ * The plugin's answer to a call opencode sent to its `invalid` tool: the name the model meant, when its bare form (or an
+ * `mcp__<server>__` form) is a harness or broker tool (`compose_check` -> `harness_compose_check`), else null (opencode's
+ * own answer). An error message, the route the model must take; the call itself never ran.
+ */
+function toolNameHint(tool, args) {
+  if (tool !== INVALID_TOOL || !args || typeof args !== 'object' || typeof args.tool !== 'string') return null;
+  const given = args.tool.trim();
+  const bare = given.replace(/^mcp__[a-z0-9-]+__/, '').replace(new RegExp(`^(${HARNESS_SERVER}|${BROKER_SERVER})[_.]`), '');
+  const { BY_NAME } = require('./harness-tools/registry');
+  const { TOOLS } = require('./broker/interface');
+  const name = BY_NAME.has(bare) ? `${HARNESS_SERVER}_${bare}` : (Object.prototype.hasOwnProperty.call(TOOLS, bare) ? `${BROKER_SERVER}_${bare}` : null);
+  if (!name || name === given) return null;
+  return `[tool-name] "${given}" is not a tool here: call ${name} with the same arguments.`;
+}
+
+/**
+ * The plugin's repeat guard (after the DeepSeek harness's repeat-tool-reminder): per session, the same tool called
+ * with the same arguments again and again. At a count in config/runner.json limits.repeatReminderAt (3, 5, 8) a call
+ * that succeeds gets a reminder after its result (advisory: it ran; appended, so the prompt cache holds); once the
+ * same call failed, every identical one from the first count on is answered with the reminder instead of running (it
+ * would fail the same way: the PPC run's 386 refused market_snapshot calls). A reminder after a success only when
+ * its result is the same as the last identical call's: a poll whose answer moves is never nudged to stop. Never a
+ * broker tool (its answers move: positions while an exit fills, orders, the account; and an exit or a stop is never
+ * refused) and never a role launch (task): the harness's tools and opencode's own. Its own state: one per plugin (run).
+ *   before(tool, args, sessionID, callID)        the refusal text, or null (run it)
+ *   after(tool, args, sessionID, callID, text)   the reminder to add to the result (`text`: its text), or null (the
+ *       plugin adds it as a text item of an MCP result's content, as opencode joins them into the output: v1.19
+ *       session/tools.ts)
+ */
+function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt, now = () => Date.now(),
+  sameStepMs = require('./tunables').runner().limits.repeatSameStepMs) {
+  const exempt = tool => tool === 'task' || tool === INVALID_TOOL || tool.startsWith(`${BROKER_SERVER}_`);
+  const canon = v => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon(v[k])])) : v);
+  // Per session: the run of identical calls (sig, n) and each call by its id (started at, returned or not).
+  const sessions = new Map();
+  const first = Math.min(...at);
+  const remind = (tool, args, n) => (n === first
+    ? 'You are repeating the exact same tool call with identical arguments. Carefully analyze the previous result before calling again: if the task is not complete, try different arguments or a different approach, or finish with what you have.'
+    : `You have called ${tool} ${n} times in a row with the same arguments. It will not change: use a different approach or arguments, or finish your report now with what you have.`);
+  return {
+    before(tool, args, sessionID, callID) {
+      if (typeof tool !== 'string' || exempt(tool)) return null;
+      const key = String(sessionID || '');
+      const sig = `${tool} ${JSON.stringify(canon(args || {}))}`;
+      const s = sessions.get(key) || { sig: null, n: 0, calls: [] };
+      if (s.sig !== sig) s.text = undefined;
+      s.n = s.sig === sig ? s.n + 1 : 1;
+      s.sig = sig;
+      // Failed: an identical call before it never returned (opencode's MCP wrapper throws on an isError result, so its
+      // after hook never runs: v1.19 mcp/catalog.ts convertTool) and started a while ago (sameStepMs: identical calls
+      // sent together in one step start within moments and are still running, not failed). Each call by its own id,
+      // so a parallel twin that returned never hides one that failed.
+      const t = now();
+      const failed = s.calls.some(c => c.sig === sig && !c.returned && t - c.at > sameStepMs);
+      s.calls = [...s.calls.filter(c => c.sig === sig).slice(-Math.max(...at)), { id: callID === null || callID === undefined ? null : String(callID), sig, at: t, returned: false }];
+      sessions.set(key, s);
+      return failed && s.n >= first ? `[repeat] ${remind(tool, args, s.n)}` : null;
+    },
+    after(tool, args, sessionID, callID, text) {
+      const s = sessions.get(String(sessionID || ''));
+      if (!s || typeof tool !== 'string' || exempt(tool)) return null;
+      const id = callID === null || callID === undefined ? null : String(callID);
+      const c = [...s.calls].reverse().find(x => !x.returned && (id === null || x.id === null || x.id === id));
+      if (c) c.returned = true;
+      // The same answer as the last identical call's: a repeat that learns nothing. An answer that moved: no reminder.
+      const same = typeof text === 'string' && s.text === text;
+      if (typeof text === 'string') s.text = text;
+      return same && at.includes(s.n) ? `\n\n[repeat] ${remind(tool, args, s.n)}` : null;
+    },
+  };
+}
+
 /** The web's permission keys: a replay denies both to every agent (WEB_KEYS), and launching a role that holds one. */
 const WEB_KEYS = Object.freeze(['websearch', 'webfetch']);
 /** The roles whose tools reach the web (WebSearch, WebFetch): a replay never launches them. */
@@ -460,4 +544,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap, INVALID_TOOL, toolNameHint, repeatGuard };

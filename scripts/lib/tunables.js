@@ -140,7 +140,7 @@ const RUNNER = {
   alerts: { throttleMinutes: nonneg(), staleMinutes: pos(), webhookTimeoutMs: int(1) },
   limits: {
     gateTailBytes: int(1), rolesRanBytes: int(1), skillsLoadedBytes: int(1), skillLookupsBytes: int(1), experienceLookupsBytes: int(1), journalTailBytes: int(1),
-    lifecycleBytes: int(1), skillUsageBytes: int(1), barsFileBytes: int(1), headPromptConfigBytes: int(1), roleSteps: int(1), historyChunkBars: int(1), entryOrdersKept: int(1), pendingKept: int(1),
+    lifecycleBytes: int(1), skillUsageBytes: int(1), barsFileBytes: int(1), headPromptConfigBytes: int(1), roleSteps: int(1), repeatReminderAt: list(int(2), { min: 1 }), repeatSameStepMs: int(1), historyChunkBars: int(1), entryOrdersKept: int(1), pendingKept: int(1),
     probeOutputBytes: int(1),
   },
   broker: { cacheKeepDays: int(1), siblingDays: int(0) },
@@ -253,7 +253,7 @@ const BUILT_IN = deepFreeze({
     alerts: { throttleMinutes: 10, staleMinutes: 5, webhookTimeoutMs: 5000 },
     limits: {
       gateTailBytes: 4194304, rolesRanBytes: 52428800, skillsLoadedBytes: 52428800, skillLookupsBytes: 5242880, experienceLookupsBytes: 5242880,
-      journalTailBytes: 8388608, lifecycleBytes: 67108864, skillUsageBytes: 67108864, barsFileBytes: 52428800, headPromptConfigBytes: 4194304, roleSteps: 40,
+      journalTailBytes: 8388608, lifecycleBytes: 67108864, skillUsageBytes: 67108864, barsFileBytes: 52428800, headPromptConfigBytes: 4194304, roleSteps: 40, repeatReminderAt: [3, 5, 8], repeatSameStepMs: 1000,
       historyChunkBars: 10000, entryOrdersKept: 200, pendingKept: 200, probeOutputBytes: 67108864,
     },
     broker: { cacheKeepDays: 30, siblingDays: 30 },
