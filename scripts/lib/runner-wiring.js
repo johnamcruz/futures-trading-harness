@@ -378,12 +378,12 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {} }) {
   if (!workflow) return null;
   const { concurrency, timeoutMinutes } = require('./tunables').runner().desk;
   return {
-    run: async ({ symbols, roles, now, laneBars = {}, at, context = null, signal = null, budgetMs = null }) => {
+    run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null }) => {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
       const key = lookupsKeyOf(home, b, symbols, now, laneBars);
       const perRoleMs = timeoutMinutes * 60000;
       const engine = { run: (role, request, { timeoutMs }) => runRole(role, request, { timeoutMs, context }) };
-      const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe };
+      const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars };
       const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
       const results = res.phases.flatMap(p => p.results);
       const reports = results.filter(r => r.ok).map(r => ({ role: r.role, text: r.text, at: now.toISOString(), until: null, lookups: key ? (r.lookups || []) : [], lookupsKey: key && (r.lookups || []).length ? key : null, source: 'desk' }));
