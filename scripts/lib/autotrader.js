@@ -1021,6 +1021,7 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
+  ROLES_CHECKED,
   loadList,
   embedsSkills,
   headAttestation,
