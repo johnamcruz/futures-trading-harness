@@ -432,13 +432,19 @@ test('opencode\'s invalid tool (its repair of an unknown name) is allowed to the
 
 test('repeatGuard: an identical call that failed is answered with the reminder from the first count on; one that succeeds gets it after its result at each count; per session; order tools and launches untouched', () => {
   const { repeatGuard } = require('../../scripts/lib/opencode');
-  const g = repeatGuard([3, 5, 8]);
-  const failing = Array.from({ length: 6 }, () => g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's1'));
+  let t = 0;
+  const clock = () => t;
+  const g = repeatGuard([3, 5, 8], clock);
+  // Retries a model step apart (5 s): each identical one after a failure.
+  const failing = Array.from({ length: 6 }, () => { t += 5000; return g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's1'); });
   assert.deepStrictEqual(failing.map(Boolean), [false, false, true, true, true, true]);
   assert.match(failing[2], /^\[repeat\] You are repeating the exact same tool call with identical arguments/);
   assert.match(failing[3], /^\[repeat\] You have called harness_market_snapshot 4 times in a row with the same arguments \(\{"bars":"\/workspace\/x\.json"\}\)/);
   assert.strictEqual(g.before('harness_market_snapshot', { bars: '/right.json' }, 's1'), null, 'new arguments run');
   assert.strictEqual(g.before('harness_market_snapshot', { bars: '/workspace/x.json' }, 's2'), null, 'another session counts its own');
+  // Identical calls sent together in one step (moments apart, still running): never taken for failed retries.
+  const par = repeatGuard([3, 5, 8], clock);
+  assert.deepStrictEqual([1, 2, 3, 4].map(() => par.before('harness_bar_briefing', { symbol: 'MNQ' }, 'p')), [null, null, null, null]);
   // Succeeding: it always runs; the reminder follows its result at 3, 5 and 8 only. Argument order doesn't matter.
   const ok = repeatGuard([3, 5, 8]);
   const notes = [];

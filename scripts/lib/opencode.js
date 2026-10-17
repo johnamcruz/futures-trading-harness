@@ -396,9 +396,13 @@ function toolNameHint(tool, args) {
  * would fail the same way: the PPC run's 386 refused market_snapshot calls). Never an order tool (an exit or a stop
  * is never refused) and never a role launch (task). Its own state: create one per plugin (opencode run).
  *   before(tool, args, sessionID)  the refusal text, or null (run it)
- *   after(tool, args, sessionID)   the reminder to append to the result, or null
+ *   after(tool, args, sessionID)   the reminder to add to the result, or null (the plugin adds it as a text item of an
+ *                                  MCP result's content, as opencode joins them into the output: v1.19 session/tools.ts)
  */
-function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt) {
+/** Identical calls started within this long of each other came in one model step (parallel), not as a retry. */
+const SAME_STEP_MS = 1000;
+
+function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt, now = () => Date.now()) {
   const { TOOLS } = require('./broker/interface');
   const exempt = tool => tool === 'task' || tool === INVALID_TOOL
     || (tool.startsWith(`${BROKER_SERVER}_`) && TOOLS[tool.slice(BROKER_SERVER.length + 1)] && TOOLS[tool.slice(BROKER_SERVER.length + 1)].role === 'order');
@@ -414,8 +418,11 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
       const sig = `${tool} ${JSON.stringify(canon(args || {}))}`;
       const last = sessions.get(key);
       const n = last && last.sig === sig ? last.n + 1 : 1;
-      const failed = Boolean(last && last.sig === sig && !last.ok);
-      sessions.set(key, { sig, n, ok: false });
+      // Failed: the identical call before it never returned (opencode's MCP wrapper throws on an isError result, so
+      // its after hook never runs: v1.19 mcp/catalog.ts convertTool) and was started a while ago. Identical calls sent
+      // together in one step start within moments (SAME_STEP_MS) and are still running, not failed.
+      const failed = Boolean(last && last.sig === sig && !last.ok && now() - last.at > SAME_STEP_MS);
+      sessions.set(key, { sig, n, ok: false, at: now() });
       return failed && n >= at[0] ? `[repeat] ${remind(tool, args, n)}` : null;
     },
     after(tool, args, sessionID) {
