@@ -134,6 +134,23 @@ test('unmetLookups: required only when the trigger fires; met by the role\'s own
   assert.deepStrictEqual(L.unmetLookups(call, { records: [{ at: T + 55, role: 'va', skill: 'liq' }], required, m3: rev, calls }), ['liq']);
 });
 
+test('unmetLookups: a run the runner ran itself counts with its recorded lookups, under the same requirement; never the file\'s records in its times', () => {
+  const required = new Map([['va', [{ skill: 'liq', when: [SL.parseTrigger('candidate.trendRule=reversal')] }]]]);
+  const rev = m3([{ trendRule: 'reversal' }]);
+  const ran = (lookups, role = 'va') => ({ role, start: T + 10, end: T + 20, text: 'r', lookups, source: 'runner' });
+  assert.deepStrictEqual(L.unmetLookups(ran(['liq']), { records: [], required, m3: rev }), []);
+  assert.deepStrictEqual(L.unmetLookups(ran([]), { records: [], required, m3: rev }), ['liq'], 'its run looked nothing up');
+  assert.deepStrictEqual(L.unmetLookups(ran(['other']), { records: [], required, m3: rev }), ['liq'], 'another skill');
+  assert.deepStrictEqual(L.unmetLookups(ran([]), { records: [{ at: T + 15, role: 'va', skill: 'liq' }], required, m3: rev }), ['liq'], 'the head session\'s file inside its times is not its run\'s');
+  assert.deepStrictEqual(L.unmetLookups(ran(['liq']), { records: [], required, m3: null }), [], 'no briefing: every one required, and its lookups hold it');
+  // A field named lookups on a transcript call (no runner source) is no lookup.
+  assert.deepStrictEqual(L.unmetLookups({ role: 'va', start: T + 10, end: T + 20, lookups: ['liq'] }, { records: [], required, m3: rev }), ['liq']);
+  // One role's calls share their lookups, whoever ran them (risk-manager phase 1 by the runner, phase 2 in the transcript).
+  const p2 = { role: 'va', start: T + 30, end: T + 40 };
+  assert.deepStrictEqual(L.unmetLookups(p2, { records: [], required, m3: rev, calls: [ran(['liq']), p2] }), []);
+  assert.deepStrictEqual(L.unmetLookups(p2, { records: [], required, m3: rev, calls: [ran(['liq'], 'xx'), p2] }), ['liq'], 'another role\'s run');
+});
+
 test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a report without its lookup doesn\'t count', () => {
   const dir = tmpDir();
   const home = path.join(dir, 'home');

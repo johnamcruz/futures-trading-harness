@@ -117,13 +117,55 @@ test('decision path, the runner runs the desk: every role run before the head tr
   const { prompt, context } = r.ran[0];
   assert.match(prompt, /The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager \(phase 1\) this cycle/);
   assert.match(prompt, /don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned/);
-  assert.deepStrictEqual(context.cachedRoles.sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst']);
+  // Credited from the runner's role record (FTH_CYCLE_ROLES, runner-roles.js), never as cached; the record ends with the cycle.
+  assert.deepStrictEqual(context.cachedRoles, [], 'a role the runner ran this cycle is no cached report');
+  assert.deepStrictEqual(context.runnerRoles.slice().sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst']);
+  assert.ok(context.rolesFile && !fs.existsSync(context.rolesFile), 'the cycle\'s role record is removed when the cycle ends');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, context.rolesFile, 'the head trader\'s run is given the record');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_CACHED, undefined);
   assert.deepStrictEqual(context.desk.missing, []);
   assert.ok(Number.isFinite(context.desk.ms) && context.desk.ms >= 0, 'the desk\'s time is the cycle\'s');
   assert.deepStrictEqual(context.desk.results.find(x => x.role === 'volume-liquidity-analyst').attempts, 2);
-  // The head trader launched no role: its desk was complete (nothing left for it to launch).
+  // The head trader launched no role: the cycle log counts the desk the runner ran (its record), complete.
   const line = D.cycleLines(w).at(-1);
-  assert.deepStrictEqual([line.desk.expected, line.desk.complete], [[], true]);
+  const ALL4 = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
+  assert.deepStrictEqual([line.desk.expected, line.desk.ran, line.desk.missing, line.desk.complete], [ALL4, ALL4, [], true]);
+});
+
+// The desk the runner runs (runner-wiring.js deskFor): each role's scripted run, its report and the lookups it made.
+const deskRun = (looked = D.REQUIRED_LOOKUPS) => async role => ({
+  ok: true, timedOut: false, output: '', lookups: looked[role] || [],
+  tools: [role === 'risk-manager' ? 'broker_get_account_snapshot' : 'harness_bar_briefing'],
+  text: role === 'risk-manager' ? '## Risk state: account 7 @ now\nTradable: yes' : `## ${role}\nData: bar_briefing m3@x\nBias: long`,
+});
+// The head trader's entry once the runner ran the desk: no analyst or phase-1 call of its own, then phase 2 and the executor.
+const afterDesk = w => D.entryCycle(w).filter(x => !(x.role && (D.ANALYSTS.includes(x.role) || typeof x.report === 'string')));
+
+test('decision path, the runner runs the desk, then an entry: the gate credits the desk from the runner\'s role record (its times, reports and lookups); phase 2 in the transcript after it approves; the order goes', async () => {
+  const w = D.world();
+  const r = await D.pass(w, decisionAt(FIRED_BAR), afterDesk(w), { runRole: deskRun() });
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  assert.deepStrictEqual(r.ctx.env.FTH_CYCLE_CACHED, undefined, 'credited by the record, not as cached');
+  assert.ok(D.position(w), 'the order filled');
+});
+
+test('decision path, the runner runs the desk: a desk run without the lookup its bar requires is run again, then missing, never served; an entry without it is refused [roles-ran]', async () => {
+  const w = D.world();
+  const looked = { ...D.REQUIRED_LOOKUPS, 'market-structure-analyst': ['breakout-vs-fakeout'] };
+  const requests = [];
+  const run = deskRun(looked);
+  const r = await D.pass(w, decisionAt(FIRED_BAR), afterDesk(w), { runRole: async (role, request) => { requests.push([role, request]); return run(role); } });
+  const msa = requests.filter(([role]) => role === 'market-structure-analyst');
+  assert.strictEqual(msa.length, 2, 'retried once');
+  assert.match(msa[0][1], /look up `breakout-vs-fakeout`, `breakout` before your report: `skill_lookup \{"skill": "<skill>", "role": "market-structure-analyst"\}`/, 'the request names the lookups its bar requires');
+  const { context } = r.ran[0];
+  assert.deepStrictEqual(context.desk.missing, [{ role: 'market-structure-analyst', stop: 'invalid', why: 'didn\'t look up breakout (this bar requires it of its role)' }]);
+  assert.ok(!context.runnerRoles.includes('market-structure-analyst'), 'not served: the head trader may launch it');
+  assert.match(r.ctx.env.FTH_CYCLE_DESK, /market-structure-analyst/, 'the [desk] rule asks for it');
+  const e = lastEntry(w);
+  assert.deepStrictEqual([e.decision, e.checks.includes('roles-ran')], ['blocked', true], JSON.stringify(e));
+  assert.match(e.messages, /not returned yet: market-structure-analyst/);
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
 });
 
 test('decision path, skip: a setup on the table, the model passes; recorded as skipped with its setup, side and 1R, shown with what followed', async () => {

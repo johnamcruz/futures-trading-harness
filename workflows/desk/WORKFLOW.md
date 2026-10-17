@@ -5,7 +5,7 @@ phases:
   - name: desk
     parallel: [market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager]
     request: desk
-    accept: [read-data, report-shape]
+    accept: [read-data, report-shape, lookups]
     retries: 1
 ---
 
@@ -23,12 +23,15 @@ the roles it can; this runs the rest.
 
 A role's report counts only if its own run read market or account data
 (`read-data`) and it is its role's report (`report-shape`: an analyst's names its
-`Data:` line, phase 1 is a risk state). A role that fails is run once more, then
-recorded missing: the order gate refuses an entry without it.
+`Data:` line, phase 1 is a risk state), and, in index mode, it looked up every
+skill the bar requires of its role (`lookups`: the request names them; the order
+gate counts its report only then). A role that fails is run once more, then
+recorded missing and not given to the head trader: it launches that role itself,
+and the order gate refuses an entry without it.
 
 ## What the head trader does with it
 
 The reports reach the head trader in its prompt, and the order gate counts them as
-returned. The head trader keeps the judgment: synthesis, `compose_check`,
+returned from the runner's record of the runs (`FTH_CYCLE_ROLES`). The head trader keeps the judgment: synthesis, `compose_check`,
 risk-manager phase 2 on its plan, and the trade-executor. See
 [docs/TOOL-CALLS-AND-ORCHESTRATION.md](../../docs/TOOL-CALLS-AND-ORCHESTRATION.md).

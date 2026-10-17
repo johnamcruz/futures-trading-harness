@@ -431,14 +431,15 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
   const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
-  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
+  // The roles the runner ran itself (its role record, FTH_CYCLE_ROLES: runner-roles.js) are judged with the transcript's.
+  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
   // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:
   // the same selection (roles-ran assessRound), the same cached list and the same lookups.
   // The cycle's bar per root as the briefing is on it (several lanes: FTH_CYCLE_BRIEFING_BARS, the first lane's, over
   // FTH_CYCLE_BARS, which names the lane bar that closed): the briefing the facts are checked against.
   const factsBars = { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) };
-  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
+  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
   if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
   // Hard rule: no entry on stale data (the owner's "data accurate and not stale"): the briefing's bar closed more than
   // the signal age limit of its own bars ago, however long the cycle ran (briefingAgeRefusal).

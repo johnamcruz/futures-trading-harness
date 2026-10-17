@@ -34,3 +34,21 @@ test('the desk request: the symbol, the bar, read your own data; phase 1 for the
   assert.match(f, /Closed 3-minute bars, oldest first, are in \/h\/bars\/MNQ-3m\.json \(get_bars format\): pass that exact path/);
   assert.doesNotMatch(a, /Closed 3-minute bars/, 'no file given: none named');
 });
+
+test('lookups: a run counts only with every skill its bar requires of its role (the ctx\'s, the gate\'s requirement); none required, nothing checked', () => {
+  const ctx = { lookups: { 'market-structure-analyst': ['breakout-vs-fakeout', 'breakout'] } };
+  const msa = 'market-structure-analyst';
+  assert.strictEqual(CHECKS.lookups(msa, { lookups: ['breakout', 'breakout-vs-fakeout', 'cisd'] }, ctx), null);
+  assert.strictEqual(CHECKS.lookups(msa, { lookups: ['breakout-vs-fakeout'] }, ctx), 'didn\'t look up breakout (this bar requires it of its role)');
+  assert.match(CHECKS.lookups(msa, {}, ctx), /didn't look up breakout-vs-fakeout, breakout/);
+  assert.strictEqual(CHECKS.lookups('risk-manager', { lookups: [] }, ctx), null, 'nothing required of the role');
+  assert.strictEqual(CHECKS.lookups(msa, { lookups: [] }, {}), null, 'full mode: none required');
+  assert.strictEqual(CHECKS.lookups(msa, { lookups: [] }), null);
+});
+
+test('the desk request names the lookups the bar requires of the role, with its role name for skill_lookup; none, nothing said', () => {
+  const ctx = { symbol: 'MNQ', at: '10:03 ET', timeframe: 3, lookups: { 'market-structure-analyst': ['breakout'] } };
+  assert.match(REQUESTS.desk('market-structure-analyst', ctx), /This bar requires you to look up `breakout` before your report: `skill_lookup \{"skill": "<skill>", "role": "market-structure-analyst"\}`/);
+  assert.doesNotMatch(REQUESTS.desk('trend-momentum-analyst', ctx), /look up/);
+  assert.doesNotMatch(REQUESTS.desk('market-structure-analyst', { ...ctx, lookups: undefined }), /look up/);
+});

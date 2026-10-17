@@ -45,18 +45,31 @@
  * built on the briefing parts still current, risk-manager phase 1 on the account unchanged) count as returned;
  * phase 2 is never cached and still starts after every analyst that ran.
  *
+ * Roles the runner ran itself this cycle (its role record, FTH_CYCLE_ROLES, runner-roles.js: the desk's roles, each its
+ * own harness run) are calls like the transcript's, with the run's wall-clock start and end and its report, merged in
+ * before the round is judged, so every rule above applies to them unchanged: phase 1 is the first risk-manager call,
+ * phase 2 one that starts after phase 1's end and every analyst's, the verdict and veto rules read its report, and a
+ * recorded trade-executor run ends the round as a transcript launch does. Index mode: a recorded run counts only when
+ * its recorded lookups hold the skills the bar requires of its role (skill-lookups.js unmetLookups). Only a run that
+ * counted (ok) with a report is a call. No file, or one that can't be read: nothing is added (fails closed: the roles
+ * it would have credited are missing). The record's times are wall-clock ms, so a transcript call or launch without
+ * them can't be ordered against it: with a record, such a call refuses the entry and such a launch ends every round.
+ *
  *   roleCalls(text)                              { calls: [{ role, start, end, text }] that count, launches: trade-executor launches }
+ *   withRunnerRuns(found, runs)                  roleCalls' result with the runner's recorded runs merged in (runner-roles.js)
+ *   cycleCalls(transcriptText, rolesFile)        roleCalls(transcriptText) with the record's runs: what the gate judges
  *   rolesInTranscript(text)                      Map role -> calls that count
  *   missingRoles(calls, cycle, cached)           what a cycle still lacks, as text, [] when complete
- *   checkRolesRan(transcriptPath, cycle, cached, lookups)   the gate's message, or null; `lookups`: (call) -> the
+ *   checkRolesRan(transcriptPath, cycle, cached, lookups, rolesFile)   the gate's message, or null; `lookups`: (call) -> the
  *                                                required skills it didn't look up (skill-lookups.js lookupRule):
- *                                                such a call doesn't count
- *   approvedPhase2(transcriptPath, cycle, cached, lookups) the phase-2 report that approves this entry, judged as
+ *                                                such a call doesn't count; `rolesFile`: the runner's role record
+ *   approvedPhase2(transcriptPath, cycle, cached, lookups, rolesFile) the phase-2 report that approves this entry, judged as
  *                                                checkRolesRan judges it: { text } | { error } | null
  */
 
 const fs = require('fs');
 const { transcriptFiles } = require('./skills-loaded');
+const { readRoleRuns, asRoleCalls } = require('./runner-roles');
 
 const ANALYSTS = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
 const CYCLES = ['full', 'lean'];
@@ -141,6 +154,28 @@ function roleCalls(text) {
   }
   return { calls: calls.filter(c => c.role), launches };
 }
+
+/** Wall-clock times (ms), as opencode's transcript and the runner's record carry them; not line positions. */
+// skill-lookups.js's own test of a call's times (one definition), required where used: it requires this module's peers.
+const wallClock = v => require('./skill-lookups').timed({ start: v, end: v });
+const UNORDERED = 'a role call in the transcript without wall-clock times (it can\'t be ordered against the runner\'s role record)';
+
+/**
+ * roleCalls' result with the runner's recorded runs (runner-roles.js readRoleRuns) merged in: their ok reports as calls,
+ * their trade-executor runs as launches. With none, `found` as it is. With some, a transcript launch timed by line
+ * position ends every round (start and end Infinity; the one placing this order excepted), and a transcript call so
+ * timed is `unordered` (assessRound refuses: fails closed).
+ */
+function withRunnerRuns(found, runs) {
+  const rec = asRoleCalls(runs);
+  if (!rec.calls.length && !rec.launches.length) return found;
+  const launches = found.launches.map(l => (l.pending || wallClock(l.start) || l.start === Infinity ? l : { ...l, start: Infinity, end: l.end === null ? null : Infinity }));
+  const unordered = found.calls.filter(c => !(wallClock(c.start) && wallClock(c.end))).length;
+  return { calls: [...found.calls, ...rec.calls], launches: [...launches, ...rec.launches], unordered };
+}
+
+/** What the gate judges: the transcript's calls with the runner's role record (no file, or unreadable: none added). */
+const cycleCalls = (text, rolesFile = null) => withRunnerRuns(roleCalls(text), readRoleRuns(rolesFile));
 
 function rolesInTranscript(text) {
   const counts = new Map();
@@ -349,8 +384,9 @@ function assessRound(found, cycle, cached = [], lookups = null) {
   const laterVeto = Boolean(latest) && found.calls.some(c => c.role === 'risk-manager' && c.start > lastExec && !counted2.has(c)
     && c.end >= latest.end && verdictOf(c.text) === 'VETO');
   const approves = Boolean(latest) && verdictOf(latest.text) === 'APPROVE' && !laterVeto;
+  if (CYCLES.includes(cycle) && found.unordered) missing.unshift(UNORDERED);
   if (CYCLES.includes(cycle) && !missing.length && !approves) missing.push(NOT_APPROVED);
-  return { missing, unmet, report: approves ? latest : null };
+  return { missing, unmet, report: approves && !found.unordered ? latest : null };
 }
 
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
@@ -382,11 +418,11 @@ function readTranscript(transcriptPath) {
  * { text }; { error } when the transcript can't be read; null when the round isn't complete or its latest phase-2
  * report doesn't approve (checkRolesRan refuses then).
  */
-function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null) {
+function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
   const t = readTranscript(transcriptPath);
   if (t.error) return { error: t.error };
-  const { missing, report } = assessRound(roleCalls(t.text), cycle, cached, lookups);
+  const { missing, report } = assessRound(cycleCalls(t.text, rolesFile), cycle, cached, lookups);
   return missing.length || !report ? null : { text: report.text };
 }
 
@@ -395,14 +431,14 @@ function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null) {
  * transcript or no cycle (an interactive session) -> null. A transcript the
  * runner named but that can't be read -> refused (fails closed).
  */
-function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
+function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
   const t = readTranscript(transcriptPath);
   if (t.error) return `The cycle's transcript can't be read (${t.error}), so the gate can't see which roles ran: no entry this cycle.`;
-  const { missing, unmet } = assessRound(roleCalls(t.text), cycle, cached, lookups);
+  const { missing, unmet } = assessRound(cycleCalls(t.text, rolesFile), cycle, cached, lookups);
   return missing.length
     ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}${unmet.length ? ` (${[...new Set(unmet)].join('; ')})` : ''}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };
