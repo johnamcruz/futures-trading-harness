@@ -53,7 +53,8 @@ CLIs can drive. The harness names no broker, firm or model.
   and the fills are simulated.
 
 How it trades, in plain language: [docs/HOW-IT-TRADES.md](docs/HOW-IT-TRADES.md). The design in full:
-[docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md) and [docs/OPERATING.md](docs/OPERATING.md).
+[docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md) and [docs/OPERATING.md](docs/OPERATING.md). How every tool call and
+multi-role step is run: [docs/TOOL-CALLS-AND-ORCHESTRATION.md](docs/TOOL-CALLS-AND-ORCHESTRATION.md).
 
 ## Requirements
 
