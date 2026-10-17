@@ -27,6 +27,7 @@ test('names: one canonical name per tool, from and back to opencode\'s and Claud
   assert.strictEqual(N.toOpencode('harness.compose_check'), 'harness_compose_check');
   assert.strictEqual(N.fromClaude('mcp__harness__compose_check'), 'harness.compose_check');
   assert.strictEqual(N.fromClaude('mcp__plugin_fth_broker__place_order'), 'broker.place_order', 'a plugin\'s server form');
+  assert.strictEqual(N.fromClaude('mcp__my_harness__compose_check'), 'my_harness.compose_check', 'another server ending in _harness is not ours');
   assert.strictEqual(N.fromClaude('Agent'), 'task');
   assert.strictEqual(N.fromClaude('Read'), 'read');
   assert.strictEqual(N.toClaude('broker.close_position'), 'mcp__broker__close_position');
@@ -168,6 +169,12 @@ test('the call log: one state per rule and session, kept in a file across proces
   assert.strictEqual(b.state('repeat', 's').n, 3);
   assert.deepStrictEqual(b.state('repeat', 'other'), {});
   b.save(); // a log holds its lock until saved (the pipeline always saves)
+  // A stale lock (a holder that died) is taken over; a lock that isn't this owner's is never removed on save.
+  fs.writeFileSync(`${file}.lock`, 'someone-else');
+  fs.utimesSync(`${file}.lock`, new Date(0), new Date(0));
+  const late = createCallLog({ file });
+  late.save();
+  assert.strictEqual(fs.existsSync(`${file}.lock`), false, 'taken over, then released by its new owner');
   fs.writeFileSync(file, 'not json');
   const bad = createCallLog({ file });
   assert.deepStrictEqual(bad.state('repeat', 's'), {}, 'an unreadable log is an empty one');

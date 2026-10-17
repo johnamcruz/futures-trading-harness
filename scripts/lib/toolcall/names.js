@@ -34,7 +34,8 @@ function fromClaude(name) {
   // `mcp__<server>__<tool>`, or a plugin's `mcp__plugin_<plugin>_<server>__<tool>` (the order gate's matcher takes both).
   const m = /^mcp__(.+?)__(.+)$/.exec(n);
   if (m) {
-    const server = SERVERS.find(s => m[1] === s || m[1].endsWith(`_${s}`)) || m[1];
+    // Only the server itself, or a plugin's `plugin_<p>_<server>`: another server merely ending in `_harness` isn't ours.
+    const server = SERVERS.find(s => m[1] === s || new RegExp(`^plugin_[a-z0-9-]+_${s}$`).test(m[1])) || m[1];
     return `${server}.${m[2]}`;
   }
   if (n === 'Task' || n === 'Agent') return 'task';
