@@ -128,7 +128,6 @@
     "roleSteps": 40,
     "repeatReminderAt": [3, 5, 8],
     "repeatSameStepMs": 1000,
-    "callLogLock": { "waitMs": 2000, "staleMs": 10000, "pollMs": 10 },
     "historyChunkBars": 10000,
     "entryOrdersKept": 200,
     "pendingKept": 200,

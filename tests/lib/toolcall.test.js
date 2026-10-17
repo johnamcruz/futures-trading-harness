@@ -160,41 +160,36 @@ test('the pipeline: the first refusal is final; a rule that throws refuses only 
   assert.throws(() => createPipeline({}), TypeError);
 });
 
-test('the call log: one state per rule and session, kept in a file across processes when given one', () => {
-  const file = path.join(tmpDir(), 'logs', 'toolcall', 's.json');
-  const a = createCallLog({ file });
-  a.state('repeat', 's').n = 3;
-  a.save();
-  const b = createCallLog({ file });
-  assert.strictEqual(b.state('repeat', 's').n, 3);
-  assert.deepStrictEqual(b.state('repeat', 'other'), {});
-  b.save(); // a log holds its lock until saved (the pipeline always saves)
-  // A stale lock (a holder that died) is taken over; a lock that isn't this owner's is never removed on save.
-  fs.writeFileSync(`${file}.lock`, 'someone-else');
-  fs.utimesSync(`${file}.lock`, new Date(0), new Date(0));
-  const late = createCallLog({ file });
-  late.save();
-  assert.strictEqual(fs.existsSync(`${file}.lock`), false, 'taken over, then released by its new owner');
-  fs.writeFileSync(file, 'not json');
-  const bad = createCallLog({ file });
-  assert.deepStrictEqual(bad.state('repeat', 's'), {}, 'an unreadable log is an empty one');
-  bad.save();
-  // Locked while held: three processes at once each wait for the other's save, so no update is lost.
+test('the call log: in memory one state per rule and session; in a file append-only, the state rebuilt by replay, parallel processes losing nothing', async () => {
+  const { readEvents, appendEvent, replayEvents } = require('../../scripts/lib/toolcall/call-log');
+  const m = createCallLog();
+  m.state('repeat', 's').n = 3;
+  assert.strictEqual(m.state('repeat', 's').n, 3);
+  assert.deepStrictEqual(m.state('repeat', 'other'), {});
+  const file = path.join(tmpDir(), 'logs', 'toolcall', 's.jsonl');
+  assert.deepStrictEqual(readEvents(file), [], 'no file: no events');
+  appendEvent(file, { event: 'post', call: { tool: 'task', name: 'task', args: { subagent_type: 'risk-manager' }, session: 's' }, result: { text: 'r' }, at: 1 });
+  fs.appendFileSync(file, 'torn{\n');
+  assert.strictEqual(readEvents(file).length, 1, 'a torn line is skipped');
+  const clock = { at: 0 };
+  const p = createPipeline({ log: createCallLog(), env: { FTH_CYCLE_DESK: 'risk-manager' }, now: () => clock.at, native: N.toOpencode });
+  assert.match(p.before({ tool: 'harness.compose_check', name: 'harness_compose_check', args: {}, session: 's' }).refuse, /^\[desk\]/, 'before the replay: not reported');
+  const q = createPipeline({ log: createCallLog(), env: { FTH_CYCLE_DESK: 'risk-manager' }, now: () => clock.at, native: N.toOpencode });
+  replayEvents(q, readEvents(file), clock);
+  assert.strictEqual(q.before({ tool: 'harness.compose_check', name: 'harness_compose_check', args: {}, session: 's' }).refuse, null, 'replayed: reported');
+  // Three hook processes at once (Claude's parallel role launches) each append their report: none is lost.
   const { spawn } = require('child_process');
-  const lib = path.join(ROOT, 'scripts', 'lib', 'toolcall', 'call-log.js');
-  const writer = role => [
-    `const { createCallLog } = require(${JSON.stringify(lib)});`,
-    `const l = createCallLog({ file: ${JSON.stringify(file)} });`,
-    "const st = l.state('desk', 's');",
-    'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);',
-    `st.reported = [...(st.reported || []), ${JSON.stringify(role)}];`,
-    'l.save();',
-  ].join(' ');
-  return Promise.all(['a', 'b', 'c'].map(r => new Promise(res => spawn(process.execPath, ['-e', writer(r)]).on('exit', res)))).then(() => {
-    assert.deepStrictEqual(createCallLog({ file }).state('desk', 's').reported.sort(), ['a', 'b', 'c']);
+  const home = tmpDir();
+  const hook = path.join(ROOT, 'scripts', 'hooks', 'toolcall.js');
+  const one = role => new Promise(res => {
+    const c = spawn(process.execPath, ['-e', `process.stdout.write(String(require(${JSON.stringify(hook)}).run(JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'par', tool_name: 'Agent', tool_input: { subagent_type: ${JSON.stringify(role)} }, tool_response: 'report' }), {}, { env: { FTH_HOME: ${JSON.stringify(home)}, FTH_AUTONOMOUS: '1' } })))`]);
+    c.on('exit', res);
   });
+  await Promise.all(['market-structure-analyst', 'trend-momentum-analyst', 'risk-manager'].map(one));
+  const { run } = require('../../scripts/hooks/toolcall');
+  const out = run(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'par', tool_name: 'mcp__harness__compose_check', tool_input: {} }), {}, { env: { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE_DESK: 'market-structure-analyst,trend-momentum-analyst,risk-manager' } });
+  assert.strictEqual(out, '', 'every role\'s report kept: compose goes');
 });
-
 test('hooks.json declares the layer: PreToolUse and PostToolUse entries that run the dispatcher; no file, no rules', () => {
   assert.deepStrictEqual([...declaredEvents(ROOT)].sort(), ['post', 'pre']);
   const h = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8')).hooks;

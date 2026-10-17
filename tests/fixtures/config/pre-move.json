@@ -978,18 +978,6 @@
    "value": 1000,
    "from": "new in fix/tool-name-and-repeat-guard (identical calls this close are one step's, not a retry)"
   },
-  "limits.callLogLock.waitMs": {
-   "value": 2000,
-   "from": "new in feat/toolcall-rules (the tool-call layer's file log lock)"
-  },
-  "limits.callLogLock.staleMs": {
-   "value": 10000,
-   "from": "new in feat/toolcall-rules (the tool-call layer's file log lock)"
-  },
-  "limits.callLogLock.pollMs": {
-   "value": 10,
-   "from": "new in feat/toolcall-rules (the tool-call layer's file log lock)"
-  },
   "limits.historyChunkBars": {
    "value": 10000,
    "from": "broker/adapter.js HISTORY_CHUNK_BARS"
