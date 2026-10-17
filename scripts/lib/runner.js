@@ -58,7 +58,7 @@ const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen } = require('./trading/positions');
 const { coverageError } = require('./trading/exchange-calendar');
-const { writeReviews } = require('./trading/runner-reviews');
+const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
 // Micros and minis of one index share bars: a position or order in either
 // belongs to the symbol polled (MNQ bars manage an NQ trade too).
@@ -174,6 +174,7 @@ function createRunner(deps) {
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   // The composed entries this process cancelled at their record's expiry: their review is due at once (runner-reviews.js).
   const cancelledEntries = new Set();
+  const reviewWaits = new Map(); // order id -> why its review waits, logged only when it changes
   let state = loadState();
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
@@ -678,10 +679,10 @@ function createRunner(deps) {
     const kept = state.runnerReviews && state.runnerReviews.day === day && Array.isArray(state.runnerReviews.ids) ? state.runnerReviews.ids : [];
     const specOf = r => syms.find(s => s.contractId && s.tickSize && famOf(s.contractId) === familyRoot(r)) || {};
     const tickOf = r => specOf(r).tickSize || null;
-    // The broker's contract's tick value, else the standard contract's (contracts.js specFor).
-    const tickValueOf = r => specOf(r).tickValue || (require('./trading/contracts').specFor(familyRoot(r)) || {}).tickValue || null;
+    // The root's own tick value (a mini's is not its micro's; the tick size is the family's).
+    const tickValueOf = r => tickValueFor(r, syms);
     try {
-      const ids = await writeReviews({ client, accountId: cfg.account, entries: journalEntries, entryOrders: entryOrders(), now, cancelled: cancelledEntries, tickOf, tickValueOf, written: kept, log, emit });
+      const ids = await writeReviews({ client, accountId: cfg.account, entries: journalEntries, entryOrders: entryOrders(), now, cancelled: cancelledEntries, tickOf, tickValueOf, written: kept, waits: reviewWaits, log, emit });
       if (ids.length !== kept.length) {
         state = { ...state, runnerReviews: { day, ids } };
         saveState(state);

@@ -85,4 +85,10 @@ test('a grade review (no result, naming the order) adds its tags to the runner\'
   assert.match(recentTrades(journal).join('\n'), /^orb long loss -1R in range \[mistake:chased\]/);
   assert.strictEqual(formSummary(journal), '0W/2L, E -1R');
   assert.ok(instincts(journal).some(x => x.key === 'mistake:chased' && x.evidence === 2));
+  // A second result review of the same order (the model's despite the runner's): one trade, its tags joined.
+  const twice = [facts(7), { ...grade(7), tags: ['result:win', 'r:3', 'mistake:late'] }];
+  assert.deepStrictEqual(graded(twice).map(r => r.tags), [['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1', 'mistake:late']]);
+  assert.strictEqual(formSummary(twice), '0W/1L, E -1R');
+  const { liveRecord } = require('../../scripts/lib/trading/track-record');
+  assert.deepStrictEqual([liveRecord(twice, 'orb').trades, liveRecord(twice, 'orb').losses, liveRecord(twice, 'orb').wins], [1, 1, 0], 'the track record counts it once');
 });

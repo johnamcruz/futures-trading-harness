@@ -31,6 +31,7 @@
  *                                      one pass: the reviews due, each through client.journalAdd; returns the
  *                                      written ids (a failed write is logged and tried again next pass)
  *   unreviewedFor(env, symbol)         unreviewedOn for the local journal now (the compose_check rule; local only)
+ *   tickValueFor(root, contracts)      the tick value of the root's own contract, never its family's
  */
 
 const { entriesSince, entryTime, contractRoot, mayBeRoot, hasTag } = require('./journal');
@@ -123,15 +124,22 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
   const label = `${setup || 'entry'} ${side || ''}`.replace(/\s+$/, '');
   const own = (Array.isArray(fills) ? fills : []).filter(f => f && f.voided !== true && String(f.orderId) === orderId && Number.isFinite(Date.parse(f.creationTimestamp)));
   if (!own.length) {
-    // The broker's own word first (search_orders: cancelled, expired or rejected, nothing filled); else the runner's
-    // cancel; else gone from the working orders for longer than a broker may take to list one.
+    // No fill listed. Never a nofill while anything says it may have filled: the broker's order shows a filled volume
+    // (a part fill, then a cancel), or a position is open on its family (its fills may lag).
     const listed = (Array.isArray(history) ? history : []).find(o => o && String(o.id) === orderId);
-    if (listed && !(Number(listed.fillVolume) > 0) && Object.prototype.hasOwnProperty.call(ENDED, Number(listed.status))) {
+    if (listed && Number(listed.fillVolume) > 0) return { wait: 'filled (in part) at the broker, its fills not listed yet' };
+    if (positions.some(p => famOf(p.contractId) === famOf(contract) && isOpen(p))) return { wait: 'a position is open on its family: its fills may not be listed yet' };
+    // The broker's own word first (search_orders: cancelled, expired or rejected, nothing filled); else the runner's
+    // cancel; else gone from the working orders for longer than a broker may take to list one. The broker's orders
+    // unread (history null): only the runner's own cancel.
+    if (listed && Object.prototype.hasOwnProperty.call(ENDED, Number(listed.status))) {
       return { review: { ...base, text: `runner: ${label} entry order ${orderId} on ${root} ended unfilled (${ENDED[Number(listed.status)]} at the broker; no fill). Facts only: the trade-reviewer adds the grade.`, tags: tags('nofill') } };
     }
     if (listed && Number(listed.status) === STATUS.filled) return { wait: 'filled at the broker, its fills not listed yet' };
     const at = Date.parse((record && record.at) || entry.ts);
-    const gone = cancelled.has(orderId) ? 'cancelled by the runner (its record expired)' : Number.isFinite(at) && nowMs - at >= graceMs ? 'no longer working' : null;
+    const graced = history !== null && Number.isFinite(at) && nowMs - at >= graceMs;
+    const gone = cancelled.has(orderId) ? 'cancelled by the runner (its record expired)' : graced ? 'no longer working' : null;
+    if (!gone && history === null) return { wait: 'the broker\'s orders could not be read' };
     if (!gone) return { wait: 'too new to tell from the broker\'s orders' };
     return { review: { ...base, text: `runner: ${label} entry order ${orderId} on ${root} ended unfilled (${gone}; no fill). Facts only: the trade-reviewer adds the grade.`, tags: tags('nofill') } };
   }
@@ -160,7 +168,7 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
  * when one of those isn't working. A failed or errored write is logged and tried again on the next pass (the journal,
  * read again then, says whether it landed).
  */
-async function writeReviews({ client, accountId, entries, entryOrders = [], now, cancelled = new Set(), tickOf = () => null, tickValueOf = () => null, written = [], log = () => {}, emit = () => {} }) {
+async function writeReviews({ client, accountId, entries, entryOrders = [], now, cancelled = new Set(), tickOf = () => null, tickValueOf = () => null, written = [], waits = new Map(), log = () => {}, emit = () => {} }) {
   const done = new Set((written || []).map(String));
   if (!client || typeof client.journalAdd !== 'function' || typeof client.accountState !== 'function') return [...done];
   const all = typeof entries === 'function' ? entries() : entries;
@@ -172,7 +180,7 @@ async function writeReviews({ client, accountId, entries, entryOrders = [], now,
   const ended = todo.some(c => !working.has(c.orderId));
   const fills = ended && typeof client.fillsSince === 'function' ? await client.fillsSince(accountId, tradingDayStart(now)) : [];
   // The broker's orders of the day (search_orders), for an entry gone with no fill: how it ended. Unread: the fallbacks.
-  let history = [];
+  let history = null;
   if (ended && typeof client.ordersSince === 'function') {
     try {
       history = await client.ordersSince(accountId, tradingDayStart(now));
@@ -185,7 +193,13 @@ async function writeReviews({ client, accountId, entries, entryOrders = [], now,
     const record = records.get(c.orderId) || null;
     const root = contractRoot(standardOf(c.entry, record));
     const out = reviewFor(c, { orders: orders || [], positions: positions || [], fills: Array.isArray(fills) ? fills : [], history, record, cancelled, nowMs: now.getTime(), tick: tickOf(root), tickValue: tickValueOf(root) });
-    if (!out.review) continue;
+    if (!out.review) {
+      // Why it waits, said once per entry and again only when the reason changes (`waits`: the caller's, per process).
+      if (waits.get(c.orderId) !== out.wait) log(`${root}: no review of entry ${c.orderId} yet: ${out.wait}`);
+      waits.set(c.orderId, out.wait);
+      continue;
+    }
+    waits.delete(c.orderId);
     try {
       const res = await client.journalAdd(out.review);
       if (!res || typeof res !== 'object' || res.kind !== 'review') throw new Error('the broker returned no journal entry');
@@ -200,6 +214,17 @@ async function writeReviews({ client, accountId, entries, entryOrders = [], now,
   return [...done];
 }
 
+/**
+ * The tick value of `root`'s own contract (a mini's is not its micro's): the standard table's (contracts.js specFor),
+ * else the broker's contract of that exact root among `contracts` ([{ contractId, tickValue }]), else null.
+ */
+function tickValueFor(root, contracts = []) {
+  const spec = require('./contracts').specFor(root);
+  if (spec && Number(spec.tickValue) > 0) return Number(spec.tickValue);
+  const c = (contracts || []).find(x => x && x.contractId && contractRoot(x.contractId) === root && Number(x.tickValue) > 0);
+  return c ? Number(c.tickValue) : null;
+}
+
 /** unreviewedOn for `symbol` from the local journal at the harness clock now (reads only local files). */
 function unreviewedFor(env, symbol) {
   const { resolveJournalPath, readJournalWindow } = require('./journal');
@@ -208,4 +233,4 @@ function unreviewedFor(env, symbol) {
   return unreviewedOn(day, contractRoot(symbol));
 }
 
-module.exports = { BY_RUNNER, coverage, unreviewedOn, reviewFor, writeReviews, unreviewedFor, isRunnerReview: e => hasTag(e, BY_RUNNER) };
+module.exports = { BY_RUNNER, coverage, unreviewedOn, reviewFor, writeReviews, unreviewedFor, tickValueFor, isRunnerReview: e => hasTag(e, BY_RUNNER) };

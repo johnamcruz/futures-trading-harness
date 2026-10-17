@@ -76,6 +76,23 @@ function reviewResult(entry) {
   return null;
 }
 
+/**
+ * The reviews of `entries` with at most one result review (result:win|loss|scratch|nofill) per named order: the first
+ * in the journal's order; a later one naming the same orderId counts nothing (the runner's factual review and a
+ * reviewer's second result: are one trade). Reviews naming no orderId, and every other entry, pass as they are.
+ */
+function onePerOrder(entries) {
+  const seen = new Set();
+  return entries.filter(e => {
+    if (!e || e.kind !== 'review' || (reviewResult(e) === null && !hasTag(e, 'result:nofill'))) return true;
+    if (e.orderId === undefined || e.orderId === null || e.orderId === '') return true;
+    const k = String(e.orderId);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 // The translator's lookups for the selected broker, re-read only when the file changes.
 let named = { file: null, mtimeMs: -1, cache: null };
 function translatorCache() {
@@ -146,6 +163,7 @@ module.exports = {
   entriesSince,
   hasTag,
   reviewResult,
+  onePerOrder,
   contractRoot,
   mayBeRoot,
   contractMonthTag,

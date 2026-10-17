@@ -257,7 +257,7 @@ const LATE = [
     reason: "fix/skills-match-code: no rules strategy is active (strategies/retired.json): the rules-only text is labelled or dropped" },
   { from: "Don't launch a role whose report the prompt gives (where the harness can, it refuses the launch; in a trade cycle it also refuses roles outside the desk, such as `strategy-researcher`): use that report for its 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.", to: "Don't launch a role whose report the prompt gives (where the harness can, it refuses the launch; in a trade cycle it also refuses roles outside the desk, such as `strategy-researcher`): use that report for its 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side, the setups to check) from the bar briefing.",
     reason: "fix/skills-match-code: no rules strategy is active: the briefing's setups to check, not a scan's candidates" },
-  { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar; trade-review (`trade-reviewer` role) grades it.",
+  { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
 ];
 const LATE_STALE = (() => {
@@ -375,8 +375,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 // Then tightened to the exact sizes when the skills were matched to the code (fix/skills-match-code): every role shrank.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86912, 'news-calendar-analyst': 10149, 'risk-manager': 89872, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9341, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48584 },
-  index: { 'market-structure-analyst': 42742, 'news-calendar-analyst': 10149, 'risk-manager': 75749, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9341, 'trend-momentum-analyst': 39880, 'volume-liquidity-analyst': 32877 },
+  full: { 'market-structure-analyst': 86912, 'news-calendar-analyst': 10149, 'risk-manager': 89872, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9338, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48584 },
+  index: { 'market-structure-analyst': 42742, 'news-calendar-analyst': 10149, 'risk-manager': 75749, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9338, 'trend-momentum-analyst': 39880, 'volume-liquidity-analyst': 32877 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

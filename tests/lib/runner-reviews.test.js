@@ -32,8 +32,21 @@ test('nofill: an entry the runner cancelled, or one gone from the working orders
     assert.match(x.text, new RegExp(`ended unfilled \\(${word} at the broker; no fill\\)`));
     assert.strictEqual(x.tags[1], 'result:nofill');
   }
-  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 2, fillVolume: 1 }] }), { wait: 'filled at the broker, its fills not listed yet' });
-  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 1 }] }), { wait: 'too new to tell from the broker\'s orders' }, 'part filled: its fills tell it, once listed');
+  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 2, fillVolume: 1 }] }), { wait: 'filled (in part) at the broker, its fills not listed yet' });
+  // Part filled, then cancelled (the runner's expiry cancel of a part-filled limit), its fills not listed yet: never a
+  // nofill, whatever the cancel or the grace says.
+  const part = { wait: 'filled (in part) at the broker, its fills not listed yet' };
+  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 1 }], cancelled: new Set(['101']) }), part);
+  assert.deepStrictEqual(one([placed(101, 30)], { history: [{ id: 101, status: 3, fillVolume: 1 }] }), part, 'past the grace too');
+  // A position open on its family: its fills may lag, so no nofill either.
+  const open = [{ contractId: 'MNQ', type: 1, size: 1 }];
+  assert.deepStrictEqual(one(e, { cancelled: new Set(['101']), positions: open }), { wait: 'a position is open on its family: its fills may not be listed yet' });
+  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 0 }], positions: open }).wait, 'a position is open on its family: its fills may not be listed yet');
+  // The broker's orders unread (history null): the grace grants nothing (it may have filled, its fills late); only the
+  // runner's own cancel with nothing open on the family.
+  assert.deepStrictEqual(one([placed(101, 30)], { history: null }), { wait: 'the broker\'s orders could not be read' });
+  assert.strictEqual(one(e, { history: null, cancelled: new Set(['101']) }).review.tags[1], 'result:nofill');
+  assert.deepStrictEqual(one(e, { history: null, cancelled: new Set(['101']), positions: open }).wait, 'a position is open on its family: its fills may not be listed yet');
 });
 
 test('win, loss, scratch: the broker\'s fills of its own order, R over the planned stop (20 ticks x 0.25 = 5 points, $10 a contract) net of its fees', () => {
@@ -79,7 +92,8 @@ test('coverage, as the gate counts: a review naming the order covers it; one nam
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20)]), ['101', '102']);
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(102)]), ['101']);
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), modelReview]), ['102'], 'the model reviewed the older one');
-  assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), runnerReview(101)]), [], 'a second review of one covers the next: never more reviews than entries');
+  assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), runnerReview(101)]), ['102'], 'a second result review of one order covers no other entry (the gate counts it once)');
+  assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), { ...modelReview, orderId: 101, tags: ['result:loss'] }]), ['102'], 'the model\'s second result: of 101 neither');
   assert.deepStrictEqual(ids([placed(101, 30), { ...modelReview, tags: ['setup:orb', 'grade:B'], orderId: 101 }]), ['101'], 'a grade review (no result) covers nothing');
   assert.deepStrictEqual(ids([placed(101, 30), { ...modelReview, tags: ['result:win', 'paper'] }]), ['101'], 'a paper review counts for nothing');
   // An NQ entry and an MNQ review: each root counts its own.
@@ -151,8 +165,33 @@ test('writeReviews: no fills read while every uncovered entry still works; an id
   const logs = [];
   const broken = fakeClient([placed(101, 1)], {});
   broken.ordersSince = async () => { throw new Error('HTTP 500'); };
-  assert.deepStrictEqual(await RR.writeReviews({ client: broken, accountId: 7, entries: [placed(101, 1)], now: NOW, written: [], log: (m, l) => logs.push(`${l} ${m}`) }), []);
-  assert.deepStrictEqual(logs, ['error the broker\'s orders could not be read for the reviews (HTTP 500)']);
+  assert.deepStrictEqual(await RR.writeReviews({ client: broken, accountId: 7, entries: [placed(101, 1)], now: NOW, written: [], log: (m, l) => logs.push(l ? `${l} ${m}` : m) }), []);
+  assert.deepStrictEqual(logs, ['error the broker\'s orders could not be read for the reviews (HTTP 500)', 'MNQ: no review of entry 101 yet: the broker\'s orders could not be read']);
+});
+
+test('tickValueFor: the root\'s own contract, never its family\'s (a mini on a micro\'s run is $5 a tick, not $0.50)', () => {
+  const syms = [{ contractId: 'MNQ', tickSize: 0.25, tickValue: 0.5 }];
+  assert.strictEqual(RR.tickValueFor('MNQ', syms), 0.5);
+  assert.strictEqual(RR.tickValueFor('NQ', syms), 5);
+  assert.strictEqual(RR.tickValueFor('ES', []), 12.5);
+  assert.strictEqual(RR.tickValueFor('ZZZ', [{ contractId: 'ZZZ', tickValue: 7 }]), 7, 'a root the table lacks: the broker\'s contract of that root');
+  assert.strictEqual(RR.tickValueFor('ZZZ', syms), null);
+  // An NQ trade's net R: 20 ticks x $5 = $100 of risk; +2R less $0.74 of fees is +1.99R (a micro's $10 would be +1.93R).
+  const nq = [placed(101, 30, { contractId: 'NQ' })];
+  const nqFill = (orderId, min, price, side, pnl = null) => ({ ...fill(orderId, min, price, side, pnl), contractId: 'NQ' });
+  const r = RR.reviewFor(RR.coverage(nq)[0], ctx({ fills: [nqFill(101, 29, 21500, 0), nqFill(null, 10, 21510, 1, 200)], tickValue: RR.tickValueFor('NQ', syms) })).review;
+  assert.deepStrictEqual(r.tags, ['by:runner', 'result:win', 'setup:orb', 'NQ', 'r:1.99']);
+});
+
+test('writeReviews: why a review waits is logged once per entry, and again only when the reason changes', async () => {
+  const journal = [placed(101, 1)];
+  const waits = new Map();
+  const logs = [];
+  const args = { accountId: 7, entries: journal, now: NOW, written: [], waits, log: m => logs.push(m) };
+  await RR.writeReviews({ ...args, client: fakeClient(journal, { orders: [{ id: 101 }] }) });
+  await RR.writeReviews({ ...args, client: fakeClient(journal, { orders: [{ id: 101 }] }) });
+  await RR.writeReviews({ ...args, client: fakeClient(journal, {}) });
+  assert.deepStrictEqual(logs, ['MNQ: no review of entry 101 yet: still working', 'MNQ: no review of entry 101 yet: the broker\'s orders could not be read']);
 });
 
 test('unreviewedFor: the gate\'s count from the local journal at the harness clock', () => {

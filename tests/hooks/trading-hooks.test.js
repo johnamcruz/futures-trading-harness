@@ -133,6 +133,11 @@ test('order gate: the runner\'s factual review (by:runner, the entry\'s order id
   const reviewed = setup([raw, { ts: at(10), ...review }, planned]);
   assert.deepStrictEqual(review.tags.slice(0, 2), ['by:runner', 'result:nofill']);
   assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, gate(orderPayload(), reviewed.env).stderr);
+  // A second result review of the same order (the model's on top of the runner's) covers no other entry: a second
+  // entry stays unreviewed, through the hook as in the gate.
+  const second = { ts: at(20), kind: 'order_placed', contractId: 'fake:MNQ:Z26', orderId: 56, text: 'setup:anytime long, stop 21480', data: { request: { side: 'buy' }, result: { success: true, orderId: 56 } } };
+  const doubled = setup([raw, { ts: at(25), ...review }, second, { ts: at(10), kind: 'review', contractId: raw.contractId, orderId: 55, text: 'mine', tags: ['result:loss', 'setup:anytime'] }, planned]);
+  assert.match(gate(orderPayload(), doubled.env).stderr, /\[review-before-next-entry\] 1 earlier entry has no review/);
   // A grade review (no result:) alone clears nothing.
   const graded = setup([raw, { ts: at(10), kind: 'review', contractId: raw.contractId, orderId: 55, text: 'grade', tags: ['grade:B', 'setup:anytime'] }, planned]);
   assert.match(gate(orderPayload(), graded.env).stderr, /\[review-before-next-entry\]/);

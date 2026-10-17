@@ -20,7 +20,7 @@
  * rules: the gate and the strategies still decide.
  */
 
-const { hasTag, reviewResult, entryTime } = require('./journal');
+const { hasTag, reviewResult, entryTime, onePerOrder } = require('./journal');
 
 const MIN_SETUP_TRADES = require('../tunables').runner().prompt.instinctsMinSetupTrades; // config/runner.json
 const RECENT_REVIEWS = require('../tunables').runner().prompt.instinctsRecentReviews;
@@ -46,10 +46,13 @@ function reviewR(e) {
 function graded(entries) {
   const id = e => (e.orderId === undefined || e.orderId === null ? null : String(e.orderId));
   const grades = new Map();
-  for (const g of entries.filter(e => e.kind === 'review' && reviewResult(e) === null && !hasTag(e, 'paper') && id(e) !== null)) {
+  const live = entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper'));
+  const kept = new Set(onePerOrder(live));
+  // A grade review, or a second result review of the same order (its tags join the first's; its result counts nothing).
+  for (const g of live.filter(e => id(e) !== null && (reviewResult(e) === null || !kept.has(e)))) {
     grades.set(id(g), [...(grades.get(id(g)) || []), ...(Array.isArray(g.tags) ? g.tags : []).filter(t => !/^(result|r|by):/i.test(String(t)))]);
   }
-  return entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).map(r => {
+  return live.filter(e => reviewResult(e) !== null && kept.has(e)).map(r => {
     const more = id(r) !== null ? grades.get(id(r)) : null;
     return more && more.length ? { ...r, tags: [...new Set([...(Array.isArray(r.tags) ? r.tags : []), ...more])] } : r;
   });

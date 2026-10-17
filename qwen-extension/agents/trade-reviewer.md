@@ -26,7 +26,7 @@ skills `trade-review` and `setup-expectancy`.
 ## Method
 
 1. `journal_read` today's `plan`, `order_placed`, `order_blocked`, and `review`
-   entries. Find each entry order that has no review yet.
+   entries. Find each entry order with no review, or only the runner's (`by:runner`).
 2. Look back first (the trade-review skill, step 2): the cycle record of the
    entry (what the model saw: the last 10 bars, the signals, its last 10
    decisions) and the harness tool `lessons` (the form of the last 10
@@ -41,7 +41,8 @@ skills `trade-review` and `setup-expectancy`.
 5. `journal_add {kind:"review", contractId, orderId, text, tags}` (tags as the
    trade-review skill lists them, `regime:` and `r:<R net of fees>` included:
    they feed the instincts every later cycle sees) with exactly
-   one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag.
+   one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag;
+   on a `by:runner` one, only the grade: no `result:` or `r:`.
 6. Review blocked orders: the server's own (`order_blocked` in the
    journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`; FTH_HOME defaults to `~/.futures-trading-harness`; one JSON
    line per decision with the checks that refused it). Why did the plan reach

@@ -62,8 +62,7 @@ session timing, sizing and pacing), and neither the prompt's facts (the
 trend rule) nor the bar briefing are their reports:
 the briefing is their input, not their analysis.
 `[desk]` (`compose_check` refused): launch the roles it names, then compose.
-`[review]` (`compose_check` refused): an entry today is unreviewed: manage it
-if open; else the runner reviews it next bar, or launch the trade-reviewer.
+`[review]` (`compose_check` refused): manage an open entry; a closed one the runner reviews next bar.
 In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
