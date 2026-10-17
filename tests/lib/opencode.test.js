@@ -409,3 +409,20 @@ test('stepCap: every role is capped at config/runner.json limits.roleSteps but a
   }
   assert.strictEqual(run.agent[oc.HEAD_AGENT].steps, undefined, 'the head trader is the run: its timeout bounds it');
 });
+
+test('deskGate: the head trader\'s compose_check waits until every role FTH_CYCLE_DESK names reported in its session; nothing else is held', () => {
+  const { deskGate } = require('../../scripts/lib/opencode');
+  const g = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
+  assert.match(g.before('harness_compose_check', 'h'), /^\[desk\] compose_check composes the trade from the desk's reports: launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager first/);
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) g.returned('task', { subagent_type: r }, 'h');
+  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/);
+  g.returned('task', { subagent_type: 'risk-manager' }, 'other');
+  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/, 'a report in another session is not this one\'s');
+  g.returned('task', { subagent_type: ' risk-manager ' }, 'h');
+  assert.strictEqual(g.before('harness_compose_check', 'h'), null, 'the desk reported');
+  // Never held: the executor, an exit, a stop, a read, the briefing, another harness tool.
+  const fresh = deskGate({ FTH_CYCLE_DESK: 'risk-manager' });
+  for (const t of ['task', 'broker_close_position', 'broker_cancel_order', 'broker_modify_order', 'broker_get_positions', 'harness_bar_briefing', 'harness_order_plan', 'compose_check']) assert.strictEqual(fresh.before(t, 'h'), null, t);
+  // No desk this cycle (lean, manage-only, paper, all cached, another action): nothing held.
+  for (const env of [{}, { FTH_CYCLE_DESK: '' }, { FTH_CYCLE_DESK: ' , ' }, null]) assert.strictEqual(deskGate(env).before('harness_compose_check', 'h'), null, JSON.stringify(env));
+});

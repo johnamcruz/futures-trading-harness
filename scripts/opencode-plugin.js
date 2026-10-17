@@ -4,18 +4,24 @@
  * The runner's opencode plugin, loaded by every autonomous run's config (opencode.js runConfig): before a tool runs,
  * it refuses a task call naming a role the run denies (FTH_DENIED_ROLES, set by the runner: opencode.js runEnv), so
  * the task permission, and with it the head trader's prompt, stays the same from cycle to cycle. The check is
- * opencode.js deniedTaskRefusal; a refusal is the tool call's error, and the session goes on. It also drops a task_id
+ * opencode.js deniedTaskRefusal; a refusal is the tool call's error, and the session goes on. It holds the head trader's
+ * compose_check until the cycle's desk reported (opencode.js deskGate). It also drops a task_id
  * that names no session (opencode.js dropInventedTaskId), so a role launched with an invented one still runs.
  */
 
-const { deniedTaskRefusal, dropInventedTaskId } = require('./lib/opencode');
+const { deniedTaskRefusal, dropInventedTaskId, deskGate } = require('./lib/opencode');
 
 async function DeniedRoles() {
+  const desk = deskGate(process.env);
   return {
     'tool.execute.before': async (input, output) => {
       dropInventedTaskId(input && input.tool, output && output.args);
-      const why = deniedTaskRefusal(input && input.tool, output && output.args, process.env);
+      const why = deniedTaskRefusal(input && input.tool, output && output.args, process.env) || desk.before(input && input.tool, input && input.sessionID);
       if (why) throw new Error(why);
+    },
+    // A role launch that returned counts for the desk (opencode.js deskGate).
+    'tool.execute.after': async input => {
+      if (input) desk.returned(input.tool, input.args, input.sessionID);
     },
   };
 }
