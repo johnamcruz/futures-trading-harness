@@ -847,8 +847,10 @@ test('mock trading, runner reviews (live): an entry stopped out gets the runner\
   assert.strictEqual(position(w), null, 'stopped out');
   const [rev] = byRunner(w);
   assert.ok(rev, r.logs.join('\n'));
-  assert.deepStrictEqual(rev.tags, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ', `r:${Math.round((-(t.risk + 1) / t.risk) * 100) / 100}`]);
-  assert.match(rev.text, /gross of fees on the planned \d+-tick stop/);
+  // Net of its two fills' fees ($0.37 each on the mock exchange) over its risk ($2 a point on MNQ), as trade-review writes r:.
+  const gross = Math.round((-(t.risk + 1) / t.risk) * 100) / 100;
+  assert.deepStrictEqual(rev.tags, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ', `r:${Math.round((gross - 0.74 / (t.risk * 2)) * 100) / 100}`]);
+  assert.match(rev.text, /R net of fees on the planned \d+-tick stop/);
   assert.strictEqual(byRunner(w).length, 1, 'once, on every later bar too');
   const next = await nextEntry(w);
   assert.ok(next.ok, next.error);

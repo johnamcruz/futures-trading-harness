@@ -314,9 +314,9 @@ function createRunner(deps) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
       // A roll starts the clock over; the first lookup keeps a lane's clock restored from the state when it was kept
       // on this contract (none with one lane).
-      return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: !sym.contractId && sym.restoredFor === c.id ? sym.clock : null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
+      return { ...sym, contractId: c.id, tickSize: c.tickSize, tickValue: c.tickValue || null, contractDay: day, clock: !sym.contractId && sym.restoredFor === c.id ? sym.clock : null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
     }
-    return { ...sym, tickSize: c.tickSize || sym.tickSize, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
+    return { ...sym, tickSize: c.tickSize || sym.tickSize, tickValue: c.tickValue || sym.tickValue || null, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
   }
 
   async function pollSymbol(i, now) {
@@ -676,9 +676,12 @@ function createRunner(deps) {
     const now = clock.now();
     const day = dayKey(now);
     const kept = state.runnerReviews && state.runnerReviews.day === day && Array.isArray(state.runnerReviews.ids) ? state.runnerReviews.ids : [];
-    const tickOf = r => (syms.find(s => s.contractId && s.tickSize && famOf(s.contractId) === familyRoot(r)) || {}).tickSize || null;
+    const specOf = r => syms.find(s => s.contractId && s.tickSize && famOf(s.contractId) === familyRoot(r)) || {};
+    const tickOf = r => specOf(r).tickSize || null;
+    // The broker's contract's tick value, else the standard contract's (contracts.js specFor).
+    const tickValueOf = r => specOf(r).tickValue || (require('./trading/contracts').specFor(familyRoot(r)) || {}).tickValue || null;
     try {
-      const ids = await writeReviews({ client, accountId: cfg.account, entries: journalEntries, entryOrders: entryOrders(), now, cancelled: cancelledEntries, tickOf, written: kept, log, emit });
+      const ids = await writeReviews({ client, accountId: cfg.account, entries: journalEntries, entryOrders: entryOrders(), now, cancelled: cancelledEntries, tickOf, tickValueOf, written: kept, log, emit });
       if (ids.length !== kept.length) {
         state = { ...state, runnerReviews: { day, ids } };
         saveState(state);

@@ -16,17 +16,18 @@
  *                         placed ORDER_GRACE_MS ago (gate-timing.js: a broker may be slow to list a new order)
  *   result:win|loss|scratch  its own position (decision-history.js ownTrade: the broker's fills, by its order id) went
  *                         flat; R by decision-history.js rOf from the fill and exit prices over the planned stop
- *                         (entry-orders.json stopTicks, else the order's stopLossBracket) x the tick: |R| under
- *                         reviews.scratchR (config/runner.json) a scratch. With no planned stop, the price move's sign.
+ *                         (entry-orders.json stopTicks, else the order's stopLossBracket) x the tick, net of fees
+ *                         when they are known (netR): |R| under reviews.scratchR (config/runner.json) a scratch. With no planned stop, the price move's sign.
  * Its tags: by:runner, the result, setup:<name> (the rationale's tag, else the gateway's record), the root, and
- * r:<R> when the stop is known; its contractId the entry's own (so it counts on every root the entry counts on), its
+ * r:<R net of fees> (the trade-review skill's r:) when the stop, the tick value and every fill's fees are known: the
+ * price R less the trade's fees and commissions over its planned risk; its contractId the entry's own (so it counts on every root the entry counts on), its
  * orderId the entry's. Not told by the fills (another order's fill in the position, a close larger than it): no
  * review; the trade-reviewer reviews it.
  *
  *   coverage(dayEntries)               the uncovered entries: [{ entry, orderId, root (the gate's count's) }], oldest first
  *   unreviewedOn(dayEntries, root)     the gate's count of entries on the root with no review (0: none)
  *   reviewFor(c, ctx)                  { review } | { wait: why } for one uncovered entry
- *   writeReviews({ client, accountId, entries, entryOrders, now, cancelled, tickOf, written, log, emit })
+ *   writeReviews({ client, accountId, entries, entryOrders, now, cancelled, tickOf, tickValueOf, written, log, emit })
  *                                      one pass: the reviews due, each through client.journalAdd; returns the
  *                                      written ids (a failed write is logged and tried again next pass)
  *   unreviewedFor(env, symbol)         unreviewedOn for the local journal now (the compose_check rule; local only)
@@ -90,7 +91,23 @@ const fmt = x => String(Math.round(Number(x) * 100) / 100);
  * entry-orders.json entry or null), history (the broker's orders of the day: search_orders), cancelled (a Set of order ids
  * the runner cancelled), nowMs, tick, graceMs, scratchR }.
  */
-function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = [], history = [], record = null, cancelled = new Set(), nowMs, tick = null, graceMs = ORDER_GRACE_MS, scratchR = REVIEWS().scratchR }) {
+/**
+ * The price R less the trade's costs (its fills' fees and commissions, opening to closing, on its contract) over its
+ * planned risk (the stop's ticks x the tick value x its size): the r: the trade-review skill writes. Null when the tick
+ * value or any fill's fees are unknown (the tag is never a different measure).
+ */
+function netR(r, fills, t, stopTicks, tickValue) {
+  const risk = Number(stopTicks) * Number(tickValue) * Number(t.size);
+  if (!(risk > 0)) return null;
+  const from = Date.parse(t.openedAt);
+  const to = Date.parse(t.closedAt);
+  const own = (fills || []).filter(f => f && f.voided !== true && f.contractId === t.contractId && Date.parse(f.creationTimestamp) >= from && Date.parse(f.creationTimestamp) <= to);
+  if (!own.length || own.some(f => !Number.isFinite(f.fees))) return null;
+  const costs = own.reduce((a, f) => a + f.fees + (Number.isFinite(f.commissions) ? f.commissions : 0), 0);
+  return Math.round((r - costs / risk) * 100) / 100;
+}
+
+function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = [], history = [], record = null, cancelled = new Set(), nowMs, tick = null, tickValue = null, graceMs = ORDER_GRACE_MS, scratchR = REVIEWS().scratchR }) {
   if (!orderId) return { wait: 'no order id to name' };
   // The contract by its standard name (the gateway's record holds the name the order was sent with; the journal the
   // broker's own id), as the account's positions and fills name it through the translator.
@@ -127,9 +144,13 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
   const stopTicks = Number((record && record.stopTicks) || (req.stopLossBracket && req.stopLossBracket.ticks)) || null;
   const r = stopTicks && Number(tick) > 0 ? rOf(side, t.fill, t.exit, stopTicks * Number(tick)) : null;
   const move = (side === 'long' ? 1 : -1) * (t.exit - t.fill);
-  const result = r !== null ? (Math.abs(r) < scratchR ? 'scratch' : r > 0 ? 'win' : 'loss') : move > 0 ? 'win' : move < 0 ? 'loss' : 'scratch';
-  const rText = r !== null ? `${r > 0 ? '+' : ''}${fmt(r)}R gross of fees on the planned ${stopTicks}-tick stop` : 'R unknown (no planned stop recorded)';
-  return { review: { ...base, text: `runner: ${label} ${t.size} ${root}, order ${orderId}: filled ${fmt(t.fill)}, out ${fmt(t.exit)} at ${t.closedAt}: ${result}, ${rText}. Facts only: the trade-reviewer adds the grade.`, tags: [...tags(result), ...(r !== null ? [`r:${fmt(r)}`] : [])] } };
+  const net = r !== null ? netR(r, fills, t, stopTicks, tickValue) : null;
+  // Judged on the R the review states: net of fees when known (the skill's), else the price R.
+  const rr = net !== null ? net : r;
+  const result = rr !== null ? (Math.abs(rr) < scratchR ? 'scratch' : rr > 0 ? 'win' : 'loss') : move > 0 ? 'win' : move < 0 ? 'loss' : 'scratch';
+  const rText = net !== null ? `${net > 0 ? '+' : ''}${fmt(net)}R net of fees on the planned ${stopTicks}-tick stop`
+    : r !== null ? `${r > 0 ? '+' : ''}${fmt(r)}R before fees on the planned ${stopTicks}-tick stop (its fees unknown)` : 'R unknown (no planned stop recorded)';
+  return { review: { ...base, text: `runner: ${label} ${t.size} ${root}, order ${orderId}: filled ${fmt(t.fill)}, out ${fmt(t.exit)} at ${t.closedAt}: ${result}, ${rText}. Facts only: the trade-reviewer adds the grade.`, tags: [...tags(result), ...(net !== null ? [`r:${fmt(net)}`] : [])] } };
 }
 
 /**
@@ -139,7 +160,7 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
  * when one of those isn't working. A failed or errored write is logged and tried again on the next pass (the journal,
  * read again then, says whether it landed).
  */
-async function writeReviews({ client, accountId, entries, entryOrders = [], now, cancelled = new Set(), tickOf = () => null, written = [], log = () => {}, emit = () => {} }) {
+async function writeReviews({ client, accountId, entries, entryOrders = [], now, cancelled = new Set(), tickOf = () => null, tickValueOf = () => null, written = [], log = () => {}, emit = () => {} }) {
   const done = new Set((written || []).map(String));
   if (!client || typeof client.journalAdd !== 'function' || typeof client.accountState !== 'function') return [...done];
   const all = typeof entries === 'function' ? entries() : entries;
@@ -163,7 +184,7 @@ async function writeReviews({ client, accountId, entries, entryOrders = [], now,
   for (const c of todo) {
     const record = records.get(c.orderId) || null;
     const root = contractRoot(standardOf(c.entry, record));
-    const out = reviewFor(c, { orders: orders || [], positions: positions || [], fills: Array.isArray(fills) ? fills : [], history, record, cancelled, nowMs: now.getTime(), tick: tickOf(root) });
+    const out = reviewFor(c, { orders: orders || [], positions: positions || [], fills: Array.isArray(fills) ? fills : [], history, record, cancelled, nowMs: now.getTime(), tick: tickOf(root), tickValue: tickValueOf(root) });
     if (!out.review) continue;
     try {
       const res = await client.journalAdd(out.review);

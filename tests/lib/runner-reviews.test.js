@@ -15,7 +15,7 @@ const NOW = new Date('2026-10-07T15:00:00Z');
 const at = min => new Date(NOW.getTime() - min * 60000).toISOString();
 const placed = (id, min, o = {}) => ({ ts: at(min), kind: 'order_placed', contractId: o.contractId || 'MNQ', orderId: id, text: o.text || 'setup:orb long, stop 21495', data: { request: { side: o.side || 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' } }, result: { success: true, orderId: id } } });
 const fill = (orderId, min, price, side, pnl = null) => ({ id: Math.random(), orderId, contractId: 'MNQ', creationTimestamp: at(min), price, side, size: 1, profitAndLoss: pnl, fees: 0.37, voided: false });
-const ctx = (o = {}) => ({ orders: [], positions: [], fills: [], record: null, cancelled: new Set(), nowMs: NOW.getTime(), tick: 0.25, ...o });
+const ctx = (o = {}) => ({ orders: [], positions: [], fills: [], record: null, cancelled: new Set(), nowMs: NOW.getTime(), tick: 0.25, tickValue: 0.5, ...o });
 const one = (entries, o) => RR.reviewFor(RR.coverage(entries)[0], ctx(o));
 
 test('nofill: an entry the runner cancelled, or one gone from the working orders past the grace, with no fill', () => {
@@ -36,20 +36,26 @@ test('nofill: an entry the runner cancelled, or one gone from the working orders
   assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 1 }] }), { wait: 'too new to tell from the broker\'s orders' }, 'part filled: its fills tell it, once listed');
 });
 
-test('win, loss, scratch: the broker\'s fills of its own order, R over the planned stop (20 ticks x 0.25 = 5 points)', () => {
+test('win, loss, scratch: the broker\'s fills of its own order, R over the planned stop (20 ticks x 0.25 = 5 points, $10 a contract) net of its fees', () => {
   const e = [placed(101, 30)];
   const closed = exit => [fill(101, 29, 21500, 0), fill(null, 10, exit, 1, 1)];
+  // Two fills at $0.37: $0.74 of $10 risk = 0.074R off the price R.
   const win = one(e, { fills: closed(21510) }).review;
-  assert.deepStrictEqual(win.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ', 'r:2']);
-  assert.match(win.text, /filled 21500, out 21510 .*: win, \+2R gross of fees on the planned 20-tick stop/);
-  assert.deepStrictEqual(one(e, { fills: closed(21495) }).review.tags, ['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1']);
-  assert.deepStrictEqual(one(e, { fills: closed(21500.75) }).review.tags, ['by:runner', 'result:scratch', 'setup:orb', 'MNQ', 'r:0.15'], '+0.15R is inside 0.2R');
-  assert.deepStrictEqual(one(e, { fills: closed(21501) }).review.tags.slice(1, 2), ['result:win'], '+0.2R is not');
+  assert.deepStrictEqual(win.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ', 'r:1.93']);
+  assert.match(win.text, /filled 21500, out 21510 .*: win, \+1\.93R net of fees on the planned 20-tick stop/);
+  assert.deepStrictEqual(one(e, { fills: closed(21495) }).review.tags, ['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1.07']);
+  assert.deepStrictEqual(one(e, { fills: closed(21501) }).review.tags, ['by:runner', 'result:scratch', 'setup:orb', 'MNQ', 'r:0.13'], '+0.2R before fees is +0.13R net: inside 0.2R');
+  assert.deepStrictEqual(one(e, { fills: closed(21501.5) }).review.tags.slice(1, 2), ['result:win'], '+0.23R net is not');
   // A short: down is the win.
   const s = [placed(102, 30, { side: 'sell', text: 'setup:orb short' })];
-  assert.deepStrictEqual(one(s, { fills: [fill(102, 29, 21500, 1), fill(null, 10, 21490, 0, 1)] }).review.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ', 'r:2']);
-  // The gateway's recorded stop wins over the bracket; no stop known at all: the price move's sign, no r:.
-  assert.deepStrictEqual(one(e, { fills: closed(21510), record: { stopTicks: 40 } }).review.tags.at(-1), 'r:1');
+  assert.deepStrictEqual(one(s, { fills: [fill(102, 29, 21500, 1), fill(null, 10, 21490, 0, 1)] }).review.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ', 'r:1.93']);
+  // The gateway's recorded stop wins over the bracket ($20 of risk); no stop known at all: the price move's sign, no r:.
+  assert.deepStrictEqual(one(e, { fills: closed(21510), record: { stopTicks: 40 } }).review.tags.at(-1), 'r:0.96');
+  // A fill's fees or the tick value unknown: no r: (never a different measure under the tag), the price R in the text.
+  const unknownFees = one(e, { fills: [fill(101, 29, 21500, 0), { ...fill(null, 10, 21510, 1, 1), fees: null }] }).review;
+  assert.deepStrictEqual(unknownFees.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ']);
+  assert.match(unknownFees.text, /\+2R before fees on the planned 20-tick stop \(its fees unknown\)/);
+  assert.deepStrictEqual(one(e, { fills: closed(21510), tickValue: null }).review.tags, ['by:runner', 'result:win', 'setup:orb', 'MNQ']);
   const bare = [{ ...placed(103, 30), data: { request: { side: 'buy' }, result: { success: true, orderId: 103 } } }];
   const noStop = one(bare, { fills: [fill(103, 29, 21500, 0), fill(null, 10, 21490, 1, -5)] }).review;
   assert.deepStrictEqual(noStop.tags, ['by:runner', 'result:loss', 'setup:orb', 'MNQ']);
