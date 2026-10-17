@@ -482,3 +482,25 @@ test('repeatGuard: an identical call that failed is answered with the reminder f
   }
   assert.strictEqual(ord.after('broker_get_positions', {}, 's', null, 'same'), null);
 });
+
+test('deskGate: the head trader\'s compose_check waits until every role FTH_CYCLE_DESK names reported in its session; nothing else is held', () => {
+  const { deskGate } = require('../../scripts/lib/opencode');
+  const g = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
+  assert.match(g.before('harness_compose_check', 'h'), /^\[desk\] compose_check composes the trade from the desk's reports: launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager first/);
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) g.returned('task', { subagent_type: r }, 'h');
+  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/);
+  g.returned('task', { subagent_type: 'risk-manager' }, 'other');
+  assert.match(g.before('harness_compose_check', 'h'), /launch risk-manager first/, 'a report in another session is not this one\'s');
+  g.returned('task', { subagent_type: ' risk-manager ' }, 'h');
+  assert.strictEqual(g.before('harness_compose_check', 'h'), null, 'the desk reported');
+  // Never held: the executor, an exit, a stop, a read, the briefing, another harness tool.
+  const fresh = deskGate({ FTH_CYCLE_DESK: 'risk-manager' });
+  for (const t of ['task', 'broker_close_position', 'broker_cancel_order', 'broker_modify_order', 'broker_get_positions', 'harness_bar_briefing', 'harness_order_plan', 'compose_check']) assert.strictEqual(fresh.before(t, 'h'), null, t);
+  // No desk this cycle (lean, manage-only, paper, all cached, another action): nothing held.
+  for (const env of [{}, { FTH_CYCLE_DESK: '' }, { FTH_CYCLE_DESK: ' , ' }, null]) assert.strictEqual(deskGate(env).before('harness_compose_check', 'h'), null, JSON.stringify(env));
+  // A role both expected and denied (it can't be launched) is never waited for, so compose never becomes impossible.
+  const both = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,risk-manager', FTH_DENIED_ROLES: 'market-structure-analyst' });
+  assert.match(both.before('harness_compose_check', 'h'), /launch risk-manager first/);
+  both.returned('task', { subagent_type: 'risk-manager' }, 'h');
+  assert.strictEqual(both.before('harness_compose_check', 'h'), null);
+});

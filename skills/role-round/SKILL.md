@@ -60,7 +60,9 @@ Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
 session timing, sizing and pacing), and neither the prompt's facts (the
 trend rule) nor the bar briefing are their reports:
-the briefing is their input, not their analysis. In an autonomous run the order
+the briefing is their input, not their analysis.
+`[desk]` (`compose_check` refused): launch the roles it names, then compose.
+In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
 returned as subagents this cycle or were given under "Cached reports",

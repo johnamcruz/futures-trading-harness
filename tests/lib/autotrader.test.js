@@ -882,6 +882,34 @@ test('opencode: the run config the runner hands opencode (OPENCODE_CONFIG_CONTEN
   }
 });
 
+test('the runner tells the run which roles its cycle must launch (FTH_CYCLE_DESK): a full trade cycle\'s roster less the cached; none for lean, manage-only, paper or another action', () => {
+  const full = validateConfig({ harness: 'opencode', dataDir: '/data/bars' });
+  const desk = (cfg, context) => childEnv(cfg, '/r', { FTH_HOME: '/srv/fth' }, context).FTH_CYCLE_DESK;
+  assert.strictEqual(desk(full, { action: 'trade', symbols: [] }), 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager');
+  assert.strictEqual(desk(full, { action: 'trade', cachedRoles: ['risk-manager', 'trend-momentum-analyst'], symbols: [] }), 'market-structure-analyst,volume-liquidity-analyst');
+  assert.strictEqual(desk(full, { action: 'trade', manageOnly: true, symbols: [] }), undefined);
+  assert.strictEqual(desk(full, { action: 'premarket', symbols: [] }), undefined);
+  assert.strictEqual(desk(validateConfig({ harness: 'opencode', cycle: 'lean' }), { action: 'trade', symbols: [] }), undefined);
+  assert.strictEqual(desk(validateConfig({ harness: 'opencode', paper: true }), { action: 'trade', symbols: [] }), undefined);
+  assert.strictEqual(childEnv(full, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_DESK: 'stale' }, { action: 'eod' }).FTH_CYCLE_DESK, undefined, 'a stale value is never inherited');
+});
+
+test('the runner\'s opencode plugin holds compose_check until the desk reported (a role launch that returned, by the after hook), and holds nothing else', async () => {
+  const saved = process.env.FTH_CYCLE_DESK;
+  process.env.FTH_CYCLE_DESK = 'market-structure-analyst,risk-manager';
+  try {
+    delete require.cache[require.resolve('../../scripts/opencode-plugin')];
+    const hooks = await require('../../scripts/opencode-plugin').server({}, {});
+    const compose = () => hooks['tool.execute.before']({ tool: 'harness_compose_check', sessionID: 'h', callID: 'c' }, { args: { symbol: 'MNQ' } });
+    await assert.rejects(compose(), /\[desk\] .*launch market-structure-analyst, risk-manager first/);
+    await assert.doesNotReject(hooks['tool.execute.before']({ tool: 'task', sessionID: 'h', callID: 'x' }, { args: { subagent_type: 'trade-executor' } }), 'the executor is never held');
+    for (const r of ['market-structure-analyst', 'risk-manager']) await hooks['tool.execute.after']({ tool: 'task', sessionID: 'h', callID: r, args: { subagent_type: r } }, { output: 'report' });
+    await assert.doesNotReject(compose());
+  } finally {
+    if (saved === undefined) delete process.env.FTH_CYCLE_DESK; else process.env.FTH_CYCLE_DESK = saved;
+  }
+});
+
 test('opencode: the run\'s environment locks it down and lets it read the runner\'s directories', () => {
   const env = childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), '/r', { FTH_HOME: '/srv/fth', PWD: '/elsewhere', OPENCODE_PERMISSION: '{"*":"allow"}', OPENCODE_DISABLE_PROJECT_CONFIG: '1' });
   assert.deepStrictEqual([env.FTH_ROOT, env.FTH_AUTONOMOUS, env.PWD], ['/r', '1', '/r/workspace']);

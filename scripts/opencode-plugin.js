@@ -6,23 +6,28 @@
  * the task permission, and with it the head trader's prompt, stays the same from cycle to cycle. The check is
  * opencode.js deniedTaskRefusal; a refusal is the tool call's error, and the session goes on. It also drops a task_id
  * that names no session (opencode.js dropInventedTaskId), so a role launched with an invented one still runs; answers
- * a call to an unknown tool name with the name meant (toolNameHint); and guards repeated identical calls (repeatGuard).
+ * a call to an unknown tool name with the name meant (toolNameHint); guards repeated identical calls (repeatGuard); and
+ * holds the head trader's compose_check until the cycle's desk reported (deskGate).
  */
 
-const { deniedTaskRefusal, dropInventedTaskId, toolNameHint, repeatGuard } = require('./lib/opencode');
+const { deniedTaskRefusal, dropInventedTaskId, toolNameHint, repeatGuard, deskGate } = require('./lib/opencode');
 
 async function DeniedRoles() {
   const repeats = repeatGuard();
+  const desk = deskGate(process.env);
   return {
     'tool.execute.before': async (input, output) => {
       const tool = input && input.tool;
       const args = output && output.args;
       dropInventedTaskId(tool, args);
-      const why = deniedTaskRefusal(tool, args, process.env) || toolNameHint(tool, args) || repeats.before(tool, args, input && input.sessionID, input && input.callID);
+      const why = deniedTaskRefusal(tool, args, process.env) || toolNameHint(tool, args) || desk.before(tool, input && input.sessionID)
+        || repeats.before(tool, args, input && input.sessionID, input && input.callID);
       if (why) throw new Error(why);
     },
     // A call that returned: the repeat guard's reminder after its result, at a reminder count (opencode.js repeatGuard).
     'tool.execute.after': async (input, output) => {
+      // A role launch that returned counts for the desk (opencode.js deskGate).
+      if (input) desk.returned(input.tool, input.args, input.sessionID);
       // The result's text, for the guard's same-answer check: an MCP result's text items, a built-in tool's output.
       const text = output && Array.isArray(output.content)
         ? output.content.filter(c => c && c.type === 'text').map(c => c.text).join('\n')

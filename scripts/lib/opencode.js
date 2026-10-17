@@ -71,6 +71,7 @@
  *   stepCap(agent)               a role's step cap ({ steps }, config/runner.json limits.roleSteps), {} for an order role
  *   toolNameHint(tool, args)     the plugin's answer to a call to an unknown name: the harness or broker tool meant
  *   repeatGuard(at)              the plugin's repeat guard: before() a refusal of a repeated failed call, after() a reminder
+ *   deskGate(env)                the plugin's desk precondition: compose_check only once FTH_CYCLE_DESK's roles reported
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
  */
@@ -445,6 +446,38 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
   };
 }
 
+/**
+ * The plugin's desk precondition: the head trader composes a trade (compose_check) only once every role this cycle
+ * must launch (FTH_CYCLE_DESK, set by the runner from trading/desk-check.js expectedRoles: the prompt's roster, less
+ * the cached) has reported to it, each a task launch that returned in that session. In the PPC run of 2026-10-16 the
+ * head trader skipped the desk in 4 of 5 cycles and analysed alone (each cycle's shortcut primed the next through its
+ * history); the order gate refused any entry from it, but the cycle was lost and trained nothing. Only compose_check is
+ * held (no role holds it): never the trade-executor, an exit, a stop or a read. Its own state: one per plugin (run).
+ *   returned(tool, args, sessionID)   a launch that returned (the plugin's after hook)
+ *   before(tool, sessionID)           the refusal naming the roles still to launch, or null
+ */
+function deskGate(env = process.env) {
+  // A role the run denies (FTH_DENIED_ROLES) is never waited for: it can't be launched.
+  const denied = deniedRolesOf(env);
+  const desk = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).filter(r => r && !denied.includes(r));
+  const reported = new Map();
+  return {
+    returned(tool, args, sessionID) {
+      if (tool !== 'task' || !args || typeof args.subagent_type !== 'string') return;
+      const key = String(sessionID || '');
+      if (!reported.has(key)) reported.set(key, new Set());
+      reported.get(key).add(args.subagent_type.trim());
+    },
+    before(tool, sessionID) {
+      if (tool !== `${HARNESS_SERVER}_compose_check` || !desk.length) return null;
+      const got = reported.get(String(sessionID || '')) || new Set();
+      const missing = desk.filter(r => !got.has(r));
+      if (!missing.length) return null;
+      return `[desk] compose_check composes the trade from the desk's reports: launch ${missing.join(', ')} first, as parallel subagents (the cycle's roster), then compose from their reports. No entry goes without them (the order gate refuses it).`;
+    },
+  };
+}
+
 /** The web's permission keys: a replay denies both to every agent (WEB_KEYS), and launching a role that holds one. */
 const WEB_KEYS = Object.freeze(['websearch', 'webfetch']);
 /** The roles whose tools reach the web (WebSearch, WebFetch): a replay never launches them. */
@@ -544,4 +577,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap, INVALID_TOOL, toolNameHint, repeatGuard };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap, INVALID_TOOL, toolNameHint, repeatGuard, deskGate };
