@@ -168,6 +168,27 @@ test('decision path, the runner runs the desk: a desk run without the lookup its
   assert.deepStrictEqual(D.placedAtBroker(w), []);
 });
 
+test('decision path, the runner runs the desk: a report the record couldn\'t hold is neither given nor cached (the next cycle never serves it as returned)', async () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const script = [{ result: 'CYCLE RESULT: no-trade - nothing fired' }];
+  const pass = async failing => {
+    const w = D.world();
+    const orig = RR.appendRoleRun;
+    RR.appendRoleRun = (file, run) => { if (run.role === failing) throw new Error('disk full'); return orig(file, run); };
+    try {
+      const r = await D.pass(w, decisionAt(QUIET_BAR), [...D.headLoads(w).map(s => ({ load: s })), ...script], { runRole: deskRun() });
+      return { given: r.ran[0].context.runnerRoles, cache: JSON.parse(fs.readFileSync(path.join(w.home, 'report-cache.json'), 'utf8')) };
+    } finally {
+      RR.appendRoleRun = orig;
+    }
+  };
+  const control = await pass(null);
+  assert.ok(control.given.includes('risk-manager') && control.cache.phase1, 'recorded: given and cached');
+  const failed = await pass('risk-manager');
+  assert.ok(!failed.given.includes('risk-manager'), 'not given');
+  assert.ok(!failed.cache || !failed.cache.phase1, 'not cached');
+});
+
 test('decision path, skip: a setup on the table, the model passes; recorded as skipped with its setup, side and 1R, shown with what followed', async () => {
   const w = D.world();
   const r = await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, `${SETUP.strategy} ${SETUP.side} skipped: no room, the first level in its way is under 1R`));

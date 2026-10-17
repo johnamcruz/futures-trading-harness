@@ -32,7 +32,7 @@ test('appendRoleRun / readRoleRuns: one line per run, mode 0600, read back in or
 
 test('appendRoleRun refuses what is no run: the caller logs it, nothing is written', () => {
   const file = path.join(tmpDir(), 'r.jsonl');
-  for (const bad of [run({ role: '' }), run({ role: ' risk-manager' }), run({ start: NaN }), run({ end: T - 1 }), run({ text: null }), run({ lookups: [1] }), run({ ok: 'yes' }), null]) {
+  for (const bad of [run({ role: '' }), run({ role: ' risk-manager' }), run({ start: NaN }), run({ end: T - 1 }), run({ start: 5, end: 10 }), run({ text: null }), run({ lookups: [1] }), run({ ok: 'yes' }), null]) {
     assert.throws(() => RR.appendRoleRun(file, bad), /not a role run/, JSON.stringify(bad));
   }
   assert.throws(() => RR.appendRoleRun(null, run()), /no record file/);
@@ -72,4 +72,17 @@ test('removeRoleRuns: the file is gone; none is nothing', () => {
   assert.strictEqual(fs.existsSync(file), false);
   RR.removeRoleRuns(file);
   RR.removeRoleRuns(null);
+});
+
+test('newRoleRunsFile sweeps the records no cycle runs with: this process\'s earlier ones and a gone process\'s; a live one\'s stays', () => {
+  const home = tmpDir();
+  const logs = path.join(home, 'logs');
+  fs.mkdirSync(logs, { recursive: true });
+  const name = pid => path.join(logs, `cycle-roles-${pid}-abcdef012345.jsonl`);
+  const gone = 2 ** 22 + 7; // above any pid this machine hands out
+  for (const pid of [process.pid, gone, process.ppid]) fs.writeFileSync(name(pid), '');
+  fs.writeFileSync(path.join(logs, 'cycle-transcript-1-x.jsonl'), '');
+  RR.newRoleRunsFile(home);
+  assert.deepStrictEqual([process.pid, gone, process.ppid].map(p => fs.existsSync(name(p))), [false, false, true]);
+  assert.ok(fs.existsSync(path.join(logs, 'cycle-transcript-1-x.jsonl')), 'another file is left alone');
 });

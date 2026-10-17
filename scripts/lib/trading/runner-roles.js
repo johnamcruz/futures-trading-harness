@@ -13,7 +13,8 @@
  * up naming its role (skill_lookup; cycle-run.js runRole), `ok` whether the run counted (the workflow's checks passed).
  *
  *   roleRunsFile(env)              the cycle's file (FTH_CYCLE_ROLES), or null
- *   newRoleRunsFile(home)          a fresh file name for one cycle, under <home>/logs
+ *   newRoleRunsFile(home)          a fresh file name for one cycle, under <home>/logs; first removes the records a cycle
+ *                                  left behind (this process's earlier ones, or a process that is gone: a crash)
  *   appendRoleRun(file, run)       append one run (throws on a bad run or a failed write: the caller logs it)
  *   readRoleRuns(file)             the runs, [] when there is no file or it can't be read (a torn or foreign line is
  *                                  skipped; a file over the size limit is none: fails closed)
@@ -35,7 +36,26 @@ const maxBytes = () => require('../tunables').runner().limits.rolesRanBytes;
 
 const roleRunsFile = env => String((env && env[ENV]) || '').trim() || null;
 
-const newRoleRunsFile = home => path.join(home, 'logs', `cycle-roles-${process.pid}-${crypto.randomBytes(6).toString('hex')}.jsonl`);
+const PREFIX = 'cycle-roles-';
+const alive = pid => {
+  try { process.kill(pid, 0); return true; } catch (err) { return err.code === 'EPERM'; }
+};
+/** Remove the records no cycle is running with: this process's own (one cycle at a time) and a gone process's. */
+function sweepRoleRuns(dir) {
+  let names;
+  try { names = fs.readdirSync(dir); } catch (_err) { return; }
+  for (const n of names) {
+    const m = new RegExp(`^${PREFIX}(\\d+)-[0-9a-f]+\\.jsonl$`).exec(n);
+    if (!m) continue;
+    const pid = Number(m[1]);
+    if (pid === process.pid || !alive(pid)) removeRoleRuns(path.join(dir, n));
+  }
+}
+function newRoleRunsFile(home) {
+  const dir = path.join(home, 'logs');
+  sweepRoleRuns(dir);
+  return path.join(dir, `${PREFIX}${process.pid}-${crypto.randomBytes(6).toString('hex')}.jsonl`);
+}
 
 const isStrings = a => Array.isArray(a) && a.every(s => typeof s === 'string');
 
@@ -44,7 +64,8 @@ function validRun(r) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
   const { role, start, end, text, lookups, ok } = r;
   if (typeof role !== 'string' || !role.trim() || role.trim() !== role) return null;
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  // Wall-clock ms (the transcript's clock), never a replay's or a line position (skill-lookups.js timed).
+  if (!require('./skill-lookups').timed({ start, end }) || end < start) return null;
   if (typeof text !== 'string' || !isStrings(lookups) || typeof ok !== 'boolean') return null;
   return { role, start, end, text, lookups: [...new Set(lookups)].sort(), ok };
 }
