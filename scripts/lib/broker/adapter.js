@@ -19,6 +19,8 @@
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
  *   cancelOrder / modifyStop / closePosition
+ *   fillsSince / ordersSince(accountId, start)   search_trades / search_orders since start
+ *   journalAdd(entry)                      journal_add (the runner's factual reviews): the entry the server wrote, or throws
  *   serverConfig()                         get_server_config
  *   close()
  *
@@ -225,6 +227,11 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return listOf(await call('search_trades', { accountId: Number(accountId), startTimestamp: start.toISOString() }), 'search_trades');
     },
 
+    /** The account's orders since `start` (search_orders), with their status: how an order ended. */
+    async ordersSince(accountId, start) {
+      return listOf(await call('search_orders', { accountId: Number(accountId), startTimestamp: start.toISOString() }), 'search_orders');
+    },
+
     /** Number of working orders in a contract. */
     async workingOrders(accountId, contractId) {
       return (await ordersOf(accountId)).filter(o => o.contractId === contractId).length;
@@ -250,6 +257,17 @@ function createAdapter({ mcp, writeMcp = mcp }) {
     /** Flatten a contract's position at market. */
     async closePosition(accountId, contractId) {
       return outcome(await order('close_position', { accountId: Number(accountId), contractId, reason: '[exit] runner' }), `close ${contractId}`);
+    },
+
+    /**
+     * Add a journal entry (journal_add: kind, text, contractId, orderId, tags): the runner's factual review of an entry
+     * that ended (trading/runner-reviews.js). Straight to the server, as reads go: it places nothing, and the gate reads
+     * the journal it writes. Returns the entry the server wrote; a failure throws.
+     */
+    async journalAdd(entry) {
+      const res = await call('journal_add', entry);
+      if (!res || typeof res !== 'object' || typeof res.kind !== 'string') throw new BrokerError('journal_add returned no journal entry');
+      return res;
     },
 
     /** The server's own config: whether it trades at all, and its guardrails (get_server_config). */

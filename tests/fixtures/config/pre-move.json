@@ -1010,6 +1010,10 @@
    "value": 8,
    "from": "new in feat/desk-in-runner (one desk role's run)"
   },
+  "reviews.scratchR": {
+   "value": 0.2,
+   "from": "new in fix/runner-writes-reviews (the runner's factual review: a trade inside 0.2R is a scratch, as skills/trade-review/SKILL.md defines it)"
+  },
   "gate.factsMinChecked": {
    "value": 2,
    "from": "trading/fact-claims.js MIN_CHECKED"

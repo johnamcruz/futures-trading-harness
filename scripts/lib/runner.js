@@ -58,6 +58,7 @@ const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen } = require('./trading/positions');
 const { coverageError } = require('./trading/exchange-calendar');
+const { writeReviews } = require('./trading/runner-reviews');
 
 // Micros and minis of one index share bars: a position or order in either
 // belongs to the symbol polled (MNQ bars manage an NQ trade too).
@@ -171,6 +172,8 @@ function createRunner(deps) {
     practiceSelect = null,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
+  // The composed entries this process cancelled at their record's expiry: their review is due at once (runner-reviews.js).
+  const cancelledEntries = new Set();
   let state = loadState();
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
@@ -395,6 +398,7 @@ function createRunner(deps) {
         log(`${item.symbol}: could not cancel the expired composed entry ${o.id} (${err.message}); the next bar retries`, 'error');
         continue;
       }
+      cancelledEntries.add(String(o.id));
       const c = (entry && entry.composed) || {};
       log(`${item.symbol}: cancelled the composed entry ${o.id}: ${!entry ? 'the gateway never recorded it as an entry' : c.expiresAt ? `its record expired at ${c.expiresAt}` : 'no record expiry was stamped for it'}`);
       emit('composed_expired', { symbol: item.symbol, orderId: o.id, expiresAt: c.expiresAt || null, record: c.record || null });
@@ -658,6 +662,29 @@ function createRunner(deps) {
       if (trail) await trailPosition(item, account);
     } catch (err) {
       log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');
+    }
+  }
+
+  /**
+   * The runner's factual review of each entry of today it has seen end, unfilled or flat (trading/runner-reviews.js),
+   * through the adapter's journal_add, after the pass's risk work: the gate's review-before-next-entry never waits on a
+   * review the model skipped; the trade-reviewer adds the grade. The ids written are kept in the state for the trading
+   * day (a restart writes none again; the journal says so too). A failure is logged and tried again on the next pass.
+   */
+  async function factualReviews() {
+    if (!cfg.account || cfg.paper || typeof client.journalAdd !== 'function' || typeof client.accountState !== 'function') return;
+    const now = clock.now();
+    const day = dayKey(now);
+    const kept = state.runnerReviews && state.runnerReviews.day === day && Array.isArray(state.runnerReviews.ids) ? state.runnerReviews.ids : [];
+    const tickOf = r => (syms.find(s => s.contractId && s.tickSize && famOf(s.contractId) === familyRoot(r)) || {}).tickSize || null;
+    try {
+      const ids = await writeReviews({ client, accountId: cfg.account, entries: journalEntries, entryOrders: entryOrders(), now, cancelled: cancelledEntries, tickOf, written: kept, log, emit });
+      if (ids.length !== kept.length) {
+        state = { ...state, runnerReviews: { day, ids } };
+        saveState(state);
+      }
+    } catch (err) {
+      log(`the runner's reviews: ${err.message}; the next bar tries again`, 'error');
     }
   }
 
@@ -1333,6 +1360,8 @@ function createRunner(deps) {
       const noCycles = d.action === 'housekeep';
       const keep = traded.filter(x => !traded.some(y => y !== x && y.symbol === x.symbol && (y.lane < x.lane || (y.lane === x.lane && traded.indexOf(y) < traded.indexOf(x)))));
       for (const item of keep) await housekeeping(item, { noCycles, trail: item.lane === 0 });
+      // Then the factual reviews of the entries that ended (never before an exit, a stop or a flatten).
+      await factualReviews();
       // Then the session record hears each closed bar (its values taken, its bars archived): after the risk work.
       for (const x of traded) {
         try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars, ...(multi ? { minutes: x.minutes } : {}) }); } catch (_err) { /* recording never stops the pass */ }

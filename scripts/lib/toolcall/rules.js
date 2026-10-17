@@ -79,6 +79,27 @@ const toolName = {
 };
 
 /**
+ * review: in the runner's runs (FTH_AUTONOMOUS=1), compose_check composes no new trade on a symbol while an earlier
+ * entry on it today has no review, counted as the order gate counts it (trading/runner-reviews.js unreviewedFor: the
+ * local journal, at the harness clock), since the gate would refuse that entry anyway. The runner writes the factual
+ * review of each entry it sees end (runner-reviews.js writeReviews), so this holds only while that is late or failed: a
+ * backstop. Fails closed (it holds an entry's step); only compose_check is held: never an exit, a stop, an order or a read.
+ */
+const reviewWait = {
+  id: 'review', event: 'pre', failClosed: true,
+  match: call => call.tool === `${HARNESS_SERVER}.compose_check`,
+  check(call, { env }) {
+    if (String((env && env.FTH_AUTONOMOUS) || '') !== '1') return null;
+    const a = call.args;
+    const symbol = a && typeof a === 'object' && typeof a.symbol === 'string' ? a.symbol.trim().toUpperCase() : '';
+    if (!symbol) return null; // compose_check refuses it itself
+    const n = require('../trading/runner-reviews').unreviewedFor(env, symbol);
+    if (!n) return null;
+    return { refuse: `[review] ${n} earlier ${symbol} entr${n === 1 ? 'y' : 'ies'} today ${n === 1 ? 'has' : 'have'} no review, so no new ${symbol} trade (the order gate refuses it). An open one: manage it until it closes. A closed or cancelled one: the runner writes its factual review at the next bar; or launch the trade-reviewer for it now. Exits and stops are never held by this.` };
+  },
+};
+
+/**
  * desk: the head trader composes a trade (compose_check) only once every role this cycle must launch (FTH_CYCLE_DESK:
  * trading/desk-check.js expectedRoles, less any the run denies) has reported to it, a launch that returned in its
  * session (desk-reported). With the runner's desk (runner-wiring.js deskFor) nothing is left for it to wait for: a
@@ -155,6 +176,6 @@ const repeatNote = {
   },
 };
 
-const RULES = Object.freeze([taskId, deniedRole, toolName, deskWait, deskReported, repeat, repeatNote]);
+const RULES = Object.freeze([taskId, deniedRole, toolName, reviewWait, deskWait, deskReported, repeat, repeatNote]);
 
 module.exports = { RULES, DENIED_ROLES_ENV, deniedRolesOf };
