@@ -20,7 +20,7 @@
  * rules: the gate and the strategies still decide.
  */
 
-const { hasTag, reviewResult, entryTime, onePerOrder } = require('./journal');
+const { hasTag, reviewResult, entryTime, onePerOrder, orderKey } = require('./journal');
 
 const MIN_SETUP_TRADES = require('../tunables').runner().prompt.instinctsMinSetupTrades; // config/runner.json
 const RECENT_REVIEWS = require('../tunables').runner().prompt.instinctsRecentReviews;
@@ -39,16 +39,17 @@ function reviewR(e) {
 }
 
 /**
- * The live reviews with a result (not paper), oldest first, each with the tags of the grade reviews that name its order
+ * The live reviews with a result (not paper), one per order (journal.js onePerOrder: the worst), each with the tags of the grade reviews that name its order
  * (a review with an orderId and no result: the trade-reviewer's grade of a trade the runner reviewed, runner-reviews.js)
  * added: their mistake:, regime: and other tags count with the trade (never a second result: or r:).
  */
 function graded(entries) {
-  const id = e => (e.orderId === undefined || e.orderId === null ? null : String(e.orderId));
+  const id = orderKey; // its order, on its trading day
   const grades = new Map();
   const live = entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper'));
   const kept = new Set(onePerOrder(live));
-  // A grade review, or a second result review of the same order (its tags join the first's; its result counts nothing).
+  // A grade review, or another result review of the same order (its tags join the one that counts, the worst; its
+  // result and r: count nothing).
   for (const g of live.filter(e => id(e) !== null && (reviewResult(e) === null || !kept.has(e)))) {
     grades.set(id(g), [...(grades.get(id(g)) || []), ...(Array.isArray(g.tags) ? g.tags : []).filter(t => !/^(result|r|by):/i.test(String(t)))]);
   }

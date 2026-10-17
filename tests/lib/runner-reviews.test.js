@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const RR = require('../../scripts/lib/trading/runner-reviews');
 const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
-const { tmpDir, FAKE_BROKERS } = require('../helpers');
+const { tmpDir, FAKE_BROKERS, brokerId } = require('../helpers');
 
 const NOW = new Date('2026-10-07T15:00:00Z');
 const at = min => new Date(NOW.getTime() - min * 60000).toISOString();
@@ -41,11 +41,15 @@ test('nofill: an entry the runner cancelled, or one gone from the working orders
   // A position open on its family: its fills may lag, so no nofill either.
   const open = [{ contractId: 'MNQ', type: 1, size: 1 }];
   assert.deepStrictEqual(one(e, { cancelled: new Set(['101']), positions: open }), { wait: 'a position is open on its family: its fills may not be listed yet' });
-  assert.deepStrictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 0 }], positions: open }).wait, 'a position is open on its family: its fills may not be listed yet');
-  // The broker's orders unread (history null): the grace grants nothing (it may have filled, its fills late); only the
-  // runner's own cancel with nothing open on the family.
-  assert.deepStrictEqual(one([placed(101, 30)], { history: null }), { wait: 'the broker\'s orders could not be read' });
+  assert.deepStrictEqual(one([placed(101, 30)], { positions: open }).wait, 'a position is open on its family: its fills may not be listed yet', 'past the grace too');
+  // The broker's own word comes first: cancelled with nothing filled is a nofill whatever else is open on the family.
+  assert.strictEqual(one(e, { history: [{ id: 101, status: 3, fillVolume: 0 }], positions: open }).review.tags[1], 'result:nofill');
+  // The broker's orders unread (history null): the runner's own cancel, or the grace (a broker-side expiry, the
+  // model's cancel), with no fill listed and nothing open on the family; under the grace it waits.
+  assert.deepStrictEqual(one(e, { history: null }), { wait: 'the broker\'s orders could not be read' });
+  assert.match(one([placed(101, 30)], { history: null }).review.text, /ended unfilled \(no longer working; no fill\)/);
   assert.strictEqual(one(e, { history: null, cancelled: new Set(['101']) }).review.tags[1], 'result:nofill');
+  assert.deepStrictEqual(one([placed(101, 30)], { history: null, positions: open }).wait, 'a position is open on its family: its fills may not be listed yet');
   assert.deepStrictEqual(one(e, { history: null, cancelled: new Set(['101']), positions: open }).wait, 'a position is open on its family: its fills may not be listed yet');
 });
 
@@ -94,6 +98,7 @@ test('coverage, as the gate counts: a review naming the order covers it; one nam
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), modelReview]), ['102'], 'the model reviewed the older one');
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), runnerReview(101)]), ['102'], 'a second result review of one order covers no other entry (the gate counts it once)');
   assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), { ...modelReview, orderId: 101, tags: ['result:loss'] }]), ['102'], 'the model\'s second result: of 101 neither');
+  assert.deepStrictEqual(ids([placed(101, 30), placed(102, 20), runnerReview(101), { ...modelReview, orderId: 101, tags: ['result:win'] }]), ['102'], 'whichever counts, one of them');
   assert.deepStrictEqual(ids([placed(101, 30), { ...modelReview, tags: ['setup:orb', 'grade:B'], orderId: 101 }]), ['101'], 'a grade review (no result) covers nothing');
   assert.deepStrictEqual(ids([placed(101, 30), { ...modelReview, tags: ['result:win', 'paper'] }]), ['101'], 'a paper review counts for nothing');
   // An NQ entry and an MNQ review: each root counts its own.
@@ -176,6 +181,21 @@ test('tickValueFor: the root\'s own contract, never its family\'s (a mini on a m
   assert.strictEqual(RR.tickValueFor('ES', []), 12.5);
   assert.strictEqual(RR.tickValueFor('ZZZ', [{ contractId: 'ZZZ', tickValue: 7 }]), 7, 'a root the table lacks: the broker\'s contract of that root');
   assert.strictEqual(RR.tickValueFor('ZZZ', syms), null);
+  // The lane's contract under the broker's own id, named by the translator's lookups (contractRoot).
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { [brokerId('ZZZ')]: { root: 'ZZZ', month: '2026-12' } }, front: {} }));
+  const prev = { home: process.env.FTH_HOME, brokers: process.env.FTH_BROKERS_FILE };
+  process.env.FTH_HOME = home;
+  process.env.FTH_BROKERS_FILE = FAKE_BROKERS;
+  try {
+    assert.strictEqual(RR.tickValueFor('ZZZ', [...syms, { contractId: brokerId('ZZZ'), tickSize: 1, tickValue: 7 }]), 7);
+    assert.strictEqual(RR.tickValueFor('ZZY', [{ contractId: brokerId('ZZZ'), tickValue: 7 }]), null, 'another root\'s contract is not this one\'s');
+  } finally {
+    for (const [k, v] of [['FTH_HOME', prev.home], ['FTH_BROKERS_FILE', prev.brokers]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
   // An NQ trade's net R: 20 ticks x $5 = $100 of risk; +2R less $0.74 of fees is +1.99R (a micro's $10 would be +1.93R).
   const nq = [placed(101, 30, { contractId: 'NQ' })];
   const nqFill = (orderId, min, price, side, pnl = null) => ({ ...fill(orderId, min, price, side, pnl), contractId: 'NQ' });

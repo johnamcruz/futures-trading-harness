@@ -28,7 +28,8 @@ skills `trade-review` and `setup-expectancy`.
    trade-review skill lists them, `regime:` and `r:<R net of fees>` included:
    they feed the instincts every later cycle sees) with exactly
    one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag;
-   on a `by:runner` one, only the grade: no `result:` or `r:`.
+   on a `by:runner` one, only the grade (no `result:` or `r:`), unless the
+   fills contradict it: then your own `result:` and `r:` (the worse counts).
 6. Review blocked orders: the server's own (`order_blocked` in the
    journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`; FTH_HOME defaults to `~/.futures-trading-harness`; one JSON
    line per decision with the checks that refused it). Why did the plan reach

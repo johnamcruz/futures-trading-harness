@@ -77,19 +77,35 @@ function reviewResult(entry) {
 }
 
 /**
- * The reviews of `entries` with at most one result review (result:win|loss|scratch|nofill) per named order: the first
- * in the journal's order; a later one naming the same orderId counts nothing (the runner's factual review and a
- * reviewer's second result: are one trade). Reviews naming no orderId, and every other entry, pass as they are.
+ * The order a review names, keyed by its trading day (an order id a replay broker reuses on another day is another
+ * order): "<day>|<orderId>", or null when it names none.
+ */
+function orderKey(e) {
+  if (!e || e.orderId === undefined || e.orderId === null || e.orderId === '') return null;
+  const t = entryTime(e);
+  return `${Number.isFinite(t) ? require('./clock').tradingDayKey(new Date(t)) : '?'}|${e.orderId}`;
+}
+
+// Of several result reviews of one order, the one that counts: the worst (a correcting loss is never outvoted).
+const WORST = ['loss', 'scratch', 'win', 'nofill'];
+const resultOf = e => reviewResult(e) || (hasTag(e, 'result:nofill') ? 'nofill' : null);
+
+/**
+ * The reviews of `entries` with exactly one result review (result:win|loss|scratch|nofill) per named order (orderKey):
+ * the worst of them (loss, then scratch, then win, then nofill; the first of equals), the rest dropped (the runner's
+ * factual review and a reviewer's own result: are one trade). Reviews naming no orderId, and every other entry, pass.
  */
 function onePerOrder(entries) {
-  const seen = new Set();
+  const best = new Map();
+  for (const e of entries) {
+    const k = e && e.kind === 'review' && resultOf(e) !== null ? orderKey(e) : null;
+    if (k === null) continue;
+    const cur = best.get(k);
+    if (!cur || WORST.indexOf(resultOf(e)) < WORST.indexOf(resultOf(cur))) best.set(k, e);
+  }
   return entries.filter(e => {
-    if (!e || e.kind !== 'review' || (reviewResult(e) === null && !hasTag(e, 'result:nofill'))) return true;
-    if (e.orderId === undefined || e.orderId === null || e.orderId === '') return true;
-    const k = String(e.orderId);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
+    const k = e && e.kind === 'review' && resultOf(e) !== null ? orderKey(e) : null;
+    return k === null || best.get(k) === e;
   });
 }
 
@@ -164,6 +180,7 @@ module.exports = {
   hasTag,
   reviewResult,
   onePerOrder,
+  orderKey,
   contractRoot,
   mayBeRoot,
   contractMonthTag,

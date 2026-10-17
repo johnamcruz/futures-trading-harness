@@ -41,7 +41,7 @@ description: Use after every closed or cancelled entry (the gate blocks the next
    - Managed per the plan (no widened stop, no early panic exit, no moved target)?
    - Size per the position-sizing rules?
 5. **Write the review** with `journal_add {kind:"review", contractId, orderId, text, tags}`
-   (the runner's, `by:runner`, there: no `result:` or `r:`):
+   (on the runner's, `by:runner`: no `result:` or `r:` unless the fills contradict it):
    - text: plan vs. actual, R, grade, what to repeat or change.
    - tags: exactly one of `result:win | result:loss | result:scratch (|R| < 0.2) |
      result:nofill`; `setup:<name>`; `regime:<primary>` (from the plan); the

@@ -12,7 +12,8 @@
  *
  * An uncovered entry gets:
  *   result:nofill         its order is no longer working and never filled: the broker's orders (search_orders) say it
- *                         was cancelled, expired or rejected; else the runner cancelled it (expireComposed); else it was
+ *                         was cancelled, expired or rejected (whatever else is open); else, with no position open on
+ *                         its family and no filled volume shown, the runner cancelled it (expireComposed) or it was
  *                         placed ORDER_GRACE_MS ago (gate-timing.js: a broker may be slow to list a new order)
  *   result:win|loss|scratch  its own position (decision-history.js ownTrade: the broker's fills, by its order id) went
  *                         flat; R by decision-history.js rOf from the fill and exit prices over the planned stop
@@ -128,16 +129,17 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
     // (a part fill, then a cancel), or a position is open on its family (its fills may lag).
     const listed = (Array.isArray(history) ? history : []).find(o => o && String(o.id) === orderId);
     if (listed && Number(listed.fillVolume) > 0) return { wait: 'filled (in part) at the broker, its fills not listed yet' };
-    if (positions.some(p => famOf(p.contractId) === famOf(contract) && isOpen(p))) return { wait: 'a position is open on its family: its fills may not be listed yet' };
-    // The broker's own word first (search_orders: cancelled, expired or rejected, nothing filled); else the runner's
-    // cancel; else gone from the working orders for longer than a broker may take to list one. The broker's orders
-    // unread (history null): only the runner's own cancel.
+    // The broker's own word first: cancelled, expired or rejected with nothing filled (search_orders), whatever else is
+    // open on the family.
     if (listed && Object.prototype.hasOwnProperty.call(ENDED, Number(listed.status))) {
       return { review: { ...base, text: `runner: ${label} entry order ${orderId} on ${root} ended unfilled (${ENDED[Number(listed.status)]} at the broker; no fill). Facts only: the trade-reviewer adds the grade.`, tags: tags('nofill') } };
     }
     if (listed && Number(listed.status) === STATUS.filled) return { wait: 'filled at the broker, its fills not listed yet' };
+    // Not said by the broker: never while a position is open on its family (its fills may lag); else the runner's own
+    // cancel, or gone from the working orders longer than a broker may take to list one (the broker's orders read or not).
+    if (positions.some(p => famOf(p.contractId) === famOf(contract) && isOpen(p))) return { wait: 'a position is open on its family: its fills may not be listed yet' };
     const at = Date.parse((record && record.at) || entry.ts);
-    const graced = history !== null && Number.isFinite(at) && nowMs - at >= graceMs;
+    const graced = Number.isFinite(at) && nowMs - at >= graceMs;
     const gone = cancelled.has(orderId) ? 'cancelled by the runner (its record expired)' : graced ? 'no longer working' : null;
     if (!gone && history === null) return { wait: 'the broker\'s orders could not be read' };
     if (!gone) return { wait: 'too new to tell from the broker\'s orders' };
