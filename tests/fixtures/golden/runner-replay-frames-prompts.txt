@@ -21,7 +21,7 @@ Autonomous cycle.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m (bar_briefing with "timeframe": "15m"; its bars file is named there), volume-liquidity-analyst on 1h (bar_briefing with "timeframe": "1h"; its bars file is named there); the others read the 3-minute bars below.
   A report on an analyst's own timeframe holds until that timeframe's next bar close, so it may be up to one of its bars old.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:37:02.000Z trade 1m ===
 Autonomous cycle.
@@ -65,5 +65,5 @@ Bias: long
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
