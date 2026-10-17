@@ -108,6 +108,7 @@ test('decision path, the runner runs the desk: every role run before the head tr
     const read = role === 'volume-liquidity-analyst' && runs.filter(r => r === role).length === 1 ? [] : [role === 'risk-manager' ? 'broker_get_account_snapshot' : 'harness_bar_briefing'];
     const text = role === 'risk-manager' ? '## Risk state: account 1 @ now\nTradable: yes' : `## ${role}\nData: bar_briefing m3@x\nBias: long`;
     assert.match(request, /MNQ/);
+    assert.match(request, /Closed 3-minute bars, oldest first, are in \/\S+MNQ-3m\.json/, 'the cycle\'s bars file, named exactly');
     return { ok: true, timedOut: false, text, tools: read, lookups: [], output: '' };
   };
   const script = [...D.headLoads(w).map(s => ({ load: s })), { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { result: 'CYCLE RESULT: no-trade - nothing fired' }];

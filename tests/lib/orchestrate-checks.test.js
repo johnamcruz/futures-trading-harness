@@ -29,4 +29,8 @@ test('the desk request: the symbol, the bar, read your own data; phase 1 for the
   const r = REQUESTS.desk('risk-manager', { symbol: 'MNQ', at: '10:03 ET', timeframe: 3 });
   assert.match(r, /^Phase 1, risk state, for MNQ/);
   for (const s of [a, r]) assert.doesNotMatch(s, /already provided/i);
+  // The cycle's bars file, named exactly: a role never guesses the path (a relative one resolved in its workspace).
+  const f = REQUESTS.desk('volume-liquidity-analyst', { symbol: 'MNQ', at: '10:03 ET', timeframe: 3, bars: '/h/bars/MNQ-3m.json' });
+  assert.match(f, /Closed 3-minute bars, oldest first, are in \/h\/bars\/MNQ-3m\.json \(get_bars format\): pass that exact path/);
+  assert.doesNotMatch(a, /Closed 3-minute bars/, 'no file given: none named');
 });
