@@ -809,3 +809,75 @@ test('decision path, trade_lifecycle: on a lane of composed strategies only, a w
   assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), []);
   assert.ok(r.logs.some(l => /never recorded it as an entry/.test(l)), r.logs.join('\n'));
 });
+
+// ---- The runner's factual reviews (trading/runner-reviews.js), on the replay path: the runner's own pass, the real
+// gateway and gate, the mock exchange as the replay broker. Each entry the runner sees end gets its review in code,
+// so the next entry on the symbol passes the gate's review-before-next-entry with no review by the model. A runner
+// restart (its state file gone) replays the fired bar, the one bar the fixture strategy fires on, at the same time.
+const journalOf = w => fs.readFileSync(w.journal, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+const runnerReviews = w => journalOf(w).filter(e => e.kind === 'review' && (e.tags || []).includes('by:runner'));
+const restart = w => fs.rmSync(w.stateFile, { force: true });
+/** The composed limit of the fired bar resting under the close, its record's expiry moved onto the decision time. */
+async function restingComposed(w) {
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { order: { limitPrice: 27420, rationale: 'setup:trade_lifecycle long, 4h up, value above, a limit under the close' } }));
+  const resting = D.working(w).filter(o => o.type === 1);
+  assert.strictEqual(resting.length, 1, 'resting unfilled');
+  const file = path.join(w.home, 'entry-orders.json');
+  fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => (e.composed ? { ...e, composed: { ...e.composed, expiresAt: decisionAt(FIRED_BAR) } } : e))));
+  return resting[0];
+}
+
+test('decision path, runner reviews (replay): a composed limit that never fills is cancelled at its expiry, the runner writes its nofill review, and the next entry passes the gate', async () => {
+  const w = D.world();
+  const limit = await restingComposed(w);
+  restart(w);
+  const r = await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w));
+  assert.ok(r.events.some(e => e.kind === 'composed_expired' && String(e.orderId) === String(limit.id)), JSON.stringify(r.events.map(e => e.kind)));
+  const [rev] = runnerReviews(w);
+  assert.deepStrictEqual([rev.orderId, rev.contractId, rev.tags], [limit.id, limit.contractId, ['by:runner', 'result:nofill', 'setup:trade_lifecycle', 'MNQ']]);
+  assert.ok(r.events.some(e => e.kind === 'review_written' && e.orderId === String(limit.id)));
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' }, 'the next entry: no review-before-next-entry');
+  assert.ok(D.position(w), 'the fx_break entry filled');
+  // Its order: the cancel before the review (the risk work first).
+  const calls = exchange.read(w.state).calls;
+  const reviewAt = calls.findIndex(c => c.tool === 'journal_add' && (c.args.tags || []).includes('by:runner'));
+  assert.ok(reviewAt > 0 && calls.findIndex(c => c.tool === 'cancel_order') < reviewAt, calls.map(c => c.tool).join(','));
+});
+
+test('decision path, runner reviews (replay): an entry that stops out gets the runner\'s loss review from the broker\'s fills, and the next entry passes the gate', async () => {
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w));
+  const stop = D.working(w).find(o => o.type === 4);
+  assert.ok(D.position(w) && stop, 'filled with its stop working');
+  const entry = journalOf(w).find(e => e.kind === 'order_placed');
+  exchange.setPrice(w.state, 'fake:MNQ:Z26', stop.stopPrice - 1);
+  assert.strictEqual(D.position(w), null, 'stopped out');
+  restart(w);
+  await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w));
+  const [rev] = runnerReviews(w);
+  assert.ok(rev, 'the runner reviewed it');
+  assert.deepStrictEqual([rev.orderId, rev.tags.slice(0, 4)], [entry.orderId, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ']]);
+  // The stop filled 1 point (4 ticks) through its level: R a little worse than -1 on the planned stop.
+  const ticks = JSON.parse(fs.readFileSync(path.join(w.home, 'entry-orders.json'), 'utf8'))[0].stopTicks;
+  // Net of its two fills' fees ($0.37 each on the mock exchange) over its risk ($0.50 a tick on MNQ), as trade-review writes r:.
+  const gross = Math.round((-(ticks * 0.25 + 1) / (ticks * 0.25)) * 100) / 100;
+  assert.strictEqual(rev.tags[4], `r:${Math.round((gross - 0.74 / (ticks * 0.5)) * 100) / 100}`);
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  assert.ok(D.position(w), 'the next entry filled');
+});
+
+test('decision path, runner reviews (replay): a journal_add that fails is logged and written on the next pass; the expiry cancel never waits for it', async () => {
+  const w = D.world();
+  const limit = await restingComposed(w);
+  exchange.update(w.state, s => { s.failJournal = 1; });
+  restart(w);
+  const first = await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w, { result: BLOCKED }));
+  assert.deepStrictEqual(D.working(w).filter(o => o.type === 1), [], 'cancelled at its expiry all the same');
+  assert.ok(first.logs.some(l => new RegExp(`^error MNQ: could not write the review of entry ${limit.id} \\(.*\\); the next bar tries again$`).test(l)), first.logs.join('\n'));
+  assert.deepStrictEqual(runnerReviews(w), []);
+  assert.ok(lastEntry(w).checks.includes('review-before-next-entry'), 'no review yet: the gate holds the next entry');
+  restart(w);
+  await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w));
+  assert.deepStrictEqual(runnerReviews(w).map(e => [e.orderId, e.tags[1]]), [[limit.id, 'result:nofill']]);
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+});

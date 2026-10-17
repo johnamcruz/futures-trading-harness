@@ -176,6 +176,33 @@ test('an unreviewed entry blocks the next entry; failed and exit orders do not c
   assert.deepStrictEqual(evaluate(entryOrder(), [placed(30), review(10, 'nofill'), plan(5)]).violations, []);
 });
 
+test('a second result review of the same order counts once: it covers no other entry and is no second loss; reviews naming no order count as before; exits pass', () => {
+  const { lossState, liveReviews } = require('../../scripts/lib/trading/order-gate');
+  const named = (m, id, result, extra = []) => ({ ...review(m, result), orderId: id, tags: [`result:${result}`, 'setup:orb', ...extra] });
+  const two = [{ ...placed(60), orderId: 101 }, named(50, 101, 'loss', ['by:runner']), { ...placed(40), orderId: 102 }];
+  // The runner's review of 101, then the model's second result: of 101: entry 102 is still unreviewed.
+  const doubled = [...two, named(30, 101, 'loss'), plan(5)];
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), doubled)), ['review-before-next-entry']);
+  assert.strictEqual(liveReviews(doubled).length, 1);
+  assert.deepStrictEqual([lossState(doubled).losses, lossState(doubled).streak], [1, 1], 'one loss, not two');
+  // 102 reviewed: clear; two reviews naming no order count as two, as before.
+  assert.deepStrictEqual(evaluate(entryOrder(), [...doubled, named(20, 102, 'win'), plan(5)]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder(), [placed(60), placed(40), review(30, 'win'), review(20, 'win'), plan(5)]).violations, []);
+  // The worst of them counts, whatever the order: a correcting loss is never outvoted (loss, scratch, win, nofill).
+  const pair = (a, b) => [{ ...placed(60), orderId: 101 }, named(50, 101, a, ['by:runner']), named(30, 101, b), plan(5)];
+  const counted = j => liveReviews(j).map(r => r.tags[0]);
+  assert.deepStrictEqual(counted(pair('win', 'loss')), ['result:loss'], 'runner win, then the model\'s loss');
+  assert.deepStrictEqual(counted(pair('loss', 'win')), ['result:loss'], 'runner loss, then the model\'s win');
+  assert.deepStrictEqual(counted(pair('nofill', 'loss')), ['result:loss'], 'nofill, then a loss');
+  assert.deepStrictEqual(counted(pair('win', 'scratch')), ['result:scratch']);
+  assert.deepStrictEqual([lossState(pair('win', 'loss')).losses, lossState(pair('loss', 'win')).losses], [1, 1]);
+  // The same order id on another trading day (a replay broker's ids start over) is another order.
+  const lastDay = { ...named(60 * 30, 101, 'win'), ts: new Date(NOW.getTime() - 2 * 86400000).toISOString() };
+  assert.strictEqual(liveReviews([lastDay, named(30, 101, 'loss')]).length, 2);
+  // An exit or a protective stop is never held by it.
+  assert.deepStrictEqual(evaluate(entryOrder({ rationale: '[exit] out', stopLossBracket: undefined }), doubled), { intent: 'risk-reducing', violations: [] });
+});
+
 test('paper reviews do not count as live reviews or losses', () => {
   const paperLoss = (m) => ({ ...review(m, 'loss'), tags: ['result:loss', 'setup:orb', 'paper'] });
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), paperLoss(10), plan(5)])), ['review-before-next-entry']);

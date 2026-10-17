@@ -73,3 +73,26 @@ test('recent form and the last 10 trades: record, expectancy, and the mistakes t
   assert.match(digest(j)[0], /^\(form\) last 10 trades/);
   assert.strictEqual(recentForm([]), null);
 });
+
+test('a grade review (no result, naming the order) adds its tags to the runner\'s factual review of that trade, never a second trade', () => {
+  const { graded, recentTrades, formSummary } = require('../../scripts/lib/trading/instincts');
+  const facts = id => ({ ts: new Date((t += 3600000)).toISOString(), kind: 'review', orderId: id, text: 'runner: orb long loss', tags: ['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1'] });
+  const grade = id => ({ ts: new Date((t += 3600000)).toISOString(), kind: 'review', orderId: id, text: 'chased it', tags: ['grade:C', 'setup:orb', 'regime:range', 'mistake:chased', 'result:win', 'r:3'].filter(x => !/^(result|r):/.test(x)) });
+  const journal = [facts(1), grade(1), facts(2), grade(2), { ...grade(3), tags: ['mistake:other'] }];
+  const list = graded(journal);
+  assert.strictEqual(list.length, 2, 'two trades');
+  assert.deepStrictEqual(list[0].tags, ['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1', 'grade:C', 'regime:range', 'mistake:chased']);
+  assert.match(recentTrades(journal).join('\n'), /^orb long loss -1R in range \[mistake:chased\]/);
+  assert.strictEqual(formSummary(journal), '0W/2L, E -1R');
+  assert.ok(instincts(journal).some(x => x.key === 'mistake:chased' && x.evidence === 2));
+  // A second result review of the same order (the model's despite the runner's): one trade, the worst's result and r:,
+  // the other's tags joined.
+  const twice = [facts(7), { ...grade(7), tags: ['result:win', 'r:3', 'mistake:late'] }];
+  assert.deepStrictEqual(graded(twice).map(r => r.tags), [['by:runner', 'result:loss', 'setup:orb', 'MNQ', 'r:-1', 'mistake:late']]);
+  const corrected = [{ ...facts(8), tags: ['by:runner', 'result:win', 'setup:orb', 'MNQ', 'r:1.5'] }, { ...grade(8), tags: ['result:loss', 'r:-1.1', 'setup:orb', 'grade:D'] }];
+  assert.deepStrictEqual(graded(corrected).map(r => r.tags), [['result:loss', 'r:-1.1', 'setup:orb', 'grade:D', 'MNQ']], 'the model\'s correcting loss counts, with the runner\'s other tags');
+  assert.strictEqual(formSummary(corrected), '0W/1L, E -1.1R');
+  assert.strictEqual(formSummary(twice), '0W/1L, E -1R');
+  const { liveRecord } = require('../../scripts/lib/trading/track-record');
+  assert.deepStrictEqual([liveRecord(twice, 'orb').trades, liveRecord(twice, 'orb').losses, liveRecord(twice, 'orb').wins], [1, 1, 0], 'the track record counts it once');
+});

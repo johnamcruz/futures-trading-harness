@@ -121,6 +121,28 @@ test('order gate: a server-written entry under a broker id the translator never 
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
 });
 
+test('order gate: the runner\'s factual review (by:runner, the entry\'s order id and contract) clears review-before-next-entry, as the runner writes it', () => {
+  const { reviewFor, coverage } = require('../../scripts/lib/trading/runner-reviews');
+  const at = m => minutesAgo(m, new Date(TEST_NOW));
+  const raw = { ts: at(30), kind: 'order_placed', contractId: 'fake:MNQ:Z26', orderId: 55, text: 'setup:anytime long, stop 21480', data: { request: { side: 'buy' }, result: { success: true, orderId: 55 } } };
+  const planned = { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' };
+  const { env } = setup([raw, planned]);
+  assert.match(gate(orderPayload(), env).stderr, /\[review-before-next-entry\]/);
+  // The review the runner writes for it, unfilled and gone (runner-reviews.js), as journal_add stores it.
+  const { review } = reviewFor(coverage([raw])[0], { orders: [], positions: [], fills: [], cancelled: new Set(['55']), nowMs: Date.parse(TEST_NOW) });
+  const reviewed = setup([raw, { ts: at(10), ...review }, planned]);
+  assert.deepStrictEqual(review.tags.slice(0, 2), ['by:runner', 'result:nofill']);
+  assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, gate(orderPayload(), reviewed.env).stderr);
+  // A second result review of the same order (the model's on top of the runner's) covers no other entry: a second
+  // entry stays unreviewed, through the hook as in the gate.
+  const second = { ts: at(20), kind: 'order_placed', contractId: 'fake:MNQ:Z26', orderId: 56, text: 'setup:anytime long, stop 21480', data: { request: { side: 'buy' }, result: { success: true, orderId: 56 } } };
+  const doubled = setup([raw, { ts: at(25), ...review }, second, { ts: at(10), kind: 'review', contractId: raw.contractId, orderId: 55, text: 'mine', tags: ['result:loss', 'setup:anytime'] }, planned]);
+  assert.match(gate(orderPayload(), doubled.env).stderr, /\[review-before-next-entry\] 1 earlier entry has no review/);
+  // A grade review (no result:) alone clears nothing.
+  const graded = setup([raw, { ts: at(10), kind: 'review', contractId: raw.contractId, orderId: 55, text: 'grade', tags: ['grade:B', 'setup:anytime'] }, planned]);
+  assert.match(gate(orderPayload(), graded.env).stderr, /\[review-before-next-entry\]/);
+});
+
 test('order gate blocks an unplanned entry with exit code 2', () => {
   const { env } = setup([]);
   const r = gate(orderPayload(), env);

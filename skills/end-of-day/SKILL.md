@@ -34,7 +34,9 @@ description: Use at the end of each session, from /eod, or at the runner's end-o
    report it in the journal note and the cycle result, and the runner keeps
    closing until it reads flat (interactively, close again and tell the user
    it is still open).
-4. Run trade-review with end-of-day lessons (the trade-reviewer role).
+4. Run trade-review with end-of-day lessons (the trade-reviewer role): it
+   grades the runner's factual reviews (`by:runner`) and reviews any entry
+   that has none.
 5. Prop attempt running: the autonomous runner records the day's closing
    balance itself (it retries a failed record and lists a close it couldn't
    record in the harness tool `combine_status`). A catch-up end of day (a day the runner

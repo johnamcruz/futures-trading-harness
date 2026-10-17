@@ -20,6 +20,7 @@
  *   failBalance     list_accounts fails (the account's balance can't be read)
  *   keepLegs        bracket legs stay working after the position goes flat (legs not cancelled on flat)
  *   oddSize         positions are listed without a size
+ *   failJournal: n  the next n journal_add calls fail (an error reply; nothing is written)
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
  *
  *   initState(file, over)          a fresh account
@@ -273,6 +274,10 @@ const HANDLERS = {
   close_position: (s, a) => closeOrder(s, a.contractId, null),
   partial_close_position: (s, a) => closeOrder(s, a.contractId, Number(a.size)),
   journal_add: (s, a, env) => {
+    if (s.failJournal > 0) {
+      s.failJournal -= 1;
+      throw new Error('HTTP 503 service unavailable');
+    }
     const entry = { ts: new Date().toISOString(), ...a };
     if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify(entry)}\n`);
     return entry;

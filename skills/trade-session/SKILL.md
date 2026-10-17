@@ -58,7 +58,7 @@ as a step names them.
   `contract-roll`) before planning.
 - **Flat with working orders**: the `leftover-orders` skill.
 - **Flat, with an earlier entry today that has no review** (it closed or was
-  cancelled between cycles): run trade-review (`trade-reviewer` role) first.
+  cancelled between cycles): the runner reviews it next bar.
   The order gate refuses the next entry until every entry is reviewed.
 - Daily stop or loss-streak cooldown in risk-manager phase 1, the prompt, or the journal → report and end.
   The gate also refuses entries after `FTH_MAX_ENTRIES_PER_DAY` (default 6)

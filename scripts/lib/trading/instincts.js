@@ -20,7 +20,7 @@
  * rules: the gate and the strategies still decide.
  */
 
-const { hasTag, reviewResult, entryTime } = require('./journal');
+const { hasTag, reviewResult, entryTime, onePerOrder, orderKey } = require('./journal');
 
 const MIN_SETUP_TRADES = require('../tunables').runner().prompt.instinctsMinSetupTrades; // config/runner.json
 const RECENT_REVIEWS = require('../tunables').runner().prompt.instinctsRecentReviews;
@@ -38,12 +38,33 @@ function reviewR(e) {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * The live reviews with a result (not paper), one per order (journal.js onePerOrder: the worst), each with the tags of the grade reviews that name its order
+ * (a review with an orderId and no result: the trade-reviewer's grade of a trade the runner reviewed, runner-reviews.js)
+ * added: their mistake:, regime: and other tags count with the trade (never a second result: or r:).
+ */
+function graded(entries) {
+  const id = orderKey; // its order, on its trading day
+  const grades = new Map();
+  const live = entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper'));
+  const kept = new Set(onePerOrder(live));
+  // A grade review, or another result review of the same order (its tags join the one that counts, the worst; its
+  // result and r: count nothing).
+  for (const g of live.filter(e => id(e) !== null && (reviewResult(e) === null || !kept.has(e)))) {
+    grades.set(id(g), [...(grades.get(id(g)) || []), ...(Array.isArray(g.tags) ? g.tags : []).filter(t => !/^(result|r|by):/i.test(String(t)))]);
+  }
+  return live.filter(e => reviewResult(e) !== null && kept.has(e)).map(r => {
+    const more = id(r) !== null ? grades.get(id(r)) : null;
+    return more && more.length ? { ...r, tags: [...new Set([...(Array.isArray(r.tags) ? r.tags : []), ...more])] } : r;
+  });
+}
+
 const confidenceFor = n => Math.min(0.9, 0.3 + 0.05 * Math.max(0, n - 1));
 const round = (x, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
 
 /** The instincts in `entries` (the journal, oldest first): [{ kind, key, text, confidence, evidence }], strongest first. */
 function instincts(entries) {
-  const reviews = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper'));
+  const reviews = graded(entries);
   const out = [];
 
   // Setups by regime (and overall).
@@ -106,7 +127,7 @@ function instincts(entries) {
  * how it ended, and what went wrong ("orb long loss -1.11R [mistake:chased]").
  */
 function recentTrades(entries, n = 10) {
-  return entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n).map(r => {
+  return graded(entries).slice(-n).map(r => {
     const dir = (/\b(long|short)\b/i.exec(String(r.text || '')) || [])[1];
     const rr = reviewR(r);
     const mistakes = (r.tags || []).filter(t => String(t).toLowerCase().startsWith('mistake:'));
@@ -116,7 +137,7 @@ function recentTrades(entries, n = 10) {
 
 /** The form of the last `n` reviewed trades: record, expectancy, and the mistakes that repeat. */
 function recentForm(entries, n = 10) {
-  const list = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n);
+  const list = graded(entries).slice(-n);
   if (!list.length) return null;
   const wins = list.filter(r => reviewResult(r) === 'win').length;
   const losses = list.filter(r => reviewResult(r) === 'loss').length;
@@ -143,11 +164,11 @@ function digest(entries, n = 6, { kinds = null, form = true } = {}) {
 
 /** The record of the last `n` reviewed trades: "4W/6L, E -0.12R", or null. */
 function formSummary(entries, n = 10) {
-  const list = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n);
+  const list = graded(entries).slice(-n);
   if (!list.length) return null;
   const rs = list.map(reviewR).filter(Number.isFinite);
   const e = rs.length ? round(rs.reduce((a, b) => a + b, 0) / rs.length) : null;
   return `${list.filter(r => reviewResult(r) === 'win').length}W/${list.filter(r => reviewResult(r) === 'loss').length}L${e === null ? '' : `, E ${e >= 0 ? '+' : ''}${e}R`}`;
 }
 
-module.exports = { instincts, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor };
+module.exports = { instincts, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor, graded };
