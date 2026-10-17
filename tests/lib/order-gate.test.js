@@ -3413,3 +3413,17 @@ test('plan-required, a composed entry: anchored to its own record\'s bar (the se
   assert.ok(Number.isNaN(cyclePlanSince(cfg, 'MNQ', { record: { bar: 'x' } })));
   assert.strictEqual(cyclePlanSince({ ...cfg, autonomous: false }, 'MNQ', { record: { bar: BAR } }), null);
 });
+
+test('trade_lifecycle, plan-required in a runner\'s cycle with lanes: a composed entry\'s plan counts from its record\'s 3m bar\'s close, not from a later 1m lane bar the cycle names', () => {
+  const home = lcHome();
+  // The 3m record's bar closed 14:00 (LC.BAR, the briefing's); a 1m lane's bar opened 14:02 and closed 14:03 (the
+  // cycle's FTH_CYCLE_BARS); the plan was written at 14:01, between the two.
+  const now = new Date('2026-10-07T14:03:02Z');
+  const cfg = { autonomous: true, cycleBars: { MNQ: '2026-10-07T14:02:00.000Z' }, cycleBriefingBars: { MNQ: LC.BAR } };
+  const at = ts => lcEval(home, LC.order(), { now, config: cfg, entries: [plan(1, { ts })] }).violations.map(v => v.check);
+  const between = at('2026-10-07T14:01:00Z');
+  assert.ok(!between.includes('composed-reads'), `the record stands: ${between}`);
+  assert.ok(!between.includes('plan-required'), `a plan since the record's bar closed counts: ${between}`);
+  // Before the record's bar closed: an earlier bar's plan, refused.
+  assert.ok(at('2026-10-07T13:59:00Z').includes('plan-required'));
+});

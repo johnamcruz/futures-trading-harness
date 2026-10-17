@@ -291,8 +291,9 @@ head trader's run, before the cycle log; per role `config/runner.json`
    never came: reported `executed`, possibly placed), or a no-trade naming the
    failed run. A lost or late reply sends no second entry; the next cycles manage and exit it as
    any position. The cycle log records the outcome and its timing (`entry`:
-   ms from the bar's close to the head trader's planned and to the order, and
-   each role's ms), phase 2's facts
+   ms from the bar's close to the head trader's planned and to the order sent,
+   the gate log's allowed decision of this cycle's order, or for an expired
+   record to the refusal, and each role's ms), phase 2's facts
    (`factCheck`) and the desk check from the record; the decision history reads
    a veto from it.
 

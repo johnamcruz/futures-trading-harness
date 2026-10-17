@@ -37,7 +37,8 @@
  *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
  *              startedWall (the wall ms the head trader's run began) }
  *   The cycle log's `entry.timing`: barClose, headMs (bar close to the head trader's planned), phase2Ms, executorMs,
- *   orderMs (bar close to the order sent, or to order_plan's refusal); outcome `expired`: the record ran out first.
+ *   orderMs (bar close to the order sent: the gate log's allowed decision of this cycle's order; for an expired record,
+ *   to order_plan's refusal; else null); outcome `expired`: the record ran out first.
  */
 
 const fs = require('fs');
@@ -124,7 +125,7 @@ function gateDecision(env, id, sinceMs) {
     }
     if (!last) return null;
     const v = Array.isArray(last.violations) ? last.violations : [];
-    return { decision: last.decision, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
+    return { decision: last.decision, ts: last.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
   } catch (_err) {
     return null;
   }
@@ -239,7 +240,8 @@ async function runEntry(deps, c) {
     try {
       order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
     } catch (err) {
-      info.timing.orderMs = sinceClose(wallNow());
+      // Only an expired record's refusal is timed as the order's moment (the record ran out by then).
+      if (/\bexpired\b/.test(err.message)) info.timing.orderMs = sinceClose(wallNow());
       // The record ran out before the order: its own reason, so it can be counted.
       stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
@@ -269,7 +271,6 @@ async function runEntry(deps, c) {
   const ran = role => (times.has(role) ? Math.max(0, times.get(role).end - times.get(role).start) : null);
   info.timing.phase2Ms = ran('risk-manager');
   info.timing.executorMs = ran('trade-executor');
-  if (times.has('trade-executor')) info.timing.orderMs = sinceClose(times.get('trade-executor').end);
   if (stop) {
     if (stop.outcome === 'expired') {
       log(`the entry: ${stop.why}: no order`, 'error');
@@ -303,7 +304,10 @@ async function runEntry(deps, c) {
       account = { error: err.message };
     }
   }
-  const decision = entered ? null : gateDecision(env, id, sentAt - require('./tunables').runner().session.gateSlackMs);
+  const sent = gateDecision(env, id, sentAt - require('./tunables').runner().session.gateSlackMs);
+  // The order's moment: the gate's decision that let it go to the broker (its log's time, the wall clock); none, null.
+  info.timing.orderMs = sent && sent.decision === 'allowed' ? sinceClose(Date.parse(sent.ts)) : null;
+  const decision = entered ? null : sent;
   const out = entryOutcome({
     entered, filled, refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',
     failed: exec && !exec.ok ? { stop: exec.stop, why: exec.why } : null, label,

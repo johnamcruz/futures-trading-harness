@@ -230,11 +230,15 @@ function cyclePlanSince(config, root, { record = null } = {}) {
   if (record) {
     const recBar = Date.parse(record.bar);
     if (!Number.isFinite(recBar)) return NaN;
-    try {
-      const b = readBriefing(config.home, root);
-      if (b && Date.parse(b.asOf) === recBar && Number.isFinite(Date.parse(b.closedAt))) return Math.max(recBar, Date.parse(b.closedAt));
-    } catch (_err) { /* no briefing: the record's bar open */ }
-    return recBar;
+    // Its close: the briefing's closedAt on that bar, else the bar's open plus its minutes (the briefing's, or the
+    // record's lane: "3m"); neither readable, its open.
+    let b = null;
+    try { b = readBriefing(config.home, root); } catch (_err) { /* no briefing */ }
+    const on = b && Date.parse(b.asOf) === recBar ? b : null;
+    if (on && Number.isFinite(Date.parse(on.closedAt))) return Math.max(recBar, Date.parse(on.closedAt));
+    const lane = /^(\d+)m$/.exec(String(record.lane || ''));
+    const minutes = on && Number.isInteger(on.minutes) && on.minutes > 0 ? on.minutes : lane ? Number(lane[1]) : null;
+    return minutes ? recBar + minutes * 60000 : recBar;
   }
   const bar = (config.cycleBars || {})[familyRoot(root)] || null;
   if (!bar) return null;

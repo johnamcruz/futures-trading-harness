@@ -259,3 +259,23 @@ test('runEntry: a record that expired before the order is its own outcome (expir
   assert.ok(t.headMs >= 32000 && t.orderMs > t.headMs && t.phase2Ms > 0, JSON.stringify(t));
   assert.strictEqual(t.executorMs, null, 'no executor ran');
 });
+
+test('runEntry: timing.orderMs is the order actually sent: the gate log\'s allowed decision of this cycle (from the bar\'s close), never the executor\'s end; a refused order has none; executorMs is the executor\'s run', async () => {
+  const id = require('../../scripts/lib/trading/check-order').cycleId({ FTH_CYCLE_TRANSCRIPT: 'x' });
+  const run = async decision => {
+    const s = setup();
+    const cyc = s.cycle({ headEnv: { FTH_CYCLE_TRANSCRIPT: 'x' } });
+    const started = Date.now();
+    const sentTs = new Date(started + 40000).toISOString(); // the gate's decision, 40 s after the head trader began
+    s.deps.runRole = (orig => async (role, request, limits) => {
+      if (role === 'trade-executor') fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: sentTs, source: 'gateway', tool: 'place_order', decision, cycle: id, violations: decision === 'blocked' ? [{ check: 'briefing-age', message: 'Stale data' }] : [] })}\n`);
+      return orig(role, request, limits);
+    })(s.deps.runRole);
+    return (await E.runEntry(s.deps, { ...cyc, startedWall: started })).entry.timing;
+  };
+  const t = await run('allowed');
+  // The cycle began 2 s after the bar's close (13:57:00 -> 13:57:02): 2 s + 40 s.
+  assert.strictEqual(t.orderMs, 42000, JSON.stringify(t));
+  assert.ok(Number.isFinite(t.executorMs) && Number.isFinite(t.phase2Ms));
+  assert.strictEqual((await run('blocked')).orderMs, null, 'refused: no order sent');
+});
