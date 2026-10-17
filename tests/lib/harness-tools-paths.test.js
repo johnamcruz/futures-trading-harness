@@ -134,3 +134,25 @@ test('paths: a directory given by its real form (/private/tmp/x for /tmp/x) is t
   assert.deepStrictEqual(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [viaAlias] }), { file: path.join(viaAlias, 'MNQ-3m.json') });
   assert.deepStrictEqual(barsFile(path.join(viaAlias, 'MNQ-3m.json'), { dirs: [viaAlias] }), { file: path.join(viaAlias, 'MNQ-3m.json') });
 });
+
+test('paths: a shortened or relative path whose file name is in a bars directory names that file (the dir it names first); none, no hint; a link is never named', () => {
+  const { base, dir } = setup();
+  const scratch = path.join(base, 'bars-scratch');
+  fs.mkdirSync(scratch, { mode: 0o755 });
+  fs.chmodSync(scratch, 0o755);
+  fs.writeFileSync(path.join(scratch, 'MNQ-3m.json'), '{"bars":[]}');
+  fs.writeFileSync(path.join(scratch, 'MNQ-15m.json'), '{"bars":[]}');
+  const dirs = [dir, scratch];
+  // The PPC run's shortened path: the scratch copy, the directory its path names.
+  const short = barsFile('/workspace/bars-scratch/MNQ-3m.json', { dirs });
+  assert.match(short.error, new RegExp(`outside them: /workspace/bars-scratch/MNQ-3m\\.json\\); that file is ${path.join(scratch, 'MNQ-3m.json').replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}: pass that path$`));
+  // Naming no directory: the first that holds it; only the scratch holds it: that one.
+  assert.match(barsFile('/elsewhere/MNQ-3m.json', { dirs }).error, new RegExp(`that file is ${path.join(dir, 'MNQ-3m.json').replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`));
+  assert.match(barsFile('MNQ-15m.json', { dirs }).error, /not an absolute path: MNQ-15m\.json\); that file is .*bars-scratch\/MNQ-15m\.json: pass that path$/);
+  // No such file anywhere, or not a bars file type: the refusal as before, no hint.
+  assert.doesNotMatch(barsFile('/workspace/bars-scratch/ES-3m.json', { dirs }).error, /that file is/);
+  assert.doesNotMatch(barsFile('/workspace/journal.jsonl', { dirs }).error, /that file is/);
+  // A symlink of that name is never named.
+  fs.symlinkSync(path.join(dir, 'MNQ-3m.json'), path.join(scratch, 'MES-3m.json'));
+  assert.doesNotMatch(barsFile('/workspace/bars-scratch/MES-3m.json', { dirs }).error, /that file is/);
+});

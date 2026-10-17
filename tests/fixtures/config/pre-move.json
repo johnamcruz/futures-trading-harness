@@ -966,6 +966,10 @@
    "value": 4194304,
    "from": "head-prompt.js MAX_CONFIG_BYTES"
   },
+  "limits.roleSteps": {
+   "value": 40,
+   "from": "new in fix/role-loops (before it, no role had a step cap)"
+  },
   "limits.historyChunkBars": {
    "value": 10000,
    "from": "broker/adapter.js HISTORY_CHUNK_BARS"

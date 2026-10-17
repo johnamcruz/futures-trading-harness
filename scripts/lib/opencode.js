@@ -68,6 +68,7 @@
  *                                (FTH_DENIED_ROLES, with `deniedRoles`), refused by the plugin
  *   deniedTaskRefusal(tool, args, env)   the plugin's refusal of a task call naming a denied role, or null
  *   dropInventedTaskId(tool, args)  the plugin's repair of a task call: a task_id that names no session is dropped
+ *   stepCap(agent)               a role's step cap ({ steps }, config/runner.json limits.roleSteps), {} for an order role
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
  */
@@ -214,12 +215,30 @@ function indexPrompt(agent, plan) {
   return out.join('\n');
 }
 
+/**
+ * A role's step cap (opencode's `steps`: the most model steps before it must answer in text), from config/runner.json
+ * limits.roleSteps: a role stuck repeating a call (the PPC run of 2026-10-16: 386 steps of one refused market_snapshot,
+ * the cycle lost to its timeout) answers with what it has. Measured on 555 role sessions: median 2 to 4, none
+ * legitimate above 27; 40 leaves room for index mode's lookups (each a step), and a cut-short role's answer fails
+ * closed (no approval, the gate's lookups). A role holding an order tool (broker interface role `order`: the trade-executor) is never
+ * capped, so a protecting stop or an exit is never cut short; {} for it.
+ */
+function stepCap(agent) {
+  const { TOOLS } = require('./broker/interface');
+  const orders = (agent.tools || []).some(t => {
+    const m = /^mcp__([a-z0-9-]+)__([a-z0-9_]+)$/.exec(t);
+    return m && m[1] === BROKER_SERVER && TOOLS[m[2]] && TOOLS[m[2]].role === 'order';
+  });
+  return orders ? {} : { steps: require('./tunables').runner().limits.roleSteps };
+}
+
 function agentConfig(agent) {
   return {
     description: agent.description,
     mode: 'subagent',
     prompt: agentPrompt(agent),
     permission: agentPermission(agent.tools, agent.skillPlan ? agent.skillPlan.mode : null),
+    ...stepCap(agent),
   };
 }
 
@@ -368,7 +387,7 @@ function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = n
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
       [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, denied, mode, replay), external_directory: { ...external } } },
-      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...noWeb(agentPermission(a.tools, mode), replay), external_directory: { ...external } } }])),
+      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', ...stepCap(a), permission: { ...noWeb(agentPermission(a.tools, mode), replay), external_directory: { ...external } } }])),
     },
   };
 }
@@ -441,4 +460,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap };
