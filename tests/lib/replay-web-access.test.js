@@ -37,9 +37,11 @@ test('opencode: a replay\'s run config denies the web to the session, the head t
   assert.ok(live.includes(`opencode: ${WEB[0]} may use websearch`), live.join('\n'));
   // The replay's plugin refuses the web roles too (FTH_DENIED_ROLES): the task tool's refusal, not only its permission.
   const env = step(REPLAY).env;
-  for (const r of WEB) assert.ok(oc.deniedRolesOf(env).includes(r), r);
-  assert.match(oc.deniedTaskRefusal('task', { subagent_type: WEB[0] }, env), /reaches the web, which a replay never does/);
-  assert.strictEqual(oc.deniedTaskRefusal('task', { subagent_type: WEB[0] }, step({ FTH_HOME: '/srv/fth' }).env), null, 'live: launched');
+  const { deniedRolesOf } = require('../../scripts/lib/toolcall/rules');
+  const refusal = e => require('../../scripts/lib/toolcall/pipeline').createPipeline({ log: require('../../scripts/lib/toolcall/call-log').createCallLog(), env: e }).before({ tool: 'task', name: 'task', args: { subagent_type: WEB[0] }, session: 's' }).refuse;
+  for (const r of WEB) assert.ok(deniedRolesOf(env).includes(r), r);
+  assert.match(refusal(env), /reaches the web, which a replay never does/);
+  assert.strictEqual(refusal(step({ FTH_HOME: '/srv/fth' }).env), null, 'live: launched');
   // No per-run config: the check can't see the web denied.
   assert.match(W.webFindings({ harness: 'opencode', env: {}, projectConfig: PROJECT, webRoles: WEB })[0], /no per-run config/);
 });
