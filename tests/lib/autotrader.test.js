@@ -1304,6 +1304,13 @@ test('the runner\'s opencode plugin answers an unknown tool name with the name m
   }
   assert.deepStrictEqual(mcp.content.map(c => c.type), ['text', 'text']);
   assert.match(mcp.content[1].text, /^\[repeat\] You are repeating/);
+  // The same call whose answer moves each time: no reminder.
+  for (let i = 0; i < 3; i += 1) {
+    const moving = { content: [{ type: 'text', text: `briefing ${i}` }] };
+    await hooks['tool.execute.before']({ tool: 'harness_bar_briefing', sessionID: 'v' }, { args: { symbol: 'MNQ' } });
+    await hooks['tool.execute.after']({ tool: 'harness_bar_briefing', sessionID: 'v', args: { symbol: 'MNQ' } }, moving);
+    assert.strictEqual(moving.content.length, 1, `call ${i + 1}`);
+  }
   // A built-in tool's result has its output string.
   const own = { output: 'listing' };
   for (let i = 0; i < 3; i += 1) {

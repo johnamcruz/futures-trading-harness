@@ -457,15 +457,28 @@ test('repeatGuard: an identical call that failed is answered with the reminder f
   const notes = [];
   for (let i = 0; i < 8; i += 1) {
     assert.strictEqual(ok.before('harness_bar_briefing', i % 2 ? { json: true, symbol: 'MNQ' } : { symbol: 'MNQ', json: true }, 's'), null);
-    notes.push(ok.after('harness_bar_briefing', {}, 's'));
+    notes.push(ok.after('harness_bar_briefing', {}, 's', null, 'the same briefing'));
   }
   assert.deepStrictEqual(notes.map(n => Boolean(n)), [false, false, true, false, true, false, false, true]);
   assert.match(notes[2], /^\n\n\[repeat\] You are repeating/);
-  // An order tool and a role launch: never refused, never reminded.
-  const ord = repeatGuard([3, 5, 8]);
-  for (let i = 0; i < 6; i += 1) {
-    assert.strictEqual(ord.before('broker_close_position', { contractId: 'MNQ' }, 's'), null);
-    assert.strictEqual(ord.before('task', { subagent_type: 'risk-manager' }, 's'), null);
+  // A repeat whose answer moved (a poll that learns something): never reminded.
+  const moving = repeatGuard([3, 5, 8], clock, 1000);
+  const moved = [];
+  for (let i = 0; i < 5; i += 1) {
+    moving.before('harness_skill_lookup', { skill: 'x' }, 'm');
+    moved.push(moving.after('harness_skill_lookup', {}, 'm', null, `answer ${i}`));
   }
-  assert.strictEqual(ord.after('broker_close_position', {}, 's'), null);
+  assert.deepStrictEqual(moved, [null, null, null, null, null]);
+  // A call recorded without an id still returns when its after hook carries one: never taken for failed.
+  const ids = repeatGuard([3, 5, 8], clock, 1000);
+  for (let i = 0; i < 4; i += 1) { ids.before('harness_bar_briefing', { symbol: 'MNQ' }, 'i'); t += 5000; ids.after('harness_bar_briefing', {}, 'i', `late-${i}`, `b${i}`); }
+  assert.strictEqual(ids.before('harness_bar_briefing', { symbol: 'MNQ' }, 'i'), null);
+  // Every broker tool (an order, or a read whose answer moves while an exit fills) and a role launch: never refused,
+  // never reminded, even after failing.
+  const ord = repeatGuard([3, 5, 8], clock, 1000);
+  for (let i = 0; i < 6; i += 1) {
+    t += 5000;
+    for (const tool of ['broker_close_position', 'broker_get_positions', 'broker_list_open_orders', 'broker_get_account_snapshot', 'task']) assert.strictEqual(ord.before(tool, { contractId: 'MNQ' }, 's'), null, tool);
+  }
+  assert.strictEqual(ord.after('broker_get_positions', {}, 's', null, 'same'), null);
 });

@@ -23,7 +23,11 @@ async function DeniedRoles() {
     },
     // A call that returned: the repeat guard's reminder after its result, at a reminder count (opencode.js repeatGuard).
     'tool.execute.after': async (input, output) => {
-      const note = input ? repeats.after(input.tool, input.args, input.sessionID, input.callID) : null;
+      // The result's text, for the guard's same-answer check: an MCP result's text items, a built-in tool's output.
+      const text = output && Array.isArray(output.content)
+        ? output.content.filter(c => c && c.type === 'text').map(c => c.text).join('\n')
+        : (output && typeof output.output === 'string' ? output.output : undefined);
+      const note = input ? repeats.after(input.tool, input.args, input.sessionID, input.callID, text) : null;
       if (!note || !output) return;
       // An MCP tool's result is its raw { content: [...] } here (opencode joins the text items into the output after
       // this hook); a built-in tool's has its output string.

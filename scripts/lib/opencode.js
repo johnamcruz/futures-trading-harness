@@ -393,17 +393,18 @@ function toolNameHint(tool, args) {
  * with the same arguments again and again. At a count in config/runner.json limits.repeatReminderAt (3, 5, 8) a call
  * that succeeds gets a reminder after its result (advisory: it ran; appended, so the prompt cache holds); once the
  * same call failed, every identical one from the first count on is answered with the reminder instead of running (it
- * would fail the same way: the PPC run's 386 refused market_snapshot calls). Never an order tool (an exit or a stop
- * is never refused) and never a role launch (task). Its own state: create one per plugin (opencode run).
- *   before(tool, args, sessionID, callID)  the refusal text, or null (run it)
- *   after(tool, args, sessionID, callID)   the reminder to add to the result, or null (the plugin adds it as a text item of an
- *                                  MCP result's content, as opencode joins them into the output: v1.19 session/tools.ts)
+ * would fail the same way: the PPC run's 386 refused market_snapshot calls). A reminder after a success only when
+ * its result is the same as the last identical call's: a poll whose answer moves is never nudged to stop. Never a
+ * broker tool (its answers move: positions while an exit fills, orders, the account; and an exit or a stop is never
+ * refused) and never a role launch (task): the harness's tools and opencode's own. Its own state: one per plugin (run).
+ *   before(tool, args, sessionID, callID)        the refusal text, or null (run it)
+ *   after(tool, args, sessionID, callID, text)   the reminder to add to the result (`text`: its text), or null (the
+ *       plugin adds it as a text item of an MCP result's content, as opencode joins them into the output: v1.19
+ *       session/tools.ts)
  */
 function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt, now = () => Date.now(),
   sameStepMs = require('./tunables').runner().limits.repeatSameStepMs) {
-  const { TOOLS } = require('./broker/interface');
-  const exempt = tool => tool === 'task' || tool === INVALID_TOOL
-    || (tool.startsWith(`${BROKER_SERVER}_`) && TOOLS[tool.slice(BROKER_SERVER.length + 1)] && TOOLS[tool.slice(BROKER_SERVER.length + 1)].role === 'order');
+  const exempt = tool => tool === 'task' || tool === INVALID_TOOL || tool.startsWith(`${BROKER_SERVER}_`);
   const canon = v => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon(v[k])])) : v);
   // Per session: the run of identical calls (sig, n) and each call by its id (started at, returned or not).
   const sessions = new Map();
@@ -417,6 +418,7 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
       const key = String(sessionID || '');
       const sig = `${tool} ${JSON.stringify(canon(args || {}))}`;
       const s = sessions.get(key) || { sig: null, n: 0, calls: [] };
+      if (s.sig !== sig) s.text = undefined;
       s.n = s.sig === sig ? s.n + 1 : 1;
       s.sig = sig;
       // Failed: an identical call before it never returned (opencode's MCP wrapper throws on an isError result, so its
@@ -429,13 +431,16 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
       sessions.set(key, s);
       return failed && s.n >= first ? `[repeat] ${remind(tool, args, s.n)}` : null;
     },
-    after(tool, args, sessionID, callID) {
+    after(tool, args, sessionID, callID, text) {
       const s = sessions.get(String(sessionID || ''));
       if (!s || typeof tool !== 'string' || exempt(tool)) return null;
       const id = callID === null || callID === undefined ? null : String(callID);
-      const c = [...s.calls].reverse().find(x => !x.returned && (id === null || x.id === id));
+      const c = [...s.calls].reverse().find(x => !x.returned && (id === null || x.id === null || x.id === id));
       if (c) c.returned = true;
-      return at.includes(s.n) ? `\n\n[repeat] ${remind(tool, args, s.n)}` : null;
+      // The same answer as the last identical call's: a repeat that learns nothing. An answer that moved: no reminder.
+      const same = typeof text === 'string' && s.text === text;
+      if (typeof text === 'string') s.text = text;
+      return same && at.includes(s.n) ? `\n\n[repeat] ${remind(tool, args, s.n)}` : null;
     },
   };
 }
