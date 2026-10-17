@@ -82,8 +82,11 @@ const MINUTE_BARS = require('./golden-bars').toMinutes(BARS.map(b => ({ ...b, ms
 /**
  * A harness home on a replay mock exchange serving the parity bars; the runner's config and state file. `dataLane`:
  * the runner config adds a 1m data lane ({ timeframe: 1, trigger: "data" }), the exchange serving MINUTE_BARS at 1m.
+ * `live`: the mock exchange as a live broker instead (no replay flag, no replay clock): each pass runs at the harness's
+ * test clock (FTH_TEST_NOW, the wall clock a test pins, as tests/e2e/mock-trading-e2e.test.js does), the exchange's
+ * own time with it, and live entries need the broker's allow-list (MOCK_ALLOWED_ACCOUNTS).
  */
-function world({ mode = 'index', dataLane = false } = {}) {
+function world({ mode = 'index', dataLane = false, live = false } = {}) {
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   const state = path.join(home, 'exchange.json');
@@ -92,20 +95,20 @@ function world({ mode = 'index', dataLane = false } = {}) {
   fs.writeFileSync(journal, '');
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({
     broker: 'replaymock',
-    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS', env: ['MOCK_STATE', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_ALLOWED_ACCOUNTS'] } },
+    brokers: { replaymock: { command: [process.execPath, SERVER], ...(live ? {} : { replay: true }), limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS', env: ['MOCK_STATE', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_ALLOWED_ACCOUNTS'] } },
   }));
   exchange.initState(state, { nowMs: Date.parse(decisionAt(QUIET_BAR)), prices: { [MNQ_ID]: BARS[0].c }, bars: { [MNQ_ID]: BARS, ...(dataLane ? { [`${MNQ_ID}@1m`]: MINUTE_BARS } : {}) } });
   fs.mkdirSync(path.join(home, 'no-accounts'));
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, NODE_ENV: 'test',
-    MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_CLOCK_FILE: clock, MOCK_REPLAY: '1', MOCK_ALLOWED_ACCOUNTS: '7',
+    MOCK_STATE: state, MOCK_JOURNAL: journal, ...(live ? {} : { MOCK_CLOCK_FILE: clock, MOCK_REPLAY: '1' }), MOCK_ALLOWED_ACCOUNTS: '7',
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_STRATEGIES_DIRS: FX_STRATEGIES, FTH_ACCOUNTS_DIRS: path.join(home, 'no-accounts'),
     // The roles' and the head trader's skills: index (the default, no variable) or full, as the runner reads it.
     ...(mode === 'full' ? { FTH_ROLE_SKILLS: 'full' } : {}),
   };
   const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400, ...(dataLane ? { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] } : {}) });
-  return { home, state, journal, clock, env, cfg, mode, stateFile: path.join(home, 'runner-state.json') };
+  return { home, state, journal, clock, env, cfg, mode, live, stateFile: path.join(home, 'runner-state.json') };
 }
 
 /**
@@ -117,7 +120,8 @@ async function pass(w, at, script, o = {}) {
   fs.writeFileSync(w.clock, JSON.stringify({ now: at }));
   const last = BARS.filter(b => Date.parse(b.t) + STEP <= ms).at(-1);
   exchange.update(w.state, s => { s.nowMs = ms; s.prices[MNQ_ID] = last.c; });
-  const env = { ...w.env, FTH_REPLAY_NOW: at };
+  // A replay pass at its replayed time; live, the harness's test clock (the exchange's own time set with it, above).
+  const env = { ...w.env, ...(w.live ? { FTH_TEST_NOW: at } : { FTH_REPLAY_NOW: at }) };
   const now = () => new Date(ms);
   const model = scriptedModel(script);
   // `o.lateBy` (ms): a slow model, its final answer that much later (the result event's times shifted, the wall clock
@@ -270,4 +274,5 @@ const placedAtBroker = w => exchange.read(w.state).calls.filter(c => c.tool === 
 module.exports = {
   ROOT, SETUP, MNQ_ID, STRATEGY_SKILLS, STEP, BARS, MINUTE_BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
   entryCycle, passCycle, roundSteps, manualArgs, planOf, gateLog, cycleLines, position, working, placedAtBroker,
+  passEnv: (w, at) => ({ ...w.env, ...(w.live ? { FTH_TEST_NOW: at } : { FTH_REPLAY_NOW: at }) }),
 };

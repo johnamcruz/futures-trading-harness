@@ -116,9 +116,15 @@ function gateLogPath(env = process.env) {
 /**
  * The runner's cycle a process runs in, as an id: a hash of its FTH_CYCLE_TRANSCRIPT (a file of that run's own, set
  * only by the runner: autotrader.js childEnv), or null outside one. The gate log stamps it on each decision, so the
- * cycle log takes only its own cycle's orders (cycle-log.js gateOrders).
+ * cycle log takes only its own cycle's orders (cycle-log.js gateOrders). A role the runner runs after the head trader
+ * for the same cycle (the entry workflow's trade-executor: runner-entry.js) is its own run with its own transcript: the
+ * runner gives it the head trader's id as FTH_CYCLE_ID (16 hex characters; anything else is ignored), so its orders are
+ * the cycle's.
  */
+const CYCLE_ID = /^[0-9a-f]{16}$/;
 function cycleId(env = process.env) {
+  const given = String((env && env.FTH_CYCLE_ID) || '').trim();
+  if (CYCLE_ID.test(given)) return given;
   const t = String((env && env.FTH_CYCLE_TRANSCRIPT) || '').trim();
   return t ? require('crypto').createHash('sha256').update(t).digest('hex').slice(0, 16) : null;
 }

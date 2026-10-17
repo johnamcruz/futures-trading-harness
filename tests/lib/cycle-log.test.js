@@ -346,3 +346,13 @@ test('writeCycleLog: every phase-2 report\'s FACTS checked against the cycle bar
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(quiet.file, 'utf8')).factCheck.counts.reports, 0);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim().split('\n')[1]).factCheck, undefined);
 });
+
+test('cycleId: a role the runner runs after the head trader for its cycle carries the head trader\'s id (FTH_CYCLE_ID, 16 hex), so its orders are the cycle\'s; anything else given is ignored', () => {
+  const { cycleId } = require('../../scripts/lib/trading/check-order');
+  const own = cycleId({ FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-executor.jsonl' });
+  const head = cycleId({ FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-head.jsonl' });
+  assert.notStrictEqual(own, head);
+  assert.strictEqual(cycleId({ FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-executor.jsonl', FTH_CYCLE_ID: head }), head);
+  for (const bad of ['', 'abc', 'ZZZZZZZZZZZZZZZZ', `${head}0`, ' ']) assert.strictEqual(cycleId({ FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-executor.jsonl', FTH_CYCLE_ID: bad }), own, JSON.stringify(bad));
+  assert.strictEqual(cycleId({ FTH_CYCLE_ID: head }), head);
+});

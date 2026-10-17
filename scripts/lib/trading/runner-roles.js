@@ -22,6 +22,13 @@
  *                                  text, lookups, source: 'runner' }), launches: every trade-executor run, ok or not,
  *                                  as a launch that ends the round (as a transcript launch does) }
  *   removeRoleRuns(file)           delete it (none: nothing)
+ *   appendHeadSkills(file, skills) record the skills the head trader loaded in its own run (the runner derives them in
+ *                                  code from that run's transcript, skills-loaded.js skillsInTranscript): one line
+ *                                  { kind: 'head-skills', skills }. The runner's entry (runner-entry.js) runs the
+ *                                  trade-executor as its own session, whose transcript loads none: the gate reads these
+ *                                  as the runner's attestation of the cycle's decider's loads (order-gate.js), never a
+ *                                  role run (readRoleRuns skips the line). Throws on a bad list or a failed write.
+ *   readHeadSkills(file)           the recorded skills, [] when there is no file, no such line, or it can't be read
  */
 
 const fs = require('fs');
@@ -111,9 +118,37 @@ function asRoleCalls(runs) {
 /** A call the runner ran (asRoleCalls), never one read from a transcript. */
 const isRunnerCall = c => Boolean(c) && c.source === SOURCE && Array.isArray(c.lookups);
 
+const HEAD_SKILLS = 'head-skills';
+const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+function appendHeadSkills(file, skills) {
+  if (!file) throw new Error('runner-roles: no record file');
+  if (!Array.isArray(skills) || !skills.every(x => typeof x === 'string' && SKILL_NAME.test(x))) throw new Error('runner-roles: not a list of skill names');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, `${JSON.stringify({ kind: HEAD_SKILLS, skills: [...new Set(skills)].sort() })}\n`, { mode: 0o600 });
+}
+
+function readHeadSkills(file) {
+  if (!file) return [];
+  let text;
+  try {
+    if (fs.statSync(file).size > maxBytes()) return [];
+    text = fs.readFileSync(file, 'utf8');
+  } catch (_err) {
+    return [];
+  }
+  const out = new Set();
+  for (const line of text.split('\n')) {
+    let r;
+    try { r = JSON.parse(line); } catch (_err) { continue; }
+    if (r && r.kind === HEAD_SKILLS && Array.isArray(r.skills)) for (const x of r.skills) if (typeof x === 'string' && SKILL_NAME.test(x)) out.add(x);
+  }
+  return [...out].sort();
+}
+
 function removeRoleRuns(file) {
   if (!file) return;
   try { fs.unlinkSync(file); } catch (_err) { /* none */ }
 }
 
-module.exports = { ENV, roleRunsFile, newRoleRunsFile, appendRoleRun, readRoleRuns, asRoleCalls, isRunnerCall, removeRoleRuns };
+module.exports = { ENV, roleRunsFile, newRoleRunsFile, appendRoleRun, readRoleRuns, asRoleCalls, isRunnerCall, removeRoleRuns, appendHeadSkills, readHeadSkills };

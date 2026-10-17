@@ -1010,6 +1010,10 @@
    "value": 8,
    "from": "new in feat/desk-in-runner (one desk role's run)"
   },
+  "entry.timeoutMinutes": {
+   "value": 6,
+   "from": "new in feat/entry-workflow (one entry role's run: risk-manager phase 2, the trade-executor)"
+  },
   "gate.factsMinChecked": {
    "value": 2,
    "from": "trading/fact-claims.js MIN_CHECKED"

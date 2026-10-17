@@ -28,6 +28,7 @@ const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin
 const { readBriefing } = require('./briefing');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
+const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
 const { attestedSkills, parseAttestation } = require('../head-prompt');
@@ -214,14 +215,39 @@ function checkConsistency(input, rationale, specOf = () => null) {
     : null;
 }
 
+/**
+ * In a runner's cycle (autonomous, the cycle names its bar for the root's family: FTH_CYCLE_BARS), the time a plan for
+ * this entry must be written at or after: the cycle bar's close (its bar briefing's closedAt when the briefing is on the
+ * cycle's briefing bar), never before the bar opened. A plan from an earlier cycle (written while this bar was still
+ * forming) is not this bar's. Outside a runner's cycle: null (planMaxAgeMin alone, as before). Entries only.
+ */
+function cyclePlanSince(config, root) {
+  if (!config.autonomous) return null;
+  const bar = (config.cycleBars || {})[familyRoot(root)] || null;
+  if (!bar) return null;
+  const open = Date.parse(bar);
+  // An unreadable bar time: no plan can be shown to be this bar's (NaN refuses every plan: fails closed).
+  if (!Number.isFinite(open)) return NaN;
+  let closed = NaN;
+  try {
+    const b = readBriefing(config.home, root);
+    const on = briefingBarOf(config, root);
+    if (b && on && Date.parse(b.asOf) === Date.parse(on)) closed = Date.parse(b.closedAt);
+  } catch (_err) { /* no briefing: the bar's open */ }
+  return Number.isFinite(closed) ? Math.max(open, closed) : open;
+}
+
 function checkPlan(input, dayEntries, now, config) {
   const cutoff = now.getTime() - config.planMaxAgeMin * 60000;
   const root = contractRoot(input.contractId);
+  // A runner's cycle: the plan is this cycle's bar's (written since the bar closed), and within planMaxAgeMin.
+  const since = cyclePlanSince(config, root);
   const plan = dayEntries.find(e =>
-    e.kind === 'plan' && entryTime(e) >= cutoff && planMatches(e, input.contractId, root));
-  return plan ? null
-    : `No journal plan for ${root} in the last ${config.planMaxAgeMin} min. `
-      + 'Write one with journal_add {kind:"plan", contractId, ...} (thesis, trigger, stop, target, size, $ risk) first.';
+    e.kind === 'plan' && entryTime(e) >= cutoff && (since === null || entryTime(e) >= since) && planMatches(e, input.contractId, root));
+  if (plan) return null;
+  const write = 'Write one with journal_add {kind:"plan", contractId, ...} (thesis, trigger, stop, target, size, $ risk) first.';
+  if (since !== null) return `No journal plan for ${root} written for this cycle's bar (since ${Number.isFinite(since) ? new Date(since).toISOString() : 'its close, which can\'t be read'}) in the last ${config.planMaxAgeMin} min: a plan from an earlier bar is not this entry's. ${write}`;
+  return `No journal plan for ${root} in the last ${config.planMaxAgeMin} min. ${write}`;
 }
 
 /** Why the market is closed for entries at `now`, or null: the session, holidays, early closes. */
@@ -424,9 +450,16 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // for the runner's own cycle transcript (a hook's transcript is another harness's session). Anything off: none.
   const embedded = config.autonomous && config.roleSkills === 'index' && !transcriptPath && config.headPromptAttestation
     ? attestedSkills(parseAttestation(config.headPromptAttestation), HARNESS_ROOT, { transcript }) : [];
-  add('skills-loaded', checkSkillsLoaded(transcript, [...required, ...situational.filter(s => !required.includes(s))], embedded));
+  // The skills the head trader loaded in its own run, as the runner recorded them after it in the cycle's role record
+  // (runner-roles.js readHeadSkills: derived in code from that run's transcript). The runner's entry runs the
+  // trade-executor as a session of its own (runner-entry.js), whose transcript loads none: the cycle's decider's loads
+  // count from the record. Only for the runner's own cycle transcript (a hook's is another harness's session); no
+  // record, or none recorded: the transcript alone decides, as before.
+  const headLoaded = config.autonomous && !transcriptPath && config.cycleRoles ? readHeadSkills(config.cycleRoles) : [];
+  const counted = [...new Set([...embedded, ...headLoaded])];
+  add('skills-loaded', checkSkillsLoaded(transcript, [...required, ...situational.filter(s => !required.includes(s))], counted));
   // And, read before an entry only, how to judge the setup and write its plan (REQUIRED_AT_ENTRY; unreadable: refused).
-  add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, embedded));
+  add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, counted));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
@@ -543,4 +576,5 @@ module.exports = {
   evaluateModify,
   formatBlock,
   factsOrder,
+  cyclePlanSince,
 };

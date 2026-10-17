@@ -156,6 +156,10 @@ invalid one, as `strategies.js` does. As with strategies:
 `sync-harness` generates nothing from a workflow: the runner reads it, and no
 model is given it to follow.
 
+A phase may declare `orders: true`: it runs the one role that holds order
+tools (`trade-executor`), only as the last phase, alone, with `retries: 0`. No
+other phase runs that role.
+
 ```yaml
 name: desk
 phases:
@@ -215,12 +219,73 @@ phases:
    `FTH_CYCLE_CACHED` and `FTH_CYCLE_CACHED_LOOKUPS`. The record lives under
    the harness home's `logs/` (mode 0600), the cycle log reads it for the
    desk check, and the runner deletes it when the cycle ends.
-4. The head trader keeps the judgment: synthesis, `compose_check`,
-   risk-manager phase 2 and the trade-executor.
+4. The head trader keeps the judgment: synthesis and `compose_check`. Where
+   the runner runs the entry (below), phase 2 and the trade-executor are its;
+   elsewhere the head trader runs them, as before.
 
 The model no longer decides whether the desk runs; it is complete by
 construction. The multi-agent design is kept: the same roles, their own
 skills, their own analysis.
+
+### The entry, the second workflow
+
+`workflows/entry/WORKFLOW.md`, run by `scripts/lib/runner-entry.js` (wired by
+`runner-wiring.js entryFor`), inside the cycle's time (`cycle-run.js`: after the
+head trader's run, before the cycle log; per role `config/runner.json`
+`entry.timeoutMinutes`, never past the cycle's limit).
+
+1. **When.** A one-symbol full trade cycle on opencode, not manage-only or
+   paper, with the runner's desk wired, that started flat with no working
+   orders (the account read before the desk; unknown is not flat), and whose
+   desk is complete in the runner's record or the report cache (the
+   trade-executor is a session of its own: a role the head trader launched
+   itself is only in its transcript, which the executor's gate doesn't read).
+   Then the head trader's prompt says the route, its run gets
+   `FTH_CYCLE_ENTRY=1`, and the tool-call rule `entry-route` refuses its own
+   launch of the trade-executor, and of the risk manager unless phase 1 is
+   still owed (`FTH_CYCLE_DESK`), naming the route: "call compose_check; when it
+   is OK, end with CYCLE RESULT: planned; the runner runs risk-manager phase 2
+   and the trade-executor". It matches only role launches and fails closed
+   (such a cycle has nothing to exit). Any other cycle: as before.
+2. **The decision.** The head trader ends `CYCLE RESULT: planned` after an OK
+   `compose_check`. The runner takes the latest compose record on the cycle's
+   bar (`lifecycle-gate.js recordsAt`); not OK, or none, is a process failure:
+   logged, nothing runs. It records the head trader's loaded skills, derived in
+   code from its transcript (`skills-loaded.js skillsInTranscript`), in the
+   role record (`runner-roles.js appendHeadSkills`): the gate counts them for
+   the executor's run of the runner's own (`skills-loaded`, `skills-at-entry`),
+   never for a hook's transcript.
+3. **`review`.** Risk-manager phase 2 on the record (the `review` request: the
+   record, the desk's reports with phase 1's, the cycle's bars file and the
+   `order_plan` call to check it with), the cycle's own context (bars, lanes,
+   start). Accepted on `read-data`, `verdict-facts` (a verdict and its FACTS
+   line, by the gate's own readers) and `lookups`; retried once. Recorded with
+   its wall-clock times, so the gate orders it after phase 1 and the analysts.
+4. **Between the phases, in code.** Anything but APPROVE stops the entry (a
+   VETO is the cycle's no-trade with its line). The order comes from
+   `order_plan`'s own operation (`harness-tools/order-plan.js` ->
+   `trading/lifecycle-order.js composedOrder`; in a prop attempt the policy
+   verdict it records), so its rationale and brackets are what
+   `composed-reads` checks. The journal plan for the bar (`kind: plan`,
+   `contractId`) goes through the broker adapter (`journalAdd`); the gate's
+   `plan-required` takes, in a runner's cycle, only a plan written since the
+   cycle bar's close.
+5. **`execute`.** The trade-executor with those exact arguments and phase 2's
+   verdict line (the `execute` request), `orders: true` and `retries: 0`: only
+   a workflow's last phase may run the order role, once. Accepted on
+   `order-sent` (its `place_order` completed, or it reported the refusal). Its
+   own run has its own transcript; the gate reads the role record
+   (`FTH_CYCLE_ROLES`) for the roles and phase 2's facts, the cycle's bars
+   (`FTH_CYCLE_BARS`) for the record, and its orders carry the cycle's id
+   (`FTH_CYCLE_ID`). Recorded: it ends the round.
+6. **After the order.** The runner reads the account and open orders through
+   the adapter: executed (a position on the family, or the gateway's record of
+   this record's entry), blocked (the gate's refusal in its log, or the
+   executor's BLOCKED or ABORTED), or a no-trade naming the failed run. A lost
+   or late reply sends no second entry; the next cycles manage and exit it as
+   any position. The cycle log records the outcome (`entry`), phase 2's facts
+   (`factCheck`) and the desk check from the record; the decision history reads
+   a veto from it.
 
 ## What each earlier fix becomes
 

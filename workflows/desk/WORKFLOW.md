@@ -32,6 +32,7 @@ and the order gate refuses an entry without it.
 ## What the head trader does with it
 
 The reports reach the head trader in its prompt, and the order gate counts them as
-returned from the runner's record of the runs (`FTH_CYCLE_ROLES`). The head trader keeps the judgment: synthesis, `compose_check`,
-risk-manager phase 2 on its plan, and the trade-executor. See
+returned from the runner's record of the runs (`FTH_CYCLE_ROLES`). The head trader keeps the judgment: synthesis and `compose_check`;
+risk-manager phase 2 on its plan and the trade-executor are the runner's where it runs the entry
+([workflows/entry](../entry/WORKFLOW.md)), the head trader's otherwise. See
 [docs/TOOL-CALLS-AND-ORCHESTRATION.md](../../docs/TOOL-CALLS-AND-ORCHESTRATION.md).

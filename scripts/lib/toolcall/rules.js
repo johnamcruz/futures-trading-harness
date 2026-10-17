@@ -57,6 +57,31 @@ const deniedRole = {
 };
 
 /**
+ * entry-route: in a cycle where the runner runs the entry (FTH_CYCLE_ENTRY=1, set by the runner only in such cycles:
+ * autotrader.js childEnv; runner-entry.js), the head trader's job ends at its decision: an OK compose_check, then
+ * `CYCLE RESULT: planned`; the runner runs risk-manager phase 2 and the trade-executor (workflows/entry). Its own
+ * launch of the trade-executor is refused, and of the risk manager unless phase 1 is still owed (risk-manager in
+ * FTH_CYCLE_DESK and not reported yet: desk-reported's state), with the route. Such a cycle starts flat with no
+ * working orders, so no exit or stop is ever behind a launch it refuses; it never matches a broker tool. It fails
+ * closed: it holds the entry's route, and refusing a launch adds no risk.
+ */
+const ENTRY_ENV = 'FTH_CYCLE_ENTRY';
+const ENTRY_ROUTE = 'call compose_check; when it is OK, end with CYCLE RESULT: planned; the runner runs risk-manager phase 2 and the trade-executor';
+const entryRoute = {
+  id: 'entry-route', event: 'pre', failClosed: true, state: 'desk',
+  match: call => call.tool === 'task',
+  check(call, { state, env }) {
+    if (String((env && env[ENTRY_ENV]) || '').trim() !== '1') return null;
+    const a = call.args;
+    const role = String((a && typeof a === 'object' && a.subagent_type) || '').trim().split(':').pop();
+    if (role === 'trade-executor') return { refuse: `[entry-route] the runner runs the trade-executor this cycle, not you: ${ENTRY_ROUTE}.` };
+    if (role !== 'risk-manager') return null;
+    const owed = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).includes('risk-manager') && !(state.reported || []).includes('risk-manager');
+    return owed ? null : { refuse: `[entry-route] the runner runs risk-manager phase 2 this cycle (phase 1's report is in your prompt): ${ENTRY_ROUTE}.` };
+  },
+};
+
+/**
  * tool-name: a call to an unknown name (opencode sends it to its `invalid` tool) whose bare form, or a server form, is
  * a harness or broker tool is answered with the name meant (`compose_check` -> the harness's compose_check): the
  * route, so the model corrects itself instead of reading a list of every tool.
@@ -155,6 +180,6 @@ const repeatNote = {
   },
 };
 
-const RULES = Object.freeze([taskId, deniedRole, toolName, deskWait, deskReported, repeat, repeatNote]);
+const RULES = Object.freeze([taskId, deniedRole, entryRoute, toolName, deskWait, deskReported, repeat, repeatNote]);
 
-module.exports = { RULES, DENIED_ROLES_ENV, deniedRolesOf };
+module.exports = { RULES, DENIED_ROLES_ENV, ENTRY_ENV, ENTRY_ROUTE, deniedRolesOf };

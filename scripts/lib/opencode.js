@@ -239,12 +239,20 @@ function stepCap(agent) {
 }
 
 /**
- * A role's mode: the desk's (the analysts and the risk manager: trading/desk-check.js DESK_ROLES) are 'all', so the
- * runner can run each as its own `opencode run --agent <role>` (the runner's desk: desk-runner.js; opencode runs a
- * 'subagent' that way as its default agent instead: v1.19 cli/cmd/run.ts) and the head trader still launches them as
- * subagents (phase 2). Every other role stays a subagent.
+ * A role's mode: the roles the runner runs as their own `opencode run --agent <role>` are 'all' (opencode runs a
+ * 'subagent' that way as its default agent instead: v1.19 cli/cmd/run.ts, "is a subagent, not a primary agent. Falling
+ * back to default agent"): the desk's (the analysts and the risk manager: trading/desk-check.js DESK_ROLES; the
+ * runner's desk, workflows/desk) and the trade-executor (the runner's entry, workflows/entry). The head trader still
+ * launches them as subagents where the runner doesn't run them. Every other role stays a subagent.
+ *
+ * Run as its own primary agent, a role keeps its own permissions: opencode 1.19 builds a config agent's rules as its
+ * defaults, then the config's top-level permission, then the agent's own (agent.ts: merge(defaults, top-level,
+ * agent's)), and a call's rule is the last that matches (permission evaluate: findLast). The trade-executor's own
+ * `broker_place_order: allow` (agentPermission) comes after the top-level `deny` (sessionPermission), so it may send
+ * an order; the head trader's agent keeps the deny, and no other role holds the tool.
  */
-const roleMode = agent => (require('./trading/desk-check').DESK_ROLES.includes(agent.name) ? 'all' : 'subagent');
+const RUNNER_RUN_ROLES = () => [...require('./trading/desk-check').DESK_ROLES, 'trade-executor'];
+const roleMode = agent => (RUNNER_RUN_ROLES().includes(agent.name) ? 'all' : 'subagent');
 
 function agentConfig(agent) {
   return {
@@ -468,4 +476,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, stepCap, roleMode, runResult, INVALID_TOOL };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, stepCap, roleMode, RUNNER_RUN_ROLES, runResult, INVALID_TOOL };

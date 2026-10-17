@@ -538,3 +538,14 @@ test('pruneReplayCaches: one prune at a time (a second, started while the first 
   assert.deepStrictEqual(pruneReplayCaches('sim', env), [day('2026-06-03')]);
   assert.strictEqual(Object.keys(JSON.parse(fs.readFileSync(indexFile, 'utf8')).ids).length, 1509);
 });
+
+test('the broker client: journalAdd writes a journal entry on the read connection (no order tool, no gate) and returns the broker\'s entry; a reply without one is an error', async () => {
+  const reads = [];
+  const writes = [];
+  const stub = (log, result) => ({ call: async (name, args) => { log.push([name, args]); return result(name, args); }, close: () => {} });
+  const client = createAdapter({ mcp: stub(reads, (name, args) => ({ ts: '2026-10-07T14:00:01Z', ...args })), writeMcp: stub(writes, () => ({ success: true })) });
+  const entry = { kind: 'plan', contractId: MNQ, accountId: 7, tags: ['setup:trade_lifecycle', 'MNQ'], text: 'trade_lifecycle long 1 MNQ' };
+  assert.deepStrictEqual(await client.journalAdd(entry), { ts: '2026-10-07T14:00:01Z', ...entry });
+  assert.deepStrictEqual([reads, writes], [[['journal_add', entry]], []]);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ ok: true })) }).journalAdd(entry), /journal_add returned no entry/);
+});

@@ -86,3 +86,24 @@ test('newRoleRunsFile sweeps the records no cycle runs with: this process\'s ear
   assert.deepStrictEqual([process.pid, gone, process.ppid].map(p => fs.existsSync(name(p))), [false, false, true]);
   assert.ok(fs.existsSync(path.join(logs, 'cycle-transcript-1-x.jsonl')), 'another file is left alone');
 });
+
+test('appendHeadSkills / readHeadSkills: the head trader\'s loads as the runner recorded them, beside the runs (never a run); bad lists refused; none when absent or unreadable', () => {
+  const file = path.join(tmpDir(), 'logs', 'r.jsonl');
+  assert.deepStrictEqual(RR.readHeadSkills(file), [], 'no file');
+  assert.deepStrictEqual(RR.readHeadSkills(null), []);
+  RR.appendRoleRun(file, run());
+  assert.deepStrictEqual(RR.readHeadSkills(file), [], 'no such line');
+  RR.appendHeadSkills(file, ['trade-session', 'trade-lifecycle', 'trade-session']);
+  fs.appendFileSync(file, `${JSON.stringify({ kind: 'head-skills', skills: ['multi-timeframe-analysis', 'Not A Skill', 7] })}\ntorn{\n`);
+  assert.deepStrictEqual(RR.readHeadSkills(file), ['multi-timeframe-analysis', 'trade-lifecycle', 'trade-session']);
+  // A head-skills line is no role run: the gate's calls are the runs alone.
+  assert.deepStrictEqual(RR.readRoleRuns(file).map(r => r.role), ['market-structure-analyst']);
+  assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
+  for (const bad of [null, 'trade-session', ['../x'], [''], [7]]) assert.throws(() => RR.appendHeadSkills(file, bad), /not a list of skill names/, JSON.stringify(bad));
+  assert.throws(() => RR.appendHeadSkills(null, []), /no record file/);
+  // A file over the size limit: none (fails closed).
+  const big = path.join(tmpDir(), 'big.jsonl');
+  fs.writeFileSync(big, `${JSON.stringify({ kind: 'head-skills', skills: ['trade-session'] })}\n`);
+  fs.truncateSync(big, require('../../scripts/lib/tunables').runner().limits.rolesRanBytes + 1);
+  assert.deepStrictEqual(RR.readHeadSkills(big), []);
+});

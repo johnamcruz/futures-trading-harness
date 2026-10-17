@@ -3230,3 +3230,32 @@ test('replay wiring (opencode): the runner\'s plugin refuses launching a role th
   assert.strictEqual(await call(live), null);
   assert.deepStrictEqual([JSON.parse(live.OPENCODE_CONFIG_CONTENT).permission.websearch, JSON.parse(live.OPENCODE_CONFIG_CONTENT).permission.task[web[0]]], ['allow', 'allow']);
 });
+
+test('order gate (hook): in a runner\'s cycle a plan must be written for the cycle\'s bar (FTH_CYCLE_BARS): an earlier bar\'s is refused [plan-required]; outside a cycle as before; an exit is never held', () => {
+  // An autonomous run reads the wall clock: the plan and the bar are placed around it (other checks may refuse too).
+  const ago = m => new Date(Date.now() - m * 60000).toISOString();
+  const { env } = setup([{ ts: ago(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' });
+  const msg = e => gate(orderPayload(), e).stderr;
+  // The cycle's bar opened 2 minutes ago: a plan from 5 minutes ago is an earlier bar's.
+  assert.match(msg({ ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: ago(2) }) }), /\[plan-required\] No journal plan for MNQ written for this cycle's bar/);
+  // The bar opened 10 minutes ago (no briefing names its close): the plan is after it.
+  assert.doesNotMatch(msg({ ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: ago(10) }) }), /plan-required/);
+  // No cycle bar (not the runner's cycle): planMaxAgeMin alone.
+  assert.doesNotMatch(msg(env), /plan-required/);
+  // An exit goes whatever the plan.
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), { ...env, FTH_CYCLE_BARS: JSON.stringify({ MNQ: ago(2) }) });
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate (hook): the head trader\'s loads the runner recorded (FTH_CYCLE_ROLES) never count for a hook\'s own transcript (another harness\'s session): it decides by its transcript alone', () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_SYMBOLS: 'MNQ' });
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'mcp__broker__get_account_snapshot', input: {} }] } })}\n`);
+  const rolesFile = path.join(dir, 'cycle-roles.jsonl');
+  RR.appendHeadSkills(rolesFile, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, { ...env, FTH_CYCLE_ROLES: rolesFile });
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry/);
+  assert.match(r.stderr, /\[skills-at-entry\]/);
+});

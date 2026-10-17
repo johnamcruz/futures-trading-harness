@@ -1,0 +1,260 @@
+'use strict';
+
+/**
+ * The runner's entry (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The entry, the second workflow"; workflows/entry): in a
+ * cycle where the runner runs the entry (runner.js entryCycle: opencode, one symbol, a full trade cycle that is not
+ * manage-only or paper, started flat with no working orders, its desk complete in the runner's role record or the
+ * report cache), the head trader's job ends at its decision: an OK compose_check, then `CYCLE RESULT: planned`. The
+ * runner then runs, in code, with the same roles (the design stays multi-agent; only the sequence is code):
+ *
+ *   1. the compose record the decision rests on: the latest record on the cycle's briefing bar for the root
+ *      (lifecycle-gate.js recordsAt), which must be OK; `planned` without one is a process failure, logged, and
+ *      nothing runs (the cycle's result stays the head trader's);
+ *   2. the head trader's loaded skills, derived in code from its run's transcript (skills-loaded.js
+ *      skillsInTranscript), recorded in the cycle's role record (runner-roles.js appendHeadSkills): the trade-executor
+ *      is a session of its own, so the gate counts the decider's loads from the record;
+ *   3. phase `review`: risk-manager phase 2 on the record (orchestrate/requests.js review), its run recorded with its
+ *      wall-clock times (the gate orders it after phase 1 and the analysts, as a launch);
+ *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
+ *      VETO is the cycle's no-trade with its line); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
+ *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
+ *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
+ *   5. phase `execute`: the trade-executor with those exact arguments and phase 2's verdict line, never run again (the
+ *      workflow's orders phase: retries 0), its run recorded (it ends the round, as a launch does);
+ *   6. the after-order read through the adapter (accountState): the cycle's outcome. Executed when the account shows a
+ *      position on the root's family or the gateway recorded this record's entry (entry-orders.json); else blocked with
+ *      the gate's refusal (its log, this cycle's id) or the executor's own BLOCKED or ABORTED report; else a failed
+ *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
+ *
+ *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
+ *   verdictLine(text)        phase 2's VERDICT line, as written
+ *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
+ *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
+ *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, perRoleMs, childEnv, lookups, orderPlan }
+ *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in)
+ *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs }
+ */
+
+const fs = require('fs');
+const { outcomeOf } = require('./autotrader');
+const { verdictOf } = require('./trading/roles-ran');
+const { recordsAt } = require('./trading/lifecycle-gate');
+const { renderRecord } = require('./trading/trade-lifecycle');
+const { skillsInTranscript } = require('./trading/skills-loaded');
+const { familyRoot } = require('./trading/contracts');
+const { contractRoot } = require('./trading/journal');
+const { isOpen } = require('./trading/positions');
+const RR = require('./trading/runner-roles');
+const { ORDER_REFUSED } = require('./orchestrate/checks');
+
+const STRATEGY = 'trade_lifecycle';
+const famOf = id => familyRoot(contractRoot(id));
+// A refusal or report as the result line and the logs carry it: one line, cut at the plan's length (config/runner.json).
+const CUT = () => require('./tunables').runner().prompt.planChars;
+const short = text => { const n = CUT(); const t = String(text || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 3)}...` : t; };
+
+/** The decision's record: the latest compose record on the cycle's bar for the root (any side); it must be OK. */
+function entryDue(records) {
+  const list = Array.isArray(records) ? records : [];
+  if (!list.length) return { run: false, why: 'planned without a compose record on the cycle\'s bar' };
+  const rec = list[list.length - 1];
+  if (!rec || rec.ok !== true) return { run: false, why: `planned without an OK compose record on the cycle's bar (the latest, ${rec && rec.id}, is not OK)` };
+  if (rec.side !== 'long' && rec.side !== 'short') return { run: false, why: `the compose record ${rec.id} has no side` };
+  return { run: true, record: rec };
+}
+
+/** Phase 2's VERDICT line, as written (the first line stating a verdict: "VERDICT: ..." or "Verdict - ..."), or ''. */
+const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict\b[*_`\s]*[:-]/i.test(l)) || '').trim();
+
+/**
+ * The gate's last refusal of a place_order in this cycle (the gate log, stamped with the cycle's id: check-order.js
+ * cycleId), at or after `sinceMs`: { checks, message } or null. Never throws.
+ */
+function gateRefusal(env, id, sinceMs) {
+  try {
+    const { gateLogPath } = require('./trading/check-order');
+    const file = gateLogPath(env);
+    const max = require('./tunables').runner().limits.gateTailBytes;
+    const size = fs.statSync(file).size;
+    const fd = fs.openSync(file, 'r');
+    let text;
+    try {
+      const len = Math.min(size, max);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      text = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+    let last = null;
+    for (const line of text.split('\n')) {
+      let e;
+      try { e = JSON.parse(line); } catch (_err) { continue; }
+      if (!e || e.cycle !== id || e.tool !== 'place_order' || e.decision !== 'blocked' || !(Date.parse(e.ts) >= sinceMs)) continue;
+      last = e;
+    }
+    if (!last) return null;
+    const v = Array.isArray(last.violations) ? last.violations : [];
+    return { checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
+  } catch (_err) {
+    return null;
+  }
+}
+
+/**
+ * The cycle's outcome after the executor's run: { outcome: executed | blocked | no-trade, result, why }.
+ *   entered   the account shows a position on the family, or the gateway recorded this record's entry
+ *   refusal   the gate's refusal this cycle ({ checks, message }) or null
+ *   report    the executor's report (its BLOCKED or ABORTED line), or ''
+ *   failed    the executor's run didn't count (its stop and why), or null
+ *   sent      its place_order call completed (the gate let it through): with nothing on the account, the broker took none
+ */
+function entryOutcome({ entered, filled = false, refusal = null, report = '', failed = null, sent = false, label }) {
+  if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : 'went'})`, why: null };
+  if (refusal) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
+  const said = ORDER_REFUSED.exec(String(report || ''));
+  if (said) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
+  // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
+  if (sent) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was refused by the broker: the order went and the account shows no position or entry (the executor's report: ${short(report) || 'none'})`, why: short(report) };
+  return { outcome: 'no-trade', result: `CYCLE RESULT: no-trade - the runner's entry: the trade-executor ${failed ? `${failed.stop}${failed.why ? ` (${failed.why})` : ''}` : 'sent no order'}: no order`, why: failed ? failed.why : 'no order' };
+}
+
+async function runEntry(deps, c) {
+  const { workflow, runRole, client, home, cfg, root, env, log = () => {}, wallNow = Date.now, perRoleMs, childEnv, lookups = {} } = deps;
+  const orderPlan = deps.orderPlan || require('./harness-tools/order-plan').plan;
+  if (outcomeOf(c.result) !== 'planned') return null;
+  const info = { ran: [], phases: [] };
+  const say = (outcome, result, more = {}) => ({ result, entry: { ...info, outcome, ...more } });
+  // 1. The record the decision rests on.
+  let due;
+  try { due = entryDue(recordsAt(home, c.symbol, c.bar)); } catch (err) { due = { run: false, why: `the compose records can't be read (${err.message})` }; }
+  if (!due.run) {
+    log(`the entry: ${due.why}: a process failure; nothing runs`, 'error');
+    return say('process-failure', c.result, { failure: due.why });
+  }
+  const rec = due.record;
+  const label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
+  info.record = rec.id;
+  if (!c.rolesFile) {
+    log('the entry: no role record for the cycle: nothing runs', 'error');
+    return say('process-failure', c.result, { failure: 'no role record' });
+  }
+  // 2. The head trader's loads, for the gate's skills checks in the executor's run.
+  try {
+    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output)].filter(Boolean));
+  } catch (err) {
+    log(`the entry: the head trader's skills could not be recorded (${err.message}): the gate sees none`, 'error');
+  }
+  const { createRun } = require('./orchestrate/engine');
+  const { runWorkflow } = require('./orchestrate/workflows');
+  const { cycleId } = require('./trading/check-order');
+  const id = cycleId(c.headEnv || {});
+  // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
+  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}) };
+  const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
+  const times = new Map();
+  const engine = {
+    run: async (role, request, { timeoutMs }) => {
+      const left = deadline - wallNow();
+      if (left <= 0) return { ok: false, timedOut: true, text: '', tools: [], output: '' };
+      const start = wallNow();
+      try { return await runRole(role, request, { timeoutMs: Math.min(timeoutMs || left, left), context: roleContext }); } finally { times.set(role, { start, end: wallNow() }); }
+    },
+  };
+  const record = r => {
+    try {
+      RR.appendRoleRun(c.rolesFile, { role: r.role, ...times.get(r.role), text: r.text || '', lookups: r.lookups || [], ok: r.ok });
+      info.ran.push({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.why ? { why: r.why } : {}) });
+      return true;
+    } catch (err) {
+      log(`the entry: ${r.role}'s run could not be recorded for the gate (${err.message})`, 'error');
+      info.ran.push({ role: r.role, stop: r.stop, unrecorded: err.message });
+      return false;
+    }
+  };
+  const ctx = {
+    symbol: c.symbol, contractId: c.contractId || null, at: c.at, timeframe: cfg.timeframe, bars: c.bars || null, lookups,
+    strategy: STRATEGY, side: rec.side, accountId: Number.isInteger(c.accountId) ? c.accountId : null,
+    record: renderRecord(rec), reports: c.reports || [],
+  };
+  let stop = null;
+  let order = null;
+  // 4. Between the phases: the verdict, the order built in code, the journal plan.
+  const before = async (p, phases) => {
+    if (p.orders !== true) return null;
+    const rev = (phases[0] && phases[0].results[0]) || null;
+    if (!rev) { stop = { outcome: 'no-trade', why: 'phase 2 did not run' }; return { stop: stop.why }; }
+    const held = record(rev);
+    if (!rev.ok) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 ${rev.stop}${rev.why ? ` (${rev.why})` : ''}` }; return { stop: stop.why }; }
+    if (!held) { stop = { outcome: 'no-trade', why: 'risk-manager phase 2 could not be recorded for the gate' }; return { stop: stop.why }; }
+    const line = verdictLine(rev.text);
+    if (verdictOf(rev.text) !== 'APPROVE') { stop = { outcome: 'vetoed', why: line || 'phase 2 did not approve' }; return { stop: stop.why }; }
+    const roleEnv = childEnv(cfg, root, env, roleContext);
+    try {
+      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
+    } catch (err) {
+      stop = { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
+      return { stop: stop.why };
+    }
+    try {
+      const tag = (/^\s*setup:([a-z0-9_-]+)/i.exec(order.args.rationale) || [])[1] || STRATEGY;
+      const p = order.plan;
+      await client.journalAdd({
+        kind: 'plan', contractId: order.args.contractId, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), tags: [`setup:${tag}`, contractRoot(order.args.contractId)],
+        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; compose record ${p.record}; phase 2: ${short(line)}`,
+      });
+    } catch (err) {
+      stop = { outcome: 'no-trade', why: `the journal plan could not be written (${err.message})` };
+      return { stop: stop.why };
+    }
+    return { ctx: { args: order.args, verdict: line } };
+  };
+  const sentAt = Date.now();
+  let res;
+  try {
+    res = await runWorkflow(workflow, { run: createRun({ engine, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the entry: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`, 'error'); } }), ctx, concurrency: 1, timeoutMs: perRoleMs, before });
+  } catch (err) {
+    log(`the entry failed (${err.message}): no order`, 'error');
+    return say('error', `CYCLE RESULT: no-trade - the runner's entry failed (${short(err.message)}): no order`, { failure: err.message });
+  }
+  info.phases = res.phases.map(p => ({ name: p.name, roles: p.results.map(r => ({ role: r.role, stop: r.stop })) }));
+  if (stop) {
+    if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
+    log(`the entry: ${stop.why}: no order`, 'error');
+    return say('no-trade', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}: no order`, { why: stop.why });
+  }
+  // 5. The executor's run is recorded: it ends the round, whatever it did.
+  const exec = (res.phases[1] && res.phases[1].results[0]) || null;
+  if (exec) record(exec);
+  // 6. The after-order read.
+  let entered = false;
+  let filled = false;
+  try {
+    const { entryOrders } = require('./harness-run');
+    entered = entryOrders(home).some(e => e && e.composed && e.composed.record === rec.id);
+  } catch (_err) { /* none recorded */ }
+  let account = null;
+  if (Number.isInteger(c.accountId) && client && typeof client.accountState === 'function') {
+    try {
+      const st = await client.accountState(c.accountId);
+      const fam = famOf(order.args.contractId);
+      const pos = (st.positions || []).filter(isOpen).filter(p => famOf(p.contractId) === fam);
+      filled = pos.length > 0;
+      entered = entered || filled;
+      account = { positions: pos.length, orders: (st.orders || []).filter(o => famOf(o.contractId) === fam).length };
+    } catch (err) {
+      log(`the entry: the account can't be read after the order (${err.message}): the outcome from the gateway's record and the executor's report`, 'error');
+      account = { error: err.message };
+    }
+  }
+  const out = entryOutcome({
+    entered, filled, refusal: entered ? null : gateRefusal(env, id, sentAt - require('./tunables').runner().session.gateSlackMs), report: exec ? exec.text : '',
+    failed: exec && !exec.ok ? { stop: exec.stop, why: exec.why } : null, label,
+    sent: Boolean(exec && Array.isArray(exec.tools) && exec.tools.includes(`${require('./broker/config').SERVER_NAME}_place_order`)),
+  });
+  if (out.outcome !== 'executed') log(`the entry: ${out.result}`, out.outcome === 'blocked' ? 'info' : 'error');
+  return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });
+}
+
+module.exports = { STRATEGY, entryDue, verdictLine, gateRefusal, entryOutcome, runEntry };

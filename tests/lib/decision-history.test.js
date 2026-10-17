@@ -677,3 +677,14 @@ test('review fixes: bad bars or entries never throw, and the prompt names a hist
   const bad = { get result() { throw new Error('corrupt entry'); }, at: at(0) };
   assert.strictEqual(historyText([bad]), ' Your last cycles: unavailable this cycle (corrupt entry).');
 });
+
+test('a setup not taken: a veto from phase 2 the runner ran itself (its role record\'s runs) is a veto too, with the transcript\'s rules; without the runs, a pass', () => {
+  const T = 1.7e12;
+  const run = (text, start, ok = true) => ({ role: 'risk-manager', start: T + start, end: T + start + 5, text, lookups: [], ok });
+  const runs = [run('Phase 1: flat, budget 1 trade', 0), run('Phase 2 on orb long.\nVERDICT: VETO - no room\nFACTS: window asia; trend long allowed', 10)];
+  const entry = (o = {}) => D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100, { scan: [fired('orb', 'long', 2)] })], output: '', ...o });
+  assert.strictEqual(entry({ runs }).action, 'vetoed');
+  assert.strictEqual(entry().action, 'skipped', 'no runs: the model\'s own pass');
+  assert.strictEqual(entry({ runs: [runs[0], run('Phase 2 on orb long.\nVERDICT: APPROVE - size 1\nFACTS: window asia; trend long allowed', 10)] }).action, 'skipped');
+  assert.strictEqual(entry({ runs: [runs[0], run(runs[1].text, 10, false)] }).action, 'skipped', 'a run that didn\'t count is no report');
+});
