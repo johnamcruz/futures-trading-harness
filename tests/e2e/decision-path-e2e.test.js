@@ -796,7 +796,9 @@ test('decision path, runner reviews (replay): an entry that stops out gets the r
   assert.deepStrictEqual([rev.orderId, rev.tags.slice(0, 4)], [entry.orderId, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ']]);
   // The stop filled 1 point (4 ticks) through its level: R a little worse than -1 on the planned stop.
   const ticks = JSON.parse(fs.readFileSync(path.join(w.home, 'entry-orders.json'), 'utf8'))[0].stopTicks;
-  assert.strictEqual(rev.tags[4], `r:${Math.round((-(ticks * 0.25 + 1) / (ticks * 0.25)) * 100) / 100}`);
+  // Net of its two fills' fees ($0.37 each on the mock exchange) over its risk ($0.50 a tick on MNQ), as trade-review writes r:.
+  const gross = Math.round((-(ticks * 0.25 + 1) / (ticks * 0.25)) * 100) / 100;
+  assert.strictEqual(rev.tags[4], `r:${Math.round((gross - 0.74 / (ticks * 0.5)) * 100) / 100}`);
   assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
   assert.ok(D.position(w), 'the next entry filled');
 });
