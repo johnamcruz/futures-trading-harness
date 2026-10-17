@@ -16,11 +16,13 @@
  */
 
 const path = require('path');
-const { buildCommand, childEnv, scoreRun, cycleOutcome } = require('./autotrader');
+const { buildCommand, childEnv, scoreRun, cycleOutcome, ROLES_CHECKED } = require('./autotrader');
 const { runHarness } = require('./harness-run');
 const { writeCycleLog } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
 const { loadConfig } = require('./trading/config');
+const { roleCalls } = require('./trading/roles-ran');
+const { expectedRoles, deskCheck, deskWarning } = require('./trading/desk-check');
 
 /** One run of the harness with the cycle's environment: its result, the transcript file, the role-skills mode and the env (the cycle log reads its clock and lanes there, as the gate). */
 function runOnce(cfg, argv, timeoutMs, context, deps) {
@@ -54,9 +56,17 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const { result, reportedResult, resultNote } = scoreRun(res, { action, harness: cfg.harness });
   // When it acted against its bar (cycle-timing.js): measurement only.
   const timing = runTiming({ res, cfg, context, env, startedMs, endedMs, now, result });
+  // Did the desk run (desk-check.js)? Only where the transcript shows the roles' calls (ROLES_CHECKED).
+  const desk = ROLES_CHECKED.has(cfg.harness) ? deskCheck({
+    expected: expectedRoles({ action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: (context && context.cachedRoles) || [] }),
+    calls: roleCalls(res.output).calls,
+    failed: ((timing && timing.roles) || []).filter(r => r && r.ok === false).map(r => r.role),
+  }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
-  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing });
+  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk });
   out(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
+  const deskWarn = deskWarning(desk);
+  if (deskWarn) err(`[autotrader] ${deskWarn}\n`);
   if (summary.missingSkills.length) err(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
   if (deps.appendLog) deps.appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   out(`[autotrader] ${result}\n`);
