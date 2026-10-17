@@ -23,14 +23,32 @@ function root(files) {
   return r;
 }
 
-test('the shipped desk workflow is valid: the three analysts and risk-manager phase 1, the desk request, read-data and report-shape, one retry', () => {
+test('the shipped desk workflow is valid: the three analysts and risk-manager phase 1, the desk request, read-data, report-shape and lookups, one retry', () => {
   const all = W.loadWorkflows(ROOT);
   assert.deepStrictEqual(all.filter(w => !w.valid).map(w => [w.name, w.errors]), []);
   const desk = W.workflowNamed(ROOT, 'desk');
-  assert.deepStrictEqual(desk.phases, [{ name: 'desk', parallel: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], request: 'desk', accept: ['read-data', 'report-shape'], retries: 1 }]);
+  assert.deepStrictEqual(desk.phases, [{ name: 'desk', parallel: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], request: 'desk', accept: ['read-data', 'report-shape', 'lookups'], retries: 1 }]);
   // The desk's roles are the desk the gate and the desk log expect (trading/desk-check.js).
   const { expectedRoles } = require('../../scripts/lib/trading/desk-check');
   assert.deepStrictEqual(desk.phases[0].parallel, expectedRoles({ action: 'trade', cycle: 'full' }));
+});
+
+test('runWorkflow: the desk\'s lookups check reads the ctx\'s requirement: a run missing one is retried, then reported missing; one with them is accepted', async () => {
+  const desk = W.workflowNamed(ROOT, 'desk');
+  const runs = { 'market-structure-analyst': 0, 'trend-momentum-analyst': 0 };
+  const engine = {
+    async run(role) {
+      runs[role] += 1;
+      // The structure analyst looks up what its bar requires on its second try; the trend analyst never does.
+      const lookups = role === 'market-structure-analyst' && runs[role] === 2 ? ['breakout'] : [];
+      return { ok: true, text: '## X\nData: bar_briefing m3@1', tools: ['harness_bar_briefing'], lookups };
+    },
+  };
+  const ctx = { symbol: 'MNQ', at: '10:03 ET', timeframe: 3, lookups: { 'market-structure-analyst': ['breakout'], 'trend-momentum-analyst': ['cisd'] } };
+  const res = await W.runWorkflow(desk, { run: createRun({ engine }), ctx, roles: ['market-structure-analyst', 'trend-momentum-analyst'], concurrency: 2 });
+  const results = res.phases[0].results;
+  assert.deepStrictEqual(results.map(r => [r.role, r.stop, r.attempts]), [['market-structure-analyst', 'completed', 2], ['trend-momentum-analyst', 'invalid', 2]]);
+  assert.strictEqual(results[1].why, 'didn\'t look up cisd (this bar requires it of its role)');
 });
 
 test('loadWorkflows refuses an invalid document and says why; none is not an error', () => {

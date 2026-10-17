@@ -29,6 +29,10 @@
  * prompts give each role its own name to pass (opencode.js lookupCall), and a role naming another is a misfollow the
  * gate can't see.
  *
+ * A role the runner ran itself (its role record, runner-roles.js) is its own session: its run's lookups naming its
+ * role are recorded with it (cycle-run.js runRole), and its call counts with those, under the same requirement as a
+ * task call's (unmetLookups). Phase 1 and phase 2 of the risk manager are one role, whichever ran them.
+ *
  *   lookupsFile(transcript)                     the cycle's lookups file
  *   recordLookup(env, { role, skill }, at)            append one (no cycle, or no role: nothing)
  *   readLookups(transcript)                     the records, [] when none
@@ -55,6 +59,7 @@ const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
 const { recordsAt, readsOf } = require('./lifecycle-gate');
 const { parseRead } = require('./composed-reads');
+const { isRunnerCall } = require('./runner-roles');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const MAX_BYTES = require('../tunables').runner().limits.skillLookupsBytes; // config/runner.json
@@ -203,8 +208,12 @@ const needed = (role, required, m3) => (required.get(role) || []).filter(r => m3
 function unmetLookups(call, { records = [], required = new Map(), m3 = null, calls = [call] }) {
   const need = needed(call.role, required, m3);
   if (!need.length) return [];
-  const windows = [call, ...calls.filter(c => c !== call && c.role === call.role)].filter(timed);
-  return need.filter(r => !records.some(x => x.role === call.role && x.skill === r.skill && windows.some(c => x.at >= c.start && x.at <= c.end))).map(r => r.skill);
+  const same = [call, ...calls.filter(c => c !== call && c.role === call.role)];
+  // A run the runner ran itself (runner-roles.js) carries the lookups its own run made naming its role: those, never
+  // the lookups file's records inside its times (the head trader's session wasn't running it).
+  const ran = new Set(same.filter(isRunnerCall).flatMap(c => c.lookups));
+  const windows = same.filter(c => !isRunnerCall(c)).filter(timed);
+  return need.filter(r => !ran.has(r.skill) && !records.some(x => x.role === call.role && x.skill === r.skill && windows.some(c => x.at >= c.start && x.at <= c.end))).map(r => r.skill);
 }
 
 /**
@@ -306,4 +315,4 @@ function lookupStats({ calls = [], records = [], required = new Map(), m3 = null
   return { lookups: records.length, byRole, requiredCalls, met };
 }
 
-module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, composedAt, factsKey, briefingFactsKey, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };
+module.exports = { PLUGIN_ROOT, timed, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, composedAt, factsKey, briefingFactsKey, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };

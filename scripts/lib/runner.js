@@ -1475,7 +1475,8 @@ function createRunner(deps) {
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
           const cached = multi && fromCache ? { ...fromCache, roles: fromCache.reports.filter(live).map(r => r.role), reports: fromCache.reports.filter(live) } : fromCache;
           // The desk, run by the runner (docs/TOOL-CALLS-AND-ORCHESTRATION.md): the roles the cache didn't serve, before the
-          // head trader decides; their reports join the cached ones (the prompt, FTH_CYCLE_CACHED: the gate counts them).
+          // head trader decides; their reports join the cached ones in the prompt, and the gate counts them from the runner's role
+          // record (runner-roles.js, FTH_CYCLE_ROLES), with each run's times, report and lookups.
           // A role whose run didn't count is missing: the head trader may launch it, the gate refuses an entry without it.
           // One-symbol cycles only (a desk report's lookups are credited under one symbol's facts key): with several, the
           // head trader launches its desk, as before.
@@ -1508,8 +1509,11 @@ function createRunner(deps) {
             // Never past the cycle's own limit (limitFor: the end of day's cap): what the desk took, else the head's minimum.
             timeoutMs = Math.max(timeoutMs - deskMs, Math.min(minHeadMs, timeoutMs));
           }
-          const served = deskRun && deskRun.reports.length
-            ? { roles: [...(cached ? cached.roles : []), ...deskRun.reports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskRun.reports] }
+          // The desk's reports the runner's role record holds (runner-roles.js): the gate credits those from it (FTH_CYCLE_ROLES),
+          // never as cached; a report it couldn't record isn't given (the head trader may launch that role).
+          const deskReports = deskRun ? deskRun.reports.filter(r => (deskRun.recorded || []).includes(r.role)) : [];
+          const served = deskReports.length
+            ? { roles: [...(cached ? cached.roles : []), ...deskReports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskReports] }
             : cached;
           // The entered decisions with their real positions (decision-history.js withPositions): an open trade's fill
           // and R; a position gone since its last cycle, closed (a failed account read closes nothing).
@@ -1551,11 +1555,13 @@ function createRunner(deps) {
             cyclesLeft,
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
-            action: again.action, cachedRoles: served ? served.roles : [],
-            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs } } : {}),
+            // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
+            // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.
+            action: again.action, cachedRoles: cached ? cached.roles : [],
+            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs }, runnerRoles: deskReports.map(r => r.role), rolesFile: deskRun.rolesFile || null } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
-            cachedLookups: served ? Object.fromEntries(served.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},
+            cachedLookups: cached ? Object.fromEntries(cached.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},
             // Several lanes: the lanes that closed, and the setups skipped for a higher-priority policy (labels see them).
             ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`), skipped } : {}),
             // Several lanes: the bar each symbol's bar briefing is on (the first lane's), which the cycle's roles read
@@ -1572,10 +1578,12 @@ function createRunner(deps) {
             r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
+            // The cycle's role record ends with it (the cycle log has read it: cycle-run.js).
+            if (deskRun && deskRun.rolesFile) require('./trading/runner-roles').removeRoleRuns(deskRun.rolesFile);
           }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskRun ? deskRun.reports : [], lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).

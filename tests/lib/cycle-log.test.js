@@ -172,6 +172,24 @@ test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unread
   }
 });
 
+test('cycleLookups: the runner\'s role record joins the transcript\'s calls (a desk role run by the runner is counted)', () => {
+  const { cycleLookups } = require('../../scripts/lib/cycle-log');
+  const L = require('../../scripts/lib/trading/skill-lookups');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const home = tmpDir();
+  const rolesFile = path.join(home, 'logs', 'cycle-roles-1-ab.jsonl');
+  RR.appendRoleRun(rolesFile, { role: 'market-structure-analyst', start: 1.7e12, end: 1.7e12 + 1000, text: '## s\nData: bar_briefing m3@x', lookups: ['breakout'], ok: true });
+  const seen = [];
+  const orig = L.lookupStats;
+  L.lookupStats = a => { seen.push(a.calls); return orig(a); };
+  try {
+    cycleLookups({ home, output: '', transcript: path.join(home, 't.jsonl'), context: { symbols: [{ symbol: 'MNQ' }], rolesFile }, roleSkills: 'index', at: new Date('2026-04-28T04:12:02Z') });
+  } finally {
+    L.lookupStats = orig;
+  }
+  assert.deepStrictEqual(seen[0].map(c => [c.role, c.source]), [['market-structure-analyst', 'runner']]);
+});
+
 test('writeCycleLog: the orders the gateway judged in the cycle\'s window are among its orders (an opencode trade-executor\'s are in no main transcript), each once', () => {
   const home = tmpDir();
   const gateLog = path.join(home, 'gate.jsonl');

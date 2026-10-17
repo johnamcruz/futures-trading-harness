@@ -123,7 +123,8 @@ async function runWorkflow(workflow, { run, ctx = {}, roles = null, concurrency,
   for (const p of workflow.phases) {
     run.phase(p.name);
     const todo = roles ? p.parallel.filter(r => roles.includes(r)) : p.parallel;
-    const accept = p.accept.map(c => CHECKS[c]);
+    // Each check reads the workflow's ctx too (the lookups the bar requires of each role).
+    const accept = p.accept.map(c => (role, r) => CHECKS[c](role, r, ctx));
     const results = await run.parallel(todo.map(role => () => run.agent(role, REQUESTS[p.request](role, ctx), { retries: p.retries, timeoutMs, accept, meta: { phase: p.name } })), { concurrency });
     phases.push({ name: p.name, results });
   }

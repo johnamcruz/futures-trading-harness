@@ -482,7 +482,8 @@ function framesText(cfg, frames) {
 
 /**
  * The reports the runner served from its report cache (report-cache.js): those roles aren't launched again this
- * cycle, and the order gate counts them as returned (FTH_CYCLE_CACHED).
+ * cycle, and the order gate counts them as returned (FTH_CYCLE_CACHED); with them, the desk's reports the runner ran
+ * this cycle (source 'desk'), which the gate counts from the runner's role record (FTH_CYCLE_ROLES, runner-roles.js).
  */
 function cachedText(cached) {
   if (!cached || !Array.isArray(cached.reports) || !cached.reports.length) return '';
@@ -631,13 +632,14 @@ const OFF_DESK = ['strategy-researcher'];
  * The roles a cycle may not launch, which the harness enforces where it can (opencode: the roles off the desk by
  * the run's task permission, the cached ones by the runner's plugin, so the head trader's prompt doesn't change with
  * the cache: opencode.js runConfig): the analysts whose report the runner served from its cache (their report is in
- * the prompt; risk-manager stays, for phase 2), and in a trade or manage cycle the roles outside the trading desk
- * (offDeskRoles).
+ * the prompt; risk-manager stays, for phase 2), the analysts the runner ran itself (runnerRoles, with their record:
+ * rolesFile), and in a trade or manage cycle the roles outside the trading desk (offDeskRoles).
  */
 function deniedRoles(context) {
   const c = context || {};
-  const cached = (c.cachedRoles || []).filter(r => typeof r === 'string' && r !== 'risk-manager');
-  return [...cached, ...offDeskRoles(context)];
+  // The analysts the runner ran itself this cycle (runnerRoles: its role record holds their reports) likewise.
+  const cached = [...(c.cachedRoles || []), ...(c.rolesFile ? c.runnerRoles || [] : [])].filter(r => typeof r === 'string' && r !== 'risk-manager');
+  return [...new Set(cached), ...offDeskRoles(context)];
 }
 
 /** The roles every trade or manage cycle denies (the same each such cycle): those outside the trading desk. */
@@ -685,7 +687,13 @@ function childEnv(cfg, root, base = process.env, context = null) {
   else delete env.FTH_CYCLE_CACHED;
   // The roles this cycle must launch before the head trader composes a trade (trading/desk-check.js, the prompt's
   // roster): the opencode plugin refuses compose_check until they reported (opencode.js deskGate).
-  const desk = require('./trading/desk-check').expectedRoles({ action: context && context.action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles });
+  // The roles the runner ran itself this cycle and the record the gate credits them from (runner-roles.js): the head
+  // trader's run gets the file; a role run there isn't one it must launch. Never inherited.
+  const runnerRoles = ((context && context.runnerRoles) || []).filter(r => typeof r === 'string');
+  const rolesFile = context && typeof context.rolesFile === 'string' && context.rolesFile ? context.rolesFile : null;
+  if (rolesFile) env.FTH_CYCLE_ROLES = rolesFile;
+  else delete env.FTH_CYCLE_ROLES;
+  const desk = require('./trading/desk-check').expectedRoles({ action: context && context.action, cycle: cfg.cycle, manageOnly: Boolean(context && context.manageOnly), paper: Boolean(cfg.paper), cachedRoles: [...cachedRoles, ...(rolesFile ? runnerRoles : [])] });
   if (desk.length) env.FTH_CYCLE_DESK = desk.join(',');
   else delete env.FTH_CYCLE_DESK;
   // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required

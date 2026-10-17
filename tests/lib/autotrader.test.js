@@ -894,6 +894,23 @@ test('the runner tells the run which roles its cycle must launch (FTH_CYCLE_DESK
   assert.strictEqual(childEnv(full, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_DESK: 'stale' }, { action: 'eod' }).FTH_CYCLE_DESK, undefined, 'a stale value is never inherited');
 });
 
+test('the runner gives the head trader its role record (FTH_CYCLE_ROLES): the roles it ran are no launch the cycle owes and no cached report; never inherited', () => {
+  const full = validateConfig({ harness: 'opencode', dataDir: '/data/bars' });
+  const env = (context, base = {}) => childEnv(full, '/r', { FTH_HOME: '/srv/fth', ...base }, context);
+  const ran = { action: 'trade', symbols: [], runnerRoles: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], rolesFile: '/srv/fth/logs/cycle-roles-1.jsonl' };
+  const e = env(ran);
+  assert.strictEqual(e.FTH_CYCLE_ROLES, '/srv/fth/logs/cycle-roles-1.jsonl');
+  assert.strictEqual(e.FTH_CYCLE_DESK, undefined, 'the runner ran the whole desk: nothing left to launch');
+  assert.strictEqual(e.FTH_CYCLE_CACHED, undefined, 'a role the runner ran is no cached report');
+  assert.strictEqual(env({ ...ran, runnerRoles: ['risk-manager'], cachedRoles: ['market-structure-analyst'] }).FTH_CYCLE_DESK, 'trend-momentum-analyst,volume-liquidity-analyst');
+  // Without the record the roles aren't credited: the cycle still owes them; a stale file is never inherited.
+  assert.strictEqual(env({ ...ran, rolesFile: null }).FTH_CYCLE_DESK, 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager');
+  assert.strictEqual(env({ action: 'trade', symbols: [] }, { FTH_CYCLE_ROLES: '/stale' }).FTH_CYCLE_ROLES, undefined);
+  const { deniedRoles } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual(deniedRoles(ran), ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'strategy-researcher'], 'the analysts it ran are not launched again; risk-manager stays, for phase 2');
+  assert.deepStrictEqual(deniedRoles({ ...ran, rolesFile: null }), ['strategy-researcher']);
+});
+
 test('the runner\'s opencode plugin holds compose_check until the desk reported (a role launch that returned, by the after hook), and holds nothing else', async () => {
   const saved = process.env.FTH_CYCLE_DESK;
   process.env.FTH_CYCLE_DESK = 'market-structure-analyst,risk-manager';
