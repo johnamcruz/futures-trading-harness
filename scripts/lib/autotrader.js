@@ -540,7 +540,7 @@ const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason
 // its first and last step only (the prompt's size budget; trade-session step 0 loads the skill with the block).
 const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry', 'Risk', 'Decision', 'Manage'];
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
-const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
+const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary). Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
  * The start of every cycle's prompt (premarket, trade, end of day): what the cycle is and where the harness is, the

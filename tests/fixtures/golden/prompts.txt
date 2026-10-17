@@ -39,7 +39,7 @@ Bias: long (high)
 --- risk-manager phase 1 report (from 10:27 ET) ---
 Phase 1: Attempt: mini active, cushion $2,000; budget $400
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: claude, lean cycle ===
 Autonomous cycle.
@@ -82,7 +82,7 @@ Bias: long (high)
 --- risk-manager phase 1 report (from 10:27 ET) ---
 Phase 1: Attempt: mini active, cushion $2,000; budget $400
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: qwen, full, no cache ===
 Autonomous cycle.
@@ -115,7 +115,7 @@ Autonomous cycle.
   With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: codex, manage-only ===
 Autonomous cycle.
@@ -144,7 +144,7 @@ Autonomous cycle.
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
   Read the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: paper mode, recovered ===
 Autonomous cycle.
@@ -177,7 +177,7 @@ Autonomous cycle.
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in paper mode (plan only, no orders).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: no account configured, no journal read ===
 Autonomous cycle.
@@ -211,7 +211,7 @@ Bias: long (high)
 --- risk-manager phase 1 report (from 10:27 ET) ---
 Phase 1: Attempt: mini active, cushion $2,000; budget $400
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: the account unreadable ===
 Autonomous cycle.
@@ -247,7 +247,7 @@ Bias: long (high)
 --- risk-manager phase 1 report (from 10:27 ET) ---
 Phase 1: Attempt: mini active, cushion $2,000; budget $400
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: a failed scan ===
 Autonomous cycle.
@@ -284,7 +284,7 @@ Bias: long (high)
 --- risk-manager phase 1 report (from 10:27 ET) ---
 Phase 1: Attempt: mini active, cushion $2,000; budget $400
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === premarket ===
 Autonomous cycle.
@@ -295,7 +295,7 @@ Autonomous cycle.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the premarket skill for MNQ on account 7, for the trading day ending 2026-04-27 (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === eod ===
 Autonomous cycle.
@@ -306,7 +306,7 @@ Autonomous cycle.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the end-of-day skill on account 7 for the trading day ending 2026-04-27, on 3-minute bars (the reconcile tool with day 2026-04-27 and timeframe 3): flatten every position and cancel working orders without asking, then review and summarize.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === eod catch-up ===
 Autonomous cycle.
@@ -317,5 +317,5 @@ Autonomous cycle.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; day 5, needs $2,588, daily room $1,113, soft stop $500 (room $613), today 2 trades, 1 loss, losing streak 0, consistency cap today $300; prop_portfolio size budget $400.
   Run the end-of-day skill on account 7 for the trading day ending 2026-04-24 (a catch-up: that day's end of day did not run; review and reconcile 2026-04-24, not today), on 3-minute bars (the reconcile tool with day 2026-04-24 and timeframe 3): flatten every position and cancel working orders without asking, then review and summarize.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

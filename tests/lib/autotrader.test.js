@@ -380,7 +380,7 @@ test('every cycle prompt ends with the exact result line the runner reads', () =
     assert.ok(text.includes(line), text.slice(-300));
     assert.ok(text.endsWith(`${line}.`), 'it is the prompt\'s last sentence');
     // A result sent as a tool call is never read: the prompt says it is plain text.
-    assert.ok(text.includes(`End with the cycle result as plain text in your final message, never as a tool call. ${line}`), text.slice(-300));
+    assert.ok(text.includes(`End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary). ${line}`), text.slice(-300));
     // The prompt echoed into a run's output is never read as its result.
     assert.strictEqual(cycleResult(`prompt=${text}\n`), null);
   }

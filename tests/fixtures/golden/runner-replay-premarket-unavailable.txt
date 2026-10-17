@@ -19,5 +19,5 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

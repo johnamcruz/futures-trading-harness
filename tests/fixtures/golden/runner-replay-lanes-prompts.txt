@@ -19,7 +19,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:37:02.000Z trade 1m ===
 Autonomous cycle.
@@ -49,7 +49,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:39:02.000Z trade 3m ===
 Autonomous cycle.
@@ -88,7 +88,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:40:02.000Z trade 1m ===
 Autonomous cycle.
@@ -118,7 +118,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:42:02.000Z trade 3m ===
 Autonomous cycle.
@@ -157,7 +157,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:43:02.000Z trade 1m ===
 Autonomous cycle.
@@ -187,7 +187,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:45:02.000Z trade 3m ===
 Autonomous cycle.
@@ -217,7 +217,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:46:02.000Z trade 1m ===
 Autonomous cycle.
@@ -247,7 +247,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:48:02.000Z trade 3m ===
 Autonomous cycle.
@@ -286,7 +286,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:49:02.000Z trade 1m ===
 Autonomous cycle.
@@ -316,7 +316,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:51:02.000Z trade 3m ===
 Autonomous cycle.
@@ -352,7 +352,7 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:48:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:52:02.000Z trade 1m ===
 Autonomous cycle.
@@ -382,7 +382,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:54:02.000Z trade 3m ===
 Autonomous cycle.
@@ -421,7 +421,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:55:02.000Z trade 1m ===
 Autonomous cycle.
@@ -451,7 +451,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:57:02.000Z trade 3m ===
 Autonomous cycle.
@@ -490,7 +490,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:58:02.000Z trade 1m ===
 Autonomous cycle.
@@ -520,7 +520,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:00:02.000Z trade 3m ===
 Autonomous cycle.
@@ -550,7 +550,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:01:02.000Z trade 1m ===
 Autonomous cycle.
@@ -580,7 +580,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:03:02.000Z trade 3m ===
 Autonomous cycle.
@@ -619,7 +619,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:04:02.000Z trade 1m ===
 Autonomous cycle.
@@ -649,7 +649,7 @@ Autonomous cycle.
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:06:02.000Z trade 3m ===
 Autonomous cycle.
@@ -684,5 +684,5 @@ Bias: long
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ End with the cycle result as plain text in your final message, never as a tool call, and write nothing after it (no summary).
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
