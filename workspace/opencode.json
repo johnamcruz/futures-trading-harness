@@ -161,7 +161,7 @@
         "harness_experience_lookup": "deny",
         "skill": "deny"
       },
-      "steps": 30
+      "steps": 40
     },
     "news-calendar-analyst": {
       "description": "Read-only analyst that builds today's scheduled high-impact event list (US data, FOMC, EIA, Treasury auctions, major earnings for index futures) and proposes order-gate blackout windows. Has web access and no trading tools. Use during /premarket and /trade-session.",
@@ -220,7 +220,7 @@
         "websearch": "allow",
         "skill": "allow"
       },
-      "steps": 30
+      "steps": 40
     },
     "risk-manager": {
       "description": "Independent risk officer for the futures desk. Phase 1 (parallel with analysts) reports account state, limits, loss streak, and today's risk budget. Phase 2 approves or vetoes a specific trade plan with sizing. Read-only; cannot place orders. Use in /premarket, /trade-session, and before any order.",
@@ -284,7 +284,7 @@
         "list": "allow",
         "skill": "deny"
       },
-      "steps": 30
+      "steps": 40
     },
     "strategy-researcher": {
       "description": "Turns strategy code, backtests, or a written trading idea into a STRATEGY.md document (code-checked frontmatter plus an agent-readable body), validates it, and keeps strategies in sync with their source code. Use for /new-strategy or when a strategy's code or parameters change.",
@@ -350,7 +350,7 @@
         "glob": "allow",
         "skill": "allow"
       },
-      "steps": 30
+      "steps": 40
     },
     "trade-executor": {
       "description": "The only agent allowed to place, modify, or cancel orders. Executes a risk-manager-approved trade plan exactly - entry, protective stop, target - verifies fills and working orders, and journals the result. Never changes the plan. Use from /trade-session after an APPROVE verdict, or to flatten in /eod.",
@@ -471,7 +471,7 @@
         "list": "allow",
         "skill": "allow"
       },
-      "steps": 30
+      "steps": 40
     },
     "trend-momentum-analyst": {
       "description": "Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).",
@@ -529,7 +529,7 @@
         "harness_experience_lookup": "deny",
         "skill": "deny"
       },
-      "steps": 30
+      "steps": 40
     },
     "volume-liquidity-analyst": {
       "description": "Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).",
@@ -587,7 +587,7 @@
         "harness_experience_lookup": "deny",
         "skill": "deny"
       },
-      "steps": 30
+      "steps": 40
     }
   },
   "permission": {

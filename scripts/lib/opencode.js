@@ -219,7 +219,8 @@ function indexPrompt(agent, plan) {
  * A role's step cap (opencode's `steps`: the most model steps before it must answer in text), from config/runner.json
  * limits.roleSteps: a role stuck repeating a call (the PPC run of 2026-10-16: 386 steps of one refused market_snapshot,
  * the cycle lost to its timeout) answers with what it has. Measured on 555 role sessions: median 2 to 4, none
- * legitimate above 27. A role holding an order tool (broker interface role `order`: the trade-executor) is never
+ * legitimate above 27; 40 leaves room for index mode's lookups (each a step), and a cut-short role's answer fails
+ * closed (no approval, the gate's lookups). A role holding an order tool (broker interface role `order`: the trade-executor) is never
  * capped, so a protecting stop or an exit is never cut short; {} for it.
  */
 function stepCap(agent) {

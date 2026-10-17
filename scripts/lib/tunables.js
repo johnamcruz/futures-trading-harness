@@ -253,7 +253,7 @@ const BUILT_IN = deepFreeze({
     alerts: { throttleMinutes: 10, staleMinutes: 5, webhookTimeoutMs: 5000 },
     limits: {
       gateTailBytes: 4194304, rolesRanBytes: 52428800, skillsLoadedBytes: 52428800, skillLookupsBytes: 5242880, experienceLookupsBytes: 5242880,
-      journalTailBytes: 8388608, lifecycleBytes: 67108864, skillUsageBytes: 67108864, barsFileBytes: 52428800, headPromptConfigBytes: 4194304, roleSteps: 30,
+      journalTailBytes: 8388608, lifecycleBytes: 67108864, skillUsageBytes: 67108864, barsFileBytes: 52428800, headPromptConfigBytes: 4194304, roleSteps: 40,
       historyChunkBars: 10000, entryOrdersKept: 200, pendingKept: 200, probeOutputBytes: 67108864,
     },
     broker: { cacheKeepDays: 30, siblingDays: 30 },
