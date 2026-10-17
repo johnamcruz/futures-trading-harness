@@ -1286,7 +1286,7 @@ test('the runner\'s opencode plugin answers an unknown tool name with the name m
   const hooks = await plugin.server({}, {});
   await assert.rejects(hooks['tool.execute.before']({ tool: 'invalid', sessionID: 's' }, { args: { tool: 'compose_check', error: 'e' } }), /call harness_compose_check with the same arguments/);
   const call = () => hooks['tool.execute.before']({ tool: 'harness_market_snapshot', sessionID: 's' }, { args: { bars: '/workspace/x.json' } });
-  // Each retry comes a model step after the last failed (more than SAME_STEP_MS): the clock is moved on between them.
+  // Each retry comes a model step after the last failed (more than limits.repeatSameStepMs): the clock is moved on between them.
   const realNow = Date.now;
   let t = realNow();
   Date.now = () => t;

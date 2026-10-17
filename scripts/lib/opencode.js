@@ -395,40 +395,46 @@ function toolNameHint(tool, args) {
  * same call failed, every identical one from the first count on is answered with the reminder instead of running (it
  * would fail the same way: the PPC run's 386 refused market_snapshot calls). Never an order tool (an exit or a stop
  * is never refused) and never a role launch (task). Its own state: create one per plugin (opencode run).
- *   before(tool, args, sessionID)  the refusal text, or null (run it)
- *   after(tool, args, sessionID)   the reminder to add to the result, or null (the plugin adds it as a text item of an
+ *   before(tool, args, sessionID, callID)  the refusal text, or null (run it)
+ *   after(tool, args, sessionID, callID)   the reminder to add to the result, or null (the plugin adds it as a text item of an
  *                                  MCP result's content, as opencode joins them into the output: v1.19 session/tools.ts)
  */
-/** Identical calls started within this long of each other came in one model step (parallel), not as a retry. */
-const SAME_STEP_MS = 1000;
-
-function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt, now = () => Date.now()) {
+function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt, now = () => Date.now(),
+  sameStepMs = require('./tunables').runner().limits.repeatSameStepMs) {
   const { TOOLS } = require('./broker/interface');
   const exempt = tool => tool === 'task' || tool === INVALID_TOOL
     || (tool.startsWith(`${BROKER_SERVER}_`) && TOOLS[tool.slice(BROKER_SERVER.length + 1)] && TOOLS[tool.slice(BROKER_SERVER.length + 1)].role === 'order');
   const canon = v => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon(v[k])])) : v);
+  // Per session: the run of identical calls (sig, n) and each call by its id (started at, returned or not).
   const sessions = new Map();
-  const remind = (tool, args, n) => (n === at[0]
+  const first = Math.min(...at);
+  const remind = (tool, args, n) => (n === first
     ? 'You are repeating the exact same tool call with identical arguments. Carefully analyze the previous result before calling again: if the task is not complete, try different arguments or a different approach, or finish with what you have.'
-    : `You have called ${tool} ${n} times in a row with the same arguments (${JSON.stringify(canon(args)).slice(0, 300)}). It will not change: use a different approach or arguments, or finish your report now with what you have.`);
+    : `You have called ${tool} ${n} times in a row with the same arguments. It will not change: use a different approach or arguments, or finish your report now with what you have.`);
   return {
-    before(tool, args, sessionID) {
+    before(tool, args, sessionID, callID) {
       if (typeof tool !== 'string' || exempt(tool)) return null;
       const key = String(sessionID || '');
       const sig = `${tool} ${JSON.stringify(canon(args || {}))}`;
-      const last = sessions.get(key);
-      const n = last && last.sig === sig ? last.n + 1 : 1;
-      // Failed: the identical call before it never returned (opencode's MCP wrapper throws on an isError result, so
-      // its after hook never runs: v1.19 mcp/catalog.ts convertTool) and was started a while ago. Identical calls sent
-      // together in one step start within moments (SAME_STEP_MS) and are still running, not failed.
-      const failed = Boolean(last && last.sig === sig && !last.ok && now() - last.at > SAME_STEP_MS);
-      sessions.set(key, { sig, n, ok: false, at: now() });
-      return failed && n >= at[0] ? `[repeat] ${remind(tool, args, n)}` : null;
+      const s = sessions.get(key) || { sig: null, n: 0, calls: [] };
+      s.n = s.sig === sig ? s.n + 1 : 1;
+      s.sig = sig;
+      // Failed: an identical call before it never returned (opencode's MCP wrapper throws on an isError result, so its
+      // after hook never runs: v1.19 mcp/catalog.ts convertTool) and started a while ago (sameStepMs: identical calls
+      // sent together in one step start within moments and are still running, not failed). Each call by its own id,
+      // so a parallel twin that returned never hides one that failed.
+      const t = now();
+      const failed = s.calls.some(c => c.sig === sig && !c.returned && t - c.at > sameStepMs);
+      s.calls = [...s.calls.filter(c => c.sig === sig).slice(-Math.max(...at)), { id: callID === null || callID === undefined ? null : String(callID), sig, at: t, returned: false }];
+      sessions.set(key, s);
+      return failed && s.n >= first ? `[repeat] ${remind(tool, args, s.n)}` : null;
     },
-    after(tool, args, sessionID) {
+    after(tool, args, sessionID, callID) {
       const s = sessions.get(String(sessionID || ''));
       if (!s || typeof tool !== 'string' || exempt(tool)) return null;
-      s.ok = true;
+      const id = callID === null || callID === undefined ? null : String(callID);
+      const c = [...s.calls].reverse().find(x => !x.returned && (id === null || x.id === id));
+      if (c) c.returned = true;
       return at.includes(s.n) ? `\n\n[repeat] ${remind(tool, args, s.n)}` : null;
     },
   };
