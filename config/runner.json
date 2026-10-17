@@ -134,5 +134,6 @@
     "probeOutputBytes": 67108864
   },
   "broker": { "cacheKeepDays": 30, "siblingDays": 30 },
-  "monteCarlo": { "paths": 2000, "reps": 2000, "max": 20000 }
+  "monteCarlo": { "paths": 2000, "reps": 2000, "max": 20000 },
+  "desk": { "concurrency": 2, "timeoutMinutes": 8 }
 }

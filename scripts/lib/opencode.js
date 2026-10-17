@@ -243,10 +243,18 @@ function stepCap(agent) {
   return orders ? {} : { steps: require('./tunables').runner().limits.roleSteps };
 }
 
+/**
+ * A role's mode: the desk's (the analysts and the risk manager: trading/desk-check.js DESK_ROLES) are 'all', so the
+ * runner can run each as its own `opencode run --agent <role>` (the runner's desk: desk-runner.js; opencode runs a
+ * 'subagent' that way as its default agent instead: v1.19 cli/cmd/run.ts) and the head trader still launches them as
+ * subagents (phase 2). Every other role stays a subagent.
+ */
+const roleMode = agent => (require('./trading/desk-check').DESK_ROLES.includes(agent.name) ? 'all' : 'subagent');
+
 function agentConfig(agent) {
   return {
     description: agent.description,
-    mode: 'subagent',
+    mode: roleMode(agent),
     prompt: agentPrompt(agent),
     permission: agentPermission(agent.tools, agent.skillPlan ? agent.skillPlan.mode : null),
     ...stepCap(agent),
@@ -478,6 +486,26 @@ function deskGate(env = process.env) {
   };
 }
 
+/**
+ * One `opencode run --format json` run's result, from its events: its final message (the last text part) and the
+ * tools it completed (in order). The orchestration layer's engine adapter for opencode reads a role's run with it
+ * (cycle-run.js runRole); its checks name no harness (orchestrate/checks.js).
+ */
+function runResult(output) {
+  let text = '';
+  const tools = [];
+  for (const line of String(output || '').split('\n')) {
+    if (!line.startsWith('{')) continue;
+    let e;
+    try { e = JSON.parse(line); } catch (_err) { continue; }
+    const p = e && e.part;
+    if (!p) continue;
+    if (e.type === 'text' && typeof p.text === 'string' && p.text.trim()) text = p.text.trim();
+    if (e.type === 'tool_use' && typeof p.tool === 'string' && p.state && p.state.status === 'completed') tools.push(p.tool);
+  }
+  return { text, tools };
+}
+
 /** The web's permission keys: a replay denies both to every agent (WEB_KEYS), and launching a role that holds one. */
 const WEB_KEYS = Object.freeze(['websearch', 'webfetch']);
 /** The roles whose tools reach the web (WebSearch, WebFetch): a replay never launches them. */
@@ -504,7 +532,7 @@ function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = n
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
       [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, denied, mode, replay), external_directory: { ...external } } },
-      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', ...stepCap(a), permission: { ...noWeb(agentPermission(a.tools, mode), replay), external_directory: { ...external } } }])),
+      ...Object.fromEntries(agents.map(a => [a.name, { mode: roleMode(a), ...stepCap(a), permission: { ...noWeb(agentPermission(a.tools, mode), replay), external_directory: { ...external } } }])),
     },
   };
 }
@@ -577,4 +605,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap, INVALID_TOOL, toolNameHint, repeatGuard, deskGate };
+module.exports = { WEB_KEYS, webRoles, LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs, PLUGIN_FILE, DENIED_ROLES_ENV, deniedRolesOf, deniedTaskRefusal, dropInventedTaskId, stepCap, roleMode, runResult, INVALID_TOOL, toolNameHint, repeatGuard, deskGate };
