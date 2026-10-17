@@ -29,6 +29,8 @@ candle closes and momentum). Your report gives those PLAN lines, under its Data 
 
 ## Method
 
+Read your own data, even when the request says it is provided: you see
+only the request.
 Start from the bar briefing: `bar_briefing {"symbol": "<SYMBOL>"}`. It is
 this bar's analysis by timeframe, computed once by the runner from the same
 bars (the snapshot, the multi-timeframe read and the scan), each part with

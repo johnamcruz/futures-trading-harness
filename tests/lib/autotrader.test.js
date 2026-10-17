@@ -903,7 +903,13 @@ test('the runner\'s opencode plugin holds compose_check until the desk reported 
     const compose = () => hooks['tool.execute.before']({ tool: 'harness_compose_check', sessionID: 'h', callID: 'c' }, { args: { symbol: 'MNQ' } });
     await assert.rejects(compose(), /\[desk\] .*launch market-structure-analyst, risk-manager first/);
     await assert.doesNotReject(hooks['tool.execute.before']({ tool: 'task', sessionID: 'h', callID: 'x' }, { args: { subagent_type: 'trade-executor' } }), 'the executor is never held');
-    for (const r of ['market-structure-analyst', 'risk-manager']) await hooks['tool.execute.after']({ tool: 'task', sessionID: 'h', callID: r, args: { subagent_type: r } }, { output: 'report' });
+    // A role whose own session read nothing doesn't count; once each read its data, compose goes.
+    await hooks['tool.execute.after']({ tool: 'task', sessionID: 'h', callID: 'm1', args: { subagent_type: 'market-structure-analyst' } }, { metadata: { sessionId: 'ses_m1' }, output: 'report' });
+    await assert.rejects(compose(), /market-structure-analyst reported without reading any data/);
+    for (const r of ['market-structure-analyst', 'risk-manager']) {
+      await hooks['tool.execute.before']({ tool: 'harness_bar_briefing', sessionID: `ses_${r}`, callID: `b-${r}` }, { args: { symbol: 'MNQ' } });
+      await hooks['tool.execute.after']({ tool: 'task', sessionID: 'h', callID: r, args: { subagent_type: r } }, { metadata: { sessionId: `ses_${r}` }, output: 'report' });
+    }
     await assert.doesNotReject(compose());
   } finally {
     if (saved === undefined) delete process.env.FTH_CYCLE_DESK; else process.env.FTH_CYCLE_DESK = saved;

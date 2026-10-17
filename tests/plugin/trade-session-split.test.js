@@ -372,9 +372,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // each mode for the risk manager (feat/practice-account-states, owner-approved): prop-challenge-pacing's counts carried
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 // Then tightened to the exact sizes when the skills were matched to the code (fix/skills-match-code): every role shrank.
+// Then raised by the owner-approved desk-data lines (feat/desk-loads-data): each analyst and the risk manager reads its own
+// data even when the request says it is provided (a role can't see the head trader's context), and role-round's line.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86912, 'news-calendar-analyst': 10149, 'risk-manager': 89872, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9178, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48584 },
-  index: { 'market-structure-analyst': 42742, 'news-calendar-analyst': 10149, 'risk-manager': 75749, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9178, 'trend-momentum-analyst': 39880, 'volume-liquidity-analyst': 32877 },
+  full: { 'market-structure-analyst': 87001, 'news-calendar-analyst': 10149, 'risk-manager': 89974, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9178, 'trend-momentum-analyst': 54671, 'volume-liquidity-analyst': 48673 },
+  index: { 'market-structure-analyst': 42831, 'news-calendar-analyst': 10149, 'risk-manager': 75851, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9178, 'trend-momentum-analyst': 39969, 'volume-liquidity-analyst': 32966 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

@@ -23,6 +23,9 @@ writes no PLAN line; its output below stays as it is.
 
 ## Phase 1: Risk state (when asked for "risk state")
 
+Make these calls yourself, even when the request says the data is provided:
+you see only the request.
+
 1. `get_server_config`: trading enabled? guardrail limits.
 2. `list_accounts` → the account the caller named (or the only tradable one):
    `canTrade`, `mcpTradingAllowed`.

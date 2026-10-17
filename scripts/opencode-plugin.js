@@ -20,6 +20,7 @@ async function DeniedRoles() {
       const tool = input && input.tool;
       const args = output && output.args;
       dropInventedTaskId(tool, args);
+      desk.saw(tool, input && input.sessionID);
       const why = deniedTaskRefusal(tool, args, process.env) || toolNameHint(tool, args) || desk.before(tool, input && input.sessionID)
         || repeats.before(tool, args, input && input.sessionID, input && input.callID);
       if (why) throw new Error(why);
@@ -27,7 +28,7 @@ async function DeniedRoles() {
     // A call that returned: the repeat guard's reminder after its result, at a reminder count (opencode.js repeatGuard).
     'tool.execute.after': async (input, output) => {
       // A role launch that returned counts for the desk (opencode.js deskGate).
-      if (input) desk.returned(input.tool, input.args, input.sessionID);
+      if (input) desk.returned(input.tool, input.args, input.sessionID, output);
       // The result's text, for the guard's same-answer check: an MCP result's text items, a built-in tool's output.
       const text = output && Array.isArray(output.content)
         ? output.content.filter(c => c && c.type === 'text').map(c => c.text).join('\n')

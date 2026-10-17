@@ -504,3 +504,25 @@ test('deskGate: the head trader\'s compose_check waits until every role FTH_CYCL
   both.returned('task', { subagent_type: 'risk-manager' }, 'h');
   assert.strictEqual(both.before('harness_compose_check', 'h'), null);
 });
+
+test('deskGate: a role counts only if its own session read data; one that answered without a read is named, to launch again', () => {
+  const { deskGate } = require('../../scripts/lib/opencode');
+  const g = deskGate({ FTH_CYCLE_DESK: 'market-structure-analyst,risk-manager' });
+  g.saw('harness_bar_briefing', 'ses_a');
+  g.returned('task', { subagent_type: 'market-structure-analyst' }, 'h', { metadata: { sessionId: 'ses_a' }, output: 'report' });
+  g.saw('skill', 'ses_b'); // a skill load is no data read
+  g.returned('task', { subagent_type: 'risk-manager' }, 'h', { metadata: { sessionId: 'ses_b' }, output: 'report' });
+  const why = g.before('harness_compose_check', 'h');
+  assert.match(why, /risk-manager reported without reading any data \(a role sees only your request: it reads its own\): launch it again with the symbol and the time/);
+  assert.doesNotMatch(why, /market-structure-analyst/);
+  // Launched again, and this time it read the account: reported. The session can come from the task's own <task id> line.
+  g.saw('broker_get_account_snapshot', 'ses_c');
+  g.returned('task', { subagent_type: 'risk-manager' }, 'h', { output: '<task id="ses_c" state="completed">\n<task_result>ok</task_result>\n</task>' });
+  assert.strictEqual(g.before('harness_compose_check', 'h'), null);
+  // A file read counts; a launch whose own session is unknown is counted (the order gate still decides an entry).
+  const f = deskGate({ FTH_CYCLE_DESK: 'trend-momentum-analyst,volume-liquidity-analyst' });
+  f.saw('read', 'ses_d');
+  f.returned('task', { subagent_type: 'trend-momentum-analyst' }, 'h', { metadata: { sessionId: 'ses_d' } });
+  f.returned('task', { subagent_type: 'volume-liquidity-analyst' }, 'h', {});
+  assert.strictEqual(f.before('harness_compose_check', 'h'), null);
+});

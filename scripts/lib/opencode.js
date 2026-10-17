@@ -453,27 +453,51 @@ function repeatGuard(at = require('./tunables').runner().limits.repeatReminderAt
  * head trader skipped the desk in 4 of 5 cycles and analysed alone (each cycle's shortcut primed the next through its
  * history); the order gate refused any entry from it, but the cycle was lost and trained nothing. Only compose_check is
  * held (no role holds it): never the trade-executor, an exit, a stop or a read. Its own state: one per plugin (run).
- *   returned(tool, args, sessionID)   a launch that returned (the plugin's after hook)
- *   before(tool, sessionID)           the refusal naming the roles still to launch, or null
+ * A role counts only if its own session read data (a harness, broker or file-read call): a subagent starts a fresh
+ * session and can't see the head trader's context, and in the PPC runs of 2026-10-16 about one role report in six
+ * came from a session that called no tool at all ("use the bar briefing already provided"), empty or invented.
+ *   saw(tool, sessionID)                      any call before it runs: a data read marks that session as having read
+ *   returned(tool, args, sessionID, result)   a launch that returned (the plugin's after hook; result.metadata.sessionId
+ *                                             is the role's own session: opencode v1.19 tool/task.ts)
+ *   before(tool, sessionID)                   the refusal naming the roles still to launch, or null
  */
 function deskGate(env = process.env) {
   // A role the run denies (FTH_DENIED_ROLES) is never waited for: it can't be launched.
   const denied = deniedRolesOf(env);
   const desk = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).filter(r => r && !denied.includes(r));
   const reported = new Map();
+  const hollow = new Map();
+  const read = new Set();
+  const reads = tool => typeof tool === 'string' && (tool.startsWith(`${HARNESS_SERVER}_`) || tool.startsWith(`${BROKER_SERVER}_`) || tool === 'read');
+  const of = (map, key) => { if (!map.has(key)) map.set(key, new Set()); return map.get(key); };
   return {
-    returned(tool, args, sessionID) {
+    saw(tool, sessionID) {
+      if (reads(tool)) read.add(String(sessionID || ''));
+    },
+    returned(tool, args, sessionID, result) {
       if (tool !== 'task' || !args || typeof args.subagent_type !== 'string') return;
       const key = String(sessionID || '');
-      if (!reported.has(key)) reported.set(key, new Set());
-      reported.get(key).add(args.subagent_type.trim());
+      const role = args.subagent_type.trim();
+      // The role's own session (the launch result's metadata, else its <task id="ses_..."> line); unknown: counted.
+      const meta = result && result.metadata && typeof result.metadata.sessionId === 'string' ? result.metadata.sessionId : null;
+      const m = !meta && result && typeof result.output === 'string' ? /<task id="(ses_[^"]+)"/.exec(result.output) : null;
+      const child = meta || (m && m[1]);
+      if (child && !read.has(child)) { of(hollow, key).add(role); return; }
+      of(reported, key).add(role);
+      of(hollow, key).delete(role);
     },
     before(tool, sessionID) {
       if (tool !== `${HARNESS_SERVER}_compose_check` || !desk.length) return null;
-      const got = reported.get(String(sessionID || '')) || new Set();
-      const missing = desk.filter(r => !got.has(r));
-      if (!missing.length) return null;
-      return `[desk] compose_check composes the trade from the desk's reports: launch ${missing.join(', ')} first, as parallel subagents (the cycle's roster), then compose from their reports. No entry goes without them (the order gate refuses it).`;
+      const key = String(sessionID || '');
+      const got = reported.get(key) || new Set();
+      const empty = desk.filter(r => !got.has(r) && (hollow.get(key) || new Set()).has(r));
+      const missing = desk.filter(r => !got.has(r) && !empty.includes(r));
+      if (!missing.length && !empty.length) return null;
+      const parts = [
+        ...(missing.length ? [`launch ${missing.join(', ')} first, as parallel subagents (the cycle's roster)`] : []),
+        ...(empty.length ? [`${empty.join(', ')} reported without reading any data (a role sees only your request: it reads its own): launch it again with the symbol and the time`] : []),
+      ];
+      return `[desk] compose_check composes the trade from the desk's reports: ${parts.join('; ')}, then compose from their reports. No entry goes without them (the order gate refuses it).`;
     },
   };
 }
