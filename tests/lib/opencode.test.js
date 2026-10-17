@@ -527,8 +527,11 @@ test('deskGate: a role counts only if its own session read data; one that answer
   f.returned('task', { subagent_type: 'trend-momentum-analyst' }, 'h', { metadata: { sessionId: 'ses_d' } });
   f.returned('task', { subagent_type: 'volume-liquidity-analyst' }, 'h', {});
   assert.strictEqual(f.before('harness_compose_check', 'h'), null);
-  // A background launch returns before its role read anything: counted, never named as empty.
+  // A background launch returns before its role reported: not a report, and the refusal says to launch in the foreground.
   const bg = deskGate({ FTH_CYCLE_DESK: 'risk-manager' });
   bg.returned('task', { subagent_type: 'risk-manager' }, 'h', { metadata: { sessionId: 'ses_e', background: true } });
+  assert.match(bg.before('harness_compose_check', 'h'), /risk-manager ran in the background \(no report yet\): launch it again in the foreground/);
+  bg.saw('harness_bar_briefing', 'ses_f');
+  bg.returned('task', { subagent_type: 'risk-manager' }, 'h', { metadata: { sessionId: 'ses_f' } });
   assert.strictEqual(bg.before('harness_compose_check', 'h'), null);
 });

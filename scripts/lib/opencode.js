@@ -470,6 +470,7 @@ function deskGate(env = process.env) {
   const desk = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).filter(r => r && !denied.includes(r));
   const reported = new Map();
   const hollow = new Map();
+  const background = new Map();
   const read = new Set();
   // A data read: a broker call, a file read, or a harness tool that reads the market or the account; not a skill or
   // a lookup of past decisions (a role that only read those invented its facts).
@@ -485,8 +486,8 @@ function deskGate(env = process.env) {
       const key = String(sessionID || '');
       const role = args.subagent_type.trim();
       // The role's own session (the launch result's metadata, else its <task id="ses_..."> line); unknown: counted.
-      // A background launch returns before the role read anything: unknown, counted (the order gate decides an entry).
-      if (result && result.metadata && result.metadata.background) { of(reported, key).add(role); return; }
+      // A background launch returns before its role reported (role-round: the desk runs in the foreground): not a report.
+      if (result && result.metadata && result.metadata.background) { of(background, key).add(role); return; }
       const meta = result && result.metadata && typeof result.metadata.sessionId === 'string' ? result.metadata.sessionId : null;
       const m = !meta && result && typeof result.output === 'string' ? /<task id="(ses_[^"]+)"/.exec(result.output) : null;
       const child = meta || (m && m[1]);
@@ -499,10 +500,12 @@ function deskGate(env = process.env) {
       const key = String(sessionID || '');
       const got = reported.get(key) || new Set();
       const empty = desk.filter(r => !got.has(r) && (hollow.get(key) || new Set()).has(r));
-      const missing = desk.filter(r => !got.has(r) && !empty.includes(r));
-      if (!missing.length && !empty.length) return null;
+      const behind = desk.filter(r => !got.has(r) && !empty.includes(r) && (background.get(key) || new Set()).has(r));
+      const missing = desk.filter(r => !got.has(r) && !empty.includes(r) && !behind.includes(r));
+      if (!missing.length && !empty.length && !behind.length) return null;
       const parts = [
         ...(missing.length ? [`launch ${missing.join(', ')} first, as parallel subagents (the cycle's roster)`] : []),
+        ...(behind.length ? [`${behind.join(', ')} ran in the background (no report yet): launch it again in the foreground`] : []),
         ...(empty.length ? [`${empty.join(', ')} reported without reading any data (a role sees only your request: it reads its own): launch it again with the symbol and the time`] : []),
       ];
       return `[desk] compose_check composes the trade from the desk's reports: ${parts.join('; ')}, then compose from their reports. No entry goes without them (the order gate refuses it).`;
