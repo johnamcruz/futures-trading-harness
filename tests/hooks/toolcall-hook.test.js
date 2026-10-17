@@ -39,3 +39,27 @@ test('toolcall hook: a repeated identical result gets the reminder as added cont
   assert.strictEqual(ctx.hookEventName, 'PostToolUse');
   assert.match(ctx.additionalContext, /^\[repeat\] You are repeating/);
 });
+
+test('toolcall hook: a big argument and result are logged as digests (small lines), and a repeat of them still gets the reminder', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const home = tmpDir();
+  const env = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
+  let t = 0;
+  const now = () => t;
+  const big = 'x'.repeat(200000);
+  let out = '';
+  for (let i = 0; i < 3; i += 1) {
+    t += 5000;
+    run(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'b', tool_name: 'Write', tool_input: { file_path: 'a.md', content: big }, tool_use_id: `w${i}` }), {}, { env, now });
+    out = run(JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'b', tool_name: 'Write', tool_input: { file_path: 'a.md', content: big }, tool_use_id: `w${i}`, tool_response: big }), {}, { env, now });
+  }
+  assert.match(JSON.parse(out).hookSpecificOutput.additionalContext, /^\[repeat\] You are repeating/);
+  const lines = fs.readFileSync(path.join(home, 'logs', 'toolcall', 'b.jsonl'), 'utf8').trim().split('\n');
+  assert.strictEqual(lines.length, 6);
+  for (const l of lines) assert.ok(l.length < 1000 && !l.includes(big), 'a line keeps the digest, not the payload');
+  // A short field the rules read (a role, a symbol) stays as given.
+  const { compact } = require('../../scripts/lib/toolcall/call-log');
+  assert.deepStrictEqual(compact({ subagent_type: 'risk-manager', n: 3, a: ['MNQ'] }), { subagent_type: 'risk-manager', n: 3, a: ['MNQ'] });
+  assert.match(compact(big), /^sha256:[0-9a-f]{64}$/);
+});

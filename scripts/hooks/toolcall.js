@@ -13,7 +13,7 @@
 
 const path = require('path');
 const { createPipeline } = require('../lib/toolcall/pipeline');
-const { createCallLog, readEvents, appendEvent, replayEvents } = require('../lib/toolcall/call-log');
+const { createCallLog, readEvents, appendEvent, replayEvents, compact } = require('../lib/toolcall/call-log');
 const { fromClaude, toClaude } = require('../lib/toolcall/names');
 const { harnessHome } = require('../lib/paths');
 
@@ -35,11 +35,12 @@ function run(rawInput, _ctx = {}, deps = {}) {
   const pipeline = createPipeline({ log: createCallLog(), env, now: () => clock.at, native: toClaude });
   replayEvents(pipeline, readEvents(file), clock);
   clock.at = (deps.now || (() => Date.now()))();
-  const call = { tool: fromClaude(payload.tool_name), name: payload.tool_name, args: payload.tool_input || {}, session, id: payload.tool_use_id || null };
-  const record = { tool: call.tool, name: call.name, args: JSON.parse(JSON.stringify(call.args)), session, id: call.id };
+  // Judged and logged compact (call-log.js): the same values the replay of this line will give the rules.
+  const call = { tool: fromClaude(payload.tool_name), name: payload.tool_name, args: compact(payload.tool_input || {}), session, id: payload.tool_use_id || null };
+  const record = { ...call, args: compact(call.args) };
   if (payload.hook_event_name === 'PostToolUse') {
     const r = payload.tool_response;
-    const text = typeof r === 'string' ? r : (r && typeof r === 'object' ? JSON.stringify(r) : undefined);
+    const text = compact(typeof r === 'string' ? r : (r && typeof r === 'object' ? JSON.stringify(r) : undefined));
     const { note } = pipeline.after(call, { text });
     appendEvent(file, { event: 'post', call: record, result: { text }, at: clock.at });
     return note ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: note } }) : '';
