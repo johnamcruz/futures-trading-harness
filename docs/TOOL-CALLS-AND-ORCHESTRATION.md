@@ -222,18 +222,20 @@ skills, their own analysis.
 
 ## Build order
 
-Each step is its own PR, with its tests:
+Orchestration first (the owner's order: the desk is the failure that costs most),
+then tool calling. Each step is its own PR, with its tests:
 
-1. **The rules registry, the dispatcher and the generated opencode adapter**,
+1. **The orchestration engine and its loader**, plus `workflows/desk/WORKFLOW.md`
+   and `node scripts/workflows.js validate`.
+2. **Wiring the desk into the runner** (after the report cache, before the head
+   trader's prompt), and the desk's roles as `mode: "all"`.
+3. **The rules registry, the dispatcher and the generated opencode adapter**,
    with today's rules ported and their behaviour unchanged (refusal texts
    pinned), and the contract tests (matchers against the order and exit tools,
    fail-closed per rule).
-2. **Classification of MCP failures** in the harness tools server and the
+4. **Classification of MCP failures** in the harness tools server and the
    gateway, and the call log.
-3. **The orchestration engine and its loader**, plus `workflows/desk/WORKFLOW.md`.
-4. **Wiring the desk into the runner** (after the report cache, before the
-   head trader's prompt).
-5. **Deleting the rules the desk makes unnecessary.**
+5. **Deleting the rules the desk makes unnecessary**, and closing #236.
 
 ## Tests
 
