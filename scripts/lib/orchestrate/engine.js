@@ -14,7 +14,7 @@
  *     phase(name), log(text)             named steps and notes, as events
  *   engine.run(role, request, { signal, timeoutMs }) -> { ok, timedOut, text, tools, output, transcript }   the harness
  *       run: `text` its final message, `tools` the tools its run completed (the engine adapter reads them from its
- *       harness's own output; the
+ *       harness's own output; the adapter enforces `timeoutMs` (it owns the process) and reports `timedOut`; the
  *       caller's: `opencode run --agent <role>` for opencode); nothing here names a harness.
  *   accept: [(role, envelope) -> null | why]   the checks a result must pass (orchestrate/checks.js)
  *   onEvent({ type, seq, phase, role, ... })   agent-start / agent-end / phase / log, paired by `seq`
@@ -58,7 +58,8 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
       const base = { output: (res && res.output) || '', transcript: (res && res.transcript) || null, text: (res && typeof res.text === 'string' ? res.text : ''), tools: Array.isArray(res && res.tools) ? res.tools.filter(t => typeof t === 'string') : [] };
       if (cancelled()) { last = { ...base, stop: 'cancelled', why: 'the run was cancelled' }; break; }
       if (!res || !res.ok) { last = { ...base, stop: res && res.timedOut ? 'timed_out' : 'failed', why: res && res.timedOut ? 'timed out' : 'the run failed' }; continue; }
-      const why = accept.map(c => c(role, base)).find(Boolean) || null;
+      // A check that throws is a failed check (its reason the error), never a rejection: every start has its end.
+      const why = accept.map(c => { try { return c(role, base); } catch (err) { return `a check failed (${err && err.message ? err.message : err})`; } }).find(Boolean) || null;
       last = why ? { ...base, stop: 'invalid', why } : { ...base, stop: 'completed', why: null };
       if (!why) break;
     }
@@ -72,14 +73,21 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
     if (!Number.isInteger(concurrency) || concurrency < 1) throw new TypeError('orchestrate: concurrency must be a whole number >= 1');
     const results = new Array(tasks.length);
     let next = 0;
+    let error = null;
+    // A task that throws (misuse) stops new tasks; every running one is awaited before the error is thrown again.
     const worker = async () => {
-      while (next < tasks.length) {
+      while (next < tasks.length && !error) {
         const i = next;
         next += 1;
-        results[i] = await tasks[i]();
+        try {
+          results[i] = await tasks[i]();
+        } catch (err) {
+          if (!error) error = err;
+        }
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+    if (error) throw error;
     return results;
   }
 

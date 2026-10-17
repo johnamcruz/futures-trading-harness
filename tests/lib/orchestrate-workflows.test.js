@@ -14,7 +14,8 @@ const doc = fm => `---\n${fm}\n---\n\nbody\n`;
 function root(files) {
   const r = tmpDir();
   fs.mkdirSync(path.join(r, 'agents'));
-  for (const a of ['market-structure-analyst', 'risk-manager']) fs.writeFileSync(path.join(r, 'agents', `${a}.md`), '---\nname: x\n---\n');
+  for (const a of ['market-structure-analyst', 'risk-manager']) fs.writeFileSync(path.join(r, 'agents', `${a}.md`), '---\nname: x\ntools: Read, mcp__harness__bar_briefing\n---\n');
+  fs.writeFileSync(path.join(r, 'agents', 'trade-executor.md'), '---\nname: trade-executor\ntools: Read, mcp__broker__place_order, mcp__broker__close_position\n---\n');
   for (const [name, text] of Object.entries(files)) {
     fs.mkdirSync(path.join(r, 'workflows', name), { recursive: true });
     fs.writeFileSync(path.join(r, 'workflows', name, 'WORKFLOW.md'), text);
@@ -37,12 +38,18 @@ test('loadWorkflows refuses an invalid document and says why; none is not an err
     ok: doc('name: ok\ndescription: d\nphases:\n  - name: p\n    parallel: [risk-manager]\n    request: desk\n    accept: [read-data]\n    retries: 0'),
     bad: doc('name: other\nphases:\n  - name: p\n    parallel: [nobody]\n    request: nope\n    accept: [never]\n    retries: -1\n  - name: p\n    parallel: []\n    request: desk\n    accept: []\n    retries: 0'),
     empty: doc('name: empty\ndescription: d\nphases: []'),
+    orders: doc('name: orders\ndescription: d\nphases:\n  - name: p\n    parallel: [trade-executor]\n    request: desk\n    accept: []\n    retries: 0'),
+    strict: doc('name: strict\ndescription: d\nextra: 1\nphases:\n  - name: p\n    parallel: [risk-manager, risk-manager]\n    request: desk\n    accept: []\n    retires: 1\n    retries: 0'),
   });
   const by = Object.fromEntries(W.loadWorkflows(r).map(w => [w.name, w]));
   assert.strictEqual(by.ok.valid, true);
   assert.strictEqual(by.bad.valid, false);
   for (const m of [/name "other" must match its folder "bad"/, /description: required/, /"nobody" is no agent/, /request: one of desk/, /"never" is no check/, /retries: a whole number/, /"p" twice/, /phases\[1\]\.parallel: one or more roles/]) assert.ok(by.bad.errors.some(e => m.test(e)), String(m));
   assert.deepStrictEqual(by.empty.errors, ['phases: one or more required']);
+  // Never the order role: a workflow run from code never places, changes or closes an order.
+  assert.ok(by.orders.errors.some(e => /"trade-executor" holds order tools: a workflow never runs it/.test(e)), JSON.stringify(by.orders.errors));
+  // Strict: an unknown key, a misspelt one, a role twice.
+  for (const m of [/extra: not a workflow key/, /phases\[0\]\.retires: not a phase key/, /risk-manager twice/]) assert.ok(by.strict.errors.some(e => m.test(e)), String(m));
   assert.strictEqual(W.workflowNamed(r, 'bad'), null);
   assert.deepStrictEqual(W.loadWorkflows(tmpDir()), []);
 });

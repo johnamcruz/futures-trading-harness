@@ -69,6 +69,18 @@ test('parallel: at most `concurrency` at once, results in the tasks\' order; eve
   const ends = events.filter(e => e.type === 'agent-end');
   assert.deepStrictEqual(starts.map(e => e.seq).sort(), ends.map(e => e.seq).sort());
   assert.ok(events.every(e => e.type === 'phase' || e.phase === 'desk'));
+  // A task that throws (misuse) stops new tasks, awaits the running ones, then throws.
+  const started = [];
+  const p = createRun({ engine: fake({}) });
+  const tasks = [0, 1, 2, 3].map(i => async () => { started.push(i); await new Promise(res => setTimeout(res, 5)); if (i === 0) throw new Error('misuse'); return i; });
+  await assert.rejects(p.parallel(tasks, { concurrency: 2 }), /misuse/);
+  assert.deepStrictEqual(started.sort(), [0, 1], 'no task started after the error');
+  // A check that throws is an invalid result with its reason, and the start still has its end.
+  const ev = [];
+  const t = createRun({ engine: fake({ a: good }), onEvent: e => ev.push(e) });
+  const tr = await t.agent('a', 'req', { accept: [() => { throw new Error('bad check'); }] });
+  assert.deepStrictEqual([tr.stop, tr.why], ['invalid', 'a check failed (bad check)']);
+  assert.deepStrictEqual(ev.map(e => e.type), ['agent-start', 'agent-end']);
   // An observer that throws never breaks the run.
   const q = createRun({ engine: fake({ a: good }), onEvent: () => { throw new Error('observer'); } });
   assert.strictEqual((await q.agent('a', 'req')).ok, true);
