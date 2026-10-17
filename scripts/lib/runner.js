@@ -1488,23 +1488,25 @@ function createRunner(deps) {
             const deskStart = clock.now().getTime();
             const minHeadMs = TUN.cycle.timeoutMinMinutes * 60000;
             const stop = new AbortController();
-            const timer = setTimeout(() => stop.abort(), Math.max(0, timeoutMs - minHeadMs));
+            const deskBudgetMs = Math.max(0, timeoutMs - minHeadMs);
+            const timer = setTimeout(() => stop.abort(), deskBudgetMs);
             // The roles' runs get the cycle's own context (its bars, lanes and start), as the head trader's does.
             const deskContext = {
               action: 'trade', manageOnly: false, cachedRoles: [],
-              symbols: items.map(x => ({ symbol: x.symbol, bar: { t: x.bar.t, contractId: x.bar.contractId, file: x.bar.file } })),
+              symbols: items.map(x => ({ symbol: x.symbol, bar: { t: x.bar.t, contractId: x.bar.contractId, file: x.bar.file }, ...(multi ? { lane: `${x.minutes}m` } : {}) })),
               ...(multi ? { cycleBars: Object.fromEntries(cacheSymbols.map(s => [s.symbol, s.bar])) } : {}),
               ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
             };
             try {
-              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), context: deskContext, signal: stop.signal });
+              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs });
             } catch (err) {
               failed('the desk: the head trader launches it', err);
             } finally {
               clearTimeout(timer);
             }
             deskMs = Math.max(0, clock.now().getTime() - deskStart);
-            timeoutMs = Math.max(minHeadMs, timeoutMs - deskMs);
+            // Never past the cycle's own limit (limitFor: the end of day's cap): what the desk took, else the head's minimum.
+            timeoutMs = Math.max(timeoutMs - deskMs, Math.min(minHeadMs, timeoutMs));
           }
           const served = deskRun && deskRun.reports.length
             ? { roles: [...(cached ? cached.roles : []), ...deskRun.reports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskRun.reports] }

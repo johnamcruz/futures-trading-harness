@@ -44,4 +44,8 @@ test('the desk runs the roles still to run with their request; a report counts o
   stop.abort();
   const late = await desk.run({ symbols: [{ symbol: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString(), signal: stop.signal });
   assert.deepStrictEqual(late.missing, [{ role: 'risk-manager', stop: 'cancelled', why: 'the run was cancelled' }]);
+  // A budget shorter than a role's own timeout bounds each role's run.
+  seen.length = 0;
+  await desk.run({ symbols: [{ symbol: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString(), budgetMs: 90000 });
+  assert.strictEqual(seen[0].timeoutMs, 90000);
 });
