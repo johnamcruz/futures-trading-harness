@@ -1498,7 +1498,7 @@ function createRunner(deps) {
               ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
             };
             try {
-              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs });
+              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), bars: (items.find(x => x.minutes === cfg.timeframe) || items[0] || { bar: {} }).bar.file || null, context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs });
             } catch (err) {
               failed('the desk: the head trader launches it', err);
             } finally {
