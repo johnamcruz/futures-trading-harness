@@ -3454,3 +3454,13 @@ test('trade_lifecycle, plan-required in a runner\'s cycle with lanes: a composed
   // Before the record's bar closed: an earlier bar's plan, refused.
   assert.ok(at('2026-10-07T13:59:00Z').includes('plan-required'));
 });
+
+test('hookTranscript: a hook judges on the session transcript it is given, except a runner\'s entry role (autonomous, a 16-hex FTH_CYCLE_ID, its own FTH_CYCLE_TRANSCRIPT): that one on its streamed transcript and the role record, as the gateway', () => {
+  const { hookTranscript } = require('../../scripts/lib/trading/check-order');
+  const role = { FTH_AUTONOMOUS: '1', FTH_CYCLE_ID: '0123456789abcdef', FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-1.jsonl' };
+  assert.strictEqual(hookTranscript('/s/session.jsonl', role), null);
+  for (const e of [{}, { ...role, FTH_AUTONOMOUS: '' }, { ...role, FTH_CYCLE_ID: '' }, { ...role, FTH_CYCLE_ID: 'XYZ' }, { ...role, FTH_CYCLE_ID: '0123456789abcdef0' }, { ...role, FTH_CYCLE_TRANSCRIPT: ' ' }]) {
+    assert.strictEqual(hookTranscript('/s/session.jsonl', e), '/s/session.jsonl', JSON.stringify(e));
+  }
+  assert.strictEqual(hookTranscript(undefined, {}), null);
+});

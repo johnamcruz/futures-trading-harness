@@ -88,20 +88,30 @@ const executor = (o = {}) => prompt => [
  */
 function roles(w, at, o = {}) {
   const runs = [];
+  // Each run's transcript in the harness's own format (Claude Code's stream-json, else opencode's JSON events).
+  const format = w.harness === 'claude' ? 'claude' : 'opencode';
   const runRole = async (role, request, limits) => {
     const isPhase2 = role === 'risk-manager' && /^Phase 2, plan verdict/.test(request);
     runs.push({ role: isPhase2 ? 'risk-manager phase 2' : role, request, context: limits.context, timeoutMs: limits.timeoutMs });
     const failed = o.fail && o.fail[isPhase2 ? 'phase2' : role];
     if (failed) return failed;
-    if (!isPhase2 && role !== 'trade-executor') return deskReport(role);
-    const model = scriptedModel(isPhase2 ? (o.phase2 || phase2(w)) : (o.executor || executor()));
-    const r = await realRunRole(w.cfg, role, request, limits, { root: D.ROOT, home: w.home, env: D.passEnv(w, at), run: model });
-    runs[runs.length - 1].env = model.last && model.last.env;
-    runs[runs.length - 1].calls = model.last ? model.last.calls : [];
+    // `o.deskRuns`: the desk's roles through the production glue too (their own runs, deskScript), not scripted results.
+    if (!isPhase2 && role !== 'trade-executor' && !o.deskRuns) return deskReport(role);
+    const model = scriptedModel(isPhase2 ? (o.phase2 || phase2(w)) : role === 'trade-executor' ? (o.executor || executor()) : deskScript(role), { format });
+    const run = (argv, opts) => { runs.find(x => x.request === request && !x.argv).argv = argv; return model(argv, opts); };
+    const r = await realRunRole(w.cfg, role, request, limits, { root: D.ROOT, home: w.home, env: D.passEnv(w, at), run });
+    const mine = runs.find(x => x.request === request && x.argv && !x.done);
+    Object.assign(mine, { done: true, env: model.last && model.last.env, calls: model.last ? model.last.calls : [], result: r });
     return r;
   };
   return { runRole, runs };
 }
+
+/** A desk role as it plays its own run: the bar briefing (an analyst) or the account (phase 1), then its report. */
+const deskScript = role => () => [
+  role === 'risk-manager' ? { broker: 'get_account_snapshot', args: { accountId: 7 } } : { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+  { result: deskReport(role).text },
+];
 
 /** The gate's place_order decisions. */
 const entries = w => D.gateLog(w).filter(x => /place_order/.test(String(x.tool || '')) && x.source === 'gateway');
@@ -423,4 +433,136 @@ test('entry workflow: the head trader composes a long and writes planned short (
   assert.ok(r.logs.some(l => /the planned line says short, the latest OK compose record \S+ is a long: a process failure/.test(l)), r.logs.join('\n'));
   assert.strictEqual(r.ran[0].result, 'CYCLE RESULT: planned - trade_lifecycle short 1');
   assert.strictEqual(D.cycleLines(w).at(-1).entry.outcome, 'process-failure');
+});
+
+// ---- Claude Code: the same workflows, every role its own `claude -p --agent <plugin>:<role>` run ----
+// The runner runs the desk and the entry on Claude Code as on opencode (autotrader.js ROLE_RUNS): each role's run goes
+// through the production glue (cycle-run.js runRole: buildCommand's Claude argv, childEnv), played by the scripted model
+// in Claude Code's stream-json; the head trader's run too. Claude Code's roles load every skill (FTH_ROLE_SKILLS full,
+// whatever the runner's own mode), so the head trader loads its skills with the Skill tool and no lookup is required.
+
+/** Claude Code's head trader when the runner runs the entry: its loads with the Skill tool, the briefing, compose_check, planned. */
+function claudeHeadPlanned(w, o = {}) {
+  const full = { ...w, mode: 'full' };
+  return [
+    ...[...new Set([...D.headLoads(full), ...REQUIRED_FOR_COMPOSED, ...D.entryLoads(full)])].map(s => ({ load: s })),
+    { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { result: o.result || `CYCLE RESULT: planned - trade_lifecycle long ${o.size || 1}` },
+  ];
+}
+
+const flagOf = (argv, f) => argv[argv.indexOf(f) + 1];
+
+test('entry workflow, Claude Code: the runner runs the desk (each role its own claude -p --agent run), the head trader composes and says planned, the runner runs phase 2 and the trade-executor with the code-built order; the gate allows it, it fills; the cycle log shows the desk and the entry complete', async () => {
+  const w = D.world({ harness: 'claude' });
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { deskRuns: true });
+  const r = await D.pass(w, at, claudeHeadPlanned(w), { runRole: R.runRole });
+  // The round: the desk's four roles, then phase 2, then the trade-executor, each its own Claude Code run as that role.
+  assert.deepStrictEqual(R.runs.slice(0, 4).map(x => x.role).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst']);
+  assert.deepStrictEqual(R.runs.map(x => x.role).slice(4), ['risk-manager phase 2', 'trade-executor']);
+  for (const x of R.runs) {
+    const role = x.role.replace(' phase 2', '');
+    assert.deepStrictEqual([x.argv[0], x.argv[1], x.argv[2], flagOf(x.argv, '--agent'), flagOf(x.argv, '--output-format')], ['claude', '-p', x.request, `futures-trading-harness:${role}`, 'stream-json'], x.role);
+    const allowed = flagOf(x.argv, '--allowedTools').split(',');
+    assert.strictEqual(allowed.includes('mcp__broker__place_order'), role === 'trade-executor', `${x.role}: only the trade-executor holds the order tool`);
+    assert.ok(flagOf(x.argv, '--disallowedTools').split(',').includes('Agent'), `${x.role} launches no role`);
+    assert.ok(x.argv.includes('--strict-mcp-config'), `${x.role}: a replay's own MCP servers only`);
+    assert.strictEqual(x.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+    assert.strictEqual(x.env.FTH_ROLE_SKILLS, 'full');
+    assert.ok(x.result.ok, `${x.role}: ${JSON.stringify(x.result)}`);
+  }
+  // The desk's reports were read from each role's stream-json (read-data: its own call; report-shape: its text).
+  assert.deepStrictEqual(R.runs.find(x => x.role === 'market-structure-analyst').result.tools, ['harness_bar_briefing']);
+  // The head trader: Claude Code's run, told the route, its run carrying the entry's rule switch; the roles' never do.
+  const { prompt, context } = r.ran[0];
+  assert.ok(prompt.includes(ENTRY_TEXT), 'the head prompt says the route');
+  assert.match(prompt, /The desk ran for this bar: the runner ran /);
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, '1');
+  const exec = R.runs.at(-1);
+  assert.strictEqual(exec.env.FTH_CYCLE_ENTRY, undefined);
+  // The gate's evidence in the executor's own run: the cycle's role record, the cycle's id, its own transcript, the bar.
+  assert.strictEqual(exec.env.FTH_CYCLE_ROLES, context.rolesFile);
+  assert.strictEqual(exec.env.FTH_CYCLE_ID, require('../../scripts/lib/trading/check-order').cycleId(r.ctx.env));
+  assert.notStrictEqual(exec.env.FTH_CYCLE_TRANSCRIPT, r.ctx.env.FTH_CYCLE_TRANSCRIPT, 'its own transcript');
+  assert.strictEqual(exec.env.FTH_CYCLE_BARS, r.ctx.env.FTH_CYCLE_BARS);
+  // The order: order_plan's arguments, built in code, sent as they are; the gate allowed it; filled with its stop.
+  const sent = D.placedAtBroker(w);
+  assert.strictEqual(sent.length, 1);
+  const args = requestedArgs(exec.request);
+  assert.deepStrictEqual([args.type, args.limitPrice, args.size, args.stopLossBracket.ticks, args.takeProfitBracket.ticks], ['limit', 27427.5, 1, 92, 338]);
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+  assert.strictEqual(D.position(w).size, 1);
+  assert.ok(D.working(w).some(o2 => o2.type === 4), 'the stop bracket works');
+  assert.deepStrictEqual(exec.result.tools, ['broker_get_account_snapshot', 'broker_place_order'], 'read from its stream-json');
+  // The cycle's outcome and log: the desk complete, the entry executed, the order the cycle's.
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ \(the runner's entry: phase 2 approved, the order filled\)$/);
+  assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.harness, 'claude');
+  assert.deepStrictEqual([line.desk.complete, line.desk.missing], [true, []]);
+  assert.deepStrictEqual([line.entry.outcome, line.entry.ran], ['executed', ['risk-manager', 'trade-executor']]);
+  assert.strictEqual(line.orders.length, 1);
+  assert.deepStrictEqual(line.missingSkills, []);
+  assert.deepStrictEqual([line.factCheck.reports, line.factCheck.false], [1, 0], JSON.stringify(line.factCheck));
+});
+
+test('entry workflow, Claude Code: the gate still holds on the runner\'s path: the head trader\'s loads count only from the runner\'s record of them [skills-loaded]; a phase-2 VETO runs no trade-executor and sends nothing', async () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const orig = RR.appendHeadSkills;
+  RR.appendHeadSkills = () => { throw new Error('disk full'); };
+  try {
+    const w = D.world({ harness: 'claude' });
+    const at = decisionAt(FIRED_BAR);
+    const r = await D.pass(w, at, claudeHeadPlanned(w), { runRole: roles(w, at, { deskRuns: true }).runRole });
+    const e = entries(w).at(-1);
+    assert.strictEqual(e.decision, 'blocked');
+    assert.deepStrictEqual(e.violations.map(v => v.check), ['skills-loaded', 'skills-at-entry'], JSON.stringify(e.violations));
+    assert.deepStrictEqual(D.placedAtBroker(w), []);
+    assert.match(r.ran[0].result, /^CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: \[skills-loaded\]/);
+  } finally {
+    RR.appendHeadSkills = orig;
+  }
+  const v = D.world({ harness: 'claude' });
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(v, at, { deskRuns: true, phase2: phase2(v, { verdict: 'VETO - room: the 1h swing is too close' }) });
+  const r = await D.pass(v, at, claudeHeadPlanned(v), { runRole: R.runRole });
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor'));
+  assert.deepStrictEqual(D.placedAtBroker(v), []);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - room/);
+});
+
+// Claude Code's stream-json doesn't time the head trader's own launches (autotrader.js TIMED_LAUNCHES), so the gate
+// can't order a phase 2 it launched itself against the runner's record: there the runner runs the desk only in a cycle
+// whose entry it runs, and drops a desk it couldn't complete.
+
+test('entry workflow, Claude Code: a cycle that started with a position runs no desk of the runner\'s (no entry cycle): the head trader launches its roles in its session, as before', async () => {
+  const w = D.world({ harness: 'claude' });
+  const at = decisionAt(FIRED_BAR);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R = roles(w, at, { deskRuns: true });
+  const r = await D.pass(w, at, [{ result: 'CYCLE RESULT: managed - the open long' }], { runRole: R.runRole });
+  assert.deepStrictEqual(R.runs, [], 'no role run by the runner');
+  assert.strictEqual(r.ran[0].context.desk, undefined);
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, undefined);
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, undefined);
+  assert.doesNotMatch(r.ran[0].prompt, /The desk ran for this bar/);
+});
+
+test('entry workflow, Claude Code: a desk the runner couldn\'t complete (an analyst missing) is dropped, record and reports: the head trader runs its whole desk, phase 2 and the trade-executor in its session, as before', async () => {
+  const w = D.world({ harness: 'claude' });
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { deskRuns: true, fail: { 'volume-liquidity-analyst': { ok: false, timedOut: true, text: '', tools: [], output: '' } } });
+  const r = await D.pass(w, at, [{ result: 'CYCLE RESULT: no-trade - running the desk' }], { runRole: R.runRole });
+  assert.ok(R.runs.some(x => x.role === 'market-structure-analyst'), 'the runner ran the desk');
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor' || x.role === 'risk-manager phase 2'));
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, undefined, 'no role record for the head trader\'s gate');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, undefined);
+  assert.deepStrictEqual(r.ctx.env.FTH_CYCLE_DESK.split(',').sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'], 'its whole desk to launch');
+  assert.doesNotMatch(r.ran[0].prompt, /The desk ran for this bar/);
+  assert.match(r.ran[0].prompt, /then risk-manager phase 2 on your plan, if any/);
+  assert.ok(r.logs.some(l => /^error the desk: volume-liquidity-analyst missing: the head trader runs its desk this cycle/.test(l)), r.logs.join('\n'));
+  const files = fs.readdirSync(require('path').join(w.home, 'logs')).filter(f => /^cycle-roles/.test(f));
+  assert.deepStrictEqual(files, [], 'the dropped record is removed');
 });
