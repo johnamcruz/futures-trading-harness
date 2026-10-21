@@ -13,8 +13,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 ## How It Works
 
 1. **Compose.** Reason through `trader-process`, each step with the skill
-   that fits; a valid setup → compose (`confluence-counting`: full, or
-   half on serious against). Call
+   that fits; trend side, a reaction at a level, the trigger closed →
+   compose (`confluence-counting`); the plan, never you, works out R:R. Call
    `compose_check` with one true read per step at least, each for your
    side (the against stay in the count), and your size.
    The record is for this bar and side; it expires `valid_bars` base bars

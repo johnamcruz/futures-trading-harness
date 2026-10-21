@@ -120,22 +120,25 @@ const PINS = {
     // move are one piece of evidence; the trend rule is the side rule and never counted.
     '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
-    'Valid → take, full size within the verdict\'s ceiling; the against sets the size:',
+    // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
+    '**Compose first.** The trend rule\'s side (or its CHoCH tier), a rejection or breakout at a key level or FVG, the trigger closed → call `compose_check`.',
+    'Never estimate room or R:R: the plan does; its refusal is the R:R check. Refused → pass, naming it.',
+    'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
     '**Decisive** → pass: a 3m close broke the leg\'s 15m/1h swing (`m3.htfLevels` `brokenAt`: a reversal, `pullback-vs-reversal`).',
     '**Serious** → half (`floor`, at least 1): 2+ categories against, or location against (the trigger into the other side\'s level).',
-    '**Minor** → full size: thin volume, the first level ahead, the VWAP distance (no edge in the census), mixed reads, an analyst\'s read.',
+    '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing" (no edge in the census), no pullback yet, mixed reads.',
     'A missing read is no reason to pass.',
     // A pullback inside the trend is never counted against itself (fix/confluence-not-vetoes).
     '**The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe structure against the trend; for once it breaks back.',
-    '| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend (setup, entry) |',
-    '| location | the level, POI or FVG it reacts at (location) |',
-    '| liquidity | a sweep taken, or liquidity as the target (setup, target) |',
-    '| trigger | the rejection or engulfing candle and its close (setup, entry) |',
-    '| participation | volume, delta, absorption; thin is neutral (entry) |',
-    '| context | VWAP side, value area, day type, session (location) |',
+    '| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |',
+    '| location | the level, POI or FVG it reacts at |',
+    '| liquidity | a sweep taken, or liquidity as the target |',
+    '| trigger | the rejection or engulfing candle and its close |',
+    '| participation | volume, delta, absorption; thin is neutral |',
+    '| context | VWAP side, value area, day type, session |',
     '**One vote**: all its reads your way → for; all against → against; mixed, none or `unknown` → neutral.',
     'Labels never add: a 3m BOS, an EMA slope and ADX are one structure vote.',
-    '**Not counted**: the trend rule and the 1h and 4h direction (the side rule, hard; compose step bias), R:R to the target (hard)',
+    '**Not counted**: the trend rule and the 1h and 4h direction (the side rule; compose step bias), R:R, the window, the news.',
     // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
   ],
   'candle-reading': [
@@ -279,7 +282,7 @@ test('basics skills: a read, never a veto; the priority order decides', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
     // confluence-counting is the count that decides (fix/confluence-not-vetoes); every other basics skill is a read in it.
-    if (s === 'confluence-counting') assert.ok(flat(text).includes('**A valid setup is the trade.**'), s);
+    if (s === 'confluence-counting') assert.ok(flat(text).includes('**a valid setup is the trade**'), s);
     else assert.ok(flat(text).includes(READ), s);
     assert.ok(vetoFree(text), `${s}: veto language`);
     // A skip in an example is the priority order's (or no fired strategy), never the skill's.

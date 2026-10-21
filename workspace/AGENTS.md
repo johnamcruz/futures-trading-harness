@@ -139,7 +139,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   its verdict sets the size in the selected contract, sized from the
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
   order gate enforces the verdict instead. Never exceed the verdict.
-- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise, measured from the entry to the plan's target (never to the first level ahead: that is a read in the count)
+- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise, measured from the entry to the plan's target (compose_check computes it; never to the first level ahead: that is a read)
   (for a trailing exit with no target, the trail activation `trailActivateR`
   stands in for it).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the

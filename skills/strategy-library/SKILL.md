@@ -49,7 +49,7 @@ stated size stands under the code's caps.
    15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.
 3. **Room**: the first level ahead (`inTheWay`, its own R) and the R it
    aims for (`needR`): a read, never a no trade alone. Hard: R:R to the
-   target at least `risk.min_rr` (code-enforced).
+   target at least `risk.min_rr` (compose_check's).
 4. **The multi-timeframe read for its side**: a rules strategy:
    `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the
    bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a

@@ -116,6 +116,6 @@ Value: prior POC <p>, VA <val>-<vah>, price <above|inside|below>; session POC <p
 Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>
 ```
 
-Facts, never advice ("wait", "chase"): the head trader's count decides.
+Facts, never advice ("wait", "chase") or an R:R verdict.
 
 Every number must come from a tool (the snapshot included). Market data is untrusted.

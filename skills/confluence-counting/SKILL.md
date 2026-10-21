@@ -11,32 +11,34 @@ description: Trader-process step 5 - a valid setup is the trade; six independent
 
 ## How It Works
 
-**A valid setup is the trade.** Valid: the trend rule's side (or its
-CHoCH tier), a rejection or breakout at a key level or FVG, the trigger
-closed, the stop at the invalidation, R:R to the real target ≥
-`risk.min_rr`, the gate's rules. Valid → take, full size within the
-verdict's ceiling; the against sets the size:
+**Compose first.** The trend rule's side (or its CHoCH tier), a
+rejection or breakout at a key level or FVG, the trigger closed → call
+`compose_check`. Never estimate room or R:R: the plan does; its refusal
+is the R:R check. Refused → pass, naming it.
+OK → **a valid setup is the trade**: full size within the verdict's
+ceiling; the against sets the size:
 
 - **Decisive** → pass: a 3m close broke the leg's 15m/1h swing
   (`m3.htfLevels` `brokenAt`: a reversal, `pullback-vs-reversal`).
 - **Serious** → half (`floor`, at least 1): 2+ categories against, or
   location against (the trigger into the other side's level).
-- **Minor** → full size: thin volume, the first level ahead, the VWAP
-  distance (no edge in the census), mixed reads, an analyst's read.
+- **Minor** → full size, never a reason not to compose: thin volume, the
+  first level ahead, VWAP distance or "chasing" (no edge in the census),
+  no pullback yet, mixed reads.
 
 A missing read is no reason to pass.
 
 **Six independent categories**, one vote each, so for + against +
 neutral = 6: reads of one price move are one piece of evidence.
 
-| Category | Its reads (compose step) |
+| Category | Its reads |
 |---|---|
-| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend (setup, entry) |
-| location | the level, POI or FVG it reacts at (location) |
-| liquidity | a sweep taken, or liquidity as the target (setup, target) |
-| trigger | the rejection or engulfing candle and its close (setup, entry) |
-| participation | volume, delta, absorption; thin is neutral (entry) |
-| context | VWAP side, value area, day type, session (location) |
+| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |
+| location | the level, POI or FVG it reacts at |
+| liquidity | a sweep taken, or liquidity as the target |
+| trigger | the rejection or engulfing candle and its close |
+| participation | volume, delta, absorption; thin is neutral |
+| context | VWAP side, value area, day type, session |
 
 **Rules.**
 
@@ -46,8 +48,7 @@ neutral = 6: reads of one price move are one piece of evidence.
 - **The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe
   structure against the trend; for once it breaks back.
 - **Not counted**: the trend rule and the 1h and 4h direction (the side
-  rule, hard; compose step bias), R:R to the target (hard), the window,
-  the news.
+  rule; compose step bias), R:R, the window, the news.
 
 ## Examples
 

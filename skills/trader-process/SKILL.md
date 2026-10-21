@@ -38,12 +38,12 @@ It adds no filter and no veto:
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** The six categories of `confluence-counting`.
 6. **Entry.** A closed bar's entry reads; never anticipate. Trigger
-   closed on a valid setup → take now.
+   closed → `compose_check` now.
    Read: `candle-reading`, `momentum-and-volume`.
-7. **Risk.** Stop (`invalidation`), target (`take-profit`), size, the
-   first level ahead; the numbers from `order_plan` or the compose record.
-8. **Decision.** Valid → take, sized by the against (step 5); ONE main
-   reason.
+7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
+   size; R:R: the compose record's, never yours.
+8. **Decision.** Compose OK → take, sized by the against (step 5);
+   refused → pass, naming it. One reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 
@@ -79,7 +79,7 @@ PLAN:
 4 Setup: <side, the setup reads | none>
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
 6 Entry: <the entry reads | none>
-7 Risk: stop <ticks>, size <n>, exit <target R|trail>, ahead <first level ahead, R | none>
+7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
 8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
@@ -101,7 +101,7 @@ PLAN:
 4 Setup: long, 15m rejected prior vah up
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
-7 Risk: stop 111 ticks, size 1, exit target 2.08R, ahead prior RTH high 1.2R
+7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
 8 Decision: valid yes, full - compose_check OK
 9 Manage: flat
 ```

@@ -16,7 +16,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
   rules candidate's (none active), `facts`, `inTheWay`, `needR` and
   `blocked` in `m3` `candidates`. They are context, not a verdict: judge by
-  the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules
+  the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (compose_check's; a rules
   strategy: also its STRATEGY.md). A valid setup on that side
   (`confluence-counting`) is the trade this harness looks for, when
   it isn't `blocked`: the strategy's normal size (position-sizing and the prop

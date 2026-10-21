@@ -538,14 +538,14 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
     const out = t.slice(t.indexOf('## Output'));
     assert.match(out, /\nReads for <the trend rule's side>: <category: fact, level, number>; against: <same>\n```/, role);
     assert.doesNotMatch(out, /^(?:Red flags|Implication):/m, role);
-    assert.ok(t.replace(/\s+/g, ' ').includes('Facts, never advice ("wait", "chase"): the head trader\'s count decides.'), role);
+    assert.ok(t.replace(/\s+/g, ' ').includes('Facts, never advice ("wait", "chase") or an R:R verdict.'), role);
   }
   // The count is in every cycle's load: the prompt's list (Claude Code, Qwen Code, Codex), opencode's head prompt (CORE),
   // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
   assert.ok(require('../../scripts/lib/head-prompt').CORE.includes('confluence-counting'));
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
-  assert.match(read('skills/trade-session/SKILL.md'), /every hard step\s+true → take, full size; serious against → half; decisive against →\s+pass/);
-  assert.match(read('skills/trade-lifecycle/SKILL.md'), /a valid setup → compose \(`confluence-counting`: full, or\s+half on serious against\)/);
+  assert.match(read('skills/trade-session/SKILL.md'), /the trigger closed → `compose_check`, never your own R:R\.\s+OK → take: full, half on serious against, pass on decisive\./);
+  assert.match(read('skills/trade-lifecycle/SKILL.md'), /trend side, a reaction at a level, the trigger closed →\s+compose \(`confluence-counting`\); the plan, never you, works out R:R\./);
 });
 
 test('the count is of independent categories, never labels, and every restatement says the same (the owner\'s duplicated-evidence principle)', () => {
@@ -555,20 +555,27 @@ test('the count is of independent categories, never labels, and every restatemen
   // The six categories, in order, each once; labels of one price move are one piece of evidence.
   assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
   // A valid setup is the trade (the owner, 2026-10-21): the categories describe the evidence; the against sets the size.
-  for (const rule of ['**A valid setup is the trade.**', 'Valid → take, full size within the verdict\'s ceiling; the against sets the size:',
+  for (const rule of ['**Compose first.**', 'the trigger closed → call `compose_check`.', 'Never estimate room or R:R: the plan does; its refusal is the R:R check.',
+    'Refused → pass, naming it.', 'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
+    'never a reason not to compose', 'no pullback yet',
     '**Decisive** → pass: a 3m close broke the leg\'s 15m/1h swing', '**Serious** → half (`floor`, at least 1): 2+ categories against, or location against',
-    '**Minor** → full size: thin volume, the first level ahead, the VWAP distance', 'A missing read is no reason to pass.',
+    '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing"', 'A missing read is no reason to pass.',
     'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
-    'a 3m BOS, an EMA slope and ADX are one structure vote', 'the trend rule and the 1h and 4h direction (the side rule, hard',
+    'a 3m BOS, an EMA slope and ADX are one structure vote', 'the trend rule and the 1h and 4h direction (the side rule;',
     '**The pullback is neutral** (`pullback-vs-reversal`)']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes('**A valid setup is the trade** (`confluence-counting`): every hard step true → take, full size; serious against → half; decisive against → pass. A missing read is no reason to pass.'));
-  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('a valid setup → compose (`confluence-counting`: full, or half on serious against).'));
-  assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>'));
+  assert.ok(ts.includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious against, pass on decisive.'));
+  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R.'));
+  const tp = flat(read('skills/trader-process/SKILL.md'));
+  assert.ok(tp.includes('8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>'));
+  // The PLAN's R:R and target are the compose record's, never the model's estimate.
+  assert.ok(tp.includes('7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>') && tp.includes('R:R: the compose record\'s, never yours.'));
+  assert.ok(flat(read('skills/strategy-library/SKILL.md')).includes("Hard: R:R to the target at least `risk.min_rr` (compose_check's)."));
+  assert.ok(flat(read('rules/trading/risk-management.md')).includes('measured from the entry to the plan\'s target (compose_check computes it;'));
   assert.ok(flat(read('skills/htf-to-ltf/SKILL.md')).includes('in the count it is neutral.'));
   assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
-  assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): a valid setup → APPROVE, full size, half on serious against; VETO only on a decisive against or a failed hard step.'));
+  assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): compose OK (its R:R the record\'s, never an estimate) → APPROVE, full size, half on serious against; VETO only on a decisive against or a failed hard step.'));
   assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('A valid setup on that side (`confluence-counting`) is the trade'));
   for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     assert.ok(read(`agents/${role}.md`).includes("Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>"), role);
@@ -577,4 +584,33 @@ test('the count is of independent categories, never labels, and every restatemen
   for (const f of ['skills/trade-session/SKILL.md', 'skills/trade-lifecycle/SKILL.md', 'skills/trader-process/SKILL.md', 'agents/risk-manager.md', 'skills/setup-judgment/SKILL.md']) {
     assert.doesNotMatch(read(f), /six items|item [1-6]\b|No against read is|for minus against|margin of/, f);
   }
+});
+
+test('compose first: the decision rule and every restatement send a setup to compose_check and never ask the model to work out room or R:R itself', () => {
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const flat = t => t.replace(/\s+/g, ' ');
+  const FILES = ['skills/confluence-counting/SKILL.md', 'skills/trade-session/SKILL.md', 'skills/trade-lifecycle/SKILL.md', 'skills/trader-process/SKILL.md',
+    'skills/setup-judgment/SKILL.md', 'skills/strategy-library/SKILL.md', 'agents/risk-manager.md', 'rules/trading/risk-management.md',
+    'agents/market-structure-analyst.md', 'agents/trend-momentum-analyst.md', 'agents/volume-liquidity-analyst.md', 'skills/top-down-entry/SKILL.md', 'skills/trade-plan/SKILL.md'];
+  // What made a model pass a with-trend setup on its own arithmetic (the 2021-07-12 replay): room or R:R checked, needed or
+  // estimated by the model, to the first level ahead.
+  const SELF = /check (?:that )?(?:there is )?(?:the )?room|room (?:it )?needs|(?:enough|insufficient|not enough) room|room to the (?:target|next)|(?:estimate|work out|compute|calculate)s? (?:the )?(?:room|R:R|target)(?! yourself: the plan)|R:R to the first level/i;
+  for (const f of FILES) assert.doesNotMatch(flat(read(f)).replace(/never (?:estimate|your own|an estimate|you)[^.;]*/gi, ''), SELF, f);
+  // Each restatement says the plan does it: compose_check, never the model's own estimate.
+  const NEVER = {
+    'skills/confluence-counting/SKILL.md': 'Never estimate room or R:R: the plan does; its refusal is the R:R check.',
+    'skills/trade-session/SKILL.md': '→ `compose_check`, never your own R:R.',
+    'skills/trade-lifecycle/SKILL.md': 'the plan, never you, works out R:R.',
+    'skills/trader-process/SKILL.md': "R:R: the compose record's, never yours.",
+    'skills/setup-judgment/SKILL.md': "the min R:R (compose_check's;",
+    'skills/strategy-library/SKILL.md': "Hard: R:R to the target at least `risk.min_rr` (compose_check's).",
+    'agents/risk-manager.md': "compose OK (its R:R the record's, never an estimate)",
+    'rules/trading/risk-management.md': "measured from the entry to the plan's target (compose_check computes it;",
+  };
+  for (const [f, s] of Object.entries(NEVER)) assert.ok(flat(read(f)).includes(s), `${f}: ${s}`);
+  // The minor reads the replay passed on are named as never a reason not to compose.
+  assert.ok(flat(read('skills/confluence-counting/SKILL.md')).includes('**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing" (no edge in the census), no pullback yet, mixed reads.'));
+  // Self-test: the old wording would fail.
+  assert.match('with order_plan\'s stop, check there is room to the target', SELF);
+  assert.match('only 1.17R ahead: estimate the R:R to the first level ahead', SELF);
 });

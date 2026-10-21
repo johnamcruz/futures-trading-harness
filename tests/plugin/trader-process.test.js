@@ -78,13 +78,13 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
     '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
-    '**Decision.** Valid → take, sized by the against (step 5); ONE main reason.',
+    '**Decision.** Compose OK → take, sized by the against (step 5); refused → pass, naming it. One reason.',
     // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired).
-    '**Entry.** A closed bar\'s entry reads; never anticipate. Trigger closed on a valid setup → take now.',
+    '**Entry.** A closed bar\'s entry reads; never anticipate. Trigger closed → `compose_check` now.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
     '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',
-    '**Risk.** Stop (`invalidation`), target (`take-profit`), size, the first level ahead; the numbers from `order_plan` or the compose record.',
+    '**Risk.** Stop (`invalidation`) and target (`take-profit`) reads, size; R:R: the compose record\'s, never yours.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
     'The side rule (`htf-to-ltf`) sets the side, long or short alike.',
     'The three market analysts never write step 2: a cached report would carry a stale window.',
@@ -253,7 +253,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
   assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
-  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**A valid setup is the trade** (`confluence-counting`): every hard step true → take, full size; serious against → half; decisive against → pass. A missing read is no reason to pass.'));
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious against, pass on decisive.'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

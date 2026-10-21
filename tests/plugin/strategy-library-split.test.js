@@ -154,7 +154,7 @@ const LATE = [
     to: "A valid setup is the trade (`confluence-counting`).",
     reason: "fix/confluence-not-vetoes: the count under the bias decides; a soft read is never a no trade alone (owner, 2026-10-21)" },
   { from: "**Room**: the first level in its way (`inTheWay`, in its own R) comes before the room it needs (`needR`) → no trade.",
-    to: ["**Room**: the first level ahead (`inTheWay`, its own R) and the R it aims for (`needR`): a read, never a no trade alone.", "Hard: R:R to the target at least `risk.min_rr` (code-enforced)."],
+    to: ["**Room**: the first level ahead (`inTheWay`, its own R) and the R it aims for (`needR`): a read, never a no trade alone.", "Hard: R:R to the target at least `risk.min_rr` (compose_check's)."],
     reason: "fix/confluence-not-vetoes: the room rule selected nothing in a census of 27,698 moments (blocked -0.032R vs room -0.079R, p 0.51): a read, never a no trade; R:R to the target stays hard" },
 ];
 const LATE_STALE = (() => {
@@ -240,7 +240,7 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   assert.notDeepStrictEqual(differences(old, swap('strategy-gate-checks', gate.replace('never more than 45 minutes ago', 'never more than 50 minutes ago'))), []);
   // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
   const lib = homes[at('strategy-library')];
-  const ROOM = /3\. \*\*Room\*\*[^]*?\(code-enforced\)\.\n/.exec(lib)[0];
+  const ROOM = /3\. \*\*Room\*\*[^]*?\(compose_check's\)\.\n/.exec(lib)[0];
   const TREND = /2\. \*\*The trend rule\*\*[^]*?4h rejection\.\n/.exec(lib)[0];
   const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
   assert.notStrictEqual(swapped, lib);

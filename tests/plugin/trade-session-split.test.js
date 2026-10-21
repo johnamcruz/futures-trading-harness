@@ -225,7 +225,7 @@ const LATE = [
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "`show` it (strategy-library) and check every context filter and skip rule against the reports.", to: null,
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
-  { from: "They are context, not a verdict: judge the setup by its strategy's STRATEGY.md (`strategies_show`: its context filter and skip rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).", to: "They are context, not a verdict: judge by the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules strategy: also its STRATEGY.md).",
+  { from: "They are context, not a verdict: judge the setup by its strategy's STRATEGY.md (`strategies_show`: its context filter and skip rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).", to: "They are context, not a verdict: judge by the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (compose_check's; a rules strategy: also its STRATEGY.md).",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "A setup the trend rule allows, `aligned` for its side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).", to: "A setup on that side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
@@ -260,7 +260,7 @@ const LATE = [
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
   { from: "It orders the thinking and adds no filter: the priority order decides.",
-    to: ["It orders the thinking and adds no filter.", "**A valid setup is the trade** (`confluence-counting`): every hard step true → take, full size; serious against → half; decisive against → pass.", "A missing read is no reason to pass."],
+    to: ["It orders the thinking and adds no filter.", "**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R.", "OK → take: full, half on serious against, pass on decisive."],
     copies: 0,
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
@@ -406,9 +406,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // market-structure analyst +28 (htf-to-ltf), under main's pins (the owner's OK while performance holds).
 // Then a valid setup is the trade (the owner, 2026-10-21), the against setting its size: the risk manager +303 and the
 // analysts +51 to +60 (trader-process's decision line; the owner's OK while performance holds).
+// Then compose first (the plan, never the model, works out R:R), its wording tightened: every role shrank or held but the
+// strategy researcher (+2, strategy-library's R:R line).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86478, 'news-calendar-analyst': 10185, 'risk-manager': 90035, 'strategy-researcher': 25559, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54470, 'volume-liquidity-analyst': 48513 },
-  index: { 'market-structure-analyst': 42819, 'news-calendar-analyst': 10185, 'risk-manager': 75912, 'strategy-researcher': 25559, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39953, 'volume-liquidity-analyst': 32993 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90033, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 75910, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
