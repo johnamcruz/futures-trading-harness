@@ -836,13 +836,14 @@ trend (ADX(14) at least 20, EMA20 beyond EMA50) is a separate bias read,
 so pairing them is the model's choice, not a definition; a strong CISD candle (body at least 0.6 of its
 range, close in its extreme third, range at least 1 ATR); a CRT sweep is
 shallow (at most half the range beyond it), and the far side should be at
-least 2R away; acceptance is two closes; don't chase VWAP past 1.5 ATR;
-breakouts want an ADX floor; flow must agree across windows, and flow
+least 2R away; acceptance is two closes; breakouts want an ADX floor; flow must agree across windows, and flow
 without price progress is absorption. **Tuned quirks, not kept:** the
 minute-of-day windows (09:48, 10:00-15:00, 573/600/900), CRT key times,
 `cisdMaxWait`, `cisdExpiry`, `cisdVoidTol`, ATR buffers of 0.1-0.5, the
 range-ATR floors of 3 and 6 for CRT, and the flow thresholds of 0.25 and
-0.3 (the flow strategies were never backtested). Which concepts work, in
+0.3 (the flow strategies were never backtested), and the VWAP-chase limit
+(1.5 ATR; a census of 27,698 moments found entries far from VWAP no worse,
+so the distance is a read, never a veto). Which concepts work, in
 which context, is what the learning loop finds; the skills state each
 concept, not a tuned number.
 

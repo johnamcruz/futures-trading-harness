@@ -183,6 +183,12 @@ const LATE = {
     { from: "$22.00 on 1 MNQ); the next 15m closed back below 21402.00. -44 ticks, -$22.00.",
       to: null,
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
+    { from: "A read, never a veto: the priority order (strategy-library) decides take, skip and size; the gate and the rulebook are untouched.",
+      to: "A read, never a veto: the count decides (`confluence-counting`).",
+      reason: "fix/confluence-not-vetoes: every read is weighed in the count (confluence-counting), which decides; the read itself is never a veto (owner, 2026-10-21)" },
+    { from: "Aim for the next swing (`m3.swingTargets`); the room to the next level (`inTheWay`) is step 3's.",
+      to: "Aim for the next swing (`m3.swingTargets`); the first level ahead (`inTheWay`) is a read (step 3).",
+      reason: "fix/confluence-not-vetoes: the first level ahead is a read, never a no trade (the room rule selected nothing in a census of 27,698 moments)" },
   ],
   breakout: [
     { from: "Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).",
@@ -230,6 +236,15 @@ const LATE = {
     { from: "retest held. orb long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);",
       to: "retest held. long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);",
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
+    { from: "A read, never a veto: the priority order (strategy-library) decides take, skip and size; the gate and the rulebook are untouched.",
+      to: "A read, never a veto: the count decides (`confluence-counting`).",
+      reason: "fix/confluence-not-vetoes: every read is weighed in the count (confluence-counting), which decides; the read itself is never a veto (owner, 2026-10-21)" },
+    { from: "Aim for the next swing (`m3.swingTargets`); the room to the next level (`inTheWay`) is step 3's.",
+      to: "Aim for the next swing (`m3.swingTargets`); the first level ahead (`inTheWay`) is a read (step 3).",
+      reason: "fix/confluence-not-vetoes: the first level ahead is a read, never a no trade (the room rule selected nothing in a census of 27,698 moments)" },
+    { from: "read); the session VAH 0.5R in the way. Priority order (step 3, room): skip.",
+      to: "read): no setup read -> pass. The session VAH 0.5R ahead is a read, not the reason.",
+      reason: "fix/confluence-not-vetoes: the first level ahead is a read, never a no trade (the room rule selected nothing in a census of 27,698 moments)" },
   ],
 };
 const LATE_STALE = [];

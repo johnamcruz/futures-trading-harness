@@ -2613,9 +2613,13 @@ test('order gate hook: a room fact is about the order\'s own setup tag (phase2-f
   const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
   const transcript = path.join(dir, 'session.jsonl');
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room long enough'));
-  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: "room long enough" \(the briefing: anytime: IB high at 0\.5R, it needs 2R\)/);
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: "room long enough" \(the briefing: anytime: IB high at 0\.5R, it aims for 2R\)/);
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room vx long enough'));
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\] Risk-manager phase 2 approved on room facts that can't be matched to this order \(setup:anytime long\): "room vx long enough"/);
+  // The room is a read, never a refusal of its own (fix/confluence-not-vetoes): an approval stating its true shortfall
+  // ("room long short": the IB high 0.5R ahead of the 2R it aims for) is no phase2-facts refusal.
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, anytime long\nFACTS: window opening drive; entries allowed; room long short'));
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\]/);
   // An exit goes whatever the facts say.
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);

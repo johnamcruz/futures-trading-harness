@@ -325,9 +325,10 @@ test('a setup\'s facts, never a grade: the trend rule and the read for its side,
   // Room: 27300 is 25 pts = 2.5R away, past the 2R trail activation.
   const a = g({});
   assert.deepStrictEqual([a.inTheWay.name, a.inTheWay.R, a.needR, a.trendRule, a.alignment, a.vwapSide], ['round number', 2.5, 2, 'allows', 'aligned', 'below']);
-  assert.deepStrictEqual(a.facts, ['the trend rule allows a short', 'multi-timeframe read for a short: aligned', 'first level in its way: round number at 2.5R; it needs 2R (room past it)', 'confluence: with orb', 'price below the VWAP (its side)']);
+  assert.deepStrictEqual(a.facts, ['the trend rule allows a short', 'multi-timeframe read for a short: aligned', 'first level ahead: round number at 2.5R; it aims for 2R', 'confluence: with orb', 'price below the VWAP (its side)']);
   assert.ok(!('grade' in a) && !('why' in a) && !('blocked' in a));
-  assert.match(g({ stopDistance: 16.67 }).facts[2], /round number at 1\.5R; it needs 2R \(the level comes first\)/);
+  // A level before the R it aims for is stated as a fact, never as a pass (no "the level comes first").
+  assert.strictEqual(g({ stopDistance: 16.67 }).facts[2], 'first level ahead: round number at 1.5R; it aims for 2R');
   assert.deepStrictEqual(g({ mtf: { style: 'trend', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
   assert.match(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
   assert.strictEqual(g({ confluence: { with: [], against: ['ema_cross'] } }).facts[3], 'confluence: none with it; against ema_cross');
@@ -348,7 +349,7 @@ test('the rendered briefing opens with a plain-language summary: price and 1R, t
   const summary = text.split('Detail by timeframe:')[0];
   for (const re of [/^Summary \(NQ 3m, \d{2}:\d{2} ET\):$/m, /^- Session: [a-z ]+ \(market (open|closed), (entries allowed|no entries)\) until \d{2}:\d{2} ET\.$/m, /^- Price [\d.]+\. 1R = ([\d.]+) pts \(0\.5 x 3m ATR\(20\) ([\d.]+), the 3m reference stop\)/m, /^- Trend rule: /m,
     /^- Alignment: long \w+, short \w+\. Regime: /m, /^- VWAP \(\w+\): price (above|below|at), [\d.]+ x 3m ATR\(14\) away/m, /^- News: next CPI at /m, /^- Room above \(R = the 3m reference stop\): /m, /^- Room below \(R = the 3m reference stop\): /m,
-    /^ {2}- orb long: the trend rule allows a long; multi-timeframe read for a long: \w+; .+ Stop 10 pts \(its own 1R\); needs 2R of room; levels ahead in its R: /m]) assert.match(summary, re);
+    /^ {2}- orb long: the trend rule allows a long; multi-timeframe read for a long: \w+; .+ Stop 10 pts \(its own 1R\); aims for 2R; levels ahead in its R: /m]) assert.match(summary, re);
   assert.match(B.renderBriefing(build(1300, null, { scan: null }), { now: new Date(b.closedAt) }), /^- Setups: unknown \(the scan failed this bar\): no rules entry this bar\.$/m);
 });
 

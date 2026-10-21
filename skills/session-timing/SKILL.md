@@ -35,12 +35,12 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | Window (ET) | Character | Harness |
 |---|---|---|
 | 18:00 (Sun–Thu) | The firm's trading day starts (its daily reset); Globex open | Session opens; daily counters reset |
-| 18:00–03:00 | Asia (`asia`), thinner | Entries allowed; overnight setups ran negative (Train, docs/research/mtf-setup-catalog.md): full confluence only |
+| 18:00–03:00 | Asia (`asia`), thinner | Entries allowed; overnight setups ran negative (Train, docs/research/mtf-setup-catalog.md): a read against |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
 | 09:35–11:00 | Opening drive; best trend window (`ny` from 09:30) | Entries allowed |
-| 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
-| 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
+| 11:00–11:30 | Late morning; the drive fades | A read against |
+| 11:30–13:30 | Lunch lull; low volume, false breaks | A read against, not a pass |
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
 | 16:00–18:00 | Daily break (the harness's day is over; the firm's own flatten deadline falls in it) | Closed: no entries, no positions (hard rule); the harness is flat by 15:50 ET (runner), 16:00 ET at the latest |

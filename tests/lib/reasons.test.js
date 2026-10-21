@@ -33,6 +33,16 @@ test('trendRuleOf: the briefing\'s Trend rule line per side', () => {
   assert.deepStrictEqual(trendRuleOf('Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.'), { prevailing: null, long: true, short: true });
   assert.deepStrictEqual(trendRuleOf('Trend rule: too few 15m candles; trend strategies can\'t enter yet, reversal strategies can.'), { prevailing: null, long: false, short: false });
   assert.deepStrictEqual(trendRuleOf(undefined), { prevailing: null, long: null, short: null });
+  // Today's line (mtf.js ruleLine: the allowed side first) reads as the older one did, for every rule mtf.js can state.
+  const { ruleLine } = require('../../scripts/lib/trading/mtf');
+  for (const [prevailing, longAllowed] of [['4h up', true], ['4h down', false], ['1h up', true], ['15m down', false]]) {
+    const line = ruleLine({ ready: true, prevailing, longAllowed, shortAllowed: !longAllowed });
+    const [allowed, against] = longAllowed ? ['LONG', 'short'] : ['SHORT', 'long'];
+    assert.strictEqual(line, `Trend rule: ${allowed} allowed (prevailing ${prevailing}); ${against} only as a reversal (mtf: reversal).`);
+    const old = `Trend rule: prevailing trend ${prevailing}; trend strategies may not go ${against}; reversal strategies (mtf: reversal) may go ${against} too.`;
+    assert.deepStrictEqual(trendRuleOf(line), trendRuleOf(old), line);
+    assert.deepStrictEqual(trendRuleOf(line), { prevailing, long: longAllowed, short: !longAllowed });
+  }
 });
 
 test('factsFromBriefing: the window, the trend rule, the setups with room and read, a verdict on its component, the attempt', () => {
@@ -97,7 +107,7 @@ test('reasonCheck: true reasons come back TRUE; judgment and unparsed clauses ar
   assert.deepStrictEqual(room.unparsed, ['the moon is full']);
   assert.strictEqual(room.status, 'unchecked', 'an unparsed clause leaves it unchecked, never confirmed');
   const text = renderCheck(room);
-  assert.match(text, /- TRUE no-room: "keltner short: VWAP at 0\.4R vs 1\.5R needed" - keltner: VWAP \(rth\) at 0\.4R, it needs 1\.5R/);
+  assert.match(text, /- TRUE no-room: "keltner short: VWAP at 0\.4R vs 1\.5R needed" - keltner: VWAP \(rth\) at 0\.4R, it aims for 1\.5R/);
   assert.match(text, /- JUDGMENT "ADX falling": yours to weigh/);
   assert.match(text, /- UNPARSED "the moon is full": no fact recognized; check it yourself/);
   // The attempt unknown (no attempts read): the claim is unchecked.
@@ -111,9 +121,9 @@ test('reasonCheck: each setup\'s priority-order steps, one by one', () => {
   const r = reasonCheck('no-trade - stood aside', f);
   assert.deepStrictEqual(r.steps.map(s => [s.setup, s.direction, s.steps.map(x => x.result)]), [
     ['orb', 'long', ['pass', 'pass', 'pass', 'pass', 'judgment', 'no-trade', 'pass']],
-    ['keltner', 'short', ['pass', 'pass', 'no-trade', 'half', 'judgment', 'no-trade', 'pass']],
+    ['keltner', 'short', ['pass', 'pass', 'judgment', 'half', 'judgment', 'no-trade', 'pass']],
   ]);
-  assert.match(renderCheck(r), /- keltner short: 1 hard stops pass \(no hard stop\); 2 trend rule pass \(the trend rule allows a short\); 3 room no-trade \(VWAP \(rth\) at 0\.4R before the 1\.5R it needs\); 4 multi-timeframe read half/);
+  assert.match(renderCheck(r), /- keltner short: 1 hard stops pass \(no hard stop\); 2 trend rule pass \(the trend rule allows a short\); 3 room judgment \(VWAP \(rth\) at 0\.4R ahead, it aims for 1\.5R: a read, never a no trade alone\); 4 multi-timeframe read half/);
   assert.match(renderCheck(reasonCheck('x', factsFromBriefing(briefing()))), /The priority order: no setup on this bar/);
 });
 

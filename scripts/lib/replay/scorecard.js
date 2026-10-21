@@ -25,7 +25,7 @@
  *   1 hard stops    a no-entry window or news blackout (the briefing's `blocked`), a skip verdict,
  *                   the attempt's entry block  -> no trade
  *   2 trend rule    a trend strategy against it -> no trade; a reversal fading it -> judgment, half
- *   3 room          the first level in its way before the R it needs -> no trade
+ *   3 room          the first level ahead before the R it aims for -> judgment (a read, never a no trade)
  *   4 mtf read      aligned -> full; mixed -> half; counter (non-reversal) -> no trade; pullback -> judgment
  *   5 skip rules    judgment (the strategy's own text)
  *   6 confluence    a setup on the other side -> no trade
@@ -117,8 +117,9 @@ const etClock = ms => ET.format(new Date(ms));
 // ---------------------------------------------------------------------------------------------
 // Classification
 
-// Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence and mixed alone are not.
-const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'no-room', 'counter', 'entry-block']);
+// Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence, mixed and the room
+// (a read, never a no trade alone) are not.
+const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'counter', 'entry-block']);
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {

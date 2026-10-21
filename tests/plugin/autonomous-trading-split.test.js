@@ -82,6 +82,9 @@ const LATE = [
     reason: "fix/skills-match-code: the runner manages a composed trade by its policy's exit mode; no rules strategy is active (strategies/retired.json)" },
   { from: "It gives only a count of working orders, the trend rule, and no scan details: read `list_open_orders` once; take the alignment and the scan's candidates from the bar briefing (`m15` `alignment`, `m3` `candidates`), and run `mtf_read` or `strategies_scan` only when it says there is no current briefing.", to: "It gives only a count of working orders, the trend rule, and no scan details: read `list_open_orders` once; take the alignment from the bar briefing (`m15` `alignment`), and run `mtf_read` only when it says there is no current briefing.",
     reason: "fix/skills-match-code: no rules strategy is active: the briefing's setups to check, not a scan's candidates" },
+  { from: "The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don't reverse a recent decision without saying what changed.",
+    to: "The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them; each bar is decided on its own facts: a past pass is no reason to pass again.",
+    reason: "fix/confluence-not-vetoes: \"no new reason since the last cycle\" was a soft veto the baseline passed on; each bar is decided on its own count (owner, 2026-10-21)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

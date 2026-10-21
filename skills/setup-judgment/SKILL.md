@@ -17,15 +17,13 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   rules candidate's (none active), `facts`, `inTheWay`, `needR` and
   `blocked` in `m3` `candidates`. They are context, not a verdict: judge by
   the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules
-  strategy: also its STRATEGY.md). A setup on that side, with room past
-  what it needs and confluence with it is the opportunity this
-  harness looks for, when the rest of this skill agrees and it isn't
-  `blocked`: the strategy's normal size (position-sizing and the prop
+  strategy: also its STRATEGY.md). A setup on that side the count takes
+  (`confluence-counting`) is the opportunity this harness looks for, when
+  it isn't `blocked`: the strategy's normal size (position-sizing and the prop
   budget), and let its own exit work (don't bank before its trail or
   target). The priority order decides: a policy strategy's verdict
   too.
-- Tabulate each analyst's bias and confidence. Trade only when at least two of
-  the three market analysts agree and none is strongly opposed.
+- Tabulate each analyst's bias and confidence. Each is a read in the count.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value
   market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition,
   plus volatility. Don't override it with a narrative; if the analysts disagree
@@ -56,7 +54,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`
   once. It checks each reason against the bar briefing (the session window
   and whether it allows entries, the trend rule per side, the candidates
-  and verdict, the room in R against the room needed, the multi-timeframe
+  and verdict, the first level ahead in R against the R it aims for, the multi-timeframe
   read for the side) and the attempt line, and lists each setup's
   priority-order steps as the facts answer them: judge each step on its
   own. A reason marked FALSE: name it, drop it, and decide again from the
@@ -67,5 +65,5 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 ## Examples
 
 ```text
-trade_lifecycle long: compose_check OK, read long aligned, nothing in its way -> take; reason_check
+trade_lifecycle long: compose_check OK, read long aligned, for 4 against 1 -> take; reason_check
 ```

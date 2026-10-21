@@ -12,8 +12,7 @@ description: Trader-process steps 7 and 9, and each cycle with a position open -
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. A missing field
+A read, never a veto: the count decides (`confluence-counting`). A missing field
 is `unknown`.
 
 **The idea's invalidation**, on a close: a pullback long, below the swing

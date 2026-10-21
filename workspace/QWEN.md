@@ -144,7 +144,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   stands in for it).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
-- Skip the trade when unsure. Standing aside is a position.
+- Pass when the count says so. Standing aside is a position.
 
 ## Skills
 

@@ -12,8 +12,7 @@ description: Use when price pushes into a level on rising volume without progres
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
 Effort is volume (the last 10 bars' `V`, `m3.participation`); result is
@@ -43,7 +42,7 @@ them): `broker-bar-fields`. Never derive one from OHLCV; without them,
 ```text
 Take: a 15m rejection of prior VAL 21480.00, then 3m bars into it on V 2,400 / 2,650 / 2,900
   (about 1,100 before); (c-o) -1.25 / +0.50 / +0.75, no close below. Reads: at prior val,
-  15m rejected prior val up, 3m absorption at prior val up. Priority order: room -> take.
+  15m rejected prior val up, 3m absorption at prior val up. The count for -> take.
 Skip: the absorption read alone, no setup read: compose_check refuses.
   Priority order (step 1): skip.
 Loser: absorption at 21480.50; long at 21480.75, stop 21474.25 (6.50 pts = 26 ticks,

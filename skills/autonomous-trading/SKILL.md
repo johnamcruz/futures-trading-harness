@@ -31,8 +31,8 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
      mode (`trade-plan`); a rules one's trail or time stop (none active).
    Don't loosen a stop it set. Why a setup did or didn't fire, and what
    earlier cycles saw: the `runner-logs` skill. The prompt also carries the last 10
-   closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don't reverse a
-   recent decision without saying what changed. Those results are your past
+   closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them; each bar is
+   decided on its own facts: a past pass is no reason to pass again. Those results are your past
    conclusions, not facts: where one contradicts this prompt's account or
    attempt line (e.g. it says no attempt is running and the prompt lists an
    active one), the prompt's facts win, and you say the earlier result was

@@ -12,8 +12,7 @@ description: Trader-process steps 3 and 5 - whether a move has push behind it fr
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
 **The bar.** `m3.bar.rangeAtr` = (h - l) / ATR(14); `m3.context.range5Atr`
@@ -65,7 +64,7 @@ did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
 
 ```text
 Take: bar H 21510.00 L 21499.75 C 21509.25: close top third; rangeAtr 1.40; vol 1.8x: momentum up.
-  Trend: adxSlope +3.2. Reads: 3m momentum up, 3m close top. Priority order: aligned, room -> take.
+  Trend: adxSlope +3.2. Reads: 3m momentum up, 3m close top. Priority order: aligned; the count for -> take.
 Skip: close middle third, rangeAtr 0.60, relVolLast3VsPrior20 0.7, adxFallingBars 6. Read: fading,
   no close or momentum read its way; the priority order leaves it to judgement: skip.
 Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 on 1 MNQ);

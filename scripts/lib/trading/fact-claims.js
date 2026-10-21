@@ -271,7 +271,7 @@ function checkClaim(claim, b, order = null) {
   if (!strategy && on.length > 1) return unmatched(`${on.length} ${claim.side} setups (${on.map(c => c.name).join(', ')}): name the strategy, room <strategy> ${claim.side} ...`);
   if (!on.length) return res('unchecked', `no ${strategy ? `${strategy} ` : ''}setup on the ${claim.side} side`);
   const rooms = on.map(roomOf);
-  const fact = on.map(c => (c.inTheWay ? `${c.name}: ${c.inTheWay.name} at ${c.inTheWay.R}R, it needs ${c.needR}R` : `${c.name}: no level in its way, it needs ${c.needR}R`)).join('; ');
+  const fact = on.map(c => (c.inTheWay ? `${c.name}: ${c.inTheWay.name} at ${c.inTheWay.R}R, it aims for ${c.needR}R` : `${c.name}: no level ahead, it aims for ${c.needR}R`)).join('; ');
   if (rooms.some(r => r === null)) return res('unchecked', `the room is unknown (${on.map(c => c.name).join(', ')})`);
   // The setup the claim is about, so the same fact counts once.
   return { ...res(rooms[0] === claim.value, fact), about: on[0].name };

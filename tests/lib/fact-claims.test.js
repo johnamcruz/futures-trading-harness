@@ -98,7 +98,7 @@ test('facts: vwap and value - price against the VWAP and the prior value area', 
 test('facts: room - the first level in the way against the R needed; never guessed', () => {
   // keltner short: VWAP at 0.4R before the 1.5R it needs; orb long: nothing in its way.
   assert.deepStrictEqual(checks(['room short short', 'room short enough', 'room long enough', 'room long short']), [true, false, true, false]);
-  assert.strictEqual(one('room short enough').fact, 'keltner: VWAP (rth) at 0.4R, it needs 1.5R');
+  assert.strictEqual(one('room short enough').fact, 'keltner: VWAP (rth) at 0.4R, it aims for 1.5R');
   // Two short setups, no strategy named and no order: it can't be matched (false, unmatched: it refuses).
   const two = briefing({ candidates: [KELTNER, BOS] });
   assert.deepStrictEqual([one('room short enough', two).check, one('room short enough', two).unmatched], [false, true]);
@@ -270,7 +270,7 @@ test('facts: line endings, control characters, underscores, the minus sign', () 
   B.writeBriefing(va, briefing({ candidates: [{ name: 'value_area', direction: 'long', stopPoints: 6, needR: 2, inTheWay: null }] }));
   const vrun = text => F.gateRefusal({ report: { text }, home: va, root: 'MNQ', now: NOW, order: { strategy: 'value_area', side: 'long' } });
   assert.deepStrictEqual(F.factsLines('FACTS: room value_area long short; _vwap below_'), ['room value_area long short', 'vwap below']);
-  assert.match(vrun('FACTS: window opening drive; room value_area long short'), /contradicts: "room value_area long short" \(the briefing: value_area: no level in its way, it needs 2R\)/);
+  assert.match(vrun('FACTS: window opening drive; room value_area long short'), /contradicts: "room value_area long short" \(the briefing: value_area: no level ahead, it aims for 2R\)/);
   assert.strictEqual(vrun('FACTS: window opening drive; room value_area long enough'), null);
   // The minus sign maps to a hyphen, as the explicit list says.
   assert.strictEqual(F.parseClaim('window opening\u2212drive').type, 'window');
@@ -382,7 +382,7 @@ test('facts: round 9 - an unconfirmed claim refuses, room resolves to the approv
   const VX_LONG = { strategy: 'vx', side: 'long' };
   const run = (text, extra = {}) => F.gateRefusal({ report: { text }, home, root: 'MNQ', now: NOW, order: ORB_LONG, ...extra });
   // The reviewer's repro: refused (room resolves to the vx order, which is short of room; news can't be confirmed).
-  assert.match(run('VERDICT: APPROVE vx long\nFACTS: window rth; entries allowed; room long enough; news clear', { order: VX_LONG }), /contradicts: "room long enough" \(the briefing: vx: IB high at 0\.5R, it needs 2R\)/);
+  assert.match(run('VERDICT: APPROVE vx long\nFACTS: window rth; entries allowed; room long enough; news clear', { order: VX_LONG }), /contradicts: "room long enough" \(the briefing: vx: IB high at 0\.5R, it aims for 2R\)/);
   // Round 10's repro: the verdict says orb, the order is vx: the room fact is about the order's vx, never the verdict's text.
   assert.match(run('VERDICT: APPROVE - size 1, orb long\nFACTS: window rth; entries allowed; room long enough', { order: VX_LONG }), /contradicts: "room long enough" \(the briefing: vx: IB high/);
   assert.match(run('VERDICT: APPROVE - size 1, orb long\nFACTS: window rth; entries allowed; room orb long enough', { order: VX_LONG }), /room facts that can't be matched to this order \(setup:vx long\): "room orb long enough" \(it is about orb long, the order is vx long\)/);

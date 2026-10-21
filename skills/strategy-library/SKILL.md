@@ -30,8 +30,8 @@ Strategies are Markdown documents, not code. Each lives at
 
 ### The priority order: the rule for every setup
 
-A verdict is a ceiling on size, never an order. Contradicting
-facts mean no trade; confluence means trade. Go down the list; a higher step
+A verdict is a ceiling on size, never an order. The count decides
+(`confluence-counting`). Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
 Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
@@ -47,9 +47,9 @@ stated size stands under the code's caps.
    fade it only at a higher-timeframe level, at half size and the nearest
    target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a
    15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.
-3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
-   before the room it needs (`needR`) → no trade. A composed trade's
-   room: its R:R to the first real level (at least `risk.min_rr`).
+3. **Room**: the first level ahead (`inTheWay`, its own R) and the R it
+   aims for (`needR`): a read, never a no trade alone. Hard: R:R to the
+   target at least `risk.min_rr` (code-enforced).
 4. **The multi-timeframe read for its side**: a rules strategy:
    `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the
    bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a

@@ -49,7 +49,7 @@ ticks apart act as one zone.
 **Room in R.** The briefing's `R` is against the reference stop
 (`m3.oneR`). Against the trade's own stop (`order_plan`'s distance, the
 trade's 1R), a target's R is its points over the stop's points. The first
-level in the way (`inTheWay`) caps what the trade can expect.
+level ahead (`inTheWay`) is a read, not a cap: price often trades through it.
 A target under the strategy's `risk.min_rr` doesn't pay for the stop.
 Round a target toward the entry (`trade-plan`).
 

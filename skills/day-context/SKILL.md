@@ -25,8 +25,8 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
   (fading needs a reversal setup at a higher-timeframe level); a normal
   variation day (one side extended, less) has made its move and often
   rotates back; an open inside the prior value area that stays
-  inside the IB is balance (fade the edges, small targets, stand aside in
-  the middle); a neutral day (both sides extended) is two-sided. With 80% or
+  inside the IB is balance (fade the edges, small targets; the middle
+  is a read against); a neutral day (both sides extended) is two-sided. With 80% or
   more of the ADR used, the room left for a target is small: say so, and
   prefer the nearest target.
 

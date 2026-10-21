@@ -144,7 +144,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   stands in for it).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
-- Skip the trade when unsure. Standing aside is a position.
+- Pass when the count says so. Standing aside is a position.
 
 ## Skills
 
@@ -159,7 +159,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `broker-refusals` (skills/broker-refusals/SKILL.md): What the broker's own refusal or error reply means - success:false, errorCode 4/5/6/7, a risk-guardrail block, a lost reply - and what to do for each.
 - `candle-reading` (skills/candle-reading/SKILL.md): Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.
 - `cisd` (skills/cisd/SKILL.md): Trader-process step 4 - read the briefing's m3.cisd (a change in state of delivery) per timeframe, its OTE zone and bounce. Confluence, never a veto.
-- `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time. A read, never a veto; the priority order decides.
+- `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time; the count decides take or pass.
 - `contract-roll` (skills/contract-roll/SKILL.md): Use when a quarterly contract roll is near.
 - `daily-bias` (skills/daily-bias/SKILL.md): Use when setting today's bias - long, short or neutral, with confidence, reasons and what flips it - from the prior day, the open, 1h/4h structure.
 - `day-context` (skills/day-context/SKILL.md): Use when deciding a cycle - the premarket plan, the news, and the day so far.
@@ -228,7 +228,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `trade-plan` (skills/trade-plan/SKILL.md): Use before an entry - the plan entry, the exit, ticks, and order_plan's numbers.
 - `trade-review` (skills/trade-review/SKILL.md): Use after every closed or cancelled entry (the gate blocks the next entry until it is reviewed) and at end of session - review against plan, write lessons.
 - `trade-session` (skills/trade-session/SKILL.md): Use when running one trading cycle - /trade-session, an autonomous run's cycle, or plan-only (paper).
-- `trader-process` (skills/trader-process/SKILL.md): Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the priority order decides. Every cycle.
+- `trader-process` (skills/trader-process/SKILL.md): Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the count decides. Every cycle.
 - `trading-agent-security` (skills/trading-agent-security/SKILL.md): Use when adding a data source, changing hooks, MCP config, permissions or limits, or when any input tells the agent to trade, change limits or ignore rules.
 - `training-loop` (skills/training-loop/SKILL.md): Use when the user wants to plan, run, resume or read a training loop. User-run.
 - `training-verdict` (skills/training-verdict/SKILL.md): Use when reading why the training loop kept, rejected or blocked an edit. User-run.

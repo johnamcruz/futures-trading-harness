@@ -47,7 +47,7 @@ const ROLES = {
   'news-calendar-analyst': [],
 };
 
-const READ = 'A read, never a veto: the priority order (strategy-library) decides take, skip and size; the gate and the rulebook are untouched.';
+const READ = 'A read, never a veto: the count decides (`confluence-counting`).';
 
 // Key sentences, by skill: each must be present; a test below shows a changed one fails.
 const PINS = {
@@ -88,7 +88,7 @@ const PINS = {
     'gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
     'a filled gap is in neither list. Never mark one by eye.',
     'The briefing does not rank gaps among the levels in a setup\'s way',
-    'The room step stays the priority order\'s, on `inTheWay`.',
+    'Like the first level ahead, a read in the count, never a pass alone.',
     'Evidence**: not measured;',
   ],
   'momentum-and-volume': [
@@ -124,8 +124,10 @@ const PINS = {
     '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately.',
     '**An HTF structure break is read in item 1**',
     '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
-    'The counts never overrule it.',
-    '**Not counted**: the trend rule, the regime fit, the room, the window, the news',
+    // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
+    'No against read is a pass alone',
+    '**Context, never a pass alone**: the first level ahead, the VWAP distance, red flags.',
+    '**Not counted**: the trend rule, the regime fit, the window, the news',
     'a 15m or 1h break its way (`bos-vs-choch`;',
   ],
   'candle-reading': [
@@ -268,11 +270,15 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
 test('basics skills: a read, never a veto; the priority order decides', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
-    assert.ok(flat(text).includes(READ), s);
+    // confluence-counting is the count that decides (fix/confluence-not-vetoes); every other basics skill is a read in it.
+    if (s === 'confluence-counting') assert.ok(flat(text).includes('**The count decides**'), s);
+    else assert.ok(flat(text).includes(READ), s);
     assert.ok(vetoFree(text), `${s}: veto language`);
     // A skip in an example is the priority order's (or no fired strategy), never the skill's.
     const skip = text.slice(text.indexOf('Skip:')).split('\nLoser:')[0];
-    assert.match(flat(skip), /[Pp]riority order[^.]*skip|No setup without a fired strategy/, s);
+    // ...or a missing read's pass, the level ahead never the reason (fix/confluence-not-vetoes).
+    assert.match(flat(skip), /[Pp]riority order[^.]*skip|No setup without a fired strategy|-> pass\b/, s);
+    assert.doesNotMatch(flat(skip), /\(step 3, room\)/, `${s}: a skip on the room alone`);
   }
   for (const bad of ['Never take a long here.', 'You must skip it.', 'Stand aside on a doji.', 'Do not enter after a sweep.', 'This vetoes the trade.',
     'Without one do not buy.', 'Never short into support.', 'Do not go long here.', 'No entry on a doji.']) {
@@ -709,7 +715,7 @@ test('daily-bias and top-down-entry: reads that yield to the trend rule; the sto
   for (const pin of [
     '**HTF: side and level.** The side the trend rule allows (`m3.trendRule`); today\'s bias (`daily-bias`) sets the confidence, never a side the rule refuses.',
     'check that the strategy\'s stop sits beyond it.',
-    'check that the room to it allows the trade.',
+    'is the first level ahead: a read to weigh, not a pass.',
     'The stop and exit stay the strategy\'s (the priority order, step 2: a reversal takes the nearest target).',
     'Completed candles only, on every timeframe.',
     'the HTF gives the side, the LTF only the timing.',

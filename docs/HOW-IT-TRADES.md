@@ -36,8 +36,11 @@ true before the order can go (`compose_check`, the `trade-lifecycle` skill).
   behind the latest confirmed 15m swing to ride the trend (`target_then_trail`,
   the account's rulebook). Of every exit tested, a structure trail like this
   kept the most edge.
-- **Selective:** a valid setup is a pass when the room to the target is under
-  2R, the trend is against it, or the reads don't all check true.
+- **Selective:** a valid setup is a pass when the R:R to its target is under
+  2R, the trend is against it, the reads don't all check true, or the count
+  of reads for and against (under the trend's side) doesn't favour it. A
+  level before the target or a stretch from VWAP is a read in that count,
+  never a pass on its own.
 
 ## Who does what
 

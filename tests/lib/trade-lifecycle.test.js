@@ -207,6 +207,21 @@ test('inTheWay: the first level strictly between the entry and the target, never
   assert.strictEqual(plan({ briefing: b }).plan.inTheWay, null, 'within a tick of the target, or past it');
 });
 
+test('a level ahead before the target is a read, never a problem; R:R to the target under min_rr stays one (fix/confluence-not-vetoes)', () => {
+  // Scenario 1: the last 3m swing high 0.17R ahead of the 2.08R target: the plan stands.
+  const { checked, briefing, ...planned } = plan();
+  assert.ok(planned.plan.inTheWay.R < planned.plan.rr);
+  assert.deepStrictEqual(planned.problems, []);
+  // The record states it as a fact beside the target, never as a reason to pass.
+  const r = TL.buildRecord({ at: '2026-04-23T15:00:05.000Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing, checked, planned });
+  assert.strictEqual(r.ok, true);
+  const text = TL.renderRecord(r, checked);
+  assert.match(text, /target 21598 \(1h-swing 21598: 231 ticks\); R:R 2\.08; first level ahead: last 3m swing high 21545 at 0\.17R;/);
+  assert.doesNotMatch(text, /in the way|comes first/);
+  // The hard EV rule: the same plan under a higher min R:R is refused.
+  assert.ok(plan({ minRR: 2.5 }).problems.some(x => /R:R 2.081 is under the strategy's min 2.5/.test(x)));
+});
+
 test('the record carries its contract, lane and exploratory flag (the learning loop reads them)', () => {
   const { checked, briefing, ...planned } = plan();
   briefing.contractId = 'MNQ:2026-06';

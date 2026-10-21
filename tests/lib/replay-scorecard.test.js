@@ -146,7 +146,9 @@ test('expected: no scan is unchecked, no setup is no trade, each step decides in
   // A reversal fading the prevailing trend: judgment, at half size.
   const fade = go({ style: 'reversal', direction: 'long', vwapSide: 'above' });
   assert.deepStrictEqual([fade.decision, fade.ceiling, fade.judgment], ['take', 11, [2, 5]]);
-  assert.deepStrictEqual([go({ room: { inTheWay: { name: 'prior VAL', R: 0.69 }, needR: 2 } }).decision, go({ room: { inTheWay: { name: 'prior VAL', R: 0.69 }, needR: 2 } }).decidedBy], ['no-trade', 3]);
+  // The room is a read (step 3 judgment), never a no trade alone: a level ahead before the target leaves the take.
+  const near = go({ room: { inTheWay: { name: 'prior VAL', R: 0.69 }, needR: 2 } });
+  assert.deepStrictEqual([near.decision, near.decidedBy, near.ceiling, near.judgment, near.couldSkip], ['take', 'take', 22, [3, 5], []]);
   // Mixed halves (floor); at size 1 the half is 0: no trade, decided by step 4.
   assert.deepStrictEqual([go({ alignment: 'mixed' }).decision, go({ alignment: 'mixed' }).ceiling], ['take', 11]);
   const one = go({ alignment: 'mixed', verdict: { action: 'full', maxSize: 1 } });
@@ -177,11 +179,12 @@ const run = (l, f, text = 'CYCLE RESULT: done') => classify(l, f, l.decision ===
 test('categories: each failure in the taxonomy, right, and unchecked', () => {
   const take = facts({ setups: [setup()] });
   const roomless = facts({ setups: [setup({ room: { inTheWay: { name: 'prior VAL', R: 0.5 }, needR: 2 } })] });
-  // right: a skip the order agrees with, for true reasons; an entry within the ceiling.
-  assert.deepStrictEqual(run(label(), roomless, 'CYCLE RESULT: veto - insufficient room'), { category: 'right', agrees: true, why: [] });
+  // A skip on the room alone, true or not, is excessive abstention: the room is a read, never a no trade alone.
+  assert.deepStrictEqual([run(label(), roomless, 'CYCLE RESULT: veto - insufficient room').category, run(label(), roomless, 'CYCLE RESULT: veto - insufficient room').agrees], ['excessive abstention', false]);
+  // right: an entry within the ceiling (a skip for true reasons: the trend-rule cases below).
   assert.strictEqual(run(entry('short', 10), take).category, 'right');
   // wrong stated reason: the right skip, a false reason.
-  assert.deepStrictEqual(run(label(), roomless, 'CYCLE RESULT: no-trade - no candidate strategies').category, 'wrong stated reason');
+  assert.deepStrictEqual(run(label(), facts({ setups: [setup({ alignment: 'counter' })] }), 'CYCLE RESULT: no-trade - no candidate strategies').category, 'wrong stated reason');
   // excessive abstention: a skip where the order says take, on false grounds or none.
   const abst = run(label(), take, 'CYCLE RESULT: no-trade - no candidate strategies (keltner short blocked by 15m down trend rule)');
   assert.deepStrictEqual([abst.category, abst.agrees], ['excessive abstention', false]);
@@ -200,7 +203,8 @@ test('categories: each failure in the taxonomy, right, and unchecked', () => {
   assert.deepStrictEqual(run(entry('short', 30), take).why, ['30 over the ceiling 22']);
   assert.strictEqual(run(entry('short', 30), take).category, 'bad size');
   assert.strictEqual(run(entry('short', 12), facts({ setups: [setup({ alignment: 'mixed' })] })).category, 'bad size', 'mixed halves 22 to 11');
-  assert.deepStrictEqual([run(entry('short', 1), roomless).category, run(entry('short', 1), roomless).why], ['bad size', ['the order says no trade (step 3)']]);
+  // An entry with a level ahead before its target: right (the room is a read, never a no trade alone).
+  assert.deepStrictEqual([run(entry('short', 1), roomless).category, run(entry('short', 1), roomless).why], ['right', []]);
   // early close: an exit the model sent before the plan's exit was reached (its own test below); a hold is right.
   assert.strictEqual(run(label({ decision: 'in-trade', teacher: { action: 'exit', orders: [] }, outcome: { setup: 'prop_portfolio', r: 0.5, mfeR: 0.8, entryTime: '2026-06-01T14:20:00.000Z' } }), facts()).category, 'early close');
   assert.strictEqual(run(label({ decision: 'in-trade', teacher: { action: 'hold', orders: [] } }), facts()).category, 'right');
@@ -399,8 +403,8 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   assert.match(R[4].reasons.claims.find(c => c.kind === 'no-entry-window').why, /opening drive window allows entries/);
   // 5: a skip verdict (step 1); "no prop attempt running" while it runs.
   assert.deepStrictEqual([R[5].expected.decision, R[5].expected.decidedBy, R[5].category], ['no-trade', 1, 'wrong stated reason']);
-  // 6: the gate refused the entry; the room (1.85R before the 2R it needs) said no trade anyway.
-  assert.deepStrictEqual([R[6].category, R[6].expected.decidedBy], ['risk-rule rejection', 3]);
+  // 6: the gate refused the entry; the room (1.85R ahead of the 2R it aims for) is a read: the order said take.
+  assert.deepStrictEqual([R[6].category, R[6].expected.decidedBy, R[6].expected.judgment], ['risk-rule rejection', 'take', [3, 5]]);
   // 7: no setup, judgment reasons, and a false claim about trend setups the bar didn't have: incidental, still right.
   assert.deepStrictEqual([R[7].category, R[7].reasons.judgment.length, R[7].incidentalFalse], ['right', 2, 1]);
   assert.deepStrictEqual(R[7].reasons.claims.map(c => [c.kind, c.check, c.incidental]), [['trend-blocks', false, true]]);
@@ -409,8 +413,8 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   // The summary.
   assert.deepStrictEqual(summary.categories, { right: 3, 'wrong-side entry': 0, 'bad size': 0, 'early close': 1, 'excessive abstention': 1, 'wrong stated reason': 2, 'risk-rule rejection': 1, unchecked: 1 });
   assert.deepStrictEqual(summary.agreement.overall, { decisions: 9, agree: 5, disagree: 3, unchecked: 1, rate: 0.625 });
-  assert.deepStrictEqual(Object.keys(summary.agreement.byStep), ['1 hard stops', '3 room', 'in a trade', 'no setup', 'take']);
-  assert.deepStrictEqual(summary.agreement.byStep.take, { decisions: 2, agree: 1, disagree: 1, unchecked: 0, rate: 0.5 });
+  assert.deepStrictEqual(Object.keys(summary.agreement.byStep), ['1 hard stops', 'in a trade', 'no setup', 'take']);
+  assert.deepStrictEqual(summary.agreement.byStep.take, { decisions: 3, agree: 1, disagree: 2, unchecked: 0, rate: 0.3333 });
   assert.strictEqual(summary.agreement.byStrategy.orb.decisions, 4);
   assert.deepStrictEqual([summary.trades.n, summary.trades.wins, summary.trades.sumR, summary.trades.net], [1, 1, 0.5, 18.52]);
   assert.strictEqual(summary.skipped.n, 1);
@@ -498,11 +502,14 @@ test('replay.js scorecard: the CLI writes the scorecard and prints its summary',
 
 test('an entry is judged against the setup it traded, not the best setup on the bar', () => {
   const orb = setup({ name: 'orb', component: null, policy: false, verdict: null });
-  const keltner = setup({ name: 'keltner', component: null, policy: false, verdict: null, room: { inTheWay: { name: 'prior day low', R: 0.3 }, needR: 2 } });
+  const keltner = setup({ name: 'keltner', component: null, policy: false, verdict: null, alignment: 'counter', room: { inTheWay: { name: 'prior day low', R: 0.3 }, needR: 2 } });
   const f = facts({ setups: [orb, keltner] });
   const enter = name => { const l = entry('short', 1, undefined, name); return classify(l, f, expectedForEntry(f, name, 'short'), checkReasons('CYCLE RESULT: executed', f)); };
-  // keltner's room says no trade, though orb's setup passes.
-  assert.deepStrictEqual([expectedForEntry(f, 'keltner', 'short').decidedBy, enter('keltner').category], [3, 'bad size']);
+  // keltner's counter read says no trade, though orb's setup passes.
+  assert.deepStrictEqual([expectedForEntry(f, 'keltner', 'short').decidedBy, enter('keltner').category], [4, 'bad size']);
+  // Its room alone (a level 0.3R ahead) never says no trade: the entry on it is right.
+  const near = facts({ setups: [orb, { ...keltner, alignment: 'aligned' }] });
+  assert.deepStrictEqual([expectedForEntry(near, 'keltner', 'short').decidedBy, classify(entry('short', 1, undefined, 'keltner'), near, expectedForEntry(near, 'keltner', 'short'), checkReasons('CYCLE RESULT: executed', near)).category], ['take', 'right']);
   assert.strictEqual(enter('orb').category, 'right');
   // A setup tag the bar has no setup for: unchecked.
   assert.deepStrictEqual([expectedForEntry(f, 'vwap_reclaim', 'short').decidedBy, enter('vwap_reclaim').category], ['no matching setup', 'unchecked']);

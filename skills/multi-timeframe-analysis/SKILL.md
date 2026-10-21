@@ -72,8 +72,8 @@ Where it is enforced:
   While the autonomous runner is running, `record` is refused (the runner
   records the symbols it trades): don't trade interactively next to it.
 
-The last line of the read states it: `Trend rule: prevailing trend 4h up;
-trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.`
+The last line of the read states it, the allowed side first: `Trend rule:
+LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).`
 The daily (`daily`) is context for your judgment; the rule reads the
 intraday frames.
 
@@ -96,7 +96,7 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
 15m: DOWN (close 21652.25 vs EMA20 21661, EMA20 vs EMA50 21664.5, structure LH/LL), ADX 18.2, ...
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
-Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
+Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).
 
 -> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.
    Shorts are counter: a trend strategy's short is refused (scan and gate); a composed
@@ -107,7 +107,7 @@ mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the par
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.59, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
-Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
+Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).
 
 -> Longs: mixed (the priority order's step 4 sizes it). Shorts: against the 4-hour trend, refused for trend strategies.
 ```

@@ -125,7 +125,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   assert.ok(cycles.length >= 5, `cycles: ${cycles.length}`);
   for (const c of cycles) {
     assert.match(c.prompt, /MNQ last 10 closed 3m bars \(ET open time, oldest first\)/);
-    assert.match(c.prompt, /MNQ Trend rule: prevailing trend/);
+    assert.match(c.prompt, /MNQ Trend rule: (?:LONG|SHORT) allowed \(prevailing /);
     assert.match(c.prompt, /With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle/);
   }
   assert.ok(cycles.some(c => /Your last \d cycle\(s\)/.test(c.prompt)), 'later cycles see the earlier results');

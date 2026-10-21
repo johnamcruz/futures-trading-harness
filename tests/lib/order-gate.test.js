@@ -1821,7 +1821,7 @@ test('phase2-facts: a room fact is about the order\'s own setup (its setup tag a
     return evaluateOrder({ input, entries: [plan()], now: NOW, config: auto }).violations.filter(v => v.check === 'phase2-facts').map(v => v.message);
   };
   // The repro: the verdict names vx, the order is setup:orb: "room long enough" is about orb, which is short of room.
-  assert.match(facts('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room long enough')[0], /contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it needs 2R\)/);
+  assert.match(facts('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room long enough')[0], /contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it aims for 2R\)/);
   // Naming another strategy, or the other side: can't be matched (never "contradicts").
   const other = facts('VERDICT: APPROVE - size 1, vx long\nFACTS: window opening drive; entries allowed; room vx long enough')[0];
   assert.match(other, /room facts that can't be matched to this order \(setup:orb long\): "room vx long enough" \(it is about vx long, the order is orb long\)/);
@@ -1878,7 +1878,7 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
   fs.writeFileSync(file, approve('VERDICT: APPROVE - size 1\nFACTS: entries allowed; room long enough; read long mixed'));
   const r = run(entryOrder());
   assert.deepStrictEqual(checks(r), ['phase2-facts']);
-  assert.match(r.violations[0].message, /approved on facts the bar briefing contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it needs 2R\); "read long mixed" \(the briefing: the long read is aligned\)\. The approval doesn't stand/);
+  assert.match(r.violations[0].message, /approved on facts the bar briefing contradicts: "room long enough" \(the briefing: orb: IB high at 0\.5R, it aims for 2R\); "read long mixed" \(the briefing: the long read is aligned\)\. The approval doesn't stand/);
   // The cycle decides another bar: this briefing isn't its facts (refused). No cycle bar given: the briefing on file
   // while it is current, else unavailable (stated facts refused, none passes).
   assert.match(facts(run(entryOrder(), { ...auto, cycleBars: { MNQ: '2026-10-07T13:57:00.000Z' } }))[0].message, /can't be read \(the MNQ briefing is for the bar at/);
@@ -1913,6 +1913,35 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
   // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
   assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
   for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));
+});
+
+test('phase2-facts: a soft read alone never refuses (the room short, the VWAP on the other side, a mixed read); a false trend fact still does (fix/confluence-not-vetoes)', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  // orb long: the IB high 0.4R ahead of the 2R it aims for, the price below the VWAP (the other side), a mixed read; the
+  // trend rule in today's wording (the allowed side first).
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', trendRule: 'Trend rule: LONG allowed (prevailing 1h up); short only as a reversal (mtf: reversal).', vwap: { side: 'below' }, candidates: [{ name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: { name: 'IB high', R: 0.4 } }] } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'mixed', short: 'counter' } } },
+  } });
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const run = text => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(text)].join('\n'));
+    return evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config: auto });
+  };
+  // Every soft read stated as the briefing has it: the entry goes (no check refuses on a soft read).
+  assert.deepStrictEqual(run('VERDICT: APPROVE - size 1, orb long, the count for it\nFACTS: window opening drive; entries allowed; trend long allowed; room long short; vwap below; read long mixed').violations, []);
+  // The trend rule stays hard: a false trend fact (shorts are blocked under a 1h uptrend) is refused, in the new wording too.
+  const r = run('VERDICT: APPROVE - size 1\nFACTS: window opening drive; trend short allowed');
+  assert.deepStrictEqual(checks(r), ['phase2-facts']);
+  assert.match(r.violations[0].message, /"trend short allowed" \(the briefing: Trend rule: LONG allowed \(prevailing 1h up\)/);
+  // The same facts read from the older line (records from before) are the same rule.
+  const { trendRuleOf } = require('../../scripts/lib/trading/reasons');
+  assert.deepStrictEqual(trendRuleOf('Trend rule: LONG allowed (prevailing 1h up); short only as a reversal (mtf: reversal).'), trendRuleOf('Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.'));
 });
 
 test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript from the runner\'s environment', () => {

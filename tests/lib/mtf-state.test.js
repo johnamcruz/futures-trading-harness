@@ -31,7 +31,7 @@ test('buildRecord: the trend rule frames as of the last closed bar, and when tha
   assert.strictEqual(Date.parse(rec.closedAt) - Date.parse(rec.asOf), 180000, 'a 3-minute bar closes 3 minutes after it opens');
   assert.deepStrictEqual(rec.biases, { 15: -1, 60: -1, 240: -1 });
   assert.strictEqual(rec.rule.prevailing, '4h down');
-  assert.match(rec.line, /trend strategies may not go long/);
+  assert.match(rec.line, /Trend rule: SHORT allowed \(prevailing \S+ down\); long only as a reversal/);
 });
 
 test('writeRecord / readRecord: one file per index family, written atomically; MNQ and NQ share it', () => {

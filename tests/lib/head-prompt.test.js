@@ -54,9 +54,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // the head trader composes only once the desk reported: +77); 72926 with the owner's approved runner's factual reviews
   // (fix/runner-writes-reviews: the [review] row in role-round and trade-session's unreviewed-entry line: +86); 73159
   // with the owner's approved runner's entry (feat/entry-workflow: one line each in role-round, trade-session,
-  // trade-lifecycle and autonomous-trading, the route in full only in an entry cycle's prompt: +233). It may shrink;
+  // trade-lifecycle and autonomous-trading, the route in full only in an entry cycle's prompt: +233); 72970 with the soft reads made
+  // reads in the count (fix/confluence-not-vetoes: the room and VWAP-distance vetoes gone, the trend rule's allowed side first: -189). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 73159, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 72970, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

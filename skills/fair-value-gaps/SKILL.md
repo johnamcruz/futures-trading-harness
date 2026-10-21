@@ -11,8 +11,7 @@ description: Use when an open or partly filled fair value gap is near price, ahe
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`. Source: Flux Charts, "Fair Value
 Gaps (FVG) Explained" (fluxcharts.com/articles/fair-value-gaps-fvg-explained).
 
@@ -51,8 +50,8 @@ bearish mirrored.
 
 **Ahead of a setup**: the unfilled part beyond `m3.price` its way. The
 briefing does not rank gaps among the levels in a setup's way
-(`inTheWay`): give the near edge in R. The room step stays the priority
-order's, on `inTheWay`.
+(`inTheWay`): give the near edge in R. Like the first level ahead, a
+read in the count, never a pass alone.
 
 **Evidence**: not measured; no FVG series in the census.
 
@@ -62,7 +61,7 @@ order's, on `inTheWay`.
 Take: bullish 15m gap partly filled, unfilled 21512.00-21515.25; a 15m close back above: held.
   Reads: at 15m fvg, 15m rejected 15m fvg high up, 3m close top. Priority order -> take.
 Skip: short at 21481.25, stop 8.00 points; open gap edge 21477.50 = 0.47R,
-  inTheWay at 0.6R. Priority order (step 3, room): skip.
+  inTheWay at 0.6R; the entry close not in yet -> pass. The edge is a read, not the reason.
 Loser: long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ); gap edge
   21509.50 = 1.47R ahead; it stalled: -17 ticks, -$8.50.
 ```

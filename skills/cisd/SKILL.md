@@ -12,8 +12,7 @@ description: Trader-process step 4 - read the briefing's m3.cisd (a change in st
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses (`scripts/lib/trading/cisd.js`); a missing field is `unknown`.
 
 **Bullish CISD** (bearish: the mirror):

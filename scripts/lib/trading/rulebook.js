@@ -68,7 +68,7 @@ const ITEMS = Object.freeze({
   hard_stops: { group: 'priority', what: 'a news blackout, a no-entry window, a gate refusal: no trade', enforcedBy: 'the order gate (blackout, no-entry window, every refusal)' },
   trend_rule: { group: 'priority', what: 'a trend strategy against the prevailing trend: no trade', enforcedBy: 'the scan and the order gate (checkTrend)' },
   trend_fade: { group: 'priority', what: 'a reversal fading the prevailing trend: only at a higher-timeframe level, smaller, nearest target', taughtIn: STEP(2) },
-  room: { group: 'priority', what: 'a level in the way before the room the setup needs: no trade', taughtIn: STEP(3) },
+  room: { group: 'priority', what: 'the first level ahead before the target: a read weighed in the count, never a no trade alone (the R:R to the target stays at least min_rr)', taughtIn: STEP(3) },
   mtf_read: { group: 'priority', what: 'the multi-timeframe read for the side sets the size', taughtIn: STEP(4) },
   skip_rules: { group: 'priority', what: "the strategy's own context filter and skip rules", taughtIn: STEP(5) },
   confluence: { group: 'priority', what: 'another strategy firing the other side: no trade', taughtIn: STEP(6) },

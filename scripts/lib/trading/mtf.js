@@ -326,8 +326,9 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
 function ruleLine(r) {
   if (!r.ready) return `Trend rule: ${r.reason}; trend strategies can't enter yet, reversal strategies can.`;
   if (!r.prevailing) return 'Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.';
-  const against = r.longAllowed ? 'short' : 'long';
-  return `Trend rule: prevailing trend ${r.prevailing}; trend strategies may not go ${against}; reversal strategies (mtf: reversal) may go ${against} too.`;
+  // The allowed side first and plainly (a small model misread the old wording, which ended on the blocked side).
+  const [allowed, against] = r.longAllowed ? ['LONG', 'short'] : ['SHORT', 'long'];
+  return `Trend rule: ${allowed} allowed (prevailing ${r.prevailing}); ${against} only as a reversal (mtf: reversal).`;
 }
 
 /**

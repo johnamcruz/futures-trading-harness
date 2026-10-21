@@ -194,7 +194,7 @@ test('each failure type planted, and its correct twin not flagged', () => {
   assert.strictEqual(cat(entry('short', 4), f), 'right', 'at the ceiling');
   assert.strictEqual(cat(entry('short', 2, { decision: 'refused', by: 'gateway', checks: ['order-pending'] }), f), 'risk-rule rejection');
   assert.strictEqual(cat(label(), f, 'CYCLE RESULT: no-trade - no strategy candidates'), 'excessive abstention');
-  assert.strictEqual(cat(label(), facts([policy({ room: { inTheWay: { name: 'prior high', R: 0.5 }, needR: 2 } })]), 'CYCLE RESULT: no-trade - insufficient room'), 'right', 'a skip the room rule allows');
+  assert.strictEqual(cat(label(), facts([policy({ room: { inTheWay: { name: 'prior high', R: 0.5 }, needR: 2 } })]), 'CYCLE RESULT: no-trade - insufficient room'), 'excessive abstention', 'the room alone is a read, never a skip');
   assert.strictEqual(cat(label(), facts([]), 'CYCLE RESULT: blocked - Session closed (10:48 ET < 18:00 ET open)'), 'wrong stated reason');
   assert.strictEqual(cat(label(), facts([]), 'CYCLE RESULT: no-trade - no strategy candidates'), 'right');
   const plan = { planOf: () => ({ targetR: null, trailActivateR: 2, maxBars: null, minutes: 3 }) };

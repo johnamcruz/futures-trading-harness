@@ -72,7 +72,7 @@ test('reason_check: the same policy\'s verdict on another family (recorded later
 test('reason_check: true reasons TRUE, the unparsed unchecked; no attempt started is "none"', () => {
   const h = home();
   const t = check({ symbol: 'MNQ', reasons: 'VERDICT: VETO - keltner short: VWAP at 0.4R vs 1.5R needed; no prop attempt running; the moon is full' }, ctx(h)).text;
-  assert.match(t, /- TRUE no-room: [^\n]*keltner: VWAP \(rth\) at 0\.4R, it needs 1\.5R\n/);
+  assert.match(t, /- TRUE no-room: [^\n]*keltner: VWAP \(rth\) at 0\.4R, it aims for 1\.5R\n/);
   assert.match(t, /- TRUE no-attempt: "no prop attempt running" - the attempt is none\n/);
   assert.match(t, /- UNPARSED "the moon is full"/);
   assert.match(t, /No reason is false by these facts; an UNCHECKED or UNPARSED one is still yours to check\.\n$/);
@@ -136,7 +136,7 @@ test('reason_check: a FACTS line (risk-manager phase 2) is checked as the order 
   assert.match(t, /FACTS checked against the bar briefing:\n- TRUE window: "window opening drive" - the window is opening drive\n- TRUE entries: "entries allowed"/);
   assert.match(t, /- FALSE trend: "trend long allowed" - Trend rule: prevailing trend 1h down; trend strategies may not go long/);
   assert.match(t, /- TRUE read: "read short mixed"/);
-  assert.match(t, /- FALSE room: "room short enough" - keltner: VWAP \(rth\) at 0\.4R, it needs 1\.5R\n/);
+  assert.match(t, /- FALSE room: "room short enough" - keltner: VWAP \(rth\) at 0\.4R, it aims for 1\.5R\n/);
   assert.match(t, /- UNCHECKED unknown: "moon full"/);
   assert.match(t, /2 FACTS FALSE: name each, drop them and decide again from the briefing; the order gate refuses an entry approved on a false fact\.\n$/);
   const json = JSON.parse(check({ symbol: 'MNQ', reasons: 'VERDICT: APPROVE - size 1\nFACTS: entries allowed', json: true }, ctx(h)).text);

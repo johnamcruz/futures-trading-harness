@@ -1,6 +1,6 @@
 ---
 name: confluence-counting
-description: Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time. A read, never a veto; the priority order decides.
+description: Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time; the count decides take or pass.
 ---
 
 # Confluence Counting
@@ -11,9 +11,10 @@ description: Trader-process step 5 - count what is for, against or neutral, each
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. The counts never
-overrule it. A missing field is `unknown` and counts neutral.
+**The count decides**, on the trend rule's side: for at least against + 2
+→ take, sized by conviction within the verdict's ceiling; else pass. No
+against read is a pass alone; the hard steps stay hard (strategy-library).
+A missing field is `unknown` and counts neutral.
 
 **Six items**, each in exactly one bucket, so for + against + neutral = 6:
 
@@ -38,17 +39,19 @@ overrule it. A missing field is `unknown` and counts neutral.
   the HTF read, never an item of its own.
 - **A reaction counts once in item 4.** A rejection on several timeframes
   is one reaction, not one per timeframe.
-- **Not counted**: the trend rule, the regime fit, the room, the window,
-  the news: the priority order's own steps or the gate's.
+- **Context, never a pass alone**: the first level ahead, the VWAP
+  distance, red flags.
+- **Not counted**: the trend rule, the regime fit, the window, the news:
+  the priority order's own steps or the gate's.
 
 ## Examples
 
 ```text
 Take: long: 6 neutral (15m pattern hammer, the candle of 4); 1 aligned, 2 15m cisd up, 3 vwap above,
   4 15m rejected prior vah up, 5 momentum: for. 5 Confluence: for 5, against 0, neutral 1.
-  Priority order: room -> take.
+  -> take.
 Skip: long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 3m choch down, 3 vwap below: against.
-  5 Confluence: for 0, against 2, neutral 4. The priority order's rule, contradicting facts: skip.
+  5 Confluence: for 0, against 2, neutral 4. -> pass.
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```

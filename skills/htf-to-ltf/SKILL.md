@@ -25,23 +25,24 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 
 | Label | Means | What to do |
 |---|---|---|
-| `aligned` | no timeframe against it, most with it | Priority step 4 (strategy-library) sets the size; with room and confluence it is the opportunity |
+| `aligned` | no timeframe against it, most with it | Priority step 4 (strategy-library) sets the size; with the count for it, the opportunity |
 | `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4 |
-| `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session |
+| `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against |
 | `counter` | the highest timeframe is against it | Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why |
 
 **The side rule** (composed, long and short alike): the prevailing HTF
 trend sets the side. `pullback` or `mixed` inside it: an entry at the
 pullback's end; while the `m3` regime still trends against the side it
-hasn't ended: wait for the setup reaction at the level and an entry close
-the trend's way (`pullback-vs-reversal`). `counter` (the HTF against): pass
+hasn't ended: the setup reaction at the level and an entry close the
+trend's way end it (`pullback-vs-reversal`). Range or mixed on the
+allowed side: a read against. `counter` (the HTF against): pass
 unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it; name the
 tier. Range or transition: the trend rule decides.
 
 ### 2. Levels flow down
 
 Take levels from the higher timeframes and treat them as targets on the
-trigger timeframe, or as reasons to skip a setup that runs straight into
+trigger timeframe, or as a read against a setup that runs straight into
 one. Where each frame's levels are: the `timeframe-sources` skill.
 Each timeframe's last completed candle and the levels it met, and the next
 swing each side: the `candle-reading` skill. Top down: `top-down-entry`.

@@ -11,8 +11,7 @@ description: Trader-process step 3 - which levels sit near price (prior day, ove
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
 **Levels**: prior RTH `day.priorRth.high`, `day.priorRth.low`,
@@ -64,9 +63,9 @@ No call until the close; wicks are information, not signals.
 
 ```text
 Take: m3.vwap.rth 21520.50; lows 21520.75, 21519.50, 21521.00, closes back above. Read: rejection,
-  3m rejected vwap rth up; the session VAH 2.6R in the way. Priority order: room -> take.
+  3m rejected vwap rth up; the session VAH 2.6R ahead, a read. For outweighs against -> take.
 Skip: short at 21481.25, prior VAL 21480.00 5 ticks below, inTheWay 0.3R.
-  Priority order (step 3, room): skip.
+  No rejection read -> pass. That level is a read, not the reason.
 Loser: rejection at prior RTH low 21402.00 (wick 21401.25); long at 21408.50, stop 21399.75
   (8.75 pts = 35 ticks, $17.50 on 1 MNQ); a close at 21398.00, acceptance below. -35 ticks, -$17.50.
 ```

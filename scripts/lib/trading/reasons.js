@@ -118,9 +118,11 @@ function setupSteps(s, facts) {
   else if (s.trendAllows === false) add(2, 'no-trade', `a trend strategy ${s.direction} against the trend rule`);
   else if (s.trendAllows === true) add(2, 'pass', `the trend rule allows a ${s.direction}`);
   else add(2, 'unknown', 'the trend rule for its side is not recorded');
+  // The room is a read, never a no trade of its own (a census found it selects nothing): a level ahead before the R it
+  // aims for is weighed with the rest of the count (judgment); none before it passes.
   if (!s.room) add(3, 'unknown', 'the room is unknown (no bars to rebuild the briefing, or no stop)');
-  else if (s.room.inTheWay && s.room.inTheWay.R < s.room.needR) add(3, 'no-trade', `${s.room.inTheWay.name} at ${s.room.inTheWay.R}R before the ${s.room.needR}R it needs`);
-  else add(3, 'pass', s.room.inTheWay ? `${s.room.inTheWay.name} at ${s.room.inTheWay.R}R, it needs ${s.room.needR}R` : `no level in its way, it needs ${s.room.needR}R`);
+  else if (s.room.inTheWay && s.room.inTheWay.R < s.room.needR) add(3, 'judgment', `${s.room.inTheWay.name} at ${s.room.inTheWay.R}R ahead, it aims for ${s.room.needR}R: a read, never a no trade alone`);
+  else add(3, 'pass', s.room.inTheWay ? `${s.room.inTheWay.name} at ${s.room.inTheWay.R}R, it aims for ${s.room.needR}R` : `no level ahead, it aims for ${s.room.needR}R`);
   const al = s.alignment;
   if (al === 'aligned') add(4, 'pass', 'aligned');
   else if (al === 'mixed') add(4, 'half', 'mixed: half');
@@ -360,7 +362,7 @@ function roomClaim(kind, clause, s, ok) {
   if (!asserts) return res('unchecked', 'no room figure to read');
   if (!s.room) return res('unchecked', 'the room is unknown');
   const way = s.room.inTheWay;
-  const fact = way ? `${s.name}: ${way.name} at ${way.R}R, it needs ${s.room.needR}R` : `${s.name}: no level in its way, it needs ${s.room.needR}R`;
+  const fact = way ? `${s.name}: ${way.name} at ${way.R}R, it aims for ${s.room.needR}R` : `${s.name}: no level ahead, it aims for ${s.room.needR}R`;
   const short = Boolean(way && way.R < s.room.needR);
   if (asserts === 'short') return res(short, fact);
   if (asserts === 'enough') return res(!short, fact);
@@ -420,6 +422,10 @@ const sectionData = (b, name) => (isObj(b) && isObj(b.sections) && isObj(b.secti
 /** The trend rule per side from the briefing's `Trend rule:` line (mtf.js ruleLine); unknown sides null. */
 function trendRuleOf(line) {
   const text = String(line || '');
+  // Today's line names the allowed side first ("Trend rule: SHORT allowed (prevailing 4h down); long only as a
+  // reversal"); a record from before says which side trend strategies may not take. The same rule either way.
+  const now = /Trend rule: (LONG|SHORT) allowed \(prevailing (\S+ (?:up|down))\)/.exec(text);
+  if (now) return { prevailing: now[2], long: now[1] === 'LONG', short: now[1] === 'SHORT' };
   const m = /prevailing trend (\S+ (?:up|down)); trend strategies may not go (long|short)/.exec(text);
   if (m) return { prevailing: m[1], long: m[2] !== 'long', short: m[2] !== 'short' };
   if (/no trend on /.test(text)) return { prevailing: null, long: true, short: true };

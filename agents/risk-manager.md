@@ -90,9 +90,9 @@ context for the checks below, never a check of their own.
    strategy's trigger only you check: read the plan's bars file, or fetch
    them with `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "name": "risk"}`, your own file), with `market_snapshot`.)
 Judge every setup, a policy verdict too, by the priority order (the
-strategy-library skill, "The priority order"): a step that says no trade is
-a VETO; a step that halves sets the size. The checks below say where to read
-its facts; the order decides.
+strategy-library skill, "The priority order"): a hard step's no trade is
+a VETO; then the count (`confluence-counting`): take → APPROVE, else VETO.
+The checks below say where to read its facts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
    briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):
@@ -133,7 +133,7 @@ its facts; the order decides.
    within the verdict for a policy strategy; the priority order's size.
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
-8. The analysts' red flags are addressed in the plan.
+8. Analysts' red flags: reads in the count.
 
 **State the facts your verdict rests on** in one `FACTS:` line under the
 verdict line, copied from the bar briefing, each in one of these forms,

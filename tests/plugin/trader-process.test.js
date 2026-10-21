@@ -68,21 +68,23 @@ test('trader-process: the steps start from the higher timeframe, in the fixed or
   });
 });
 
-test('trader-process: it orders the thinking and adds no filter; the priority order decides', () => {
+test('trader-process: it orders the thinking and adds no filter; the count decides', () => {
   const t = flat(read(SKILL));
   const pins = [
     'It adds no filter and no veto',
-    '**The priority order decides** (strategy-library): take, skip and size.',
-    "Only its hard stops and the gate's end a plan early.",
+    // The count decides (fix/confluence-not-vetoes): only the hard steps and the gate end a plan early.
+    "**The count decides** (`confluence-counting`); only the hard steps (strategy-library) and the gate's end a plan early.",
     // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
     '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
-    'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
+    '**Decision.** Take or pass on the count (step 5); its ONE main reason.',
+    // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired).
+    '**Entry.** A closed bar\'s entry reads; never anticipate. Trigger and count for → take now.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
     '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',
-    '**Risk.** Stop (`invalidation`), target (`take-profit`), size, the room; the numbers from `order_plan` or the compose record.',
+    '**Risk.** Stop (`invalidation`), target (`take-profit`), size, the first level ahead; the numbers from `order_plan` or the compose record.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
     'The side rule (`htf-to-ltf`) sets the side, long or short alike.',
     'The three market analysts never write step 2: a cached report would carry a stale window.',
@@ -189,14 +191,14 @@ test('trader-process: on an analyst\'s own timeframe, m3 is the frame\'s bar par
   assert.ok(flat(read(SKILL)).includes("on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`, the briefing's of the lane trading."));
 });
 
-test('trader-process: a candidate with nothing in its way has room, not an unknown one', () => {
+test('trader-process: a candidate with nothing ahead is `none`, not an unknown one', () => {
   const B = require('../../scripts/lib/trading/briefing');
   const r = { name: 'orb', candidate: true, direction: 'long', status: 'active', confluence: { with: [], against: [] }, entryRef: 1, stopDistance: 10, exit: { trailActivateR: 2 } };
   const c = B.candidate(r, 100, [], {});
   // No level ahead, a known stop: inTheWay is null, stopPoints is set (what the skill's guidance reads).
   assert.strictEqual(c.inTheWay, null);
   assert.ok(c.stopPoints > 0);
-  assert.ok(flat(read(SKILL)).includes('No level in the way (a null `inTheWay`) with a stop means room enough, not `unknown`.'));
+  assert.ok(flat(read(SKILL)).includes('No level ahead (a null `inTheWay`) with a stop is `none`, not `unknown`.'));
   // Without a stop, inTheWay is null too: that one is unknown (the guidance names the stop).
   const noStop = B.candidate({ ...r, stopDistance: null }, 100, [['prior RTH high', 120]], {});
   assert.strictEqual(noStop.inTheWay, null);
@@ -250,7 +252,8 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   assert.match(read('agents/news-calendar-analyst.md'), /\n2 Context: news <clear\|blackout\|unknown> now; next <HH:MM ET event \| none>\n```/);
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
-  assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter: the priority order decides\./);
+  assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**The count decides** (`confluence-counting`).'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

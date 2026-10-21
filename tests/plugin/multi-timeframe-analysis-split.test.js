@@ -127,7 +127,23 @@ const LATE = [
     reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
   { from: "**Reversal strategies** (`mtf: reversal`): may fade it.", to: null,
     reason: "fix/skills-match-code: one side rule for every entry, long and short alike (the owner's trend-following decision; composed: pullback an entry, counter a pass unless the D2 tier); no rules strategy is active" },
+  { from: "The last line of the read states it: `Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.` The daily (`daily`) is context for your judgment; the rule reads the intraday frames.",
+    to: "The last line of the read states it, the allowed side first: `Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).` The daily (`daily`) is context for your judgment; the rule reads the intraday frames.",
+    reason: "fix/confluence-not-vetoes: the trend rule names the allowed side first (mtf.js ruleLine): the old line ended on the blocked side and local models read it as allowed" },
+  { from: "Take levels from the higher timeframes and treat them as targets on the trigger timeframe, or as reasons to skip a setup that runs straight into one.",
+    to: "Take levels from the higher timeframes and treat them as targets on the trigger timeframe, or as a read against a setup that runs straight into one.",
+    reason: "fix/confluence-not-vetoes: a soft read is a read in the count, never a pass alone (owner, 2026-10-21; a census of 27,698 moments)" },
+  { from: "Priority step 4 (strategy-library) sets the size; with room and confluence it is the opportunity",
+    to: "Priority step 4 (strategy-library) sets the size; with the count for it, the opportunity",
+    reason: "fix/confluence-not-vetoes: a soft read is a read in the count, never a pass alone (owner, 2026-10-21; a census of 27,698 moments)" },
+  { from: "Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session",
+    to: "Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against",
+    reason: "fix/confluence-not-vetoes: a soft read is a read in the count, never a pass alone (owner, 2026-10-21; a census of 27,698 moments)" },
 ];
+// The two example lines (mtf_read output), both in today's wording (the same line twice: nowCopies).
+ALLOWED.push({ old: "Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.",
+  now: "Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).", copies: 0, nowCopies: 2,
+  reason: "fix/confluence-not-vetoes: the trend rule names the allowed side first (mtf.js ruleLine): the old line ended on the blocked side and local models read it as allowed" });
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
   ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
