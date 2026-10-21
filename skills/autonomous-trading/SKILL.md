@@ -78,7 +78,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    made again.
    `blocked` only when the order gate, the gateway or the broker refused an
    order this cycle; nothing fired, or you stood aside, is `no-trade`.
-   `planned`: the runner enters on your OK `compose_check`.
+   `planned`: only when the prompt says the runner runs the entry; else you place it (`trade-session` 4-6).
    `error` only when the cycle could not do its work (tools failing, facts
    you couldn't read): the runner counts it as a failed cycle.
    The runner reads only that line, from your final message: a summary, a
