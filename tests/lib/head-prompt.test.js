@@ -58,9 +58,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // reads in the count (fix/confluence-not-vetoes: the room and VWAP-distance vetoes gone, the trend rule's allowed side first: -189),
   // then 73252 with the count's rule where the head trader reads it every cycle (trade-session, trade-lifecycle) and
   // confluence-counting loaded every cycle (+282; the owner's OK while performance holds), then 72968 with the
-  // count of independent categories, not labels (the owner's duplicated-evidence principle: -284). It may shrink;
+  // count of independent categories, not labels (the owner's duplicated-evidence principle: -284), then 73049 with the pullback neutral and the margin's size
+  // (full at 2+, half at 1: +81, under main's 73159). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 72968, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 73049, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

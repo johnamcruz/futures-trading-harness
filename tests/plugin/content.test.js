@@ -544,8 +544,8 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
   assert.ok(require('../../scripts/lib/head-prompt').CORE.includes('confluence-counting'));
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
-  assert.match(read('skills/trade-session/SKILL.md'), /for at least against \+ 2 → take/);
-  assert.match(read('skills/trade-lifecycle/SKILL.md'), /for at least against \+ 2 → compose, else pass/);
+  assert.match(read('skills/trade-session/SKILL.md'), /2\+ → full size,\s+1 → half, below 1 → pass/);
+  assert.match(read('skills/trade-lifecycle/SKILL.md'), /a margin of 1\+ → compose \(`confluence-counting`\), else\s+pass/);
 });
 
 test('the count is of independent categories, never labels, and every restatement says the same (the owner\'s duplicated-evidence principle)', () => {
@@ -554,15 +554,17 @@ test('the count is of independent categories, never labels, and every restatemen
   const cc = flat(read('skills/confluence-counting/SKILL.md'));
   // The six categories, in order, each once; labels of one price move are one piece of evidence.
   assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
-  for (const rule of ['count categories, not labels; for at least against + 2 → take', 'No against category is a pass alone',
-    'Reads of the same price move are one piece of evidence, not several labels.', 'mixed, none or `unknown` → neutral',
-    'a 3m BOS, an EMA slope and ADX are one structure for', 'the trend rule and the 1h and 4h direction (the side rule, hard']) assert.ok(cc.includes(rule), rule);
+  for (const rule of ['the margin, categories for minus against: 2+ → full size within the verdict\'s ceiling; 1 → half (`floor`, at least 1); below 1 → pass.',
+    'No against category is a pass alone', 'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
+    'a 3m BOS, an EMA slope and ADX are one structure vote', 'the trend rule and the 1h and 4h direction (the side rule, hard',
+    '**The pullback is neutral** (`pullback-vs-reversal`)', 'against only when a 3m close broke the leg\'s 15m/1h swing']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes("on the trend rule's side, categories, not labels: for at least against + 2 → take") && ts.includes('No against category is a pass alone.'));
-  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('categories for at least against + 2 → compose, else pass (`confluence-counting`)'));
+  assert.ok(ts.includes("on the trend rule's side, the trigger there, categories for minus against: 2+ → full size, 1 → half, below 1 → pass. The pullback is neutral."));
+  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('a margin of 1+ → compose (`confluence-counting`), else pass.'));
+  assert.ok(flat(read('skills/htf-to-ltf/SKILL.md')).includes('in the count it is neutral.'));
   assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
-  assert.ok(flat(read('agents/risk-manager.md')).includes('then the count of categories (`confluence-counting`): take → APPROVE, else VETO.'));
+  assert.ok(flat(read('agents/risk-manager.md')).includes('then the count of categories (`confluence-counting`): take → APPROVE at its size (margin 2+: full, 1: half), else VETO.'));
   assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('Each read is in its category of the count.'));
   for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     assert.ok(read(`agents/${role}.md`).includes("Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>"), role);

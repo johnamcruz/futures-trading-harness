@@ -253,7 +253,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
   assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
-  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**The count decides** (`confluence-counting`): on the trend rule\'s side, categories, not labels: for at least against + 2 → take, sized by conviction within the ceiling; else pass. No against category is a pass alone.'));
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**The count decides** (`confluence-counting`): on the trend rule\'s side, the trigger there, categories for minus against: 2+ → full size, 1 → half, below 1 → pass. The pullback is neutral.'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

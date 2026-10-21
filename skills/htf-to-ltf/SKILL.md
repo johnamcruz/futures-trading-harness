@@ -34,8 +34,8 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 trend sets the side. `pullback` or `mixed` inside it: an entry at the
 pullback's end; while the `m3` regime still trends against the side it
 hasn't ended: the setup reaction at the level and an entry close the
-trend's way end it (`pullback-vs-reversal`). Range or mixed on the
-allowed side: a read against. `counter` (the HTF against): pass
+trend's way end it (`pullback-vs-reversal`); in the count it is neutral.
+Range or mixed on the allowed side: a read against. `counter` (the HTF against): pass
 unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it; name the
 tier. Range or transition: the trend rule decides.
 
