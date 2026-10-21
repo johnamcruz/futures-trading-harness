@@ -132,6 +132,27 @@ test('desk: the head trader\'s compose_check waits until every role FTH_CYCLE_DE
   assert.strictEqual(pre(both, 'harness_compose_check', {}, 'h'), null);
 });
 
+test('a role named with its plugin (Claude Code: `futures-trading-harness:risk-manager`) is that role to every rule: its report counts for the desk, its denial applies, its phase 1 is owed once', () => {
+  const P = r => `futures-trading-harness:${r}`;
+  const desk = 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager';
+  const g = pipe({ FTH_CYCLE_DESK: desk });
+  for (const r of desk.split(',')) post(g, 'task', { subagent_type: P(r) }, 'h');
+  assert.strictEqual(pre(g, 'harness_compose_check', {}, 'h'), null, 'the desk reported under its plugin names');
+  // A denied role is denied however the harness spells it.
+  const d = pipe({ FTH_DENIED_ROLES: 'market-structure-analyst' });
+  assert.match(pre(d, 'task', { subagent_type: P('market-structure-analyst') }, 'h') || '', /^\[denied-role\] market-structure-analyst is not launched this cycle/);
+  assert.strictEqual(pre(d, 'task', { subagent_type: P('risk-manager') }, 'h'), null);
+  // The entry route: phase 1 owed, launched under its plugin name, reported; a second launch (phase 2) is refused.
+  const e = pipe({ FTH_CYCLE_ENTRY: '1', FTH_CYCLE_DESK: 'risk-manager' });
+  assert.strictEqual(pre(e, 'task', { subagent_type: P('risk-manager') }, 'h'), null);
+  post(e, 'task', { subagent_type: P('risk-manager') }, 'h');
+  assert.match(pre(e, 'task', { subagent_type: P('risk-manager') }, 'h') || '', /\[entry-route\] the runner runs risk-manager phase 2/);
+  // Nothing that names no role counts.
+  const n = pipe({ FTH_CYCLE_DESK: 'risk-manager' });
+  for (const v of ['', ' ', ':', 'futures-trading-harness:', 7, null]) post(n, 'task', { subagent_type: v }, 'h');
+  assert.match(pre(n, 'harness_compose_check', {}, 'h') || '', /launch risk-manager first/);
+});
+
 test('entry-route: in a cycle where the runner runs the entry, the head trader\'s launch of the trade-executor is refused with the route, and of risk-manager unless phase 1 is still owed; any other cycle, role or tool is untouched', () => {
   const { ENTRY_ROUTE } = require('../../scripts/lib/toolcall/rules');
   assert.strictEqual(ENTRY_ROUTE, 'call compose_check; when it is OK, end with CYCLE RESULT: planned; the runner runs risk-manager phase 2 and the trade-executor');

@@ -20,6 +20,12 @@ const DENIED_ROLES_ENV = 'FTH_DENIED_ROLES';
 const deniedRolesOf = env => String((env && env[DENIED_ROLES_ENV]) || '').split(',').map(r => r.trim()).filter(Boolean);
 /** A task_id that is an opencode session id (a resume); any other is the model's own label. */
 const SESSION_ID = /^ses/;
+/**
+ * A role launch's role, as the gate reads it (roles-ran.js roleOf): a harness may name a plugin's role with its plugin
+ * (Claude Code: `futures-trading-harness:risk-manager`), so the last `:` part is the role. Every rule here compares
+ * roles by it, so a launch, a denial and a report name one role however the harness spells it.
+ */
+const roleName = v => (typeof v === 'string' && v.trim() ? v.trim().split(':').pop().trim() : '');
 const canon = v => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon(v[k])])) : v);
 
 /**
@@ -50,7 +56,7 @@ const deniedRole = {
   check(call, { env }) {
     const a = call.args;
     if (!a || typeof a !== 'object') return null;
-    const role = String(a.subagent_type || '').trim();
+    const role = roleName(a.subagent_type);
     if (!role || !deniedRolesOf(env).includes(role)) return null;
     return { refuse: `[denied-role] ${role} is not launched this cycle (the cycle prompt gives its cached report, the role is off the desk, or it reaches the web, which a replay never does): don't call it again; go on with the reports you have.` };
   },
@@ -73,7 +79,7 @@ const entryRoute = {
   check(call, { state, env }) {
     if (String((env && env[ENTRY_ENV]) || '').trim() !== '1') return null;
     const a = call.args;
-    const role = String((a && typeof a === 'object' && a.subagent_type) || '').trim().split(':').pop();
+    const role = roleName(a && typeof a === 'object' ? a.subagent_type : '');
     if (role === 'trade-executor') return { refuse: `[entry-route] the runner runs the trade-executor this cycle, not you: ${ENTRY_ROUTE}.` };
     if (role !== 'risk-manager') return null;
     const owed = String((env && env.FTH_CYCLE_DESK) || '').split(',').map(r => r.trim()).includes('risk-manager') && !(state.reported || []).includes('risk-manager');
@@ -148,8 +154,9 @@ const deskReported = {
   match: call => call.tool === 'task',
   check(call, { state }) {
     const a = call.args;
-    if (!a || typeof a.subagent_type !== 'string') return null;
-    state.reported = [...new Set([...(state.reported || []), a.subagent_type.trim()])];
+    const role = a ? roleName(a.subagent_type) : '';
+    if (!role) return null;
+    state.reported = [...new Set([...(state.reported || []), role])];
     return null;
   },
 };
