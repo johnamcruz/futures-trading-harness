@@ -187,11 +187,28 @@ phases:
 - **Misuse is loud.** An unknown role, a bad option or a missing engine is an
   error, not a result.
 - **The engine interface:** `engine.run(role, request, signal) -> { ok,
-  timedOut, output, transcript }`. The first engine is `opencode run --agent
+  timedOut, output, transcript }` (`cycle-run.js runRole`), on every harness
+  that runs one role as a headless run of its own with that role's tools
+  (`autotrader.js ROLE_RUNS`). Claude Code: `claude -p <request> --agent
+  futures-trading-harness:<role>`, the session taking that role's prompt,
+  tools and model, its `--allowedTools` the role's own tools (none wider than
+  the head trader's), its `--disallowedTools` adding the subagent tool and the
+  order tools it doesn't hold (only the trade-executor holds them), with the
+  head trader's lock-down otherwise (`--plugin-dir`, stream-json, `dontAsk`,
+  a replay's strict MCP config, `childEnv`). opencode: `opencode run --agent
   <role>`; for it, the desk's roles are `mode: "all"`, because opencode runs a
-  subagent that way as its default agent instead. Nothing above the interface
-  names a harness. A later engine (`opencode serve` sessions, or another
-  harness) plugs in under it.
+  subagent that way as its default agent instead. Each run is read the same
+  way, `{ text, tools }` (`transcript.js claudeRunResult`, `opencode.js
+  runResult`), tools named `<server>_<tool>`, with its lookups from its own
+  transcript. Codex and Qwen Code have no headless run of a named role that
+  holds its tools: there the head trader launches the desk, phase 2 and the
+  trade-executor in its session, as before. Claude Code's stream-json doesn't
+  time the head trader's own launches, so the gate can't order a phase 2 it
+  launched itself against the runner's record (`autotrader.js
+  TIMED_LAUNCHES`): there the runner runs the desk only in a cycle whose entry
+  it may run (below), and drops a desk it couldn't complete, record and
+  reports, so the head trader runs its whole desk, as before. Nothing above
+  the interface names a harness.
 
 ### The desk, the first workflow
 
@@ -204,7 +221,8 @@ phases:
    requires of its role (`lookups`: the requirement is the gate's own, and the
    request names the skills). A role that fails is run again once; then it is
    recorded missing, a process failure for that cycle, and not given to the
-   head trader, which launches it itself.
+   head trader, which launches it itself (on a harness that times its launches;
+   on Claude Code the whole desk is dropped, as above).
 3. The reports reach the head trader in its prompt, beside the cached ones.
    The order gate learns of them from the runner's role record
    (`FTH_CYCLE_ROLES`, `scripts/lib/trading/runner-roles.js`): one line per
@@ -234,8 +252,9 @@ skills, their own analysis.
 head trader's run, before the cycle log; per role `config/runner.json`
 `entry.timeoutMinutes`, never past the cycle's limit).
 
-1. **When.** A one-symbol full trade cycle on opencode, not manage-only or
-   paper, with the runner's desk wired, that started flat with no working
+1. **When.** A one-symbol full trade cycle on a harness that runs a role on
+   its own (Claude Code, opencode), not manage-only or paper, with the
+   runner's desk wired, that started flat with no working
    orders (the account read before the desk; unknown is not flat), and whose
    desk is complete in the runner's record or the report cache. A data lane
    (`trigger: data`) never cycles, so a 3m lane with a 1m data lane is still
@@ -258,7 +277,11 @@ head trader's run, before the cycle log; per role `config/runner.json`
    code from its transcript (`skills-loaded.js skillsInTranscript`), in the
    role record (`runner-roles.js appendHeadSkills`): the gate counts them for
    the executor's run of the runner's own (`skills-loaded`, `skills-at-entry`),
-   never for a hook's transcript.
+   never for a hook's own transcript. Claude Code's order hook in that run
+   (an autonomous run with `FTH_CYCLE_ID` and its own `FTH_CYCLE_TRANSCRIPT`)
+   judges on the run's streamed transcript and the record, as the gateway does
+   (`check-order.js hookTranscript`): its session file holds none of the head
+   trader's loads.
 3. **`review`.** Risk-manager phase 2 on the record (the `review` request: the
    record, the desk's reports with phase 1's, the cycle's bars file and the
    `order_plan` call to check it with), the cycle's own context (bars, lanes,

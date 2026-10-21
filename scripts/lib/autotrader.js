@@ -753,19 +753,72 @@ function childEnv(cfg, root, base = process.env, context = null) {
   return env;
 }
 
-/** argv for one headless run. */
+/**
+ * Harnesses the runner runs one role on as a run of its own (cycle-run.js runRole: the desk and entry workflows), the
+ * role's own tools enforced by the harness: Claude Code (`--agent <plugin>:<role>`: the session is that role, its
+ * prompt, tools and model) and opencode (`--agent <role>`). Codex and Qwen Code have no headless run of a named role
+ * that holds its tools, so their head trader launches the desk, phase 2 and the trade-executor in its own session.
+ */
+const ROLE_RUNS = new Set(['claude', 'opencode']);
+/**
+ * Harnesses whose cycle transcript times the head trader's own role launches on the wall clock (opencode's events), so
+ * the gate orders them against the runner's role record (roles-ran.js withRunnerRuns). Claude Code's stream-json
+ * carries no times: there the runner runs its desk only in a cycle whose entry it runs (runner.js).
+ */
+const TIMED_LAUNCHES = new Set(['opencode']);
+
+/** A role the runner runs on its own (opencode.js RUNNER_RUN_ROLES: the desk's and the trade-executor), as its agent document; else throws. */
+function runnerRole(name) {
+  const a = opencode.RUNNER_RUN_ROLES().includes(name) ? require('./harness-sync').loadAgents(PLUGIN_ROOT).find(x => x.name === name) : null;
+  if (!a) throw new Error(`autotrader: ${name} is not a role the runner runs on its own`);
+  return a;
+}
+
+/**
+ * Claude Code's allow rules for one role's own run: the role's tools (agents/<role>.md), none wider than the head
+ * trader's (claudeTools): Read as its scoped reads, WebFetch as its calendar sites, WebSearch and the skill tool as it
+ * has them (a replay: no web), each MCP tool by name on a server it reaches. Any other tool the role lists (a shell,
+ * edits) is not allowed: dontAsk refuses it.
+ */
+function claudeRoleTools(root, agent, opts = {}) {
+  const head = claudeTools(root, opts);
+  const servers = [SERVER_NAME, HARNESS_SERVER].map(s => `mcp__${s}`).filter(s => head.includes(s));
+  const out = [];
+  for (const t of agent.tools || []) {
+    if (t === 'Read') out.push(...head.filter(x => x.startsWith('Read(')));
+    else if (t === 'WebFetch') out.push(...head.filter(x => x.startsWith('WebFetch(')));
+    else if (t.startsWith('mcp__')) { if (servers.some(s => t.startsWith(`${s}__`))) out.push(t); }
+    else if (head.includes(t)) out.push(t);
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * Claude Code's deny rules a role's own run adds to the head trader's (claudeDenied): no role launches a role (the
+ * subagent tool), and the broker's order tools the role doesn't hold (only the trade-executor holds them).
+ */
+const claudeRoleDenied = agent => ['Agent', 'Task', ...ORDER_TOOL_NAMES.map(t => `mcp__${SERVER_NAME}__${t}`).filter(t => !(agent.tools || []).includes(t))];
+
+/** argv for one headless run; `agent`: one role run on its own by the runner (ROLE_RUNS only, else throws). */
 function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {}) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
+  if (agent && !ROLE_RUNS.has(cfg.harness)) throw new Error(`autotrader: ${cfg.harness} runs no role on its own (its head trader launches its roles)`);
   switch (cfg.harness) {
-    case 'claude':
+    case 'claude': {
+      const replay = isReplay(env);
+      const opts = { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay };
+      // `agent`: one role run on its own (runnerRole), by the plugin-scoped name Claude Code lists it under.
+      const role = agent ? runnerRole(agent) : null;
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
-      return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay: isReplay(env) }).join(','),
-        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay: isReplay(env) }).join(','),
+      return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []),
+        '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
+        '--allowedTools', (role ? claudeRoleTools(root, role, opts) : claudeTools(root, opts)).join(','),
+        '--disallowedTools', [...claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay }), ...(role ? claudeRoleDenied(role) : [])].join(','),
         // A replay: only the harness's own MCP servers load (no user server reaches the web).
-        ...(isReplay(env) ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
+        ...(replay ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
         ...(model ? ['--model', model] : []), ...extra];
+    }
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
       // A replay: no network from the sandbox (its default, stated so no user config turns it on), and no web search
@@ -784,7 +837,7 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {
       // the model is the user's opencode default unless the config names one (provider/model).
       // --dir: opencode takes its project directory from PWD, not the working directory the runner sets.
       // --agent: the harness's head trader, whose permissions no user config for opencode's own agents changes.
-      // `agent`: one of the desk's roles, run on its own by the runner (desk-runner.js).
+      // `agent`: one role run on its own by the runner (cycle-run.js runRole).
       return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), '--agent', agent || opencode.HEAD_AGENT, ...(model ? ['--model', model] : []), ...extra, prompt];
     default:
       return cfg.command.map(a => String(a).replace('{prompt}', prompt));
@@ -1065,6 +1118,11 @@ module.exports = {
   atEntryLoad,
   ENTRY_TEXT,
   ROLES_CHECKED,
+  ROLE_RUNS,
+  TIMED_LAUNCHES,
+  runnerRole,
+  claudeRoleTools,
+  claudeRoleDenied,
   loadList,
   embedsSkills,
   headAttestation,

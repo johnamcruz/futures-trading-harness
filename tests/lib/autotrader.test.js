@@ -64,6 +64,43 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.deepStrictEqual(custom, ['my-agent', '--task', 'PROMPT']);
 });
 
+test('one role\'s own run (buildCommand `agent`): Claude Code and opencode run it; its tools are its own, never wider than the head trader\'s; any other harness, or a role the runner never runs alone, throws', () => {
+  const { claudeRoleTools, claudeRoleDenied, runnerRole, ROLE_RUNS } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual([...ROLE_RUNS].sort(), ['claude', 'opencode']);
+  const claude = validateConfig({ harness: 'claude' });
+  const replay = { FTH_REPLAY_NOW: '2026-04-28T14:00:00.000Z', HOME: '/h' };
+  for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) {
+    const argv = buildCommand(claude, 'REQ', '/fth', replay, { agent: role });
+    const flag = f => argv[argv.indexOf(f) + 1];
+    assert.deepStrictEqual(argv.slice(0, 7), ['claude', '-p', 'REQ', '--plugin-dir', '/fth', '--agent', `futures-trading-harness:${role}`], role);
+    const allowed = flag('--allowedTools').split(',');
+    const denied = flag('--disallowedTools').split(',');
+    const head = claudeTools('/fth', { replay: true });
+    const own = runnerRole(role).tools;
+    // Every allowed rule is the role's own tool, or a head trader's scoped read when the role reads.
+    for (const t of allowed) assert.ok(own.includes(t) || (own.includes('Read') && t.startsWith('Read(') && head.includes(t)), `${role}: ${t}`);
+    assert.ok(!allowed.some(t => t === 'Agent' || t === 'mcp__broker' || t === 'mcp__harness' || t === 'WebSearch' || /^(Bash|Write|Edit)/.test(t)), role);
+    assert.ok(denied.includes('Agent') && denied.includes('WebSearch'), `${role}: no role launches a role; a replay has no web`);
+    const orders = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'].map(t => `mcp__broker__${t}`);
+    if (role === 'trade-executor') assert.ok(orders.every(t => allowed.includes(t) && !denied.includes(t)), 'only the trade-executor holds the order tools');
+    else assert.ok(orders.every(t => denied.includes(t) && !allowed.includes(t)), `${role} holds no order tool`);
+    // A replay: only the harness's own MCP servers.
+    assert.ok(argv.includes('--strict-mcp-config') && argv.includes('--mcp-config'), role);
+  }
+  // The head trader's run names no agent.
+  assert.ok(!buildCommand(claude, 'P', '/fth').includes('--agent'));
+  // A role tool the head trader doesn't hold (a shell, edits) is never allowed; WebFetch stays the calendar sites.
+  assert.deepStrictEqual(claudeRoleTools('/r', { tools: ['Bash', 'Edit', 'Write', 'Glob', 'WebFetch', 'mcp__other__x'] }, { home: '/h' }), claudeTools('/r', { home: '/h' }).filter(t => t.startsWith('WebFetch(')));
+  assert.deepStrictEqual(claudeRoleDenied({ tools: ['mcp__broker__place_order'] }).filter(t => /place_order/.test(t)), []);
+  assert.throws(() => buildCommand(claude, 'P', '/fth', {}, { agent: 'strategy-researcher' }), /not a role the runner runs on its own/);
+  for (const harness of ['codex', 'qwen', 'custom']) {
+    const c = validateConfig({ harness, ...(harness === 'custom' ? { command: ['x', '{prompt}'] } : {}) });
+    assert.throws(() => buildCommand(c, 'P', '/fth', {}, { agent: 'risk-manager' }), /runs no role on its own/, harness);
+  }
+  const oc = buildCommand(validateConfig({ harness: 'opencode' }), 'REQ', '/fth', {}, { agent: 'risk-manager' });
+  assert.strictEqual(oc[oc.indexOf('--agent') + 1], 'risk-manager');
+});
+
 test('prompts name the skill, symbol, account, and paper mode', () => {
   const p = prompts(validateConfig({ account: '123', paper: true }), et(10, 0));
   assert.match(p.trade('MNQ'), /autonomous-trading skill[\s\S]*trade-session skill for MNQ on account 123 in paper mode/);

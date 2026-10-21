@@ -1517,7 +1517,15 @@ function createRunner(deps) {
           // A role whose run didn't count is missing: the head trader may launch it, the gate refuses an entry without it.
           // One-symbol cycles only (a desk report's lookups are credited under one symbol's facts key): with several, the
           // head trader launches its desk, as before.
-          const deskRoles = desk && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
+          // Started flat with no working orders (the account read: unknown is not flat), one symbol and lane, a full trade
+          // cycle with the runner's entry wired: a cycle whose entry the runner may run (entryCycle below).
+          const startedFlat = Boolean(acct && !acct.error && Array.isArray(acct.positions) && !acct.positions.length && Array.isArray(acct.orders) && !acct.orders.length);
+          const entryPossible = Boolean(entryWorkflow) && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 && run.length === 1 && startedFlat;
+          // A harness whose transcript doesn't time the head trader's own launches (desk.timed false: Claude Code's
+          // stream-json) can't order a phase 2 it launched itself against the runner's record (the gate refuses such an
+          // entry, roles-ran.js), so the runner runs its desk only in a cycle whose entry it may run.
+          const deskHere = Boolean(desk) && (desk.timed !== false || entryPossible);
+          const deskRoles = deskHere && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
           let deskRun = null;
           let deskMs = 0;
           if (deskRoles.length) {
@@ -1548,18 +1556,24 @@ function createRunner(deps) {
           }
           // The desk's reports the runner's role record holds (runner-roles.js): the gate credits those from it (FTH_CYCLE_ROLES),
           // never as cached; a report it couldn't record isn't given (the head trader may launch that role).
-          const deskReports = deskRun ? deskRun.reports.filter(r => (deskRun.recorded || []).includes(r.role)) : [];
+          const recordedReports = deskRun ? deskRun.reports.filter(r => (deskRun.recorded || []).includes(r.role)) : [];
           // The runner runs the entry (runner-entry.js, workflows/entry) when the head trader decides a trade in this
-          // cycle: a one-symbol full trade cycle (not manage-only or paper) with the runner's entry wired, started flat
-          // with no working orders (the account read: unknown is not flat), and its desk complete in the runner's record
+          // cycle: entryPossible (above) with the runner's desk wired, and its desk complete in the runner's record
           // or the report cache (the trade-executor is a session of its own: the gate sees the head trader's own launches
           // only in the head trader's transcript, so a role it launched itself would be missing there). Otherwise the
           // head trader runs phase 2 and the trade-executor, as before.
-          const startedFlat = Boolean(acct && !acct.error && Array.isArray(acct.positions) && !acct.positions.length && Array.isArray(acct.orders) && !acct.orders.length);
-          const deskDone = expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: [...(cached ? cached.roles : []), ...deskReports.map(r => r.role)] }).length === 0;
-          const entryCycle = Boolean(entryWorkflow) && Boolean(desk) && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 && run.length === 1 && startedFlat && deskDone;
+          const deskDone = expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: [...(cached ? cached.roles : []), ...recordedReports.map(r => r.role)] }).length === 0;
+          const entryCycle = entryPossible && Boolean(desk) && deskDone;
+          // An untimed harness's desk that didn't complete (no entry cycle): dropped, record and reports, so the head trader
+          // runs its whole desk in its session, as before (a record beside its own untimed launches would refuse its entry).
+          const dropDesk = Boolean(deskRun) && desk.timed === false && !entryCycle;
+          if (dropDesk) {
+            log(`the desk: ${deskRun.missing.map(m => m.role).join(', ') || 'a role'} missing: the head trader runs its desk this cycle`, 'error');
+            if (deskRun.rolesFile) attempt('removing the desk\'s role record', () => require('./trading/runner-roles').removeRoleRuns(deskRun.rolesFile), null);
+          }
+          const deskReports = dropDesk ? [] : recordedReports;
           // Its runs go in the cycle's role record: the desk's, or a fresh one when the cache served the whole desk.
-          let rolesFile = deskRun && deskRun.rolesFile ? deskRun.rolesFile : null;
+          let rolesFile = deskRun && deskRun.rolesFile && !dropDesk ? deskRun.rolesFile : null;
           if (entryCycle && !rolesFile) rolesFile = attempt('the role record for the runner\'s entry', () => entryWorkflow.recordFile(), null);
           const served = deskReports.length
             ? { roles: [...(cached ? cached.roles : []), ...deskReports.map(r => r.role)], reports: [...(cached ? cached.reports : []), ...deskReports] }

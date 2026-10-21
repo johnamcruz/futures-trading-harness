@@ -2,7 +2,8 @@
 
 /**
  * The runner's entry (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The entry, the second workflow"; workflows/entry): in a
- * cycle where the runner runs the entry (runner.js entryCycle: opencode, one symbol, a full trade cycle that is not
+ * cycle where the runner runs the entry (runner.js entryCycle: a harness that runs a role on its own, autotrader.js
+ * ROLE_RUNS; one symbol, a full trade cycle that is not
  * manage-only or paper, started flat with no working orders, its desk complete in the runner's role record or the
  * report cache), the head trader's job ends at its decision: an OK compose_check, then `CYCLE RESULT: planned`. The
  * runner then runs, in code, with the same roles (the design stays multi-agent; only the sequence is code):

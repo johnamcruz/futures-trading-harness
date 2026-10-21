@@ -54,7 +54,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 function scriptedModel(script, { format = 'opencode' } = {}) {
   const claude = format === 'claude';
   const scripted = async (argv, { env, liveFile, stream = null }) => {
-    const prompt = String(argv[argv.length - 1] || '');
+    // The request: Claude Code's after `-p` (claude -p <prompt> ...), opencode's last.
+    const prompt = String((argv[0] === 'claude' ? argv[argv.indexOf('-p') + 1] : argv[argv.length - 1]) || '');
     const steps = typeof script === 'function' ? script(prompt, env) : script;
     const ctx = { env, prompt, results: {}, calls: [], liveFile };
     scripted.last = ctx;

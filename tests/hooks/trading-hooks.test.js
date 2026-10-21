@@ -403,6 +403,39 @@ test('order gate (hook): the runner\'s head-prompt attestation (opencode, index 
   assert.doesNotMatch(exit.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
 });
 
+test('order gate (hook): a runner\'s entry role on Claude Code (FTH_CYCLE_ID, its own streamed transcript) is judged as the gateway judges it: the head trader\'s loads count from the cycle\'s role record, never for any other hook call', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const rolesFile = path.join(dir, 'logs', 'cycle-roles.jsonl');
+  fs.mkdirSync(path.dirname(rolesFile), { recursive: true });
+  RR.appendHeadSkills(rolesFile, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
+  // The trade-executor's own run: its stream-json (the runner's cycle transcript of that run) and Claude Code's session
+  // file for it, neither holding the head trader's loads.
+  const own = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Skill', input: { skill: 'broker-mcp' } }] } });
+  const cycle = path.join(dir, 'cycle-transcript-exec.jsonl');
+  const session = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(cycle, own);
+  fs.writeFileSync(session, own);
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_TRANSCRIPT: cycle, FTH_CYCLE_ROLES: rolesFile, FTH_CYCLE_ID: '0123456789abcdef' };
+  const skillsChecks = /\[skills-loaded\]|\[skills-at-entry\]/;
+  const judged = gate({ ...orderPayload(), transcript_path: session }, auto);
+  assert.doesNotMatch(judged.stderr, skillsChecks, 'the recorded loads count, as the gateway counts them');
+  assert.strictEqual(judged.stderr, gate(orderPayload(), auto).stderr, 'the same verdict as the gateway\'s call (no transcript_path)');
+  // Not a runner's entry role (no cycle id, or a malformed one; not autonomous): the hook's own session decides, as before.
+  for (const [what, e] of [['no cycle id', { ...auto, FTH_CYCLE_ID: '' }], ['a malformed cycle id', { ...auto, FTH_CYCLE_ID: 'abc' }], ['not autonomous', { ...auto, FTH_AUTONOMOUS: '' }]]) {
+    const r = gate({ ...orderPayload(), transcript_path: session }, e);
+    assert.strictEqual(r.code, 2, what);
+    assert.match(r.stderr, /\[skills-loaded\][^\n]*not loaded in this session: trade-session/, what);
+  }
+  // Its streamed transcript gone: refused (fails closed), the record or not.
+  const gone = gate({ ...orderPayload(), transcript_path: session }, { ...auto, FTH_CYCLE_TRANSCRIPT: path.join(dir, 'gone.jsonl') });
+  assert.strictEqual(gone.code, 2);
+  assert.match(gone.stderr, /\[skills-at-entry\] The session's transcript can't be read/);
+  // An exit is never held by any of it.
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: session }, auto);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate (hook): strategy-library was split; an entry without any one of its pieces is refused, an exit never is', () => {
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });

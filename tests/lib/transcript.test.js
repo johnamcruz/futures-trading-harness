@@ -2,8 +2,32 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS } = require('../../scripts/lib/transcript');
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, claudeRunResult } = require('../../scripts/lib/transcript');
 const hc = require('../../scripts/lib/headless-check');
+
+test('claudeRunResult: a Claude Code stream-json run\'s final message and the tools it completed, named as the engine\'s checks read them; errors, unanswered calls and a subagent\'s calls are not its', () => {
+  const use = (id, name, input = {}, parent = null) => JSON.stringify({ type: 'assistant', parent_tool_use_id: parent, message: { content: [{ type: 'tool_use', id, name, input }] } });
+  const res = (id, isError = false, parent = null) => JSON.stringify({ type: 'user', parent_tool_use_id: parent, message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'x', is_error: isError }] } });
+  const text = t => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } });
+  const lines = [
+    JSON.stringify({ type: 'system', subtype: 'init' }),
+    use('a', 'mcp__harness__bar_briefing'), res('a'),
+    use('b', 'mcp__broker__place_order'), res('b', true),
+    use('c', 'Read'), res('c'),
+    use('d', 'tool_call', { name: 'mcp__broker__get_account_snapshot', arguments: '{}' }), res('d'),
+    use('e', 'Skill', { skill: 'x' }),
+    use('f', 'mcp__broker__place_order', {}, 'zz'), res('f', false, 'zz'),
+    text('first'), text('## Report'),
+  ];
+  assert.deepStrictEqual(claudeRunResult(lines.join('\n')), { text: '## Report', tools: ['harness_bar_briefing', 'read', 'broker_get_account_snapshot'] });
+  // The result event's text is the final message when there is one.
+  assert.strictEqual(claudeRunResult([...lines, JSON.stringify({ type: 'result', subtype: 'success', result: 'EXECUTED' })].join('\n')).text, 'EXECUTED');
+  // A run that ended in an error result (max turns, a crash) wrote no report, whatever text came before it and whatever
+  // its exit code: a truncated run is never read as a role's report.
+  assert.strictEqual(claudeRunResult([...lines, JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, result: 'Reached max turns' })].join('\n')).text, '');
+  assert.deepStrictEqual(claudeRunResult(''), { text: '', tools: [] });
+  assert.deepStrictEqual(claudeRunResult('not json\n{"type":"result"}'), { text: '', tools: [] });
+});
 
 test('documents: one JSON document, one per line, or what parses after warning lines', () => {
   assert.deepStrictEqual(documents('[{"a":1}]'), [[{ a: 1 }]]);
