@@ -40,7 +40,7 @@ A missing field is `unknown` and counts neutral.
 - **A reaction counts once in item 4.** A rejection on several timeframes
   is one reaction, not one per timeframe.
 - **Context, never a pass alone**: the first level ahead, the VWAP
-  distance, red flags.
+  distance (no edge in the census), an analyst's read against.
 - **Not counted**: the trend rule, the regime fit, the window, the news:
   the priority order's own steps or the gate's.
 

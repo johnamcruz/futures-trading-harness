@@ -16,7 +16,7 @@ Autonomous cycle.
   End of day: the runner flattens every position at 15:50 ET (in 314 min); a trade must have room to work before then.
   Account 7 at 10:36 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, and confluence-counting are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m (bar_briefing with "timeframe": "15m"; its bars file is named there), volume-liquidity-analyst on 1h (bar_briefing with "timeframe": "1h"; its bars file is named there); the others read the 3-minute bars below.
@@ -43,7 +43,7 @@ Autonomous cycle.
   Your last 1 cycle(s) on the lanes that closed (with the first lane's last few, and those of the lane an open trade was entered on), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -75t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, and confluence-counting are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.

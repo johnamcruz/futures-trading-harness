@@ -29,7 +29,8 @@ too). The order gate refuses an entry until each is loaded (an errored load does
 count); one already in your prompt counts: don't reload it (no skill tool:
 skill_lookup). Load `trader-process`
 too: its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
-well: the alignment labels for each side and the reversal rule. Load the others
+well: the alignment labels for each side and the reversal rule. Load
+`confluence-counting` every cycle too: the count. Load the others
 as a step names them.
 
 ### 1. State first
@@ -117,7 +118,9 @@ It orders the thinking and adds no filter.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
-- **The count decides** (`confluence-counting`).
+- **The count decides** (`confluence-counting`): on the trend rule's
+  side, for at least against + 2 → take, sized by conviction within the
+  ceiling; else pass. No against read is a pass alone.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

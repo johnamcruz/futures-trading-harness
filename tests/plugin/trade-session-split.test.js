@@ -260,7 +260,7 @@ const LATE = [
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
   { from: "It orders the thinking and adds no filter: the priority order decides.",
-    to: ["It orders the thinking and adds no filter.", "**The count decides** (`confluence-counting`)."],
+    to: ["It orders the thinking and adds no filter.", "**The count decides** (`confluence-counting`): on the trend rule's side, for at least against + 2 → take, sized by conviction within the ceiling; else pass.", "No against read is a pass alone."],
     copies: 0,
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
@@ -328,7 +328,8 @@ test('trade-session split: the core keeps its numbered steps, step 0 as it was, 
   const step0 = t => [...t.slice(t.indexOf('### 0.'), t.indexOf('### 1.')).matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]);
   // trade-lifecycle joins after multi-timeframe-analysis (the composed entry's list; the strategy skills a rules entry's).
   const before0 = step0(read(BEFORE));
-  assert.deepStrictEqual(step0(ts), [...before0.slice(0, 2), 'trade-lifecycle', ...before0.slice(2)]);
+  // confluence-counting joins last (fix/confluence-not-vetoes): the count that decides, loaded every cycle.
+  assert.deepStrictEqual(step0(ts), [...before0.slice(0, 2), 'trade-lifecycle', ...before0.slice(2), 'confluence-counting']);
   const f = flat(ts);
   for (const s of PIECES) assert.match(f, new RegExp(`\`${s}\``), `trade-session points to ${s}`);
   // The head trader is told to read the two the gate requires before an entry (REQUIRED_AT_ENTRY), in step 3.
@@ -397,9 +398,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 // Then tightened to the exact sizes when the skills were matched to the code (fix/skills-match-code): every role shrank.
 // Then tightened again with the soft reads made reads in the count (fix/confluence-not-vetoes): every role shrank or held.
+// Then the analysts' reports as reads for or against, never advice, and the count's context with its evidence: +85 to
+// +146 bytes for the three analysts, +38 for the risk manager (the owner's OK while performance holds).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86262, 'news-calendar-analyst': 10134, 'risk-manager': 89869, 'strategy-researcher': 25550, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54280, 'volume-liquidity-analyst': 48405 },
-  index: { 'market-structure-analyst': 42599, 'news-calendar-analyst': 10134, 'risk-manager': 75746, 'strategy-researcher': 25550, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39755, 'volume-liquidity-analyst': 32877 },
+  full: { 'market-structure-analyst': 86402, 'news-calendar-analyst': 10134, 'risk-manager': 89907, 'strategy-researcher': 25550, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54426, 'volume-liquidity-analyst': 48490 },
+  index: { 'market-structure-analyst': 42739, 'news-calendar-analyst': 10134, 'risk-manager': 75784, 'strategy-researcher': 25550, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39901, 'volume-liquidity-analyst': 32962 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

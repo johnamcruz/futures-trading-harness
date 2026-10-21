@@ -154,7 +154,7 @@ The checks below say where to read its facts.
    within the verdict for a policy strategy; the priority order's size.
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
-8. Analysts' red flags: reads in the count.
+8. Analysts' reads against: in the count.
 
 **State the facts your verdict rests on** in one `FACTS:` line under the
 verdict line, copied from the bar briefing, each in one of these forms,

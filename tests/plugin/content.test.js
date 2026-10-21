@@ -445,7 +445,7 @@ test('the priority order is written once, in strategy-library, and every role th
   // Who decides has it: trade-session names it (a rules entry loads strategy-library); the roles that judge a setup carry
   // it. A trade_lifecycle entry is sized by the model under the caps: no priority order halves it (the owner's D1).
   assert.match(read('skills/trade-session/SKILL.md'), /The priority order\*\* \(the `strategy-library` skill, "The priority order"\)/);
-  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding/);
+  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf and confluence-counting before deciding/);
   for (const role of ['risk-manager', 'market-structure-analyst', 'trend-momentum-analyst']) {
     // Its core (role-skills): never only in its index (role-index).
     assert.match(read(`agents/${role}.md`), /^role-skills: \[[^\]]*\bstrategy-library\b/m, role);
@@ -529,4 +529,21 @@ test('the reasons check example in reason-check has the form the check prints ("
   // reasons.js prints `the ${account} attempt is active`: the example names an account the same way.
   assert.match(read('scripts/lib/trading/reasons.js'), /`the \$\{facts\.attempt\.account\} attempt is active`/);
   assert.match(m[1], /^[a-z0-9_]+$/, 'an account name, not a phrase');
+});
+
+test('the analysts report reads for or against the trend rule\'s side, never advice; the head trader loads the count every cycle in every harness', () => {
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
+    const t = read(`agents/${role}.md`);
+    const out = t.slice(t.indexOf('## Output'));
+    assert.match(out, /\nReads for <the trend rule's side>: <fact, level, number>; against: <fact, level, number>\n```/, role);
+    assert.doesNotMatch(out, /^(?:Red flags|Implication):/m, role);
+    assert.ok(t.replace(/\s+/g, ' ').includes('Facts, never advice ("wait", "chase", "stand aside"): the head trader\'s count decides.'), role);
+  }
+  // The count is in every cycle's load: the prompt's list (Claude Code, Qwen Code, Codex), opencode's head prompt (CORE),
+  // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
+  assert.ok(require('../../scripts/lib/head-prompt').CORE.includes('confluence-counting'));
+  assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
+  assert.match(read('skills/trade-session/SKILL.md'), /for at least against \+ 2 → take/);
+  assert.match(read('skills/trade-lifecycle/SKILL.md'), /for at least against \+ 2 → compose, else pass/);
 });

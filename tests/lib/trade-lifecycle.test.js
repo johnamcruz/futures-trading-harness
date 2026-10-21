@@ -216,7 +216,7 @@ test('a level ahead before the target is a read, never a problem; R:R to the tar
   const r = TL.buildRecord({ at: '2026-04-23T15:00:05.000Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing, checked, planned });
   assert.strictEqual(r.ok, true);
   const text = TL.renderRecord(r, checked);
-  assert.match(text, /target 21598 \(1h-swing 21598: 231 ticks\); R:R 2\.08; first level ahead: last 3m swing high 21545 at 0\.17R;/);
+  assert.match(text, /target 21598 \(1h-swing 21598: 231 ticks\); R:R 2\.08; first level ahead: last 3m swing high 21545 at 0\.17R \(a read; no edge in the census\);/);
   assert.doesNotMatch(text, /in the way|comes first/);
   // The hard EV rule: the same plan under a higher min R:R is refused.
   assert.ok(plan({ minRR: 2.5 }).problems.some(x => /R:R 2.081 is under the strategy's min 2.5/.test(x)));

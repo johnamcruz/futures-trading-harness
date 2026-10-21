@@ -126,7 +126,7 @@ const PINS = {
     '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
     // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
     'No against read is a pass alone',
-    '**Context, never a pass alone**: the first level ahead, the VWAP distance, red flags.',
+    '**Context, never a pass alone**: the first level ahead, the VWAP distance (no edge in the census), an analyst\'s read against.',
     '**Not counted**: the trend rule, the regime fit, the window, the news',
     'a 15m or 1h break its way (`bos-vs-choch`;',
   ],
@@ -764,7 +764,8 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
   // bytes, is no more than at the split's merge (foundation batch B, on main at 507adfbd, whose same load without htf-to-ltf
   // was 58878): 55733.
   const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x) && !/^strategy-/.test(x));
-  assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'trade-lifecycle', 'trade-session', 'trader-process']);
+  // confluence-counting every cycle too (fix/confluence-not-vetoes: the count that decides take or pass).
+  assert.deepStrictEqual(loads.sort(), ['confluence-counting', 'htf-to-ltf', 'multi-timeframe-analysis', 'trade-lifecycle', 'trade-session', 'trader-process']);
   const bytes = loads.reduce((a, x) => a + Buffer.byteLength(read(file(x))), 0);
   assert.ok(bytes <= 55733, `the head trader's per-cycle load: ${bytes} bytes`);
 });

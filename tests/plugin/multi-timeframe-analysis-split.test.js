@@ -271,7 +271,7 @@ function headTraderLoads(tradeSession) {
 test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cycle, so it still reads the alignment rule', () => {
   const ts = read('skills/trade-session/SKILL.md');
   const loads = headTraderLoads(ts);
-  for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED, 'trader-process', 'htf-to-ltf']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
+  for (const s of [...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED, 'trader-process', 'htf-to-ltf', 'confluence-counting']) assert.ok(loads.includes(s), `trade-session step 0 loads ${s}`);
   // Every unit of the old alignment section (the table, the policy ceiling), its reversal paragraph, and the rule that
   // a plan's alignment is the briefing's (never the daily) is in a skill the head trader loads every cycle.
   const old = units(read(BEFORE));
