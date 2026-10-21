@@ -536,9 +536,9 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     const t = read(`agents/${role}.md`);
     const out = t.slice(t.indexOf('## Output'));
-    assert.match(out, /\nReads for <the trend rule's side>: <fact, level, number>; against: <fact, level, number>\n```/, role);
+    assert.match(out, /\nReads for <the trend rule's side>: <category: fact, level, number>; against: <same>\n```/, role);
     assert.doesNotMatch(out, /^(?:Red flags|Implication):/m, role);
-    assert.ok(t.replace(/\s+/g, ' ').includes('Facts, never advice ("wait", "chase", "stand aside"): the head trader\'s count decides.'), role);
+    assert.ok(t.replace(/\s+/g, ' ').includes('Facts, never advice ("wait", "chase"): the head trader\'s count decides.'), role);
   }
   // The count is in every cycle's load: the prompt's list (Claude Code, Qwen Code, Codex), opencode's head prompt (CORE),
   // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
@@ -546,4 +546,29 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
   assert.match(read('skills/trade-session/SKILL.md'), /for at least against \+ 2 → take/);
   assert.match(read('skills/trade-lifecycle/SKILL.md'), /for at least against \+ 2 → compose, else pass/);
+});
+
+test('the count is of independent categories, never labels, and every restatement says the same (the owner\'s duplicated-evidence principle)', () => {
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cc = flat(read('skills/confluence-counting/SKILL.md'));
+  // The six categories, in order, each once; labels of one price move are one piece of evidence.
+  assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
+  for (const rule of ['count categories, not labels; for at least against + 2 → take', 'No against category is a pass alone',
+    'Reads of the same price move are one piece of evidence, not several labels.', 'mixed, none or `unknown` → neutral',
+    'a 3m BOS, an EMA slope and ADX are one structure for', 'the trend rule and the 1h and 4h direction (the side rule, hard']) assert.ok(cc.includes(rule), rule);
+  // Each restatement: categories, the same threshold, and no against category a pass alone.
+  const ts = flat(read('skills/trade-session/SKILL.md'));
+  assert.ok(ts.includes("on the trend rule's side, categories, not labels: for at least against + 2 → take") && ts.includes('No against category is a pass alone.'));
+  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('categories for at least against + 2 → compose, else pass (`confluence-counting`)'));
+  assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
+  assert.ok(flat(read('agents/risk-manager.md')).includes('then the count of categories (`confluence-counting`): take → APPROVE, else VETO.'));
+  assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('Each read is in its category of the count.'));
+  for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
+    assert.ok(read(`agents/${role}.md`).includes("Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>"), role);
+  }
+  // No restatement keeps the old label count.
+  for (const f of ['skills/trade-session/SKILL.md', 'skills/trade-lifecycle/SKILL.md', 'skills/trader-process/SKILL.md', 'agents/risk-manager.md', 'skills/setup-judgment/SKILL.md']) {
+    assert.doesNotMatch(read(f), /six items|item [1-6]\b|No against read is/, f);
+  }
 });

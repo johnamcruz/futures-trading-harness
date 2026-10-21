@@ -36,7 +36,7 @@ It adds no filter and no veto:
 4. **Setup.** The setup reads (`trade-lifecycle`), on the side rule's
    side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
-5. **Confluence.** Count the six items of `confluence-counting`.
+5. **Confluence.** The six categories of `confluence-counting`.
 6. **Entry.** A closed bar's entry reads; never anticipate. Trigger and
    count for → take now.
    Read: `candle-reading`, `momentum-and-volume`.
@@ -98,7 +98,7 @@ PLAN:
 2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
 4 Setup: long, 15m rejected prior vah up
-5 Confluence: for 4, against 0, neutral 2: aligned, VWAP, level, momentum
+5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
 7 Risk: stop 111 ticks, size 1, exit target 2.08R, ahead prior RTH high 1.2R
 8 Decision: take - for 4 against 0, compose_check OK

@@ -54,8 +54,8 @@ developing.
 
 **In the PLAN.**
 
-- **1 HTF**: the 15m and 1h breaks, read in item 1 of
-  `confluence-counting`.
+- **1 HTF**: a 1h break is the side rule's, a 15m one structure
+  (`confluence-counting`).
 - **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
   lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher

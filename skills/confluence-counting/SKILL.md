@@ -1,57 +1,55 @@
 ---
 name: confluence-counting
-description: Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time; the count decides take or pass.
+description: Trader-process step 5 - count six independent categories for, against or neutral, each once, never labels; the count decides take or pass.
 ---
 
 # Confluence Counting
 
 ## When to Use
 
-- Trader-process step 5: `5 Confluence: for <n>, against <n>, neutral <n>: <main ones>`.
+- Trader-process step 5: `5 Confluence: for <n>, against <n>, neutral <n>: <categories>`.
 
 ## How It Works
 
-**The count decides**, on the trend rule's side: for at least against + 2
-→ take, sized by conviction within the verdict's ceiling; else pass. No
-against read is a pass alone; the hard steps stay hard (strategy-library).
-A missing field is `unknown` and counts neutral.
+**The count decides**, on the trend rule's side: count categories, not
+labels; for at least against + 2 → take, larger with more categories for,
+up to the verdict's ceiling; else pass. No against category is a pass
+alone; the hard steps stay hard (strategy-library).
 
-**Six items**, each in exactly one bucket, so for + against + neutral = 6:
+**Six independent categories**, each counted once, so for + against +
+neutral = 6. Reads of the same price move are one piece of evidence, not
+several labels.
 
-| # | Item | For | Against | Neutral |
-|---|---|---|---|---|
-| 1 | HTF read, `m15.alignment` for its side (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
-| 2 | Setup-timeframe structure: a CISD, OTE, a 3m or 5m break (`cisd`, `bos-vs-choch`) | any its way | any against it | none |
-| 3 | VWAP, `m3.vwap.side` | its side | the other side | `at` |
-| 4 | Reaction at the nearest level (`levels-and-reactions`, `rejection`) | rejection or sweep its way | acceptance against it | none yet |
-| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
-| 6 | Other reads of a fact already counted | - | - | always |
+| Category | Its reads (compose step) |
+|---|---|
+| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend (setup, entry) |
+| location | the level, POI or FVG it reacts at (location) |
+| liquidity | a sweep taken, or liquidity as the target (setup, target) |
+| trigger | the rejection or engulfing candle and its close (setup, entry) |
+| participation | volume, delta, absorption (entry) |
+| context | VWAP side, value area, day type, session (location) |
 
 **Rules.**
 
-- **Other reads of the same fact count once** (item 6): a pattern on the
-  candle that made item 4's rejection, a CISD or a sweep on that candle, a
-  second timeframe of the same reaction.
-- **Indicators together are one item**: EMA, ADX and SuperTrend readings
-  count together in item 5, never separately.
-- **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
-  `m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
-  the HTF read, never an item of its own.
-- **A reaction counts once in item 4.** A rejection on several timeframes
-  is one reaction, not one per timeframe.
+- **One vote a category**: all its reads your way → for; all against →
+  against; mixed, none or `unknown` → neutral.
+- **Labels never add**: a 3m BOS, an EMA slope and ADX are one structure
+  for; a rejection, its pattern and the same reaction on another
+  timeframe are one trigger.
+- **Not counted**: the trend rule and the 1h and 4h direction (the side
+  rule, hard; the compose step bias), R:R to the target (hard), the
+  window, the news (the gate's).
 - **Context, never a pass alone**: the first level ahead, the VWAP
   distance (no edge in the census), an analyst's read against.
-- **Not counted**: the trend rule, the regime fit, the window, the news:
-  the priority order's own steps or the gate's.
 
 ## Examples
 
 ```text
-Take: long: 6 neutral (15m pattern hammer, the candle of 4); 1 aligned, 2 15m cisd up, 3 vwap above,
-  4 15m rejected prior vah up, 5 momentum: for. 5 Confluence: for 5, against 0, neutral 1.
-  -> take.
-Skip: long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 3m choch down, 3 vwap below: against.
-  5 Confluence: for 0, against 2, neutral 4. -> pass.
+Take: long, trend rule long: structure (15m cisd up, 3m momentum up: one), location (at prior vah),
+  trigger (15m rejected prior vah up, hammer: one), context (vwap above): for; liquidity, participation:
+  neutral. 5 Confluence: for 4, against 0, neutral 2 -> take.
+Skip: long: structure (3m choch down), context (vwap below): against; location, liquidity, trigger,
+  participation: neutral. 5 Confluence: for 0, against 2, neutral 4 -> pass.
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```

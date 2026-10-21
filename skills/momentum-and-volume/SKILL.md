@@ -46,9 +46,9 @@ timeframe:
 They confirm that a price-action read has momentum behind it (a 15m
 rejection with the trend while price holds the right side of a rising
 EMA20, ADX rising). ADX has no side. They never trigger an entry and never
-override the price-action read. In the count they are one item with the
-bar's momentum (`confluence-counting`, item 5): all with its side FOR, all
-against AGAINST, mixed neutral.
+override the price-action read. In the count they and the bar's momentum
+are structure (`confluence-counting`): all with its side FOR, all against
+AGAINST, mixed neutral.
 
 **The read.** Momentum (this skill owns it; read `<tf> momentum up|down`):
 the 3m candle line's `momentum up|down` (any timeframe's line alike):

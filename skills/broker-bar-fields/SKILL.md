@@ -41,8 +41,8 @@ alone:
 - **No read**: the bars disagree, it sits near its neutral value, or it is
   `unknown`.
 
-**Confirmation only.** It is part of item 5 in the count
-(`confluence-counting`, with momentum and volume): FOR when it confirms the
+**Confirmation only.** It is part of participation in the count
+(`confluence-counting`, with volume): FOR when it confirms the
 read's side, AGAINST when it is against it, neutral otherwise. It never
 makes a setup, never moves a stop and never sizes a trade.
 

@@ -159,7 +159,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `broker-refusals` (skills/broker-refusals/SKILL.md): What the broker's own refusal or error reply means - success:false, errorCode 4/5/6/7, a risk-guardrail block, a lost reply - and what to do for each.
 - `candle-reading` (skills/candle-reading/SKILL.md): Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.
 - `cisd` (skills/cisd/SKILL.md): Trader-process step 4 - read the briefing's m3.cisd (a change in state of delivery) per timeframe, its OTE zone and bounce. Confluence, never a veto.
-- `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time; the count decides take or pass.
+- `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - count six independent categories for, against or neutral, each once, never labels; the count decides take or pass.
 - `contract-roll` (skills/contract-roll/SKILL.md): Use when a quarterly contract roll is near.
 - `daily-bias` (skills/daily-bias/SKILL.md): Use when setting today's bias - long, short or neutral, with confidence, reasons and what flips it - from the prior day, the open, 1h/4h structure.
 - `day-context` (skills/day-context/SKILL.md): Use when deciding a cycle - the premarket plan, the news, and the day so far.

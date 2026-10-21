@@ -23,7 +23,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   budget), and let its own exit work (don't bank before its trail or
   target). The priority order decides: a policy strategy's verdict
   too.
-- Tabulate each analyst's bias and confidence. Each is a read in the count.
+- Tabulate each analyst's bias and confidence. Each read is in its category of the count.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value
   market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition,
   plus volatility. Don't override it with a narrative; if the analysts disagree

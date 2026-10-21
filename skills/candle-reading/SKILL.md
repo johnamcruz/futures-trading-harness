@@ -60,7 +60,7 @@ prior candle, ATR(14) as of prev):
 A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
-The stack counts once (`confluence-counting`, item 4).
+The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
 general, none measured in our data yet.

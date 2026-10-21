@@ -260,7 +260,7 @@ const LATE = [
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
   { from: "It orders the thinking and adds no filter: the priority order decides.",
-    to: ["It orders the thinking and adds no filter.", "**The count decides** (`confluence-counting`): on the trend rule's side, for at least against + 2 → take, sized by conviction within the ceiling; else pass.", "No against read is a pass alone."],
+    to: ["It orders the thinking and adds no filter.", "**The count decides** (`confluence-counting`): on the trend rule's side, categories, not labels: for at least against + 2 → take, sized by conviction within the ceiling; else pass.", "No against category is a pass alone."],
     copies: 0,
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
@@ -314,7 +314,7 @@ test('trade-session split: the comparison catches a lost, a doubled, a moved or 
   assert.deepStrictEqual(differences(old, moved, ALLOWED), [], 'a move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved, HOMES, RANGES, ALLOWED), [], 'but leaves its home');
   // Two bullets of setup-judgment swapped: nothing lost, the order changed.
-  const B1 = /- Tabulate each analyst's bias[^]*?in the count\.\n/.exec(sj)[0];
+  const B1 = /- Tabulate each analyst's bias[^]*?of the count\.\n/.exec(sj)[0];
   const B2 = /- Start from the computed regime[^]*?say why in the plan\.\n/.exec(sj)[0];
   const swapped = sj.replace(B1, '\u0000').replace(B2, B1).replace('\u0000', B2);
   assert.deepStrictEqual(differences(old, swap({ 'setup-judgment': swapped }), ALLOWED), []);
@@ -400,9 +400,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then tightened again with the soft reads made reads in the count (fix/confluence-not-vetoes): every role shrank or held.
 // Then the analysts' reports as reads for or against, never advice, and the count's context with its evidence: +85 to
 // +146 bytes for the three analysts, +38 for the risk manager (the owner's OK while performance holds).
+// Then the count of independent categories (the owner's duplicated-evidence principle), its wording tightened: every role
+// shrank or held against that.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86402, 'news-calendar-analyst': 10134, 'risk-manager': 89907, 'strategy-researcher': 25550, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54426, 'volume-liquidity-analyst': 48490 },
-  index: { 'market-structure-analyst': 42739, 'news-calendar-analyst': 10134, 'risk-manager': 75784, 'strategy-researcher': 25550, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39901, 'volume-liquidity-analyst': 32962 },
+  full: { 'market-structure-analyst': 86390, 'news-calendar-analyst': 10134, 'risk-manager': 89592, 'strategy-researcher': 25550, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54410, 'volume-liquidity-analyst': 48462 },
+  index: { 'market-structure-analyst': 42731, 'news-calendar-analyst': 10134, 'risk-manager': 75469, 'strategy-researcher': 25550, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39893, 'volume-liquidity-analyst': 32942 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

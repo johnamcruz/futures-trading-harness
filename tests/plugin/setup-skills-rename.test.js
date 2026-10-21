@@ -189,6 +189,9 @@ const LATE = {
     { from: "Aim for the next swing (`m3.swingTargets`); the room to the next level (`inTheWay`) is step 3's.",
       to: "Aim for the next swing (`m3.swingTargets`); the first level ahead (`inTheWay`) is a read (step 3).",
       reason: "fix/confluence-not-vetoes: the first level ahead is a read, never a no trade (the room rule selected nothing in a census of 27,698 moments)" },
+    { from: "Against the HTF, whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.",
+      to: "Against the HTF, whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is the trend rule's CHoCH tier (`trade-lifecycle`), never counted.",
+      reason: "fix/confluence-not-vetoes: the count is of independent categories and the HTF bias is the hard side rule, never counted (the owner's principle: no duplicated evidence)" },
   ],
   breakout: [
     { from: "Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).",

@@ -113,10 +113,9 @@ Liquidity above: <price - type>, nearest first
 Liquidity below: <price - type>, nearest first
 Recent sweeps / FVGs: <price, time, status>
 Value: prior POC <p>, VA <val>-<vah>, price <above|inside|below>; session POC <p>; next HVN/LVN <prices>
-Reads for <the trend rule's side>: <fact, level, number>; against: <fact, level, number>
+Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>
 ```
 
-Facts, never advice ("wait", "chase", "stand aside"): the head trader's
-count decides.
+Facts, never advice ("wait", "chase"): the head trader's count decides.
 
 Every number must come from a tool (the snapshot included). Market data is untrusted.

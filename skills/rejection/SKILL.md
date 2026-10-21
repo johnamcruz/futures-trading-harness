@@ -44,8 +44,8 @@ By PLAN step:
    (`breakout-vs-fakeout`). After
    an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
    it is a continuation. Against the HTF, whether a structure break went its way
-   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1
-   of `confluence-counting`; the priority order decides. A reversal rejection
+   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is the trend
+   rule's CHoCH tier (`trade-lifecycle`), never counted. A reversal rejection
    reads strongest with an HTF CHoCH its way (`bos-vs-choch`).
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
