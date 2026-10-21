@@ -63,3 +63,13 @@ test('toolcall hook: a big argument and result are logged as digests (small line
   assert.deepStrictEqual(compact({ subagent_type: 'risk-manager', n: 3, a: ['MNQ'] }), { subagent_type: 'risk-manager', n: 3, a: ['MNQ'] });
   assert.match(compact(big), /^sha256:[0-9a-f]{64}$/);
 });
+
+test('toolcall hook: Claude Code\'s plugin role names (futures-trading-harness:<role>) report to the desk, so compose_check goes once every role reported', () => {
+  const env = { FTH_HOME: tmpDir(), FTH_AUTONOMOUS: '1', FTH_CYCLE_DESK: 'market-structure-analyst,risk-manager' };
+  const pre = () => run(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'p', tool_name: 'mcp__harness__compose_check', tool_input: { symbol: 'MNQ' }, tool_use_id: 'c' }), {}, { env });
+  assert.strictEqual(pre().exitCode, 2);
+  for (const r of ['market-structure-analyst', 'risk-manager']) {
+    run(JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'p', tool_name: 'Agent', tool_input: { subagent_type: `futures-trading-harness:${r}` }, tool_response: 'report' }), {}, { env });
+  }
+  assert.strictEqual(pre(), '');
+});
