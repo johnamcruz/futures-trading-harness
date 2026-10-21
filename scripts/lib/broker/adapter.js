@@ -19,7 +19,9 @@
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
  *   cancelOrder / modifyStop / closePosition
- *   journalAdd(entry)                      journal_add (a plan, a note): the entry the broker wrote
+ *   fillsSince / ordersSince(accountId, start)   search_trades / search_orders since start
+ *   journalAdd(entry)                      journal_add (the runner's plan and its factual reviews): the entry the server
+ *                                          wrote, or throws
  *   serverConfig()                         get_server_config
  *   close()
  *
@@ -226,6 +228,11 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return listOf(await call('search_trades', { accountId: Number(accountId), startTimestamp: start.toISOString() }), 'search_trades');
     },
 
+    /** The account's orders since `start` (search_orders), with their status: how an order ended. */
+    async ordersSince(accountId, start) {
+      return listOf(await call('search_orders', { accountId: Number(accountId), startTimestamp: start.toISOString() }), 'search_orders');
+    },
+
     /** Number of working orders in a contract. */
     async workingOrders(accountId, contractId) {
       return (await ordersOf(accountId)).filter(o => o.contractId === contractId).length;
@@ -254,13 +261,15 @@ function createAdapter({ mcp, writeMcp = mcp }) {
     },
 
     /**
-     * Add a journal entry (journal_add: { kind, text, contractId?, accountId?, orderId?, tags? }): the broker writes it
-     * with its own time, where the order gate reads it (the runner's entry writes its plan this way: runner-entry.js).
+     * Add a journal entry (journal_add: { kind, text, contractId?, accountId?, orderId?, tags? }): the runner's plan of
+     * an entry (runner-entry.js) and its factual review of one that ended (trading/runner-reviews.js). Straight to the
+     * server, as reads go: it places nothing, and the gate reads the journal it writes, with the server's own time.
+     * Returns the entry the server wrote ({ ts, kind, ... }); a failure throws.
      */
     async journalAdd(entry) {
-      const r = await call('journal_add', entry);
-      if (!r || typeof r !== 'object' || typeof r.ts !== 'string') throw new BrokerError('journal_add returned no entry');
-      return r;
+      const res = await call('journal_add', entry);
+      if (!res || typeof res !== 'object' || typeof res.kind !== 'string' || typeof res.ts !== 'string') throw new BrokerError('journal_add returned no journal entry');
+      return res;
     },
 
     /** The server's own config: whether it trades at all, and its guardrails (get_server_config). */

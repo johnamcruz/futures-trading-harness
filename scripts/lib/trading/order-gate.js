@@ -19,7 +19,7 @@
  */
 
 const { tradingDayStart, entryClock, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
-const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot } = require('./journal');
+const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot, onePerOrder } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
@@ -118,12 +118,13 @@ function isRiskReducing(rationale) {
 /**
  * Reviews that count toward live trading state: not tagged `paper`, and graded
  * with a result tag (result:win|loss|scratch|nofill). With a root, a review that
- * names a different contract doesn't count.
+ * names a different contract doesn't count. At most one per named order (journal.js onePerOrder): a second result
+ * review of the same orderId covers no other entry and is no second loss.
  */
 function liveReviews(entries, root = null) {
-  return entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper')
-    && (reviewResult(e) !== null || hasTag(e, 'result:nofill'))
-    && (!root || mayBeRoot(e.contractId, root)));
+  return onePerOrder(entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper')
+    && (reviewResult(e) !== null || hasTag(e, 'result:nofill'))))
+    .filter(e => !root || mayBeRoot(e.contractId, root));
 }
 
 function successfulEntries(dayEntries) {

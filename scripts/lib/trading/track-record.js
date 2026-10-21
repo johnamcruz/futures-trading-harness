@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { stats, hourOf } = require('../backtest/report');
-const { reviewResult, hasTag } = require('./journal');
+const { reviewResult, hasTag, onePerOrder } = require('./journal');
 const { reviewR } = require('./instincts');
 const { zonedParts } = require('./clock');
 
@@ -110,7 +110,8 @@ function readRecord(home, strategy) {
 
 /** The journal's reviewed trades of `strategy` (not paper): { trades, wins, losses, meanR, inRegime }. */
 function liveRecord(entries, strategy, regime = null) {
-  const reviews = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper') && hasTag(e, `setup:${strategy}`));
+  // One trade per named order (journal.js onePerOrder): the runner's review and a second result review are one.
+  const reviews = onePerOrder(entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper'))).filter(e => e.kind === 'review' && reviewResult(e) !== null && hasTag(e, `setup:${strategy}`));
   const sum = list => {
     const rs = list.map(reviewR).filter(Number.isFinite);
     return {

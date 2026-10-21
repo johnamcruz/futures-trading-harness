@@ -199,6 +199,15 @@ test('the broker client: reads on one connection, order calls on the other; a st
   assert.strictEqual((await fillsClient.fillsSince('7', new Date('2026-10-07T22:00:00Z'))).length, 1);
   assert.deepStrictEqual(fillReads[0], ['search_trades', { accountId: 7, startTimestamp: '2026-10-07T22:00:00.000Z' }]);
   await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ nope: 1 })) }).fillsSince(7, new Date()), /search_trades/);
+  // The orders since a time (how an entry ended) and the runner's factual review: both on the read connection.
+  const more = [];
+  const busy = createAdapter({ mcp: stub(more, name => (name === 'search_orders' ? [{ id: 9, status: 3 }] : { ts: 't', kind: 'review', text: 'x' })), writeMcp: stub(writes, () => ({})) });
+  assert.deepStrictEqual(await busy.ordersSince('7', new Date('2026-10-07T22:00:00Z')), [{ id: 9, status: 3 }]);
+  const review = { kind: 'review', text: 'x', contractId: 'MNQ', orderId: 9, tags: ['by:runner', 'result:nofill'] };
+  assert.strictEqual((await busy.journalAdd(review)).kind, 'review');
+  assert.deepStrictEqual(more, [['search_orders', { accountId: 7, startTimestamp: '2026-10-07T22:00:00.000Z' }], ['journal_add', review]]);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => null) }).journalAdd(review), /journal_add returned no journal entry/);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({})) }).ordersSince(7, new Date()), /search_orders/);
 });
 
 test('tradingBlocked: the server must trade, on the runner\'s account', () => {
@@ -547,5 +556,5 @@ test('the broker client: journalAdd writes a journal entry on the read connectio
   const entry = { kind: 'plan', contractId: MNQ, accountId: 7, tags: ['setup:trade_lifecycle', 'MNQ'], text: 'trade_lifecycle long 1 MNQ' };
   assert.deepStrictEqual(await client.journalAdd(entry), { ts: '2026-10-07T14:00:01Z', ...entry });
   assert.deepStrictEqual([reads, writes], [[['journal_add', entry]], []]);
-  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ ok: true })) }).journalAdd(entry), /journal_add returned no entry/);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ ok: true })) }).journalAdd(entry), /journal_add returned no journal entry/);
 });

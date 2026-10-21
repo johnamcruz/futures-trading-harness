@@ -306,7 +306,7 @@ const PROP_STRATEGY = 'prop_portfolio';
 const PROP_ACCOUNT = 'topstep_100k';
 const propAccount = () => loadAccounts(ROOT, {}).accounts.find(a => a.name === PROP_ACCOUNT);
 
-async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = false }) {
+async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = false, deps = {} }) {
   const clockRef = { t: Date.parse(from) };
   const events = [];
   const logs = [];
@@ -334,6 +334,8 @@ async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = 
     entryOrders: () => entryOrders(w.home),
     strategyNamed: name => loadStrategies(ROOT, w.env).strategies.find(x => x.name === name && x.valid) || null,
     event: ev => events.push(ev), log,
+    // A test's own wiring on top (deps): the journal reader, the composed limits' expiry.
+    ...deps,
   });
   try {
     for (let guard = 0; clockRef.t < Date.parse(until) && guard < 2000; guard += 1) {
@@ -773,4 +775,102 @@ test('mock trading: a runner that crashed mid-day catches up the next morning: i
   assert.match(thanksgiving.runs[0][2], /trading day ending 2026-11-25 \(a catch-up/);
   assert.deepStrictEqual(thanksgiving.runs.filter(x => x[0] === 'trade'), []);
   assert.strictEqual(position(h), null);
+});
+
+// ---- The runner's factual reviews (trading/runner-reviews.js), live (the wall clock): the runner's passes through the
+// adapter, the real gateway and gate, the mock exchange. Each entry the runner sees end gets its review in code, so the
+// next entry on the symbol passes the gate's review-before-next-entry with no review by the model.
+const { readJournal } = require('../../scripts/lib/trading/journal');
+const LR = require('../../scripts/lib/trading/lifecycle-runner');
+const byRunner = w => readJournal(w.journal).filter(e => e.kind === 'review' && (e.tags || []).includes('by:runner'));
+/** The runner wired as runner-wiring.js wires it: the journal, and fx_break's limits expiring as composed ones do. */
+const reviewDeps = w => ({
+  journalEntries: () => readJournal(w.journal),
+  composed: {
+    due: (orders, now) => LR.dueComposed({ entries: entryOrders(w.home), orders, composed: new Set(['fx_break']), now }),
+    stamped: () => false, onlyComposed: () => false, unrecorded: () => [], forItem: () => [], byOrder: () => ({}),
+  },
+});
+/** The next entry, through the gateway (the fired bar's records and the broker's bars put back): allowed, or refused. */
+async function nextEntry(w) {
+  const sig = signalOnFiredBar(w);
+  const gw = gatewayClient(w);
+  try {
+    return await attempt(gw, 'place_order', fxEntry(sig));
+  } finally {
+    gw.close();
+  }
+}
+/** An fx_break limit under the close, resting, its record's expiry a minute on (as the gateway stamps a composed one). */
+async function restingLimit(w, sig, at) {
+  const gw = gatewayClient(w);
+  try {
+    const r = await attempt(gw, 'place_order', fxEntry(sig, { type: 'limit', limitPrice: sig.price - 10, rationale: 'setup:fx_break long trigger on the closed bar, a limit under the close' }));
+    assert.ok(r.ok, r.error);
+  } finally {
+    gw.close();
+  }
+  assert.strictEqual(working(w).filter(o => o.type === 1).length, 1, 'resting');
+  const file = path.join(w.home, 'entry-orders.json');
+  fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')).map(e => ({ ...e, composed: { record: 'r1', expiresAt: new Date(at.getTime() + 60000).toISOString() } }))));
+  exchange.update(w.state, s => { delete s.bars; });
+  return working(w).find(o => o.type === 1);
+}
+
+test('mock trading, runner reviews (live): a limit that never fills is cancelled at its record\'s expiry, the runner writes its nofill review, and the next entry passes the gate', async () => {
+  const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
+  const w = world(at.toISOString());
+  const sig = signalOnFiredBar(w);
+  const limit = await restingLimit(w, sig, at);
+  const refused = await nextEntry(w);
+  exchange.update(w.state, s => { delete s.bars; });
+  assert.ok(!refused.ok && lastBlock(w).some(v => v.check === 'review-before-next-entry'), 'still working: unreviewed');
+  const r = await runDay(w, { from: new Date(at.getTime() + 1000).toISOString(), until: new Date(at.getTime() + 5 * 60000).toISOString(), deps: reviewDeps(w) });
+  assert.deepStrictEqual(working(w).filter(o => o.type === 1), [], 'cancelled at its expiry');
+  assert.ok(r.events.some(e => e.kind === 'composed_expired' && e.orderId === limit.id));
+  assert.deepStrictEqual(byRunner(w).map(e => [e.orderId, e.contractId, e.tags]), [[limit.id, MNQ_ID, ['by:runner', 'result:nofill', 'setup:fx_break', 'MNQ']]]);
+  const next = await nextEntry(w);
+  assert.ok(next.ok, next.error);
+  assert.strictEqual(position(w).size, 1);
+});
+
+test('mock trading, runner reviews (live): an entry stopped out gets the runner\'s loss review from the broker\'s fills (R on its planned stop), and the next entry passes the gate', async () => {
+  const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
+  const w = world(at.toISOString());
+  const t = await enterBos(w);
+  exchange.update(w.state, s => { delete s.bars; });
+  const r = await runDay(w, {
+    from: new Date(at.getTime() + 1000).toISOString(), until: new Date(at.getTime() + 8 * 60000).toISOString(), deps: reviewDeps(w),
+    // Through the stop by a point after two minutes: the broker's stop fills there.
+    before: ms => { if (ms >= at.getTime() + 2 * 60000 && position(w)) exchange.setPrice(w.state, MNQ_ID, t.stop - 1); },
+  });
+  assert.strictEqual(position(w), null, 'stopped out');
+  const [rev] = byRunner(w);
+  assert.ok(rev, r.logs.join('\n'));
+  // Net of its two fills' fees ($0.37 each on the mock exchange) over its risk ($2 a point on MNQ), as trade-review writes r:.
+  const gross = Math.round((-(t.risk + 1) / t.risk) * 100) / 100;
+  assert.deepStrictEqual(rev.tags, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ', `r:${Math.round((gross - 0.74 / (t.risk * 2)) * 100) / 100}`]);
+  assert.match(rev.text, /R net of fees on the planned \d+-tick stop/);
+  assert.strictEqual(byRunner(w).length, 1, 'once, on every later bar too');
+  const next = await nextEntry(w);
+  assert.ok(next.ok, next.error);
+});
+
+test('mock trading, runner reviews (live): a journal_add that fails is logged and written on the next bar; the expiry cancel goes first, never held by it', async () => {
+  const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
+  const w = world(at.toISOString());
+  const sig = signalOnFiredBar(w);
+  const limit = await restingLimit(w, sig, at);
+  exchange.update(w.state, s => { s.failJournal = 1; });
+  const r = await runDay(w, { from: new Date(at.getTime() + 1000).toISOString(), until: new Date(at.getTime() + 8 * 60000).toISOString(), deps: reviewDeps(w) });
+  const fail = r.logs.findIndex(l => new RegExp(`^ERROR MNQ: could not write the review of entry ${limit.id} \\(.*\\); the next bar tries again$`).test(l));
+  const wrote = r.logs.findIndex(l => new RegExp(`^INFO MNQ: wrote the runner's review of entry ${limit.id} \\(result:nofill\\)$`).test(l));
+  assert.ok(fail !== -1 && wrote > fail, r.logs.join('\n'));
+  const calls = exchange.read(w.state).calls;
+  const cancel = calls.findIndex(c => c.tool === 'cancel_order' && c.args.orderId === limit.id);
+  const firstTry = calls.findIndex(c => c.tool === 'journal_add');
+  assert.ok(cancel !== -1 && cancel < firstTry, 'the cancel before the review\'s first try');
+  assert.strictEqual(byRunner(w).length, 1);
+  const next = await nextEntry(w);
+  assert.ok(next.ok, next.error);
 });

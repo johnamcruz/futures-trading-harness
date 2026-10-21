@@ -503,4 +503,4 @@ function historyLines(history, market = []) {
   });
 }
 
-module.exports = { ACTIONS, EXITS_KEPT, parseResult, decisionEntry, marketOf, outcome, historyLines, withPositions, exitRecords, appendExit, ownTrade, fillsNeededSince, UNSEEN_READS };
+module.exports = { ACTIONS, EXITS_KEPT, parseResult, decisionEntry, marketOf, outcome, historyLines, withPositions, exitRecords, appendExit, ownTrade, rOf, sideOf, fillsNeededSince, UNSEEN_READS, MIXED };

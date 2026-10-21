@@ -12,7 +12,7 @@ const { createPipeline } = require('../../scripts/lib/toolcall/pipeline');
 const { createCallLog } = require('../../scripts/lib/toolcall/call-log');
 const N = require('../../scripts/lib/toolcall/names');
 const { declaredEvents, DISPATCHER } = require('../../scripts/lib/toolcall/hooks');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FAKE_BROKERS } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const pipe = (env = {}, now = () => Date.now()) => createPipeline({ log: createCallLog(), env, now, native: N.toOpencode });
@@ -159,7 +159,26 @@ test('entry-route: in a cycle where the runner runs the entry, the head trader\'
   assert.strictEqual(rule.failClosed, true);
 });
 
-test('the registry\'s contract: every rule has an id, an event and a matcher; no rule that can refuse matches an order or exit tool; only the desk and the entry route fail closed', () => {
+test('review: in the runner\'s runs, compose_check on a symbol with an entry today that has no review is refused with the route; reviewed, another symbol, or outside a runner: it goes; an unreadable journal refuses it', () => {
+  const home = tmpDir();
+  const journal = path.join(home, 'journal.jsonl');
+  const ts = new Date(Date.now() - 60000).toISOString();
+  fs.writeFileSync(journal, `${JSON.stringify({ ts, kind: 'order_placed', contractId: 'MNQ', orderId: 101, text: 'setup:trade_lifecycle long', data: { result: { success: true, orderId: 101 } } })}\n`);
+  const env = { FTH_AUTONOMOUS: '1', FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: journal };
+  const refusal = pre(pipe(env), 'harness_compose_check', { symbol: 'mnq', side: 'long' }, 'h');
+  assert.strictEqual(refusal, '[review] 1 earlier MNQ entry today has no review, so no new MNQ trade (the order gate refuses it). An open one: manage it until it closes. A closed or cancelled one: the runner writes its factual review at the next bar; or launch the trade-reviewer for it now. Exits and stops are never held by this.');
+  assert.strictEqual(pre(pipe(env), 'harness_compose_check', { symbol: 'MES', side: 'long' }, 'h'), null, 'another symbol');
+  assert.strictEqual(pre(pipe({ ...env, FTH_AUTONOMOUS: '' }), 'harness_compose_check', { symbol: 'MNQ' }, 'h'), null, 'outside the runner\'s runs');
+  for (const args of [{}, null, { symbol: 7 }]) assert.strictEqual(pre(pipe(env), 'harness_compose_check', args, 'h'), null, `${JSON.stringify(args)}: compose_check answers it`);
+  for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_modify_order', 'broker_place_order', 'harness_bar_briefing', 'task']) assert.strictEqual(pre(pipe(env), t, { symbol: 'MNQ', contractId: 'MNQ' }, 'h'), null, t);
+  // The runner's review (or the trade-reviewer's) clears it.
+  fs.appendFileSync(journal, `${JSON.stringify({ ts, kind: 'review', contractId: 'MNQ', orderId: 101, text: 'runner: nofill', tags: ['by:runner', 'result:nofill'] })}\n`);
+  assert.strictEqual(pre(pipe(env), 'harness_compose_check', { symbol: 'MNQ' }, 'h'), null, 'reviewed');
+  // A journal that can't be read: refused (it fails closed, as the gate would).
+  assert.match(pre(pipe({ ...env, FAKE_BROKER_JOURNAL: home }), 'harness_compose_check', { symbol: 'MNQ' }, 'h'), /^\[review\] the check failed \(.*\): refused \(it fails closed\)\.$/);
+});
+
+test('the registry\'s contract: every rule has an id, an event and a matcher; no rule that can refuse matches an order or exit tool; only the review, the desk and the entry route fail closed', () => {
   const { TOOLS } = require('../../scripts/lib/broker/interface');
   const orders = Object.keys(TOOLS).filter(t => TOOLS[t].role === 'order').map(t => `broker.${t}`);
   assert.ok(orders.includes('broker.close_position') && orders.includes('broker.cancel_order'));
@@ -169,8 +188,8 @@ test('the registry\'s contract: every rule has an id, an event and a matcher; no
     assert.ok(typeof r.id === 'string' && ['pre', 'post'].includes(r.event) && typeof r.match === 'function' && typeof r.check === 'function', r.id);
     if (r.event === 'pre') for (const o of orders) assert.strictEqual(r.match({ tool: o, args: {} }), false, `${r.id} never matches ${o}`);
   }
-  // The rules that hold an entry's step: the desk before compose_check, and the entry's route (only role launches).
-  assert.deepStrictEqual(RULES.filter(r => r.failClosed).map(r => r.id).sort(), ['desk', 'entry-route']);
+  // The rules that hold an entry's step: the review and the desk before compose_check, and the entry's route (only role launches).
+  assert.deepStrictEqual(RULES.filter(r => r.failClosed).map(r => r.id).sort(), ['desk', 'entry-route', 'review']);
 });
 
 test('the pipeline: the first refusal is final; a rule that throws refuses only when it fails closed; a post rule that throws adds nothing; misuse is loud', () => {
