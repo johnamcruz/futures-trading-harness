@@ -121,7 +121,7 @@ test('cycle run: the workspace guard is required (never defaulted open), and the
   assert.match(cli, /^function guardWorkspace\(cfg, killSwitchFile, when\) \{/m);
 });
 
-test('runRole: one desk role\'s own harness run (`--agent <role>`, the request its prompt), its final text, completed tools and lookups; opencode only', async () => {
+test('runRole on opencode: one role\'s own harness run (`--agent <role>`, the request its prompt), its final text, completed tools and lookups; Codex and Qwen Code run none', async () => {
   const { runRole } = require('../../scripts/lib/cycle-run');
   const home = tmpDir();
   const seen = [];
@@ -145,7 +145,60 @@ test('runRole: one desk role\'s own harness run (`--agent <role>`, the request i
   assert.strictEqual(argv.at(-1), 'Phase 1, risk state, for MNQ');
   assert.strictEqual(o.timeoutMs, 5000);
   assert.deepStrictEqual([r.ok, r.text, r.tools, r.lookups], [true, '## Risk state: account 1', ['broker_get_account_snapshot'], ['position-sizing']]);
-  await assert.rejects(runRole(validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] }), 'risk-manager', 'x', {}, { root: ROOT, run }), /opencode only/);
+  // Codex and Qwen Code run no role on their own: their head trader launches its roles (no run starts).
+  for (const harness of ['codex', 'qwen']) {
+    await assert.rejects(runRole(validateConfig({ harness, premarketAt: '', symbols: ['MNQ'] }), 'risk-manager', 'x', {}, { root: ROOT, run }), /on claude and opencode only/);
+  }
+  assert.strictEqual(seen.length, 1);
+});
+
+test('runRole on Claude Code: the role\'s own `claude -p` run (`--agent <plugin>:<role>`, its own tools allowed, the order tools it lacks and launching a role denied), read from its stream-json: its final text, completed tools named as the engine reads them, lookups', async () => {
+  const { runRole } = require('../../scripts/lib/cycle-run');
+  const home = tmpDir();
+  const seen = [];
+  const run = async (argv, o) => {
+    seen.push({ argv, o });
+    fs.mkdirSync(path.dirname(o.liveFile), { recursive: true });
+    const { lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
+    fs.writeFileSync(lookupsFile(o.liveFile), `${JSON.stringify({ at: 1, role: 'risk-manager', skill: 'position-sizing' })}\n${JSON.stringify({ at: 2, role: 'trade-executor', skill: 'order-types' })}\n`);
+    const use = (id, name, input = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+    const res = (id, text, isError = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: isError }] } });
+    const output = [
+      JSON.stringify({ type: 'system', subtype: 'init', tools: ['Read', 'Skill'] }),
+      use('t1', 'Skill', { skill: 'position-sizing' }), res('t1', 'loaded'),
+      use('t2', 'mcp__broker__get_account_snapshot', { accountId: 1 }), res('t2', '{"balance":1}'),
+      use('t3', 'mcp__harness__combine_status'), res('t3', 'no attempt', true),
+      use('t4', 'Read', { file_path: '/x' }), res('t4', 'text'),
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'draft' }] } }),
+      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: '## Risk state: account 1' }),
+    ].join('\n');
+    return { ok: true, timedOut: false, code: 0, output, stdout: output };
+  };
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
+  const env = { FTH_HOME: home, HOME: home, PATH: process.env.PATH };
+  const r = await runRole(cfg, 'risk-manager', 'Phase 1, risk state, for MNQ', { timeoutMs: 5000, context: { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] } }, { root: ROOT, home, env, run });
+  const { argv, o } = seen[0];
+  const flag = f => argv[argv.indexOf(f) + 1];
+  assert.deepStrictEqual(argv.slice(0, 3), ['claude', '-p', 'Phase 1, risk state, for MNQ']);
+  assert.strictEqual(flag('--agent'), 'futures-trading-harness:risk-manager');
+  assert.deepStrictEqual([flag('--output-format'), flag('--permission-mode'), flag('--plugin-dir')], ['stream-json', 'dontAsk', ROOT]);
+  const allowed = flag('--allowedTools').split(',');
+  const denied = flag('--disallowedTools').split(',');
+  assert.ok(allowed.includes('mcp__broker__get_account_snapshot') && allowed.includes('Skill') && allowed.some(t => t.startsWith('Read(')));
+  assert.ok(!allowed.includes('mcp__broker') && !allowed.includes('Agent') && !allowed.some(t => /place_order/.test(t)), 'only its own tools, never the whole broker server');
+  for (const t of ['Agent', 'mcp__broker__place_order', 'mcp__broker__close_position']) assert.ok(denied.includes(t), t);
+  assert.strictEqual(o.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+  assert.strictEqual(o.liveFile, o.env.FTH_CYCLE_TRANSCRIPT, 'its stream-json lands in its own cycle transcript, which the gate reads');
+  assert.deepStrictEqual([r.ok, r.text, r.tools, r.lookups], [true, '## Risk state: account 1', ['skill', 'broker_get_account_snapshot', 'read'], ['position-sizing']]);
+  // The trade-executor's own run holds the order tools; no other role does.
+  await runRole(cfg, 'trade-executor', 'send it', { timeoutMs: 5000 }, { root: ROOT, home, env, run });
+  const ex = seen[1].argv;
+  assert.strictEqual(ex[ex.indexOf('--agent') + 1], 'futures-trading-harness:trade-executor');
+  assert.ok(ex[ex.indexOf('--allowedTools') + 1].split(',').includes('mcp__broker__place_order'));
+  assert.ok(!ex[ex.indexOf('--disallowedTools') + 1].split(',').includes('mcp__broker__place_order'));
+  // A role the runner never runs on its own: refused before any run.
+  await assert.rejects(runRole(cfg, 'strategy-researcher', 'x', {}, { root: ROOT, home, env, run }), /not a role the runner runs on its own/);
+  assert.strictEqual(seen.length, 2);
 });
 
 test('cycle run: the runner\'s entry runs after the head trader\'s run, within what is left of the limit and before the cycle log; its result is the cycle\'s; never after a failed run or with the kill switch on', async () => {

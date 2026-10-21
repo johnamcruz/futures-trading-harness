@@ -129,6 +129,19 @@ function cycleId(env = process.env) {
   return t ? require('crypto').createHash('sha256').update(t).digest('hex').slice(0, 16) : null;
 }
 
+/**
+ * The transcript a hook's order check reads: the one the harness passes (`given`, its session's), except in a role the
+ * runner runs for its cycle's entry (an autonomous run with the head trader's id, FTH_CYCLE_ID, and its own streamed
+ * transcript, FTH_CYCLE_TRANSCRIPT: runner-entry.js on Claude Code): null, so the hook judges the order as the gateway
+ * does, on that run's streamed transcript and the cycle's role record (the head trader's loads, the desk, phase 2).
+ * That session's own file holds none of the head trader's loads, so the hook would refuse what the gateway allows.
+ */
+function hookTranscript(given, env = process.env) {
+  const e = env || {};
+  const entryRole = String(e.FTH_AUTONOMOUS || '') === '1' && CYCLE_ID.test(String(e.FTH_CYCLE_ID || '').trim()) && Boolean(String(e.FTH_CYCLE_TRANSCRIPT || '').trim());
+  return entryRole ? null : (given || null);
+}
+
 /** Append a decision to the gate log (best effort; never throws), with the runner's cycle id when in one. */
 function logDecision(entry, env = process.env) {
   try {
@@ -142,4 +155,4 @@ function logDecision(entry, env = process.env) {
 }
 
 // The gate's clock too (harness-now.js), so the gateway takes its time where it takes its checks.
-module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, cycleId, createGatewayClock };
+module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, cycleId, hookTranscript, createGatewayClock };

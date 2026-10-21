@@ -10,7 +10,7 @@
  */
 
 const path = require('path');
-const { checkOrder, logDecision } = require('../lib/trading/check-order');
+const { checkOrder, logDecision, hookTranscript } = require('../lib/trading/check-order');
 
 // Any MCP server's order tools (the broker server, under whatever name an older install registered it).
 const ORDER_TOOL = /^mcp__.+__(place_order|modify_order)$/i;
@@ -27,8 +27,9 @@ function run(rawInput, ctx = {}, deps = {}) {
     pluginRoot: ctx.pluginRoot || path.resolve(__dirname, '..', '..'),
     now: deps.now, // else the harness clock (harness-now.js), checked for a replay clock either way
     tool: match[1].toLowerCase(),
-    // Claude Code passes the session transcript: the gate checks the trading skills were loaded.
-    transcriptPath: payload.transcript_path || null,
+    // Claude Code passes the session transcript: the gate checks the trading skills were loaded (a runner's entry role
+    // is judged on its streamed transcript and the cycle's role record, as the gateway judges it: hookTranscript).
+    transcriptPath: hookTranscript(payload.transcript_path, env),
   });
   if (result.allowed) return '';
 

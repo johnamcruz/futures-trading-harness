@@ -18,7 +18,7 @@
  */
 
 const path = require('path');
-const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, ROLES_CHECKED } = require('./autotrader');
+const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, ROLES_CHECKED, ROLE_RUNS } = require('./autotrader');
 const { runHarness } = require('./harness-run');
 const { writeCycleLog } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
@@ -106,15 +106,15 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
  * role as its own harness run (`buildCommand`'s `agent`), with the cycle's environment (its bars, cached roles, the
  * transcript live), within `timeoutMs`. Its result for the engine: { ok, timedOut, output, transcript, text, tools,
  * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
- * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). opencode only (opencode.js runResult reads its events).
+ * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). Only on a harness
+ * that runs a role on its own (autotrader.js ROLE_RUNS), each read the same way (runResultOf); any other throws.
  */
 async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, deps = {}) {
-  if (cfg.harness !== 'opencode') throw new Error(`cycle-run: the runner's desk runs on opencode only (harness ${cfg.harness})`);
+  if (!ROLE_RUNS.has(cfg.harness)) throw new Error(`cycle-run: the runner runs a role on its own on ${[...ROLE_RUNS].join(' and ')} only (harness ${cfg.harness}: its head trader launches its roles)`);
   const env = deps.env || process.env;
   const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, context), { agent: role });
   const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
-  const { runResult } = require('./opencode');
-  const { text, tools } = runResult(res.output);
+  const { text, tools } = runResultOf(cfg.harness, res.output);
   let lookups;
   try {
     const { readLookups, lookupsFile } = require('./trading/skill-lookups');
@@ -125,4 +125,7 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
   return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups };
 }
 
-module.exports = { runCycle, runOnce, runRole };
+/** A role's run as the engine reads it, { text, tools }: Claude Code's stream-json (transcript.js), opencode's events (opencode.js). */
+const runResultOf = (harness, output) => (harness === 'claude' ? require('./transcript').claudeRunResult(output) : require('./opencode').runResult(output));
+
+module.exports = { runCycle, runOnce, runRole, runResultOf };

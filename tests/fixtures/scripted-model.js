@@ -33,6 +33,11 @@
  *
  * As a process (scripted-opencode.js): `stream(line)` is called with each event as it is printed, to write it to the standard
  * output the runner's live writer reads, so the gate reads the transcript mid-cycle as it reads a real one (no `liveFile`).
+ *
+ * `format: 'claude'` (scriptedModel(script, { format })): the transcript as Claude Code's `-p --output-format
+ * stream-json` prints it instead: each tool call an assistant `tool_use` (Skill, Task, mcp__harness__<tool>,
+ * mcp__broker__<tool>) answered by a user `tool_result`, a subagent's `Task` launched before its own calls and answered
+ * when it ends, and the final message a `result` event. The same tools are called; only the transcript differs.
  */
 
 const fs = require('fs');
@@ -46,9 +51,11 @@ const val = (x, ctx) => (typeof x === 'function' ? x(ctx) : x);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /** A run (argv, { env, liveFile }) -> { ok, timedOut, code, output, stdout } that plays `script(prompt, env)`. */
-function scriptedModel(script) {
+function scriptedModel(script, { format = 'opencode' } = {}) {
+  const claude = format === 'claude';
   const scripted = async (argv, { env, liveFile, stream = null }) => {
-    const prompt = String(argv[argv.length - 1] || '');
+    // The request: Claude Code's after `-p` (claude -p <prompt> ...), opencode's last.
+    const prompt = String((argv[0] === 'claude' ? argv[argv.indexOf('-p') + 1] : argv[argv.length - 1]) || '');
     const steps = typeof script === 'function' ? script(prompt, env) : script;
     const ctx = { env, prompt, results: {}, calls: [], liveFile };
     scripted.last = ctx;
@@ -64,12 +71,28 @@ function scriptedModel(script) {
     // Wall-clock ms, strictly increasing: a call's window starts after the one before it ended.
     const tick = async () => { await sleep(2); last = Math.max(Date.now(), last + 1); return last; };
     const emit = ev => {
-      const line = `${JSON.stringify({ ...ev, timestamp: Date.now(), sessionID: SESSION })}\n`;
+      const line = `${JSON.stringify(claude ? { ...ev, session_id: SESSION } : { ...ev, timestamp: Date.now(), sessionID: SESSION })}\n`;
       out += line;
       if (stream) stream(line);
       if (liveFile) try { fs.appendFileSync(liveFile, line); } catch (_err) { /* removed by the test: the gate reads none */ }
     };
-    const toolEvent = (tool, input, state) => emit({ type: 'tool_use', part: { type: 'tool', tool, callID: `call_${(id += 1)}`, sessionID: SESSION, state: { input, ...state } } });
+    // Claude Code's names: the skill tool, the subagent tool, and MCP tools by server (harness_x -> mcp__harness__x).
+    const claudeName = tool => (tool === 'skill' ? 'Skill' : tool === 'task' ? 'Task' : tool.replace(/^(harness|broker)_/, 'mcp__$1__'));
+    const claudeUse = (tool, input) => {
+      const useId = `toolu_${(id += 1)}`;
+      emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: useId, name: claudeName(tool), input: tool === 'skill' ? { skill: input.name } : input }] } });
+      return useId;
+    };
+    const claudeResult = (useId, text, isError = false) => emit({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: useId, content: [{ type: 'text', text: String(text) }], is_error: isError }] } });
+    const TASK_OUT = /^<task id="[^"]*" state="completed">\n<task_result>\n([^]*)\n<\/task_result>\n<\/task>$/;
+    const toolEvent = (tool, input, state) => {
+      if (claude) {
+        const useId = claudeUse(tool, input);
+        claudeResult(useId, state.status === 'error' ? state.error : String(state.output || '').replace(TASK_OUT, '$1'), state.status === 'error');
+        return;
+      }
+      emit({ type: 'tool_use', part: { type: 'tool', tool, callID: `call_${(id += 1)}`, sessionID: SESSION, state: { input, ...state } } });
+    };
     let gateway = null;
     let tools = null;
     const gw = () => (gateway = gateway || createMcpClient({ command: process.execPath, args: [path.join(ROOT, 'scripts', 'mcp-gateway.js')], env, cwd: ROOT, timeoutMs: 30000 }));
@@ -98,7 +121,8 @@ function scriptedModel(script) {
       return { ok: !r.isError, text };
     };
     try {
-      emit({ type: 'step_start', part: { type: 'step-start', sessionID: SESSION } });
+      if (claude) emit({ type: 'system', subtype: 'init', cwd: ROOT, tools: [] });
+      else emit({ type: 'step_start', part: { type: 'step-start', sessionID: SESSION } });
       for (const step of steps) {
         if (step.load) {
           const t = { start: await tick(), end: await tick() };
@@ -132,6 +156,15 @@ function scriptedModel(script) {
           const r = await callGateway(step.broker, args);
           if (r.ok) ctx.results[step.broker] = r.value;
           toolEvent(`broker_${step.broker}`, args, r.ok ? { status: 'completed', output: r.text, time: { start, end: await tick() } } : { status: 'error', error: r.text, time: { start, end: await tick() } });
+        } else if (step.executor && claude) {
+          // Claude Code: the subagent's Task call is launched first, its own calls run inside it, then its answer.
+          const useId = claudeUse('task', { description: 'execute', prompt: 'the plan and the verdict line', subagent_type: 'trade-executor' });
+          const said = [];
+          for (const c of step.executor) {
+            const r = await callGateway(c.broker, val(c.args, ctx));
+            said.push(`${c.broker}: ${r.ok ? 'ok' : `refused ${r.text.slice(0, 300)}`}`);
+          }
+          claudeResult(useId, said.join('\n'));
         } else if (step.executor) {
           const start = await tick();
           const said = [];
@@ -145,11 +178,15 @@ function scriptedModel(script) {
           });
         } else if (step.act) {
           await step.act(ctx);
+        } else if (step.result && claude) {
+          const text = val(step.result, ctx);
+          emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+          emit({ type: 'result', subtype: 'success', is_error: false, result: text });
         } else if (step.result) {
           emit({ type: 'text', part: { type: 'text', sessionID: SESSION, text: val(step.result, ctx), time: { start: Date.now(), end: Date.now() } } });
         }
       }
-      emit({ type: 'step_finish', part: { type: 'step-finish', sessionID: SESSION, reason: 'stop' } });
+      if (!claude) emit({ type: 'step_finish', part: { type: 'step-finish', sessionID: SESSION, reason: 'stop' } });
     } finally {
       if (gateway) gateway.close();
       if (tools) tools.close();

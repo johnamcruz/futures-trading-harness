@@ -43,7 +43,7 @@ const { openAdapter, liveRunBlocked } = require('./broker/adapter');
 const { activeBroker } = require('./broker/config');
 const { acquireAccountLocks, checkAccountLock, lockExemption, serverIdentities, lockSpec, normApi } = require('./account-lock');
 const { normId } = require('./broker/allow-list');
-const { dayKey } = require('./autotrader');
+const { dayKey, ROLE_RUNS, TIMED_LAUNCHES } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
@@ -347,6 +347,12 @@ function lookupNeeds(briefingsBySymbol, now, env = process.env, { home = null, l
   return out;
 }
 
+/**
+ * The environment lookupNeeds reads the roles' mode from, as their runs get it (autotrader.js childEnv): opencode's
+ * own (index by default); every other harness's roles load all their skills (full), so no lookup is required of them.
+ */
+const rolesEnv = (cfg, env) => (cfg.harness === 'opencode' ? env : { ...env, FTH_ROLE_SKILLS: 'full' });
+
 /** Index mode: the roles a situational lookup is required of on these briefings' bars (lookupNeeds' roles). */
 const lookupRoles = (briefingsBySymbol, now, env = process.env, opts = {}) => Object.keys(lookupNeeds(briefingsBySymbol, now, env, opts));
 
@@ -365,7 +371,8 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
  * runner runs the desk's roles the report cache didn't serve, as workflows/desk/WORKFLOW.md says, through the
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
  * config/runner.json desk.concurrency, each within desk.timeoutMinutes. null (the model launches its desk, as before)
- * without a `runRole`, on another harness than opencode, on a lean cycle, or without a valid desk workflow.
+ * without a `runRole`, on a harness that runs no role on its own (autotrader.js ROLE_RUNS), on a lean cycle, or without
+ * a valid desk workflow.
  *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results, rolesFile, recorded }:
  *     `context` the cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget
  *     for the desk, `budgetMs` its length: no role's own run outlasts it; each report as the prompt and the report cache
@@ -376,13 +383,16 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
  *     record that can't be written credits none: logged, and the head trader may launch them).
  */
 function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Date.now, env = process.env }) {
-  if (typeof runRole !== 'function' || cfg.harness !== 'opencode' || cfg.cycle !== 'full') return null;
+  if (typeof runRole !== 'function' || !ROLE_RUNS.has(cfg.harness) || cfg.cycle !== 'full') return null;
   const { workflowNamed, runWorkflow } = require('./orchestrate/workflows');
   const { createRun } = require('./orchestrate/engine');
   const workflow = workflowNamed(root, 'desk');
   if (!workflow) return null;
   const { concurrency, timeoutMinutes } = require('./tunables').runner().desk;
   return {
+    // Whether the head trader's own launches are timed in its transcript (autotrader.js TIMED_LAUNCHES): runner.js runs an
+    // untimed harness's desk only in a cycle whose entry it runs.
+    timed: TIMED_LAUNCHES.has(cfg.harness),
     run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null }) => {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
       const key = lookupsKeyOf(home, b, symbols, now, laneBars);
@@ -397,7 +407,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
       };
       // The lookups the bar requires of each role (index mode), as the gate reads them: the request names them and the
       // desk's `lookups` check holds a run that missed one (retried, then missing, never served).
-      const lookups = lookupNeeds(b, now, env, { home, laneBars });
+      const lookups = lookupNeeds(b, now, rolesEnv(cfg, env), { home, laneBars });
       const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars, lookups };
       const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
       const results = res.phases.flatMap(p => p.results);
@@ -422,13 +432,13 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
  * The runner's entry (runner-entry.js, workflows/entry/WORKFLOW.md): after the head trader's run in a cycle where the
  * runner runs the entry (runner.js), risk-manager phase 2 and the trade-executor through the orchestration engine on
  * `runRole`, each within config/runner.json entry.timeoutMinutes and the cycle's budget. null (the head trader runs its
- * entry, as before) without a `runRole`, on another harness than opencode, on a lean cycle, or without a valid entry
+ * entry, as before) without a `runRole`, on a harness that runs no role on its own (ROLE_RUNS), on a lean cycle, or without a valid entry
  * workflow.
  *   run(cycle) -> null | { result, entry }    runner-entry.js runEntry (the lookups the bar requires of phase 2 added)
  *   recordFile()                              a fresh role record for a cycle whose desk the cache served whole
  */
 function entryFor({ home, cfg, root, runRole = null, client = null, log = () => {}, wallNow = Date.now, env = process.env }) {
-  if (typeof runRole !== 'function' || cfg.harness !== 'opencode' || cfg.cycle !== 'full') return null;
+  if (typeof runRole !== 'function' || !ROLE_RUNS.has(cfg.harness) || cfg.cycle !== 'full') return null;
   const workflow = require('./orchestrate/workflows').workflowNamed(root, 'entry');
   if (!workflow) return null;
   const { timeoutMinutes } = require('./tunables').runner().entry;
@@ -437,7 +447,7 @@ function entryFor({ home, cfg, root, runRole = null, client = null, log = () => 
   return {
     run: cycle => {
       const b = { [cycle.symbol]: readBriefing(home, cycle.symbol) };
-      const lookups = lookupNeeds(b, cycle.now || new Date(), env, { home, laneBars: cycle.laneBars || {} });
+      const lookups = lookupNeeds(b, cycle.now || new Date(), rolesEnv(cfg, env), { home, laneBars: cycle.laneBars || {} });
       return runEntry({ workflow, runRole, client, home, cfg, root, env, log, wallNow, perRoleMs: timeoutMinutes * 60000, childEnv, lookups }, cycle);
     },
     recordFile: () => require('./trading/runner-roles').newRoleRunsFile(home),
@@ -465,7 +475,7 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
       // bar and lanes: a candidate that appeared since needs a fresh run); else it runs. The gate counts those lookups
       // of a cached report under that key, and no others (trading/skill-lookups.js lookupRule).
       // Only opencode runs index their roles (autotrader.js childEnv gives every other harness full).
-      const needs = cfg.harness === 'opencode' ? lookupNeeds(b, now, env, { home, laneBars }) : {};
+      const needs = lookupNeeds(b, now, rolesEnv(cfg, env), { home, laneBars });
       const credited = r => (key && r.lookupsKey === key && Array.isArray(r.lookups) ? r.lookups : []);
       const met = r => (needs[r.role] || []).every(skill => credited(r).includes(skill));
       const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(met)

@@ -17,6 +17,8 @@
  *   opencodeStopped(part)    opencode stopped the call itself (an unavailable tool, a permission rule)
  *   opencodeCall(part)       an opencode tool part as { name, input, result }, MCP tools named
  *                            mcp__<server>__<tool> as on the other harnesses
+ *   claudeRunResult(text)    a Claude Code `-p --output-format stream-json` run's { text, tools }, as opencode.js
+ *                            runResult reads opencode's: the orchestration engine's role result
  *
  * Never throws on a malformed transcript: what it can't parse it skips.
  */
@@ -106,4 +108,36 @@ function opencodeCall(part) {
 const OPENCODE_STOPPED = /^\s*(Model tried to call unavailable tool|The user has specified a rule which prevents you from using this specific tool call|The user rejected permission to use this specific tool call)/;
 const opencodeStopped = part => Boolean(part && part.state && part.state.status === 'error' && OPENCODE_STOPPED.test(resultText(part.state.error)));
 
-module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };
+/**
+ * A Claude Code `-p --output-format stream-json` run's result, as opencode.js runResult reads opencode's (the
+ * orchestration engine's role result, cycle-run.js runRole): its final message (the result event's, else its last
+ * text) and the tools it completed in order (a tool_use answered by a tool_result that isn't an error, the real tool
+ * behind a bridge), named as the engine's checks read them (orchestrate/checks.js): an MCP tool <server>_<tool>,
+ * any other lowercased (read, skill). Only the session's own calls: a subagent's (parent_tool_use_id) aren't its.
+ */
+function claudeRunResult(text) {
+  let final = '';
+  let last = '';
+  const open = new Map();
+  const tools = [];
+  for (const ev of documents(text)) {
+    if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id) continue;
+    if (ev.type === 'result' && typeof ev.result === 'string' && ev.result.trim()) final = ev.result.trim();
+    const content = ev.message && Array.isArray(ev.message.content) ? ev.message.content : [];
+    for (const c of content) {
+      if (!c || typeof c !== 'object') continue;
+      if (ev.type === 'assistant' && c.type === 'text' && typeof c.text === 'string' && c.text.trim()) last = c.text.trim();
+      if (ev.type === 'assistant' && c.type === 'tool_use' && typeof c.id === 'string') open.set(c.id, unwrap(String(c.name || ''), c.input));
+      if (ev.type === 'user' && c.type === 'tool_result' && open.has(c.tool_use_id)) {
+        const call = open.get(c.tool_use_id);
+        open.delete(c.tool_use_id);
+        if (c.is_error === true) continue;
+        const m = /^mcp__(.+?)__(.+)$/.exec(call.name);
+        tools.push(m ? `${m[1]}_${m[2]}` : call.name.toLowerCase());
+      }
+    }
+  }
+  return { text: final || last, tools };
+}
+
+module.exports = { claudeRunResult, documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };

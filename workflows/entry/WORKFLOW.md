@@ -19,8 +19,9 @@ phases:
 
 ## What it is
 
-In a full trade cycle where the runner runs the desk (opencode, one symbol, not
-manage-only or paper) and the cycle started flat with no working orders, the
+In a full trade cycle where the runner runs the desk (a harness that runs a
+role on its own: Claude Code, opencode; one symbol, not manage-only or paper)
+and the cycle started flat with no working orders, the
 head trader's job ends at its decision: an OK `compose_check`, then
 `CYCLE RESULT: planned`. The runner then runs the entry, in code, with the same
 roles: risk-manager phase 2 on the compose record, and on its approval the

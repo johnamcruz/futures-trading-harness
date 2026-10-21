@@ -11,10 +11,11 @@ const RR = require('../../scripts/lib/trading/runner-roles');
 const ROOT = path.resolve(__dirname, '..', '..');
 const cfg = (o = {}) => validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'], ...o });
 
-test('deskFor: the runner\'s desk only with a role runner, on opencode, in a full cycle', () => {
+test('deskFor: the runner\'s desk only with a role runner, on a harness that runs a role on its own (Claude Code, opencode), in a full cycle', () => {
   const runRole = async () => ({});
   assert.strictEqual(deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT }), null, 'no role runner: the head trader launches its desk');
-  assert.strictEqual(deskFor({ home: tmpDir(), cfg: cfg({ harness: 'claude' }), root: ROOT, runRole }), null);
+  for (const harness of ['codex', 'qwen']) assert.strictEqual(deskFor({ home: tmpDir(), cfg: cfg({ harness }), root: ROOT, runRole }), null, `${harness}: its head trader launches its desk`);
+  assert.strictEqual(typeof deskFor({ home: tmpDir(), cfg: cfg({ harness: 'claude' }), root: ROOT, runRole }).run, 'function', 'Claude Code: the runner runs it');
   assert.strictEqual(deskFor({ home: tmpDir(), cfg: cfg({ cycle: 'lean' }), root: ROOT, runRole }), null);
   assert.strictEqual(typeof deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT, runRole }).run, 'function');
   assert.strictEqual(lookupsKeyOf(tmpDir(), { MNQ: null }, [{ symbol: 'MNQ' }], new Date(), {}), null, 'no briefing: no lookups key');
@@ -71,11 +72,12 @@ test('the desk\'s record that can\'t be written credits none: logged, and the ro
   assert.ok(logs.some(l => /risk-manager's run could not be recorded for the gate/.test(l)));
 });
 
-test('entryFor: the runner\'s entry only with a role runner, on opencode, in a full cycle, with a valid entry workflow; its record file is a fresh one under the home\'s logs', () => {
+test('entryFor: the runner\'s entry only with a role runner, on a harness that runs a role on its own (Claude Code, opencode), in a full cycle, with a valid entry workflow; its record file is a fresh one under the home\'s logs', () => {
   const { entryFor } = require('../../scripts/lib/runner-wiring');
   const runRole = async () => ({});
   assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg(), root: ROOT }), null, 'no role runner: the head trader runs its entry');
-  assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg({ harness: 'claude' }), root: ROOT, runRole }), null);
+  for (const harness of ['codex', 'qwen']) assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg({ harness }), root: ROOT, runRole }), null, `${harness}: its head trader runs its entry`);
+  assert.strictEqual(typeof entryFor({ home: tmpDir(), cfg: cfg({ harness: 'claude' }), root: ROOT, runRole }).run, 'function', 'Claude Code: the runner runs it');
   assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg({ cycle: 'lean' }), root: ROOT, runRole }), null);
   assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg(), root: tmpDir(), runRole }), null, 'no entry workflow: none');
   const home = tmpDir();
