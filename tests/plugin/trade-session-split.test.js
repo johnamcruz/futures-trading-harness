@@ -428,10 +428,14 @@ test('trade-session split: the gate requires setup-judgment and trade-plan at en
   const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
   for (const s of REQUIRED_AT_ENTRY) assert.ok(!REQUIRED_FOR_ENTRY.includes(s), s);
-  // Not on the runner's per-cycle load list: the prompt doesn't name them.
+  // Not on the runner's per-cycle load list; the prompt names them only in their own clause, "before an entry" (a head
+  // trader that loads its own skills, Claude Code, composed, was approved and was refused [skills-at-entry] without it).
   const A = require('../../scripts/lib/autotrader');
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
-  for (const s of REQUIRED_AT_ENTRY) assert.ok(!p.includes(s), `the cycle prompt names ${s}`);
+  const perCycle = p.slice(0, p.indexOf('; before an entry, also load'));
+  assert.ok(p.indexOf('; before an entry, also load') > 0, 'the at-entry clause');
+  for (const s of REQUIRED_AT_ENTRY) assert.ok(!perCycle.includes(s), `the per-cycle list names ${s}`);
+  assert.match(p, /; before an entry, also load setup-judgment and trade-plan, then run/);
   // The refusal is taught: its row in the gate-refusals family, which says exits and stops still go.
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);

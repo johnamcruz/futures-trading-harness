@@ -88,6 +88,11 @@ const num = v => (Number.isFinite(v) ? v : null);
 // A subagent's report: opencode wraps it in <task ...><task_result>...</task_result></task>; Claude's tool result is
 // a string or text blocks; Qwen's response carries an output string.
 const allText = c => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter(x => isObj(x) && typeof x.text === 'string').map(x => x.text).join('\n') : '');
+// What Claude Code appends to a subagent's result, after the report: the agent's id with how to continue it, and its
+// usage. Not the role's words: the report is read without them (a FACTS block would otherwise read them as facts).
+const AGENT_FOOTER = /^[ \t]*agentId: \S+ \(use SendMessage\b[^\n]*$/gm;
+const USAGE_BLOCK = /<usage>[^]*?<\/usage>/g;
+const claudeReport = c => allText(c).replace(USAGE_BLOCK, '').replace(AGENT_FOOTER, '').replace(/\s+$/, '');
 const taskResult = o => { const m = /<task_result>\n?([^]*?)\n?<\/task_result>/.exec(String(o || '')); return m ? m[1] : String(o || ''); };
 
 /** The subagent calls that returned in the foreground without an error, with their start and end, in order. */
@@ -130,7 +135,7 @@ function roleCalls(text) {
         // A launch acknowledgment (a subagent run in the background, by request or by default) is not a report.
         const ack = call.background || LAUNCHED.test(resultText(c.content));
         if (call.role === EXECUTOR) launches.push({ start: call.start, end: ack ? null : i, background: ack });
-        else if (c.is_error !== true && !ack) calls.push({ role: call.role, start: call.start, end: i, text: allText(c.content) });
+        else if (c.is_error !== true && !ack) calls.push({ role: call.role, start: call.start, end: i, text: claudeReport(c.content) });
         claude.delete(c.tool_use_id);
       }
     }

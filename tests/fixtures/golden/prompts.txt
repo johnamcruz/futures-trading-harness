@@ -69,7 +69,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf and confluence-counting before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf and confluence-counting before deciding; before an entry, also load setup-judgment and trade-plan, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Lean cycle: on a candidate, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -112,7 +112,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf and confluence-counting before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf and confluence-counting before deciding; before an entry, also load setup-judgment and trade-plan, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
@@ -142,7 +142,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  Read the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf and confluence-counting before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries).
+  Read the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf and confluence-counting before deciding; before an entry, also load setup-judgment and trade-plan, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
