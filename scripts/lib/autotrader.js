@@ -728,6 +728,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
     Object.assign(env, activeBroker(env).paperEnv);
   }
+  // Claude Code: every subagent runs in the foreground, so each role's report returns in the head trader's turn, before
+  // it decides (a background launch returns at once and its report comes too late: the desk never reports, and the gate
+  // counts no background launch as a role that ran: roles-ran.js). Claude Code starts subagents in the background by
+  // default; this is its documented switch that makes it wait for every one (and for background tasks).
+  if (cfg.harness === 'claude') env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = '1';
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups,
