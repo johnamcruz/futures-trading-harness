@@ -120,6 +120,10 @@ const etClock = ms => ET.format(new Date(ms));
 // Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence, mixed and the room
 // (a read, never a no trade alone) are not.
 const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'counter', 'entry-block']);
+// The grounds that pass a valid composed setup (an OK record): the hard ones its record doesn't already hold.
+const COMPOSED_GROUNDS = new Set(['no-entry-window', 'trend-blocks', 'no-attempt', 'verdict-skip', 'entry-block']);
+// A reversal against the side (pullback-vs-reversal: a 3m close broke the leg's 15m/1h swing): the decisive soft read.
+const DECISIVE = /\brevers(?:al|ed)\b|broke the (?:leg'?s )?(?:15m|1h|last)? ?swing|swing (?:low|high)? ?(?:was )?broken/i;
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -165,12 +169,16 @@ function classify(label, facts, expected, reasons) {
   // A skip (or standing aside with nothing to take).
   if (expected.decision === 'no-trade') return out(falseReason ? 'wrong stated reason' : 'right', true);
   if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
-  // A pass on an OK compose record: the record is a checker's, not advice, and passing is a good decision by default,
-  // scored as one (the composed-entry design: "passes by default: a pass is a good decision and is scored as one"); its
-  // outcome is the learning report's counterfactual grade, not adherence.
+  // A pass on an OK compose record: a valid setup (every read verified, the plan standing) is the trade (the owner's
+  // decision, 2026-10-21: confluence-counting); only a decisive reason passes it: a true hard ground the record can't
+  // see (an entry block, a verdict's skip, the trend rule), or a reversal stated (the leg's swing broken, which no
+  // claim kind checks: unchecked). Soft reads, or none, are excessive abstention.
   if (expected.composed !== undefined) {
-    why.push(`a pass on the verified compose record ${expected.composed}: passing is the model's call`);
-    return out(falseReason ? 'wrong stated reason' : 'right', true);
+    const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
+    if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) return why.push('a decisive reason stated (a reversal): checked by hand'), out('unchecked', null);
+    why.push(`a valid setup (the verified compose record ${expected.composed}) passed without a decisive reason`);
+    return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
   if (expected.couldSkip && expected.couldSkip.length) {
     why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`);

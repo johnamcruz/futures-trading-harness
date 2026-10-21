@@ -120,9 +120,13 @@ const PINS = {
     // move are one piece of evidence; the trend rule is the side rule and never counted.
     '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
-    '2+ → full size within the verdict\'s ceiling; 1 → half (`floor`, at least 1); below 1 → pass.',
+    'Valid → take, full size within the verdict\'s ceiling; the against sets the size:',
+    '**Decisive** → pass: a 3m close broke the leg\'s 15m/1h swing (`m3.htfLevels` `brokenAt`: a reversal, `pullback-vs-reversal`).',
+    '**Serious** → half (`floor`, at least 1): 2+ categories against, or location against (the trigger into the other side\'s level).',
+    '**Minor** → full size: thin volume, the first level ahead, the VWAP distance (no edge in the census), mixed reads, an analyst\'s read.',
+    'A missing read is no reason to pass.',
     // A pullback inside the trend is never counted against itself (fix/confluence-not-vetoes).
-    '**The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe structure against the trend; for once it breaks back; against only when a 3m close broke the leg\'s 15m/1h swing (`m3.htfLevels` `brokenAt`).',
+    '**The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe structure against the trend; for once it breaks back.',
     '| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend (setup, entry) |',
     '| location | the level, POI or FVG it reacts at (location) |',
     '| liquidity | a sweep taken, or liquidity as the target (setup, target) |',
@@ -133,8 +137,6 @@ const PINS = {
     'Labels never add: a 3m BOS, an EMA slope and ADX are one structure vote.',
     '**Not counted**: the trend rule and the 1h and 4h direction (the side rule, hard; compose step bias), R:R to the target (hard)',
     // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
-    'No against category is a pass alone',
-    '**Context, never a pass alone**: the first level ahead, the VWAP distance (no edge in the census), an analyst\'s read against.',
   ],
   'candle-reading': [
     'A pattern away from a level is not evidence.',
@@ -277,7 +279,7 @@ test('basics skills: a read, never a veto; the priority order decides', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
     // confluence-counting is the count that decides (fix/confluence-not-vetoes); every other basics skill is a read in it.
-    if (s === 'confluence-counting') assert.ok(flat(text).includes('**The count decides**'), s);
+    if (s === 'confluence-counting') assert.ok(flat(text).includes('**A valid setup is the trade.**'), s);
     else assert.ok(flat(text).includes(READ), s);
     assert.ok(vetoFree(text), `${s}: veto language`);
     // A skip in an example is the priority order's (or no fired strategy), never the skill's.

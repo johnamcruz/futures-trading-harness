@@ -86,7 +86,7 @@ const MINUTE_BARS = require('./golden-bars').toMinutes(BARS.map(b => ({ ...b, ms
  * test clock (FTH_TEST_NOW, the wall clock a test pins, as tests/e2e/mock-trading-e2e.test.js does), the exchange's
  * own time with it, and live entries need the broker's allow-list (MOCK_ALLOWED_ACCOUNTS).
  */
-function world({ mode = 'index', dataLane = false, live = false } = {}) {
+function world({ mode = 'index', dataLane = false, live = false, harness = 'opencode' } = {}) {
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   const state = path.join(home, 'exchange.json');
@@ -107,8 +107,8 @@ function world({ mode = 'index', dataLane = false, live = false } = {}) {
     // The roles' and the head trader's skills: index (the default, no variable) or full, as the runner reads it.
     ...(mode === 'full' ? { FTH_ROLE_SKILLS: 'full' } : {}),
   };
-  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400, ...(dataLane ? { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] } : {}) });
-  return { home, state, journal, clock, env, cfg, mode, live, stateFile: path.join(home, 'runner-state.json') };
+  const cfg = validateConfig({ harness, cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400, ...(dataLane ? { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] } : {}) });
+  return { home, state, journal, clock, env, cfg, mode, live, harness, stateFile: path.join(home, 'runner-state.json') };
 }
 
 /**
@@ -123,7 +123,8 @@ async function pass(w, at, script, o = {}) {
   // A replay pass at its replayed time; live, the harness's test clock (the exchange's own time set with it, above).
   const env = { ...w.env, ...(w.live ? { FTH_TEST_NOW: at } : { FTH_REPLAY_NOW: at }) };
   const now = () => new Date(ms);
-  const model = scriptedModel(script);
+  // The transcript in the harness's own format (Claude Code's stream-json, else opencode's JSON events).
+  const model = scriptedModel(script, { format: w.harness === 'claude' ? 'claude' : 'opencode' });
   // `o.lateBy` (ms): a slow model, its final answer that much later (the result event's times shifted, the wall clock
   // the cycle's timing reads with it once the run returned): what the cycle log's timing sees of a cycle that overran.
   const slow = o.lateBy ? lateModel(model, o.lateBy) : null;

@@ -30,8 +30,8 @@ Strategies are Markdown documents, not code. Each lives at
 
 ### The priority order: the rule for every setup
 
-A verdict is a ceiling on size, never an order. The count decides
-(`confluence-counting`). Go down the list; a higher step
+A verdict is a ceiling on size, never an order. A valid setup is the
+trade (`confluence-counting`). Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
 Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so

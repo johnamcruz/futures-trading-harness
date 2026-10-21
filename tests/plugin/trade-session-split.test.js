@@ -260,7 +260,7 @@ const LATE = [
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
   { from: "It orders the thinking and adds no filter: the priority order decides.",
-    to: ["It orders the thinking and adds no filter.", "**The count decides** (`confluence-counting`): on the trend rule's side, the trigger there, categories for minus against: 2+ → full size, 1 → half, below 1 → pass.", "The pullback is neutral."],
+    to: ["It orders the thinking and adds no filter.", "**A valid setup is the trade** (`confluence-counting`): every hard step true → take, full size; serious against → half; decisive against → pass.", "A missing read is no reason to pass."],
     copies: 0,
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
@@ -273,7 +273,7 @@ const LATE = [
     to: "It checks each reason against the bar briefing (the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the first level ahead in R against the R it aims for, the multi-timeframe read for the side) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own.",
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "A setup on that side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
-    to: "A setup on that side the count takes (`confluence-counting`) is the opportunity this harness looks for, when it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
+    to: "A valid setup on that side (`confluence-counting`) is the trade this harness looks for, when it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an unanswered red flag → **no trade**: journal a short `note` with the reason and what would change it, and end.",
     to: "No setup (no candidate, no `compose_check` OK), a failed skip rule, or an event within 15 minutes → **no trade**: journal a short `note` with the reason and what would change it, and end.",
@@ -404,9 +404,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // shrank or held against that.
 // Then the pullback neutral in the count and the margin's size (full at 2+, half at 1): the risk manager +140, the
 // market-structure analyst +28 (htf-to-ltf), under main's pins (the owner's OK while performance holds).
+// Then a valid setup is the trade (the owner, 2026-10-21), the against setting its size: the risk manager +303 and the
+// analysts +51 to +60 (trader-process's decision line; the owner's OK while performance holds).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86418, 'news-calendar-analyst': 10134, 'risk-manager': 89732, 'strategy-researcher': 25550, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54410, 'volume-liquidity-analyst': 48462 },
-  index: { 'market-structure-analyst': 42759, 'news-calendar-analyst': 10134, 'risk-manager': 75609, 'strategy-researcher': 25550, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39893, 'volume-liquidity-analyst': 32942 },
+  full: { 'market-structure-analyst': 86478, 'news-calendar-analyst': 10185, 'risk-manager': 90035, 'strategy-researcher': 25559, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54470, 'volume-liquidity-analyst': 48513 },
+  index: { 'market-structure-analyst': 42819, 'news-calendar-analyst': 10185, 'risk-manager': 75912, 'strategy-researcher': 25559, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39953, 'volume-liquidity-analyst': 32993 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

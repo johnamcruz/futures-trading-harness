@@ -17,8 +17,8 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   rules candidate's (none active), `facts`, `inTheWay`, `needR` and
   `blocked` in `m3` `candidates`. They are context, not a verdict: judge by
   the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules
-  strategy: also its STRATEGY.md). A setup on that side the count takes
-  (`confluence-counting`) is the opportunity this harness looks for, when
+  strategy: also its STRATEGY.md). A valid setup on that side
+  (`confluence-counting`) is the trade this harness looks for, when
   it isn't `blocked`: the strategy's normal size (position-sizing and the prop
   budget), and let its own exit work (don't bank before its trail or
   target). The priority order decides: a policy strategy's verdict

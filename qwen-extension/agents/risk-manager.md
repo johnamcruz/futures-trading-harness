@@ -112,8 +112,9 @@ context for the checks below, never a check of their own.
    them with `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "name": "risk"}`, your own file), with `market_snapshot`.)
 Judge every setup, a policy verdict too, by the priority order (the
 strategy-library skill, "The priority order"): a hard step's no trade is
-a VETO; then the count of categories (`confluence-counting`): take →
-APPROVE at its size (margin 2+: full, 1: half), else VETO.
+a VETO; then (`confluence-counting`): a valid setup → APPROVE, full size,
+half on serious against; VETO only on a decisive against or a failed hard
+step.
 The checks below say where to read its facts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current

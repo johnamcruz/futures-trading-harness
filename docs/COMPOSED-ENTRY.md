@@ -64,9 +64,12 @@ loop improves the thinking, not only which combination it picks.
 
 **Think like a pro trader.** A pro reads context before setups (the
 higher-timeframe bias and the day's levels first), waits at levels for
-price to come to them, takes only setups where the reads line up and the
-room to the target pays for the risk, and passes by default: a pass is a
-good decision and is scored as one. Invalidation is defined before entry,
+price to come to them, and takes a valid setup (every hard step true: the
+trend's side, a reaction at a key level, the trigger closed, the stop at
+the invalidation, R:R to the target at least the minimum), at full size, or
+half on serious evidence against; it passes only on a decisive reason (the
+owner's decision, 2026-10-21: a pass on a verified record without one is
+scored excessive abstention, `confluence-counting`). Invalidation is defined before entry,
 every trade is managed and reviewed, and size comes from risk, never
 conviction. The learning loop rewards that discipline (good passes, honest
 reasons), never the number of trades.

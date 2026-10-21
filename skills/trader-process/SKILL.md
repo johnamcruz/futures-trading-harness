@@ -1,6 +1,6 @@
 ---
 name: trader-process
-description: Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the count decides. Every cycle.
+description: Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; a valid setup is the trade. Every cycle.
 ---
 
 # Trader Process
@@ -13,8 +13,8 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 It adds no filter and no veto:
 
-- **The count decides** (`confluence-counting`); only the hard steps
-  (strategy-library) and the gate's end a plan early.
+- **A valid setup is the trade** (`confluence-counting`); only a
+  decisive against, the hard steps and the gate's end a plan early.
 - **A setup is a combination of reads** you state, step by step, and
   `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
 - **Management always runs.** Managing and exiting a position, and the
@@ -37,12 +37,13 @@ It adds no filter and no veto:
    side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** The six categories of `confluence-counting`.
-6. **Entry.** A closed bar's entry reads; never anticipate. Trigger and
-   count for → take now.
+6. **Entry.** A closed bar's entry reads; never anticipate. Trigger
+   closed on a valid setup → take now.
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`), target (`take-profit`), size, the
    first level ahead; the numbers from `order_plan` or the compose record.
-8. **Decision.** Take or pass on the count (step 5); its ONE main reason.
+8. **Decision.** Valid → take, sized by the against (step 5); ONE main
+   reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 
@@ -79,7 +80,7 @@ PLAN:
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
 6 Entry: <the entry reads | none>
 7 Risk: stop <ticks>, size <n>, exit <target R|trail>, ahead <first level ahead, R | none>
-8 Decision: <take|skip> - <one main reason>
+8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
 
@@ -101,6 +102,6 @@ PLAN:
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
 7 Risk: stop 111 ticks, size 1, exit target 2.08R, ahead prior RTH high 1.2R
-8 Decision: take - for 4 against 0, compose_check OK
+8 Decision: valid yes, full - compose_check OK
 9 Manage: flat
 ```

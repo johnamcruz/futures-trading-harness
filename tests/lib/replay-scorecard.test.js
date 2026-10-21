@@ -744,7 +744,7 @@ test('a composed entry is graded on its own record: right at its size, bad size 
   assert.strictEqual(expectedForEntry(both, 'prop_portfolio', 'short').decision, 'take');
 });
 
-test('a composed pass: right with no OK record, right on one (a good decision by default), a wrong stated reason when false', () => {
+test('a composed pass: right with no OK record; on one (a valid setup) excessive abstention without a decisive reason; a wrong stated reason when false', () => {
   const { composedSetup, composedSetupsFrom } = require('../../scripts/lib/trading/reasons');
   // The latest record per side is the one that counts (the gate judges it): an OK one then a failed one is no setup.
   assert.deepStrictEqual(composedSetupsFrom([composedRec(), composedRec({ id: 'rec2', ok: false })]), []);
@@ -756,10 +756,14 @@ test('a composed pass: right with no OK record, right on one (a good decision by
   const none = facts();
   assert.deepStrictEqual(run(label(), none, 'CYCLE RESULT: no-trade - compose record not OK'), { category: 'right', agrees: true, why: [] });
   const f = facts({ setups: [composedSetup(composedRec(), { window: WINDOW.drive })] });
-  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the reads are thin, passing'), { category: 'right', agrees: true, why: ['a pass on the verified compose record rec1: passing is the model\'s call'] });
+  // A valid setup is the trade (fix/confluence-not-vetoes): a pass on soft reads is excessive abstention; a decisive one
+  // (a reversal, which no claim checks) is unchecked; a false reason stays a wrong stated reason.
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the reads are thin, passing'), { category: 'excessive abstention', agrees: false, why: ['a valid setup (the verified compose record rec1) passed without a decisive reason'] });
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the 3m close broke the 15m swing low: a reversal').category, 'unchecked');
   assert.strictEqual(run(label(), f, 'CYCLE RESULT: no-trade - opening print window until 10:00 ET').category, 'wrong stated reason');
   // "No rules strategy fired" (the runner's own words) stays true beside a composed setup: it is no strategy that fired.
-  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - no rules strategy fired, passing').category, 'right');
+  // ...but it is no reason to pass the composed setup beside it.
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - no rules strategy fired, passing').category, 'excessive abstention');
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - no candidate strategies', f), 'nothing-fired').check, true);
   // No scan logged: the rules setups are unknown, so a pass beside a record is not judged (an entry on it still is).
   assert.deepStrictEqual(run(label(), facts({ scanned: false, setups: f.setups }), 'CYCLE RESULT: no-trade - passing').category, 'unchecked');
@@ -815,7 +819,8 @@ test('scoreRun and labels: a composed limit entry at its record is right with no
     { name: 'prop_composed', valid: true, signal: 'policy', status: 'active', timeframe: '3m', strategies: ['trade_lifecycle'] }];
   const { runDir } = makeRun({ steps });
   const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
-  assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'right', 'right', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
+  // k 3: a pass on its OK record (a valid setup) with no decisive reason is excessive abstention (fix/confluence-not-vetoes).
+  assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'excessive abstention', 'right', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
   assert.deepStrictEqual(records[18].expected.composed, 'rec19');
   assert.deepStrictEqual([records[16].expected.composed, records[17].expected.composed], ['rec17', 'rec18']);
   assert.deepStrictEqual([records[14].expected.composed, records[15].expected.decidedBy, records[15].why], ['rec15', 1, ['the order says no trade (step 1)']]);

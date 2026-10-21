@@ -118,9 +118,9 @@ It orders the thinking and adds no filter.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
-- **The count decides** (`confluence-counting`): on the trend rule's
-  side, the trigger there, categories for minus against: 2+ → full size,
-  1 → half, below 1 → pass. The pullback is neutral.
+- **A valid setup is the trade** (`confluence-counting`): every hard step
+  true → take, full size; serious against → half; decisive against →
+  pass. A missing read is no reason to pass.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

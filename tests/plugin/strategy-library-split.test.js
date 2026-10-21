@@ -151,7 +151,7 @@ const LATE = [
   { from: "A strategy that fired but failed a filter shows none.", to: null,
     reason: "fix/skills-match-code review: the scan's broker-field values, shorter (rules strategies only; none active)" },
   { from: "Contradicting facts mean no trade; confluence means trade.",
-    to: "The count decides (`confluence-counting`).",
+    to: "A valid setup is the trade (`confluence-counting`).",
     reason: "fix/confluence-not-vetoes: the count under the bias decides; a soft read is never a no trade alone (owner, 2026-10-21)" },
   { from: "**Room**: the first level in its way (`inTheWay`, in its own R) comes before the room it needs (`needR`) → no trade.",
     to: ["**Room**: the first level ahead (`inTheWay`, its own R) and the R it aims for (`needR`): a read, never a no trade alone.", "Hard: R:R to the target at least `risk.min_rr` (code-enforced)."],

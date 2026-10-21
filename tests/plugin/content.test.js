@@ -304,8 +304,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
     assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
     assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
   }
-  assert.match(read('skills/setup-judgment/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge by\s+the side rule \(`htf-to-ltf`\) and its alignment table[^]*?the count takes\s+\(`confluence-counting`\) is the opportunity this harness looks for, when\s+it isn't `blocked`[^]*?The priority order decides: a policy strategy's verdict\s+too\./);
-  assert.match(read('skills/strategy-library/SKILL.md'), /### The priority order: the rule for every setup[^]*?A\s+verdict\s+is\s+a\s+ceiling\s+on\s+size,\s+never\s+an\s+order\.\s+The\s+count\s+decides\s+\(`confluence-counting`\)\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
+  assert.match(read('skills/setup-judgment/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge by\s+the side rule \(`htf-to-ltf`\) and its alignment table[^]*?A valid setup on that side\s+\(`confluence-counting`\) is the trade this harness looks for, when\s+it isn't `blocked`[^]*?The priority order decides: a policy strategy's verdict\s+too\./);
+  assert.match(read('skills/strategy-library/SKILL.md'), /### The priority order: the rule for every setup[^]*?A\s+verdict\s+is\s+a\s+ceiling\s+on\s+size,\s+never\s+an\s+order\.\s+A\s+valid\s+setup\s+is\s+the\s+trade\s+\(`confluence-counting`\)\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
   for (const f of [...TRADE_SESSION_SPLIT, 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
     assert.doesNotMatch(read(f), /Place exactly the verdict|the facts never\s+change it|doesn't halve the verdict|is already sized: don't halve it|Never argue with\s+it/, f);
   }
@@ -544,8 +544,8 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
   assert.ok(require('../../scripts/lib/head-prompt').CORE.includes('confluence-counting'));
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
-  assert.match(read('skills/trade-session/SKILL.md'), /2\+ → full size,\s+1 → half, below 1 → pass/);
-  assert.match(read('skills/trade-lifecycle/SKILL.md'), /a margin of 1\+ → compose \(`confluence-counting`\), else\s+pass/);
+  assert.match(read('skills/trade-session/SKILL.md'), /every hard step\s+true → take, full size; serious against → half; decisive against →\s+pass/);
+  assert.match(read('skills/trade-lifecycle/SKILL.md'), /a valid setup → compose \(`confluence-counting`: full, or\s+half on serious against\)/);
 });
 
 test('the count is of independent categories, never labels, and every restatement says the same (the owner\'s duplicated-evidence principle)', () => {
@@ -554,23 +554,27 @@ test('the count is of independent categories, never labels, and every restatemen
   const cc = flat(read('skills/confluence-counting/SKILL.md'));
   // The six categories, in order, each once; labels of one price move are one piece of evidence.
   assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
-  for (const rule of ['the margin, categories for minus against: 2+ → full size within the verdict\'s ceiling; 1 → half (`floor`, at least 1); below 1 → pass.',
-    'No against category is a pass alone', 'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
+  // A valid setup is the trade (the owner, 2026-10-21): the categories describe the evidence; the against sets the size.
+  for (const rule of ['**A valid setup is the trade.**', 'Valid → take, full size within the verdict\'s ceiling; the against sets the size:',
+    '**Decisive** → pass: a 3m close broke the leg\'s 15m/1h swing', '**Serious** → half (`floor`, at least 1): 2+ categories against, or location against',
+    '**Minor** → full size: thin volume, the first level ahead, the VWAP distance', 'A missing read is no reason to pass.',
+    'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
     'a 3m BOS, an EMA slope and ADX are one structure vote', 'the trend rule and the 1h and 4h direction (the side rule, hard',
-    '**The pullback is neutral** (`pullback-vs-reversal`)', 'against only when a 3m close broke the leg\'s 15m/1h swing']) assert.ok(cc.includes(rule), rule);
+    '**The pullback is neutral** (`pullback-vs-reversal`)']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes("on the trend rule's side, the trigger there, categories for minus against: 2+ → full size, 1 → half, below 1 → pass. The pullback is neutral."));
-  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('a margin of 1+ → compose (`confluence-counting`), else pass.'));
+  assert.ok(ts.includes('**A valid setup is the trade** (`confluence-counting`): every hard step true → take, full size; serious against → half; decisive against → pass. A missing read is no reason to pass.'));
+  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('a valid setup → compose (`confluence-counting`: full, or half on serious against).'));
+  assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>'));
   assert.ok(flat(read('skills/htf-to-ltf/SKILL.md')).includes('in the count it is neutral.'));
   assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
-  assert.ok(flat(read('agents/risk-manager.md')).includes('then the count of categories (`confluence-counting`): take → APPROVE at its size (margin 2+: full, 1: half), else VETO.'));
-  assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('Each read is in its category of the count.'));
+  assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): a valid setup → APPROVE, full size, half on serious against; VETO only on a decisive against or a failed hard step.'));
+  assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('A valid setup on that side (`confluence-counting`) is the trade'));
   for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     assert.ok(read(`agents/${role}.md`).includes("Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>"), role);
   }
   // No restatement keeps the old label count.
   for (const f of ['skills/trade-session/SKILL.md', 'skills/trade-lifecycle/SKILL.md', 'skills/trader-process/SKILL.md', 'agents/risk-manager.md', 'skills/setup-judgment/SKILL.md']) {
-    assert.doesNotMatch(read(f), /six items|item [1-6]\b|No against read is/, f);
+    assert.doesNotMatch(read(f), /six items|item [1-6]\b|No against read is|for minus against|margin of/, f);
   }
 });
