@@ -20,7 +20,8 @@
  *   netPosition(accountId, contractId)     signed net size
  *   cancelOrder / modifyStop / closePosition
  *   fillsSince / ordersSince(accountId, start)   search_trades / search_orders since start
- *   journalAdd(entry)                      journal_add (the runner's factual reviews): the entry the server wrote, or throws
+ *   journalAdd(entry)                      journal_add (the runner's plan and its factual reviews): the entry the server
+ *                                          wrote, or throws
  *   serverConfig()                         get_server_config
  *   close()
  *
@@ -260,13 +261,14 @@ function createAdapter({ mcp, writeMcp = mcp }) {
     },
 
     /**
-     * Add a journal entry (journal_add: kind, text, contractId, orderId, tags): the runner's factual review of an entry
-     * that ended (trading/runner-reviews.js). Straight to the server, as reads go: it places nothing, and the gate reads
-     * the journal it writes. Returns the entry the server wrote; a failure throws.
+     * Add a journal entry (journal_add: { kind, text, contractId?, accountId?, orderId?, tags? }): the runner's plan of
+     * an entry (runner-entry.js) and its factual review of one that ended (trading/runner-reviews.js). Straight to the
+     * server, as reads go: it places nothing, and the gate reads the journal it writes, with the server's own time.
+     * Returns the entry the server wrote ({ ts, kind, ... }); a failure throws.
      */
     async journalAdd(entry) {
       const res = await call('journal_add', entry);
-      if (!res || typeof res !== 'object' || typeof res.kind !== 'string') throw new BrokerError('journal_add returned no journal entry');
+      if (!res || typeof res !== 'object' || typeof res.kind !== 'string' || typeof res.ts !== 'string') throw new BrokerError('journal_add returned no journal entry');
       return res;
     },
 

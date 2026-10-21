@@ -9,7 +9,9 @@
  *
  *   runCycle(cfg, action, prompt, opts, limits, deps)   the runner's cycle result ({ ok, timedOut, result, ... })
  *     opts:   { dryRun }: print the argv only
- *     limits: { timeoutMs, context } (runner.js)
+ *     limits: { timeoutMs, context, entry } (runner.js; `entry`: the runner's entry, runner-entry.js, run after the
+ *             head trader's run inside the cycle's time and before its log: ({ result, output, env, startedWall, budgetMs }) ->
+ *             null | { result, entry }: the cycle's result becomes its result, and the cycle log records `entry`)
  *     deps:   { root, home, env, run (runHarness), onChild, out(text), err(text), appendLog(now, text),
  *               guard(killSwitchFile, when) (the workspace guard: false when it tripped; required, never defaulted
  *               open), now(), wallNow() (the wall clock in ms the cycle's timing reads: Date.now) }
@@ -33,7 +35,7 @@ function runOnce(cfg, argv, timeoutMs, context, deps) {
     .then(r => ({ ...r, transcript: env.FTH_CYCLE_TRANSCRIPT || null, roleSkills: env.FTH_ROLE_SKILLS || null, headPrompt: env.FTH_HEAD_PROMPT || null, env }));
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null } = {}, deps = {}) {
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null } = {}, deps = {}) {
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
@@ -52,9 +54,26 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const wallNow = deps.wallNow || Date.now;
   const startedMs = wallNow();
   const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
-  const endedMs = wallNow();
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
-  const { result, reportedResult, resultNote } = scoreRun(res, { action, harness: cfg.harness });
+  const scored = scoreRun(res, { action, harness: cfg.harness });
+  const { reportedResult, resultNote } = scored;
+  let { result } = scored;
+  // The runner's entry (runner-entry.js) after a head trader's run that finished, within what is left of the cycle's
+  // limit, and never once the kill switch is on: its result is the cycle's, its time the cycle's.
+  let entry = null;
+  if (typeof entryHook === 'function' && res.ok && !res.timedOut) {
+    if (!guard(killSwitchFile, 'before the runner\'s entry')) entry = { outcome: 'not-run', why: 'the kill switch is on' };
+    else {
+      try {
+        const e = await entryHook({ result, output: res.output || '', env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
+        if (e) { entry = e.entry || null; if (typeof e.result === 'string' && e.result) result = e.result; }
+      } catch (e2) {
+        err(`[autotrader] the runner's entry failed (${e2.message}): no order\n`);
+        entry = { outcome: 'error', why: e2.message };
+      }
+    }
+  }
+  const endedMs = wallNow();
   // When it acted against its bar (cycle-timing.js): measurement only.
   // The runner's desk ran before this run (runner.js): its time counts in the cycle's (context.desk.ms).
   const deskMs = context && context.desk && Number.isFinite(context.desk.ms) ? context.desk.ms : 0;
@@ -69,7 +88,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     decided: Boolean(res.ok) && !res.timedOut && outcomeOf(result) !== 'blocked',
   }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
-  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk });
+  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk, entry });
   out(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
   const deskWarn = deskWarning(desk);
   if (deskWarn) err(`[autotrader] ${deskWarn}\n`);

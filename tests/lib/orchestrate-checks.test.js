@@ -52,3 +52,45 @@ test('the desk request names the lookups the bar requires of the role, with its 
   assert.doesNotMatch(REQUESTS.desk('trend-momentum-analyst', ctx), /look up/);
   assert.doesNotMatch(REQUESTS.desk('market-structure-analyst', { ...ctx, lookups: undefined }), /look up/);
 });
+
+test('verdict-facts: phase 2\'s report has its verdict and its FACTS line, read by the gate\'s own readers (a VETO is a report); order-sent: the executor\'s order call completed, or it reported the refusal', () => {
+  const vf = CHECKS['verdict-facts'];
+  assert.strictEqual(vf('risk-manager', { text: 'VERDICT: APPROVE - size 1\nFACTS: window asia; trend long allowed' }), null);
+  assert.strictEqual(vf('risk-manager', { text: 'VERDICT: VETO - room: stand aside\nFACTS: window asia; trend long allowed' }), null);
+  assert.match(vf('risk-manager', { text: 'VERDICT: APPROVE - size 1' }), /no FACTS line/);
+  assert.match(vf('risk-manager', { text: 'FACTS: window asia\nlooks fine' }), /no VERDICT line/);
+  assert.match(vf('risk-manager', { text: '  ' }), /no report/);
+  assert.match(vf('risk-manager', null), /no report/);
+  // The same readers as the gate's: an approval the gate reads as none is none here.
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  const { factsLines } = require('../../scripts/lib/trading/fact-claims');
+  for (const text of ['Verdict - approve\nFACTS: news clear; entries allowed', 'decision: take it\nFACTS: news clear']) assert.strictEqual(vf('risk-manager', { text }) === null, verdictOf(text) !== null && factsLines(text) !== null, text);
+  const sent = CHECKS['order-sent'];
+  assert.strictEqual(sent('trade-executor', { tools: ['broker_get_account_snapshot', 'broker_place_order'], text: 'EXECUTED' }), null);
+  assert.strictEqual(sent('trade-executor', { tools: ['broker_get_account_snapshot'], text: 'BLOCKED\nBlocked by trading harness' }), null);
+  assert.strictEqual(sent('trade-executor', { tools: [], text: '**ABORTED**\nOrderRejected' }), null);
+  assert.match(sent('trade-executor', { tools: ['broker_get_account_snapshot'], text: 'EXECUTED (it says)' }), /no order call and no refusal reported/);
+  assert.match(sent('trade-executor', { tools: ['harness_place_order'], text: 'done' }), /no order call/, 'only the broker server\'s order tool');
+  assert.strictEqual(sent('trade-executor', { tools: ['b2_place_order'], text: '' }, { brokerServer: 'b2' }), null);
+});
+
+test('review and execute requests: phase 2 gets the record, the reports and the bars, the order_plan call to make and its output; the executor the exact arguments and the verdict line', () => {
+  const ctx = { symbol: 'MNQ', contractId: 'MNQ', at: '2026-10-07T13:57:02.000Z', timeframe: 3, bars: '/b/MNQ-3m.json', strategy: 'trade_lifecycle', side: 'long', accountId: 7, record: 'compose_check MNQ long ... OK', reports: [{ role: 'risk-manager', text: '## Risk state: account 7' }, { role: 'market-structure-analyst', text: 'Data: x' }, { role: 'trend-momentum-analyst', text: ' ' }], lookups: { 'risk-manager': ['order-types'] } };
+  const r = REQUESTS.review('risk-manager', ctx);
+  assert.match(r, /^Phase 2, plan verdict, for MNQ \(contractId MNQ\) at the 3-minute bar that closed by 2026-10-07T13:57:02\.000Z\./);
+  assert.ok(r.includes('`order_plan {"bars":"/b/MNQ-3m.json","symbol":"MNQ","strategy":"trade_lifecycle","side":"long","accountId":7}`'), r);
+  assert.match(r, /are in \/b\/MNQ-3m\.json \(get_bars format\)/);
+  assert.match(r, /look up `order-types` before your report: `skill_lookup \{"skill": "<skill>", "role": "risk-manager"\}`/);
+  assert.match(r, /End with your VERDICT line, then your FACTS line last/);
+  assert.match(r, /--- compose record \(MNQ long\) ---\ncompose_check MNQ long \.\.\. OK\n--- end of compose record \(MNQ long\) ---/);
+  assert.match(r, /--- risk-manager phase 1 report ---\n## Risk state: account 7\n--- end of risk-manager phase 1 report ---/);
+  assert.match(r, /--- market-structure-analyst report ---\nData: x/);
+  assert.doesNotMatch(r, /trend-momentum-analyst report/, 'an empty report is left out');
+  assert.doesNotMatch(r, /already provided/i);
+  const args = { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21500, size: 1, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:trade_lifecycle long' };
+  const x = REQUESTS.execute('trade-executor', { ...ctx, args, verdict: ' VERDICT: APPROVE - size 1, risk $20.00 ' });
+  assert.ok(x.includes(`built by the runner from this bar's compose record: ${JSON.stringify(args)}. Send them as given`), x);
+  assert.match(x, /The risk manager's line: VERDICT: APPROVE - size 1, risk \$20\.00\./);
+  assert.match(x, /once; never resize, reprice or relabel them/);
+  assert.match(x, /EXECUTED, BLOCKED or ABORTED first/);
+});

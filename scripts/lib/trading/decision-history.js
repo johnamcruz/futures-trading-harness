@@ -5,7 +5,7 @@
  * per decision, with what happened since, so the next cycle can see a run of misses or stops, not only what it
  * said. The runner records an entry after each trade cycle (runner.js state.history, kept across restarts):
  *
- *   decisionEntry({ at, symbols, result, items, entries, lanes, output, cycle, cached })   the state.history entry: its
+ *   decisionEntry({ at, symbols, result, items, entries, lanes, output, cycle, cached, runs })   the state.history entry: its
  *       result line plus the facts at the decision: the symbol and lane, the bar and its close (the price), the
  *       tick, the action (entered, skipped, vetoed, managed, no-trade, flattened, blocked, planned, error), and the
  *       setup's strategy, side and stop distance (1R) when there is one. `items`: the cycle's { symbol, minutes,
@@ -16,7 +16,9 @@
  *       `cycle` and `cached`: the cycle kind and the roles served from the cache) is a veto (verdictOf) naming its setup
  *       (or, naming none of the cycle's setups, its symbol); else
  *       `skipped`: the model's own pass, a good decision when its counterfactual lost. A transcript
- *       with no such report (a harness whose transcript doesn't show the roles' reports) is a pass, as before.
+ *       with no such report (a harness whose transcript doesn't show the roles' reports) is a pass, as before. `runs`:
+ *       the runner's role record of the cycle (runner-roles.js readRoleRuns), merged in as the gate merges it (a phase 2
+ *       the runner ran itself, the entry workflow's, decides a veto the same way).
  *   historyLines(history, market)   the lines, oldest first; consecutive identical no-trades collapse into one
  *       ("10:03-10:18 MNQ 3m no-trade ×6 @21500.25: nothing fired; since -4t").
  *   marketOf(items, timeframe)      the bars the outcomes read: per symbol and lane, its closed bars and the close
@@ -125,11 +127,12 @@ const wordIn = (text, w) => Boolean(w) && new RegExp(`(^|[^A-Za-z0-9_])${String(
  * lanes): the veto is this decision's only when the report names its setup, or, naming none of the cycle's setups, its
  * symbol; a veto of another setup leaves the model's own pass on this one a pass. Never throws.
  */
-function vetoedIn(output, { cycle = 'full', cached = [], setup, symbol, setups = [] } = {}) {
-  if (!output) return false;
+function vetoedIn(output, { cycle = 'full', cached = [], setup, symbol, setups = [], runs = [] } = {}) {
+  if (!output && !(Array.isArray(runs) && runs.length)) return false;
   try {
-    const { roleCalls, round, latestPhase2, verdictOf } = require('./roles-ran');
-    const last = latestPhase2(round(roleCalls(output), cycle, cached).p2);
+    const { roleCalls, round, latestPhase2, verdictOf, withRunnerRuns } = require('./roles-ran');
+    // With the runner's own runs (its role record, runner-roles.js): the entry workflow's phase 2 is the runner's.
+    const last = latestPhase2(round(withRunnerRuns(roleCalls(output), Array.isArray(runs) ? runs : []), cycle, cached).p2);
     if (!last || verdictOf(last.text) !== 'VETO') return false;
     return setups.some(s => wordIn(last.text, s)) ? wordIn(last.text, setup) : wordIn(last.text, symbol);
   } catch (_err) {
@@ -138,7 +141,7 @@ function vetoedIn(output, { cycle = 'full', cached = [], setup, symbol, setups =
 }
 
 /** The state.history entry for a cycle (see the module comment). */
-function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false, positions = null, output = '', cycle = 'full', cached = [] }) {
+function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false, positions = null, output = '', cycle = 'full', cached = [], runs = [] }) {
   const base = { at, symbols, result, ...(Array.isArray(lanes) && lanes.length ? { lanes } : {}) };
   const list = (items || []).filter(x => x && x.bar && x.bar.t);
   if (!list.length) return base;
@@ -160,7 +163,7 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   const setup = aboutSetup && !unknown ? setupOf(item) : null;
   const tick = Number(item.tickSize) > 0 ? Number(item.tickSize) : null;
   // A setup not taken: the risk manager's veto, or the model's own pass.
-  const vetoed = () => vetoedIn(output, { cycle, cached, setup: setup.setup, symbol: item.symbol, setups: list.map(setupOf).filter(Boolean).map(s => s.setup) });
+  const vetoed = () => vetoedIn(output, { cycle, cached, runs, setup: setup.setup, symbol: item.symbol, setups: list.map(setupOf).filter(Boolean).map(s => s.setup) });
   const action = action0 === 'no-trade' && setup ? (vetoed() ? 'vetoed' : 'skipped') : action0;
   const same = setup && placed && setup.setup === placed.setup;
   const facts = placed

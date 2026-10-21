@@ -1010,6 +1010,10 @@
    "value": 8,
    "from": "new in feat/desk-in-runner (one desk role's run)"
   },
+  "entry.timeoutMinutes": {
+   "value": 6,
+   "from": "new in feat/entry-workflow (one entry role's run: risk-manager phase 2, the trade-executor)"
+  },
   "reviews.scratchR": {
    "value": 0.2,
    "from": "new in fix/runner-writes-reviews (the runner's factual review: a trade inside 0.2R is a scratch, as skills/trade-review/SKILL.md defines it)"

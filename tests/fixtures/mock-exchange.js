@@ -16,6 +16,7 @@
  *   closeReply      'refuse': closes come back success: false and close nothing; 'error': a close is
  *                   taken (held, as holdCloses) but its reply is an error (a timeout after the broker took it)
  *   loseEntryReply  place_order is taken and filled, but no reply is sent (an order of unknown outcome)
+ *   refuseEntries   place_order is refused (success: false, OrderRejected) and nothing is placed
  *   hideOrders      search_orders doesn't list orders yet (the broker is slow to show one)
  *   failBalance     list_accounts fails (the account's balance can't be read)
  *   keepLegs        bracket legs stay working after the position goes flat (legs not cancelled on flat)
@@ -239,6 +240,7 @@ const HANDLERS = {
   place_order: (s, a, env) => {
     const c = contractOf(a.contractId);
     if (!c) return fail(8, 'ContractNotFound');
+    if (s.refuseEntries) return fail(2, 'OrderRejected: the broker refused the order');
     const before = netOf(s, a.contractId);
     const o = {
       id: s.nextId++, accountId: ACCOUNT, contractId: a.contractId, creationTimestamp: iso(s.nowMs), updateTimestamp: iso(s.nowMs), status: 1, type: TYPE[a.type],

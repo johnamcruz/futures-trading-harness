@@ -29,13 +29,15 @@
  *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings })  { roles, reports: [{ role, text, at, until, tf? }] }
  *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
  *   phase1Holds(text, account)                  phase 1 confirms every active attempt and denies none
- *   recordReports({ prev, output, served, briefings, symbols, account, day, now, frames, frameBriefings, lookups })  the new cache
+ *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, account, day, now, frames, frameBriefings, lookups })  the new cache
+ *                                               (`runs`: the runner's role record of the cycle, runner-roles.js readRoleRuns:
+ *                                               a trade-executor the runner ran ends phase 1's cache as a launch does)
  *   cacheFile(home), readCache(home), writeCache(home, cache)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { ANALYSTS, roleCalls, verdictOf } = require('./roles-ran');
+const { ANALYSTS, roleCalls, verdictOf, withRunnerRuns } = require('./roles-ran');
 const { sharedParts, frameHolds } = require('./briefing');
 
 const PHASE1 = 'risk-manager';
@@ -213,12 +215,13 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
  * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
  * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], fresh = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
+function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
   const { lookupsInCall } = require('./skill-lookups');
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
-  const { calls, launches } = roleCalls(output);
+  // With the runner's own runs (its role record): the entry workflow's trade-executor is a launch (the account changed).
+  const { calls, launches } = withRunnerRuns(roleCalls(output), Array.isArray(runs) ? runs : []);
   const fits = t => typeof t === 'string' && t.length <= MAX_TEXT;
   // The desk's reports this cycle (the runner ran those roles): each is that role's report, with its own run's lookups.
   const ran = role => (Array.isArray(fresh) ? fresh : []).find(f => f && f.role === role && typeof f.text === 'string') || null;

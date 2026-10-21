@@ -62,6 +62,7 @@ session timing, sizing and pacing), and neither the prompt's facts (the
 trend rule) nor the bar briefing are their reports:
 the briefing is their input, not their analysis.
 `[desk]` (`compose_check` refused): launch the roles it names, then compose.
+Runner runs the entry (prompt says): launch no role (`[entry-route]`).
 `[review]` (`compose_check` refused): manage an open entry; a closed one the runner reviews next bar.
 In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,

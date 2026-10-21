@@ -70,3 +70,18 @@ test('the desk\'s record that can\'t be written credits none: logged, and the ro
   assert.deepStrictEqual([d.reports.length, d.recorded], [1, []]);
   assert.ok(logs.some(l => /risk-manager's run could not be recorded for the gate/.test(l)));
 });
+
+test('entryFor: the runner\'s entry only with a role runner, on opencode, in a full cycle, with a valid entry workflow; its record file is a fresh one under the home\'s logs', () => {
+  const { entryFor } = require('../../scripts/lib/runner-wiring');
+  const runRole = async () => ({});
+  assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg(), root: ROOT }), null, 'no role runner: the head trader runs its entry');
+  assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg({ harness: 'claude' }), root: ROOT, runRole }), null);
+  assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg({ cycle: 'lean' }), root: ROOT, runRole }), null);
+  assert.strictEqual(entryFor({ home: tmpDir(), cfg: cfg(), root: tmpDir(), runRole }), null, 'no entry workflow: none');
+  const home = tmpDir();
+  const e = entryFor({ home, cfg: cfg(), root: ROOT, runRole });
+  assert.strictEqual(typeof e.run, 'function');
+  assert.strictEqual(path.dirname(e.recordFile()), path.join(home, 'logs'));
+  // The per-role timeout is config's (config/runner.json entry.timeoutMinutes).
+  assert.ok(require('../../scripts/lib/tunables').runner().entry.timeoutMinutes >= 1);
+});

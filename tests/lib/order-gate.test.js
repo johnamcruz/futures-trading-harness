@@ -1844,7 +1844,8 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
     m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
   } };
   const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
-  const run = (input, cfg = auto) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+  // The plan written for the cycle's bar (after its 13:57 close: plan-required in a runner's cycle).
+  const run = (input, cfg = auto) => evaluateOrder({ input, entries: [plan(1)], now: NOW, config: cfg });
   // The analysts and phase 1, then phase 2's report (its text as given).
   const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
   const approve = text => [...ocSkills, ...ocRoles.slice(0, 4), p2(text)].join('\n');
@@ -2733,7 +2734,8 @@ test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS
   const base = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
   const run = (env, input = entryOrder(), now = late) => {
     const cfg = { ...config, ...loadConfig({ ...base, ...env }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home };
-    const r = evaluateOrder({ input, entries: [plan()], now, config: cfg });
+    // The plan written for the cycle's bar, at the entry's time (after its close: plan-required in a runner's cycle).
+    const r = evaluateOrder({ input, entries: [plan(0, { ts: now.toISOString() })], now, config: cfg });
     return { ...r, violations: r.violations.filter(v => v.check !== 'phase2-facts') };
   };
   const BARS = { FTH_CYCLE_BARS: JSON.stringify({ MNQ: CYCLE_BAR }) };
@@ -2747,7 +2749,8 @@ test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS
   // The cycle names another bar (the briefing on disk is an earlier bar's, or a later one was written mid-cycle), or an
   // unreadable one: not this cycle's facts, every lookup required (fails closed), at any clock.
   for (const env of [{ FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:00:00.000Z' }) }, { FTH_CYCLE_BARS: JSON.stringify({ MNQ: 'not a time' }) }]) {
-    for (const now of [late, NOW]) assert.deepStrictEqual(checks(run(env, entryOrder(), now)), ['roles-ran'], `${JSON.stringify(env)} ${now.toISOString()}`);
+    // (An unreadable bar shows no plan to be this bar's either: plan-required fails closed too.)
+    for (const now of [late, NOW]) assert.deepStrictEqual(checks(run(env, entryOrder(), now)), /not a time/.test(JSON.stringify(env)) ? ['plan-required', 'roles-ran'] : ['roles-ran'], `${JSON.stringify(env)} ${now.toISOString()}`);
   }
   brief('2026-10-07T14:00:00.000Z');
   assert.deepStrictEqual(checks(run(BARS)), ['roles-ran'], 'a later bar\'s briefing is not the cycle\'s');
@@ -3349,4 +3352,105 @@ test('gate config: the loss streak\'s env override only tightens; the committed 
   for (const looser of [String(pinned + 1), '99']) assert.strictEqual(loadConfig({ FTH_MAX_CONSECUTIVE_LOSSES: looser }).maxConsecutiveLosses, pinned, `${looser}: held at the config's`);
   assert.strictEqual(loadConfig({ FTH_MAX_CONSECUTIVE_LOSSES: '0' }).maxConsecutiveLosses, pinned, 'invalid: the config\'s');
   assert.strictEqual(loadConfig({}).configCritical, null);
+});
+
+test('skills-loaded / skills-at-entry: the head trader\'s loads the runner recorded in the cycle\'s role record count for a trade-executor run of the runner\'s own (an autonomous cycle transcript, FTH_CYCLE_ROLES); never for a hook\'s transcript, a non-autonomous call, or without the record; exits never held', () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const dir = require('../helpers').tmpDir();
+  // The executor's own session: an opencode transcript with no skill load of its own.
+  const file = path.join(dir, 'executor-transcript.jsonl');
+  fs.writeFileSync(file, `${ocEvent('broker_get_account_snapshot', { accountId: 7 })}\n`);
+  const rolesFile = path.join(dir, 'cycle-roles.jsonl');
+  const auto = { ...config, autonomous: true, cycle: null, cycleTranscript: file, roleSkills: 'full' };
+  const skills = (cfg, opts = {}) => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: cfg, ...opts }).violations.filter(v => v.check === 'skills-loaded' || v.check === 'skills-at-entry').map(v => v.check);
+  assert.deepStrictEqual(skills(auto), ['skills-loaded', 'skills-at-entry'], 'control: the executor\'s own transcript loaded nothing');
+  RR.appendHeadSkills(rolesFile, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan']);
+  assert.deepStrictEqual(skills({ ...auto, cycleRoles: rolesFile }), [], 'the head trader\'s recorded loads count');
+  // Only what was recorded: one missing is still refused, by name.
+  const partial = path.join(dir, 'partial.jsonl');
+  RR.appendHeadSkills(partial, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment']);
+  const m = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...auto, cycleRoles: partial } }).violations;
+  assert.deepStrictEqual(m.map(v => v.check).filter(c => /skills/.test(c)), ['skills-at-entry']);
+  assert.match(m.find(v => v.check === 'skills-at-entry').message, /not read in this session: trade-plan/);
+  // A hook's transcript (another harness's session), a non-autonomous call, or no record: the transcript alone decides.
+  assert.deepStrictEqual(skills({ ...auto, cycleRoles: rolesFile }, { transcriptPath: file }), ['skills-loaded', 'skills-at-entry']);
+  assert.deepStrictEqual(skills({ ...auto, autonomous: false, cycleRoles: rolesFile }), ['skills-loaded', 'skills-at-entry']);
+  assert.deepStrictEqual(skills({ ...auto, cycleRoles: path.join(dir, 'gone.jsonl') }), ['skills-loaded', 'skills-at-entry']);
+  // Role runs alone in the record are no loads.
+  const runsOnly = path.join(dir, 'runs.jsonl');
+  RR.appendRoleRun(runsOnly, { role: 'risk-manager', start: 1.7e12, end: 1.7e12 + 1, text: 'trade-session multi-timeframe-analysis', lookups: ['trade-session'], ok: true });
+  assert.deepStrictEqual(skills({ ...auto, cycleRoles: runsOnly }), ['skills-loaded', 'skills-at-entry']);
+  // An exit never reaches it.
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ side: 'sell', stopLossBracket: undefined, rationale: '[exit] flatten' }), entries: [], now: NOW, config: auto }).violations, []);
+});
+
+test('plan-required, in a runner\'s cycle: the plan is this cycle\'s bar\'s (written since its close, its briefing\'s closedAt, never before it opened); an earlier bar\'s plan, or an unreadable bar, is refused; outside a cycle as before; exits never held', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = require('../helpers').tmpDir();
+  const BAR = '2026-10-07T13:54:00.000Z'; // closes 13:57; NOW is 14:00
+  const at = iso => ({ ts: iso, kind: 'plan', contractId: CONTRACT, text: 'ORB long above 21500, stop 21480' });
+  const cfg = (o = {}) => ({ ...config, home, autonomous: true, cycleBars: { MNQ: BAR }, ...o });
+  const planChecks = (entries, c = cfg(), input = entryOrder()) => evaluateOrder({ input, entries, now: NOW, config: c }).violations.filter(v => v.check === 'plan-required');
+  const { cyclePlanSince } = require('../../scripts/lib/trading/order-gate');
+  // No briefing for the bar: since its open.
+  assert.strictEqual(cyclePlanSince(cfg(), 'MNQ'), Date.parse(BAR));
+  assert.deepStrictEqual(planChecks([at('2026-10-07T13:55:00.000Z')]), [], 'after the bar opened');
+  assert.match(planChecks([at('2026-10-07T13:53:00.000Z')])[0].message, /No journal plan for MNQ written for this cycle's bar \(since 2026-10-07T13:54:00\.000Z\)/);
+  // The briefing on the cycle's bar: since its close.
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {} });
+  assert.strictEqual(cyclePlanSince(cfg(), 'MNQ'), Date.parse('2026-10-07T13:57:00.000Z'));
+  assert.match(planChecks([at('2026-10-07T13:55:00.000Z')])[0].message, /since 2026-10-07T13:57:00\.000Z.*a plan from an earlier bar is not this entry's/, 'written while the bar formed: an earlier cycle\'s');
+  assert.deepStrictEqual(planChecks([at('2026-10-07T13:57:00.000Z')]), []);
+  assert.deepStrictEqual(planChecks([at('2026-10-07T13:59:30.000Z')]), []);
+  // Still within planMaxAgeMin, and on the contract: the old rules hold too.
+  assert.strictEqual(planChecks([at('2026-10-07T13:58:00.000Z')], cfg({ planMaxAgeMin: 1 })).length, 1);
+  assert.strictEqual(planChecks([{ ...at('2026-10-07T13:58:00.000Z'), contractId: 'MES' }]).length, 1);
+  // A briefing on another bar is not the cycle bar's: its open alone.
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: '2026-10-07T13:51:00.000Z', closedAt: '2026-10-07T13:54:00.000Z', sections: {} });
+  assert.strictEqual(cyclePlanSince(cfg(), 'MNQ'), Date.parse(BAR));
+  // Several lanes: the briefing's bar (FTH_CYCLE_BRIEFING_BARS) gives the close; never before the lane bar opened.
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {} });
+  assert.strictEqual(cyclePlanSince(cfg({ cycleBars: { MNQ: '2026-10-07T13:58:00.000Z' }, cycleBriefingBars: { MNQ: BAR } }), 'MNQ'), Date.parse('2026-10-07T13:58:00.000Z'));
+  // An unreadable bar time: no plan is this bar's (fails closed).
+  assert.ok(Number.isNaN(cyclePlanSince(cfg({ cycleBars: { MNQ: 'not a time' } }), 'MNQ')));
+  assert.match(planChecks([at('2026-10-07T13:59:00.000Z')], cfg({ cycleBars: { MNQ: 'not a time' } }))[0].message, /its close, which can't be read/);
+  // Outside a runner's cycle (not autonomous, or no cycle bar for the root): planMaxAgeMin alone, as before.
+  assert.strictEqual(cyclePlanSince(cfg({ autonomous: false }), 'MNQ'), null);
+  assert.strictEqual(cyclePlanSince(cfg({ cycleBars: { MES: BAR } }), 'MNQ'), null);
+  assert.deepStrictEqual(planChecks([at('2026-10-07T13:50:00.000Z')], cfg({ autonomous: false })), []);
+  assert.deepStrictEqual(planChecks([at('2026-10-07T13:50:00.000Z')], cfg({ cycleBars: {} })), []);
+  // An exit or a protective stop is never held by it, whatever the plan.
+  for (const rationale of ['[exit] flatten', '[protect] stop for the long']) {
+    assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale }), entries: [], now: NOW, config: cfg() }).violations, [], rationale);
+  }
+});
+
+test('plan-required, a composed entry: anchored to its own record\'s bar (the setup lane\'s, its briefing\'s close), never to another lane\'s bar that closed this cycle', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const { cyclePlanSince } = require('../../scripts/lib/trading/order-gate');
+  const home = require('../helpers').tmpDir();
+  const BAR = '2026-10-07T13:54:00.000Z'; // the 3m setup bar, closed 13:57
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {} });
+  // A later 1m lane's bar named as the cycle's (FTH_CYCLE_BARS), the briefing's on the 3m bar.
+  const cfg = { ...config, home, autonomous: true, cycleBars: { MNQ: '2026-10-07T13:59:00.000Z' }, cycleBriefingBars: { MNQ: BAR } };
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ'), Date.parse('2026-10-07T13:59:00.000Z'), 'not a composed entry: the lane bar that closed');
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ', { record: { bar: BAR } }), Date.parse('2026-10-07T13:57:00.000Z'), 'composed: its record\'s bar\'s close');
+  // A record on another bar than the briefing's: its own bar's open; an unreadable one fails closed.
+  assert.strictEqual(cyclePlanSince(cfg, 'MNQ', { record: { bar: '2026-10-07T13:51:00.000Z' } }), Date.parse('2026-10-07T13:51:00.000Z'));
+  assert.ok(Number.isNaN(cyclePlanSince(cfg, 'MNQ', { record: { bar: 'x' } })));
+  assert.strictEqual(cyclePlanSince({ ...cfg, autonomous: false }, 'MNQ', { record: { bar: BAR } }), null);
+});
+
+test('trade_lifecycle, plan-required in a runner\'s cycle with lanes: a composed entry\'s plan counts from its record\'s 3m bar\'s close, not from a later 1m lane bar the cycle names', () => {
+  const home = lcHome();
+  // The 3m record's bar closed 14:00 (LC.BAR, the briefing's); a 1m lane's bar opened 14:02 and closed 14:03 (the
+  // cycle's FTH_CYCLE_BARS); the plan was written at 14:01, between the two.
+  const now = new Date('2026-10-07T14:03:02Z');
+  const cfg = { autonomous: true, cycleBars: { MNQ: '2026-10-07T14:02:00.000Z' }, cycleBriefingBars: { MNQ: LC.BAR } };
+  const at = ts => lcEval(home, LC.order(), { now, config: cfg, entries: [plan(1, { ts })] }).violations.map(v => v.check);
+  const between = at('2026-10-07T14:01:00Z');
+  assert.ok(!between.includes('composed-reads'), `the record stands: ${between}`);
+  assert.ok(!between.includes('plan-required'), `a plan since the record's bar closed counts: ${between}`);
+  // Before the record's bar closed: an earlier bar's plan, refused.
+  assert.ok(at('2026-10-07T13:59:00Z').includes('plan-required'));
 });

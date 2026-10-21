@@ -51,7 +51,7 @@
 
 const { readBriefing, current, WINDOWS } = require('./briefing');
 const { trendRuleOf } = require('./reasons');
-const { roleCalls, verdictOf, verdictProblem } = require('./roles-ran');
+const { verdictOf, verdictProblem, cycleCalls } = require('./roles-ran');
 const { familyRoot } = require('./contracts');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock');
 
@@ -397,14 +397,16 @@ function symbolOf(text, symbols) {
 
 /**
  * The cycle log's record (cycle-log.js): every risk-manager report with a verdict line (phase 2) in the cycle's
- * transcript, its FACTS checked against the briefing of its symbol's cycle bar (context.symbols: [{ symbol, bar: { t } }]).
- * { reports: [{ verdict, symbol, stated, status, claims, unavailable }], counts: { reports, claims, true, false, unchecked } }.
- * Never throws: a failure is recorded as { error }.
+ * transcript, and in the runner's role record (context.rolesFile, runner-roles.js: phase 2 the runner ran itself, the
+ * entry workflow's), its FACTS checked against the briefing of its symbol's cycle bar (context.symbols: [{ symbol, bar:
+ * { t } }]). { reports: [{ verdict, symbol, stated, status, claims, unavailable }], counts: { reports, claims, true,
+ * false, unchecked } }. Never throws: a failure is recorded as { error }.
  */
 function cycleFactChecks({ home, output, context = null, now = new Date() }) {
   try {
     const symbols = (isObj(context) && Array.isArray(context.symbols) ? context.symbols : []).filter(s => isObj(s) && s.symbol);
-    const reports = roleCalls(output).calls.filter(c => c.role === 'risk-manager' && verdictOf(c.text) !== null).map(c => {
+    const rolesFile = isObj(context) && typeof context.rolesFile === 'string' && context.rolesFile ? context.rolesFile : null;
+    const reports = cycleCalls(output, rolesFile).calls.filter(c => c.role === 'risk-manager' && verdictOf(c.text) !== null).map(c => {
       const s = symbolOf(c.text, symbols);
       const got = s ? briefingFor(home, s.symbol, { cycleBar: isObj(s.bar) ? s.bar.t : null, now }) : { why: symbols.length ? 'the report names no single cycle symbol' : 'no cycle symbol' };
       return { verdict: verdictOf(c.text), symbol: s ? s.symbol : null, ...checkFacts(c.text, got.briefing || null, got.why) };

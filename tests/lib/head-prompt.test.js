@@ -51,10 +51,12 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // management row (feat/prop-portfolio-missing: the exit mode may let a winner run past its target: +181); 73246 with the
   // owner's approved reading of the risk record in experience_lookup (feat/risk-record-lookup: +610); 72767 with the
   // skills matched to the code (fix/skills-match-code: -479), 72763 after its review (main 73246); 72840 with the owner's approved [desk] line in role-round (feat/desk-before-compose:
-  // the head trader composes only once the desk reported: +77); 72926 with the runner's factual reviews (fix/runner-writes-reviews:
-  // the [review] row in role-round and trade-session's unreviewed-entry line: +86, for the owner's OK). It may shrink;
+  // the head trader composes only once the desk reported: +77); 72926 with the owner's approved runner's factual reviews
+  // (fix/runner-writes-reviews: the [review] row in role-round and trade-session's unreviewed-entry line: +86); 73159
+  // with the owner's approved runner's entry (feat/entry-workflow: one line each in role-round, trade-session,
+  // trade-lifecycle and autonomous-trading, the route in full only in an entry cycle's prompt: +233). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 72926, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 73159, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

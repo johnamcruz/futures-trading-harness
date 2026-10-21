@@ -302,3 +302,16 @@ test('the desk\'s reports (the runner ran those roles) are recorded as the roles
   const next = RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) });
   assert.deepStrictEqual(next.roles, [ANALYSTS[0], 'risk-manager']);
 });
+
+test('a trade-executor the runner ran (its role record: the entry workflow) changed the account: no phase 1 is cached from that cycle, as after a launch in the transcript', () => {
+  const { a } = pair();
+  const now = new Date(a.closedAt);
+  const fresh = [{ role: 'risk-manager', text: '## Risk state: account 7\nPhase 1: budget 2 trades', lookups: [] }];
+  const T = 1.7e12;
+  const p2 = { role: 'risk-manager', start: T + 10, end: T + 20, text: 'VERDICT: APPROVE - size 1\nFACTS: window asia; trend long allowed', lookups: [], ok: true };
+  const exec = { role: 'trade-executor', start: T + 30, end: T + 40, text: 'EXECUTED', lookups: [], ok: true };
+  const base = { output: '', fresh, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now };
+  assert.ok(RC.recordReports({ ...base, runs: [p2] }).phase1, 'control: no executor ran');
+  assert.strictEqual(RC.recordReports({ ...base, runs: [p2, exec] }).phase1, null);
+  assert.strictEqual(RC.recordReports({ ...base, runs: [p2, { ...exec, ok: false }] }).phase1, null, 'a failed executor run may have sent it too');
+});

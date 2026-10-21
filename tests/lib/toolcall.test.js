@@ -132,6 +132,33 @@ test('desk: the head trader\'s compose_check waits until every role FTH_CYCLE_DE
   assert.strictEqual(pre(both, 'harness_compose_check', {}, 'h'), null);
 });
 
+test('entry-route: in a cycle where the runner runs the entry, the head trader\'s launch of the trade-executor is refused with the route, and of risk-manager unless phase 1 is still owed; any other cycle, role or tool is untouched', () => {
+  const { ENTRY_ROUTE } = require('../../scripts/lib/toolcall/rules');
+  assert.strictEqual(ENTRY_ROUTE, 'call compose_check; when it is OK, end with CYCLE RESULT: planned; the runner runs risk-manager phase 2 and the trade-executor');
+  const e = pipe({ FTH_CYCLE_ENTRY: '1' });
+  for (const role of ['trade-executor', 'futures-trading-harness:trade-executor', ' trade-executor ']) {
+    const why = pre(e, 'task', { subagent_type: role, prompt: 'Compose and check short trade' }, 'h');
+    assert.match(why || '', /^\[entry-route\] the runner runs the trade-executor this cycle, not you: call compose_check; when it is OK, end with CYCLE RESULT: planned; the runner runs risk-manager phase 2 and the trade-executor\.$/, role);
+  }
+  assert.match(pre(e, 'task', { subagent_type: 'risk-manager', prompt: 'phase 2' }, 'h') || '', /^\[entry-route\] the runner runs risk-manager phase 2 this cycle \(phase 1's report is in your prompt\)/);
+  // The analysts and every other tool go (the desk's own rules apply to them); the broker's order and exit tools are never matched.
+  for (const role of ['market-structure-analyst', 'volume-liquidity-analyst', 'trade-reviewer']) assert.strictEqual(pre(e, 'task', { subagent_type: role }, 'h'), null, role);
+  for (const t of ['broker_place_order', 'broker_close_position', 'broker_cancel_order', 'broker_modify_order', 'harness_compose_check', 'harness_order_plan']) assert.strictEqual(pre(e, t, {}, 'h'), null, t);
+  // Phase 1 still owed (the desk didn't serve it): its launch goes once; after it reported, a second (phase 2) is refused.
+  const owed = pipe({ FTH_CYCLE_ENTRY: '1', FTH_CYCLE_DESK: 'risk-manager' });
+  assert.strictEqual(pre(owed, 'task', { subagent_type: 'risk-manager' }, 'h'), null);
+  post(owed, 'task', { subagent_type: 'risk-manager' }, 'h');
+  assert.match(pre(owed, 'task', { subagent_type: 'risk-manager' }, 'h') || '', /\[entry-route\] the runner runs risk-manager phase 2/);
+  assert.match(pre(owed, 'task', { subagent_type: 'trade-executor' }, 'h') || '', /\[entry-route\]/, 'the executor is never owed');
+  // Not an entry cycle (unset, or anything but 1: a cycle with a position or working orders, another harness): untouched.
+  for (const env of [{}, { FTH_CYCLE_ENTRY: '0' }, { FTH_CYCLE_ENTRY: 'true' }, { FTH_CYCLE_ENTRY: '' }]) {
+    for (const role of ['trade-executor', 'risk-manager']) assert.strictEqual(pre(pipe(env), 'task', { subagent_type: role }, 'h'), null, `${JSON.stringify(env)} ${role}`);
+  }
+  // It fails closed: a throw in it refuses the launch (never an order or exit tool: it matches none).
+  const rule = RULES.find(r => r.id === 'entry-route');
+  assert.strictEqual(rule.failClosed, true);
+});
+
 test('review: in the runner\'s runs, compose_check on a symbol with an entry today that has no review is refused with the route; reviewed, another symbol, or outside a runner: it goes; an unreadable journal refuses it', () => {
   const home = tmpDir();
   const journal = path.join(home, 'journal.jsonl');
@@ -151,7 +178,7 @@ test('review: in the runner\'s runs, compose_check on a symbol with an entry tod
   assert.match(pre(pipe({ ...env, FAKE_BROKER_JOURNAL: home }), 'harness_compose_check', { symbol: 'MNQ' }, 'h'), /^\[review\] the check failed \(.*\): refused \(it fails closed\)\.$/);
 });
 
-test('the registry\'s contract: every rule has an id, an event and a matcher; no rule that can refuse matches an order or exit tool; only the review and the desk fail closed', () => {
+test('the registry\'s contract: every rule has an id, an event and a matcher; no rule that can refuse matches an order or exit tool; only the review, the desk and the entry route fail closed', () => {
   const { TOOLS } = require('../../scripts/lib/broker/interface');
   const orders = Object.keys(TOOLS).filter(t => TOOLS[t].role === 'order').map(t => `broker.${t}`);
   assert.ok(orders.includes('broker.close_position') && orders.includes('broker.cancel_order'));
@@ -161,7 +188,8 @@ test('the registry\'s contract: every rule has an id, an event and a matcher; no
     assert.ok(typeof r.id === 'string' && ['pre', 'post'].includes(r.event) && typeof r.match === 'function' && typeof r.check === 'function', r.id);
     if (r.event === 'pre') for (const o of orders) assert.strictEqual(r.match({ tool: o, args: {} }), false, `${r.id} never matches ${o}`);
   }
-  assert.deepStrictEqual(RULES.filter(r => r.failClosed).map(r => r.id), ['review', 'desk']);
+  // The rules that hold an entry's step: the review and the desk before compose_check, and the entry's route (only role launches).
+  assert.deepStrictEqual(RULES.filter(r => r.failClosed).map(r => r.id).sort(), ['desk', 'entry-route', 'review']);
 });
 
 test('the pipeline: the first refusal is final; a rule that throws refuses only when it fails closed; a post rule that throws adds nothing; misuse is loud', () => {
