@@ -203,6 +203,22 @@ test('runRole on Claude Code: the role\'s own `claude -p` run (`--agent <plugin>
   assert.strictEqual(seen.length, 2);
 });
 
+test('cycle run: the runner\'s entry reads the head trader\'s stdout only (its loads are recorded for the gate), never the output stderr was mixed into', async () => {
+  const home = tmpDir();
+  const load = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'trade-session' } }] } });
+  const stdout = `${load}\nCYCLE RESULT: planned - trade_lifecycle long 1\n`;
+  // A stderr chunk landed inside the stream-json line: the mixed output has a torn line, the stdout copy has none.
+  const output = `${load.slice(0, 40)}warning: something on stderr\n${load.slice(40)}\nCYCLE RESULT: planned - trade_lifecycle long 1\n`;
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
+  const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
+  const seen = [];
+  const entry = async a => { seen.push(a); return { result: 'CYCLE RESULT: no-trade - x', entry: { outcome: 'no-trade' } }; };
+  const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output, stdout }));
+  await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, d.deps);
+  assert.strictEqual(seen[0].output, stdout);
+  assert.ok(require('../../scripts/lib/trading/skills-loaded').skillsInTranscript(seen[0].output).has('trade-session'), 'the load is read');
+});
+
 test('cycle run: the runner\'s entry runs after the head trader\'s run, within what is left of the limit and before the cycle log; its result is the cycle\'s; never after a failed run or with the kill switch on', async () => {
   const home = tmpDir();
   const out = 'CYCLE RESULT: planned - trade_lifecycle long 1\n';

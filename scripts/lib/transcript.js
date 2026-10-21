@@ -118,10 +118,13 @@ const opencodeStopped = part => Boolean(part && part.state && part.state.status 
 function claudeRunResult(text) {
   let final = '';
   let last = '';
+  // A run that ended in an error result is no report, whatever text it wrote before (independent of its exit code).
+  let errored = false;
   const open = new Map();
   const tools = [];
   for (const ev of documents(text)) {
     if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id) continue;
+    if (ev.type === 'result' && ev.is_error === true) errored = true;
     if (ev.type === 'result' && ev.is_error !== true && typeof ev.result === 'string' && ev.result.trim()) final = ev.result.trim();
     const content = ev.message && Array.isArray(ev.message.content) ? ev.message.content : [];
     for (const c of content) {
@@ -137,7 +140,7 @@ function claudeRunResult(text) {
       }
     }
   }
-  return { text: final || last, tools };
+  return { text: errored ? '' : final || last, tools };
 }
 
 module.exports = { claudeRunResult, documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };

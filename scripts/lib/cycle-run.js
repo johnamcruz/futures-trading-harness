@@ -65,7 +65,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     if (!guard(killSwitchFile, 'before the runner\'s entry')) entry = { outcome: 'not-run', why: 'the kill switch is on' };
     else {
       try {
-        const e = await entryHook({ result, output: res.output || '', env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
+        const e = await entryHook({ result, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
         if (e) { entry = e.entry || null; if (typeof e.result === 'string' && e.result) result = e.result; }
       } catch (e2) {
         err(`[autotrader] the runner's entry failed (${e2.message}): no order\n`);
