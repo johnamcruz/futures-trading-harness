@@ -572,7 +572,10 @@ test('the count is of independent categories, never labels, and every restatemen
   // The PLAN's R:R and target are the compose record's, never the model's estimate.
   assert.ok(tp.includes('7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>') && tp.includes('R:R: the compose record\'s, never yours.'));
   assert.ok(flat(read('skills/strategy-library/SKILL.md')).includes("Hard: R:R to the target at least `risk.min_rr` (compose_check's)."));
-  assert.ok(flat(read('rules/trading/risk-management.md')).includes('measured from the entry to the plan\'s target (compose_check computes it;'));
+  assert.ok(flat(read('rules/trading/risk-management.md')).includes('measured from the entry to the plan\'s target; `compose_check` computes and enforces it, never your estimate'));
+  // No number for the model to apply by hand: the minimum is the strategy's, checked in code (a Sonnet replay passed on
+  // "room 1.21R, below the 1.5R minimum" measured to the first level ahead).
+  assert.ok(!/\b1\.5R\b/.test(read('rules/trading/risk-management.md')), 'no hand-applied R:R number in the always-on rule');
   assert.ok(flat(read('skills/htf-to-ltf/SKILL.md')).includes('in the count it is neutral.'));
   assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
   assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): compose OK (its R:R the record\'s, never an estimate) → APPROVE, full size, half on serious against; VETO only on a decisive against or a failed hard step.'));
@@ -584,6 +587,15 @@ test('the count is of independent categories, never labels, and every restatemen
   for (const f of ['skills/trade-session/SKILL.md', 'skills/trade-lifecycle/SKILL.md', 'skills/trader-process/SKILL.md', 'agents/risk-manager.md', 'skills/setup-judgment/SKILL.md']) {
     assert.doesNotMatch(read(f), /six items|item [1-6]\b|No against read is|for minus against|margin of/, f);
   }
+});
+
+test('the decision is an always-on rule (rules/trading/decision.md) every harness carries in context, so a head trader that skips its skills still has it', () => {
+  const flat = text => text.replace(/\s+/g, ' ');
+  const r = flat(read('rules/trading/decision.md'));
+  for (const s of ['call `compose_check`', 'Never estimate room, R:R or the target yourself', 'a valid setup is the trade', 'never a reason not to compose']) assert.ok(r.includes(s), s);
+  // Embedded where each harness reads it: AGENTS.md (Codex, opencode), QWEN.md (Qwen Code; Claude Code imports it).
+  for (const f of ['workspace/AGENTS.md', 'workspace/QWEN.md']) assert.ok(flat(read(f)).includes('Never estimate room, R:R or the target yourself'), f);
+  assert.match(read('workspace/CLAUDE.md'), /@QWEN\.md/);
 });
 
 test('compose first: the decision rule and every restatement send a setup to compose_check and never ask the model to work out room or R:R itself', () => {
@@ -605,7 +617,7 @@ test('compose first: the decision rule and every restatement send a setup to com
     'skills/setup-judgment/SKILL.md': "the min R:R (compose_check's;",
     'skills/strategy-library/SKILL.md': "Hard: R:R to the target at least `risk.min_rr` (compose_check's).",
     'agents/risk-manager.md': "compose OK (its R:R the record's, never an estimate)",
-    'rules/trading/risk-management.md': "measured from the entry to the plan's target (compose_check computes it;",
+    'rules/trading/risk-management.md': "measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate",
   };
   for (const [f, s] of Object.entries(NEVER)) assert.ok(flat(read(f)).includes(s), `${f}: ${s}`);
   // The minor reads the replay passed on are named as never a reason not to compose.
