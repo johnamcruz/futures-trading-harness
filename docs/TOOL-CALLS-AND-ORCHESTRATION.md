@@ -221,7 +221,8 @@ phases:
    requires of its role (`lookups`: the requirement is the gate's own, and the
    request names the skills). A role that fails is run again once; then it is
    recorded missing, a process failure for that cycle, and not given to the
-   head trader, which launches it itself.
+   head trader, which launches it itself (on a harness that times its launches;
+   on Claude Code the whole desk is dropped, as above).
 3. The reports reach the head trader in its prompt, beside the cached ones.
    The order gate learns of them from the runner's role record
    (`FTH_CYCLE_ROLES`, `scripts/lib/trading/runner-roles.js`): one line per

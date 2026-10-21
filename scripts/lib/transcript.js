@@ -122,7 +122,7 @@ function claudeRunResult(text) {
   const tools = [];
   for (const ev of documents(text)) {
     if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id) continue;
-    if (ev.type === 'result' && typeof ev.result === 'string' && ev.result.trim()) final = ev.result.trim();
+    if (ev.type === 'result' && ev.is_error !== true && typeof ev.result === 'string' && ev.result.trim()) final = ev.result.trim();
     const content = ev.message && Array.isArray(ev.message.content) ? ev.message.content : [];
     for (const c of content) {
       if (!c || typeof c !== 'object') continue;

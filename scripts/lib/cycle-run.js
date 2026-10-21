@@ -114,7 +114,7 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
   const env = deps.env || process.env;
   const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, context), { agent: role });
   const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
-  const { text, tools } = runResultOf(cfg.harness, res.output);
+  const { text, tools } = runResultOf(cfg.harness, typeof res.stdout === 'string' ? res.stdout : res.output);
   let lookups;
   try {
     const { readLookups, lookupsFile } = require('./trading/skill-lookups');

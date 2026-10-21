@@ -172,7 +172,9 @@ test('runRole on Claude Code: the role\'s own `claude -p` run (`--agent <plugin>
       JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'draft' }] } }),
       JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: '## Risk state: account 1' }),
     ].join('\n');
-    return { ok: true, timedOut: false, code: 0, output, stdout: output };
+    // The engine reads the standard output alone: a stderr chunk interleaved in `output` (here mid-line) never breaks an event.
+    const mixed = output.replace('"result":', 'WARN from stderr\n"result":');
+    return { ok: true, timedOut: false, code: 0, output: mixed, stdout: output };
   };
   const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
   const env = { FTH_HOME: home, HOME: home, PATH: process.env.PATH };

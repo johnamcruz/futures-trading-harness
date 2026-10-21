@@ -22,6 +22,8 @@ test('claudeRunResult: a Claude Code stream-json run\'s final message and the to
   assert.deepStrictEqual(claudeRunResult(lines.join('\n')), { text: '## Report', tools: ['harness_bar_briefing', 'read', 'broker_get_account_snapshot'] });
   // The result event's text is the final message when there is one.
   assert.strictEqual(claudeRunResult([...lines, JSON.stringify({ type: 'result', subtype: 'success', result: 'EXECUTED' })].join('\n')).text, 'EXECUTED');
+  // An error result (max turns, a crash) is no report: the last text stands.
+  assert.strictEqual(claudeRunResult([...lines, JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, result: 'Reached max turns' })].join('\n')).text, '## Report');
   assert.deepStrictEqual(claudeRunResult(''), { text: '', tools: [] });
   assert.deepStrictEqual(claudeRunResult('not json\n{"type":"result"}'), { text: '', tools: [] });
 });
