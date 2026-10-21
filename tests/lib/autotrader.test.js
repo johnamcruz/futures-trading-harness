@@ -1174,6 +1174,17 @@ test('scoredResult: a trade cycle\'s `blocked` with no order call in its transcr
   assert.deepStrictEqual(scoreRun({ ok: true, timedOut: false, code: 0, output: `${codex}\n${line}`, stdout: `${codex}\n${line}` }, { action: 'trade', harness: 'codex' }).reportedResult, undefined);
 });
 
+test('childEnv: a Claude Code run waits for every subagent (CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1): each role reports in the head trader\'s turn; another harness is left as it is', () => {
+  const claude = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' });
+  assert.strictEqual(childEnv(claude, '/r', {}, { action: 'trade' }).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+  // Set even when the user's environment says otherwise: a background launch never reports to the desk.
+  assert.strictEqual(childEnv(claude, '/r', { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '0' }, null).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+  for (const harness of ['opencode', 'codex', 'qwen']) {
+    const c = validateConfig({ harness, premarketAt: '', timeframe: 3, account: '7' });
+    assert.strictEqual(childEnv(c, '/r', {}, { action: 'trade' }).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, undefined, harness);
+  }
+});
+
 test('childEnv: FTH_CYCLE_CACHED_LOOKUPS is the run\'s own: set only for a cached role with lookups and a key, never inherited', () => {
   const cfg = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' });
   const stale = { FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['rejection'], key: 'k' } }) };
