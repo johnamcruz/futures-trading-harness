@@ -426,18 +426,15 @@ test('trade-session split: no role prompt grows, in full or index mode, and no r
   for (const r of loadRoles(ROOT)) for (const s of [...PIECES, 'gate-refusals-skills']) assert.ok(![...r.skills, ...r.index].includes(s), `${r.name}: ${s}`);
 });
 
-test('trade-session split: the gate requires setup-judgment and trade-plan at entry, apart from the per-cycle list', () => {
+test('trade-session split: the gate requires setup-judgment and trade-plan at entry, and every cycle loads them', () => {
   const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
   for (const s of REQUIRED_AT_ENTRY) assert.ok(!REQUIRED_FOR_ENTRY.includes(s), s);
-  // Not on the runner's per-cycle load list; the prompt names them only in their own clause, "before an entry" (a head
-  // trader that loads its own skills, Claude Code, composed, was approved and was refused [skills-at-entry] without it).
+  // On the runner's per-cycle load list too (ALSO_LOAD), never left to "before an entry": a Claude Code replay lost 2 of 6
+  // approved orders to [skills-at-entry] when the head trader was told to load them only before an entry.
   const A = require('../../scripts/lib/autotrader');
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
-  const perCycle = p.slice(0, p.indexOf('; before an entry, also load'));
-  assert.ok(p.indexOf('; before an entry, also load') > 0, 'the at-entry clause');
-  for (const s of REQUIRED_AT_ENTRY) assert.ok(!perCycle.includes(s), `the per-cycle list names ${s}`);
-  assert.match(p, /; before an entry, also load setup-judgment and trade-plan, then run/);
+  assert.match(p, /also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/);
   // The refusal is taught: its row in the gate-refusals family, which says exits and stops still go.
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);

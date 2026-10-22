@@ -514,14 +514,13 @@ const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills'
 // The skills an entry needs loaded (the order gate's skills-loaded check, REQUIRED_FOR_ENTRY), then the ones the head
 // trader loads every cycle that the gate does not require (ALSO_LOAD: htf-to-ltf, the alignment labels and the reversal rule;
 // confluence-counting, the count that decides take or pass; trade-session step 0).
-const ALSO_LOAD = ['htf-to-ltf', 'confluence-counting'];
+// And the gate's skills-at-entry ones (REQUIRED_AT_ENTRY: setup-judgment, trade-plan) every cycle: "before an entry" relied on
+// the head trader remembering, and a Claude Code replay lost 2 of 6 approved orders to [skills-at-entry] without them.
+const ALSO_LOAD = ['htf-to-ltf', 'confluence-counting', ...REQUIRED_AT_ENTRY];
 const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
 /** The skills a cycle loads, as the prompt names them: "a, b, and c (the order gate refuses an entry without them); also load d and e". */
-// And the gate's skills-at-entry ones (REQUIRED_AT_ENTRY), named apart: loaded only before an entry, not every cycle. A
-// head trader that loads its own skills (Claude Code) composed, was approved and was refused [skills-at-entry] without them.
 const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>
   `${andList(required)}${gated ? ' (the order gate refuses an entry without them)' : ''}${also.length ? `; also load ${andList(also)}` : ''}`;
-const atEntryLoad = (atEntry = REQUIRED_AT_ENTRY) => (atEntry.length ? `; before an entry, also load ${andList(atEntry)}` : '');
 
 /**
  * The runner's attestation of the head trader's embedded skills (head-prompt.js) for a run of `root`'s workspace, or
@@ -544,7 +543,7 @@ function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
 /** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
 const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
   ? `Your skills ${andList([...REQUIRED_FOR_ENTRY, ...ALSO_LOAD])} are in your prompt, already loaded (don't load them again): decide by them`
-  : `${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding${atEntryLoad()}`);
+  : `${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding`);
 
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 // The outcomes a cycle may report (its result line's first word): the prompt and the autonomous-trading skill list
@@ -1115,7 +1114,6 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
-  atEntryLoad,
   ENTRY_TEXT,
   ROLES_CHECKED,
   ROLE_RUNS,

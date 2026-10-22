@@ -16,7 +16,7 @@ Autonomous cycle.
   Account 7 at 10:36 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Context unavailable this cycle (not "none"): premarket plan unavailable (today's premarket run failed 2 time(s); there is no plan for today: trade from the bars and your skills).
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, and confluence-counting are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
