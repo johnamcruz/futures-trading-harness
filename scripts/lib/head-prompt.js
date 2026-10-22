@@ -41,7 +41,7 @@
  *
  *   claudeHeadText(root)          the Claude head trader's prompt addition (index mode)
  *   claudeHeadFile(home, text)    where the runner keeps it: <home>/head-prompt/claude-head-<sha256>.md
- *   writeClaudeHead(home, root)   { file, text }, written when missing or different
+ *   writeClaudeHead(home, root)   { file, text }, written when missing or different (older ones pruned: the newest kept)
  *   claudeAttestation({ file, text, root, cycle })   the runner's attestation of it
  */
 
@@ -210,8 +210,28 @@ function writeClaudeHead(home, root) {
     const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     fs.writeFileSync(tmp, text);
     fs.renameSync(tmp, file);
+    pruneClaudeHeads(path.dirname(file), file);
   }
   return { file, text };
+}
+
+/**
+ * A new prompt addition written (a skill changed): the older ones go, but the newest of them (by mtime), which a run
+ * that started before the change may still be attested for. A run whose file went fails closed (the gate counts none).
+ * Best effort: a file another runner removed first, or one that can't be removed, is left.
+ */
+function pruneClaudeHeads(dir, keep) {
+  let older;
+  try {
+    older = fs.readdirSync(dir).filter(n => CLAUDE_FILE.test(n) && path.join(dir, n) !== keep)
+      .map(n => { const f = path.join(dir, n); try { return { f, t: fs.statSync(f).mtimeMs }; } catch (_err) { return null; } })
+      .filter(Boolean).sort((x, y) => y.t - x.t);
+  } catch (_err) {
+    return;
+  }
+  for (const { f } of older.slice(1)) {
+    try { fs.unlinkSync(f); } catch (_err) { /* gone already, or kept */ }
+  }
 }
 
 /** The runner's attestation of a Claude head trader's prompt addition for one cycle, or null (no cycle, no skill embedded). */

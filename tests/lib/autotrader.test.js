@@ -1570,3 +1570,21 @@ test('headSkillsInPrompt true (Claude Code): the head trader gets its index-mode
   assert.notStrictEqual(att2.cycle, att.cycle);
   assert.deepStrictEqual(fs.readdirSync(path.join(home, 'head-prompt')), [path.basename(file)]);
 });
+
+test('headSkillsInPrompt: a new prompt addition (a skill changed) prunes the older ones but the newest of them; an unchanged one prunes nothing', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = tmpDir();
+  const dir = path.join(home, 'head-prompt');
+  fs.mkdirSync(dir, { recursive: true });
+  const old = (n, ageS) => { const f = path.join(dir, `claude-head-${String(n).repeat(64)}.md`); fs.writeFileSync(f, 'old'); const t = Date.now() / 1000 - ageS; fs.utimesSync(f, t, t); return f; };
+  const files = [old(1, 400), old(2, 300), old(3, 200)];
+  const other = path.join(dir, 'notes.md');
+  fs.writeFileSync(other, 'not a head file');
+  const { file } = H.writeClaudeHead(home, ROOT);
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), [path.basename(file), path.basename(files[2]), 'notes.md'].sort());
+  // Written again unchanged: nothing pruned.
+  H.writeClaudeHead(home, ROOT);
+  assert.ok(fs.existsSync(files[2]));
+  // The attested one is never pruned by its own write, and a missing directory is no error.
+  assert.ok(fs.existsSync(file));
+});

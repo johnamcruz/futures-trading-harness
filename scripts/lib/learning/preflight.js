@@ -729,16 +729,18 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     claudeHead: once(() => {
       const hp = require('../head-prompt');
       // Written as the runner writes it (a scratch home) and read back as the gate reads it: its hash against the text built now.
+      // Any failure (no scratch home, not written, not read back): no prompt, so the check FAILs, never throws.
       let prompt;
       let expected;
-      const scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-head-'));
+      let scratch = null;
       try {
+        scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-head-'));
         expected = hp.claudeHeadText(root);
         prompt = hp.claudeHeadIn(hp.writeClaudeHead(scratch, root).file);
       } catch (_err) {
         prompt = null;
       } finally {
-        fs.rmSync(scratch, { recursive: true, force: true });
+        if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
       }
       return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
     }),

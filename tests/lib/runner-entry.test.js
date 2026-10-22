@@ -332,36 +332,6 @@ test('runEntry: no late entry fails closed: the 1m bar unreadable and no local b
   assert.deepStrictEqual([ok.entry.outcome, t.calls.map(c => c.role)], ['executed', ['phase2', 'trade-executor']]);
 });
 
-test('runEntry: an executor the hook refused (its run invalid: no order call, no refusal reported) reports the gate\'s refusal from the hook\'s gate-log entry of this cycle; none there, as before', async () => {
-  const flat = { positions: [], orders: [] };
-  const invalid = { ok: false, timedOut: false, stop: 'invalid', why: 'no order call and no refusal reported', text: 'Done.', tools: [], output: '' };
-  // As before: no gate log entry for the cycle, a no-trade naming the executor's stop.
-  let s = setup({ roles: { 'trade-executor': invalid }, state: flat });
-  let r = await E.runEntry(s.deps, s.cycle());
-  assert.strictEqual(r.entry.outcome, 'no-trade');
-  assert.match(r.result, /^CYCLE RESULT: no-trade - the runner's entry: the trade-executor /);
-  // The hook's refusal (trading-order-gate.js logs no `tool`; it carries the order's contract and rationale), stamped
-  // with the cycle's id while the executor ran: the outcome is the gate's refusal, by its checks.
-  s = setup({ roles: { 'trade-executor': () => {
-    const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
-    fs.appendFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date().toISOString(), source: 'hook', decision: 'blocked', violations: [{ check: 'skills-at-entry', message: 'Read how to judge the setup; not read in this session: trade-plan.' }], contractId: 'MNQ', rationale: ARGS.rationale, cycle: id })}\n`);
-    return invalid;
-  } }, state: flat });
-  r = await E.runEntry(s.deps, s.cycle());
-  assert.strictEqual(r.entry.outcome, 'blocked');
-  assert.match(r.result, /^CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: \[skills-at-entry\] Read how to judge the setup; not read in this session: trade-plan\./);
-  // A hook refusal of a modify_order (no contract, no rationale), or another cycle's: not this order's refusal.
-  for (const extra of [{ contractId: undefined, rationale: undefined }, { cycle: 'ffffffffffffffff' }]) {
-    s = setup({ roles: { 'trade-executor': () => {
-      const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
-      fs.appendFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date().toISOString(), source: 'hook', decision: 'blocked', violations: [{ check: 'modify-entry', message: 'no' }], contractId: 'MNQ', rationale: 'x', cycle: id, ...extra })}\n`);
-      return invalid;
-    } }, state: flat });
-    r = await E.runEntry(s.deps, s.cycle());
-    assert.strictEqual(r.entry.outcome, 'no-trade', JSON.stringify(extra));
-  }
-});
-
 test('runEntry: a Claude Code head trader the runner attested in index mode: its skill_lookup reads recorded as its loads, and its attestation passed to the roles\' runs with the cycle\'s id; without it, as before', async () => {
   const lookup = (id, skill) => [
     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'mcp__harness__skill_lookup', input: { skill } }] } }),

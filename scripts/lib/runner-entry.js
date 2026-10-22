@@ -106,14 +106,6 @@ function gateRefusal(env, id, sinceMs) {
 }
 
 /**
- * The order tool a gate log entry judged: the gateway names it (`tool`); the hook's refusal (trading-order-gate.js)
- * names none, and is a place_order's when it carries the order's contract or rationale, a modify_order's otherwise (as
- * replay/labels.js gateTool reads it). A Claude Code executor's place_order refused by the hook never reaches the
- * gateway, so the hook's entry is the only record of why.
- */
-const orderTool = e => (typeof e.tool === 'string' ? e.tool : e.source === 'hook' ? (e.contractId || e.rationale ? 'place_order' : 'modify_order') : null);
-
-/**
  * The gate's last place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, checks,
  * message } or null. `allowed` means the order went to the broker (whatever its reply). Never throws.
  */
@@ -137,7 +129,7 @@ function gateDecision(env, id, sinceMs) {
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
-      if (!e || e.cycle !== id || orderTool(e) !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
+      if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
       last = e;
     }
     if (!last) return null;

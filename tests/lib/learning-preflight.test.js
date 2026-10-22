@@ -561,3 +561,24 @@ test('head-prompt: a Claude Code run is N/A as before; with headSkillsInPrompt i
   assert.match(P.headPromptCheck(ctx(cut)).detail, /doesn't embed the current text of trade-plan/);
   assert.strictEqual(P.headPromptCheck(ctx(cut)).status, P.FAIL);
 });
+
+test('head-prompt (Claude, headSkillsInPrompt): the prompt addition not written, not read back, or no scratch home: FAIL, never a throw', () => {
+  const fs2 = require('fs');
+  const hp = require('../../scripts/lib/head-prompt');
+  const on = r => ({ run: { cfg: { ...ctx().run.cfg, harness: 'claude', headSkillsInPrompt: true } }, read: { roleSkillsMode: () => 'full', claudeHead: P.defaultReaders(ROOT, {}, {}).claudeHead, ...r } });
+  const failed = (label, patch) => {
+    const undo = patch();
+    try {
+      const res = P.headPromptCheck(ctx(on()));
+      assert.strictEqual(res.status, P.FAIL, `${label}: ${res.detail}`);
+      assert.match(res.detail, /prompt addition can't be built/, label);
+    } finally {
+      undo();
+    }
+  };
+  const swap = (obj, key, fn) => () => { const orig = obj[key]; obj[key] = fn; return () => { obj[key] = orig; }; };
+  failed('not written', swap(hp, 'writeClaudeHead', () => { throw new Error('EACCES'); }));
+  failed('not read back', swap(hp, 'claudeHeadIn', () => null));
+  failed('no scratch home', swap(fs2, 'mkdtempSync', () => { throw new Error('ENOSPC'); }));
+  assert.strictEqual(P.headPromptCheck(ctx(on())).status, P.PASS, 'restored');
+});
