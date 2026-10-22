@@ -207,14 +207,25 @@ phases:
   launched itself against the runner's record (`autotrader.js
   TIMED_LAUNCHES`): there the runner runs the desk only in a cycle whose entry
   it may run (below), and drops a desk it couldn't complete, record and
-  reports, so the head trader runs its whole desk, as before. Nothing above
-  the interface names a harness.
+  reports, so the head trader runs its whole desk, as before. Where the
+  machine opts in (the runner config's `deskOnManagedCycles: true`, absent
+  by default, as is `deskConcurrency`), it also runs
+  the desk in a managed cycle: one that started with a position or working
+  order open in the account read. A complete desk there is kept, record and
+  reports; the head trader's prompt gives the reports with no roster and says
+  the cycle manages and sends no entry (`autotrader.js MANAGED_DESK_TEXT`).
+  An entry there fails closed: a phase 2 the head trader launched itself is
+  untimed beside the record (`[roles-ran]`), and without one phase 2 is
+  missing. Exits, stop moves, closes and cancels are risk-reducing, never
+  checked for roles, and go as always. A desk it couldn't complete is dropped,
+  as above. Nothing above the interface names a harness.
 
 ### The desk, the first workflow
 
 1. The report cache serves what it can. The desk workflow runs the rest of the
-   desk: the three analysts and risk-manager phase 1, in parallel, each with
-   the request built in code.
+   desk: the three analysts and risk-manager phase 1, in parallel (up to
+   `config/runner.json` `desk.concurrency` at once, which the machine's
+   `deskConcurrency` may lower), each with the request built in code.
 2. A report counts only if its run read data (a broker call, a file read, or a
    market or account tool, not a skill or past-decision lookup), has its
    role's report shape, and, in index mode, looked up every skill the bar

@@ -1676,11 +1676,17 @@ function createRunner(deps) {
           // Started flat with no working orders (the account read: unknown is not flat), one symbol and lane, a full trade
           // cycle with the runner's entry wired: a cycle whose entry the runner may run (entryCycle below).
           const startedFlat = Boolean(acct && !acct.error && Array.isArray(acct.positions) && !acct.positions.length && Array.isArray(acct.orders) && !acct.orders.length);
+          // Started managing: the account read shows a position or a working order open (no account or an unread one is
+          // neither flat nor this: such a cycle runs as before). Only where this machine opts in (the runner config's
+          // deskOnManagedCycles, off by default: such a cycle runs as before).
+          const startedManaging = cfg.deskOnManagedCycles === true && Boolean(acct && !acct.error && Array.isArray(acct.positions) && Array.isArray(acct.orders) && (acct.positions.length || acct.orders.length));
           const entryPossible = Boolean(entryWorkflow) && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 && run.length === 1 && startedFlat;
           // A harness whose transcript doesn't time the head trader's own launches (desk.timed false: Claude Code's
           // stream-json) can't order a phase 2 it launched itself against the runner's record (the gate refuses such an
-          // entry, roles-ran.js), so the runner runs its desk only in a cycle whose entry it may run.
-          const deskHere = Boolean(desk) && (desk.timed !== false || entryPossible);
+          // entry, roles-ran.js), so there the runner runs its desk in a cycle whose entry it may run, and in a managed
+          // cycle (startedManaging), whose job is managing them: the desk is complete from the runner's record, and the cycle
+          // runs no new entry (managedDesk below).
+          const deskHere = Boolean(desk) && (desk.timed !== false || entryPossible || startedManaging);
           const deskRoles = deskHere && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
           let deskRun = null;
           let deskMs = 0;
@@ -1720,9 +1726,16 @@ function createRunner(deps) {
           // head trader runs phase 2 and the trade-executor, as before.
           const deskDone = expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: [...(cached ? cached.roles : []), ...recordedReports.map(r => r.role)] }).length === 0;
           const entryCycle = entryPossible && Boolean(desk) && deskDone;
-          // An untimed harness's desk that didn't complete (no entry cycle): dropped, record and reports, so the head trader
-          // runs its whole desk in its session, as before (a record beside its own untimed launches would refuse its entry).
-          const dropDesk = Boolean(deskRun) && desk.timed === false && !entryCycle;
+          // An untimed harness's complete desk in a managed cycle (startedManaging): kept, record and reports, so the
+          // desk check is complete from the runner's record and the head trader launches no role. With the record, any role
+          // the head trader launched itself is unordered and the gate refuses an entry (roles-ran.js: fails closed), so its
+          // prompt says the cycle manages and enters nothing (autotrader.js MANAGED_DESK_TEXT). Exits, stop moves, closes
+          // and cancels are risk-reducing: the gate never checks the roles for them, so they go as always.
+          const managedDesk = Boolean(deskRun) && desk.timed === false && !entryCycle && startedManaging && deskDone;
+          // An untimed harness's desk that didn't complete (no entry cycle, no managed desk): dropped, record and reports, so
+          // the head trader runs its whole desk in its session, as before (a record beside its own untimed launches would
+          // refuse its entry).
+          const dropDesk = Boolean(deskRun) && desk.timed === false && !entryCycle && !managedDesk;
           if (dropDesk) {
             log(`the desk: ${deskRun.missing.map(m => m.role).join(', ') || 'a role'} missing: the head trader runs its desk this cycle`, 'error');
             if (deskRun.rolesFile) attempt('removing the desk\'s role record', () => require('./trading/runner-roles').removeRoleRuns(deskRun.rolesFile), null);
@@ -1754,7 +1767,7 @@ function createRunner(deps) {
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
-            cyclesLeft, entry: runsEntry,
+            cyclesLeft, entry: runsEntry, managedDesk,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
             ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),

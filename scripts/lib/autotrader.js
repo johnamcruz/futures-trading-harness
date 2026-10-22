@@ -136,10 +136,18 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
+/**
+ * Claude Code's cross-session tools: listing the agents running on the machine and messaging one. A trading session
+ * (the head trader, every role the runner runs) reaches no session but its own: denied to all of them (claudeDenied).
+ * The head trader keeps `Agent`, its fallback when the runner's desk didn't run.
+ */
+const CROSS_SESSION_TOOLS = Object.freeze(['SendMessage', 'ListAgents']);
+
 function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null, replay = false } = {}) {
   const h = p => abs(path.join(home, p));
   const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
+    ...CROSS_SESSION_TOOLS,
     ...state,
     // A replay: the web, and every role whose tools reach it, denied (deny beats any allow in the user's settings).
     ...(replay ? replayWebDenied() : []),
@@ -243,6 +251,15 @@ function historyBars(timeframe) {
   return Math.min(GET_BARS_MAX, Math.max(B.historyMinBars, Math.ceil((B.historyDays * B.historyDayHours * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
 
+/**
+ * The runner config's deskConcurrency (this machine's): a whole number from 1 up to config/runner.json desk.concurrency
+ * lowers it; null keeps that value. The problem with `v`, or null.
+ */
+function deskConcurrencyProblem(v) {
+  const max = TUN.desk.concurrency;
+  return Number.isInteger(v) && v >= 1 && v <= max ? null : `deskConcurrency: a whole number from 1 to ${max} (config/runner.json desk.concurrency; this machine may only lower it), or null for that value; got ${JSON.stringify(v)}`;
+}
+
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
@@ -311,6 +328,12 @@ function validateConfig(raw) {
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
+  // This machine's desk settings, absent by default (as before):
+  // deskConcurrency, a whole number from 1 up to config/runner.json desk.concurrency, lowers it (deskConcurrencyProblem);
+  // deskOnManagedCycles true runs the runner's desk in a managed cycle on a harness that doesn't time the head trader's
+  // own launches (runner.js managedDesk: that cycle manages, no entry).
+  if (cfg.deskOnManagedCycles !== undefined && typeof cfg.deskOnManagedCycles !== 'boolean') errors.push('deskOnManagedCycles: true or false, or absent (as before: a managed cycle runs no desk of the runner\'s on such a harness)');
+  if (cfg.deskConcurrency !== undefined && cfg.deskConcurrency !== null) { const p = deskConcurrencyProblem(cfg.deskConcurrency); if (p) errors.push(p); }
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -508,6 +531,14 @@ function cachedText(cached) {
  */
 const ENTRY_TEXT = ' The runner runs this cycle\'s entry (the desk\'s reports are below): to trade, call compose_check with your reads and size; when it says OK, end with CYCLE RESULT: planned - <setup> <side> <size> (the trade-lifecycle skill). The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don\'t launch risk-manager or the trade-executor, and don\'t write the plan (the harness refuses those launches this cycle). To pass: CYCLE RESULT: no-trade - <why>.';
 
+/**
+ * A managed cycle on a harness that doesn't time the head trader's own launches (runner.js managedDesk: it started with
+ * a position or working order open, and the runner ran its desk): the desk's reports are in the prompt and the order
+ * gate counts them from the runner's record; a role the head trader launched itself can't be ordered against that
+ * record, so the gate refuses any entry this cycle. Said in place of the roster: manage, launch no desk role, no entry.
+ */
+const MANAGED_DESK_TEXT = ' This cycle started with a position or working order open: it manages them, and the runner ran the desk for this bar (its reports are below). Don\'t launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat. Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.';
+
 // How the skills are loaded: Claude, opencode and Qwen Code have a skill tool (which the gate sees, skills-loaded.js);
 // Codex reads them (it carries them in AGENTS.md); a custom harness, either.
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
@@ -578,7 +609,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -620,7 +651,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -1115,6 +1146,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   ENTRY_TEXT,
+  MANAGED_DESK_TEXT,
   ROLES_CHECKED,
   ROLE_RUNS,
   TIMED_LAUNCHES,
@@ -1151,6 +1183,7 @@ module.exports = {
   pluginName,
   CODEX_REPLAY_NO_WEB,
   claudeDenied,
+  deskConcurrencyProblem,
   claudeOrderToolConflicts,
   resolveDataDir,
   NEWS_DOMAINS,
