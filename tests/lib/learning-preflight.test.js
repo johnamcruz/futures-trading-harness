@@ -592,3 +592,17 @@ test('the training preflight\'s own readers create no run home (headSkillsInProm
   read.claudeHead(); // the head-prompt check (its scratch home)
   assert.strictEqual(fs.existsSync(runHome), false, 'a preflight reader created the run home');
 });
+
+test('cycle-data: the run\'s cycleDataInPrompt said in its preflight record (off, on for Claude Code), never on another harness', () => {
+  assert.ok(P.CHECKS.includes(P.cycleData), 'one of the checks every learning run records');
+  const of = cfg => P.cycleData({ run: { cfg } });
+  assert.deepStrictEqual([of({ harness: 'claude' }).status, of({ harness: 'claude' }).detail], [P.PASS, 'off: the head trader makes its own reads']);
+  assert.strictEqual(of({ harness: 'opencode', cycleDataInPrompt: false }).status, P.PASS);
+  const on = of({ harness: 'claude', cycleDataInPrompt: true });
+  assert.strictEqual(on.status, P.PASS);
+  assert.match(on.detail, /^on: .*never pooled with a run without it/);
+  // A config validateConfig would refuse: FAIL, never a PASS.
+  assert.strictEqual(of({ harness: 'opencode', cycleDataInPrompt: true }).status, P.FAIL);
+  assert.strictEqual(of({ harness: 'claude', cycleDataInPrompt: 'yes' }).status, P.FAIL);
+  assert.strictEqual(P.cycleData({ run: {} }).status, P.PASS, 'no runner config: off');
+});

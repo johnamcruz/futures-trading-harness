@@ -1486,3 +1486,29 @@ test('a fresh run with an opt-in Claude head prompt (headSkillsInPrompt) starts:
   // Then the run home is seeded: it must still be fresh (a non-empty folder without a manifest is refused).
   assert.doesNotThrow(() => seedRunHome(w.run, { root: ROOT, userEnv: w.env }));
 });
+
+test('cycleDataInPrompt is part of what makes a run a run: absent, nothing is added; on, every hash and the setup record tell it apart', () => {
+  const RC = require('../../scripts/lib/replay/config');
+  const AB = require('../../scripts/lib/train/ab-compare');
+  const base = replayConfig(tmpDir()).autotrader;
+  const world = extra => userWorld({ autotrader: { ...base, harness: 'claude', command: undefined, ...extra } });
+  const off = world({});
+  seedRunHome(off.run, { root: ROOT, userEnv: off.env });
+  const on = world({ cycleDataInPrompt: true });
+  assert.ok(!('cycleDataInPrompt' in off.run.cfg), 'absent stays absent (no default written)');
+  assert.strictEqual(on.run.cfg.cycleDataInPrompt, true);
+  // The same run but for the key (two worlds differ in their folders, so one run is compared with the key added).
+  const withKey = run => ({ ...run, cfg: { ...run.cfg, cycleDataInPrompt: true } });
+  for (const [name, fn] of [['configHash', x => RC.configHash(x, off.env)], ['setupHash', RC.setupHash], ['setupBase', RC.setupBase], ['setupFixed', RC.setupFixed]]) {
+    assert.notStrictEqual(fn(withKey(off.run)), fn(off.run), name);
+    assert.strictEqual(fn({ ...off.run, cfg: { ...off.run.cfg } }), fn(off.run), `${name}: stable`);
+  }
+  // The setup record names it (cfg.cycleDataInPrompt): an A/B comparison refuses the pair unless it is the declared field.
+  const recOff = AB.setupRecord(off.run, { env: off.env });
+  const recOn = AB.setupRecord(withKey(off.run), { env: off.env });
+  assert.ok(!('cfg.cycleDataInPrompt' in recOff.config));
+  assert.strictEqual(recOn.config['cfg.cycleDataInPrompt'], 'true');
+  const cmp = AB.compareSetups(recOff, recOn, {});
+  assert.strictEqual(cmp.ok, false);
+  assert.ok(cmp.refusals.some(x => /cfg\.cycleDataInPrompt/.test(x)), JSON.stringify(cmp.refusals));
+});

@@ -337,6 +337,10 @@ function validateConfig(raw) {
   // headSkillsInPrompt true: Claude Code's head trader in index mode (claudeHeadOn; head-prompt.js), absent or false as before.
   if (cfg.headSkillsInPrompt !== undefined && typeof cfg.headSkillsInPrompt !== 'boolean') errors.push('headSkillsInPrompt: true or false, or absent (as before: the head trader loads its skills)');
   if (cfg.headSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`headSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's head trader has its own index mode, FTH_ROLE_SKILLS)`);
+  // cycleDataInPrompt true: Claude Code's head trader gets this cycle's reads already made, in its prompt (cycle-data.js),
+  // absent or false as before.
+  if (cfg.cycleDataInPrompt !== undefined && typeof cfg.cycleDataInPrompt !== 'boolean') errors.push('cycleDataInPrompt: true or false, or absent (as before: the head trader makes its own reads)');
+  if (cfg.cycleDataInPrompt === true && cfg.harness !== 'claude') errors.push(`cycleDataInPrompt: for harness "claude" only (harness ${cfg.harness})`);
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -627,6 +631,18 @@ const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason
 const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry', 'Risk', 'Decision', 'Manage'];
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
+
+/**
+ * A trade cycle's prompt with this cycle's pre-collected reads (cycle-data.js render: the runner config's
+ * cycleDataInPrompt, Claude Code only) put at its end, just before the result line, so everything before them is the
+ * prompt as built (prompts().trade, untouched) and the fixed prefix stays cached. No data: the prompt as it is. A prompt
+ * that doesn't end with the result line throws (the caller gives it unchanged).
+ */
+function withCycleData(prompt, data) {
+  if (!data) return prompt;
+  if (typeof prompt !== 'string' || !prompt.endsWith(RESULT_LINE)) throw new Error('withCycleData: the prompt does not end with its result line');
+  return `${prompt.slice(0, -RESULT_LINE.length)}${data}${RESULT_LINE}`;
+}
 
 /**
  * The start of every cycle's prompt (premarket, trade, end of day): what the cycle is and where the harness is, the
@@ -1266,6 +1282,8 @@ module.exports = {
   headAttestation,
   skillsText,
   stableHead,
+  withCycleData,
+  RESULT_LINE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

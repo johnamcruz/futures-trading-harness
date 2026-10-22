@@ -51,6 +51,7 @@
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
+const CD = require('./cycle-data');
 const { decisionEntry, marketOf, parseResult, withPositions, exitRecords, appendExit, fillsNeededSince } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
@@ -1827,10 +1828,16 @@ function createRunner(deps) {
             accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
             context, rolesFile, reports: served ? served.reports.map(x => ({ role: x.role, text: x.text })) : [], budgetMs,
           }) : null;
+          // This machine's opt-in (the runner config's cycleDataInPrompt, Claude Code only): the head trader's first reads,
+          // made by the runner with its run's own environment just before its run (cycle-run.js), in its prompt (cycle-data.js).
+          const precollect = CD.on(cfg) ? runEnv => CD.collect({
+            symbols: [...new Set(items.map(x => x.symbol))], accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
+            env: runEnv, root, broker: client, now: () => clock.now(),
+          }) : null;
           let r;
           let ranRuns = [];
           try {
-            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(precollect ? { precollect } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
             stopPrices();

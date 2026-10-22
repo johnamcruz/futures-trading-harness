@@ -1903,3 +1903,25 @@ test('practice, signal trigger: a held position runs every bar though no bar is 
   assert.ok(bars.every(t => t > et(10, 10) && t <= et(10, 31)));
   assert.ok(told.includes(true), 'the selector heard the position');
 });
+
+test('cycleDataInPrompt: the runner hands a trade cycle its reads\' collector only with the key on (Claude Code); absent, the limits are as before', async () => {
+  const run = async extra => {
+    const clockRef = { t: et(10, 0) };
+    const seen = [];
+    const client = { ...fakeMarket({ minutes: 3, accountState: { positions: [], orders: [] } }).client(clockRef), readText: async (tool, args) => { seen.push(['read', tool, args]); return { text: '[]', isError: false }; } };
+    const runner = bareRunner({ cfg: { timeframe: 3, harness: 'claude', account: '7', ...extra }, clockRef, client, runCycle: async (action, prompt, limits = {}) => { seen.push(['cycle', action, Object.keys(limits).sort(), limits]); clockRef.t += 20000; return { ok: true, timedOut: false }; } });
+    while (clockRef.t < et(10, 7)) { const ms = await runner.step(); clockRef.t += ms; }
+    return seen;
+  };
+  const off = (await run({})).filter(x => x[0] === 'cycle' && x[1] === 'trade');
+  assert.ok(off.length >= 1);
+  for (const c of off) assert.deepStrictEqual(c[2], ['context', 'timeoutMs'], 'no collector, no other key');
+  const onSeen = await run({ cycleDataInPrompt: true });
+  const on = onSeen.filter(x => x[0] === 'cycle' && x[1] === 'trade');
+  assert.ok(on.length >= 1);
+  for (const c of on) assert.deepStrictEqual(c[2], ['context', 'precollect', 'timeoutMs']);
+  // The collector reads the cycle's symbols' briefings and the configured account through the runner's broker client.
+  const got = await on[0][3].precollect({ FTH_HOME: '/nonexistent-home' });
+  assert.deepStrictEqual(got.missing.map(m => [m.tool, m.args]), [['bar_briefing', { symbol: 'MNQ' }]]);
+  assert.deepStrictEqual(got.blocks.map(b => [b.tool, b.args, b.text]), [['get_account_snapshot', { accountId: 7 }, '[]'], ['list_open_positions', { accountId: 7 }, '[]'], ['list_open_orders', { accountId: 7 }, '[]']]);
+});

@@ -530,13 +530,14 @@ without them. A wrong value refuses the config, so no run starts.
 
 ### Machine-local head trader settings
 
-One optional key of the runner config, set the same way (the user's machine,
-never the repo; absent means the run behaves as without it; a wrong value, or
+Two optional keys of the runner config, set the same way (the user's machine,
+never the repo; absent means the run behaves as without them; a wrong value, or
 `true` on a harness other than `claude`, refuses the config).
 
 | Key | Absent (default) | Set |
 |---|---|---|
 | `headSkillsInPrompt` | Claude Code's head trader loads its per-cycle skills with its skill tool, one tool turn each, as the cycle's prompt says (`false` is the same) | `true` (harness `claude` only): the head trader runs as opencode's does in index mode. The runner writes its per-cycle skills (`scripts/lib/head-prompt.js` `CORE`, the same text a load returns) and a one-line index of every other skill to `<harness home>/head-prompt/claude-head-<hash>.md` and gives it to the head trader's run as `--append-system-prompt-file` (the cached prefix, before the cycle's prompt); the cycle's prompt says they are loaded, and any other skill is read whole with `skill_lookup`. The runner attests the file for that cycle (`FTH_HEAD_PROMPT`); the order gate counts the embedded skills, the head trader's `skill_lookup` reads and index mode's situational lookups only when the file still hashes to the attestation, embeds each skill's current text, and the call is that cycle's (the head trader's own session, or the runner's entry executor). Anything off: none counts, and the transcript decides as before. The roles still load their skills themselves |
+| `cycleDataInPrompt` | Claude Code's head trader makes its first reads of every trade and manage cycle itself: `bar_briefing` for each symbol, then the account (`get_account_snapshot`, `list_open_positions`, `list_open_orders`), one tool turn each (`false` is the same) | `true` (harness `claude` only): the runner makes those reads just before the head trader's run, with that run's own environment, and puts their exact text at the end of its prompt, before the result line (the cached prefix is unchanged): `bar_briefing` through the harness tool itself, the broker reads straight to the server through the contract translator, as the gateway passes the model's reads. Each block's header names the tool, its arguments and its as-of time; the model calls a tool again only for anything more or newer. A read not made whole (an error, a briefing that isn't this cycle's bar's, a broker client that can't read raw text) gives no block, only a line telling the model to read it itself. The reads take their time from the cycle's limit. No gate or check reads the blocks (the gate recomputes from the harness home, as always). The cycle log's context records `precollected` (`tool`, `args`, `asOf`, `sha256`, `chars`) and `notCollected`; the key is part of a replay's config and setup hashes and its setup record, and the training preflight's `cycle-data` line says it, so a run with it is never pooled or compared with one without it (`scripts/lib/cycle-data.js`) |
 
 ### Replay
 
