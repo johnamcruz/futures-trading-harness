@@ -196,6 +196,8 @@ test('runRole on Claude Code: the role\'s own `claude -p` run (`--agent <plugin>
   await runRole(cfg, 'trade-executor', 'send it', { timeoutMs: 5000 }, { root: ROOT, home, env, run });
   const ex = seen[1].argv;
   assert.strictEqual(ex[ex.indexOf('--agent') + 1], 'futures-trading-harness:trade-executor');
+  // A role's run is marked as one (FTH_ROLE_RUN): the stop-review reminder asks it for no CYCLE RESULT line.
+  assert.deepStrictEqual([o.env.FTH_ROLE_RUN, seen[1].o.env.FTH_ROLE_RUN], ['risk-manager', 'trade-executor']);
   assert.ok(ex[ex.indexOf('--allowedTools') + 1].split(',').includes('mcp__broker__place_order'));
   assert.ok(!ex[ex.indexOf('--disallowedTools') + 1].split(',').includes('mcp__broker__place_order'));
   // A role the runner never runs on its own: refused before any run.
@@ -217,6 +219,33 @@ test('cycle run: the runner\'s entry reads the head trader\'s stdout only (its l
   await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, d.deps);
   assert.strictEqual(seen[0].output, stdout);
   assert.ok(require('../../scripts/lib/trading/skills-loaded').skillsInTranscript(seen[0].output).has('trade-session'), 'the load is read');
+});
+
+test('cycle run: an earlier `planned` line with none in the final message never starts the runner\'s entry: "(none reported)"; a recovered line is noted in the cycle log', async () => {
+  const home = tmpDir();
+  const said = text => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+  const hook = JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Stop hook feedback: 1 entry this trading day has no review.' }] } });
+  const ended = text => JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: text });
+  const stdout = [said('compose_check OK.\nCYCLE RESULT: planned - trade_lifecycle long 1'), hook, said('On reflection I stand aside.'), ended('On reflection I stand aside.')].join('\n');
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
+  const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
+  const roles = [];
+  const { runEntry } = require('../../scripts/lib/runner-entry');
+  const entryDeps = { runRole: async (...a) => { roles.push(a); throw new Error('phase 2 must not run'); }, workflow: {}, home, cfg, root: ROOT, env: {} };
+  const seen = [];
+  const entry = async a => { seen.push(a.result); return runEntry(entryDeps, a); };
+  const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output: stdout, stdout }));
+  const r = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, entry }, d.deps);
+  assert.deepStrictEqual([r.ok, r.result, seen, roles.length], [false, 'CYCLE RESULT: (none reported)', ['CYCLE RESULT: (none reported)'], 0]);
+  // A recovered managed line: logged with the note that says so.
+  const managed = [said('CYCLE RESULT: managed - MNQ long 1 open, stop working'), hook, said('Still open; stopping.'), ended('Still open; stopping.')].join('\n');
+  const m = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output: managed, stdout: managed }));
+  const r2 = await runCycle(cfg, 'manage', 'p', {}, { timeoutMs: 10000, context: { ...context, action: 'manage' } }, m.deps);
+  const { EARLIER_NOTE } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual([r2.ok, r2.result, r2.resultNote], [true, 'CYCLE RESULT: managed - MNQ long 1 open, stop working', EARLIER_NOTE]);
+  const lines = fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines.map(l => [l.result, l.resultNote]), [['CYCLE RESULT: (none reported)', undefined], ['CYCLE RESULT: managed - MNQ long 1 open, stop working', EARLIER_NOTE]]);
+  assert.strictEqual(JSON.parse(fs.readFileSync(lines[1].file, 'utf8')).resultNote, EARLIER_NOTE, 'the cycle\'s own record too');
 });
 
 test('cycle run: the runner\'s entry runs after the head trader\'s run, within what is left of the limit and before the cycle log; its result is the cycle\'s; never after a failed run or with the kill switch on', async () => {
