@@ -329,6 +329,9 @@ function lossState(dayEntries, carried = null) {
   return { streak, losses, lastLoss, lastLossMs };
 }
 
+/** The managed-cycle refusal (a managed cycle: FTH_CYCLE_MANAGE). */
+const MANAGED_CYCLE_REFUSAL = 'A managed cycle (it started with a position or working order open): manage only, no new entry, add or reversal; a new entry waits for a cycle that starts flat. Exits, stop moves, closes and cancels ([exit] or [protect]) still go.';
+
 /**
  * `strategies` is the registry from strategies.js (loadStrategies). When it is
  * null the strategy check is skipped (tests of other checks); the hook and the
@@ -363,6 +366,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // Hard rule: a runner's cycle enters only while the runner holds its account's lock (one runner per account).
   const lockMsg = lockGateRefusal(config.accountLock, input.accountId);
   if (lockMsg) violations.push({ check: 'account-lock', message: lockMsg });
+  // Hard rule: a managed cycle (FTH_CYCLE_MANAGE: the runner's, on this machine's opt-in) manages only. Risk-reducing
+  // orders returned above, so exits, stop moves, closes and cancels go as always.
+  if (config.cycleManage) violations.push({ check: 'managed-cycle', message: MANAGED_CYCLE_REFUSAL });
   add('setup-tag', setup ? null
     : 'Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
@@ -604,6 +610,7 @@ module.exports = {
   lossState,
   evaluateOrder,
   evaluateModify,
+  MANAGED_CYCLE_REFUSAL,
   formatBlock,
   factsOrder,
   cyclePlanSince,

@@ -516,6 +516,18 @@ More runner settings:
   `dataDir` is set. With several `symbols`, one cycle covers every symbol
   whose bar closed, so none is starved.
 
+### Machine-local desk settings
+
+Two optional keys of the runner config (`autotrader.json`, or a replay
+config's `autotrader` block): the user's machine sets them, the repo never
+does. Both are absent by default, and absent means the run behaves as
+without them. A wrong value refuses the config, so no run starts.
+
+| Key | Absent (default) | Set |
+|---|---|---|
+| `deskConcurrency` | the desk runs `config/runner.json` `desk.concurrency` roles at once (`null` is the same as absent) | a whole number from 1 up to that value, which it lowers (e.g. `1` for a model server that answers one request at a time); higher, or any other value, is refused |
+| `deskOnManagedCycles` | a managed cycle (one that started with a position or working order open) on a harness that doesn't time the head trader's own launches runs no desk of the runner's: the head trader launches its roles | `true`: the runner runs the desk there too, in at most half the cycle's time; the head trader gets the reports (the runner's desk or the report cache), launches no role, and sends no entry, add or reversal that cycle (the gate refuses one: `[managed-cycle]`); exits, stop moves, closes and cancels go as always. The head trader's own management waits for the desk (at most that half); the runner's own per-bar trail, target and exit don't. On another harness it does nothing, and the runner says so at its start ([TOOL-CALLS-AND-ORCHESTRATION.md](TOOL-CALLS-AND-ORCHESTRATION.md)) |
+
 ### Replay
 
 `scripts/replay.js` runs the live harness over history: the same runner,

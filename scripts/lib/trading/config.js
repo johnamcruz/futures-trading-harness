@@ -174,6 +174,9 @@ function loadConfig(env = process.env) {
     // The runner's record of the roles it ran itself this cycle (FTH_CYCLE_ROLES, set by the runner; runner-roles.js):
     // roles-ran judges them with the transcript's calls. Unset: none.
     cycleRoles: String(env.FTH_CYCLE_ROLES || '').trim() || null,
+    // A managed cycle (FTH_CYCLE_MANAGE, set by the runner only where the machine opted in, runner.js managedCycle):
+    // every entry refused (order-gate.js managed-cycle). Any value set counts (fails closed); unset or blank: none.
+    cycleManage: String(env.FTH_CYCLE_MANAGE || '').trim() !== '',
     // The runner's attestation of the skills opencode's head trader has embedded in its prompt (FTH_HEAD_PROMPT, index
     // mode only; head-prompt.js), as given: the gate parses and checks it against the run's config file per entry.
     headPromptAttestation: String(env.FTH_HEAD_PROMPT || '').trim() || null,

@@ -43,7 +43,7 @@ const { openAdapter, liveRunBlocked } = require('./broker/adapter');
 const { activeBroker } = require('./broker/config');
 const { acquireAccountLocks, checkAccountLock, lockExemption, serverIdentities, lockSpec, normApi } = require('./account-lock');
 const { normId } = require('./broker/allow-list');
-const { dayKey, ROLE_RUNS, TIMED_LAUNCHES } = require('./autotrader');
+const { dayKey, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
@@ -367,10 +367,35 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
 }
 
 /**
+ * The desk's roles run at once: config/runner.json desk.concurrency, or the runner config's deskConcurrency (the user's
+ * machine) when it lowers it; anything else throws (autotrader.js deskConcurrencyProblem; validateConfig refuses it first).
+ */
+function deskConcurrencyOf(cfg) {
+  const committed = require('./tunables').runner().desk.concurrency;
+  const local = cfg ? cfg.deskConcurrency : undefined;
+  if (local === undefined || local === null) return committed;
+  const problem = deskConcurrencyProblem(local);
+  if (problem) throw new Error(problem);
+  return local;
+}
+
+/**
+ * The runner config's deskOnManagedCycles set where it does nothing: the runner's desk on a harness that doesn't time
+ * the head trader's own launches (Claude Code), in a full cycle, is the only place it applies. The line said once at
+ * the runner's start (deskFor), or null; never a refusal.
+ */
+function managedDeskNote(cfg) {
+  if (!cfg || cfg.deskOnManagedCycles !== true) return null;
+  if (ROLE_RUNS.has(cfg.harness) && !TIMED_LAUNCHES.has(cfg.harness) && cfg.cycle === 'full') return null;
+  return `deskOnManagedCycles is set but does nothing here (harness ${cfg.harness}, ${cfg.cycle} cycle): it applies only to the runner's desk in a full cycle on a harness that doesn't time the head trader's own launches; managed cycles run as before`;
+}
+
+/**
  * The runner's desk (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The desk, the first workflow"): each full trade cycle the
  * runner runs the desk's roles the report cache didn't serve, as workflows/desk/WORKFLOW.md says, through the
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
- * config/runner.json desk.concurrency, each within desk.timeoutMinutes. null (the model launches its desk, as before)
+ * config/runner.json desk.concurrency (lowered by the runner config's deskConcurrency: deskConcurrencyOf), each within
+ * desk.timeoutMinutes. null (the model launches its desk, as before)
  * without a `runRole`, on a harness that runs no role on its own (autotrader.js ROLE_RUNS), on a lean cycle, or without
  * a valid desk workflow.
  *   run({ symbols, roles, now, laneBars, at, context, signal }) -> { reports, missing, results, rolesFile, recorded }:
@@ -383,15 +408,19 @@ function lookupsKeyOf(home, b, symbols, now, laneBars) {
  *     record that can't be written credits none: logged, and the head trader may launch them).
  */
 function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Date.now, env = process.env }) {
+  const note = managedDeskNote(cfg);
+  if (note) log(note);
   if (typeof runRole !== 'function' || !ROLE_RUNS.has(cfg.harness) || cfg.cycle !== 'full') return null;
   const { workflowNamed, runWorkflow } = require('./orchestrate/workflows');
   const { createRun } = require('./orchestrate/engine');
   const workflow = workflowNamed(root, 'desk');
   if (!workflow) return null;
-  const { concurrency, timeoutMinutes } = require('./tunables').runner().desk;
+  const { timeoutMinutes } = require('./tunables').runner().desk;
+  // The runner config's deskConcurrency (this machine's, validated as at most the committed value) lowers it.
+  const concurrency = deskConcurrencyOf(cfg);
   return {
     // Whether the head trader's own launches are timed in its transcript (autotrader.js TIMED_LAUNCHES): runner.js runs an
-    // untimed harness's desk only in a cycle whose entry it runs.
+    // untimed harness's desk only in a cycle whose entry it runs or a managed one (no entry that cycle: runner.js managedDesk).
     timed: TIMED_LAUNCHES.has(cfg.harness),
     run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null }) => {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
@@ -682,4 +711,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { deskFor, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

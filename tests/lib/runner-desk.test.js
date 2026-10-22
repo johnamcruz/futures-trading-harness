@@ -87,3 +87,59 @@ test('entryFor: the runner\'s entry only with a role runner, on a harness that r
   // The per-role timeout is config's (config/runner.json entry.timeoutMinutes).
   assert.ok(require('../../scripts/lib/tunables').runner().entry.timeoutMinutes >= 1);
 });
+
+test('the desk\'s concurrency: config/runner.json\'s, lowered by the runner config\'s deskConcurrency (this machine\'s); a higher or invalid value is refused', async () => {
+  const { deskConcurrencyOf } = require('../../scripts/lib/runner-wiring');
+  const committed = require('../../scripts/lib/tunables').runner().desk.concurrency;
+  assert.ok(committed >= 2, 'the committed value runs roles at once (this test lowers it)');
+  // The most roles in flight at once, the four desk roles each taking a moment.
+  const inFlight = async c => {
+    let now = 0;
+    let most = 0;
+    const runRole = async () => {
+      now += 1; most = Math.max(most, now);
+      await new Promise(r => setTimeout(r, 20));
+      now -= 1;
+      return { ok: true, text: 'Data: bar_briefing m3@1\nBias: long', tools: ['harness_bar_briefing'] };
+    };
+    const at = new Date();
+    await deskFor({ home: tmpDir(), cfg: c, root: ROOT, runRole }).run({ symbols: [{ symbol: 'MNQ' }], roles: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], now: at, at: at.toISOString() });
+    return most;
+  };
+  // Absent (or null): the committed value.
+  assert.strictEqual(deskConcurrencyOf(cfg()), committed);
+  assert.strictEqual(await inFlight(cfg()), committed);
+  // Lowered: one at a time.
+  assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: 1 })), 1);
+  assert.strictEqual(await inFlight(cfg({ deskConcurrency: 1 })), 1);
+  assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: committed })), committed);
+  // Higher than the committed value, or not a whole number from 1: the runner config is refused (no run starts).
+  for (const bad of [committed + 1, 0, -1, 1.5, '1', true, {}]) {
+    assert.throws(() => cfg({ deskConcurrency: bad }), /deskConcurrency: a whole number from 1 to \d+ \(config\/runner\.json desk\.concurrency; this machine may only lower it\)/, JSON.stringify(bad));
+    assert.throws(() => deskConcurrencyOf({ deskConcurrency: bad }), /deskConcurrency/, JSON.stringify(bad));
+  }
+});
+
+test('deskOnManagedCycles (this machine\'s opt-in): absent by default; true or false accepted; anything else refuses the runner config', () => {
+  assert.strictEqual(cfg().deskOnManagedCycles, undefined, 'absent: a managed cycle runs as before');
+  assert.strictEqual(cfg().deskConcurrency, undefined, 'absent: the committed concurrency');
+  for (const ok of [true, false]) assert.strictEqual(cfg({ deskOnManagedCycles: ok }).deskOnManagedCycles, ok);
+  for (const bad of ['true', 1, null, {}]) assert.throws(() => cfg({ deskOnManagedCycles: bad }), /deskOnManagedCycles: true or false, or absent/, JSON.stringify(bad));
+});
+
+test('deskConcurrency null is the committed value (as absent); managedDeskNote: a line only where deskOnManagedCycles does nothing', () => {
+  const { deskConcurrencyOf, managedDeskNote } = require('../../scripts/lib/runner-wiring');
+  const committed = require('../../scripts/lib/tunables').runner().desk.concurrency;
+  assert.strictEqual(cfg({ deskConcurrency: null }).deskConcurrency, null, 'accepted');
+  assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: null })), committed);
+  assert.strictEqual(managedDeskNote(cfg()), null, 'absent: nothing said');
+  assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: false })), null);
+  assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: true })), null, 'where it applies: nothing said');
+  for (const o of [{ harness: 'opencode' }, { harness: 'codex' }, { harness: 'qwen' }, { harness: 'claude', cycle: 'lean' }]) {
+    assert.match(managedDeskNote(cfg({ ...o, deskOnManagedCycles: true })), /deskOnManagedCycles is set but does nothing here/, JSON.stringify(o));
+  }
+  // Said once, at the runner's start (deskFor), never a refusal.
+  const logs = [];
+  deskFor({ home: tmpDir(), cfg: cfg({ harness: 'codex', deskOnManagedCycles: true }), root: ROOT, log: m => logs.push(m) });
+  assert.strictEqual(logs.filter(l => /deskOnManagedCycles/.test(l)).length, 1);
+});

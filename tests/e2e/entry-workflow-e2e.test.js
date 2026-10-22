@@ -21,7 +21,7 @@ const { ENTRY_TEXT } = require('../../scripts/lib/autotrader');
 const { REQUIRED_FOR_COMPOSED } = require('../../scripts/lib/trading/skills-loaded');
 const TL = require('../../scripts/lib/trading/trade-lifecycle');
 
-const { FIRED_BAR, NEXT_BAR, decisionAt, MNQ_ID } = D;
+const { FIRED_BAR, NEXT_BAR, QUIET_BAR, decisionAt, MNQ_ID } = D;
 
 // The composed long on the fired bar's real facts (as tests/e2e/decision-path-e2e.test.js composes it).
 const LC_READS = [
@@ -96,7 +96,7 @@ function roles(w, at, o = {}) {
     const failed = o.fail && o.fail[isPhase2 ? 'phase2' : role];
     if (failed) return failed;
     // `o.deskRuns`: the desk's roles through the production glue too (their own runs, deskScript), not scripted results.
-    if (!isPhase2 && role !== 'trade-executor' && !o.deskRuns) return deskReport(role);
+    if (!isPhase2 && role !== 'trade-executor' && !o.deskRuns) return o.cacheable ? cacheableReport(w, role) : deskReport(role);
     const model = scriptedModel(isPhase2 ? (o.phase2 || phase2(w)) : role === 'trade-executor' ? (o.executor || executor()) : deskScript(role), { format });
     const run = (argv, opts) => { runs.find(x => x.request === request && !x.argv).argv = argv; return model(argv, opts); };
     const r = await realRunRole(w.cfg, role, request, limits, { root: D.ROOT, home: w.home, env: D.passEnv(w, at), run });
@@ -105,6 +105,13 @@ function roles(w, at, o = {}) {
     return r;
   };
   return { runRole, runs };
+}
+
+/** `o.cacheable`: an analyst's report naming the bar briefing's current versions, which the report cache keeps. */
+function cacheableReport(w, role) {
+  if (role === 'risk-manager') return deskReport(role);
+  const b = require('../../scripts/lib/trading/briefing').readBriefing(w.home, 'MNQ');
+  return { ...deskReport(role), text: `## ${role}\nData: bar_briefing ${['m3', 'm15', 'h1', 'day'].map(p => b.sections[p].version).join(', ')}\nBias: long` };
 }
 
 /** A desk role as it plays its own run: the bar briefing (an analyst) or the account (phase 1), then its report. */
@@ -548,6 +555,156 @@ test('entry workflow, Claude Code: a cycle that started with a position runs no 
   assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, undefined);
   assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, undefined);
   assert.doesNotMatch(r.ran[0].prompt, /The desk ran for this bar/);
+});
+
+// This machine's opt-in (the runner config's deskOnManagedCycles, absent by default): the runner runs the desk in a
+// managed cycle too (it started with a position or working order open: no entry that cycle).
+const managedOptIn = w => Object.assign(w, { cfg: { ...w.cfg, deskOnManagedCycles: true } });
+
+test('entry workflow, Claude Code, deskOnManagedCycles absent: a managed cycle gives the head trader the roster to launch its desk, as before', async () => {
+  const { MANAGED_DESK_TEXT } = require('../../scripts/lib/autotrader');
+  const w = D.world({ harness: 'claude' });
+  assert.strictEqual(w.cfg.deskOnManagedCycles, undefined, 'absent by default');
+  const at = decisionAt(FIRED_BAR);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R = roles(w, at, { deskRuns: true });
+  const r = await D.pass(w, at, [{ result: 'CYCLE RESULT: managed - the open long' }], { runRole: R.runRole });
+  assert.deepStrictEqual(R.runs, [], 'no role run by the runner');
+  assert.match(r.ran[0].prompt, /as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any/);
+  assert.ok(!r.ran[0].prompt.includes(MANAGED_DESK_TEXT));
+  assert.deepStrictEqual(r.ctx.env.FTH_CYCLE_DESK.split(',').sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst']);
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_MANAGE, undefined, 'never the managed-cycle flag with the key absent');
+  assert.strictEqual(r.ran[0].context.manage, undefined);
+});
+
+test('entry workflow, Claude Code, deskOnManagedCycles on: a cycle that started with a position runs the runner\'s desk and keeps its record: the prompt carries the reports and no roster, the desk check is complete, the exit goes; an entry is refused [managed-cycle]', async () => {
+  const { MANAGED_DESK_TEXT } = require('../../scripts/lib/autotrader');
+  const w = managedOptIn(D.world({ harness: 'claude' }));
+  const at = decisionAt(FIRED_BAR);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R = roles(w, at, { deskRuns: true });
+  const r = await D.pass(w, at, [
+    { executor: [{ broker: 'close_position', args: { accountId: 7, contractId: MNQ_ID } }] },
+    { result: 'CYCLE RESULT: managed - closed the open long' },
+  ], { runRole: R.runRole });
+  assert.deepStrictEqual(R.runs.map(x => x.role).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'], 'the runner ran the desk');
+  const { prompt, context } = r.ran[0];
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, context.rolesFile, 'the record is kept for the head trader\'s gate');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, undefined, 'no entry route');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_DESK, undefined, 'no role to launch');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_MANAGE, '1', 'the gate refuses any entry this cycle');
+  assert.ok(prompt.includes(MANAGED_DESK_TEXT), 'the prompt says the cycle manages, no entry');
+  assert.match(prompt, /The desk ran for this bar: the runner ran /);
+  assert.doesNotMatch(prompt, /as parallel subagents|then risk-manager phase 2 on your plan/, 'no roster');
+  assert.ok(!prompt.includes(ENTRY_TEXT));
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual([line.desk.complete, line.desk.missing], [true, []]);
+  assert.strictEqual(D.position(w), null, 'the exit went');
+  assert.ok(!r.logs.some(l => /the head trader runs its desk this cycle/.test(l)), r.logs.join('\n'));
+
+  // An entry in such a cycle (the head trader's own phase 2 and trade-executor) is refused: a managed cycle enters
+  // nothing (and its own launches can't be ordered against the runner's record either).
+  const v = managedOptIn(D.world({ harness: 'claude' }));
+  exchange.handle(v.state, 'place_order', { accountId: 7, contractId: 'fake:MES:Z26', side: 'buy', type: 'limit', limitPrice: 1, size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R2 = roles(v, at, { deskRuns: true });
+  const r2 = await D.pass(v, at, [
+    { role: 'risk-manager', lookups: [], report: 'Phase 2.\nVERDICT: APPROVE - size 1' },
+    { executor: [{ broker: 'place_order', args: D.manualArgs('setup:fx_break long') }] },
+    { result: 'CYCLE RESULT: blocked - refused' },
+  ], { runRole: R2.runRole });
+  assert.strictEqual(R2.runs.length, 4, 'the runner ran the desk (a working order open: a managed cycle)');
+  assert.ok(r2.ran[0].prompt.includes(MANAGED_DESK_TEXT) && r2.ctx.env.FTH_CYCLE_ROLES);
+  const e = entries(v).at(-1);
+  assert.strictEqual(e.decision, 'blocked');
+  assert.ok(e.violations.some(x => x.check === 'managed-cycle'), JSON.stringify(e.violations));
+  const rr = e.violations.find(x => x.check === 'roles-ran');
+  assert.ok(rr && /without wall-clock times/.test(rr.message), JSON.stringify(e.violations));
+  assert.deepStrictEqual(D.placedAtBroker(v).filter(c => c.args.contractId !== 'fake:MES:Z26'), [], 'nothing reached the broker');
+});
+
+test('entry workflow, Claude Code, deskOnManagedCycles on: the next managed cycle with the desk all served from the report cache: the managed text, no roster, an entry refused [managed-cycle], an exit still goes', async () => {
+  const { MANAGED_DESK_TEXT } = require('../../scripts/lib/autotrader');
+  const w = managedOptIn(D.world({ harness: 'claude' }));
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const first = roles(w, decisionAt(QUIET_BAR), { cacheable: true });
+  await D.pass(w, decisionAt(QUIET_BAR), [{ result: 'CYCLE RESULT: managed - holding the long' }], { runRole: first.runRole });
+  assert.strictEqual(first.runs.length, 4, 'the first managed cycle ran the desk');
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { cacheable: true });
+  const r = await D.pass(w, at, [
+    { executor: [{ broker: 'place_order', args: D.manualArgs('setup:fx_break long') }] },
+    { executor: [{ broker: 'close_position', args: { accountId: 7, contractId: MNQ_ID } }] },
+    { result: 'CYCLE RESULT: managed - closed the long' },
+  ], { runRole: R.runRole });
+  assert.deepStrictEqual(R.runs, [], 'the report cache served the whole desk');
+  const { prompt } = r.ran[0];
+  assert.ok(prompt.includes(MANAGED_DESK_TEXT), prompt);
+  assert.doesNotMatch(prompt, /as parallel subagents|then risk-manager phase 2 on your plan/, 'no roster');
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_MANAGE, '1');
+  const e = entries(w).filter(x => !/^\s*\[(exit|protect)\]/.test(String((x.input || x.args || {}).rationale || ''))).at(-1);
+  assert.strictEqual(e.decision, 'blocked');
+  assert.ok(e.violations.some(x => x.check === 'managed-cycle'), JSON.stringify(e.violations));
+  assert.strictEqual(D.position(w), null, 'the exit went');
+});
+
+test('entry workflow, Claude Code, deskOnManagedCycles on: a managed cycle\'s desk that didn\'t complete is dropped (the head trader runs its desk, as before), and an entry is still refused [managed-cycle]', async () => {
+  const { MANAGED_DESK_TEXT, MANAGED_NO_ENTRY_TEXT } = require('../../scripts/lib/autotrader');
+  const w = managedOptIn(D.world({ harness: 'claude' }));
+  const at = decisionAt(FIRED_BAR);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: 'fake:MES:Z26', side: 'buy', type: 'limit', limitPrice: 1, size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R = roles(w, at, { deskRuns: true, fail: { 'volume-liquidity-analyst': { ok: false, timedOut: true, text: '', tools: [], output: '' } } });
+  const r = await D.pass(w, at, [
+    { executor: [{ broker: 'place_order', args: D.manualArgs('setup:fx_break long') }] },
+    { result: 'CYCLE RESULT: blocked - refused' },
+  ], { runRole: R.runRole });
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_ROLES, undefined, 'dropped');
+  assert.match(r.ran[0].prompt, /then risk-manager phase 2 on your plan, if any/, 'the roster, as before');
+  assert.ok(r.ran[0].prompt.includes(MANAGED_NO_ENTRY_TEXT) && !r.ran[0].prompt.includes(MANAGED_DESK_TEXT));
+  assert.strictEqual(r.ctx.env.FTH_CYCLE_MANAGE, '1');
+  const e = entries(w).at(-1);
+  assert.ok(e.violations.some(x => x.check === 'managed-cycle'), JSON.stringify(e.violations));
+});
+
+test('entry workflow, deskOnManagedCycles on: a managed cycle\'s desk gets at most half the cycle\'s time; an entry cycle\'s desk keeps its budget; opencode\'s managed cycle is unchanged by the key', async () => {
+  const at = decisionAt(FIRED_BAR);
+  const minHeadMs = require('../../scripts/lib/tunables').runner().cycle.timeoutMinMinutes * 60000;
+  const perRoleMs = require('../../scripts/lib/tunables').runner().desk.timeoutMinutes * 60000;
+  // The flat entry cycle: the desk's budget is the cycle's less the head trader's minimum (each role within it).
+  // A cycle long enough that half of it is less than a role's own limit (the cap binds).
+  const T = require('../../scripts/lib/tunables').runner();
+  const longer = w2 => Object.assign(w2, { cfg: { ...w2.cfg, cycleTimeoutMinutes: T.desk.timeoutMinutes + T.cycle.timeoutMinMinutes + 1 } });
+  const flat = longer(managedOptIn(D.world({ harness: 'claude' })));
+  const F = roles(flat, at, { deskRuns: true });
+  await D.pass(flat, at, [{ result: 'CYCLE RESULT: no-trade - nothing' }], { runRole: F.runRole });
+  const cycleMs = flat.cfg.cycleTimeoutMinutes * 60000;
+  assert.strictEqual(F.runs[0].timeoutMs, Math.min(perRoleMs, cycleMs - minHeadMs), 'the default budget');
+  // The managed cycle: at most half.
+  const w = longer(managedOptIn(D.world({ harness: 'claude' })));
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const R = roles(w, at, { deskRuns: true });
+  await D.pass(w, at, [{ result: 'CYCLE RESULT: managed - holding' }], { runRole: R.runRole });
+  assert.strictEqual(R.runs.length, 4);
+  assert.strictEqual(T.desk.managedBudgetShare, 0.5, 'half, as the owner set it');
+  for (const x of R.runs) assert.ok(x.timeoutMs <= Math.floor(cycleMs * T.desk.managedBudgetShare), `${x.role}: ${x.timeoutMs} > half of ${cycleMs}`);
+  assert.ok(Math.floor(cycleMs * T.desk.managedBudgetShare) < Math.min(perRoleMs, cycleMs - minHeadMs), 'the cap binds here');
+  // opencode (its launches timed): the key changes nothing: the desk runs as before, no managed text, no flag.
+  const { MANAGED_DESK_TEXT } = require('../../scripts/lib/autotrader');
+  const runOc = async optIn => {
+    const o = D.world();
+    if (optIn) managedOptIn(o);
+    exchange.handle(o.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+    const O = roles(o, at);
+    const r = await D.pass(o, at, [{ result: 'CYCLE RESULT: managed - holding' }], { runRole: O.runRole });
+    return { roles: O.runs.map(x => [x.role, x.timeoutMs]), prompt: r.ran[0].prompt.split(o.home).join('<home>'), manage: r.ctx.env.FTH_CYCLE_MANAGE, logs: r.logs };
+  };
+  const off = await runOc(false);
+  const on = await runOc(true);
+  assert.deepStrictEqual(on.roles, off.roles);
+  assert.strictEqual(on.manage, undefined);
+  assert.ok(!on.prompt.includes(MANAGED_DESK_TEXT));
+  assert.strictEqual(on.prompt.replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, ''), off.prompt.replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, ''));
+  assert.ok(on.logs.some(l => /deskOnManagedCycles is set but does nothing here \(harness opencode/.test(l)), on.logs.join('\n'));
+  assert.ok(!off.logs.some(l => /deskOnManagedCycles/.test(l)));
 });
 
 test('entry workflow, Claude Code: a desk the runner couldn\'t complete (an analyst missing) is dropped, record and reports: the head trader runs its whole desk, phase 2 and the trade-executor in its session, as before', async () => {

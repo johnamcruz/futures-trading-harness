@@ -34,5 +34,7 @@ and the order gate refuses an entry without it.
 The reports reach the head trader in its prompt, and the order gate counts them as
 returned from the runner's record of the runs (`FTH_CYCLE_ROLES`). The head trader keeps the judgment: synthesis and `compose_check`;
 risk-manager phase 2 on its plan and the trade-executor are the runner's where it runs the entry
-([workflows/entry](../entry/WORKFLOW.md)), the head trader's otherwise. See
+([workflows/entry](../entry/WORKFLOW.md)), the head trader's otherwise. In a managed cycle the runner runs
+(where the machine opts in, on a harness that doesn't time the head trader's own launches) the head trader
+manages and enters nothing. See
 [docs/TOOL-CALLS-AND-ORCHESTRATION.md](../../docs/TOOL-CALLS-AND-ORCHESTRATION.md).

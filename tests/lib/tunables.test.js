@@ -81,6 +81,9 @@ test('tunables: a missing, unreadable, non-JSON, incomplete, unknown-keyed or mi
   refused('runner', writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', '2'), /gate\.maxConsecutiveLosses: a whole number/);
   refused('runner', writeAt(clone(committed('runner')), 'gate.maxConsecutiveLosses', 0), /gate\.maxConsecutiveLosses: a whole number from 1 to Infinity, not 0/);
   refused('runner', writeAt(clone(committed('runner')), 'gate.noEntryWindows', 'x'), /gate\.noEntryWindows: a list/);
+  // A managed cycle's desk share above 0 (0 would give the desk no time) and at most the whole cycle.
+  refused('runner', writeAt(clone(committed('runner')), 'desk.managedBudgetShare', 0), /desk\.managedBudgetShare: a number/);
+  refused('runner', writeAt(clone(committed('runner')), 'desk.managedBudgetShare', 1.5), /desk\.managedBudgetShare: a number/);
   refused('training', writeAt(clone(committed('training')), 'keepRule.primary', 'meanR'), /keepRule\.primary: one of passRate/);
   refused('training', writeAt(clone(committed('training')), 'exitTest.correctReadRate', 1.2), /exitTest\.correctReadRate: a number from 0 to 1, not 1\.2/);
   refused('replay', writeAt(clone(committed('replay')), 'stages.1.refused.prop', 'maybe'), /stages\.1\.refused\.prop: true, false or 'set'/);
