@@ -907,6 +907,9 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(410)) }).category, 'right');
   assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(409, { windowEntries: 'none' })) }).category, 'right');
   assert.strictEqual(cls(quiet).category, 'right');
+  // A true hard ground stated (here no attempt running) passes it too: unchecked, never abstention.
+  const noAttempt = { ...quiet, attempt: { account: null, status: 'none' }, composable: composableSetup(b(409)) };
+  assert.strictEqual(classify(label, noAttempt, expectedDecision(noAttempt), checkReasons('CYCLE RESULT: no-trade - no attempt is running', noAttempt)).category, 'unchecked');
   // A pass in an attempt that blocks entries (a loss-streak cooldown, stated or not) is right, never abstention.
   assert.strictEqual(cls({ ...quiet, attempt: { account: 'a', status: 'active', entryBlock: 'cooldown after 2 losses' }, composable: composableSetup(b(409)) }).category, 'right');
 });

@@ -59,7 +59,7 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    or pass on anything marginal (`prop-challenge-pacing`).
 7. **Half size** wherever the priority order (strategy-library) halves a
    trade, computed as it says there. Never round a half up. A composed
-   trade is never halved: its size is the one you state, under the caps.
+   trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a
    rules candidate; use its numbers, never your own. The budget (step 3)
