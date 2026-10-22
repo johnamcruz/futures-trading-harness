@@ -11,6 +11,9 @@
  *     .call(name, args)         tools/call -> the result's JSON (content[0].text,
  *                               parsed), or throws with the server's text on
  *                               isError or a JSON-RPC error
+ *     .callText(name, args)     tools/call -> { text, isError }: the result's text exactly as the server sent it
+ *                               (text null unless its content is exactly one text item), never parsed; throws only
+ *                               on a JSON-RPC error or no answer (the runner's pre-collected reads, cycle-data.js)
  *     .request(method, params)  any request -> its raw result (throws on a JSON-RPC error)
  *     .close()
  *
@@ -128,6 +131,13 @@ function createMcpClient({ command, args = [], env = process.env, cwd = undefine
       } catch (_err) {
         throw new McpError(`${name}: the result is not JSON (${text.slice(0, 120)})`);
       }
+    },
+    async callText(name, args = {}) {
+      await connected();
+      const res = await send('tools/call', { name, arguments: args });
+      const content = res && Array.isArray(res.content) ? res.content : [];
+      const only = content.length === 1 && content[0] && content[0].type === 'text' && typeof content[0].text === 'string' ? content[0].text : null;
+      return { text: only, isError: Boolean(!res || res.isError) };
     },
     close() {
       if (child) {
