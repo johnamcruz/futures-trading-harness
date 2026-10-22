@@ -200,8 +200,37 @@ function skillsInTranscript(text) {
   return out;
 }
 
-/** The skills loaded in this hook call's transcripts (transcriptFiles), or null when none could be read. */
-function loadedSkills(transcriptPath) {
+/**
+ * The skills a Claude Code session read whole with the harness tool skill_lookup (its stream-json, or its session file):
+ * a `…skill_lookup` tool_use naming a skill whose tool_result (no error) is that skill's text (`<skill name="<it>">`).
+ * A subagent's calls (parent_tool_use_id, or a sidechain turn) aren't the session's. Counted by the gate only for a Claude Code head trader
+ * the runner attested in index mode (head-prompt.js claudeAttested); never otherwise, so other runs are as before.
+ */
+function claudeLookupsInTranscript(text) {
+  const out = new Set();
+  const asked = new Map(); // tool_use id -> skill name
+  for (const line of String(text || '').split('\n')) {
+    if (!line.includes('skill_lookup') && !line.includes('tool_result')) continue;
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id || ev.isSidechain === true) continue;
+    const content = ev.message && typeof ev.message === 'object' && Array.isArray(ev.message.content) ? ev.message.content : [];
+    for (const c of content) {
+      if (!c || typeof c !== 'object') continue;
+      if (c.type === 'tool_use' && /(^|__)skill_lookup$/.test(String(c.name || '')) && isId(c.id) && c.input && typeof c.input.skill === 'string') asked.set(c.id, skillName(c.input.skill));
+      if (c.type === 'tool_result' && isId(c.tool_use_id) && asked.has(c.tool_use_id)) {
+        const name = asked.get(c.tool_use_id);
+        asked.delete(c.tool_use_id);
+        const body = typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? c.content.map(x => (x && typeof x.text === 'string' ? x.text : '')).join('\n') : '';
+        if (c.is_error !== true && name && body.trimStart().startsWith(`<skill name="${name}">`)) out.add(name);
+      }
+    }
+  }
+  return out;
+}
+
+/** The skills loaded in this hook call's transcripts (transcriptFiles), or null when none could be read. `parse`: how a transcript's text names them. */
+function loadedSkills(transcriptPath, parse = skillsInTranscript) {
   const loaded = new Set();
   let readAny = false;
   for (const file of transcriptFiles(transcriptPath)) {
@@ -212,7 +241,7 @@ function loadedSkills(transcriptPath) {
       const buf = Buffer.alloc(len);
       fs.readSync(fd, buf, 0, len, 0);
       fs.closeSync(fd);
-      for (const s of skillsInTranscript(buf.toString('utf8'))) loaded.add(s);
+      for (const s of parse(buf.toString('utf8'))) loaded.add(s);
       readAny = true;
     } catch (_err) {
       // missing or unreadable: the other file may still have them
@@ -250,4 +279,4 @@ function checkSkillsAtEntry(transcriptPath, required = REQUIRED_AT_ENTRY, embedd
     : null;
 }
 
-module.exports = { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, loadedSkills, checkSkillsLoaded, checkSkillsAtEntry };
+module.exports = { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, claudeLookupsInTranscript, loadedSkills, checkSkillsLoaded, checkSkillsAtEntry };

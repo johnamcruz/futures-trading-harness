@@ -131,3 +131,22 @@ test('checkSkillsAtEntry: setup-judgment and trade-plan read (a load or a skill_
   assert.strictEqual(checkSkillsLoaded(gone), null);
   assert.match(checkSkillsAtEntry(gone), /transcript can't be read/);
 });
+
+test('claudeLookupsInTranscript: a Claude Code skill_lookup counts only answered with that skill\'s text; an error, another skill\'s text, a listing, a subagent\'s call, or no answer don\'t; skillsInTranscript never counts one', () => {
+  const { claudeLookupsInTranscript } = require('../../scripts/lib/trading/skills-loaded');
+  const use = (id, skill, extra = {}) => JSON.stringify({ type: 'assistant', ...extra, message: { content: [{ type: 'tool_use', id, name: 'mcp__harness__skill_lookup', input: { skill } }] } });
+  const res = (id, text, extra = {}) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], ...extra }] } });
+  const text = [
+    use('a', 'rejection'), res('a', '<skill name="rejection">\n...\n</skill>\n'),
+    use('b', 'breakout'), res('b', '<skill name="breakout">\n...\n</skill>\n', { is_error: true }),
+    use('c', 'invalidation'), res('c', '<skill name="other">\n...\n</skill>\n'),
+    use('d', 'absorption'), res('d', 'Every skill of the harness (88)'),
+    use('e', 'session-timing', { parent_tool_use_id: 'p1' }), res('e', '<skill name="session-timing">\n...\n</skill>\n'),
+    use('f', 'day-context'),
+    use('i', 'breakout-vs-fakeout', { isSidechain: true }), res('i', '<skill name="breakout-vs-fakeout">\n...\n</skill>\n'),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', content: '<skill name="trade-plan">\n</skill>' }] } }),
+    use('h', 'trade-plan'), JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'h', content: '<skill name="trade-plan">\n...\n</skill>' }] } }),
+  ].join('\n');
+  assert.deepStrictEqual([...claudeLookupsInTranscript(text)].sort(), ['rejection', 'trade-plan']);
+  assert.deepStrictEqual([...skillsInTranscript(text)], [], 'not a load for the transcript check');
+});

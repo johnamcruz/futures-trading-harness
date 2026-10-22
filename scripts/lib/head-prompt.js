@@ -27,6 +27,22 @@
  *   attestation(configFile, root) { config, sha256, skills } for the runner, or null (no head prompt, or no skill embedded)
  *   parseAttestation(text)        the env value as { config, sha256, skills }, or null
  *   attestedSkills(att, root, { transcript })   the skills the gate may count as loaded: [] unless everything checks
+ *
+ * Claude Code's head trader runs the same index mode only where the user's machine opts in (the runner config's
+ * headSkillsInPrompt, autotrader.js): CORE embedded and every other skill indexed one line each, read whole with the
+ * harness tool skill_lookup, in a file the runner gives it as a system-prompt addition (--append-system-prompt-file, so
+ * it sits in the cached prefix, never after the cycle's prompt). The file is the harness home's, named by its text's
+ * hash; the runner attests it with the cycle it is for ({ harness: 'claude', config: <file>, sha256, skills, cycle }),
+ * and the gate counts its skills (and the head trader's skill_lookup reads, and the situational rules of index mode)
+ * only when everything checks at judgment time: the cycle is this process's (check-order.js cycleId), the file still
+ * hashes to the attested hash and embeds each skill's current text, and the transcript is a Claude Code run's (a hook's,
+ * that run's own session). Anything off: none counts, and the transcript decides as before. Without the key nothing of
+ * this runs: the argv, the prompt, the env and the gate are as before.
+ *
+ *   claudeHeadText(root)          the Claude head trader's prompt addition (index mode)
+ *   claudeHeadFile(home, text)    where the runner keeps it: <home>/head-prompt/claude-head-<sha256>.md
+ *   writeClaudeHead(home, root)   { file, text }, written when missing or different (older ones pruned: the newest kept)
+ *   claudeAttestation({ file, text, root, cycle })   the runner's attestation of it
  */
 
 const crypto = require('crypto');
@@ -59,6 +75,7 @@ const CORE = [...new Set([
 const MAX_CONFIG_BYTES = require('./tunables').runner().limits.headPromptConfigBytes; // config/runner.json
 const SHA = /^[0-9a-f]{64}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const CYCLE = /^[0-9a-f]{16}$/;
 
 const skillBody = (root, name) => parseFrontmatter(fs.readFileSync(path.join(root, 'skills', name, 'SKILL.md'), 'utf8')).body.trim();
 const block = (name, body) => `<skill name="${name}">\n${body}\n</skill>`;
@@ -138,24 +155,160 @@ function parseAttestation(text) {
     const a = JSON.parse(String(text || ''));
     if (!a || typeof a !== 'object' || typeof a.config !== 'string' || !SHA.test(String(a.sha256)) || !Array.isArray(a.skills)) return null;
     if (!a.skills.length || !a.skills.every(s => typeof s === 'string' && NAME.test(s))) return null;
+    // A Claude head trader's (claudeAttestation): its harness and cycle too. opencode's carries neither.
+    if (a.harness !== undefined) {
+      if (a.harness !== 'claude' || !CYCLE.test(String(a.cycle))) return null;
+      return { harness: 'claude', config: a.config, sha256: a.sha256, skills: [...new Set(a.skills)], cycle: a.cycle };
+    }
     return { config: a.config, sha256: a.sha256, skills: [...new Set(a.skills)] };
   } catch (_err) {
     return null;
   }
 }
 
-/** An opencode `run --format json` stream: its first event is one of opencode's (a session id and a part). */
-function isOpencodeTranscript(file) {
-  let text;
+/*
+ * Claude Code's head trader in index mode (the runner config's headSkillsInPrompt). Its workspace instructions are
+ * CLAUDE.md (no skill catalog: Claude Code lists skills itself), so the index is here, one line per skill not embedded.
+ */
+const CLAUDE_FILE = /^claude-head-[0-9a-f]{64}\.md$/;
+const LOOKUP_TOOL = () => `mcp__${require('./harness-tools/registry').SERVER_NAME}__skill_lookup`;
+
+function claudeHeadText(root, table = SITUATIONAL) {
+  const plan = headPlan(root, 'index');
+  const names = plan.docs.map(d => d.name);
+  const index = require('./harness-tools/skills').skillCatalog(root).filter(k => !names.includes(k.name));
+  const out = [
+    `${HEAD_MARK} This part of your instructions holds your skills (index mode): the workspace instructions (CLAUDE.md) and the cycle's prompt still apply.`,
+    '',
+    `Your skills ${andList(names)} are below, already loaded (Your skills): every cycle reads them. Read them here; don't load them again. Any other skill a step needs is in Your skill index below: read one whole with \`${LOOKUP_TOOL()} {"skill": "<name>"}\` (no role: that is the roles') only when this cycle needs it. The roles you launch load their own skills.`,
+    '',
+  ];
+  const required = headRequired(table);
+  if (required.length) {
+    out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
+      ...required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
+  }
+  out.push('## Your skills (already loaded)', '',
+    `The skills you use every cycle (${names.join(', ')}) are below in full: they are loaded.`, '',
+    ...plan.docs.flatMap(d => [block(d.name, d.body), '']),
+    '## Your skill index', '',
+    `Your other skills, not loaded. Read one only when this cycle needs it: ${LOOKUP_TOOL()} returns the whole skill.`, '',
+    ...index.map(k => `- ${k.name}: ${k.description}`), '');
+  return out.join('\n');
+}
+
+const claudeHeadFile = (home, text) => path.join(home, 'head-prompt', `claude-head-${sha256(text)}.md`);
+
+/** The Claude head trader's prompt addition in the harness home: { file, text }, written (atomically) when missing or different. */
+function writeClaudeHead(home, root) {
+  const text = claudeHeadText(root);
+  const file = claudeHeadFile(home, text);
+  let same;
+  try { same = fs.readFileSync(file, 'utf8') === text; } catch (_err) { same = false; }
+  if (!same) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, file);
+    pruneClaudeHeads(path.dirname(file), file);
+  }
+  return { file, text };
+}
+
+/**
+ * A new prompt addition written (a skill changed): the older ones go, but the newest of them (by mtime), which a run
+ * that started before the change may still be attested for. A run whose file went fails closed (the gate counts none).
+ * Best effort: a file another runner removed first, or one that can't be removed, is left.
+ */
+function pruneClaudeHeads(dir, keep) {
+  let older;
+  try {
+    older = fs.readdirSync(dir).filter(n => CLAUDE_FILE.test(n) && path.join(dir, n) !== keep)
+      .map(n => { const f = path.join(dir, n); try { return { f, t: fs.statSync(f).mtimeMs }; } catch (_err) { return null; } })
+      .filter(Boolean).sort((x, y) => y.t - x.t);
+  } catch (_err) {
+    return;
+  }
+  for (const { f } of older.slice(1)) {
+    try { fs.unlinkSync(f); } catch (_err) { /* gone already, or kept */ }
+  }
+}
+
+/** The runner's attestation of a Claude head trader's prompt addition for one cycle, or null (no cycle, no skill embedded). */
+function claudeAttestation({ file, text, root, cycle }) {
+  const skills = embeddedSkills(text, root);
+  return skills.length && CYCLE.test(String(cycle || '')) ? { harness: 'claude', config: file, sha256: sha256(text), skills, cycle } : null;
+}
+
+/** A Claude head file's text, or null (not absolute, not the runner's name, too large, unreadable). */
+function claudeHeadIn(file) {
+  try {
+    if (!path.isAbsolute(String(file)) || !CLAUDE_FILE.test(path.basename(file))) return null;
+    if (fs.statSync(file).size > MAX_CONFIG_BYTES) return null;
+    return fs.readFileSync(file, 'utf8') || null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** The first lines of a file (at most 64 KiB), or '' when unreadable (a transcript's first event is in them). */
+function headOf(file) {
   try {
     const fd = fs.openSync(file, 'r');
-    const buf = Buffer.alloc(64 * 1024);
-    const n = fs.readSync(fd, buf, 0, buf.length, 0);
-    fs.closeSync(fd);
-    text = buf.toString('utf8', 0, n);
+    try {
+      const buf = Buffer.alloc(64 * 1024);
+      const n = fs.readSync(fd, buf, 0, buf.length, 0);
+      return buf.toString('utf8', 0, n);
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (_err) {
-    return false;
+    return '';
   }
+}
+
+/**
+ * A Claude Code `-p --output-format stream-json` run's session id, from its init event (the first `system` init at the
+ * stream's start: a session-start hook's system events may come before it), or null. Only whole lines count: a tool's
+ * output is a string inside an event, never a line of its own.
+ */
+function claudeStreamSession(file) {
+  for (const line of headOf(file).split('\n')) {
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    if (!ev || typeof ev !== 'object' || ev.type !== 'system') return null; // no init first: not a run's stream
+    if (ev.subtype === 'init') return typeof ev.session_id === 'string' && ev.session_id ? ev.session_id : null;
+  }
+  return null;
+}
+
+/** The session a Claude Code hook's transcript_path is of: …/<session>.jsonl, or …/<session>/subagents/<agent>.jsonl. */
+function claudeSessionOfPath(file) {
+  const f = String(file || '');
+  const sub = /\/([^/]+)\/subagents\/[^/]+\.jsonl$/.exec(f);
+  if (sub) return sub[1];
+  const main = /\/([^/]+)\.jsonl$/.exec(f);
+  return main ? main[1] : null;
+}
+
+/**
+ * The Claude head trader's embedded skills the gate may count: only for this process's cycle (`cycle`), the attested
+ * file still hashing to the attested hash and embedding each one's current text, the runner's streamed transcript
+ * (`stream`) a Claude Code run's, and a hook's transcript (`hook`) that run's own session. Anything off: [].
+ */
+function claudeAttested(att, root, { stream, hook = null, cycle } = {}) {
+  if (!att || att.harness !== 'claude' || !CYCLE.test(String(cycle || '')) || att.cycle !== cycle) return [];
+  const text = claudeHeadIn(att.config);
+  if (!text || sha256(text) !== att.sha256) return [];
+  const session = stream ? claudeStreamSession(stream) : null;
+  if (!session || (hook && claudeSessionOfPath(hook) !== session)) return [];
+  const embedded = embeddedSkills(text, root);
+  return att.skills.filter(s => embedded.includes(s));
+}
+
+/** An opencode `run --format json` stream: its first event is one of opencode's (a session id and a part). */
+function isOpencodeTranscript(file) {
+  const text = headOf(file);
   for (const line of text.split('\n')) {
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
@@ -170,6 +323,8 @@ function isOpencodeTranscript(file) {
  * text. Anything off: [] (the transcript alone decides).
  */
 function attestedSkills(att, root, { transcript } = {}) {
+  // A Claude head trader's attestation is checked by claudeAttested, never here.
+  if (att && att.harness !== undefined) return [];
   if (!att || !transcript || !isOpencodeTranscript(transcript)) return [];
   const prompt = headPromptIn(att.config);
   if (!prompt || sha256(prompt) !== att.sha256) return [];
@@ -177,4 +332,7 @@ function attestedSkills(att, root, { transcript } = {}) {
   return att.skills.filter(s => embedded.includes(s));
 }
 
-module.exports = { HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256 };
+module.exports = {
+  HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256,
+  claudeHeadText, claudeHeadFile, writeClaudeHead, claudeAttestation, claudeHeadIn, claudeStreamSession, claudeSessionOfPath, claudeAttested,
+};

@@ -528,6 +528,16 @@ without them. A wrong value refuses the config, so no run starts.
 | `deskConcurrency` | the desk runs `config/runner.json` `desk.concurrency` roles at once (`null` is the same as absent) | a whole number from 1 up to that value, which it lowers (e.g. `1` for a model server that answers one request at a time); higher, or any other value, is refused |
 | `deskOnManagedCycles` | a managed cycle (one that started with a position or working order open) on a harness that doesn't time the head trader's own launches runs no desk of the runner's: the head trader launches its roles | `true`: the runner runs the desk there too, in at most half the cycle's time; the head trader gets the reports (the runner's desk or the report cache), launches no role, and sends no entry, add or reversal that cycle (the gate refuses one: `[managed-cycle]`); exits, stop moves, closes and cancels go as always. The head trader's own management waits for the desk (at most that half); the runner's own per-bar trail, target and exit don't. On another harness it does nothing, and the runner says so at its start ([TOOL-CALLS-AND-ORCHESTRATION.md](TOOL-CALLS-AND-ORCHESTRATION.md)) |
 
+### Machine-local head trader settings
+
+One optional key of the runner config, set the same way (the user's machine,
+never the repo; absent means the run behaves as without it; a wrong value, or
+`true` on a harness other than `claude`, refuses the config).
+
+| Key | Absent (default) | Set |
+|---|---|---|
+| `headSkillsInPrompt` | Claude Code's head trader loads its per-cycle skills with its skill tool, one tool turn each, as the cycle's prompt says (`false` is the same) | `true` (harness `claude` only): the head trader runs as opencode's does in index mode. The runner writes its per-cycle skills (`scripts/lib/head-prompt.js` `CORE`, the same text a load returns) and a one-line index of every other skill to `<harness home>/head-prompt/claude-head-<hash>.md` and gives it to the head trader's run as `--append-system-prompt-file` (the cached prefix, before the cycle's prompt); the cycle's prompt says they are loaded, and any other skill is read whole with `skill_lookup`. The runner attests the file for that cycle (`FTH_HEAD_PROMPT`); the order gate counts the embedded skills, the head trader's `skill_lookup` reads and index mode's situational lookups only when the file still hashes to the attestation, embeds each skill's current text, and the call is that cycle's (the head trader's own session, or the runner's entry executor). Anything off: none counts, and the transcript decides as before. The roles still load their skills themselves |
+
 ### Replay
 
 `scripts/replay.js` runs the live harness over history: the same runner,

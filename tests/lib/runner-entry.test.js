@@ -331,3 +331,33 @@ test('runEntry: no late entry fails closed: the 1m bar unreadable and no local b
   const ok = await E.runEntry(t.deps, t.cycle());
   assert.deepStrictEqual([ok.entry.outcome, t.calls.map(c => c.role)], ['executed', ['phase2', 'trade-executor']]);
 });
+
+test('runEntry: a Claude Code head trader the runner attested in index mode: its skill_lookup reads recorded as its loads, and its attestation passed to the roles\' runs with the cycle\'s id; without it, as before', async () => {
+  const lookup = (id, skill) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'mcp__harness__skill_lookup', input: { skill } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text: `<skill name="${skill}">\n...\n</skill>\n` }] }] } }),
+  ].join('\n');
+  const skill = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'trade-lifecycle' } }] } });
+  const output = [skill, lookup('l1', 'strategy-scan')].join('\n');
+  const att = { harness: 'claude', config: '/h/head-prompt/claude-head-0123456789abcdef.md', sha256: 'a'.repeat(64), skills: ['trade-session'], cycle: null };
+  // Without the attestation: the Skill load only, no headPrompt in the roles' context.
+  let s = setup();
+  s.deps.cfg = { timeframe: 3, harness: 'claude' };
+  await E.runEntry(s.deps, s.cycle({ output }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle']);
+  assert.ok(!('headPrompt' in s.calls[1].limits.context));
+  // With it: the lookups too, and the attestation as the head trader's run had it.
+  s = setup();
+  s.deps.cfg = { timeframe: 3, harness: 'claude' };
+  const headEnv = s.cycle().headEnv;
+  const id = require('../../scripts/lib/trading/check-order').cycleId(headEnv);
+  const value = JSON.stringify({ ...att, cycle: id });
+  await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...headEnv, FTH_HEAD_PROMPT: value } }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['strategy-scan', 'trade-lifecycle']);
+  assert.deepStrictEqual([s.calls[1].limits.context.cycleId, s.calls[1].limits.context.headPrompt], [id, value]);
+  // opencode's attestation (no harness): as before.
+  s = setup();
+  await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...headEnv, FTH_HEAD_PROMPT: JSON.stringify({ config: '/w/opencode.json', sha256: 'a'.repeat(64), skills: ['trade-session'] }) } }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle']);
+  assert.ok(!('headPrompt' in s.calls[1].limits.context));
+});

@@ -1480,3 +1480,111 @@ test('a cycle where the runner runs the entry: FTH_CYCLE_ENTRY for the head trad
   assert.match(MANAGED_NO_ENTRY_TEXT, /send no new entry, added size or reversal \(the order gate refuses an entry this cycle\)/);
   assert.ok(!off.includes(MANAGED_NO_ENTRY_TEXT));
 });
+
+test('headSkillsInPrompt (this machine\'s runner config): a boolean or absent, for harness claude only', () => {
+  assert.strictEqual(validateConfig({ harness: 'claude' }).headSkillsInPrompt, undefined, 'absent stays absent');
+  assert.strictEqual(validateConfig({ harness: 'claude', headSkillsInPrompt: true }).headSkillsInPrompt, true);
+  assert.strictEqual(validateConfig({ harness: 'claude', headSkillsInPrompt: false }).headSkillsInPrompt, false);
+  assert.throws(() => validateConfig({ harness: 'claude', headSkillsInPrompt: 'yes' }), /headSkillsInPrompt: true or false/);
+  for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, headSkillsInPrompt: true }), /headSkillsInPrompt: for harness "claude" only/, harness);
+  assert.strictEqual(validateConfig({ harness: 'opencode', headSkillsInPrompt: false }).headSkillsInPrompt, false);
+});
+
+test('headSkillsInPrompt absent or false: the Claude head trader\'s argv, env and prompts are as before (no prompt addition, no attestation, an inherited one dropped, the load sentence)', () => {
+  const home = tmpDir();
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }];
+  const now = new Date('2026-10-07T14:30:00Z');
+  const off = validateConfig({ harness: 'claude' });
+  const no = validateConfig({ harness: 'claude', headSkillsInPrompt: false });
+  const base = { FTH_HOME: home, FTH_HEAD_PROMPT: JSON.stringify({ harness: 'claude', config: '/x/claude-head-0123456789abcdef.md', sha256: 'a'.repeat(64), skills: ['trade-session'], cycle: '0123456789abcdef' }) };
+  for (const cfgX of [off, no]) {
+    const argv = buildCommand(cfgX, 'p', ROOT, base);
+    assert.ok(!argv.includes('--append-system-prompt-file'), 'no prompt addition');
+    assert.deepStrictEqual(argv, buildCommand(off, 'p', ROOT, base));
+    assert.deepStrictEqual(buildCommand(cfgX, 'p', ROOT, base, { agent: 'trade-executor' }), buildCommand(off, 'p', ROOT, base, { agent: 'trade-executor' }));
+    const env = childEnv(cfgX, ROOT, base, { cycleId: '0123456789abcdef', headPrompt: base.FTH_HEAD_PROMPT });
+    assert.ok(!('FTH_HEAD_PROMPT' in env), 'an inherited or passed attestation is dropped');
+    const { FTH_CYCLE_TRANSCRIPT: _t1, ...rest } = env;
+    const { FTH_CYCLE_TRANSCRIPT: _t2, ...restOff } = childEnv(off, ROOT, base, { cycleId: '0123456789abcdef' });
+    assert.deepStrictEqual(rest, restOff);
+    assert.strictEqual(env.FTH_ROLE_SKILLS, 'full');
+    const trade = prompts(cfgX, now).trade(items);
+    assert.match(trade, /With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/);
+    assert.strictEqual(trade, prompts(off, now).trade(items));
+  }
+  assert.ok(!fs.existsSync(path.join(home, 'head-prompt')), 'nothing written');
+});
+
+test('headSkillsInPrompt true (Claude Code): the head trader gets its index-mode prompt addition as a system-prompt file in the harness home, attested for its cycle; a role\'s run gets no file, the entry\'s carries the head trader\'s attestation only for that cycle', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const home = tmpDir();
+  const on = validateConfig({ harness: 'claude', headSkillsInPrompt: true });
+  const argv = buildCommand(on, 'the cycle prompt', ROOT, { FTH_HOME: home });
+  const at = argv.indexOf('--append-system-prompt-file');
+  assert.ok(at > 0, JSON.stringify(argv));
+  const file = argv[at + 1];
+  assert.strictEqual(path.dirname(file), path.join(home, 'head-prompt'));
+  assert.match(path.basename(file), /^claude-head-[0-9a-f]{64}\.md$/);
+  // The rest of the argv is as before (the prompt still the cycle's, after -p).
+  const before = buildCommand(validateConfig({ harness: 'claude' }), 'the cycle prompt', ROOT, { FTH_HOME: home });
+  assert.deepStrictEqual([...argv.slice(0, at), ...argv.slice(at + 2)], before);
+  assert.deepStrictEqual(argv.slice(0, 3), ['claude', '-p', 'the cycle prompt']);
+  // A role run on its own: no prompt addition (its role's prompt is its own).
+  assert.ok(!buildCommand(on, 'r', ROOT, { FTH_HOME: home }, { agent: 'trade-executor' }).includes('--append-system-prompt-file'));
+  // The run's env: the file written, attested for this run's cycle; FTH_ROLE_SKILLS stays full (its roles load theirs).
+  const env = childEnv(on, ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: 'stale' });
+  const att = H.parseAttestation(env.FTH_HEAD_PROMPT);
+  assert.ok(att, env.FTH_HEAD_PROMPT);
+  assert.deepStrictEqual([att.harness, att.config, att.cycle], ['claude', file, cycleIdOf(env)]);
+  const text = fs.readFileSync(file, 'utf8');
+  assert.strictEqual(att.sha256, H.sha256(text));
+  assert.deepStrictEqual(att.skills, H.CORE);
+  assert.strictEqual(env.FTH_ROLE_SKILLS, 'full');
+  // The file: CORE embedded whole (each skill's text as a load returns it), every other skill indexed one line, skill_lookup named.
+  for (const s of H.CORE) assert.ok(text.includes(`<skill name="${s}">\n${require('../../scripts/lib/frontmatter').parseFrontmatter(fs.readFileSync(path.join(ROOT, 'skills', s, 'SKILL.md'), 'utf8')).body.trim()}\n</skill>`), s);
+  const all = fs.readdirSync(path.join(ROOT, 'skills')).filter(n => fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md')));
+  for (const s of all.filter(n => !H.CORE.includes(n))) {
+    assert.ok(new RegExp(`^- ${s}: `, 'm').test(text), `indexed: ${s}`);
+    assert.ok(!text.includes(`<skill name="${s}">`), `not embedded: ${s}`);
+  }
+  assert.match(text, /mcp__harness__skill_lookup \{"skill": "<name>"\}/);
+  // The cycle's prompt: the skills are in its prompt, already loaded (not the load sentence).
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }];
+  const trade = prompts(on, new Date('2026-10-07T14:30:00Z')).trade(items);
+  assert.match(trade, /Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded \(don't load them again\): decide by them/);
+  assert.doesNotMatch(trade, /With your skill tool, load/);
+  // The entry's role (the head trader's cycle id): the head trader's own attestation when it is that cycle's, else none;
+  // never a new one.
+  const id = att.cycle;
+  assert.strictEqual(childEnv(on, ROOT, { FTH_HOME: home }, { cycleId: id, headPrompt: env.FTH_HEAD_PROMPT }).FTH_HEAD_PROMPT, JSON.stringify(att));
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home }, { cycleId: 'f'.repeat(16), headPrompt: env.FTH_HEAD_PROMPT })), 'another cycle\'s');
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: env.FTH_HEAD_PROMPT }, { cycleId: id })), 'none passed: an inherited one never counts');
+  // A desk role's own run (cycle-run.js runRole: roleRun, no cycle id): no prompt addition, so no attestation.
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: env.FTH_HEAD_PROMPT }, { roleRun: 'market-structure-analyst' })));
+  assert.strictEqual(childEnv(on, ROOT, { FTH_HOME: home }, { roleRun: 'trade-executor', cycleId: id, headPrompt: env.FTH_HEAD_PROMPT }).FTH_HEAD_PROMPT, JSON.stringify(att), 'the entry\'s role: the head trader\'s');
+  // Two runs: one file (named by its text's hash), each run its own cycle.
+  const env2 = childEnv(on, ROOT, { FTH_HOME: home });
+  const att2 = H.parseAttestation(env2.FTH_HEAD_PROMPT);
+  assert.strictEqual(att2.config, file);
+  assert.notStrictEqual(att2.cycle, att.cycle);
+  assert.deepStrictEqual(fs.readdirSync(path.join(home, 'head-prompt')), [path.basename(file)]);
+});
+
+test('headSkillsInPrompt: a new prompt addition (a skill changed) prunes the older ones but the newest of them; an unchanged one prunes nothing', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = tmpDir();
+  const dir = path.join(home, 'head-prompt');
+  fs.mkdirSync(dir, { recursive: true });
+  const old = (n, ageS) => { const f = path.join(dir, `claude-head-${String(n).repeat(64)}.md`); fs.writeFileSync(f, 'old'); const t = Date.now() / 1000 - ageS; fs.utimesSync(f, t, t); return f; };
+  const files = [old(1, 400), old(2, 300), old(3, 200)];
+  const other = path.join(dir, 'notes.md');
+  fs.writeFileSync(other, 'not a head file');
+  const { file } = H.writeClaudeHead(home, ROOT);
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), [path.basename(file), path.basename(files[2]), 'notes.md'].sort());
+  // Written again unchanged: nothing pruned.
+  H.writeClaudeHead(home, ROOT);
+  assert.ok(fs.existsSync(files[2]));
+  // The attested one is never pruned by its own write, and a missing directory is no error.
+  assert.ok(fs.existsSync(file));
+});

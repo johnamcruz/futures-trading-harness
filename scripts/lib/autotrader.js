@@ -334,6 +334,9 @@ function validateConfig(raw) {
   // own launches (runner.js managedDesk: that cycle manages, no entry).
   if (cfg.deskOnManagedCycles !== undefined && typeof cfg.deskOnManagedCycles !== 'boolean') errors.push('deskOnManagedCycles: true or false, or absent (as before: a managed cycle runs no desk of the runner\'s on such a harness)');
   if (cfg.deskConcurrency !== undefined && cfg.deskConcurrency !== null) { const p = deskConcurrencyProblem(cfg.deskConcurrency); if (p) errors.push(p); }
+  // headSkillsInPrompt true: Claude Code's head trader in index mode (claudeHeadOn; head-prompt.js), absent or false as before.
+  if (cfg.headSkillsInPrompt !== undefined && typeof cfg.headSkillsInPrompt !== 'boolean') errors.push('headSkillsInPrompt: true or false, or absent (as before: the head trader loads its skills)');
+  if (cfg.headSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`headSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's head trader has its own index mode, FTH_ROLE_SKILLS)`);
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -568,10 +571,43 @@ function headAttestation(cfg, root, env = process.env) {
   }
   return headPrompt.attestation(path.join(path.resolve(root, cfg.workdir), 'opencode.json'), root);
 }
+/**
+ * Claude Code's head trader in index mode: this machine's runner config sets headSkillsInPrompt (validateConfig; absent
+ * or false, as before). Its per-cycle skills are embedded in a system-prompt addition (head-prompt.js claudeHeadText:
+ * buildCommand's --append-system-prompt-file), which the runner attests per run (childEnv) for the gate.
+ */
+const claudeHeadOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.headSkillsInPrompt === true;
 /** Whether the head trader's prompt holds every skill the cycle prompt would have it load: attested, none left out. */
 function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
+  if (claudeHeadOn(cfg)) {
+    const skills = headPrompt.embeddedSkills(headPrompt.claudeHeadText(root || PLUGIN_ROOT), root || PLUGIN_ROOT);
+    return [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].every(s => skills.includes(s));
+  }
   const att = headAttestation(cfg, root || PLUGIN_ROOT, env);
   return Boolean(att) && [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].every(s => att.skills.includes(s));
+}
+
+/**
+ * The attestation of a Claude head trader's prompt addition for this run (claudeHeadOn only), or null. A role the runner
+ * runs for the head trader's cycle (`context.cycleId`: the entry's) carries the head trader's own attestation
+ * (`context.headPrompt`, as its run had it) when it is for that cycle, never a new one; another role's run
+ * (`context.roleRun`: the desk's) none; the head trader's own run writes the file it is given and attests it for its cycle.
+ */
+function claudeHeadAttestation(cfg, root, base, context, env) {
+  if (!claudeHeadOn(cfg)) return null;
+  const c = context || {};
+  // A role the runner runs on its own (cycle-run.js runRole: `roleRun`) has no prompt addition: never a new attestation.
+  if (typeof c.roleRun === 'string' && c.roleRun && !(typeof c.cycleId === 'string' && c.cycleId)) return null;
+  if (typeof c.cycleId === 'string' && c.cycleId) {
+    const att = headPrompt.parseAttestation(c.headPrompt);
+    return att && att.harness === 'claude' && att.cycle === c.cycleId ? att : null;
+  }
+  try {
+    const { file, text } = headPrompt.writeClaudeHead(harnessHome(base), root);
+    return headPrompt.claudeAttestation({ file, text, root, cycle: require('./trading/check-order').cycleId(env) });
+  } catch (_err) {
+    return null; // no attestation: the gate counts no embedded skill (the transcript decides)
+  }
 }
 /** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
 const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
@@ -762,6 +798,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
   env.FTH_ROLE_SKILLS = 'full';
   // The head trader's embedded skills are attested only for an opencode run in index mode (below): never inherited.
   delete env[headPrompt.ATTEST_ENV];
+  // Claude Code's head trader in index mode (this machine's opt-in, claudeHeadOn): its run's attestation, for its cycle.
+  if (claudeHeadOn(cfg)) {
+    const att = claudeHeadAttestation(cfg, root, base, context, env);
+    if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
+  }
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -846,8 +887,11 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {
       const opts = { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), replay };
       // `agent`: one role run on its own (runnerRole), by the plugin-scoped name Claude Code lists it under.
       const role = agent ? runnerRole(agent) : null;
+      // The head trader in index mode (claudeHeadOn, this machine's opt-in): its skills as a system-prompt addition, in
+      // the cached prefix (head-prompt.js; childEnv writes the file and attests it). A role's own run: never.
+      const head = claudeHeadOn(cfg) && !role ? ['--append-system-prompt-file', headPrompt.claudeHeadFile(harnessHome(env), headPrompt.claudeHeadText(root))] : [];
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
-      return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []),
+      return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []), ...head,
         '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
         '--allowedTools', (role ? claudeRoleTools(root, role, opts) : claudeTools(root, opts)).join(','),
         '--disallowedTools', [...claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay }), ...(role ? claudeRoleDenied(role) : [])].join(','),
@@ -1162,6 +1206,8 @@ module.exports = {
   claudeRoleDenied,
   loadList,
   embedsSkills,
+  claudeHeadOn,
+  claudeHeadAttestation,
   headAttestation,
   skillsText,
   stableHead,

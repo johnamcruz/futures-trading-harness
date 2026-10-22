@@ -546,3 +546,39 @@ test('no-web-in-replay, a custom command: a learning run needs the replay config
   const { resolveReplay } = require('../../scripts/lib/replay/config');
   assert.throws(() => resolveReplay({ noWeb: 'yes' }, { root: ROOT }), /noWeb: true or false/);
 });
+
+test('head-prompt: a Claude Code run is N/A as before; with headSkillsInPrompt its prompt addition is checked (the real one passes, a missing skill fails)', () => {
+  const claude = { ...ctx().run.cfg, harness: 'claude' };
+  const opencodeHead = () => { throw new Error('opencode.json is not this run\'s'); };
+  const na = P.headPromptCheck(ctx({ run: { cfg: claude }, read: { head: opencodeHead } }));
+  assert.deepStrictEqual([na.status, na.detail], [P.NA, 'the head prompt is opencode\'s; this run\'s harness is claude']);
+  assert.strictEqual(P.headComposedReads(ctx({ run: { cfg: claude }, read: { head: opencodeHead } })).status, P.NA);
+  const real = P.defaultReaders(ROOT, {}, {});
+  const on = { run: { cfg: { ...claude, headSkillsInPrompt: true } }, read: { head: opencodeHead, roleSkillsMode: () => 'full', claudeHead: real.claudeHead } };
+  assert.strictEqual(P.headPromptCheck(ctx(on)).status, P.PASS, P.headPromptCheck(ctx(on)).detail);
+  assert.strictEqual(P.headComposedReads(ctx(on)).status, P.PASS, P.headComposedReads(ctx(on)).detail);
+  const cut = { ...on, read: { ...on.read, claudeHead: () => ({ ...real.claudeHead(), embedded: real.claudeHead().embedded.filter(s => s !== 'trade-plan') }) } };
+  assert.match(P.headPromptCheck(ctx(cut)).detail, /doesn't embed the current text of trade-plan/);
+  assert.strictEqual(P.headPromptCheck(ctx(cut)).status, P.FAIL);
+});
+
+test('head-prompt (Claude, headSkillsInPrompt): the prompt addition not written, not read back, or no scratch home: FAIL, never a throw', () => {
+  const fs2 = require('fs');
+  const hp = require('../../scripts/lib/head-prompt');
+  const on = r => ({ run: { cfg: { ...ctx().run.cfg, harness: 'claude', headSkillsInPrompt: true } }, read: { roleSkillsMode: () => 'full', claudeHead: P.defaultReaders(ROOT, {}, {}).claudeHead, ...r } });
+  const failed = (label, patch) => {
+    const undo = patch();
+    try {
+      const res = P.headPromptCheck(ctx(on()));
+      assert.strictEqual(res.status, P.FAIL, `${label}: ${res.detail}`);
+      assert.match(res.detail, /prompt addition can't be built/, label);
+    } finally {
+      undo();
+    }
+  };
+  const swap = (obj, key, fn) => () => { const orig = obj[key]; obj[key] = fn; return () => { obj[key] = orig; }; };
+  failed('not written', swap(hp, 'writeClaudeHead', () => { throw new Error('EACCES'); }));
+  failed('not read back', swap(hp, 'claudeHeadIn', () => null));
+  failed('no scratch home', swap(fs2, 'mkdtempSync', () => { throw new Error('ENOSPC'); }));
+  assert.strictEqual(P.headPromptCheck(ctx(on())).status, P.PASS, 'restored');
+});

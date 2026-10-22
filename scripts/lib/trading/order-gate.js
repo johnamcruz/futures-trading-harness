@@ -26,12 +26,12 @@ const { propViolations, runningAttempts, latestVerdict, carriedLossState } = req
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
-const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills } = require('./skills-loaded');
+const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
-const { attestedSkills, parseAttestation } = require('../head-prompt');
+const { attestedSkills, parseAttestation, claudeAttested } = require('../head-prompt');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
@@ -472,9 +472,18 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
   // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
   const factsBar = briefingBarOf(config, contractRoot(input.contractId));
+  // Claude Code's head trader in index mode (the runner config's headSkillsInPrompt): the skills its prompt addition
+  // embeds, only on the runner's attestation for this cycle, checked now against that file, the skills' current text and
+  // this run's own transcript (head-prompt.js claudeAttested; a hook's, that run's session). Then the head trader's
+  // index mode applies as opencode's: its situational skills are required, and its skill_lookup reads count as loads.
+  // Its roles load their skills as before (FTH_ROLE_SKILLS full). No attestation, or anything off: none, as before.
+  const att = config.autonomous && config.headPromptAttestation ? parseAttestation(config.headPromptAttestation) : null;
+  const claudeHead = att && att.harness === 'claude'
+    ? claudeAttested(att, HARNESS_ROOT, { stream: config.cycleTranscript, hook: transcriptPath, cycle: require('./check-order').cycleId({ FTH_CYCLE_ID: config.cycleIdGiven || '', FTH_CYCLE_TRANSCRIPT: config.cycleTranscript || '' }) }) : [];
+  const claudeLooked = claudeHead.length ? [...(loadedSkills(transcript, claudeLookupsInTranscript) || [])] : [];
   // The composed triggers (the head trader's own reads) apply to a composed entry only.
   const table = composed ? SITUATIONAL : SITUATIONAL.filter(e => !e.taughtIn);
-  const situational = !(config.autonomous && config.roleSkills === 'index') ? []
+  const situational = !(config.autonomous && (config.roleSkills === 'index' || claudeHead.length)) ? []
     : config.cycleLaneBars === null ? headSituationalSkills(table)
       : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar), table);
   // A composed entry reads trade-lifecycle in place of the strategy skills (no scan fired for it).
@@ -490,7 +499,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // count from the record. Only for the runner's own cycle transcript (a hook's is another harness's session); no
   // record, or none recorded: the transcript alone decides, as before.
   const headLoaded = config.autonomous && !transcriptPath && config.cycleRoles ? readHeadSkills(config.cycleRoles) : [];
-  const counted = [...new Set([...embedded, ...headLoaded])];
+  const counted = [...new Set([...embedded, ...headLoaded, ...claudeHead, ...claudeLooked])];
   add('skills-loaded', checkSkillsLoaded(transcript, [...required, ...situational.filter(s => !required.includes(s))], counted));
   // And, read before an entry only, how to judge the setup and write its plan (REQUIRED_AT_ENTRY; unreadable: refused).
   add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, counted));

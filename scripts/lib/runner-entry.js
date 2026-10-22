@@ -51,7 +51,7 @@ const { outcomeOf } = require('./autotrader');
 const { verdictOf } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
-const { skillsInTranscript } = require('./trading/skills-loaded');
+const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
 const { familyRoot } = require('./trading/contracts');
 const { contractRoot } = require('./trading/journal');
 const { isOpen } = require('./trading/positions');
@@ -189,9 +189,13 @@ async function runEntry(deps, c) {
     log('the entry: no role record for the cycle: nothing runs', 'error');
     return say('process-failure', c.result, { failure: 'no role record' });
   }
-  // 2. The head trader's loads, for the gate's skills checks in the executor's run.
+  // 2. The head trader's loads, for the gate's skills checks in the executor's run. A Claude Code head trader in index
+  // mode (attested by the runner: autotrader.js claudeHeadOn, this machine's opt-in) also read skills whole with
+  // skill_lookup; those are its loads too. Without that attestation, as before.
+  const headAtt = require('./head-prompt').parseAttestation((c.headEnv || {}).FTH_HEAD_PROMPT);
+  const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
   try {
-    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output)].filter(Boolean));
+    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : [])].filter(Boolean));
   } catch (err) {
     log(`the entry: the head trader's skills could not be recorded (${err.message}): the gate sees none`, 'error');
   }
@@ -200,7 +204,9 @@ async function runEntry(deps, c) {
   const { cycleId } = require('./trading/check-order');
   const id = cycleId(c.headEnv || {});
   // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
-  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}) };
+  // A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate counts what
+  // the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's).
+  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
   // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's
   // start (c.at), then the wall clock since the head trader's run began (c.startedWall).
