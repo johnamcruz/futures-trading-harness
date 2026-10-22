@@ -324,13 +324,15 @@ head trader's run, before the cycle log; per role `config/runner.json`
    (`FTH_CYCLE_BARS`) for the record, and its orders carry the cycle's id
    (`FTH_CYCLE_ID`). Recorded: it ends the round.
 6. **After the order.** The runner reads the account and open orders through
-   the adapter: executed (a position on the family, or the gateway's record of
-   this record's entry), blocked (the gate's refusal of a `place_order` in its
+   the adapter: executed (a position on the family, the entry working unfilled:
+   an open or pending order on its own contract, side and type, or the
+   gateway's record of this record's entry), blocked (the gate's refusal of a `place_order` in its
    log, the hook's or the gateway's, by the tool each logs, or the executor's
    BLOCKED or ABORTED first line, or a call that completed with nothing on the
-   account; a `place_order` the gate let through this cycle wins over a
-   refusal before or after it, the refused retry logged), unknown (the gate let it through and its reply
-   never came: reported `executed`, possibly placed), or a no-trade naming the
+   account read; a `place_order` the gate let through this cycle wins over a
+   refusal before or after it, the refused retry logged), unknown (the gate let
+   it through and its reply never came, or its call completed and the account
+   couldn't be read: reported `executed`, possibly placed), or a no-trade naming the
    failed run. A lost or late reply sends no second entry; the next cycles manage and exit it as
    any position. The cycle log records the outcome and its timing (`entry`:
    ms from the bar's close to the head trader's planned and to the order sent,

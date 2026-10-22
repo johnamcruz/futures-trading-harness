@@ -167,6 +167,52 @@ test('runEntry: a refused retry never hides the order that went: allowed then bl
   assert.strictEqual((await E.runEntry(s.deps, s.cycle())).entry.outcome, 'executed');
 });
 
+test('workingEntry: the account\'s working order on the entry\'s own contract (root, and month when both name one), side and type, open or pending; another contract of the family, a protective leg, a stop, a filled or cancelled order is not it', () => {
+  const mine = { id: 41, contractId: 'MNQ', side: 0, type: 1, status: 1, limitPrice: 21500 };
+  assert.strictEqual(E.workingEntry([mine], ARGS), mine);
+  const named = { id: 42, contractId: 'MNQ', side: 'buy', type: 'limit', status: 'pending' };
+  assert.strictEqual(E.workingEntry([named], ARGS), named, 'the codes\' names too');
+  assert.strictEqual(E.workingEntry([{ ...mine, status: undefined }], ARGS).id, 41, 'no status stated: listed open orders are working');
+  for (const [other, why] of [
+    [{ ...mine, contractId: 'NQ' }, 'the mini of the family'], [{ ...mine, contractId: 'MES' }, 'another root'],
+    [{ ...mine, side: 1 }, 'the other side (a target of a long)'], [{ ...mine, type: 4, stopPrice: 21490 }, 'a stop (a protective stop of a short)'],
+    [{ ...mine, status: 2 }, 'filled'], [{ ...mine, status: 3 }, 'cancelled'], [null, 'junk'],
+  ]) assert.strictEqual(E.workingEntry([other], ARGS), null, why);
+  const dated = { ...ARGS, contractId: 'MNQ:2026-12' };
+  assert.strictEqual(E.workingEntry([{ ...mine, contractId: 'MNQ:2027-03' }], dated), null, 'another month');
+  assert.strictEqual(E.workingEntry([{ ...mine, contractId: 'MNQ:2026-12' }], dated).id, 41);
+  assert.strictEqual(E.workingEntry([mine], dated).id, 41, 'a month named on one side only: the root decides');
+  assert.strictEqual(E.workingEntry('x', ARGS), null);
+});
+
+test('runEntry: the order went: a working entry order on the account is executed (working, unfilled); one on another contract is not counted; an unreadable account is unknown; a readable empty account is the broker\'s refusal', async () => {
+  const went = { ok: true, timedOut: false, text: 'EXECUTED\nOrders: 1', tools: ['broker_place_order'], lookups: [], output: '' };
+  const run = async o => {
+    const s = setup({ roles: { 'trade-executor': went }, ...o });
+    const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+    fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: id, violations: [] })}\n`);
+    return E.runEntry(s.deps, s.cycle());
+  };
+  const resting = { id: 41, contractId: 'MNQ', side: 0, type: 1, status: 1, limitPrice: 21500 };
+  let r = await run({ state: { positions: [], orders: [resting] } });
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['executed', 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ (the runner\'s entry: phase 2 approved, the order is working, unfilled: order 41, limit 21500)']);
+  r = await run({ state: { positions: [], orders: [{ ...resting, contractId: 'NQ' }, { ...resting, id: 9, side: 1, type: 4, stopPrice: 21600 }] } });
+  assert.strictEqual(r.entry.outcome, 'blocked');
+  assert.match(r.result, /was refused by the broker: the order went and the account shows no position or entry/);
+  r = await run({ readFails: true });
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['unknown', 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ: unknown, the order\'s outcome couldn\'t be read (the order went and the account can\'t be read after it): treat it as possibly placed']);
+  // No account to read (no account id): unread too.
+  const s = setup({ roles: { 'trade-executor': went } });
+  const sid = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: sid, violations: [] })}\n`);
+  assert.strictEqual((await E.runEntry(s.deps, s.cycle({ accountId: null }))).entry.outcome, 'unknown');
+  r = await run({ state: { positions: [], orders: [] } });
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['blocked', 'CYCLE RESULT: blocked - the trade_lifecycle long 1 MNQ was refused by the broker: the order went and the account shows no position or entry (the executor\'s report: EXECUTED Orders: 1)']);
+  // A filled entry is filled, whatever rests beside it.
+  r = await run({ state: { positions: [{ contractId: 'MNQ', type: 1, size: 1 }], orders: [resting] } });
+  assert.match(r.result, /the order filled\)$/);
+});
+
 test('entryOutcome: a refusal passed with an allowed order is never the outcome; a BLOCKED report after an allowed order is a retry\'s', () => {
   const label = 'trade_lifecycle long 1 MNQ';
   assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['x'], message: '[x] no' }, allowed: true, sent: false, label }).outcome, 'unknown');
