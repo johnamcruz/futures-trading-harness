@@ -380,3 +380,20 @@ test('planLine: the briefing states a setup\'s standard plan as code computes it
   assert.strictEqual(L.planLine(null), null);
   assert.strictEqual(L.planLine({ minutes: 3, sections: { m3: { data: { bar: { t: 'x' }, windowEntries: 'allowed' } } } }), null);
 });
+
+test('planLine: a side the trend rule allows only as a reversal gets no standard plan (its CHoCH tier), never "OK -> compose_check"', () => {
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  const b = buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, 410), minutes: 3, now: new Date(Date.parse(bars[409].t) + 180000) });
+  const rule = trendRule => ({ ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, trendRule } } } });
+  const against = rule('Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).');
+  assert.strictEqual(L.planLine(against), '- Standard plan (code, as compose_check plans it): short "15m rejected ib low down": against the trend rule: only as a reversal (its 1h CHoCH tier).');
+  assert.deepStrictEqual(L.standardPlans(against).map(p => [p.side, p.status]), [['short', 'against']]);
+  // The allowed side keeps its plan.
+  assert.match(L.planLine(rule('Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).')), /short "15m rejected ib low down": plan OK: .* OK -> compose_check with its reads/);
+});
+
+test('the standard plan\'s R:R minimum is the composed strategy\'s risk.min_rr: the briefing\'s OK and compose_check\'s never differ', () => {
+  const doc = require('../../scripts/lib/trading/strategies').loadStrategies(path.join(__dirname, '..', '..'), {}).strategies.find(x => x.name === require('../../scripts/lib/trading/trade-lifecycle').STRATEGY);
+  assert.strictEqual(L.MIN_RR, doc.risk.min_rr);
+});

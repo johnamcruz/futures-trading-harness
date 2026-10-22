@@ -725,8 +725,8 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   // 4950: the load sentence names the two skills strategy-library was split into (an entry needs them loaded).
   // Still 4950 with "; also load htf-to-ltf" (ALSO_LOAD): the bar line's "use that file for the 3-minute timeframe
   // instead of fetching it" became "use that file; don't fetch 3-minute bars".
-  // 5000: "; before an entry, also load setup-judgment and trade-plan" (the gate's skills-at-entry: a head trader that loads
-  // its own skills, Claude Code, was refused [skills-at-entry] without them; fix/confluence-not-vetoes).
+  // 5000: setup-judgment and trade-plan on the every-cycle load list (ALSO_LOAD: the gate's skills-at-entry; a head trader
+  // that loads its own skills, Claude Code, was refused [skills-at-entry] without them; fix/confluence-not-vetoes).
   if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
   assert.ok(p.length < 5000, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.

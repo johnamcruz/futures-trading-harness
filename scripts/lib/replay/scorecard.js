@@ -98,6 +98,7 @@ const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file'
 const { roleOf } = require('../prop/splits');
 const { learningLook } = require('../learning/scorecard-look');
 const { setupMoment } = require('../learning/setup-moments');
+const { standardPlans } = require('../learning/setup-library');
 const { trendRuleOf } = require('../trading/reasons');
 
 const VERSION = 1;
@@ -126,7 +127,7 @@ const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no
 const COMPOSED_GROUNDS = new Set(['no-entry-window', 'trend-blocks', 'no-attempt', 'verdict-skip', 'entry-block']);
 // The decisive read against the side (confluence-counting): a real HTF reversal, a 1h CHoCH against it. A 15m swing
 // broken is serious (half), never a pass.
-const DECISIVE = /\b1h choch\b|\bchoch\b[^.;]*\b1h\b|\b1h\b[^.;]*\bchoch\b/i;
+const DECISIVE = /\b1h (?:choch|change of character)\b|\b(?:choch|change of character) (?:on|of) the 1h\b/i;
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -173,6 +174,11 @@ function classify(label, facts, expected, reasons) {
   // A composable setup (trend side, a reaction at a key level, the trigger closed) passed without compose_check: the
   // model judged room or R:R itself instead of the plan (confluence-counting: compose first).
   if (expected.decision === 'no-trade' && expected.decidedBy === 'no setup' && facts.composable && facts.composable.valid) {
+    // A true hard ground (an entry block, no attempt, a verdict's skip, the window, the trend rule) passes it, as it
+    // passes an OK record; so does the attempt's own entry block, stated or not.
+    const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
+    if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    if (facts.attempt && facts.attempt.entryBlock) return why.push(`the attempt blocks entries (${facts.attempt.entryBlock})`), out('right', true);
     why.push(`no compose: ${facts.composable.sides.join(' and ')} ${facts.composable.reason}, passed without compose_check`);
     return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
@@ -380,7 +386,9 @@ function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
  * A composable setup in a bar briefing (the facts compose_check starts from): the setup timeframe's last completed
  * candle reacted at a key level or FVG (setup-moments.js, the "Setups to check" line), the trigger timeframe closed
  * after it (phase confirmation), on a side the trend rule allows, in a window that allows entries and no news
- * blackout. { valid, sides, reason }; never throws (no briefing: not valid).
+ * blackout, and the briefing's Standard plan for that side is OK (setup-library.js standardPlans, the same code the
+ * briefing's line comes from): a plan the line states refused is a pass the skills prescribe, never abstention.
+ * { valid, sides, reason }; never throws (no briefing: not valid).
  */
 function composableSetup(b) {
   try {
@@ -388,10 +396,13 @@ function composableSetup(b) {
     if (!m3 || !m3.bar) return { valid: false, sides: [], reason: 'no bar briefing' };
     const mo = setupMoment(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000 });
     const rule = trendRuleOf(m3.trendRule);
-    const sides = [...new Set(mo.reactions.map(r => (r.dir === 'up' ? 'long' : r.dir === 'down' ? 'short' : null)).filter(x => x && rule[x] === true))];
+    const allowed = [...new Set(mo.reactions.map(r => (r.dir === 'up' ? 'long' : r.dir === 'down' ? 'short' : null)).filter(x => x && rule[x] === true))];
     const blocked = m3.windowEntries !== 'allowed' ? `the ${m3.window} window allows no entries` : m3.news && m3.news.inBlackout !== false ? 'a news blackout or the news unknown' : null;
-    const valid = mo.moment && mo.phase === 'confirmation' && sides.length > 0 && !blocked;
-    return { valid, sides, reason: blocked || (!mo.moment ? mo.reason : mo.phase !== 'confirmation' ? `${mo.reason}: the trigger not closed yet` : !sides.length ? `${mo.reason}: not the trend rule's side` : mo.reason) };
+    const plans = mo.moment && mo.phase === 'confirmation' && allowed.length && !blocked ? standardPlans(b) || [] : [];
+    const sides = allowed.filter(side => plans.some(p => p.side === side && p.status === 'traded'));
+    const refused = allowed.map(side => plans.find(p => p.side === side)).filter(Boolean).map(p => `${p.side} plan refused (${p.why})`);
+    const valid = sides.length > 0;
+    return { valid, sides: valid ? sides : allowed, reason: blocked || (!mo.moment ? mo.reason : mo.phase !== 'confirmation' ? `${mo.reason}: the trigger not closed yet` : !allowed.length ? `${mo.reason}: not the trend rule's side` : !valid ? `${mo.reason}: ${refused.join(', ') || 'no standard plan'}` : `${mo.reason}, plan OK`) };
   } catch (err) {
     return { valid: false, sides: [], reason: `the briefing can't be read (${err.message})` };
   }

@@ -419,38 +419,62 @@ function runnerClock({ from, to, sessions = null }) {
 }
 
 /**
- * The briefing's "Standard plan" line (see the header): the plan compose_check would make of the strongest reaction
- * each side, stated as the code's fact so the model never works out room or R:R itself. Never throws.
+ * The standard plan compose_check would make of the strongest reaction each side at a bar briefing: per side
+ * { side, reaction, status, why, plan, reads } (status 'traded' is a plan OK; 'against' is a side the trend rule
+ * allows only as a reversal: no standard plan), or null when the bar has no setup moment to plan. Never throws.
  */
-function planLine(b, { setupTf = DEFAULTS.setupTf } = {}) {
+function standardPlans(b, { setupTf = DEFAULTS.setupTf } = {}) {
   try {
     const m3 = m3Of(b);
     if (!m3 || !m3.bar || m3.windowEntries !== 'allowed') return null;
     const mo = setupMoment(m3.candles, { setupTf, barClose: Date.parse(m3.bar.t) + b.minutes * 60000 });
     if (!mo.moment || mo.phase !== 'confirmation') return null;
-    // The contract's tick (contracts.js); a root it doesn't list gets no plan line (never a guessed tick).
+    // The contract's tick (contracts.js); a root it doesn't list gets no plan (never a guessed tick).
     const tick = tickOf(b.symbol);
     if (!tick) return null;
-    const stf = tfLabel(setupTf);
-    const parts = [];
+    // The trend rule the briefing states: a side it allows only as a reversal is the CHoCH tier's, never the standard plan.
+    const rule = require('../trading/reasons').trendRuleOf(m3.trendRule);
+    const out = [];
     for (const side of ['long', 'short']) {
       const reaction = mo.reactions.find(r => sideOf(r.dir) === side);
       if (!reaction) continue;
+      if (rule[side] === false) { out.push({ side, reaction, status: 'against', why: 'against the trend rule: only as a reversal (its 1h CHoCH tier)', plan: null, reads: [] }); continue; }
       const r = composeAt(b, reaction, { side, tick, setupTf });
-      const what = `${side} "${stf} ${reaction.rel} ${levelWords(reaction.name)} ${reaction.dir}"`;
-      if (r.status !== 'traded') { parts.push(`${what}: plan refused (${r.why})`); continue; }
-      const p = r.plan;
-      parts.push(`${what}: plan OK: entry ${p.entry.price}, stop ${p.stop.price} (${p.stop.ticks}t), target ${p.target.price}, R:R ${p.rr}; reads ${r.reads.map(x => `"${x.read}"`).join(', ')}`);
+      out.push({ side, reaction, status: r.status, why: r.why || null, plan: r.plan || null, reads: r.reads || [] });
     }
-    if (!parts.length) return null;
-    const ok = parts.some(x => / plan OK: /.test(x));
-    return `- Standard plan (code, as compose_check plans it): ${parts.join('; ')}.${ok ? ' OK -> compose_check with its reads; never estimate R:R.' : ''}`;
+    return out.length ? out : null;
   } catch (_err) {
     return null;
   }
 }
 
-module.exports = { strategyValidBars, planLine,
+/**
+ * The briefing's "Standard plan" line (see the header): the plan compose_check would make of the strongest reaction
+ * each side, stated as the code's fact so the model never works out room or R:R itself. Never throws.
+ */
+function planLine(b, { setupTf = DEFAULTS.setupTf } = {}) {
+  const plans = standardPlans(b, { setupTf });
+  if (!plans) return null;
+  try {
+    return renderPlans(plans, tfLabel(setupTf));
+  } catch (_err) {
+    return null;
+  }
+}
+
+// The line from the plans: each side OK (its numbers and reads), refused (why), or against the trend rule.
+function renderPlans(plans, stf) {
+  const parts = plans.map(({ side, reaction, status, why, plan: p, reads }) => {
+    const what = `${side} "${stf} ${reaction.rel} ${levelWords(reaction.name)} ${reaction.dir}"`;
+    if (status === 'against') return `${what}: ${why}`;
+    if (status !== 'traded') return `${what}: plan refused (${why})`;
+    return `${what}: plan OK: entry ${p.entry.price}, stop ${p.stop.price} (${p.stop.ticks}t), target ${p.target.price}, R:R ${p.rr}; reads ${reads.map(x => `"${x.read}"`).join(', ')}`;
+  });
+  const ok = plans.some(x => x.status === 'traded');
+  return `- Standard plan (code, as compose_check plans it): ${parts.join('; ')}.${ok ? ' OK -> compose_check with its reads; never estimate R:R.' : ''}`;
+}
+
+module.exports = { strategyValidBars, planLine, standardPlans,
   baseBars, runnerClock,
   VERSION, KIND, MIN_RR, STANDARD, scanLibrary, composeAt, entryRead, targetCandidates, setupKeyOf, buildLibraryIndex, libraryCellAt, noRoomBefore,
   libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary, libraryShown,
