@@ -1010,6 +1010,10 @@
    "value": 8,
    "from": "new in feat/desk-in-runner (one desk role's run)"
   },
+  "desk.managedBudgetShare": {
+   "value": 0.5,
+   "from": "new in fix/desk-on-manage-cycles (a managed cycle's desk: at most this share of the cycle, the owner's half)"
+  },
   "entry.timeoutMinutes": {
    "value": 6,
    "from": "new in feat/entry-workflow (one entry role's run: risk-manager phase 2, the trade-executor)"

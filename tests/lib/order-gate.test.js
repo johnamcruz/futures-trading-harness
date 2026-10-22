@@ -3524,3 +3524,24 @@ test('hookTranscript: a hook judges on the session transcript it is given, excep
   }
   assert.strictEqual(hookTranscript(undefined, {}), null);
 });
+
+test('managed-cycle (FTH_CYCLE_MANAGE, the runner\'s, on this machine\'s opt-in): every entry refused, hard (no skip); [exit] and [protect] still go; unset or blank: no such check', () => {
+  const { MANAGED_CYCLE_REFUSAL } = require('../../scripts/lib/trading/order-gate');
+  const managed = { ...config, ...{ cycleManage: loadConfig({ FTH_ROLE_SKILLS: 'full', FTH_CYCLE_MANAGE: '1' }).cycleManage } };
+  assert.strictEqual(managed.cycleManage, true);
+  const r = evaluate(entryOrder(), [plan()], { config: managed });
+  assert.deepStrictEqual(checks(r), ['managed-cycle']);
+  assert.strictEqual(r.violations[0].message, MANAGED_CYCLE_REFUSAL);
+  assert.match(MANAGED_CYCLE_REFUSAL, /manage only, no new entry, add or reversal; a new entry waits for a cycle that starts flat/);
+  // Not skippable.
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...managed, skipChecks: new Set(['managed-cycle']) } })), ['managed-cycle']);
+  // Risk-reducing orders return before it.
+  for (const rationale of ['[exit] close the long', '[protect] stop to breakeven']) {
+    const x = evaluate(entryOrder({ rationale }), [], { config: managed });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
+  // Any value set fails closed; unset or blank is none.
+  assert.strictEqual(loadConfig({ FTH_CYCLE_MANAGE: 'yes' }).cycleManage, true);
+  for (const v of [undefined, '', '  ']) assert.strictEqual(loadConfig({ FTH_CYCLE_MANAGE: v }).cycleManage, false, JSON.stringify(v));
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()]).violations, []);
+});

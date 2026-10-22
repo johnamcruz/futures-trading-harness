@@ -211,14 +211,20 @@ phases:
   machine opts in (the runner config's `deskOnManagedCycles: true`, absent
   by default, as is `deskConcurrency`), it also runs
   the desk in a managed cycle: one that started with a position or working
-  order open in the account read. A complete desk there is kept, record and
-  reports; the head trader's prompt gives the reports with no roster and says
-  the cycle manages and sends no entry (`autotrader.js MANAGED_DESK_TEXT`).
-  An entry there fails closed: a phase 2 the head trader launched itself is
-  untimed beside the record (`[roles-ran]`), and without one phase 2 is
-  missing. Exits, stop moves, closes and cancels are risk-reducing, never
-  checked for roles, and go as always. A desk it couldn't complete is dropped,
-  as above. Nothing above the interface names a harness.
+  order open in the account read. Such a cycle manages only: the runner sets
+  `FTH_CYCLE_MANAGE=1` for the head trader's run, and the order gate (hook
+  and gateway) refuses every entry, add or reversal in it (`[managed-cycle]`,
+  a hard check). Exits, stop moves, closes and cancels are risk-reducing and
+  return before it, as always. A desk complete from the runner's record or
+  the report cache is kept, record and reports, and the head trader's prompt
+  gives the reports with no roster and says the cycle manages
+  (`autotrader.js MANAGED_DESK_TEXT`); a desk it couldn't complete is
+  dropped, as above, and the prompt says no entry this cycle beside the
+  roster. The desk there gets at most half the cycle's time, so the head
+  trader's own management waits at most that long; the runner's own per-bar
+  position management (its trail, target and exit: `stop_moved` and
+  `position_closed` by the runner) is independent of the desk and doesn't
+  wait for it. Nothing above the interface names a harness.
 
 ### The desk, the first workflow
 

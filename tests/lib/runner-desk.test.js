@@ -126,3 +126,20 @@ test('deskOnManagedCycles (this machine\'s opt-in): absent by default; true or f
   for (const ok of [true, false]) assert.strictEqual(cfg({ deskOnManagedCycles: ok }).deskOnManagedCycles, ok);
   for (const bad of ['true', 1, null, {}]) assert.throws(() => cfg({ deskOnManagedCycles: bad }), /deskOnManagedCycles: true or false, or absent/, JSON.stringify(bad));
 });
+
+test('deskConcurrency null is the committed value (as absent); managedDeskNote: a line only where deskOnManagedCycles does nothing', () => {
+  const { deskConcurrencyOf, managedDeskNote } = require('../../scripts/lib/runner-wiring');
+  const committed = require('../../scripts/lib/tunables').runner().desk.concurrency;
+  assert.strictEqual(cfg({ deskConcurrency: null }).deskConcurrency, null, 'accepted');
+  assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: null })), committed);
+  assert.strictEqual(managedDeskNote(cfg()), null, 'absent: nothing said');
+  assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: false })), null);
+  assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: true })), null, 'where it applies: nothing said');
+  for (const o of [{ harness: 'opencode' }, { harness: 'codex' }, { harness: 'qwen' }, { harness: 'claude', cycle: 'lean' }]) {
+    assert.match(managedDeskNote(cfg({ ...o, deskOnManagedCycles: true })), /deskOnManagedCycles is set but does nothing here/, JSON.stringify(o));
+  }
+  // Said once, at the runner's start (deskFor), never a refusal.
+  const logs = [];
+  deskFor({ home: tmpDir(), cfg: cfg({ harness: 'codex', deskOnManagedCycles: true }), root: ROOT, log: m => logs.push(m) });
+  assert.strictEqual(logs.filter(l => /deskOnManagedCycles/.test(l)).length, 1);
+});

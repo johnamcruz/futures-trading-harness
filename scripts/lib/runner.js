@@ -1684,10 +1684,15 @@ function createRunner(deps) {
           // A harness whose transcript doesn't time the head trader's own launches (desk.timed false: Claude Code's
           // stream-json) can't order a phase 2 it launched itself against the runner's record (the gate refuses such an
           // entry, roles-ran.js), so there the runner runs its desk in a cycle whose entry it may run, and in a managed
-          // cycle (startedManaging), whose job is managing them: the desk is complete from the runner's record, and the cycle
-          // runs no new entry (managedDesk below).
+          // cycle (startedManaging), whose job is managing them: the desk is complete from the runner's record, and the gate
+          // refuses any entry in the cycle (managedCycle below).
           const deskHere = Boolean(desk) && (desk.timed !== false || entryPossible || startedManaging);
           const deskRoles = deskHere && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1 ? expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: cached ? cached.roles : [] }) : [];
+          // A managed cycle (startedManaging: this machine opted in, and the cycle started with a position or working order
+          // open) on an untimed harness, where the runner's desk applies: manage only, whatever the desk did. The gate
+          // refuses every entry in it (FTH_CYCLE_MANAGE, order-gate.js managed-cycle); exits, stop moves, closes and cancels
+          // are risk-reducing and go before that check, as always.
+          const managedCycle = startedManaging && Boolean(desk) && desk.timed === false && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1;
           let deskRun = null;
           let deskMs = 0;
           if (deskRoles.length) {
@@ -1696,7 +1701,10 @@ function createRunner(deps) {
             const deskStart = clock.now().getTime();
             const minHeadMs = TUN.cycle.timeoutMinMinutes * 60000;
             const stop = new AbortController();
-            const deskBudgetMs = Math.max(0, timeoutMs - minHeadMs);
+            // A managed cycle's desk gets at most config/runner.json desk.managedBudgetShare of the cycle (half): the head
+            // trader's own management is never starved (a desk cut short is incomplete: the head trader runs its desk, and
+            // the gate still refuses an entry).
+            const deskBudgetMs = managedCycle ? Math.min(Math.max(0, timeoutMs - minHeadMs), Math.floor(timeoutMs * TUN.desk.managedBudgetShare)) : Math.max(0, timeoutMs - minHeadMs);
             const timer = setTimeout(() => stop.abort(), deskBudgetMs);
             // The roles' runs get the cycle's own context (its bars, lanes and start), as the head trader's does.
             const deskContext = {
@@ -1726,12 +1734,10 @@ function createRunner(deps) {
           // head trader runs phase 2 and the trade-executor, as before.
           const deskDone = expectedRoles({ action: 'trade', cycle: cfg.cycle, cachedRoles: [...(cached ? cached.roles : []), ...recordedReports.map(r => r.role)] }).length === 0;
           const entryCycle = entryPossible && Boolean(desk) && deskDone;
-          // An untimed harness's complete desk in a managed cycle (startedManaging): kept, record and reports, so the
-          // desk check is complete from the runner's record and the head trader launches no role. With the record, any role
-          // the head trader launched itself is unordered and the gate refuses an entry (roles-ran.js: fails closed), so its
-          // prompt says the cycle manages and enters nothing (autotrader.js MANAGED_DESK_TEXT). Exits, stop moves, closes
-          // and cancels are risk-reducing: the gate never checks the roles for them, so they go as always.
-          const managedDesk = Boolean(deskRun) && desk.timed === false && !entryCycle && startedManaging && deskDone;
+          // Its desk complete from the runner's record or the report cache: kept, record and reports, the desk check
+          // complete, and the prompt says the cycle manages, with no roster (autotrader.js MANAGED_DESK_TEXT). Not complete:
+          // the head trader runs its desk, as before (dropDesk below), and still enters nothing (MANAGED_NO_ENTRY_TEXT).
+          const managedDesk = managedCycle && !entryCycle && deskDone;
           // An untimed harness's desk that didn't complete (no entry cycle, no managed desk): dropped, record and reports, so
           // the head trader runs its whole desk in its session, as before (a record beside its own untimed launches would
           // refuse its entry).
@@ -1767,7 +1773,7 @@ function createRunner(deps) {
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
-            cyclesLeft, entry: runsEntry, managedDesk,
+            cyclesLeft, entry: runsEntry, managedDesk, managedCycle,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
             ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
@@ -1795,6 +1801,8 @@ function createRunner(deps) {
             ...(rolesFile ? { rolesFile } : {}),
             // The runner runs the entry this cycle (FTH_CYCLE_ENTRY: the entry-route rule; the prompt says the route).
             ...(runsEntry ? { entry: true } : {}),
+            // A managed cycle (managedCycle: this machine's opt-in only): FTH_CYCLE_MANAGE, the gate refuses every entry.
+            ...(managedCycle ? { manage: true } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: cached ? Object.fromEntries(cached.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},

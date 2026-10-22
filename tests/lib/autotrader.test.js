@@ -1440,6 +1440,11 @@ test('a cycle where the runner runs the entry: FTH_CYCLE_ENTRY for the head trad
   for (const context of [{ action: 'trade', symbols: [] }, { action: 'trade', symbols: [], entry: 'yes' }, { action: 'trade', symbols: [], entry: false }, null]) {
     assert.strictEqual(env(context, { FTH_CYCLE_ENTRY: '1' }).FTH_CYCLE_ENTRY, undefined, JSON.stringify(context));
   }
+  // A managed cycle (runner.js managedCycle): FTH_CYCLE_MANAGE only when the runner says so; never inherited.
+  assert.strictEqual(env({ action: 'trade', symbols: [], manage: true }).FTH_CYCLE_MANAGE, '1');
+  for (const context of [{ action: 'trade', symbols: [] }, { action: 'trade', symbols: [], manage: 'yes' }, null]) {
+    assert.strictEqual(env(context, { FTH_CYCLE_MANAGE: '1' }).FTH_CYCLE_MANAGE, undefined, JSON.stringify(context));
+  }
   assert.strictEqual(env({ action: 'trade', symbols: [], cycleId: '0123456789abcdef' }).FTH_CYCLE_ID, '0123456789abcdef');
   for (const cycleId of ['0123', 'not hex at all!!', 7, null]) assert.strictEqual(env({ action: 'trade', symbols: [], cycleId }, { FTH_CYCLE_ID: 'ffffffffffffffff' }).FTH_CYCLE_ID, undefined, String(cycleId));
   // The prompt: the route, before the desk's reports; not the roster's own phase 2 and executor.
@@ -1467,4 +1472,11 @@ test('a cycle where the runner runs the entry: FTH_CYCLE_ENTRY for the head trad
   assert.doesNotMatch(managed, /then risk-manager phase 2 on your plan, if any|as parallel subagents/);
   assert.ok(!managed.includes(ENTRY_TEXT) && !off.includes(MANAGED_DESK_TEXT));
   assert.ok(!prompts(cfg, new Date('2026-10-07T14:03:02Z'), '/r').trade(items, { cached: served, managedDesk: true, manageOnly: true }).includes(MANAGED_DESK_TEXT));
+  // A managed cycle whose desk didn't complete: the roster (the head trader runs its desk), and no entry this cycle.
+  const { MANAGED_NO_ENTRY_TEXT } = require('../../scripts/lib/autotrader');
+  const fallback = prompts(cfg, new Date('2026-10-07T14:03:02Z'), '/r').trade(items, { cached: served, managedCycle: true });
+  assert.ok(fallback.includes(MANAGED_NO_ENTRY_TEXT) && !fallback.includes(MANAGED_DESK_TEXT));
+  assert.match(fallback, /then risk-manager phase 2 on your plan, if any/);
+  assert.match(MANAGED_NO_ENTRY_TEXT, /send no new entry, added size or reversal \(the order gate refuses an entry this cycle\)/);
+  assert.ok(!off.includes(MANAGED_NO_ENTRY_TEXT));
 });

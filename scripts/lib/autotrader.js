@@ -537,7 +537,9 @@ const ENTRY_TEXT = ' The runner runs this cycle\'s entry (the desk\'s reports ar
  * gate counts them from the runner's record; a role the head trader launched itself can't be ordered against that
  * record, so the gate refuses any entry this cycle. Said in place of the roster: manage, launch no desk role, no entry.
  */
-const MANAGED_DESK_TEXT = ' This cycle started with a position or working order open: it manages them, and the runner ran the desk for this bar (its reports are below). Don\'t launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat. Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.';
+const MANAGED_DESK_TEXT = ' This cycle started with a position or working order open: it manages them, and the desk\'s reports for this bar are below (the runner ran the desk, or its report cache served it). Don\'t launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat. Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.';
+/** The same managed cycle whose desk didn't complete: the head trader runs its desk (the roster), and still enters nothing. */
+const MANAGED_NO_ENTRY_TEXT = ' This cycle started with a position or working order open: it manages them; send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat. Exits, stop moves, closes and cancels go as always.';
 
 // How the skills are loaded: Claude, opencode and Qwen Code have a skill tool (which the gate sees, skills-loaded.js);
 // Codex reads them (it carries them in AGENTS.md); a custom harness, either.
@@ -609,7 +611,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -651,7 +653,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -741,6 +743,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // trader's own launch of phase 2 and the trade-executor (toolcall/rules.js). Never inherited.
   if (context && context.entry === true) env.FTH_CYCLE_ENTRY = '1';
   else delete env.FTH_CYCLE_ENTRY;
+  // A managed cycle (runner.js managedCycle, this machine's opt-in): the order gate refuses every entry (managed-cycle).
+  // Never inherited.
+  if (context && context.manage === true) env.FTH_CYCLE_MANAGE = '1';
+  else delete env.FTH_CYCLE_MANAGE;
   // A role the runner runs after the head trader for its cycle (the entry's): the head trader's cycle id, so the gate
   // log stamps its orders as the cycle's (check-order.js cycleId). Never inherited.
   if (context && typeof context.cycleId === 'string' && /^[0-9a-f]{16}$/.test(context.cycleId)) env.FTH_CYCLE_ID = context.cycleId;
@@ -1147,6 +1153,7 @@ function runnerArgv(argv) {
 module.exports = {
   ENTRY_TEXT,
   MANAGED_DESK_TEXT,
+  MANAGED_NO_ENTRY_TEXT,
   ROLES_CHECKED,
   ROLE_RUNS,
   TIMED_LAUNCHES,

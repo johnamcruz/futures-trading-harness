@@ -156,6 +156,19 @@ test('order gate allows a planned entry', () => {
   assert.strictEqual(r.code, 0, r.stderr);
 });
 
+test('order gate wiring: a managed cycle (FTH_CYCLE_MANAGE, the runner\'s) refuses the planned entry [managed-cycle]; [exit] and [protect] still go; unset, the entry goes', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const managed = { ...env, FTH_CYCLE_MANAGE: '1' };
+  const r = gate(orderPayload(), managed);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[managed-cycle\] A managed cycle .*manage only, no new entry, add or reversal/);
+  for (const rationale of ['[protect] stop for the anytime long at 21480', '[exit] flatten']) {
+    const ok = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale }), managed);
+    assert.strictEqual(ok.code, 0, `${rationale}: ${ok.stderr}`);
+  }
+  assert.strictEqual(gate(orderPayload(), env).code, 0, 'unset: the same entry goes');
+});
+
 test('order gate: a setup tag that is not first is refused with where it goes', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);

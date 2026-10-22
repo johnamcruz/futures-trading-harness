@@ -525,8 +525,8 @@ without them. A wrong value refuses the config, so no run starts.
 
 | Key | Absent (default) | Set |
 |---|---|---|
-| `deskConcurrency` | the desk runs `config/runner.json` `desk.concurrency` roles at once | a whole number from 1 up to that value, which it lowers (e.g. `1` for a model server that answers one request at a time); higher, or anything else, is refused |
-| `deskOnManagedCycles` | a managed cycle (one that started with a position or working order open) on a harness that doesn't time the head trader's own launches runs no desk of the runner's: the head trader launches its roles | `true`: the runner runs the desk there too; the head trader gets the reports, launches no role, and sends no entry that cycle (the gate refuses one); exits, stop moves, closes and cancels go as always ([TOOL-CALLS-AND-ORCHESTRATION.md](TOOL-CALLS-AND-ORCHESTRATION.md)) |
+| `deskConcurrency` | the desk runs `config/runner.json` `desk.concurrency` roles at once (`null` is the same as absent) | a whole number from 1 up to that value, which it lowers (e.g. `1` for a model server that answers one request at a time); higher, or any other value, is refused |
+| `deskOnManagedCycles` | a managed cycle (one that started with a position or working order open) on a harness that doesn't time the head trader's own launches runs no desk of the runner's: the head trader launches its roles | `true`: the runner runs the desk there too, in at most half the cycle's time; the head trader gets the reports (the runner's desk or the report cache), launches no role, and sends no entry, add or reversal that cycle (the gate refuses one: `[managed-cycle]`); exits, stop moves, closes and cancels go as always. The head trader's own management waits for the desk (at most that half); the runner's own per-bar trail, target and exit don't. On another harness it does nothing, and the runner says so at its start ([TOOL-CALLS-AND-ORCHESTRATION.md](TOOL-CALLS-AND-ORCHESTRATION.md)) |
 
 ### Replay
 
