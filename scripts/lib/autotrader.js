@@ -25,7 +25,7 @@ const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL, SESSION_DEFAULTS } = require('./trading/clock');
 const { et: etTime, etStamp } = require('./trading/session-context');
 const { historyLines, marketOf } = require('./trading/decision-history');
-const { documents, isOpencodeEvent } = require('./transcript');
+const { documents, isOpencodeEvent, unwrap } = require('./transcript');
 const opencode = require('./opencode');
 const headPrompt = require('./head-prompt');
 
@@ -790,6 +790,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // log stamps its orders as the cycle's (check-order.js cycleId). Never inherited.
   if (context && typeof context.cycleId === 'string' && /^[0-9a-f]{16}$/.test(context.cycleId)) env.FTH_CYCLE_ID = context.cycleId;
   else delete env.FTH_CYCLE_ID;
+  // A role the runner runs on its own (cycle-run.js runRole: `roleRun`): its name, so a hook tells its run from the head
+  // trader's (the stop-review reminder asks only the head trader for its CYCLE RESULT line). Never inherited.
+  if (context && typeof context.roleRun === 'string' && context.roleRun) env.FTH_ROLE_RUN = context.roleRun;
+  else delete env.FTH_ROLE_RUN;
   // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required
   // under, which the gate counts for that role under that key only.
   const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, e]) => cachedRoles.includes(r) && e && Array.isArray(e.skills) && e.skills.length && typeof e.key === 'string' && e.key) : [];
@@ -1020,54 +1024,97 @@ function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = f
 const TRANSCRIPT_EVENT = /^(?:system|assistant|user|result|(?:item|turn|thread)\.[a-z_.]+)$/;
 
 /**
- * The run's final message: { structured, final }. `structured`: the output is a harness transcript
- * (Claude stream-json, Qwen JSON, Codex --json events, opencode JSON events); `final`: its final message
+ * The run's final message: { structured, final, earlier, fromEarlier }. `structured`: the output is a harness
+ * transcript (Claude stream-json, Qwen JSON, Codex --json events, opencode JSON events); `final`: its final message
  * (Claude's and Qwen's { type: 'result', result }, Codex's last agent message, opencode's text parts after
- * its last step start or tool call), or null when it has none (a run cut short).
+ * its last step start or tool call), or null when it has none (a run cut short). `earlier`: the last result line the
+ * session's own agent wrote in its text (ownLines: a line that starts with the label), for cycleResult's fallback,
+ * in a Claude, Qwen or opencode transcript (else null). Never a subagent's or a sidechain's text (parent_tool_use_id,
+ * isSidechain; opencode's run shows its own session only, held to its first session id), a message the harness made
+ * (model "<synthetic>", opencode's synthetic or ignored parts), a tool result or a hook's feedback (user-role events).
+ * An order call or a role launch after the line (a bridged one as the tool it reaches) makes it stale (it no longer
+ * says what the cycle did), a run that ended in an error (Claude's is_error result, an opencode error event) has
+ * none, and a `planned` line is never taken (it starts the runner's entry: only a final message's line may): null.
+ * `fromEarlier`: the final message has no result line, so cycleResult gives `earlier`.
  */
 function finalMessage(output) {
   let final = null;
   let structured = false;
   let texts = []; // opencode: the text parts since its last step start or tool call
+  let earlier = null;
+  let errored = false;
+  let session = null; // opencode: the run's own session
+  const own = text => { const lines = ownLines(text); if (lines.length) earlier = lines[lines.length - 1]; };
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
       if (isOpencodeEvent(ev)) {
         structured = true;
+        if (session === null) session = ev.sessionID;
+        const mine = ev.sessionID === session;
+        if (ev.type === 'error') errored = true;
         // The model's own text (not one opencode added); a later step or tool call means it went on after it.
-        if (ev.type === 'text' && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) texts.push(ev.part.text);
-        else if (ev.type === 'tool_use' || ev.type === 'step_start') texts = [];
+        if (ev.type === 'text' && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) {
+          texts.push(ev.part.text);
+          if (mine) own(ev.part.text);
+        } else if (ev.type === 'tool_use' || ev.type === 'step_start') texts = [];
+        if (ev.type === 'tool_use' && mine && acts(ev.part.tool)) earlier = null;
         final = texts.length ? texts.join('\n') : null;
         continue;
       }
       if (!ev || typeof ev !== 'object' || !TRANSCRIPT_EVENT.test(ev.type)) continue;
       structured = true;
       if (ev.type === 'result' && typeof ev.result === 'string') final = ev.result;
+      if (ev.type === 'result' && ev.is_error === true) errored = true;
       const item = ev.type === 'item.completed' && ev.item;
       if (item && (item.type === 'agent_message' || item.type === 'assistant_message') && typeof item.text === 'string') final = item.text;
+      // Claude's and Qwen's top-level assistant turns: their text, and the calls that make an earlier line stale.
+      const msg = ev.type === 'assistant' && !ev.parent_tool_use_id && ev.isSidechain !== true ? ev.message : null;
+      if (!msg || typeof msg !== 'object' || msg.model === '<synthetic>' || !Array.isArray(msg.content)) continue;
+      for (const c of msg.content) {
+        if (c && c.type === 'text' && typeof c.text === 'string') own(c.text);
+        else if (c && c.type === 'tool_use' && acts(unwrap(String(c.name || ''), c.input).name)) earlier = null;
+      }
     }
   }
-  return { structured, final };
+  if (errored || outcomeOf(earlier) === 'planned') earlier = null;
+  return { structured, final, earlier, fromEarlier: final !== null && !resultLines(final).length && earlier !== null };
 }
+
+/** A call that acts after a result line: an order tool, or a role launch (TASK_CALL's, Qwen Code's `agent`). */
+const acts = name => ORDER_CALL.test(String(name || '')) || TASK_CALL.has(String(name || '')) || name === 'agent';
+
+/**
+ * The result lines of the session's own earlier text (finalMessage `earlier`): only a line that starts with the label
+ * (spaces, markdown marks, a list dash or a blockquote's ">" before it), never one inside the model's own narration
+ * ('I will end with "CYCLE RESULT: no-trade - ..."').
+ */
+const ownLines = text => [...String(text).matchAll(/^[ \t>*_`-]*CYCLE RESULT:[*_` \t]*([^\n]*)/gm)]
+  .map(m => resultBody(m[1])).filter(body => body && !body.startsWith('<')).map(body => `CYCLE RESULT: ${body}`);
 
 /** A result line's body without markdown emphasis or code marks; '' when nothing is left. */
 const resultBody = raw => String(raw).replace(/\*\*|__|`/g, '').replace(/^[*_\s]+|[*_\s]+$/g, '').trim();
+
+/** A message's result lines, in order, as "CYCLE RESULT: <body>": no empty body, no template ("<...>"). */
+const resultLines = text => [...String(text).matchAll(/CYCLE RESULT:[*_` \t]*([^\n]*)/g)]
+  .map(m => resultBody(m[1])).filter(body => body && !body.startsWith('<')).map(body => `CYCLE RESULT: ${body}`);
 
 /**
  * The last "CYCLE RESULT: <outcome> - <reason>" line the model reported, if any: in its final message
  * when the output is a transcript (so a prompt, skill text, or tool output echoed earlier never counts;
  * a transcript without a final message, a run cut short, reported none), else anywhere in a plain-text
- * run's output. Trivial formatting is tolerated (leading spaces, markdown bold, italics or code around
+ * run's output. A final message without one (the model answered a stop hook's reminder after its line) falls back
+ * to the last line the session's own agent wrote before (finalMessage `earlier`); a final message's line always wins.
+ * Trivial formatting is tolerated (leading spaces, markdown bold, italics or code around
  * the line, the label, or the body); the label is exact, and a line with no body or the template
  * ("CYCLE RESULT: <no-trade | ...> - <reason>") is not a result.
  */
 function cycleResult(output) {
-  const { structured, final } = finalMessage(output);
+  const { structured, final, earlier } = finalMessage(output);
   if (structured && final === null) return null;
+  if (final !== null) return resultLines(final).at(-1) || earlier;
   // In raw text a line ends at a newline, or (JSON text) at an escaped newline or a closing quote.
-  const found = final === null
-    ? [...String(output || '').matchAll(/CYCLE RESULT:[*_` \t]*([^\n"\\]*)/g)]
-    : [...final.matchAll(/CYCLE RESULT:[*_` \t]*([^\n]*)/g)];
-  const results = found.map(m => resultBody(m[1])).filter(body => body && !body.startsWith('<'));
+  const results = [...String(output || '').matchAll(/CYCLE RESULT:[*_` \t]*([^\n"\\]*)/g)]
+    .map(m => resultBody(m[1])).filter(body => body && !body.startsWith('<'));
   return results.length ? `CYCLE RESULT: ${results[results.length - 1]}` : null;
 }
 
@@ -1091,7 +1138,7 @@ function cycleOutcome(res, { result, intact, action, lookups = [], reportedResul
   // `result`: the line as scored (scoreRun); `reportedResult`: the one the agent wrote, when scored otherwise.
   return {
     ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '',
-    ...(reportedResult ? { reportedResult, resultNote } : {}), ...(agentError ? { agentError: true } : {}), lookups: Array.isArray(lookups) ? lookups : [],
+    ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), ...(agentError ? { agentError: true } : {}), lookups: Array.isArray(lookups) ? lookups : [],
   };
 }
 
@@ -1103,13 +1150,18 @@ const SCORED_HARNESSES = ['opencode', 'claude'];
 /**
  * The result a run is logged and scored with: runResult's line, and for a trade or manage cycle of a harness in
  * SCORED_HARNESSES a `blocked` line rewritten as scoredResult says, the agent's own kept: { result, reportedResult?,
- * resultNote? }.
+ * resultNote? }. A line cycleResult took from an earlier message (finalMessage `fromEarlier`) carries EARLIER_NOTE in
+ * resultNote, so the cycle log tells it from a final message's line.
  */
 function scoreRun(res, { action, harness } = {}) {
   const result = runResult(res);
   const scored = res.ok && (action === 'trade' || action === 'manage') && SCORED_HARNESSES.includes(harness) ? scoredResult(result, agentOutput(res)) : null;
-  return scored ? { result: scored.result, reportedResult: result, resultNote: scored.note } : { result };
+  const earlier = res.ok && finalMessage(agentOutput(res)).fromEarlier ? EARLIER_NOTE : null;
+  const notes = [earlier, scored && scored.note].filter(Boolean).join('; ');
+  return { result: scored ? scored.result : result, ...(scored ? { reportedResult: result } : {}), ...(notes ? { resultNote: notes } : {}) };
 }
+
+const EARLIER_NOTE = 'result line taken from an earlier message: the final message had none';
 
 // The order tools (the broker interface's names, any server prefix) and the subagent that sends entries.
 const ORDER_CALL = /(?:^|__|_)(?:place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
@@ -1253,6 +1305,8 @@ module.exports = {
   decide,
   recordRun,
   cycleResult,
+  finalMessage,
+  EARLIER_NOTE,
   runResult,
   signalDecision,
 };

@@ -21,7 +21,8 @@
  *
  * The decision on the bar: the first of an ENTRY order call (a place_order whose rationale isn't [exit] or [protect],
  * cycle-log.js RISK_REDUCING) and the head trader's last CYCLE RESULT line with an outcome other than error
- * (autotrader.js outcomeOf); a trade-executor launch is not one (it may only trail a stop). With none timed, the
+ * (autotrader.js outcomeOf; in its own text, as autotrader.js cycleResult reads it: a subagent's or a sidechain's
+ * never counts, and its last line counts when its final message has none); a trade-executor launch is not one (it may only trail a stop). With none timed, the
  * cycle's end, when the run finished and wrote such a result. The order: the first entry place_order the gate logged
  * (gate log, wall `ts`) during the run, else one in the transcript, with the gate's answer (allowed or refused).
  * The gate log's records are this cycle's by its id (check-order.js cycleId, stamped by the gateway), within the run's
@@ -110,7 +111,7 @@ function transcriptTimes(text, lineTimes = null) {
       else if (c.type === 'tool_result' && pending.has(c.tool_use_id)) {
         roles.push({ ...pending.get(c.tool_use_id), end: at, ok: c.is_error !== true });
         pending.delete(c.tool_use_id);
-      } else if (c.type === 'text' && ev.type === 'assistant' && decides(c.text)) decided.push(at);
+      } else if (c.type === 'text' && ev.type === 'assistant' && !ev.parent_tool_use_id && ev.isSidechain !== true && decides(c.text)) decided.push(at);
     }
     if (ev.type === 'result' && decides(ev.result)) decided.push(at);
     // Qwen's session parts.

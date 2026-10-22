@@ -413,6 +413,111 @@ test('cycleResult: a transcript cut short has no result; formatting inside the b
   assert.strictEqual(cycleResult(codex), 'CYCLE RESULT: no-trade - final');
 });
 
+// --- The fallback: a final message without the line gives the session's own last line (a stop hook's reminder after it). ---
+const MANAGED = 'CYCLE RESULT: managed - MNQ short 1 from 13480.25 is open; protective stop at 13490.25 working; no new order this cycle.';
+const sj = evs => evs.map(e => JSON.stringify(e)).join('\n');
+const said = (text, extra = {}) => ({ type: 'assistant', ...extra, message: { role: 'assistant', content: [{ type: 'text', text }] } });
+const called = (name, id = 'c1', input = {}) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+const answered = (id, content) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+const ended = result => ({ type: 'result', subtype: 'success', is_error: false, result });
+const STOPPED = 'The entry from this cycle is still open, so there is no review to write yet. The protective stop is working. I\'m stopping here.';
+
+test('cycleResult regression: a managed cycle whose stop hook asked again after its line (the replay transcript\'s shape) keeps its line', () => {
+  const { runResult } = require('../../scripts/lib/autotrader');
+  const out = sj([
+    { type: 'system', subtype: 'init' },
+    said(`Position managed.\n\n${MANAGED}`),
+    { type: 'user', isSynthetic: true, message: { role: 'user', content: [{ type: 'text', text: 'Stop hook feedback:\n[stop:trading:review-reminder]: 1 entry this trading day has no review. If the trade is closed, run /trade-review. If it is still open, confirm the protective stop is working with list_open_orders, then you may stop. Then end your reply with this cycle\'s CYCLE RESULT line again, as its last line.' }] } },
+    called('mcp__broker__list_open_orders', 'l1', { accountId: 1 }),
+    answered('l1', '[{"id":7,"type":4,"side":0,"size":1,"stopPrice":13490.25}]'),
+    said(STOPPED),
+    ended(STOPPED),
+  ]);
+  assert.strictEqual(cycleResult(out), MANAGED);
+  assert.strictEqual(runResult({ ok: true, stdout: out }), MANAGED, 'logged with its line, not "(none reported)"');
+  assert.strictEqual(cycleOutcome({ ok: true, stdout: out }, { result: MANAGED, intact: true, action: 'manage' }).ok, true, 'a decision: no failed cycle, no retry');
+  // A failed run is still its error, whatever it wrote.
+  assert.strictEqual(runResult({ ok: false, timedOut: false, code: 1, stdout: out }), 'CYCLE RESULT: error - exit 1');
+});
+
+test('cycleResult fallback: the final message\'s line wins; only the session\'s own text counts; no line anywhere is none', () => {
+  const { runResult } = require('../../scripts/lib/autotrader');
+  const earlier = 'CYCLE RESULT: no-trade - first look';
+  // The final message's line wins over an earlier one.
+  assert.strictEqual(cycleResult(sj([said(earlier), said(`Done.\n${MANAGED}`), ended(`Done.\n${MANAGED}`)])), MANAGED);
+  assert.strictEqual(cycleResult(sj([said(earlier), ended(`Done.\n${MANAGED}`)])), MANAGED, 'the result event\'s line, with a different earlier one');
+  // Without one in the final message: the last own line, of several (a template never counts).
+  assert.strictEqual(cycleResult(sj([said(earlier), said(`${MANAGED}\nCYCLE RESULT: <no-trade | managed> - <reason>`), said(STOPPED), ended(STOPPED)])), MANAGED);
+  // A subagent's, a sidechain's or the harness's own message never counts.
+  for (const extra of [{ parent_tool_use_id: 'toolu_1' }, { isSidechain: true }]) assert.strictEqual(cycleResult(sj([said(MANAGED, extra), ended(STOPPED)])), null, JSON.stringify(extra));
+  assert.strictEqual(cycleResult(sj([{ type: 'assistant', message: { model: '<synthetic>', content: [{ type: 'text', text: MANAGED }] } }, ended(STOPPED)])), null, 'synthetic');
+  // Hook feedback and tool results (user-role events) never count.
+  assert.strictEqual(cycleResult(sj([{ type: 'user', message: { role: 'user', content: [{ type: 'text', text: `Stop hook feedback:\n${MANAGED}` }] } }, ended(STOPPED)])), null, 'hook feedback');
+  assert.strictEqual(cycleResult(sj([called('Skill', 's1'), answered('s1', MANAGED), ended(STOPPED)])), null, 'tool result');
+  // An order call or a role launch after the line makes it stale; a read doesn't.
+  assert.strictEqual(cycleResult(sj([said(earlier), called('mcp__broker__place_order'), ended(STOPPED)])), null, 'order after the line');
+  assert.strictEqual(cycleResult(sj([said(earlier), called('Task', 't1', { subagent_type: 'trade-executor' }), ended(STOPPED)])), null, 'launch after the line');
+  assert.strictEqual(cycleResult(sj([said(earlier), called('mcp__broker__list_open_orders'), ended(STOPPED)])), earlier, 'a read after the line');
+  // A run that ended in an error result keeps no earlier line; a run cut short (no final message) has none.
+  assert.strictEqual(cycleResult(sj([said(MANAGED), { type: 'result', subtype: 'error_during_execution', is_error: true, result: 'stopped' }])), null, 'error result');
+  assert.strictEqual(cycleResult(sj([said(MANAGED)])), null, 'cut short');
+  // No line anywhere: "(none reported)".
+  assert.strictEqual(runResult({ ok: true, stdout: sj([said('Looking.'), said(STOPPED), ended(STOPPED)]) }), 'CYCLE RESULT: (none reported)');
+  // Qwen's JSON array, Claude-shaped: the same rule.
+  assert.strictEqual(cycleResult(`Warning\n${JSON.stringify([{ type: 'system' }, said(MANAGED), said(STOPPED), ended(STOPPED)])}`), MANAGED, 'qwen');
+});
+
+test('cycleResult fallback, opencode: its own session\'s text before its last tool call; Codex keeps its last agent message', () => {
+  const oc = (type, part, sessionID = 'ses_head') => ({ type, timestamp: 1, sessionID, part });
+  const text = (t, sid) => oc('text', { type: 'text', text: t }, sid);
+  const tool = name => oc('tool_use', { type: 'tool', tool: name, state: { status: 'completed', input: {}, output: '[]' } });
+  assert.strictEqual(cycleResult(sj([text(MANAGED), tool('broker_list_open_orders'), text(STOPPED)])), MANAGED);
+  assert.strictEqual(cycleResult(sj([text('CYCLE RESULT: no-trade - early'), tool('broker_list_open_orders'), text(`ok\n${MANAGED}`)])), MANAGED, 'the final text\'s line wins');
+  assert.strictEqual(cycleResult(sj([text('start'), text(MANAGED, 'ses_child'), tool('broker_list_open_orders'), text(STOPPED)])), null, 'another session\'s text');
+  assert.strictEqual(cycleResult(sj([text(MANAGED), oc('text', { type: 'text', text: STOPPED, synthetic: true }), tool('x'), text(STOPPED)])), MANAGED);
+  assert.strictEqual(cycleResult(sj([oc('text', { type: 'text', text: MANAGED, synthetic: true }), tool('x'), text(STOPPED)])), null, 'opencode\'s synthetic text');
+  assert.strictEqual(cycleResult(sj([text(MANAGED), tool('broker_place_order'), text(STOPPED)])), null, 'an order after the line');
+  assert.strictEqual(cycleResult(sj([text(MANAGED), tool('task'), text(STOPPED)])), null, 'a launch after the line');
+  assert.strictEqual(cycleResult(sj([text(MANAGED), { type: 'error', timestamp: 1, sessionID: 'ses_head', error: { name: 'APIError' } }, tool('x'), text(STOPPED)])), null, 'an error event');
+  // Codex: no fallback (its items don't say which agent wrote them).
+  const codex = [{ type: 'item.completed', item: { type: 'agent_message', text: MANAGED } }, { type: 'item.completed', item: { type: 'agent_message', text: STOPPED } }];
+  assert.strictEqual(cycleResult(sj(codex)), null);
+});
+
+test('cycleResult fallback, review fixes: Qwen\'s bridged order call stales a line; a `planned` line is never recovered; narration is no line; the recovery is noted', () => {
+  const { runResult, scoreRun, finalMessage, EARLIER_NOTE } = require('../../scripts/lib/autotrader');
+  // (1) Qwen Code's tool_call bridge (tests/fixtures/qwen-bridge-transcript.json's shape): the tool it reaches decides.
+  const bridged = (name, args = {}) => ({ type: 'assistant', session_id: 'session-1', parent_tool_use_id: null, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'call-9', name: 'tool_call', input: { name, arguments: args } }] } });
+  const qwen = evs => JSON.stringify([{ type: 'system', subtype: 'init', session_id: 'session-1', tools: ['tool_call', 'agent'] }, ...evs]);
+  assert.strictEqual(cycleResult(qwen([said(MANAGED), bridged('mcp__broker__place_order', { side: 1 }), said(STOPPED), ended(STOPPED)])), null, 'a bridged order after the line');
+  assert.strictEqual(cycleResult(qwen([said(MANAGED), bridged('mcp__broker__list_open_orders'), said(STOPPED), ended(STOPPED)])), MANAGED, 'a bridged read');
+  assert.strictEqual(cycleResult(qwen([said(MANAGED), called('agent', 'a1', { subagent_type: 'trade-executor' }), said(STOPPED), ended(STOPPED)])), null, 'Qwen\'s agent launch');
+  // (2) A `planned` line (it starts the runner's entry) only ever from the final message.
+  const planned = 'CYCLE RESULT: planned - trade_lifecycle long 1';
+  assert.strictEqual(runResult({ ok: true, stdout: sj([said(planned), said('I stand aside.'), ended('I stand aside.')]) }), 'CYCLE RESULT: (none reported)');
+  assert.strictEqual(cycleResult(sj([said(MANAGED), said(`**${planned.replace('planned', 'Planned')}**`), said(STOPPED), ended(STOPPED)])), null, 'the last own line is planned: none, never an older one');
+  assert.strictEqual(cycleResult(sj([said(planned), ended(`ok\n${planned}`)])), planned, 'a final message\'s planned line stands');
+  for (const line of ['CYCLE RESULT: executed - orb long 1', 'CYCLE RESULT: no-trade - quiet', 'CYCLE RESULT: blocked - [loss-streak] cooldown', MANAGED]) {
+    assert.strictEqual(cycleResult(sj([said(line), said(STOPPED), ended(STOPPED)])), line, line);
+  }
+  // (3) Only a line that starts with the label: the model's narration is none; within a message the last such line.
+  const narration = 'I will end with "CYCLE RESULT: no-trade - nothing set up" if nothing sets up.';
+  assert.strictEqual(cycleResult(sj([said(narration), said(STOPPED), ended(STOPPED)])), null, 'narration');
+  assert.strictEqual(cycleResult(sj([said(`- **CYCLE RESULT:** no-trade - early\n> CYCLE RESULT: no-trade - later\n${narration}`), said(STOPPED), ended(STOPPED)])), 'CYCLE RESULT: no-trade - later');
+  assert.strictEqual(cycleResult(sj([said(`Done. ${MANAGED}`), ended(`Done. ${MANAGED}`)])), MANAGED, 'a final message\'s line stays read anywhere in it');
+  // (4) The recovery is visible: fromEarlier, and scoreRun's note; a final message's line has none.
+  const recovered = sj([said(MANAGED), said(STOPPED), ended(STOPPED)]);
+  assert.deepStrictEqual([finalMessage(recovered).fromEarlier, finalMessage(sj([said(MANAGED), ended(MANAGED)])).fromEarlier], [true, false]);
+  assert.deepStrictEqual(scoreRun({ ok: true, stdout: recovered }, { action: 'manage', harness: 'claude' }), { result: MANAGED, resultNote: EARLIER_NOTE });
+  assert.deepStrictEqual(scoreRun({ ok: true, stdout: sj([said(MANAGED), ended(MANAGED)]) }, { action: 'manage', harness: 'claude' }), { result: MANAGED });
+  assert.deepStrictEqual(scoreRun({ ok: false, code: 1, stdout: recovered }, { action: 'manage', harness: 'claude' }), { result: 'CYCLE RESULT: error - exit 1' }, 'a failed run: no note');
+  // With a blocked line rescored too: both notes.
+  const blocked = sj([said('CYCLE RESULT: blocked - nothing fired'), called('mcp__broker__list_open_orders'), said(STOPPED), ended(STOPPED)]);
+  const s = scoreRun({ ok: true, stdout: blocked }, { action: 'trade', harness: 'claude' });
+  assert.deepStrictEqual([s.result, s.reportedResult], ['CYCLE RESULT: no-trade - nothing fired', 'CYCLE RESULT: blocked - nothing fired']);
+  assert.match(s.resultNote, new RegExp(`^${EARLIER_NOTE}; reported blocked`));
+});
+
 test('every cycle prompt ends with the exact result line the runner reads', () => {
   const cfg = validateConfig({ harness: 'claude', account: '1' });
   const p = prompts(cfg, new Date('2026-10-07T14:03:02Z'), ROOT);
@@ -1447,6 +1552,15 @@ test('a cycle where the runner runs the entry: FTH_CYCLE_ENTRY for the head trad
   }
   assert.strictEqual(env({ action: 'trade', symbols: [], cycleId: '0123456789abcdef' }).FTH_CYCLE_ID, '0123456789abcdef');
   for (const cycleId of ['0123', 'not hex at all!!', 7, null]) assert.strictEqual(env({ action: 'trade', symbols: [], cycleId }, { FTH_CYCLE_ID: 'ffffffffffffffff' }).FTH_CYCLE_ID, undefined, String(cycleId));
+  // A role the runner runs on its own (runRole's roleRun): FTH_ROLE_RUN, its name, for that run only; the head trader's
+  // run never inherits it (the stop-review reminder asks only the head trader for its result line).
+  for (const harness of ['opencode', 'claude']) {
+    const c = validateConfig({ harness, dataDir: '/data/bars' });
+    assert.strictEqual(childEnv(c, '/r', { FTH_HOME: '/srv/fth' }, { action: 'trade', symbols: [], roleRun: 'trade-executor' }).FTH_ROLE_RUN, 'trade-executor', harness);
+    for (const context of [{ action: 'trade', symbols: [] }, { action: 'trade', symbols: [], roleRun: '' }, { action: 'trade', symbols: [], roleRun: 7 }, null]) {
+      assert.strictEqual(childEnv(c, '/r', { FTH_HOME: '/srv/fth', FTH_ROLE_RUN: 'risk-manager' }, context).FTH_ROLE_RUN, undefined, `${harness} ${JSON.stringify(context)}`);
+    }
+  }
   // The prompt: the route, before the desk's reports; not the roster's own phase 2 and executor.
   const { prompts, ENTRY_TEXT } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', symbols: ['MNQ'] });
