@@ -804,6 +804,10 @@ test('stop hook asks once for a review of unreviewed entries', () => {
   const auto = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js')).run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1' }, now: new Date(TEST_NOW) });
   assert.strictEqual(auto.exitCode, 2);
   assert.match(auto.stderr, /then you may stop\. Then end your reply with this cycle's CYCLE RESULT line again, as its last line\./);
+  // A role the runner runs on its own (FTH_ROLE_RUN: the trade-executor, the desk) writes no CYCLE RESULT line.
+  const role = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js')).run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1', FTH_ROLE_RUN: 'trade-executor' }, now: new Date(TEST_NOW) });
+  assert.strictEqual(role.exitCode, 2);
+  assert.match(role.stderr, /then you may stop\.$/);
 });
 
 test('MCP gateway blocks a bad order end to end and forwards everything else', async () => {
