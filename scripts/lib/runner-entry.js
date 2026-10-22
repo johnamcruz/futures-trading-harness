@@ -28,8 +28,11 @@
  *   5. phase `execute`: the trade-executor with those exact arguments and phase 2's verdict line, never run again (the
  *      workflow's orders phase: retries 0), its run recorded (it ends the round, as a launch does);
  *   6. the after-order read through the adapter (accountState): the cycle's outcome. Executed when the account shows a
- *      position on the root's family or the gateway recorded this record's entry (entry-orders.json); else blocked with
- *      the gate's refusal (its log, this cycle's id) or the executor's own BLOCKED or ABORTED report; else a failed
+ *      position on the root's family, the entry working unfilled (workingEntry) or the gateway recorded this record's
+ *      entry (entry-orders.json); else, when the
+ *      gate let a place_order of this cycle through (its log, this cycle's id, the hook's records and the gateway's),
+ *      the order's (a later refused retry never hides it); else blocked with the gate's refusal (the same log) or the
+ *      executor's own BLOCKED or ABORTED report; else a failed
  *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
  *
  *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
@@ -68,6 +71,33 @@ const CUT = () => require('./tunables').runner().prompt.planChars;
 const LE_BARS = require('./tunables').runner().gate.signalMaxAgeBars;
 const short = text => { const n = CUT(); const t = String(text || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 3)}...` : t; };
 
+// The broker interface's codes (broker/interface.js ENUMS: docs/BROKER-MCP-INTERFACE.md): an order's side, type and
+// status; a working order is open or pending. A code or its name.
+const { ENUMS } = require('./broker/interface');
+const SIDE_CODE = ENUMS.side;
+const TYPE_CODE = ENUMS.orderType;
+const WORKING = ['open', 'pending'];
+const sameCode = (got, name, codes) => (typeof got === 'number' || /^\s*\d+\s*$/.test(String(got ?? '')) ? Number(got) === codes[name] : String(got ?? '').toLowerCase() === name);
+const working = s => s === undefined || s === null || WORKING.some(n => sameCode(s, n, ENUMS.orderStatus));
+
+/**
+ * The account's working order that is this entry's, or null: on the entry's own contract (its root, never another of
+ * the family, and its month when both name one), on the entry's side and of its order type (a protective stop or
+ * target of a position is the other side, or a stop), and open or pending when the order states a status. The entry
+ * starts flat with no working orders (runner.js entryCycle), so such an order is the one this cycle placed.
+ */
+function workingEntry(orders, args) {
+  if (!Array.isArray(orders) || !args) return null;
+  const { parseStandardName } = require('./broker/translator');
+  const month = id => (parseStandardName(id) || {}).month || null;
+  const want = { root: contractRoot(args.contractId), month: month(args.contractId), side: String(args.side || '').toLowerCase(), type: String(args.type || '').toLowerCase() };
+  if (!(want.side in SIDE_CODE) || !(want.type in TYPE_CODE)) return null;
+  return orders.find(o => o && typeof o === 'object' && contractRoot(o.contractId) === want.root
+    && !(want.month && month(o.contractId) && month(o.contractId) !== want.month)
+    && sameCode(o.side, want.side, SIDE_CODE) && sameCode(o.type, want.type, TYPE_CODE)
+    && working(o.status)) || null;
+}
+
 /** The decision's record: the latest compose record on the cycle's bar for the root (any side); it must be OK. */
 function entryDue(records) {
   const list = Array.isArray(records) ? records : [];
@@ -98,18 +128,33 @@ const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict
 
 /**
  * The gate's last refusal of a place_order in this cycle (the gate log, stamped with the cycle's id: check-order.js
- * cycleId), at or after `sinceMs`: { checks, message } or null. Never throws.
+ * cycleId), at or after `sinceMs`: { checks, message } or null (the last decision is not a refusal). Never throws.
  */
 function gateRefusal(env, id, sinceMs) {
-  const d = gateDecision(env, id, sinceMs);
-  return d && d.decision === 'blocked' ? { checks: d.checks, message: d.message } : null;
+  const list = placeOrderDecisions(env, id, sinceMs);
+  const last = list[list.length - 1];
+  return last && last.decision === 'blocked' ? { checks: last.checks, message: last.message } : null;
 }
 
 /**
- * The gate's last place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, checks,
- * message } or null. `allowed` means the order went to the broker (whatever its reply). Never throws.
+ * The gate's place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, ts, checks,
+ * message, refusedAfter } or null. `allowed` means an order went to the broker (whatever its reply): any allowed
+ * place_order of the cycle wins over a refusal, before or after it (a refused retry never hides an order that went);
+ * it is the first allowed one (the order's moment), with the last refusal after it as `refusedAfter` ({ checks,
+ * message }, else null). With none allowed, the last refusal. The hook's and the gateway's records alike, by the tool
+ * each logged (`place_order` only: a refused modify_order or cancel_order is never the entry's); a record naming no
+ * tool is none. Never throws.
  */
 function gateDecision(env, id, sinceMs) {
+  const list = placeOrderDecisions(env, id, sinceMs);
+  const at = list.findIndex(e => e.decision === 'allowed');
+  if (at < 0) return list.length ? { ...list[list.length - 1], refusedAfter: null } : null;
+  const later = list.slice(at + 1).filter(e => e.decision === 'blocked').pop();
+  return { ...list[at], refusedAfter: later ? { checks: later.checks, message: later.message } : null };
+}
+
+/** This cycle's place_order decisions (allowed or blocked) in the gate log's tail at or after `sinceMs`, in order. */
+function placeOrderDecisions(env, id, sinceMs) {
   try {
     const { gateLogPath } = require('./trading/check-order');
     const file = gateLogPath(env);
@@ -125,18 +170,21 @@ function gateDecision(env, id, sinceMs) {
     } finally {
       fs.closeSync(fd);
     }
-    let last = null;
+    const recs = [];
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
       if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
-      last = e;
+      recs.push({ ...e, ms: Date.parse(e.ts) });
     }
-    if (!last) return null;
-    const v = Array.isArray(last.violations) ? last.violations : [];
-    return { decision: last.decision, ts: last.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
+    // One call the gateway allowed and its order tracker then refused to send (two records, nothing sent) is one refusal,
+    // as the cycle log and the labels read it (replay/labels.js collapsePairs).
+    return require('./replay/labels').collapsePairs(recs).map(e => {
+      const v = Array.isArray(e.violations) ? e.violations : [];
+      return { decision: e.decision, ts: e.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(e.message || '') };
+    });
   } catch (_err) {
-    return null;
+    return [];
   }
 }
 
@@ -146,21 +194,51 @@ function gateDecision(env, id, sinceMs) {
  *   refusal   the gate's refusal this cycle ({ checks, message }) or null
  *   report    the executor's report (its BLOCKED or ABORTED line), or ''
  *   failed    the executor's run didn't count (its stop and why), or null
+ *   working   the account's working order that is this entry's (workingEntry), or null: entered, unfilled
  *   sent      its place_order call completed (the gate let it through): with nothing on the account, the broker took none
+ *   attempted it made a place_order call, completed or not (its transcript): with no gate decision of it, unknown
  *   allowed   the gate let a place_order of this cycle through (its log), whatever the broker's reply
+ *   unread    the account wasn't read after the order (no account, or its read failed): a sent order is unknown
  * The gate let it through and its call never completed (a lost or late reply, a timeout): the order's outcome is
  * unknown, never a refusal (the gateway's order tracker holds new entries as pending until it settles). The result
  * word is `executed`, so the next cycles treat it as possibly placed; the outcome is `unknown`.
  */
-function entryOutcome({ entered, filled = false, refusal = null, report = '', failed = null, sent = false, allowed = false, label }) {
-  if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : 'went'})`, why: null };
-  if (refusal) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
+/** A working order as the result names it: `: order <id>, <type> <price>`, as much as it states. */
+function restingOf(o) {
+  const type = Object.keys(TYPE_CODE).find(k => sameCode(o.type, k, TYPE_CODE)) || null;
+  const price = Number.isFinite(Number(o.limitPrice)) && o.limitPrice !== null ? o.limitPrice : Number.isFinite(Number(o.stopPrice)) && o.stopPrice !== null ? o.stopPrice : null;
+  const parts = [o.id !== undefined && o.id !== null ? `order ${o.id}` : null, [type, price].filter(x => x !== null).join(' ') || null].filter(Boolean);
+  return parts.length ? `: ${parts.join(', ')}` : '';
+}
+
+function entryOutcome({ entered, filled = false, working = null, refusal = null, report = '', failed = null, sent = false, attempted = false, allowed = false, unread = false, label }) {
+  if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : working ? `is working, unfilled${restingOf(working)}` : 'went'})`, why: null };
+  // A refusal never hides an order the gate let through this cycle (gateDecision: allowed wins).
+  if (refusal && !allowed) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
   if (allowed && !sent) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (its reply never came and the account doesn't show it): treat it as possibly placed`, why: short(report) || 'no reply' };
+  // The order went (the gate let it through, or its call completed) and the account couldn't be read after it (nor the
+  // gateway's record found): unknown, never refused, whatever the executor says.
+  if ((allowed || sent) && unread) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (the order went and the account can't be read after it): treat it as possibly placed`, why: short(report) || 'the account can\'t be read' };
+  // A place_order call was made, never completed, and the gate log holds no decision of it (none can be read): unknown.
+  if (attempted && !sent && !allowed && !refusal) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (a place_order call was made, its reply never came and the gate log has no decision of it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
-  if (said) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
+  // A BLOCKED report after the gate let an order through is a refused retry's: the order's outcome decides.
+  if (said && !(allowed && said[1] === 'BLOCKED')) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
   if (sent) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was refused by the broker: the order went and the account shows no position or entry (the executor's report: ${short(report) || 'none'})`, why: short(report) };
   return { outcome: 'no-trade', result: `CYCLE RESULT: no-trade - the runner's entry: the trade-executor ${failed ? `${failed.stop}${failed.why ? ` (${failed.why})` : ''}` : 'sent no order'}: no order`, why: failed ? failed.why : 'no order' };
+}
+
+// A place_order call in a run's transcript (any server prefix), completed, errored or unanswered; one its harness stopped
+// itself (an unavailable tool, a permission rule) never reached a tool.
+const PLACE_ORDER = /(?:^|__|_)place_order$/;
+function attemptedOrder(exec) {
+  if (!exec) return false;
+  try {
+    return require('./cycle-log').toolCalls(String(exec.output || '')).some(x => PLACE_ORDER.test(x.name) && !x.stopped);
+  } catch (_err) {
+    return false;
+  }
 }
 
 async function runEntry(deps, c) {
@@ -339,13 +417,16 @@ async function runEntry(deps, c) {
     entered = entryOrders(home).some(e => e && e.composed && e.composed.record === rec.id);
   } catch (_err) { /* none recorded */ }
   let account = null;
+  let rest = null;
   if (Number.isInteger(c.accountId) && client && typeof client.accountState === 'function') {
     try {
       const st = await client.accountState(c.accountId);
       const fam = famOf(order.args.contractId);
       const pos = (st.positions || []).filter(isOpen).filter(p => famOf(p.contractId) === fam);
       filled = pos.length > 0;
-      entered = entered || filled;
+      // The entry resting unfilled (a working order on its contract, side and type: workingEntry) is the broker's too.
+      rest = filled ? null : workingEntry(st.orders, order.args);
+      entered = entered || filled || Boolean(rest);
       account = { positions: pos.length, orders: (st.orders || []).filter(o => famOf(o.contractId) === fam).length };
     } catch (err) {
       log(`the entry: the account can't be read after the order (${err.message}): the outcome from the gateway's record and the executor's report`, 'error');
@@ -355,14 +436,17 @@ async function runEntry(deps, c) {
   const sent = gateDecision(env, id, sentAt - require('./tunables').runner().session.gateSlackMs);
   // The order's moment: the gate's decision that let it go to the broker (its log's time, the wall clock); none, null.
   info.timing.orderMs = sent && sent.decision === 'allowed' ? sinceClose(Date.parse(sent.ts)) : null;
+  // An order went and a later place_order of the cycle was refused: the outcome is the order's, the retry's refusal logged.
+  if (sent && sent.decision === 'allowed' && sent.refusedAfter) log(`the entry: a later place_order of the cycle (a retry) was refused by the order gate after the order went: ${short(sent.refusedAfter.message)}`, 'error');
   const decision = entered ? null : sent;
   const out = entryOutcome({
-    entered, filled, refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',
+    entered, filled, working: rest, unread: !account || Boolean(account.error), refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',
     failed: exec && !exec.ok ? { stop: exec.stop, why: exec.why } : null, label,
     sent: Boolean(exec && Array.isArray(exec.tools) && exec.tools.includes(`${require('./broker/config').SERVER_NAME}_place_order`)),
+    attempted: attemptedOrder(exec),
   });
   if (out.outcome !== 'executed') log(`the entry: ${out.result}`, out.outcome === 'blocked' ? 'info' : 'error');
   return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });
 }
 
-module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, entryOutcome, runEntry };
+module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, workingEntry, entryOutcome, runEntry };
