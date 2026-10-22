@@ -138,7 +138,7 @@ test('claudeLookupsInTranscript: a Claude Code skill_lookup counts only answered
   const res = (id, text, extra = {}) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], ...extra }] } });
   const text = [
     use('a', 'rejection'), res('a', '<skill name="rejection">\n...\n</skill>\n'),
-    use('b', 'breakout'), res('b', 'no skill "breakout"', { is_error: true }),
+    use('b', 'breakout'), res('b', '<skill name="breakout">\n...\n</skill>\n', { is_error: true }),
     use('c', 'invalidation'), res('c', '<skill name="other">\n...\n</skill>\n'),
     use('d', 'absorption'), res('d', 'Every skill of the harness (88)'),
     use('e', 'session-timing', { parent_tool_use_id: 'p1' }), res('e', '<skill name="session-timing">\n...\n</skill>\n'),

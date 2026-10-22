@@ -3587,6 +3587,15 @@ test('claude head prompt (gate): the attested prompt addition\'s skills and the 
   for (const s of [...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY]) assert.ok(att.skills.includes(s), `attested: ${s}`);
   assert.strictEqual(att.harness, 'claude');
   assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'the gateway: the runner\'s stream');
+  // A session-start hook's system events before the init (Claude Code streams them first): the init still names it.
+  const H = require('../../scripts/lib/head-prompt');
+  const hooked = path.join(dir, 'logs', 'cycle-transcript-hooked.jsonl');
+  fs.writeFileSync(hooked, `${JSON.stringify({ type: 'system', subtype: 'hook_response', session_id: 'x', output: 'session start' })}\n${fs.readFileSync(cfg.cycleTranscript, 'utf8')}`);
+  assert.strictEqual(H.claudeStreamSession(hooked), CLAUDE_SESSION);
+  assert.deepStrictEqual(skillChecks(headGate({ ...cfg, cycleTranscript: hooked, headPromptAttestation: JSON.stringify({ ...att, cycle: require('../../scripts/lib/trading/check-order').cycleId({ FTH_CYCLE_TRANSCRIPT: hooked }) }) }, entryOrder(), { transcriptPath: session })), []);
+  // Anything but system events before an init: not a run's stream.
+  fs.writeFileSync(hooked, `${JSON.stringify({ type: 'assistant', message: { content: [] } })}\n${fs.readFileSync(cfg.cycleTranscript, 'utf8')}`);
+  assert.strictEqual(H.claudeStreamSession(hooked), null);
   assert.deepStrictEqual(skillChecks(headGate(cfg, entryOrder(), { transcriptPath: session })), [], 'the hook: the head trader\'s own session file');
   // A subagent's hook (the head trader's trade-executor): its file, paired with the session's main one.
   const sub = path.join(dir, 'projects', CLAUDE_SESSION, 'subagents', 'agent-1.jsonl');

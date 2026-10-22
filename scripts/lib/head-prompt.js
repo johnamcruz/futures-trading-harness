@@ -247,12 +247,17 @@ function headOf(file) {
   }
 }
 
-/** A Claude Code `-p --output-format stream-json` run's session id (its first event, the init), or null. */
+/**
+ * A Claude Code `-p --output-format stream-json` run's session id, from its init event (the first `system` init at the
+ * stream's start: a session-start hook's system events may come before it), or null. Only whole lines count: a tool's
+ * output is a string inside an event, never a line of its own.
+ */
 function claudeStreamSession(file) {
   for (const line of headOf(file).split('\n')) {
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
-    return ev && ev.type === 'system' && ev.subtype === 'init' && typeof ev.session_id === 'string' && ev.session_id ? ev.session_id : null;
+    if (!ev || typeof ev !== 'object' || ev.type !== 'system') return null; // no init first: not a run's stream
+    if (ev.subtype === 'init') return typeof ev.session_id === 'string' && ev.session_id ? ev.session_id : null;
   }
   return null;
 }
