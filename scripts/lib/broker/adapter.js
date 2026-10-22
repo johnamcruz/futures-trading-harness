@@ -249,10 +249,13 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return outcome(await order('cancel_order', { accountId: Number(accountId), orderId: Number(orderId) }), `cancel order ${orderId}`);
     },
 
-    /** Move a protective stop (toward the market only: the gateway refuses anything else). */
-    async modifyStop(accountId, orderId, stopPrice) {
-      // No reason: a price move needs none, and the server would journal it as a note.
-      return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), stopPrice }), `modify order ${orderId}`);
+    /**
+     * Move a protective stop (toward the market only: the gateway refuses anything else). A trail's move sends no
+     * reason (a price move needs none, and the server would journal it as a note); a `reason` (the runner's "[protect]
+     * the plan's stop ...": runner.js guardFill) is sent, journaled as why it moved.
+     */
+    async modifyStop(accountId, orderId, stopPrice, reason = null) {
+      return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), stopPrice, ...(reason ? { reason: String(reason) } : {}) }), `modify order ${orderId}`);
     },
 
     /** Flatten a contract's position at market. */

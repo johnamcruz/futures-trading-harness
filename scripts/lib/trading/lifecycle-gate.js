@@ -34,7 +34,8 @@
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot })
- *                                   { message: why it is refused | null, check, record, plan, room, expiresAt }
+ *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing }
+ *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
  *   reversalAllowed({ home, root, side, check, now, maxAgeMin })   D2 (the owner's "CHoCH at or above the trend"): whether a composed
  *                                   entry against the prevailing trend (mtf-state's record) stands on the re-checked
@@ -205,7 +206,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,
     // against the R its target needs.
     const room = { stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null };
-    return { message: null, check, record: rec, plan: p, room, expiresAt: new Date(expiry).toISOString() };
+    return { message: null, check, record: rec, plan: p, room, expiresAt: new Date(expiry).toISOString(), briefing: b };
   } catch (err) {
     return say(`the check failed (${err.message}): no entry (fails closed)`);
   }

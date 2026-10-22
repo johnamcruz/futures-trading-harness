@@ -31,7 +31,8 @@ const EXPIRES = '2026-10-07T14:06:00.000Z';
 
 function briefing(over = {}) {
   return {
-    symbol: 'MNQ', minutes: 3, asOf: BAR,
+    // The bar's close and its time, as buildBriefing writes them (the late-entry check's local price: late-entry.js).
+    symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: CLOSE, price: 21540.25,
     sections: {
       m3: {
         version: 'v-scenario-1', validUntil: NEXT_CLOSE,

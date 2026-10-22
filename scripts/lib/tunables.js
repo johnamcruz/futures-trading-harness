@@ -112,7 +112,7 @@ const RUNNER = {
     planMaxAgeMin: int(1), maxConsecutiveLosses: int(1), lossCooldownMin: int(0), maxDailyLosses: int(1), maxEntriesPerDay: int(0),
     mtfMaxAgeMin: int(1), signalMaxAgeBars: int(1), signalMaxAgeCeilingMin: int(1), futureToleranceMin: nonneg(), minConfluence: int(1),
     maxCorrelatedPositions: int(1), noEntryWindows: list(str()), bracketToleranceTicks: nonneg(), bracketSpanToleranceTicks: nonneg(),
-    factsMinChecked: int(0), factsMaxItems: int(1),
+    factsMinChecked: int(0), factsMaxItems: int(1), lateEntryDriftShare: frac(),
   },
   lifecycle: { maxSize: int(1) }, // the stop's buffer and floor are the strategy's own: strategies/trade_lifecycle/STRATEGY.md risk
   account: { snapshotMaxAgeMs: int(1), balanceToleranceUsd: nonneg(), snapshotFutureToleranceMs: ms(), verdictsKept: int(1) },
@@ -200,7 +200,7 @@ const PINS = deepFreeze({
     'gate.planMaxAgeMin': 120, 'gate.maxConsecutiveLosses': 2, 'gate.lossCooldownMin': 30, 'gate.maxDailyLosses': 3, 'gate.maxEntriesPerDay': 6, 'gate.mtfMaxAgeMin': 15,
     'gate.signalMaxAgeBars': 3, 'gate.signalMaxAgeCeilingMin': 45, 'gate.futureToleranceMin': 1, 'gate.minConfluence': 1, 'gate.maxCorrelatedPositions': 1,
     'gate.noEntryWindows': ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], 'gate.bracketToleranceTicks': 1, 'gate.bracketSpanToleranceTicks': 2,
-    'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20,
+    'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20, 'gate.lateEntryDriftShare': 0.25,
     'lifecycle.maxSize': 100,
     'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
     'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,
@@ -227,7 +227,7 @@ const BUILT_IN = deepFreeze({
       planMaxAgeMin: 120, maxConsecutiveLosses: 2, lossCooldownMin: 30, maxDailyLosses: 3, maxEntriesPerDay: 6, mtfMaxAgeMin: 15,
       signalMaxAgeBars: 3, signalMaxAgeCeilingMin: 45, futureToleranceMin: 1, minConfluence: 1, maxCorrelatedPositions: 1,
       noEntryWindows: ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], bracketToleranceTicks: 1, bracketSpanToleranceTicks: 2,
-      factsMinChecked: 2, factsMaxItems: 20,
+      factsMinChecked: 2, factsMaxItems: 20, lateEntryDriftShare: 0.25,
     },
     lifecycle: { maxSize: 100 },
     account: { snapshotMaxAgeMs: 600000, balanceToleranceUsd: 0.01, snapshotFutureToleranceMs: 60000, verdictsKept: 500 },
@@ -336,6 +336,9 @@ const SPECS = Object.freeze({
     'gate.mtfMaxAgeMin': 'down', 'gate.signalMaxAgeBars': 'down', 'gate.signalMaxAgeCeilingMin': 'down', 'gate.futureToleranceMin': 'down', 'gate.minConfluence': 'up',
     'gate.maxCorrelatedPositions': 'down', 'gate.noEntryWindows': 'exact', 'gate.bracketToleranceTicks': 'down', 'gate.bracketSpanToleranceTicks': 'down',
     'gate.factsMinChecked': 'up', 'gate.factsMaxItems': 'down',
+    // How far past a composed entry's limit, against it, the price may be when the order goes (a share of its stop
+    // distance; trading/late-entry.js): only falls.
+    'gate.lateEntryDriftShare': 'down',
     'lifecycle.maxSize': 'down',
     'account.snapshotMaxAgeMs': 'down', 'account.balanceToleranceUsd': 'down', 'account.snapshotFutureToleranceMs': 'down',
     'clock.serverTimeToleranceMs': 'down', 'clock.wallStartMaxAgeMs': 'down', 'clock.wallStartAheadMs': 'down',

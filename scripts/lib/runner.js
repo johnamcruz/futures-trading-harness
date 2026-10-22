@@ -88,6 +88,7 @@ const MAX_RETRY_MS = RUN.maxRetryMs;
 const CLOSE_SETTLE_MS = RUN.closeSettleMs;
 // End of day that reads the account but doesn't find it flat yet counts as failed runs (kill switch) only after this long.
 const { ORDER_GRACE_MS } = require('./trading/gate-timing');
+const LR = require('./trading/lifecycle-runner');
 const { expectedRoles } = require('./trading/desk-check');
 const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
 const FILL_GRACE_MS = RUN.fillGraceMs;
@@ -145,6 +146,9 @@ function createRunner(deps) {
     // run in a cycle where the runner runs the entry (entryCycle below), recordFile() a role record for a cycle the
     // desk didn't write one for. null: the head trader runs phase 2 and the trade-executor itself, as before.
     entry: entryWorkflow = null,
+    // The latest local price of a symbol's family (trading/late-entry.js readPrice: the runner's entry recorded it before
+    // its order): (symbol) -> { price, closedAt } or null. A composed fill's check reads the newer of it and the bars.
+    latestPrice = () => null,
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -413,7 +417,7 @@ function createRunner(deps) {
   /**
    * While a cycle runs (the runner awaits it), its composed limits still expire: every `composedWatchMs` the run's
    * symbols' due composed entries are cancelled (expireComposed), so a cycle outlasting a record's expiry never leaves
-   * its limit working. Returns the stop.
+   * its limit working, and a composed fill is checked against its plan at once (guardFill). Returns the stop.
    */
   function watchComposed(items) {
     if (!composed || !cfg.account || cfg.paper || typeof client.accountState !== 'function' || !(composedWatchMs > 0)) return () => {};
@@ -427,7 +431,12 @@ function createRunner(deps) {
       if (!composed.stamped(roots, since)) return;
       busy = true;
       try {
-        for (const item of items) await expireComposed(item, await client.accountState(cfg.account));
+        for (const item of items) {
+          const account = await client.accountState(cfg.account);
+          await expireComposed(item, account);
+          // A fill during the cycle: checked against its plan at once, not at the next bar.
+          await guardFill(item, account);
+        }
       } catch (err) {
         log(`composed expiry during the cycle: ${err.message}`, 'error');
       } finally {
@@ -619,6 +628,64 @@ function createRunner(deps) {
     log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);
   }
 
+  /**
+   * A composed entry's fill against its plan, once per position (lifecycle-runner.js fillGuard): at or beyond the
+   * plan's stop (the fill, or the latest price), closed at once ([exit]) with its orders cancelled; filled away from the
+   * plan's limit, its stop (a bracket set from the fill) moved to the plan's stop price ([protect]). The position is
+   * matched to the gateway's record of its entry as the trailing manager matches it. Returns true when it acted (the
+   * trail waits for the next account read). A failed close or move is logged and tried again on the next pass.
+   */
+  async function guardFill(item, { positions, orders }) {
+    const fam = famOf(item.contractId);
+    const guards = { ...(state.fillGuards || {}) };
+    const tick = Number(item.tickSize) || 0;
+    let acted = false;
+    for (const p of (positions || []).filter(x => famOf(x.contractId) === fam && isOpen(x))) {
+      const key = `${p.contractId}|${String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`)}`;
+      if (guards[key]) continue;
+      const sign = Number(p.type) === 1 ? 1 : Number(p.type) === 2 ? -1 : 0;
+      const opened = Date.parse(p.creationTimestamp);
+      const fillAt = Number.isFinite(opened) ? opened : clock.now().getTime();
+      const dayStart = tradingDayStart(new Date(fillAt)).getTime();
+      const side = sign > 0 ? 'buy' : 'sell';
+      const rec = [...entryOrders()].reverse().find(e => {
+        const at = Date.parse(e.at);
+        return e && e.composed && contractRoot(e.contractId) === contractRoot(p.contractId) && (!e.side || e.side === side) && at >= dayStart && at <= fillAt + ORDER_GRACE_MS;
+      });
+      if (!rec) { guards[key] = 'none'; continue; }
+      // The newest price the runner holds: its bars' last close, or the price its entry recorded, whichever closed later.
+      const last = item.bars && item.bars.length ? item.bars[item.bars.length - 1] : null;
+      const known = [last ? { price: Number(last.c), at: Date.parse(last.t) + (item.minutes || cfg.timeframe) * 60000 } : null, (() => { const r = latestPrice(item.symbol); return r ? { price: Number(r.price), at: Date.parse(r.closedAt) } : null; })()]
+        .filter(x => x && Number.isFinite(x.price) && Number.isFinite(x.at));
+      const price = known.length ? known.reduce((a, b) => (b.at > a.at ? b : a)).price : null;
+      const g = LR.fillGuard({ position: p, entry: rec, orders, tick, price });
+      try {
+        if (g.action === 'flatten') {
+          closedAt.set(p.contractId, clock.now().getTime()); // end of day won't send a second close while this one fills
+          await client.closePosition(cfg.account, p.contractId);
+          emit('position_closed', { symbol: item.symbol, contractId: p.contractId, setup: rec.setup, side: sign > 0 ? 'long' : 'short', entry: Number(p.averagePrice), why: `[exit] ${g.why}` });
+          log(`${item.symbol}: [exit] ${g.why}; closed at market`, 'error');
+          for (const o of (orders || []).filter(x => x.contractId === p.contractId)) {
+            try { await client.cancelOrder(cfg.account, o.id); } catch (err) { log(`${item.symbol}: could not cancel ${o.id} after the close (${err.message}); the next bar retries`, 'error'); }
+          }
+          acted = true;
+        } else if (g.action === 'reanchor') {
+          await client.modifyStop(cfg.account, g.orderId, g.to, `[protect] the plan's stop ${g.to}: ${g.why}`);
+          emit('stop_moved', { symbol: item.symbol, contractId: p.contractId, setup: rec.setup, from: g.from, to: g.to, why: 'plan stop' });
+          log(`${item.symbol}: [protect] ${g.why}`);
+          acted = true;
+        }
+        guards[key] = g.action;
+      } catch (err) {
+        log(`${item.symbol}: ${g.action === 'flatten' ? 'could not close' : 'could not move the stop of'} the composed fill (${err.message}); the next pass retries`, 'error');
+      }
+    }
+    // Only this family's positions' keys are kept with the others' (a flat family's go).
+    const openKeys = new Set((positions || []).filter(isOpen).map(x => `${x.contractId}|${String(x.id ?? `${x.creationTimestamp}|${x.averagePrice}`)}`));
+    state = { ...state, fillGuards: Object.fromEntries(Object.entries(guards).filter(([k]) => openKeys.has(k))) };
+    return acted;
+  }
+
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
   /**
    * Close every position of this root (any month) whose opposite-side stops
@@ -664,6 +731,8 @@ function createRunner(deps) {
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
       if (noCycles && await flattenUncovered(item, account)) return;
+      // A composed fill beyond its plan's stop goes at once; one away from its limit gets the plan's stop.
+      if (await guardFill(item, account)) return;
       if (trail) await trailPosition(item, account);
     } catch (err) {
       log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');

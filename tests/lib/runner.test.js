@@ -339,7 +339,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false, killFile = null, beforeStep = null }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false, killFile = null, beforeStep = null, fillPrice = 21500 }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -371,13 +371,13 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         if (fillsAt !== null && clockRef.t >= fillsAt) flat = true;
         return {
           positions: [
-            ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, ...(oddSize ? {} : { size: 1 }), averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
+            ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, ...(oddSize ? {} : { size: 1 }), averagePrice: fillPrice, creationTimestamp: new Date(fillAt).toISOString() }]),
             ...(otherMonth && !calls.closedIds.includes(otherMonth) ? [{ id: 78, contractId: otherMonth, type: 1, size: 1, averagePrice: 21600, creationTimestamp: new Date(fillAt).toISOString() }] : []),
           ],
           orders: [...(noStop ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21600 }].filter(o => !calls.cancelled.includes(o.id)),
         };
       },
-      async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
+      async modifyStop(acct, id, price, reason) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); if (reason) (calls.reasons = calls.reasons || []).push(reason); stopPrice = price; },
       async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') { if (ghosts > 0) ghosts -= 1; else if (closeFillMs) fillsAt = clockRef.t + closeFillMs; else flat = true; } },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
@@ -506,6 +506,27 @@ test('exit mode target_then_trail, live: the target order is cancelled, the stop
   assert.ok(st.logs.some(l => /structure trail: no 15m swing confirmed yet; trailing 1R behind the best price \(the fallback\)/.test(l)), st.logs.join('\n'));
   const none = await trailSim({ tape, exit, until: et(10, 15) });
   assert.deepStrictEqual([none.modified, none.cancelled.includes(10)], [[21595, 21610], true], 'no bracket recorded: the one resting limit (21600) is its target');
+});
+
+test('a composed fill (the gate\'s stamp): beyond the plan\'s stop it is closed at once ([exit]); away from the plan\'s limit its stop goes to the plan\'s price ([protect]); at the limit nothing moves', async () => {
+  // The plan: a long, limit 21500, stop 21490 (40 ticks), target 21520. The broker's stop is 40 ticks from the fill.
+  const composed = { record: 'r1', expiresAt: new Date(et(10, 6)).toISOString(), entry: 21500, stop: 21490, target: 21520, side: 'long' };
+  const exit = { mode: 'target' };
+  // Filled 2 points better (21498): its stop rests at 21488; the runner moves it to 21490 once, with its reason.
+  const better = await trailSim({ tape: {}, exit, fillPrice: 21498, stopAt: 21488, record: { composed }, until: et(10, 12) });
+  assert.deepStrictEqual([better.modified, better.closedIds], [[21490], []], better.logs.join('\n'));
+  assert.match(better.reasons[0], /^\[protect\] the plan's stop 21490: filled at 21498, not the plan's 21500/);
+  assert.ok(better.events.some(e => e.kind === 'stop_moved' && e.from === 21488 && e.to === 21490));
+  // Filled beyond the plan's stop (a marketable limit after the market left the plan): closed at once, orders cancelled.
+  const bad = await trailSim({ tape: {}, exit, fillPrice: 21488, stopAt: 21478, record: { composed }, until: et(10, 4) });
+  assert.deepStrictEqual([bad.closedIds, bad.modified], [['MNQ'], []]);
+  assert.ok(bad.cancelled.includes(9) && bad.cancelled.includes(10));
+  assert.ok(bad.logs.some(l => /\[exit\] filled at 21488, beyond the plan's stop 21490: the setup was invalid before the fill \(no late entry\); closed at market/.test(l)), bad.logs.join('\n'));
+  // Filled at the limit: its bracket is the plan's; nothing moves. Not composed (no stamp): nothing moves either.
+  const at = await trailSim({ tape: {}, exit, record: { composed }, until: et(10, 12) });
+  assert.deepStrictEqual([at.modified, at.closedIds], [[], []]);
+  const plain = await trailSim({ tape: {}, exit, fillPrice: 21488, stopAt: 21478, until: et(10, 12) });
+  assert.deepStrictEqual([plain.modified, plain.closedIds], [[], []]);
 });
 
 test('time stop: max_bars counts the strategy\'s bars, scaled to the runner\'s timeframe', async () => {

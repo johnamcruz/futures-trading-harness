@@ -3096,6 +3096,33 @@ test('order gate (hook): a trade_lifecycle entry is judged on its compose record
   }
 });
 
+test('order gate (hook): no late entry ([late-entry]): the latest local price beyond the plan\'s stop, or past its entry against it over the share, refuses the composed entry and is logged; the trade\'s way goes; an exit always goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const home = trendHome();
+  let env = null;
+  const lc = (entries, input, extra = {}) => { env = setup(entries, { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), ...extra }).env; return gate(orderPayload(input), env); };
+  LC.writeScenario(home);
+  const price = p => LE.recordPrice(home, 'MNQ', { price: p, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+  price(21500);
+  let r = lc([lcPlan], LC.order());
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[late-entry\] setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry/);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
+  assert.deepStrictEqual([log.decision, log.violations.map(v => v.check)], ['blocked', ['late-entry']]);
+  // An exit and a protective stop go at that price.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    assert.strictEqual(lc([lcPlan], { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale }).code, 0, rationale);
+  }
+  // 7 points under the 21540.25 limit (over 0.25 of the 27.75-point stop): missed; the trade's way: goes.
+  fs.rmSync(path.join(home, LE.FILE));
+  price(21533.25);
+  assert.match(lc([lcPlan], LC.order()).stderr, /\[late-entry\] .*missed the plan's entry 21540\.25/);
+  fs.rmSync(path.join(home, LE.FILE));
+  price(21560);
+  r = lc([lcPlan], LC.order());
+  assert.strictEqual(r.code, 0, r.stderr);
+});
+
 test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
   const H = require('../../scripts/lib/head-prompt');
   const home = trendHome();
@@ -3248,6 +3275,15 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   // The same seven minutes with the clock pinned (no wall start): the bar's own moment, the entry goes (what replay hid).
   const pinned = await run(home => LC.writeScenario(home), msgs(LC.order()));
   assert.strictEqual(pinned.sent.length, 1, pinned.texts[1]);
+  // No late entry ([late-entry]): the latest local price (the runner's entry recorded it) beyond the plan's stop: the
+  // entry never reaches the broker; an exit at that price goes.
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const latePrice = home => LE.recordPrice(home, 'MNQ', { price: 21500, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+  const gone = await run(home => { LC.writeScenario(home); latePrice(home); }, msgs(LC.order()));
+  assert.deepStrictEqual(gone.sent, []);
+  assert.match(gone.texts[1], /\[late-entry\] setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry/);
+  const out = await run(home => { LC.writeScenario(home); latePrice(home); }, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });
+  assert.strictEqual(out.sent.length, 1, out.texts[1]);
 });
 
 test('order gate (hook): modify_order may not reprice a working trade_lifecycle entry worse than its record\'s entry; a better price and a stop move go', () => {
