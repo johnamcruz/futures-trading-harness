@@ -146,7 +146,7 @@ const RUNNER = {
   broker: { cacheKeepDays: int(1), siblingDays: int(0) },
   monteCarlo: { paths: int(0), reps: int(0), max: int(1) },
   // managedBudgetShare: the most of a managed cycle's time its desk may take (runner.js managedCycle), the rest the head trader's.
-  desk: { concurrency: int(1), timeoutMinutes: int(1), managedBudgetShare: frac() },
+  desk: { concurrency: int(1), timeoutMinutes: int(1), managedBudgetShare: pos(1) },
   entry: { timeoutMinutes: int(1) },
   reviews: { scratchR: nonneg() },
 };
