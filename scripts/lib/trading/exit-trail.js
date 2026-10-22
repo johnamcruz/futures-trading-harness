@@ -97,18 +97,24 @@ function swingAtBar(bars, bar, minutes, sign) {
 const limitOf = o => Number(o && (o.limitPrice ?? o.price));
 
 /**
- * Live: the trade's own target for a trail past it, and the resting order(s) to cancel so it isn't closed there: the
- * entry's takeProfitBracket ticks from the fill (the gateway's entry record, `rec.targetTicks`), else the one resting
- * limit order on the position's other side. Returns { price, cancel: [orders], why } (price null: no target known;
- * nothing is cancelled then). Only orders at the target price are cancelled; never a stop.
+ * Live: the trade's own target for a trail past it, and the resting order(s) to cancel so it isn't closed there: a
+ * composed entry's plan target price (the gate's stamp, `rec.composed.target`: the structure level its plan named, not
+ * the fill-shifted one), else the entry's takeProfitBracket ticks from the fill (the gateway's entry record,
+ * `rec.targetTicks`), else the one resting limit order on the position's other side. Returns { price, cancel: [orders],
+ * why } (price null: no target known; nothing is cancelled then). Only orders at the target price, or at the bracket's
+ * distance from the fill (where the broker rests it), are cancelled; never a stop.
  */
 function liveTarget({ rec, entry, sign, tick, orders = [], contractId }) {
   const exits = (orders || []).filter(o => o && o.contractId === contractId && Number(o.type) === 1 && (Number(o.side) === 0 ? 1 : -1) === -sign);
+  const onTick = x => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
+  const bracket = rec && Number.isInteger(rec.targetTicks) && rec.targetTicks > 0 && tick > 0 ? onTick(entry + sign * rec.targetTicks * tick) : null;
+  const planned = rec && rec.composed && Number.isFinite(rec.composed.target) && sign * (rec.composed.target - entry) > 0 ? rec.composed.target : null;
   let price = null;
-  if (rec && Number.isInteger(rec.targetTicks) && rec.targetTicks > 0 && tick > 0) price = Math.round(Math.round((entry + sign * rec.targetTicks * tick) / tick) * tick * 1e9) / 1e9;
+  if (planned !== null) price = planned;
+  else if (bracket !== null) price = bracket;
   else if (exits.length === 1 && Number.isFinite(limitOf(exits[0])) && sign * (limitOf(exits[0]) - entry) > 0) price = limitOf(exits[0]);
   if (price === null) return { price: null, cancel: [], why: exits.length > 1 ? 'several resting limit orders, none recorded as its target' : 'no takeProfitBracket recorded and no resting target' };
-  return { price, cancel: exits.filter(o => Math.abs(limitOf(o) - price) < tick / 2), why: null };
+  return { price, cancel: exits.filter(o => [price, bracket].some(x => x !== null && Math.abs(limitOf(o) - x) < tick / 2)), why: null };
 }
 
 module.exports = { SWING_TFS, swingSeries, afterTargetStep, swingAtBar, liveTarget };

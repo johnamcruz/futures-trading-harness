@@ -22,7 +22,8 @@
     "bracketToleranceTicks": 1,
     "bracketSpanToleranceTicks": 2,
     "factsMinChecked": 2,
-    "factsMaxItems": 20
+    "factsMaxItems": 20,
+    "lateEntryDriftShare": 0.25
   },
   "lifecycle": { "maxSize": 100 },
   "account": {

@@ -21,10 +21,13 @@ const ARGS = { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', size
 const P2 = 'Phase 2.\nVERDICT: APPROVE - size 1, risk $20.00\nFACTS: window opening drive; trend long allowed';
 
 /** A home with the records on the bar, and the deps runEntry runs on (every role and the broker scripted). */
-function setup({ records = [record()], roles = {}, plan = null, journalFails = false, state = { positions: [{ contractId: 'MNQ', type: 1, size: 1 }], orders: [] }, readFails = false } = {}) {
+// The harness clock at the order's moment, and the newest closed 1m bar then (13:56 opened, closed 13:57): the market.
+const NOW = new Date('2026-10-07T13:57:40.000Z');
+function setup({ records = [record()], roles = {}, plan = null, journalFails = false, state = { positions: [{ contractId: 'MNQ', type: 1, size: 1 }], orders: [] }, readFails = false, market = 21500, barsFail = false } = {}) {
   const home = tmpDir();
   for (const r of records) TL.appendRecord(home, r);
   const calls = [];
+  const barReads = [];
   const journal = [];
   const runRole = async (role, request, limits) => {
     const phase = /^Phase 2, plan verdict/.test(request) ? 'phase2' : role;
@@ -38,12 +41,13 @@ function setup({ records = [record()], roles = {}, plan = null, journalFails = f
   const client = {
     journalAdd: async e => { if (journalFails) throw new Error('journal down'); journal.push(e); return { ts: new Date().toISOString(), ...e }; },
     accountState: async () => { if (readFails) throw new Error('no answer'); return state; },
+    closedBars: async (contractId, o) => { barReads.push({ contractId, ...o }); if (barsFail) throw new Error('HTTP 503'); return [{ t: '2026-10-07T13:55:00.000Z', o: 21500, h: 21501, l: 21499, c: 21500, v: 1 }, { t: '2026-10-07T13:56:00.000Z', o: 21500, h: Math.max(21500, market), l: Math.min(21500, market), c: market, v: 1 }]; },
   };
   const logs = [];
   const rolesFile = path.join(home, 'logs', 'cycle-roles-test.jsonl');
   const deps = {
     workflow: workflowNamed(ROOT, 'entry'), runRole, client, home, cfg: { timeframe: 3, harness: 'opencode' }, root: ROOT,
-    env: { FTH_HOME: home, FTH_GATE_LOG: path.join(home, 'gate.jsonl') }, log: (m, l) => logs.push(`${l || 'info'} ${m}`), perRoleMs: 60000,
+    env: { FTH_HOME: home, FTH_GATE_LOG: path.join(home, 'gate.jsonl') }, log: (m, l) => logs.push(`${l || 'info'} ${m}`), perRoleMs: 60000, now: () => NOW,
     childEnv: (cfg, root, env) => ({ ...env }), lookups: {},
     orderPlan: plan || (() => ({ args: ARGS, plan: { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: 1, entry: 21500, stopPrice: 21490, stopTicks: 40, targetPrice: 21520, targetTicks: 80, riskUsd: 20, record: 'rec0000000000001' } })),
   };
@@ -52,7 +56,7 @@ function setup({ records = [record()], roles = {}, plan = null, journalFails = f
     headEnv: { FTH_CYCLE_TRANSCRIPT: path.join(home, 'logs', 'head.jsonl') }, symbol: 'MNQ', contractId: 'MNQ', bar: BAR, bars: '/bars/MNQ-3m.json', at: '2026-10-07T13:57:02.000Z',
     accountId: 7, context: { symbols: [{ symbol: 'MNQ', bar: { t: BAR } }], entry: true }, rolesFile, reports: [{ role: 'risk-manager', text: '## Risk state: account 7' }], budgetMs: 600000, ...o,
   });
-  return { home, deps, cycle, calls, journal, logs, rolesFile };
+  return { home, deps, cycle, calls, barReads, journal, logs, rolesFile };
 }
 
 test('entryDue: the latest compose record on the bar decides; it must be OK and have a side', () => {
@@ -278,4 +282,52 @@ test('runEntry: timing.orderMs is the order actually sent: the gate log\'s allow
   assert.strictEqual(t.orderMs, 42000, JSON.stringify(t));
   assert.ok(Number.isFinite(t.executorMs) && Number.isFinite(t.phase2Ms));
   assert.strictEqual((await run('blocked')).orderMs, null, 'refused: no order sent');
+});
+
+test('runEntry: no late entry: the newest closed 1m bar, read just before the executor and recorded for the gate, beyond the plan\'s stop or past its entry against it over the share is a pass: no executor run, no journal plan, outcome late', async () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  // The plan: a long, limit 21500, stop 21490 (10 points): 0.25 of it = 2.5 points under the entry.
+  for (const [market, why] of [[21488, /^CYCLE RESULT: no-trade - the runner's entry: the setup was invalidated before the order went \(price 21488 beyond the plan's stop 21490\): no late entry/], [21497.25, /^CYCLE RESULT: no-trade - the runner's entry: missed the plan's entry 21500 \(price 21497\.25 is 2\.75 points past it against the long/]]) {
+    const s = setup({ market });
+    const r = await E.runEntry(s.deps, s.cycle({ startedWall: Date.now() }));
+    assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'phase 2 ran; the executor never did');
+    assert.deepStrictEqual([r.entry.outcome, s.journal], ['late', []]);
+    assert.match(r.result, why);
+    assert.match(r.entry.why, /no late entry/);
+    assert.ok(Number.isFinite(r.entry.timing.orderMs), 'the order\'s moment: the refusal');
+    // The bar read at the harness's clock, on the order's contract, and recorded for the gate (its close at 13:57).
+    assert.deepStrictEqual([s.barReads[0].contractId, s.barReads[0].minutes, s.barReads[0].now], ['MNQ', 1, NOW]);
+    assert.deepStrictEqual(LE.readPrice(s.home, 'MNQ'), { price: market, closedAt: '2026-10-07T13:57:00.000Z', minutes: 1, source: 'runner-entry' });
+    assert.ok(s.logs.some(l => /^info the entry: .*no late entry.*a pass, no executor run$/.test(l)), s.logs.join('\n'));
+  }
+  // Within the share, and the trade's way past the entry: the executor runs (the limit rests at the plan's price).
+  for (const market of [21497.5, 21530]) {
+    const s = setup({ market });
+    const r = await E.runEntry(s.deps, s.cycle());
+    assert.deepStrictEqual([s.calls.map(c => c.role), r.entry.outcome], [['phase2', 'trade-executor'], 'executed'], String(market));
+  }
+});
+
+test('runEntry: no late entry, the replay\'s short (2021-08-18): sell limit 14979.5, stop 14986.5, the market at 14997.5 when the order would go: refused, never sent', async () => {
+  const BAR21 = '2021-08-18T17:33:00.000Z';
+  const rec = record({ side: 'short', bar: BAR21, plan: { ...PLAN, entry: { price: 14979.5 }, stop: { ...PLAN.stop, price: 14986.5, ticks: 28 }, target: { ...PLAN.target, price: 14960, ticks: 78 } } });
+  const s = setup({ records: [rec], market: 14997.5, plan: () => ({ args: { ...ARGS, side: 'sell', limitPrice: 14979.5, stopLossBracket: { ticks: 28, type: 'stop' }, takeProfitBracket: { ticks: 78, type: 'limit' } }, plan: { strategy: 'trade_lifecycle', side: 'short', contract: 'MNQ', size: 1, entry: 14979.5, stopPrice: 14986.5, stopTicks: 28, targetPrice: 14960, targetTicks: 78, riskUsd: 14, record: rec.id } }) });
+  s.deps.now = () => new Date('2021-08-18T17:37:30.000Z');
+  s.deps.client.closedBars = async () => [{ t: '2021-08-18T17:36:00.000Z', o: 14990, h: 14998, l: 14989, c: 14997.5, v: 1 }];
+  const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle short 1', bar: BAR21, at: '2021-08-18T17:36:02.000Z' }));
+  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role)], ['late', ['phase2']]);
+  assert.match(r.result, /the setup was invalidated before the order went \(price 14997\.5 beyond the plan's stop 14986\.5\): no late entry/);
+});
+
+test('runEntry: no late entry fails closed: the 1m bar unreadable and no local bar is a pass (logged); a fresh local briefing at the plan decides when the read fails', async () => {
+  const s = setup({ barsFail: true });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role)], ['late', ['phase2']]);
+  assert.match(r.result, /no current price for MNQ from local bars \(no local bar\).*fails closed/);
+  assert.ok(s.logs.some(l => /^error the entry: the latest 1m bar can't be read \(HTTP 503\): the local bars decide$/.test(l)), s.logs.join('\n'));
+  // The cycle bar's own briefing (closed 13:57, its close at the plan's entry): it decides; the entry goes on.
+  const t = setup({ barsFail: true });
+  require('../../scripts/lib/trading/briefing').writeBriefing(t.home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', price: 21500, sections: {} });
+  const ok = await E.runEntry(t.deps, t.cycle());
+  assert.deepStrictEqual([ok.entry.outcome, t.calls.map(c => c.role)], ['executed', ['phase2', 'trade-executor']]);
 });

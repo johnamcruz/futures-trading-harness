@@ -65,8 +65,9 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    expired (compose again); an entry already placed on this bar and side;
    another contract; a read false, unverifiable or against your side now
    (drop it or pass), or no setup or entry read your way; the plan, ticks, limit or size not the record's. The
-   stop is never widened: name a farther level or pass. Exits and
-   protective orders are never held.
+   stop is never widened: name a farther level or pass. `[late-entry]`:
+   missed the plan's entry, or price beyond its stop before the order went
+   → pass: never enter late. Exits and protective orders are never held.
 
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |

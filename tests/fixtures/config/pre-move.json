@@ -1026,6 +1026,10 @@
    "value": 20,
    "from": "trading/fact-claims.js MAX_ITEMS"
   },
+  "gate.lateEntryDriftShare": {
+   "value": 0.25,
+   "from": "new in fix/no-late-entry (a composed entry's adverse drift past its limit, as a share of its stop distance)"
+  },
   "runner.calendarWarnDays": {
    "value": 30,
    "from": "trading/exchange-calendar.js WARN_DAYS"

@@ -19,7 +19,7 @@
  *                                         dependency; onBarClosed(symbol, { bar, stale, action, contractId, values }) hears each closed bar the runner polls
  *                                         (barRecorder: its bars archived, the strategies' field values taken)
  *   deskFor({ home, cfg, root, runRole, log })  the runner's desk (workflows/desk/WORKFLOW.md), or null
- *   entryFor({ home, cfg, root, runRole, client, log })  the runner's entry (workflows/entry/WORKFLOW.md), or null
+ *   entryFor({ home, cfg, root, runRole, client, log, now })  the runner's entry (workflows/entry/WORKFLOW.md), or null
  *   lookupsKeyOf(home, briefings, symbols, now, laneBars)  a one-symbol cycle's lookups facts key, or null
  *   reportCacheFor(home, cfg, frames, env) the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
@@ -437,7 +437,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
  *   run(cycle) -> null | { result, entry }    runner-entry.js runEntry (the lookups the bar requires of phase 2 added)
  *   recordFile()                              a fresh role record for a cycle whose desk the cache served whole
  */
-function entryFor({ home, cfg, root, runRole = null, client = null, log = () => {}, wallNow = Date.now, env = process.env }) {
+function entryFor({ home, cfg, root, runRole = null, client = null, log = () => {}, wallNow = Date.now, now = () => new Date(), env = process.env }) {
   if (typeof runRole !== 'function' || !ROLE_RUNS.has(cfg.harness) || cfg.cycle !== 'full') return null;
   const workflow = require('./orchestrate/workflows').workflowNamed(root, 'entry');
   if (!workflow) return null;
@@ -448,7 +448,7 @@ function entryFor({ home, cfg, root, runRole = null, client = null, log = () => 
     run: cycle => {
       const b = { [cycle.symbol]: readBriefing(home, cycle.symbol) };
       const lookups = lookupNeeds(b, cycle.now || new Date(), rolesEnv(cfg, env), { home, laneBars: cycle.laneBars || {} });
-      return runEntry({ workflow, runRole, client, home, cfg, root, env, log, wallNow, perRoleMs: timeoutMinutes * 60000, childEnv, lookups }, cycle);
+      return runEntry({ workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs: timeoutMinutes * 60000, childEnv, lookups }, cycle);
     },
     recordFile: () => require('./trading/runner-roles').newRoleRunsFile(home),
   };
@@ -633,7 +633,11 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The desk run by the runner (deskFor): on `runRole` (cycle-run.js, the caller's), else null.
     desk: deskFor({ home, cfg, root, runRole, log, env }),
     // The entry run by the runner (entryFor): on `runRole`, else null.
-    entry: entryFor({ home, cfg, root, runRole, client, log, env }),
+    entry: entryFor({ home, cfg, root, runRole, client, log, env, now }),
+    // The price the runner's entry recorded before its order (trading/late-entry.js), for a composed fill's check.
+    latestPrice: symbol => { try { return require('./trading/late-entry').readPrice(home, symbol); } catch (_err) { return null; } },
+    // The latest 1m price kept during a trade cycle for the gate's [late-entry] (runner.js watchPrice), on every harness.
+    recordPrice: (symbol, rec, opts) => require('./trading/late-entry').recordPrice(home, symbol, rec, opts),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),

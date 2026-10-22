@@ -2891,15 +2891,46 @@ test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it 
   const ok = lcEval(home);
   assert.deepStrictEqual(ok.violations, []);
   // What the gate judged, for the gateway's stamp: the record, its expiry (the earlier of the record's and the
-  // briefing's), the entry price and the side.
+  // briefing's), the plan's entry, stop and target prices (the runner's fill check: lifecycle-runner.js fillGuard) and the side.
   const judged = require('../../scripts/lib/trading/trade-lifecycle').readRecords(home, 'MNQ').at(-1);
-  assert.deepStrictEqual(ok.composed, { record: judged.id, expiresAt: LC.EXPIRES, entry: 21540.25, side: 'long' });
+  assert.deepStrictEqual(ok.composed, { record: judged.id, expiresAt: LC.EXPIRES, entry: 21540.25, stop: 21512.5, target: 21598, side: 'long' });
   // Several lanes: the briefing's bar (FTH_CYCLE_BRIEFING_BARS, the first lane's) over the lane bar that closed.
   assert.deepStrictEqual(lcEval(home, LC.order(), { config: { cycleBars: { MNQ: '2026-10-07T13:59:00.000Z' }, cycleBriefingBars: { MNQ: LC.BAR } } }).violations, []);
   const paper = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, status: 'paper' } : s));
   const r = lcEval(home, LC.order(), { strategies: paper });
   assert.deepStrictEqual(checks(r), ['strategy']);
   assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
+});
+
+test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest local price beyond the plan\'s stop, or past its entry against it over the share, refuses; the trade\'s way, or within the share, goes; exits always go', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  // Scenario 1: a long, limit 21540.25, stop 21512.5 (27.75 points): 0.25 of it = 6.9375 points below the entry.
+  const at = price => { const home = lcHome(); LE.recordPrice(home, 'MNQ', { price, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' }); return lcEval(home); };
+  const late = r => r.violations.filter(v => v.check === 'late-entry').map(v => v.message);
+  assert.deepStrictEqual(checks(at(21512.5)), ['late-entry'], 'at the stop');
+  assert.match(late(at(21500))[0], /^setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry \(the runner-entry price at 2026-10-07T14:00:00\.000Z\)\. Pass; the next bar composes on its own facts\. Exits, protective stops and stop moves still go\.$/);
+  assert.match(late(at(21533.25))[0], /missed the plan's entry 21540\.25 \(price 21533\.25 is 7 points past it against the long, over 0\.25 of the 27\.75-point stop\)/);
+  assert.deepStrictEqual(at(21533.5).violations, [], '6.75 points: within the share');
+  assert.deepStrictEqual(at(21570).violations, [], 'the trade\'s way: the limit rests at the plan\'s price');
+  // Not skippable.
+  { const home = lcHome(); LE.recordPrice(home, 'MNQ', { price: 21500, closedAt: '2026-10-07T14:00:00Z', minutes: 1 }); assert.deepStrictEqual(checks(lcEval(home, LC.order(), { config: { skip: ['late-entry'] } })), ['late-entry']); }
+  // No current price (the briefing with no close, a recorded price past its 3 min): refused, fails closed.
+  const home = trendHome();
+  const b = LC.briefing();
+  delete b.price;
+  delete b.closedAt;
+  LC.writeScenario(home, { b });
+  LE.recordPrice(home, 'MNQ', { price: 21540.25, closedAt: '2026-10-07T13:56:00Z', minutes: 1 });
+  // The shipped signal age (this file's config lifts it): 3 bars, 3 min on 1m.
+  const none = lcEval(home, LC.order(), { config: { signalMaxAgeBars: 3, signalMaxAgeCeilingMin: 45 } });
+  assert.deepStrictEqual(lcEval(home).violations, [], 'the same price within a lifted age limit: it counts');
+  assert.deepStrictEqual(checks(none), ['late-entry']);
+  assert.match(none.violations[0].message, /no current price for MNQ from local bars \(the newest is not current: recorded 21540\.25 closed 4\.0 min ago \(limit 3 min\)\).*no entry \(fails closed\)/);
+  // Exits, protective stops and closes never reach it, whatever the price.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
 });
 
 test('trade_lifecycle: composed-reads refuses a false, unverifiable or other-side read, and a missing, expired, used or mismatched record', () => {

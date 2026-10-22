@@ -37,6 +37,7 @@ const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMiss
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
+const { lateEntryRefusal, ageLimitOf } = require('./late-entry');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -392,6 +393,14 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       const v = latestVerdict(config.home, named.name, contractRoot(input.contractId));
       if (!v || v.record !== composedCheck.record.id) violations.push({ check: 'policy', message: `setup:${named.name}: the latest verdict is not the one sized on the compose record of ${composedCheck.record.at} (order_plan records it): plan the entry again.` });
     }
+    // Hard rule (the owner's "if you miss the move don't enter late"): a composed entry goes only while the market is
+    // still at its plan, by the latest local price (late-entry.js): beyond the plan's stop, or past its entry against
+    // it by more than the configured share of the stop distance, it is a pass; no current price, refused (fails closed).
+    if (!composedCheck.message) {
+      const p = composedCheck.plan;
+      const late = lateEntryRefusal({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
+      if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late}. Exits, protective stops and stop moves still go.` });
+    }
   }
   // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
   // the tier its frame needs among the record's re-checked reads (lifecycle-gate.js reversalAllowed); then the trend
@@ -528,8 +537,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     ? `${enteredAll} entries this trading day (limit ${config.maxEntriesPerDay}).`
     : null);
 
-  // A composed entry the gate let through: the record it judged, its expiry and entry price, for the gateway's stamp.
-  const composedOut = composedCheck && !composedCheck.message ? { composed: { record: composedCheck.record.id, expiresAt: composedCheck.expiresAt, entry: composedCheck.plan.entry.price, side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null } } : {};
+  // A composed entry the gate let through: the record it judged, its expiry, its entry, stop and target prices (the
+  // runner re-anchors a fill's stop to the plan's and flattens a fill beyond it: lifecycle-runner.js fillGuard), for
+  // the gateway's stamp.
+  const composedOut = composedCheck && !composedCheck.message ? { composed: { record: composedCheck.record.id, expiresAt: composedCheck.expiresAt, entry: composedCheck.plan.entry.price, stop: composedCheck.plan.stop.price, target: composedCheck.plan.target.price, side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null } } : {};
   return { intent: 'entry', violations, ...composedOut };
 }
 

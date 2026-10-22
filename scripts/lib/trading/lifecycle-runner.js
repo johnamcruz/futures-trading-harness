@@ -15,7 +15,8 @@
  *                                     on a composed entry (the record it judged, the expiry it computed, the entry
  *                                     price, the side), written before the order goes so an order found placed later
  *                                     carries it; taken (read and removed) once used; cleared when its reply settles it
- *   entryStamp(env, args, stamp, key)  the stamp entry-orders.json keeps: the gate's (given, or taken from pending); a
+ *   entryStamp(env, args, stamp, key)  the stamp entry-orders.json keeps: the gate's (given, or taken from pending: its
+ *                                     record, expiry, side, and the plan's entry, stop and target prices); a
  *                                     composed entry without one gets { record: null, expiresAt: null } (due at once);
  *                                     another setup's: null. Never re-looked-up at reply time
  *   dueComposed({ entries, orders, composed, now })   the working orders that are composed entries (their gateway
@@ -25,6 +26,8 @@
  *                                     working limit orders on the root the gateway never recorded as entries, flat or
  *                                     adding to the position's side (a bracket's target, the other side, stays)
  *   liveComposed({ entries, roots, since })   a composed entry on the roots that may still be working in a cycle
+ *   fillGuard({ position, entry, orders, tick, price })   a composed entry's fill against its plan: flatten (the fill or
+ *                                     the price beyond the plan's stop), reanchor (the stop to the plan's price), or none
  *   recordSummary(record)             a record as the decision history and the cycle log keep it: id, side, ok, the
  *                                     signatures, the stated size, the stop and target, the first level in the way,
  *                                     each read with its check
@@ -40,6 +43,7 @@ const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
 const { readRecords, daysNear } = require('./trade-lifecycle');
 const { isOpen, signedSize } = require('./positions');
+const { ENUMS } = require('../broker/interface');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -114,7 +118,7 @@ function takePendingStamp(env, key) {
 
 function entryStamp(env, args, stamp = null, key = null) {
   const given = isObj(stamp) ? stamp : key !== null ? takePendingStamp(env, key) : null;
-  if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...(Number.isFinite(given.entry) ? { entry: given.entry } : {}), ...(given.side ? { side: given.side } : {}) };
+  if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...Object.fromEntries(['entry', 'stop', 'target'].filter(k => Number.isFinite(given[k])).map(k => [k, given[k]])), ...(given.side ? { side: given.side } : {}) };
   return isComposedEntry(env, args) ? { record: null, expiresAt: null } : null;
 }
 
@@ -160,6 +164,44 @@ function liveComposed({ entries = [], roots = [], since }) {
     ? Date.parse(e.composed.expiresAt) >= since : !(Date.parse(e.at) < since)));
 }
 
+/**
+ * A composed entry's fill against its plan (the owner's "don't enter late"): what the runner does once it sees the
+ * position. The broker's brackets are distances from the fill, so a fill away from the plan's limit leaves the stop off
+ * the structure level the plan named. `entry` is the gateway's record of the order (entry-orders.json) with the gate's
+ * stamp (`composed`: the plan's entry, stop and target prices; the stop also from the rationale's "stop <price>").
+ *   flatten    the fill, or the latest price, is at or beyond the plan's stop: the setup was invalid; out at market
+ *   reanchor   the fill differs from the plan's limit and the one resting stop is not at the plan's stop: move it there
+ *              (only ever toward the fill: a limit fills at its price or better, so the plan's stop risks no more than
+ *              planned; a stop the plan would widen stays where it is)
+ *   none       nothing to do (why says what)
+ * { action, why, orderId?, from?, to? }. Never throws.
+ */
+function fillGuard({ position, entry, orders = [], tick, price = null }) {
+  const none = why => ({ action: 'none', why });
+  try {
+    const c = entry && isObj(entry.composed) ? entry.composed : null;
+    if (!c) return none('not a composed entry');
+    const sign = Math.sign(signedSize(position));
+    const fill = Number(position && position.averagePrice);
+    const stop = Number.isFinite(c.stop) ? c.stop : Number(entry.stopPrice);
+    if (!sign || !Number.isFinite(fill) || !Number.isFinite(stop) || !(tick > 0)) return none('no fill, side or plan stop to check');
+    const beyond = x => sign * (x - stop) <= 0;
+    if (beyond(fill)) return { action: 'flatten', why: `filled at ${fill}, beyond the plan's stop ${stop}: the setup was invalid before the fill (no late entry)` };
+    const p = price === null || price === undefined ? NaN : Number(price);
+    if (Number.isFinite(p) && beyond(p)) return { action: 'flatten', why: `the price ${p} is beyond the plan's stop ${stop} (filled at ${fill}): the setup is invalid` };
+    if (Number.isFinite(c.entry) && Math.abs(fill - c.entry) < tick / 2) return none('filled at the plan\'s limit');
+    const stops = (orders || []).filter(o => o && o.contractId === position.contractId && Number(o.type) === ENUMS.orderType.stop && (Number(o.side) === ENUMS.side.buy ? 1 : -1) === -sign);
+    if (stops.length !== 1) return none(`${stops.length} working stops on the position: none moved`);
+    const resting = Number(stops[0].stopPrice);
+    if (!Number.isFinite(resting)) return none('the resting stop has no price');
+    if (Math.abs(resting - stop) < tick / 2) return none('the stop is at the plan\'s');
+    if (sign * (stop - resting) < 0) return none(`the plan's stop ${stop} is wider than the resting ${resting}: kept`);
+    return { action: 'reanchor', orderId: stops[0].id, from: resting, to: stop, why: `filled at ${fill}, not the plan's ${c.entry}: the stop goes to the plan's ${stop} (the structure level), from ${resting}` };
+  } catch (err) {
+    return none(`the check failed (${err.message})`);
+  }
+}
+
 function recordSummary(r) {
   if (!isObj(r)) return null;
   const p = isObj(r.plan) ? r.plan : null;
@@ -182,4 +224,4 @@ function cycleComposed(home, cycleId, symbols = [], at = null) {
   return roots.flatMap(root => readRecords(home, root, { days }).filter(r => r.cycleId === cycleId)).map(recordSummary);
 }
 
-module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, pendingKey, writePendingStamp, pendingStamp, takePendingStamp, clearPendingStamp, entryStamp, dueComposed, unrecordedEntries, liveComposed, recordSummary, cycleComposed };
+module.exports = { composedSetups, composedLaneErrors, runsComposed, isComposedEntry, pendingKey, writePendingStamp, pendingStamp, takePendingStamp, clearPendingStamp, entryStamp, dueComposed, unrecordedEntries, liveComposed, fillGuard, recordSummary, cycleComposed };

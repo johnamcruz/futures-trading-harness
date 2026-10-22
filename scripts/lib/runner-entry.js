@@ -21,6 +21,10 @@
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
+ *      and, just before the executor, no late entry (trading/late-entry.js, the gate's own check): the newest closed 1m
+ *      bar read through the adapter (`now`: the harness clock) is recorded for the gate, and a price beyond the plan's
+ *      stop, past its entry against it by more than gate.lateEntryDriftShare of the stop distance, or no current price
+ *      is a pass: outcome `late`, the cycle's no-trade with why, no executor run;
  *   5. phase `execute`: the trade-executor with those exact arguments and phase 2's verdict line, never run again (the
  *      workflow's orders phase: retries 0), its run recorded (it ends the round, as a launch does);
  *   6. the after-order read through the adapter (accountState): the cycle's outcome. Executed when the account shows a
@@ -33,7 +37,7 @@
  *   verdictLine(text)        phase 2's VERDICT line, as written
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
- *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, perRoleMs, childEnv, lookups, orderPlan }
+ *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan }
  *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in)
  *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
  *              startedWall (the wall ms the head trader's run began) }
@@ -53,11 +57,15 @@ const { contractRoot } = require('./trading/journal');
 const { isOpen } = require('./trading/positions');
 const RR = require('./trading/runner-roles');
 const { ORDER_REFUSED } = require('./orchestrate/checks');
+const LE = require('./trading/late-entry');
 
 const STRATEGY = 'trade_lifecycle';
 const famOf = id => familyRoot(contractRoot(id));
 // A refusal or report as the result line and the logs carry it: one line, cut at the plan's length (config/runner.json).
 const CUT = () => require('./tunables').runner().prompt.planChars;
+// The 1m bars read for the latest price before the order, as many as the signal age limit counts (config/runner.json);
+// the newest closed one is the price.
+const LE_BARS = require('./tunables').runner().gate.signalMaxAgeBars;
 const short = text => { const n = CUT(); const t = String(text || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 3)}...` : t; };
 
 /** The decision's record: the latest compose record on the cycle's bar for the root (any side); it must be OK. */
@@ -156,7 +164,7 @@ function entryOutcome({ entered, filled = false, refusal = null, report = '', fa
 }
 
 async function runEntry(deps, c) {
-  const { workflow, runRole, client, home, cfg, root, env, log = () => {}, wallNow = Date.now, perRoleMs, childEnv, lookups = {} } = deps;
+  const { workflow, runRole, client, home, cfg, root, env, log = () => {}, wallNow = Date.now, now = () => new Date(), perRoleMs, childEnv, lookups = {} } = deps;
   const orderPlan = deps.orderPlan || require('./harness-tools/order-plan').plan;
   if (outcomeOf(c.result) !== 'planned') return null;
   const info = { ran: [], phases: [] };
@@ -247,6 +255,14 @@ async function runEntry(deps, c) {
       stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
     }
+    // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
+    // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
+    const late = await lateCheck(order, roleEnv);
+    if (late) {
+      info.timing.orderMs = sinceClose(wallNow());
+      stop = { outcome: 'late', why: late };
+      return { stop: stop.why };
+    }
     try {
       const tag = (/^\s*setup:([a-z0-9_-]+)/i.exec(order.args.rationale) || [])[1] || STRATEGY;
       const p = order.plan;
@@ -259,6 +275,27 @@ async function runEntry(deps, c) {
       return { stop: stop.why };
     }
     return { ctx: { args: order.args, verdict: line } };
+  };
+  // The latest price before the executor runs: the newest closed 1m bar through the adapter, recorded locally (the gate
+  // reads only local state); a failed read leaves the local bars to decide. The check is the gate's own.
+  const lateCheck = async (o, roleEnv) => {
+    const root = c.symbol;
+    if (client && typeof client.closedBars === 'function') {
+      try {
+        const got = await client.closedBars(o.args.contractId, { minutes: 1, limit: LE_BARS, now: now() });
+        const last = Array.isArray(got) && got.length ? got[got.length - 1] : null;
+        const closedAt = last ? Date.parse(last.t) + 60000 : NaN;
+        if (last && Number.isFinite(Number(last.c)) && Number.isFinite(closedAt) && closedAt <= now().getTime()) LE.recordPrice(home, root, { price: Number(last.c), closedAt: new Date(closedAt).toISOString(), minutes: 1, source: 'runner-entry' }, { now: now(), log: m => log(`the entry: ${m}`) });
+      } catch (err) {
+        log(`the entry: the latest 1m bar can't be read (${err.message}): the local bars decide`, 'error');
+      }
+    }
+    let config;
+    try { config = require('./trading/config').loadConfig(roleEnv); } catch (_err) { config = null; }
+    const G = require('./tunables').runner().gate;
+    const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });
+    const { readBriefing } = require('./trading/briefing');
+    return LE.lateEntryRefusal({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
   };
   const sentAt = Date.now();
   let res;
@@ -276,6 +313,10 @@ async function runEntry(deps, c) {
     if (stop.outcome === 'expired') {
       log(`the entry: ${stop.why}: no order`, 'error');
       return say('expired', 'CYCLE RESULT: no-trade - the composed record expired before the order', { why: stop.why });
+    }
+    if (stop.outcome === 'late') {
+      log(`the entry: ${stop.why}: a pass, no executor run`);
+      return say('late', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}`, { why: stop.why });
     }
     if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
     log(`the entry: ${stop.why}: no order`, 'error');

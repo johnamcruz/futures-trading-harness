@@ -113,3 +113,15 @@ test('liveTarget: the entry\'s own target from its bracket, and only the resting
   assert.match(none.why, /several resting limit orders/);
   assert.strictEqual(liveTarget({ rec: null, entry: 100, sign: 1, tick: 0.25, orders: [], contractId: 'MNQ' }).price, null);
 });
+
+test('liveTarget: a composed entry\'s target is its plan\'s price (the gate\'s stamp), not the fill-shifted bracket; the resting bracket limit is still cancelled', () => {
+  // Planned: limit 21500, target 21520 (80 ticks); filled better at 21498, so the broker's target rests at 21518.
+  const orders = [{ id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21518 }, { id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21488 }];
+  const r = liveTarget({ rec: { targetTicks: 80, composed: { entry: 21500, stop: 21490, target: 21520 } }, entry: 21498, sign: 1, tick: 0.25, orders, contractId: 'MNQ' });
+  assert.deepStrictEqual([r.price, r.cancel.map(o => o.id)], [21520, [10]]);
+  // No stamped target: the bracket from the fill, as before.
+  assert.strictEqual(liveTarget({ rec: { targetTicks: 80 }, entry: 21498, sign: 1, tick: 0.25, orders, contractId: 'MNQ' }).price, 21518);
+  // A short mirrored.
+  const s = liveTarget({ rec: { targetTicks: 78, composed: { entry: 14979.5, target: 14960 } }, entry: 14981.5, sign: -1, tick: 0.25, orders: [{ id: 11, contractId: 'MNQ', type: 1, side: 0, size: 1, limitPrice: 14962 }], contractId: 'MNQ' });
+  assert.deepStrictEqual([s.price, s.cancel.map(o => o.id)], [14960, [11]]);
+});
