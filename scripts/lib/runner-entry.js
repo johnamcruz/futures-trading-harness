@@ -28,8 +28,10 @@
  *   5. phase `execute`: the trade-executor with those exact arguments and phase 2's verdict line, never run again (the
  *      workflow's orders phase: retries 0), its run recorded (it ends the round, as a launch does);
  *   6. the after-order read through the adapter (accountState): the cycle's outcome. Executed when the account shows a
- *      position on the root's family or the gateway recorded this record's entry (entry-orders.json); else blocked with
- *      the gate's refusal (its log, this cycle's id) or the executor's own BLOCKED or ABORTED report; else a failed
+ *      position on the root's family or the gateway recorded this record's entry (entry-orders.json); else, when the
+ *      gate let a place_order of this cycle through (its log, this cycle's id, the hook's records and the gateway's),
+ *      the order's (a later refused retry never hides it); else blocked with the gate's refusal (the same log) or the
+ *      executor's own BLOCKED or ABORTED report; else a failed
  *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
  *
  *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
@@ -98,18 +100,33 @@ const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict
 
 /**
  * The gate's last refusal of a place_order in this cycle (the gate log, stamped with the cycle's id: check-order.js
- * cycleId), at or after `sinceMs`: { checks, message } or null. Never throws.
+ * cycleId), at or after `sinceMs`: { checks, message } or null (the last decision is not a refusal). Never throws.
  */
 function gateRefusal(env, id, sinceMs) {
-  const d = gateDecision(env, id, sinceMs);
-  return d && d.decision === 'blocked' ? { checks: d.checks, message: d.message } : null;
+  const list = placeOrderDecisions(env, id, sinceMs);
+  const last = list[list.length - 1];
+  return last && last.decision === 'blocked' ? { checks: last.checks, message: last.message } : null;
 }
 
 /**
- * The gate's last place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, checks,
- * message } or null. `allowed` means the order went to the broker (whatever its reply). Never throws.
+ * The gate's place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, ts, checks,
+ * message, refusedAfter } or null. `allowed` means an order went to the broker (whatever its reply): any allowed
+ * place_order of the cycle wins over a refusal, before or after it (a refused retry never hides an order that went);
+ * it is the first allowed one (the order's moment), with the last refusal after it as `refusedAfter` ({ checks,
+ * message }, else null). With none allowed, the last refusal. The hook's and the gateway's records alike, by the tool
+ * each logged (`place_order` only: a refused modify_order or cancel_order is never the entry's); a record naming no
+ * tool is none. Never throws.
  */
 function gateDecision(env, id, sinceMs) {
+  const list = placeOrderDecisions(env, id, sinceMs);
+  const at = list.findIndex(e => e.decision === 'allowed');
+  if (at < 0) return list.length ? { ...list[list.length - 1], refusedAfter: null } : null;
+  const later = list.slice(at + 1).filter(e => e.decision === 'blocked').pop();
+  return { ...list[at], refusedAfter: later ? { checks: later.checks, message: later.message } : null };
+}
+
+/** This cycle's place_order decisions (allowed or blocked) in the gate log's tail at or after `sinceMs`, in order. */
+function placeOrderDecisions(env, id, sinceMs) {
   try {
     const { gateLogPath } = require('./trading/check-order');
     const file = gateLogPath(env);
@@ -125,18 +142,17 @@ function gateDecision(env, id, sinceMs) {
     } finally {
       fs.closeSync(fd);
     }
-    let last = null;
+    const out = [];
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
       if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
-      last = e;
+      const v = Array.isArray(e.violations) ? e.violations : [];
+      out.push({ decision: e.decision, ts: e.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(e.message || '') });
     }
-    if (!last) return null;
-    const v = Array.isArray(last.violations) ? last.violations : [];
-    return { decision: last.decision, ts: last.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(last.message || '') };
+    return out;
   } catch (_err) {
-    return null;
+    return [];
   }
 }
 
@@ -154,10 +170,12 @@ function gateDecision(env, id, sinceMs) {
  */
 function entryOutcome({ entered, filled = false, refusal = null, report = '', failed = null, sent = false, allowed = false, label }) {
   if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : 'went'})`, why: null };
-  if (refusal) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
+  // A refusal never hides an order the gate let through this cycle (gateDecision: allowed wins).
+  if (refusal && !allowed) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
   if (allowed && !sent) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (its reply never came and the account doesn't show it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
-  if (said) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
+  // A BLOCKED report after the gate let an order through is a refused retry's: the order's outcome decides.
+  if (said && !(allowed && said[1] === 'BLOCKED')) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
   if (sent) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was refused by the broker: the order went and the account shows no position or entry (the executor's report: ${short(report) || 'none'})`, why: short(report) };
   return { outcome: 'no-trade', result: `CYCLE RESULT: no-trade - the runner's entry: the trade-executor ${failed ? `${failed.stop}${failed.why ? ` (${failed.why})` : ''}` : 'sent no order'}: no order`, why: failed ? failed.why : 'no order' };
@@ -355,6 +373,8 @@ async function runEntry(deps, c) {
   const sent = gateDecision(env, id, sentAt - require('./tunables').runner().session.gateSlackMs);
   // The order's moment: the gate's decision that let it go to the broker (its log's time, the wall clock); none, null.
   info.timing.orderMs = sent && sent.decision === 'allowed' ? sinceClose(Date.parse(sent.ts)) : null;
+  // An order went and a later place_order of the cycle was refused: the outcome is the order's, the retry's refusal logged.
+  if (sent && sent.decision === 'allowed' && sent.refusedAfter) log(`the entry: a later place_order of the cycle (a retry) was refused by the order gate after the order went: ${short(sent.refusedAfter.message)}`, 'error');
   const decision = entered ? null : sent;
   const out = entryOutcome({
     entered, filled, refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',

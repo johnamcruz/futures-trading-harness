@@ -95,6 +95,85 @@ test('gateRefusal: the gate log\'s last blocked place_order of this cycle, since
   assert.strictEqual(E.gateRefusal({ FTH_GATE_LOG: path.join(home, 'none.jsonl') }, 'c1', 0), null, 'no log: none');
 });
 
+test('gateDecision: the hook\'s records by their tool like the gateway\'s; place_order only (a refused modify_order or cancel_order naming a contract and a rationale is none); a record naming no tool is none', () => {
+  const home = tmpDir();
+  const env = { FTH_GATE_LOG: path.join(home, 'gate.jsonl') };
+  const now = Date.now();
+  const line = o => JSON.stringify({ ts: new Date(now).toISOString(), source: 'hook', decision: 'blocked', cycle: 'c1', violations: [{ check: 'plan-required', message: 'No plan' }], contractId: 'MNQ', rationale: 'setup:trade_lifecycle long', ...o });
+  fs.writeFileSync(env.FTH_GATE_LOG, `${[line({ tool: 'modify_order' }), line({ tool: 'cancel_order' }), line({})].join('\n')}\n`);
+  assert.strictEqual(E.gateDecision(env, 'c1', now - 1000), null, 'a modify, a cancel, an old hook record without a tool: none is the entry\'s');
+  fs.appendFileSync(env.FTH_GATE_LOG, `${line({ tool: 'place_order' })}\n`);
+  assert.deepStrictEqual(E.gateDecision(env, 'c1', now - 1000), { decision: 'blocked', ts: new Date(now).toISOString(), checks: ['plan-required'], message: '[plan-required] No plan', refusedAfter: null });
+});
+
+test('gateDecision: an allowed place_order of the cycle wins over a refusal before or after it (the first allowed, the later refusal named); blocked only is the last refusal; nothing is null', () => {
+  const home = tmpDir();
+  const env = { FTH_GATE_LOG: path.join(home, 'gate.jsonl') };
+  const now = Date.now();
+  const at = s => new Date(now + s * 1000).toISOString();
+  const allowed = s => JSON.stringify({ ts: at(s), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: 'c1', violations: [] });
+  const blocked = (s, check, source = 'gateway') => JSON.stringify({ ts: at(s), source, tool: 'place_order', decision: 'blocked', cycle: 'c1', violations: [{ check, message: 'no' }] });
+  const read = lines => { fs.writeFileSync(env.FTH_GATE_LOG, `${lines.join('\n')}\n`); return E.gateDecision(env, 'c1', now - 1000); };
+  assert.deepStrictEqual(read([allowed(1), blocked(2, 'exposure', 'hook')]), { decision: 'allowed', ts: at(1), checks: [], message: '', refusedAfter: { checks: ['exposure'], message: '[exposure] no' } });
+  assert.deepStrictEqual(read([blocked(1, 'plan-required'), allowed(2)]), { decision: 'allowed', ts: at(2), checks: [], message: '', refusedAfter: null });
+  assert.deepStrictEqual([read([allowed(1), allowed(3)]).ts], [at(1)], 'the order\'s moment: the first that went');
+  assert.deepStrictEqual(read([blocked(1, 'plan-required'), blocked(2, 'exposure')]), { decision: 'blocked', ts: at(2), checks: ['exposure'], message: '[exposure] no', refusedAfter: null });
+  assert.strictEqual(read(['']), null);
+  // gateRefusal stays the last decision's refusal.
+  read([allowed(1), blocked(2, 'exposure')]);
+  assert.deepStrictEqual(E.gateRefusal(env, 'c1', now - 1000), { checks: ['exposure'], message: '[exposure] no' });
+});
+
+test('runEntry: the hook refused the executor\'s place_order and it reported nothing: blocked with the gate\'s refusal, never "trade-executor invalid"', async () => {
+  const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: '' } }, state: { positions: [], orders: [] } });
+  const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  const hookLine = (tool, cycle = id) => JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'hook', tool, decision: 'blocked', cycle, violations: [{ check: 'plan-required', message: 'No plan' }], contractId: 'MNQ', rationale: ARGS.rationale });
+  // A refused modify_order with the entry's contract and rationale is never the entry's refusal.
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${hookLine('modify_order')}\n`);
+  let r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['no-trade', 'CYCLE RESULT: no-trade - the runner\'s entry: the trade-executor invalid (no order call and no refusal reported): no order']);
+  const t = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: '' } }, state: { positions: [], orders: [] } });
+  const tid = require('../../scripts/lib/trading/check-order').cycleId(t.cycle().headEnv);
+  fs.writeFileSync(t.deps.env.FTH_GATE_LOG, `${hookLine('place_order', tid)}\n`);
+  r = await E.runEntry(t.deps, t.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['blocked', 'CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: [plan-required] No plan']);
+});
+
+test('runEntry: a refused retry never hides the order that went: allowed then blocked is the order\'s outcome, the retry\'s refusal logged; blocked then allowed the order\'s; blocked only blocked', async () => {
+  const lost = { ok: true, timedOut: false, text: 'BLOCKED\nthe retry was refused', tools: [], output: '' };
+  const run = async (decisions, roles = { 'trade-executor': lost }) => {
+    const s = setup({ roles, state: { positions: [], orders: [] } });
+    const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+    fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${decisions.map((d, i) => JSON.stringify({ ts: new Date(Date.now() + 5000 + i * 1000).toISOString(), source: i ? 'hook' : 'gateway', tool: 'place_order', decision: d, cycle: id, violations: d === 'blocked' ? [{ check: 'exposure', message: 'One entry at a time' }] : [] })).join('\n')}\n`);
+    const r = await E.runEntry(s.deps, s.cycle());
+    return { r, logs: s.logs };
+  };
+  // Its reply never came, its retry refused: unknown (executed, possibly placed), never blocked.
+  let { r, logs } = await run(['allowed', 'blocked']);
+  assert.strictEqual(r.entry.outcome, 'unknown');
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ: unknown/);
+  assert.ok(logs.some(l => /^error the entry: a later place_order of the cycle \(a retry\) was refused by the order gate after the order went: \[exposure\] One entry at a time$/.test(l)), logs.join('\n'));
+  // Its call completed, its retry refused, the executor says BLOCKED: the order went (the broker's to answer), not the gate's refusal.
+  ({ r } = await run(['allowed', 'blocked'], { 'trade-executor': { ...lost, tools: ['broker_place_order'] } }));
+  assert.deepStrictEqual([r.entry.outcome, /was refused by the broker: the order went/.test(r.result)], ['blocked', true]);
+  ({ r } = await run(['blocked', 'allowed']));
+  assert.strictEqual(r.entry.outcome, 'unknown');
+  ({ r } = await run(['blocked']));
+  assert.deepStrictEqual([r.entry.outcome, r.result], ['blocked', 'CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: [exposure] One entry at a time']);
+  // The account shows the position: executed, whatever the log says.
+  const s = setup();
+  const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'hook', tool: 'place_order', decision: 'blocked', cycle: id, violations: [{ check: 'exposure', message: 'x' }] })}\n`);
+  assert.strictEqual((await E.runEntry(s.deps, s.cycle())).entry.outcome, 'executed');
+});
+
+test('entryOutcome: a refusal passed with an allowed order is never the outcome; a BLOCKED report after an allowed order is a retry\'s', () => {
+  const label = 'trade_lifecycle long 1 MNQ';
+  assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['x'], message: '[x] no' }, allowed: true, sent: false, label }).outcome, 'unknown');
+  assert.match(E.entryOutcome({ entered: false, allowed: true, sent: true, report: 'BLOCKED\nretry', label }).result, /was refused by the broker: the order went/);
+  assert.match(E.entryOutcome({ entered: false, allowed: false, sent: false, report: 'BLOCKED\nx', label }).result, /was blocked: BLOCKED x$/);
+});
+
 test('runEntry: not planned is nothing for the runner; planned without an OK record is a process failure, logged, nothing runs', async () => {
   const s = setup();
   assert.strictEqual(await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: no-trade - nothing' })), null);
