@@ -582,3 +582,13 @@ test('head-prompt (Claude, headSkillsInPrompt): the prompt addition not written,
   failed('no scratch home', swap(fs2, 'mkdtempSync', () => { throw new Error('ENOSPC'); }));
   assert.strictEqual(P.headPromptCheck(ctx(on())).status, P.PASS, 'restored');
 });
+
+test('the training preflight\'s own readers create no run home (headSkillsInPrompt on): the replay starts a run only in a fresh home, so a check that wrote there refused every fresh run', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-preflight-home-'));
+  const runHome = path.join(tmp, 'run-home');
+  const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], account: '7', timeframe: 3, headSkillsInPrompt: true });
+  const read = P.defaultReaders(ROOT, { HOME: tmp, FTH_HOME: runHome });
+  read.replayStep({ cfg, start: '2022-04-21T13:00:00Z', paths: { runHome } }); // the no-web check's step
+  read.claudeHead(); // the head-prompt check (its scratch home)
+  assert.strictEqual(fs.existsSync(runHome), false, 'a preflight reader created the run home');
+});
