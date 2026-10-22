@@ -77,7 +77,7 @@ const { ENUMS } = require('./broker/interface');
 const SIDE_CODE = ENUMS.side;
 const TYPE_CODE = ENUMS.orderType;
 const WORKING = ['open', 'pending'];
-const sameCode = (got, name, codes) => (typeof got === 'number' ? got === codes[name] : String(got ?? '').toLowerCase() === name);
+const sameCode = (got, name, codes) => (typeof got === 'number' || /^\s*\d+\s*$/.test(String(got ?? '')) ? Number(got) === codes[name] : String(got ?? '').toLowerCase() === name);
 const working = s => s === undefined || s === null || WORKING.some(n => sameCode(s, n, ENUMS.orderStatus));
 
 /**
@@ -170,15 +170,19 @@ function placeOrderDecisions(env, id, sinceMs) {
     } finally {
       fs.closeSync(fd);
     }
-    const out = [];
+    const recs = [];
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
       if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
-      const v = Array.isArray(e.violations) ? e.violations : [];
-      out.push({ decision: e.decision, ts: e.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(e.message || '') });
+      recs.push({ ...e, ms: Date.parse(e.ts) });
     }
-    return out;
+    // One call the gateway allowed and its order tracker then refused to send (two records, nothing sent) is one refusal,
+    // as the cycle log and the labels read it (replay/labels.js collapsePairs).
+    return require('./replay/labels').collapsePairs(recs).map(e => {
+      const v = Array.isArray(e.violations) ? e.violations : [];
+      return { decision: e.decision, ts: e.ts, checks: v.map(x => x.check), message: v.map(x => `[${x.check}] ${x.message}`).join(' ') || String(e.message || '') };
+    });
   } catch (_err) {
     return [];
   }
@@ -192,6 +196,7 @@ function placeOrderDecisions(env, id, sinceMs) {
  *   failed    the executor's run didn't count (its stop and why), or null
  *   working   the account's working order that is this entry's (workingEntry), or null: entered, unfilled
  *   sent      its place_order call completed (the gate let it through): with nothing on the account, the broker took none
+ *   attempted it made a place_order call, completed or not (its transcript): with no gate decision of it, unknown
  *   allowed   the gate let a place_order of this cycle through (its log), whatever the broker's reply
  *   unread    the account wasn't read after the order (no account, or its read failed): a sent order is unknown
  * The gate let it through and its call never completed (a lost or late reply, a timeout): the order's outcome is
@@ -206,19 +211,34 @@ function restingOf(o) {
   return parts.length ? `: ${parts.join(', ')}` : '';
 }
 
-function entryOutcome({ entered, filled = false, working = null, refusal = null, report = '', failed = null, sent = false, allowed = false, unread = false, label }) {
+function entryOutcome({ entered, filled = false, working = null, refusal = null, report = '', failed = null, sent = false, attempted = false, allowed = false, unread = false, label }) {
   if (entered) return { outcome: 'executed', result: `CYCLE RESULT: executed - ${label} (the runner's entry: phase 2 approved, the order ${filled ? 'filled' : working ? `is working, unfilled${restingOf(working)}` : 'went'})`, why: null };
   // A refusal never hides an order the gate let through this cycle (gateDecision: allowed wins).
   if (refusal && !allowed) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the order gate refused the ${label}: ${short(refusal.message)}`, why: refusal.message };
   if (allowed && !sent) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (its reply never came and the account doesn't show it): treat it as possibly placed`, why: short(report) || 'no reply' };
+  // The order went (the gate let it through, or its call completed) and the account couldn't be read after it (nor the
+  // gateway's record found): unknown, never refused, whatever the executor says.
+  if ((allowed || sent) && unread) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (the order went and the account can't be read after it): treat it as possibly placed`, why: short(report) || 'the account can\'t be read' };
+  // A place_order call was made, never completed, and the gate log holds no decision of it (none can be read): unknown.
+  if (attempted && !sent && !allowed && !refusal) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (a place_order call was made, its reply never came and the gate log has no decision of it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
   // A BLOCKED report after the gate let an order through is a refused retry's: the order's outcome decides.
   if (said && !(allowed && said[1] === 'BLOCKED')) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
-  // Its order call went and the account couldn't be read after it (nor the gateway's record found): unknown, never refused.
-  if (sent && unread) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (the order went and the account can't be read after it): treat it as possibly placed`, why: short(report) || 'the account can\'t be read' };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
   if (sent) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was refused by the broker: the order went and the account shows no position or entry (the executor's report: ${short(report) || 'none'})`, why: short(report) };
   return { outcome: 'no-trade', result: `CYCLE RESULT: no-trade - the runner's entry: the trade-executor ${failed ? `${failed.stop}${failed.why ? ` (${failed.why})` : ''}` : 'sent no order'}: no order`, why: failed ? failed.why : 'no order' };
+}
+
+// A place_order call in a run's transcript (any server prefix), completed, errored or unanswered; one its harness stopped
+// itself (an unavailable tool, a permission rule) never reached a tool.
+const PLACE_ORDER = /(?:^|__|_)place_order$/;
+function attemptedOrder(exec) {
+  if (!exec) return false;
+  try {
+    return require('./cycle-log').toolCalls(String(exec.output || '')).some(x => PLACE_ORDER.test(x.name) && !x.stopped);
+  } catch (_err) {
+    return false;
+  }
 }
 
 async function runEntry(deps, c) {
@@ -423,6 +443,7 @@ async function runEntry(deps, c) {
     entered, filled, working: rest, unread: !account || Boolean(account.error), refusal: decision && decision.decision === 'blocked' ? decision : null, allowed: Boolean(decision && decision.decision === 'allowed'), report: exec ? exec.text : '',
     failed: exec && !exec.ok ? { stop: exec.stop, why: exec.why } : null, label,
     sent: Boolean(exec && Array.isArray(exec.tools) && exec.tools.includes(`${require('./broker/config').SERVER_NAME}_place_order`)),
+    attempted: attemptedOrder(exec),
   });
   if (out.outcome !== 'executed') log(`the entry: ${out.result}`, out.outcome === 'blocked' ? 'info' : 'error');
   return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });

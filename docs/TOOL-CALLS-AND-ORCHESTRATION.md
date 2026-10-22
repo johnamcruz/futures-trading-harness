@@ -330,9 +330,12 @@ head trader's run, before the cycle log; per role `config/runner.json`
    log, the hook's or the gateway's, by the tool each logs, or the executor's
    BLOCKED or ABORTED first line, or a call that completed with nothing on the
    account read; a `place_order` the gate let through this cycle wins over a
-   refusal before or after it, the refused retry logged), unknown (the gate let
-   it through and its reply never came, or its call completed and the account
-   couldn't be read: reported `executed`, possibly placed), or a no-trade naming the
+   refusal before or after it, the refused retry logged, except the gateway's
+   allowed record and its order tracker's refusal of the same call, one
+   refusal), unknown (the gate let it through and its reply never came; or the
+   order went and the account couldn't be read, whatever the executor reports;
+   or a `place_order` call with no reply and no gate decision of it: reported
+   `executed`, possibly placed), or a no-trade naming the
    failed run. A lost or late reply sends no second entry; the next cycles manage and exit it as
    any position. The cycle log records the outcome and its timing (`entry`:
    ms from the bar's close to the head trader's planned and to the order sent,

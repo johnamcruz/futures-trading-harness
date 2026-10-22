@@ -213,6 +213,59 @@ test('runEntry: the order went: a working entry order on the account is executed
   assert.match(r.result, /the order filled\)$/);
 });
 
+test('workingEntry: codes sent as digit strings are codes', () => {
+  const o = { id: 43, contractId: 'MNQ', side: '0', type: '1', status: '1', limitPrice: 21500 };
+  assert.strictEqual(E.workingEntry([o], ARGS), o);
+  assert.strictEqual(E.workingEntry([{ ...o, side: '1' }], ARGS), null);
+  assert.strictEqual(E.workingEntry([{ ...o, status: '3' }], ARGS), null);
+});
+
+test('entryOutcome and runEntry: the order went and the account can\'t be read: unknown whatever the executor says (ABORTED too); a gate refusal with nothing allowed is still blocked', async () => {
+  const label = 'trade_lifecycle long 1 MNQ';
+  const o = E.entryOutcome({ entered: false, allowed: true, sent: true, unread: true, report: 'ABORTED\nUnknownError: no answer', label });
+  assert.deepStrictEqual([o.outcome, /couldn't be read \(the order went and the account can't be read after it\)/.test(o.result)], ['unknown', true]);
+  assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['x'], message: '[x] no' }, unread: true, label }).outcome, 'blocked');
+  assert.strictEqual(E.entryOutcome({ entered: false, unread: true, report: 'ABORTED\nOrderRejected', label }).outcome, 'blocked', 'no order went: the report stands');
+  const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nUnknownError: no answer', tools: ['broker_place_order'], output: '' } }, readFails: true });
+  const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: id, violations: [] })}\n`);
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, /^CYCLE RESULT: executed - .*: unknown/.test(r.result)], ['unknown', true]);
+});
+
+test('gateDecision and runEntry: the gateway\'s allowed record and its order tracker\'s refusal of the same call are one refusal (nothing sent): blocked, no order time, no retry logged; a real retry refusal still leaves the order', async () => {
+  const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'BLOCKED\nthe gateway refused it', tools: [], output: '' } }, state: { positions: [], orders: [] } });
+  const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
+  const t0 = Date.now() + 5000;
+  const rec = (ms, o) => JSON.stringify({ ts: new Date(ms).toISOString(), source: 'gateway', tool: 'place_order', cycle: id, contractId: 'MNQ', rationale: ARGS.rationale, ...o });
+  const tracker = { decision: 'blocked', violations: [{ check: 'order-pending', message: 'customTag fth-1 is in use by an order of unknown outcome' }] };
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${[rec(t0, { decision: 'allowed', violations: [] }), rec(t0 + 200, tracker)].join('\n')}\n`);
+  assert.deepStrictEqual(E.gateDecision(s.deps.env, id, 0).checks, ['order-pending']);
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.entry.timing.orderMs], ['blocked', null]);
+  assert.match(r.result, /^CYCLE RESULT: blocked - the order gate refused the .*\[order-pending\]/);
+  assert.ok(!s.logs.some(l => /a later place_order of the cycle \(a retry\)/.test(l)), s.logs.join('\n'));
+  // The same contract and rationale, refused by another check: a retry; the order that went stands.
+  fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${[rec(t0, { decision: 'allowed', violations: [] }), rec(t0 + 200, { decision: 'blocked', violations: [{ check: 'exposure', message: 'One entry at a time' }] })].join('\n')}\n`);
+  const d = E.gateDecision(s.deps.env, id, 0);
+  assert.deepStrictEqual([d.decision, d.refusedAfter.checks], ['allowed', ['exposure']]);
+});
+
+test('runEntry: a place_order call made with no gate decision of it and no reply is unknown (possibly placed); no call at all stays a no-trade', async () => {
+  const call = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'p1', name: 'mcp__broker__place_order', input: ARGS }] } });
+  const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nno reply', tools: [], output: call } }, state: { positions: [], orders: [] } });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, /a place_order call was made, its reply never came and the gate log has no decision of it/.test(r.result)], ['unknown', true]);
+  const t = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nno reply', tools: [], output: JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'none' }] } }) } }, state: { positions: [], orders: [] } });
+  assert.strictEqual((await E.runEntry(t.deps, t.cycle())).entry.outcome, 'blocked', 'no call: the report as today');
+  // A call its harness stopped itself (opencode: an unavailable tool) never reached a tool: no call.
+  const stopped = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: ARGS, error: 'Model tried to call unavailable tool broker_place_order' } } });
+  const v = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: stopped } }, state: { positions: [], orders: [] } });
+  assert.strictEqual((await E.runEntry(v.deps, v.cycle())).entry.outcome, 'no-trade', 'a stopped call: no-trade');
+  const u = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: '' } }, state: { positions: [], orders: [] } });
+  assert.strictEqual((await E.runEntry(u.deps, u.cycle())).entry.outcome, 'no-trade', 'no call, no report: no-trade');
+});
+
 test('entryOutcome: a refusal passed with an allowed order is never the outcome; a BLOCKED report after an allowed order is a retry\'s', () => {
   const label = 'trade_lifecycle long 1 MNQ';
   assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['x'], message: '[x] no' }, allowed: true, sent: false, label }).outcome, 'unknown');
