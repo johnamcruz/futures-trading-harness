@@ -1474,3 +1474,15 @@ test('config hash: the limits mapping in brokers.json and the account file (acco
   fs.appendFileSync(file, '\n<!-- edited -->\n');
   assert.notStrictEqual(configHash(run, w.env), h, 'the account file is in the hash');
 });
+
+test('a fresh run with an opt-in Claude head prompt (headSkillsInPrompt) starts: the preflight\'s probe, then the seed of its fresh home (the order scripts/replay.js runs them), as a learning run would', () => {
+  const dir = tmpDir();
+  const base = replayConfig(dir).autotrader;
+  const w = userWorld({ autotrader: { ...base, harness: 'claude', command: undefined, headSkillsInPrompt: true } });
+  assert.strictEqual(w.run.cfg.headSkillsInPrompt, true);
+  // The training preflight's no-web check builds the step's env and argv first (web-access.js replayStep).
+  require('../../scripts/lib/replay/web-access').replayStep(w.run, { root: ROOT, env: w.env });
+  assert.strictEqual(fs.existsSync(w.run.paths.runHome), false, 'the preflight wrote into the run home');
+  // Then the run home is seeded: it must still be fresh (a non-empty folder without a manifest is refused).
+  assert.doesNotThrow(() => seedRunHome(w.run, { root: ROOT, userEnv: w.env }));
+});
