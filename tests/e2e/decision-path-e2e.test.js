@@ -779,8 +779,9 @@ test('decision path, trade_lifecycle, the runner: the history and the cycle log 
   assert.ok(h.composed.reads.every(x => x.check === true && x.agrees === true), JSON.stringify(h.composed.reads));
   // The gateway stamped the entry with its record and that record's expiry (valid_bars, 2, bars after the bar's close) at placement.
   const stamped = JSON.parse(fs.readFileSync(path.join(w.home, 'entry-orders.json'), 'utf8')).find(e => String(e.orderId) === String(resting[0].id));
-  // The stamp is the gate's own: the record it judged, the expiry it computed, the entry price and the side.
-  assert.deepStrictEqual(stamped.composed, { record: rec.id, expiresAt: rec.expiresAt, entry: 27427.5, side: 'long' });
+  // The stamp is the gate's own: the record it judged, the expiry it computed, the plan's entry, stop and target prices
+  // (the runner's fill check) and the side.
+  assert.deepStrictEqual(stamped.composed, { record: rec.id, expiresAt: rec.expiresAt, entry: 27427.5, stop: rec.plan.stop.price, target: rec.plan.target.price, side: 'long' });
   assert.strictEqual(h.composed.id, rec.id, 'the history keeps the order\'s own record');
   // The cycle log: the cycle's compose_check call.
   const line = D.cycleLines(w).at(-1);

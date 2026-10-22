@@ -56,7 +56,7 @@ const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
-const { isOpen } = require('./trading/positions');
+const { isOpen, signedSize } = require('./trading/positions');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -643,7 +643,8 @@ function createRunner(deps) {
     for (const p of (positions || []).filter(x => famOf(x.contractId) === fam && isOpen(x))) {
       const key = `${p.contractId}|${String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`)}`;
       if (guards[key]) continue;
-      const sign = Number(p.type) === 1 ? 1 : Number(p.type) === 2 ? -1 : 0;
+      let sign;
+      try { sign = Math.sign(signedSize(p)); } catch (_err) { sign = 0; }
       const opened = Date.parse(p.creationTimestamp);
       const fillAt = Number.isFinite(opened) ? opened : clock.now().getTime();
       const dayStart = tradingDayStart(new Date(fillAt)).getTime();

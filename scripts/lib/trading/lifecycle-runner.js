@@ -43,6 +43,7 @@ const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
 const { readRecords, daysNear } = require('./trade-lifecycle');
 const { isOpen, signedSize } = require('./positions');
+const { ENUMS } = require('../broker/interface');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
@@ -180,16 +181,16 @@ function fillGuard({ position, entry, orders = [], tick, price = null }) {
   try {
     const c = entry && isObj(entry.composed) ? entry.composed : null;
     if (!c) return none('not a composed entry');
-    const sign = Number(position && position.type) === 1 ? 1 : Number(position && position.type) === 2 ? -1 : 0;
+    const sign = Math.sign(signedSize(position));
     const fill = Number(position && position.averagePrice);
     const stop = Number.isFinite(c.stop) ? c.stop : Number(entry.stopPrice);
     if (!sign || !Number.isFinite(fill) || !Number.isFinite(stop) || !(tick > 0)) return none('no fill, side or plan stop to check');
-    const beyond = x => sign * (x - stop) <= 1e-9;
+    const beyond = x => sign * (x - stop) <= 0;
     if (beyond(fill)) return { action: 'flatten', why: `filled at ${fill}, beyond the plan's stop ${stop}: the setup was invalid before the fill (no late entry)` };
     const p = price === null || price === undefined ? NaN : Number(price);
     if (Number.isFinite(p) && beyond(p)) return { action: 'flatten', why: `the price ${p} is beyond the plan's stop ${stop} (filled at ${fill}): the setup is invalid` };
     if (Number.isFinite(c.entry) && Math.abs(fill - c.entry) < tick / 2) return none('filled at the plan\'s limit');
-    const stops = (orders || []).filter(o => o && o.contractId === position.contractId && Number(o.type) === 4 && (Number(o.side) === 0 ? 1 : -1) === -sign);
+    const stops = (orders || []).filter(o => o && o.contractId === position.contractId && Number(o.type) === ENUMS.orderType.stop && (Number(o.side) === ENUMS.side.buy ? 1 : -1) === -sign);
     if (stops.length !== 1) return none(`${stops.length} working stops on the position: none moved`);
     const resting = Number(stops[0].stopPrice);
     if (!Number.isFinite(resting)) return none('the resting stop has no price');

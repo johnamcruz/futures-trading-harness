@@ -290,7 +290,7 @@ async function runEntry(deps, c) {
         log(`the entry: the latest 1m bar can't be read (${err.message}): the local bars decide`, 'error');
       }
     }
-    let config = null;
+    let config;
     try { config = require('./trading/config').loadConfig(roleEnv); } catch (_err) { config = null; }
     const G = require('./tunables').runner().gate;
     const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });

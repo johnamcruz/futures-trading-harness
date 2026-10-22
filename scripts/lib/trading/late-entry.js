@@ -31,7 +31,6 @@ const path = require('path');
 const { familyRoot } = require('./contracts');
 const { signalMaxAgeMin } = require('./signal-state');
 
-const EPS = 1e-9;
 const FUTURE_MIN = require('../tunables').runner().gate.futureToleranceMin; // config/runner.json: a clock's slack, as signal-state's
 const FILE = 'latest-price.json';
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -62,7 +61,7 @@ function readPrice(home, root) {
 function latestPrice({ home, root, briefing = null, now = new Date(), maxAgeMin }) {
   const seen = [];
   const candidates = [];
-  let recorded = null;
+  let recorded;
   try { recorded = readPrice(home, root); } catch (_err) { recorded = null; }
   if (recorded) candidates.push({ price: recorded.price, closedAt: recorded.closedAt, minutes: recorded.minutes || 1, source: recorded.source || 'recorded' });
   if (isObj(briefing) && Number.isFinite(Number(briefing.price)) && Number.isFinite(Date.parse(briefing.closedAt))) {
@@ -86,11 +85,11 @@ function lateEntry({ side, entry, stop, price, share }) {
   const s = Number(stop);
   const p = Number(price);
   if (!sign || ![e, s, p, share].every(Number.isFinite) || !(sign * (e - s) > 0)) return { kind: 'unreadable', message: `the plan (a ${side} at ${entry}, stop ${stop}) or the price ${price} can't be checked` };
-  if (sign * (p - s) <= EPS) return { kind: 'beyond-stop', message: `the setup was invalidated before the order went (price ${p} beyond the plan's stop ${s}): no late entry` };
+  if (sign * (p - s) <= 0) return { kind: 'beyond-stop', message: `the setup was invalidated before the order went (price ${p} beyond the plan's stop ${s}): no late entry` };
   const against = sign * (e - p);
   const allowed = share * sign * (e - s);
-  if (against > allowed + EPS) {
-    return { kind: 'missed-entry', message: `missed the plan's entry ${e} (price ${p} is ${+against.toFixed(6)} points past it against the ${side}, over ${share} of the ${+(sign * (e - s)).toFixed(6)}-point stop): the limit would fill away from the plan: no late entry` };
+  if (against > allowed) {
+    return { kind: 'missed-entry', message: `missed the plan's entry ${e} (price ${p} is ${against} points past it against the ${side}, over ${share} of the ${sign * (e - s)}-point stop): the limit would fill away from the plan: no late entry` };
   }
   return null;
 }
