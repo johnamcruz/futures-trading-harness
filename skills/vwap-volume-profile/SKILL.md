@@ -28,9 +28,9 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day; fade extremes, small
-     targets, or stand aside.
-   - Distance from VWAP in ATRs: beyond ~2 × ATR(14) on the trigger timeframe
-     is stretched; don't chase.
+     targets; a read against trend entries.
+   - Distance from VWAP in ATRs: a read, never a pass alone (far from
+     VWAP did no worse in the census).
 2. **Relative volume**: the participation fields, as computed, are the
    `momentum-and-volume` skill's.
 3. **Volume profile.** Don't estimate it by hand: market-snapshot's
@@ -89,6 +89,6 @@ up; target VAH 21560.00, 69.75 points away; the POC at 21522.00 is the halfway m
 09:52 ET: 3m close above OR high, v = 2,140 vs OR average 1,180 (1.8×), price
 0.6 ATR above rising RTH VWAP → participation confirmed: 3m momentum up.
 
-11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation; trend reads
-wait for a range break.
+11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation: a read against
+trend entries until a range break.
 ```

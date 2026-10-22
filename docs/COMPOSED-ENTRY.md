@@ -64,9 +64,12 @@ loop improves the thinking, not only which combination it picks.
 
 **Think like a pro trader.** A pro reads context before setups (the
 higher-timeframe bias and the day's levels first), waits at levels for
-price to come to them, takes only setups where the reads line up and the
-room to the target pays for the risk, and passes by default: a pass is a
-good decision and is scored as one. Invalidation is defined before entry,
+price to come to them, and takes a valid setup (every hard step true: the
+trend's side, a reaction at a key level, the trigger closed, the stop at
+the invalidation, R:R to the target at least the minimum), at full size, or
+half on serious evidence against; it passes only on a decisive reason (the
+owner's decision, 2026-10-21: a pass on a verified record without one is
+scored excessive abstention, `confluence-counting`). Invalidation is defined before entry,
 every trade is managed and reviewed, and size comes from risk, never
 conviction. The learning loop rewards that discipline (good passes, honest
 reasons), never the number of trades.
@@ -836,13 +839,14 @@ trend (ADX(14) at least 20, EMA20 beyond EMA50) is a separate bias read,
 so pairing them is the model's choice, not a definition; a strong CISD candle (body at least 0.6 of its
 range, close in its extreme third, range at least 1 ATR); a CRT sweep is
 shallow (at most half the range beyond it), and the far side should be at
-least 2R away; acceptance is two closes; don't chase VWAP past 1.5 ATR;
-breakouts want an ADX floor; flow must agree across windows, and flow
+least 2R away; acceptance is two closes; breakouts want an ADX floor; flow must agree across windows, and flow
 without price progress is absorption. **Tuned quirks, not kept:** the
 minute-of-day windows (09:48, 10:00-15:00, 573/600/900), CRT key times,
 `cisdMaxWait`, `cisdExpiry`, `cisdVoidTol`, ATR buffers of 0.1-0.5, the
 range-ATR floors of 3 and 6 for CRT, and the flow thresholds of 0.25 and
-0.3 (the flow strategies were never backtested). Which concepts work, in
+0.3 (the flow strategies were never backtested), and the VWAP-chase limit
+(1.5 ATR; a census of 27,698 moments found entries far from VWAP no worse,
+so the distance is a read, never a veto). Which concepts work, in
 which context, is what the learning loop finds; the skills state each
 concept, not a tuned number.
 

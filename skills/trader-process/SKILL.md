@@ -1,6 +1,6 @@
 ---
 name: trader-process
-description: Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the priority order decides. Every cycle.
+description: Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; a valid setup is the trade. Every cycle.
 ---
 
 # Trader Process
@@ -13,9 +13,8 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 It adds no filter and no veto:
 
-- **The priority order decides** (strategy-library): take, skip and
-  size. Only its hard stops and the gate's end a
-  plan early.
+- **A valid setup is the trade** (`confluence-counting`); only a
+  decisive against, the hard steps and the gate's end a plan early.
 - **A setup is a combination of reads** you state, step by step, and
   `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
 - **Management always runs.** Managing and exiting a position, and the
@@ -37,13 +36,14 @@ It adds no filter and no veto:
 4. **Setup.** The setup reads (`trade-lifecycle`), on the side rule's
    side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
-5. **Confluence.** Count the six items of `confluence-counting`.
-6. **Entry.** A closed bar's entry reads; never anticipate.
+5. **Confluence.** The six categories of `confluence-counting`.
+6. **Entry.** A closed bar's entry reads; never anticipate. Trigger
+   closed → `compose_check` now.
    Read: `candle-reading`, `momentum-and-volume`.
-7. **Risk.** Stop (`invalidation`), target (`take-profit`), size, the
-   room; the numbers from `order_plan` or the compose record.
-8. **Decision.** Take, skip or wait, decided with the priority order;
-   write its ONE main reason. The counts never overrule it.
+7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
+   size; R:R: the compose record's, never yours.
+8. **Decision.** Compose OK → take, sized by the against (step 5);
+   refused → pass, naming it. One reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 
@@ -79,13 +79,13 @@ PLAN:
 4 Setup: <side, the setup reads | none>
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
 6 Entry: <the entry reads | none>
-7 Risk: stop <ticks>, size <n>, exit <target R|trail>, room <the first level in the way, R>
-8 Decision: <take|skip|wait> - <one main reason>
+7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
+8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
 
-No level in the way (a null `inTheWay`) with a stop means room enough,
-not `unknown`. The cycle result's reason is line 8's.
+No level ahead (a null `inTheWay`) with a stop is `none`, not
+`unknown`. The cycle result's reason is line 8's.
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
 close 9; excessive abstention 8; wrong stated reason the false line's;
@@ -95,13 +95,13 @@ risk-rule rejection 2, 7.
 
 ```text
 PLAN:
-1 HTF: 4h up, 1h up, 15m up, bias long, rule prevailing trend 4h up
+1 HTF: 4h up, 1h up, 15m up, bias long, rule LONG allowed (prevailing 4h up)
 2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
 4 Setup: long, 15m rejected prior vah up
-5 Confluence: for 4, against 0, neutral 2: aligned, VWAP, level, momentum
+5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
-7 Risk: stop 111 ticks, size 1, exit target 2.08R, room enough
-8 Decision: take - continuation with room, compose_check OK
+7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
+8 Decision: valid yes, full - compose_check OK
 9 Manage: flat
 ```

@@ -11,8 +11,7 @@ description: Trader-process step 1 and the regime in step 2 - whether each timef
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are the
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are the
 code's or hypotheses; a missing field is `unknown`.
 
 Each timeframe's trend is its votes (`multi-timeframe-analysis`; read
@@ -58,7 +57,7 @@ pause, not a range day. The side and the pullback: `htf-to-ltf`.
 
 ```text
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10, crosses 1); BOS up 2 bars ago. Read: trend.
-  Reads: 1h up, 3m bos up. Priority order: aligned, room -> take.
+  Reads: 1h up, 3m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.
   Reads: regime transition, read long mixed; the priority order's rule (contradicting facts) decided skip.
 Loser: read trend; long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ);

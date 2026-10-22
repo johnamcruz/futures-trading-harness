@@ -30,7 +30,8 @@ context, so the outcomes teach which combinations work in which market.
 ## When to Use
 
 - Every bar of a runner cycle: the model composes a candidate from its
-  skills, or passes (a pass is a good decision and is scored as one).
+  skills; a valid setup is the trade, a pass only on a decisive reason
+  (`confluence-counting`).
 - Only with a `compose_check` record that is `OK` for this bar and side.
 - Read `trade-lifecycle` before an entry: how to compose, send and read a refusal.
 

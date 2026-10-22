@@ -548,7 +548,9 @@ will judge them, before any measurement. Examples:
 - the multi-timeframe read's sizing in the priority order (step 4 of
   `strategy-library`);
 - "a reversal only at a higher-timeframe level, nearest target";
-- "skip when room < the setup's R";
+- "skip when room < the setup's R" (measured on 27,698 practice-train
+  moments, 2026-10-21: no selective value, so the room is now a read,
+  never a veto; likewise "don't chase beyond 2 ATR from VWAP");
 - "lunch-window setups are weaker";
 - each strategy's skip rules and filters;
 - the flow strategies' claims (R34), measured only on covered months

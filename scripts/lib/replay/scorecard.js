@@ -25,7 +25,7 @@
  *   1 hard stops    a no-entry window or news blackout (the briefing's `blocked`), a skip verdict,
  *                   the attempt's entry block  -> no trade
  *   2 trend rule    a trend strategy against it -> no trade; a reversal fading it -> judgment, half
- *   3 room          the first level in its way before the R it needs -> no trade
+ *   3 room          the first level ahead before the R it aims for -> judgment (a read, never a no trade)
  *   4 mtf read      aligned -> full; mixed -> half; counter (non-reversal) -> no trade; pullback -> judgment
  *   5 skip rules    judgment (the strategy's own text)
  *   6 confluence    a setup on the other side -> no trade
@@ -97,6 +97,9 @@ const { checkLook } = require('../prop/looks');
 const { readLedger, appendLook, withLedgerLock } = require('../prop/ledger-file');
 const { roleOf } = require('../prop/splits');
 const { learningLook } = require('../learning/scorecard-look');
+const { setupMoment } = require('../learning/setup-moments');
+const { standardPlans } = require('../learning/setup-library');
+const { trendRuleOf } = require('../trading/reasons');
 
 const VERSION = 1;
 // This scorecard grades composed setups on their own compose record (the training preflight checks for it).
@@ -117,8 +120,14 @@ const etClock = ms => ET.format(new Date(ms));
 // ---------------------------------------------------------------------------------------------
 // Classification
 
-// Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence and mixed alone are not.
-const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'no-room', 'counter', 'entry-block']);
+// Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence, mixed and the room
+// (a read, never a no trade alone) are not.
+const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'counter', 'entry-block']);
+// The grounds that pass a valid composed setup (an OK record): the hard ones its record doesn't already hold.
+const COMPOSED_GROUNDS = new Set(['no-entry-window', 'trend-blocks', 'no-attempt', 'verdict-skip', 'entry-block']);
+// The decisive read against the side (confluence-counting): a real HTF reversal, a 1h CHoCH against it. A 15m swing
+// broken is serious (half), never a pass.
+const DECISIVE = /\b1h (?:choch|change of character)\b|\b(?:choch|change of character) (?:on|of) the 1h\b/i;
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -162,14 +171,29 @@ function classify(label, facts, expected, reasons) {
   }
   if (act !== 'none' || notes.some(r => NOT_A_DECISION.has(r))) return why.push(notes.join(', ') || 'not an entry or a skip'), out('unchecked', null);
   // A skip (or standing aside with nothing to take).
+  // A composable setup (trend side, a reaction at a key level, the trigger closed) passed without compose_check: the
+  // model judged room or R:R itself instead of the plan (confluence-counting: compose first).
+  if (expected.decision === 'no-trade' && expected.decidedBy === 'no setup' && facts.composable && facts.composable.valid) {
+    // A true hard ground (an entry block, no attempt, a verdict's skip, the window, the trend rule) passes it, as it
+    // passes an OK record; so does the attempt's own entry block, stated or not.
+    const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
+    if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    if (facts.attempt && facts.attempt.entryBlock) return why.push(`the attempt blocks entries (${facts.attempt.entryBlock})`), out('right', true);
+    why.push(`no compose: ${facts.composable.sides.join(' and ')} ${facts.composable.reason}, passed without compose_check`);
+    return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
+  }
   if (expected.decision === 'no-trade') return out(falseReason ? 'wrong stated reason' : 'right', true);
   if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
-  // A pass on an OK compose record: the record is a checker's, not advice, and passing is a good decision by default,
-  // scored as one (the composed-entry design: "passes by default: a pass is a good decision and is scored as one"); its
-  // outcome is the learning report's counterfactual grade, not adherence.
+  // A pass on an OK compose record: a valid setup (every read verified, the plan standing) is the trade (the owner's
+  // decision, 2026-10-21: confluence-counting); only a decisive reason passes it: a true hard ground the record can't
+  // see (an entry block, a verdict's skip, the trend rule), or a 1h CHoCH against stated (which no claim kind checks:
+  // unchecked). Soft reads, or none, are excessive abstention.
   if (expected.composed !== undefined) {
-    why.push(`a pass on the verified compose record ${expected.composed}: passing is the model's call`);
-    return out(falseReason ? 'wrong stated reason' : 'right', true);
+    const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
+    if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
+    why.push(`a valid setup (the verified compose record ${expected.composed}) passed without a decisive reason`);
+    return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
   if (expected.couldSkip && expected.couldSkip.length) {
     why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`);
@@ -332,10 +356,17 @@ function runRecords(home, { strategies, outcomeBars }) {
 const before = (list, t) => (list || []).filter(x => Date.parse(x.at) <= t).pop() || null;
 
 /** The briefing's candidates and alignment for the bar, rebuilt from the bars closed by it; null without them. */
-function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
+/** The bars a cycle on `barT` was handed (the last `count` up to it, its time keys dropped), or null: too few, no tf. */
+function barsAt(rec, { symbol, barT, tf, count }) {
   const all = rec.barsFor(symbol, tf);
   const i = all.findIndex(b => b.t === barT || b.ms === Date.parse(barT));
   if (i < 2 || !tf) return null;
+  return all.slice(Math.max(0, i + 1 - count), i + 1).map(({ ms: _ms, ...x }) => x);
+}
+
+function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
+  const bars = barsAt(rec, { symbol, barT, tf, count });
+  if (!bars) return null;
   const style = r => { const s = rec.byName.get(r.name); return s && s.mtf ? s.mtf : null; };
   // The runner's scan results, as far as the log keeps them: a rules candidate's exit and min R:R from its strategy.
   const results = scan.results.filter(isObj).map(r => {
@@ -344,8 +375,45 @@ function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
     return { ...r, ...(rules ? { minRR: s.risk ? s.risk.min_rr : undefined, exit: exitPlan(s), status: s.status } : {}), ...(r.mtf ? { mtf: { ...r.mtf, style: style(r) || 'trend' } } : {}) };
   });
   try {
-    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars: all.slice(Math.max(0, i + 1 - count), i + 1).map(({ ms: _ms, ...x }) => x), minutes: tf, scan: results, blackouts: rec.blackouts, roundSteps: rec.roundSteps, now: new Date(t) });
+    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars, minutes: tf, scan: results, blackouts: rec.blackouts, roundSteps: rec.roundSteps, now: new Date(t) });
     return { candidates: b.sections.m3.data.candidates || [], alignment: b.sections.m15.data.alignment || {} };
+  } catch (_err) {
+    return null;
+  }
+}
+
+/**
+ * A composable setup in a bar briefing (the facts compose_check starts from): the setup timeframe's last completed
+ * candle reacted at a key level or FVG (setup-moments.js, the "Setups to check" line), the trigger timeframe closed
+ * after it (phase confirmation), on a side the trend rule allows, in a window that allows entries and no news
+ * blackout, and the briefing's Standard plan for that side is OK (setup-library.js standardPlans, the same code the
+ * briefing's line comes from): a plan the line states refused is a pass the skills prescribe, never abstention.
+ * { valid, sides, reason }; never throws (no briefing: not valid).
+ */
+function composableSetup(b) {
+  try {
+    const m3 = b && b.sections && b.sections.m3 ? b.sections.m3.data : null;
+    if (!m3 || !m3.bar) return { valid: false, sides: [], reason: 'no bar briefing' };
+    const mo = setupMoment(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000 });
+    const rule = trendRuleOf(m3.trendRule);
+    const allowed = [...new Set(mo.reactions.map(r => (r.dir === 'up' ? 'long' : r.dir === 'down' ? 'short' : null)).filter(x => x && rule[x] === true))];
+    const blocked = m3.windowEntries !== 'allowed' ? `the ${m3.window} window allows no entries` : m3.news && m3.news.inBlackout !== false ? 'a news blackout or the news unknown' : null;
+    const plans = mo.moment && mo.phase === 'confirmation' && allowed.length && !blocked ? standardPlans(b) || [] : [];
+    const sides = allowed.filter(side => plans.some(p => p.side === side && p.status === 'traded'));
+    const refused = allowed.map(side => plans.find(p => p.side === side)).filter(Boolean).map(p => `${p.side} plan refused (${p.why})`);
+    const valid = sides.length > 0;
+    return { valid, sides: valid ? sides : allowed, reason: blocked || (!mo.moment ? mo.reason : mo.phase !== 'confirmation' ? `${mo.reason}: the trigger not closed yet` : !allowed.length ? `${mo.reason}: not the trend rule's side` : !valid ? `${mo.reason}: ${refused.join(', ') || 'no standard plan'}` : `${mo.reason}, plan OK`) };
+  } catch (err) {
+    return { valid: false, sides: [], reason: `the briefing can't be read (${err.message})` };
+  }
+}
+
+/** The bar briefing rebuilt at a decision (the runner's own code on the run's bars, no scan), or null. */
+function plainBriefingAt(rec, { symbol, barT, t, tf, count }) {
+  const bars = barsAt(rec, { symbol, barT, tf, count });
+  if (!bars) return null;
+  try {
+    return buildBriefing({ symbol, contractId: null, bars, minutes: tf, scan: [], blackouts: rec.blackouts, roundSteps: rec.roundSteps, now: new Date(t) });
   } catch (_err) {
     return null;
   }
@@ -439,6 +507,11 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
   }
   facts.setups.push(...composedSetups);
   facts.attempt = attemptAt(label, facts, { accounts, doc });
+  // A pass with no compose call on the bar: whether the briefing held a composable setup (only then rebuilt).
+  const act = label.teacher ? label.teacher.action : null;
+  if (label.decision !== 'in-trade' && (act === 'none' || act === null) && !composedOf(doc, label).length && !facts.setups.length && rec.barsFor) {
+    facts.composable = composableSetup(plainBriefingAt(rec, { symbol: label.symbol, barT: label.barT, t, tf, count }));
+  }
   return facts;
 }
 
@@ -694,4 +767,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
     : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor };
+module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor, composableSetup };

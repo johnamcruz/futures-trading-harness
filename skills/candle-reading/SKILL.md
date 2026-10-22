@@ -22,8 +22,7 @@ every timeframe. Never judge the in-progress candle: a 15m hammer half
 formed is not a hammer. In strategy rules `htfc_*` is the candle in
 progress: never judge a pattern on it.
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle, named with its
@@ -61,7 +60,7 @@ prior candle, ATR(14) as of prev):
 A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
-The stack counts once (`confluence-counting`, item 4).
+The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
 general, none measured in our data yet.
@@ -72,8 +71,8 @@ general, none measured in our data yet.
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
   on the 1h close a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing. Priority order -> take.
-Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming;
-  the session VAH 0.4R in the way. Priority order (step 3, room): skip.
+Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
+  the entry read not in yet -> pass. The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL. -38 ticks, -$19.00.

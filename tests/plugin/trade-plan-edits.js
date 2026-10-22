@@ -13,9 +13,8 @@ target or the trail's activation, and a level closer than 1R is a skip under
 the skip rules that name it), and the session window`,
   now: `liquidity in the trade's way (\`inTheWay\`, the compose record's or a
 candidate's: the first level in its direction in points and R, where 1R is
-its own stop: check there is room to the target or the trail's
-activation), and the session window`,
-  reason: 'a composed trade\'s room is its compose record\'s inTheWay; the skip rules that named it were the retired rules strategies\'' },
+its own stop: a read beside the target, not a pass), and the session window`,
+  reason: 'a composed trade\'s room is its compose record\'s inTheWay; the skip rules that named it were the retired rules strategies\'; then fix/confluence-not-vetoes: the first level ahead is a read, never a pass alone (the room rule selected nothing in a census of 27,698 moments)' },
   { old: 'The exit follows the strategy\'s `exit` (shown in the scan):\n\n- **Trailing:**',
     now: `The exit: a composed trade sends the record's stop and target
 (\`trade-lifecycle\`); its policy's \`exit\` (the rulebook; a rules strategy's:

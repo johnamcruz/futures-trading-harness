@@ -34,7 +34,7 @@ const { parseLanes, agentOverrideErrors } = require('./lanes');
 const { sideValuesText } = require('./trading/rules');
 // The head trader's load list: the composed entry's (trade_lifecycle, the one entry strategy). A rules strategy's entry
 // (a user's or a fixture's) also needs the strategy skills, read with skill_lookup (the gate requires them for it).
-const { REQUIRED_FOR_COMPOSED: REQUIRED_FOR_ENTRY } = require('./trading/skills-loaded');
+const { REQUIRED_FOR_COMPOSED: REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('./trading/skills-loaded');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -512,9 +512,11 @@ const ENTRY_TEXT = ' The runner runs this cycle\'s entry (the desk\'s reports ar
 // Codex reads them (it carries them in AGENTS.md); a custom harness, either.
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
 // The skills an entry needs loaded (the order gate's skills-loaded check, REQUIRED_FOR_ENTRY), then the ones the head
-// trader loads every cycle that the gate does not require (ALSO_LOAD: htf-to-ltf, the alignment labels and the reversal rule,
-// trade-session step 0).
-const ALSO_LOAD = ['htf-to-ltf'];
+// trader loads every cycle that the gate does not require (ALSO_LOAD: htf-to-ltf, the alignment labels and the reversal rule;
+// confluence-counting, the count that decides take or pass; trade-session step 0).
+// And the gate's skills-at-entry ones (REQUIRED_AT_ENTRY: setup-judgment, trade-plan) every cycle: "before an entry" relied on
+// the head trader remembering, and a Claude Code replay lost 2 of 6 approved orders to [skills-at-entry] without them.
+const ALSO_LOAD = ['htf-to-ltf', 'confluence-counting', ...REQUIRED_AT_ENTRY];
 const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
 /** The skills a cycle loads, as the prompt names them: "a, b, and c (the order gate refuses an entry without them); also load d and e". */
 const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>

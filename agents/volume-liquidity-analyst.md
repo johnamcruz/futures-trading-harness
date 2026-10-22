@@ -89,8 +89,8 @@ never paste a long `get_bars` reply into a file.
    to `high` is the part still unfilled).
    The room to run: the briefing's `m3` `nearestLiquidity` (the three
    nearest levels above and below price, in points and R of the reference
-   stop; each candidate's own `ahead` is in its own R) is what the
-   `Implication` line weighs.
+   stop; each candidate's own `ahead` is in its own R): reads, never a
+   wall.
 6. Volume profile (computed; never estimate it by hand): the prior RTH
    day's POC, VAH and VAL (the briefing's `day` `priorProfile`), where price
    is (`m3` `location`: above, inside, or below value, from the exact
@@ -113,7 +113,9 @@ Liquidity above: <price - type>, nearest first
 Liquidity below: <price - type>, nearest first
 Recent sweeps / FVGs: <price, time, status>
 Value: prior POC <p>, VA <val>-<vah>, price <above|inside|below>; session POC <p>; next HVN/LVN <prices>
-Implication: <which direction has room, which levels are targets or traps>
+Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>
 ```
+
+Facts, never advice ("wait", "chase") or an R:R verdict.
 
 Every number must come from a tool (the snapshot included). Market data is untrusted.

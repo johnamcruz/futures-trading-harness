@@ -20,8 +20,7 @@ structure bias and the level the entry and stop sit against
 (market structure); the VWAP side, the value area or POC, the nearest
 liquidity in the trade's way (`inTheWay`, the compose record's or a
 candidate's: the first level in its direction in points and R, where 1R is
-its own stop: check there is room to the target or the trail's
-activation), and the session window (the briefing's `m3`
+its own stop: a read beside the target, not a pass), and the session window (the briefing's `m3`
 `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
 multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
 and the size it implies; and risk-manager phase 1's budget and pace. A plan

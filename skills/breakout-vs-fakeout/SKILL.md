@@ -12,8 +12,7 @@ description: Trader-process step 3, price through or at a level - accepted (clos
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
 - **Fakeout (sweep), computed**: `m3.sweeps`, a level traded through from
@@ -48,9 +47,9 @@ fired too rarely to say.
 
 ```text
 Take: prior RTH high 21615.00; closes 21619.25, 21622.50, 21621.75; retest low 21615.75 held.
-  Read: acceptance, 3m broke prior rth high up. Priority order: room, aligned -> take.
+  Read: acceptance, 3m broke prior rth high up; aligned, for outweighs against -> take.
 Skip: m3.sweeps: prior RTH high 21625.00, key, wick 21629.50, back in 1 bar. Long at 21616.50:
-  the swept high 0.6R in the way. Priority order (step 3, room): skip.
+  a fakeout against the long, no acceptance read -> pass. The swept high 0.6R ahead is a read.
 Loser: read acceptance (closes 21618.50, 21620.25); long at 21620.25, stop 21615.75
   (4.50 pts = 18 ticks, $9.00 on 1 MNQ); low 21612.00, now a sweep (bars 3). -18 ticks, -$9.00.
 ```

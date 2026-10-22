@@ -31,8 +31,8 @@ points to the read it uses.
 4. **Where the idea is wrong.** Beyond the reaction's LTF structure
    (`invalidation`): check that the strategy's stop sits beyond it.
 5. **Where it aims.** The next HTF swing (`m3.swingTargets`);
-   `candidate.inTheWay` is the first level in the way: check that the room
-   to it allows the trade.
+   `candidate.inTheWay` is the first level ahead: a read to weigh, not a
+   pass. Hard: R:R to the target at least `risk.min_rr`.
 
 When the timeframes disagree, the alignment label (`htf-to-ltf`) names it:
 the HTF gives the side, the LTF only the timing.

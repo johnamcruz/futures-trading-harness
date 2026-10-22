@@ -12,8 +12,7 @@ description: Structure breaks as computed - confirmed swings, BOS (continuation)
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. A missing field
+A read, never a veto: the count decides (`confluence-counting`). A missing field
 or a null break is `unknown`.
 
 The bar briefing holds the breaks. The latest BOS or CHoCH (`lastBreak`)
@@ -55,8 +54,8 @@ developing.
 
 **In the PLAN.**
 
-- **1 HTF**: the 15m and 1h breaks, read in item 1 of
-  `confluence-counting`.
+- **1 HTF**: a 1h break is the side rule's, a 15m one structure
+  (`confluence-counting`).
 - **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
   lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
@@ -67,7 +66,7 @@ developing.
 
 ```text
 Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
-  Reads: 1h bos up, at vwap rth, 3m choch up. Priority order: aligned, room -> take.
+  Reads: 1h bos up, at vwap rth, 3m choch up. Priority order: aligned; the count for -> take.
 Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50. Read: a 3m pullback, not a reversal.
   A short: no 1h CHoCH down; the priority order (step 2) decided skip.
 Loser: 1h up; m3, then 15m CHoCH down through 21560.00. Read: reversal developing.

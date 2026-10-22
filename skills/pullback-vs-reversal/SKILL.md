@@ -12,8 +12,7 @@ description: Trader-process step 4, price moving against the higher-timeframe tr
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`. "Last 10 bars" is the cycle
 prompt's line (`V` and the `(c-o)` per bar).
 

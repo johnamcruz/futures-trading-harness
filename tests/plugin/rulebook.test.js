@@ -325,7 +325,7 @@ test('R4: each rulebook classifies every item, and every enforced item is really
 /** What each taught item's step teaches, in the skill's own words (whitespace may wrap). */
 const TAUGHT = {
   trend_fade: /reversal strategy may\s+fade it only at a higher-timeframe level/,
-  room: /`inTheWay`[^]*`needR`\)\s+→ no trade/,
+  room: /`inTheWay`[^]*`needR`\)[^]*never a no\s+trade alone/,
   mtf_read: /`aligned` → full;[^]*`mixed` → half;[^]*`counter` on a\s+non-reversal setup → no trade/,
   skip_rules: /skip rules\*\*[^]*any skip rule hit: no trade/,
   confluence: /\*\*Confluence\*\* \(rules strategies\): another firing the other side → no trade/,

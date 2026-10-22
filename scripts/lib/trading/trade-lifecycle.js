@@ -273,7 +273,7 @@ function renderRecord(r, checked = null) {
   if (checked) out.push(renderCheck(checked).trimEnd());
   const p = r.plan;
   if (p) {
-    out.push(`Plan (code's arithmetic): entry limit ${p.entry.price}; stop ${p.stop.price} (${p.stop.source} ${p.stop.level}, ${p.stop.bufferTicks} tick beyond: ${p.stop.ticks} ticks, minimum ${p.stop.floorTicks ?? 'unknown'}); target ${p.target.price} (${p.target.source} ${p.target.level}: ${p.target.ticks} ticks); R:R ${p.rr}; first level in the way: ${p.inTheWay ? `${p.inTheWay.name} ${p.inTheWay.price} at ${p.inTheWay.R}R` : 'none found'}; size ${p.size ?? '?'} risking $${p.riskUsd ?? '?'} ($${p.perContractUsd} a contract, at most ${p.maxSize ?? '?'} by risk.max_risk_usd).`);
+    out.push(`Plan (code's arithmetic): entry limit ${p.entry.price}; stop ${p.stop.price} (${p.stop.source} ${p.stop.level}, ${p.stop.bufferTicks} tick beyond: ${p.stop.ticks} ticks, minimum ${p.stop.floorTicks ?? 'unknown'}); target ${p.target.price} (${p.target.source} ${p.target.level}: ${p.target.ticks} ticks); R:R ${p.rr}; first level ahead: ${p.inTheWay ? `${p.inTheWay.name} ${p.inTheWay.price} at ${p.inTheWay.R}R (a read; no edge in the census)` : 'none found'}; size ${p.size ?? '?'} risking $${p.riskUsd ?? '?'} ($${p.perContractUsd} a contract, at most ${p.maxSize ?? '?'} by risk.max_risk_usd).`);
   }
   for (const x of r.problems.filter(x => !(checked && checked.problems.includes(x)))) out.push(`- PROBLEM: ${x}`);
   out.push(r.ok ? `OK: every read verified and the plan stands (signature ${r.signature}). A calculator and a checker, not advice: whether to trade is yours.`

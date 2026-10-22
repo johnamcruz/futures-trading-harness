@@ -13,8 +13,10 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 ## How It Works
 
 1. **Compose.** Reason through `trader-process`, each step with the skill
-   that fits, and call `compose_check` with one read per step at least and
-   your size. Pass unless every read is true now and agrees with your side.
+   that fits; trend side, a reaction at a level, the trigger closed →
+   compose (`confluence-counting`); the plan, never you, works out R:R. Call
+   `compose_check` with one true read per step at least, each for your
+   side (the against stay in the count), and your size.
    The record is for this bar and side; it expires `valid_bars` base bars
    after its bar's close (two: 6 minutes on the 3m).
 
@@ -35,7 +37,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    (`m3.cisd.<tf>.confirmedClose`): the entry read closes after it; a CISD
    with no close time is refused.
    Each needs a true read your way; `at`, `touched`, `swept`, volume,
-   participation and a setup `in ote` only support it.
+   participation and a setup `in ote` only support it. Both true and the
+   count for → compose now.
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about

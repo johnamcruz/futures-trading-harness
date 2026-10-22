@@ -135,7 +135,7 @@ test('ruleSeries: causal per bar, and on the last bar the same biases as the liv
   for (const m of [240, 60, 15]) assert.strictEqual(biasesAt(ser, b.length - 1)[m], live.biases[m], `${m}m`);
   assert.strictEqual(live.rule.prevailing, '4h down');
   assert.deepStrictEqual([live.rule.longAllowed, live.rule.shortAllowed], [false, true]);
-  assert.match(live.lines[live.lines.length - 1], /prevailing trend 4h down; trend strategies may not go long/);
+  assert.match(live.lines[live.lines.length - 1], /^Trend rule: SHORT allowed \(prevailing 4h down\); long only as a reversal \(mtf: reversal\)\.$/);
 });
 
 test('readTimeframe reads at most the last 300 candles, so long series stay linear', () => {

@@ -17,6 +17,8 @@ function withLate(allowed, late, beforeUnits) {
   const apply = (a, l) => {
     used.add(l);
     if (l.to === null) { delete a.now; a.copies = 0; } else a.now = l.to;
+    // copies: an explicit count of the old unit left (a unit split in several: 0, so the home check counts it once).
+    if (l.copies !== undefined) a.copies = l.copies;
     a.reason = `${a.reason}; then ${l.reason}`;
   };
   for (const l of late) {

@@ -529,8 +529,9 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
     mtf.style === 'reversal' ? reversalFact
       : allowed === false ? `against the trend rule for a ${r.direction}` : allowed === true ? `the trend rule allows a ${r.direction}` : 'the trend rule unknown',
     `multi-timeframe read for a ${r.direction}: ${align || 'unknown'}`,
-    inTheWay ? `first level in its way: ${inTheWay.name} at ${inTheWay.R}R; it needs ${needR}R (${inTheWay.R >= needR ? 'room past it' : 'the level comes first'})`
-      : R > 0 ? `no level in its way found; it needs ${needR}R` : 'its stop is unknown, so no R',
+    // The room as a fact, never a verdict: the first level ahead beside the R it aims for (the count weighs it).
+    inTheWay ? `first level ahead: ${inTheWay.name} at ${inTheWay.R}R; it aims for ${needR}R`
+      : R > 0 ? `no level ahead found; it aims for ${needR}R` : 'its stop is unknown, so no R',
     `confluence: ${(conf.with || []).length ? `with ${conf.with.join(', ')}` : 'none with it'}${(conf.against || []).length ? `; against ${conf.against.join(', ')}` : ''}`,
     vwapSide === 'at' ? 'price at the VWAP' : vwapSide ? `price ${vwapSide} the VWAP (${(up ? vwapSide === 'above' : vwapSide === 'below') ? 'its side' : 'the other side'})` : 'the VWAP unknown',
     ...(lunch ? ['lunch lull'] : []),
@@ -737,6 +738,9 @@ function summaryLines(b, et) {
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
   if (check) out.push(check);
+  // Its standard plan (learning/setup-library.js planLine, the census's composeAt and planOf): R:R as code's fact.
+  const plan = check ? require('../learning/setup-library').planLine(b) : null;
+  if (plan) out.push(plan);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
   // Only rules setups fire; a composed one is the model's to read, so none fired is never "no setup".
@@ -744,7 +748,7 @@ function summaryLines(b, et) {
   else {
     out.push('- Setups:');
     for (const c of m3.candidates) {
-      out.push(`  - ${c.name} ${c.direction}: ${c.facts.join('; ')}${c.blocked ? ` (blocked now: ${c.blocked})` : ''}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.${c.values ? ` Values: ${c.values}.` : ''}`);
+      out.push(`  - ${c.name} ${c.direction}: ${c.facts.join('; ')}${c.blocked ? ` (blocked now: ${c.blocked})` : ''}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; aims for ${c.needR}R; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.${c.values ? ` Values: ${c.values}.` : ''}`);
     }
   }
   return out;

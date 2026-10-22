@@ -225,7 +225,7 @@ const LATE = [
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "`show` it (strategy-library) and check every context filter and skip rule against the reports.", to: null,
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
-  { from: "They are context, not a verdict: judge the setup by its strategy's STRATEGY.md (`strategies_show`: its context filter and skip rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).", to: "They are context, not a verdict: judge by the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (a rules strategy: also its STRATEGY.md).",
+  { from: "They are context, not a verdict: judge the setup by its strategy's STRATEGY.md (`strategies_show`: its context filter and skip rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).", to: "They are context, not a verdict: judge by the side rule (`htf-to-ltf`) and its alignment table, and the min R:R (compose_check's; a rules strategy: also its STRATEGY.md).",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "A setup the trend rule allows, `aligned` for its side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).", to: "A setup on that side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
@@ -259,6 +259,28 @@ const LATE = [
     reason: "fix/skills-match-code: no rules strategy is active: the briefing's setups to check, not a scan's candidates" },
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
+  { from: "It orders the thinking and adds no filter: the priority order decides.",
+    to: ["It orders the thinking and adds no filter.", "**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R.", "OK → take: full, half on serious against, pass on a 1h CHoCH against."],
+    copies: 0,
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
+    to: null,
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "Read it before choosing a setup: a trend day (one side extended two IBs, or one from a narrow IB), often after an open outside the prior range and an open-drive, is traded with it (fading needs a reversal setup at a higher-timeframe level); a normal variation day (one side extended, less) has made its move and often rotates back; an open inside the prior value area that stays inside the IB is balance (fade the edges, small targets, stand aside in the middle); a neutral day (both sides extended) is two-sided.",
+    to: "Read it before choosing a setup: a trend day (one side extended two IBs, or one from a narrow IB), often after an open outside the prior range and an open-drive, is traded with it (fading needs a reversal setup at a higher-timeframe level); a normal variation day (one side extended, less) has made its move and often rotates back; an open inside the prior value area that stays inside the IB is balance (fade the edges, small targets; the middle is a read against); a neutral day (both sides extended) is two-sided.",
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "It checks each reason against the bar briefing (the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own.",
+    to: "It checks each reason against the bar briefing (the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the first level ahead in R against the R it aims for, the multi-timeframe read for the side) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own.",
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "A setup on that side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
+    to: "A valid setup on that side (`confluence-counting`) is the trade this harness looks for, when it isn't `blocked`: the strategy's normal size (position-sizing and the prop budget), and let its own exit work (don't bank before its trail or target).",
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an unanswered red flag → **no trade**: journal a short `note` with the reason and what would change it, and end.",
+    to: "No setup (no candidate, no `compose_check` OK), a failed skip rule, or an event within 15 minutes → **no trade**: journal a short `note` with the reason and what would change it, and end.",
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
+  { from: "`journal_add {kind:\"plan\", contractId, tags:[\"setup:<name>\", \"<SYMBOL>\", \"regime:<primary>\"]}`: thesis, trigger (what happened, price, time), entry, stop, exit, size (position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's P&L, and for a prop attempt the cushion and size budget), skip rules checked, analyst agreement, and what each role reported that the plan rests on: the structure bias and the level the entry and stop sit against (market structure); the VWAP side, the value area or POC, the nearest liquidity in the trade's way (`inTheWay`, the compose record's or a candidate's: the first level in its direction in points and R, where 1R is its own stop: check there is room to the target or the trail's activation), and the session window (the briefing's `m3` `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the multi-timeframe alignment for the side (aligned, pullback, mixed, counter) and the size it implies; and risk-manager phase 1's budget and pace.",
+    to: "`journal_add {kind:\"plan\", contractId, tags:[\"setup:<name>\", \"<SYMBOL>\", \"regime:<primary>\"]}`: thesis, trigger (what happened, price, time), entry, stop, exit, size (position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's P&L, and for a prop attempt the cushion and size budget), skip rules checked, analyst agreement, and what each role reported that the plan rests on: the structure bias and the level the entry and stop sit against (market structure); the VWAP side, the value area or POC, the nearest liquidity in the trade's way (`inTheWay`, the compose record's or a candidate's: the first level in its direction in points and R, where 1R is its own stop: a read beside the target, not a pass), and the session window (the briefing's `m3` `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the multi-timeframe alignment for the side (aligned, pullback, mixed, counter) and the size it implies; and risk-manager phase 1's budget and pace.",
+    reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -292,7 +314,7 @@ test('trade-session split: the comparison catches a lost, a doubled, a moved or 
   assert.deepStrictEqual(differences(old, moved, ALLOWED), [], 'a move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved, HOMES, RANGES, ALLOWED), [], 'but leaves its home');
   // Two bullets of setup-judgment swapped: nothing lost, the order changed.
-  const B1 = /- Tabulate each analyst's bias[^]*?strongly opposed\.\n/.exec(sj)[0];
+  const B1 = /- Tabulate each analyst's bias[^]*?of the count\.\n/.exec(sj)[0];
   const B2 = /- Start from the computed regime[^]*?say why in the plan\.\n/.exec(sj)[0];
   const swapped = sj.replace(B1, '\u0000').replace(B2, B1).replace('\u0000', B2);
   assert.deepStrictEqual(differences(old, swap({ 'setup-judgment': swapped }), ALLOWED), []);
@@ -306,7 +328,8 @@ test('trade-session split: the core keeps its numbered steps, step 0 as it was, 
   const step0 = t => [...t.slice(t.indexOf('### 0.'), t.indexOf('### 1.')).matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]);
   // trade-lifecycle joins after multi-timeframe-analysis (the composed entry's list; the strategy skills a rules entry's).
   const before0 = step0(read(BEFORE));
-  assert.deepStrictEqual(step0(ts), [...before0.slice(0, 2), 'trade-lifecycle', ...before0.slice(2)]);
+  // confluence-counting joins last (fix/confluence-not-vetoes): the count that decides, loaded every cycle.
+  assert.deepStrictEqual(step0(ts), [...before0.slice(0, 2), 'trade-lifecycle', ...before0.slice(2), 'confluence-counting']);
   const f = flat(ts);
   for (const s of PIECES) assert.match(f, new RegExp(`\`${s}\``), `trade-session points to ${s}`);
   // The head trader is told to read the two the gate requires before an entry (REQUIRED_AT_ENTRY), in step 3.
@@ -374,9 +397,22 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // each mode for the risk manager (feat/practice-account-states, owner-approved): prop-challenge-pacing's counts carried
 // from before the first cycle and its judgment from the attempt line (near the floor, after a loss, near the target).
 // Then tightened to the exact sizes when the skills were matched to the code (fix/skills-match-code): every role shrank.
+// Then tightened again with the soft reads made reads in the count (fix/confluence-not-vetoes): every role shrank or held.
+// Then the analysts' reports as reads for or against, never advice, and the count's context with its evidence: +85 to
+// +146 bytes for the three analysts, +38 for the risk manager (the owner's OK while performance holds).
+// Then the count of independent categories (the owner's duplicated-evidence principle), its wording tightened: every role
+// shrank or held against that.
+// Then the pullback neutral in the count and the margin's size (full at 2+, half at 1): the risk manager +140, the
+// market-structure analyst +28 (htf-to-ltf), under main's pins (the owner's OK while performance holds).
+// Then a valid setup is the trade (the owner, 2026-10-21), the against setting its size: the risk manager +303 and the
+// analysts +51 to +60 (trader-process's decision line; the owner's OK while performance holds).
+// Then compose first (the plan, never the model, works out R:R), its wording tightened: every role shrank or held but the
+// strategy researcher (+2, strategy-library's R:R line).
+// Then decisive is a 1h CHoCH against (a 15m swing broken is serious, a sweep a read for) and the briefing's Standard plan
+// line is named: the risk manager +211 (confluence-counting; the owner's OK while performance holds).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86912, 'news-calendar-analyst': 10149, 'risk-manager': 89872, 'strategy-researcher': 25583, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54582, 'volume-liquidity-analyst': 48584 },
-  index: { 'market-structure-analyst': 42742, 'news-calendar-analyst': 10149, 'risk-manager': 75749, 'strategy-researcher': 25583, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39880, 'volume-liquidity-analyst': 32877 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90244, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 76121, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
@@ -392,14 +428,15 @@ test('trade-session split: no role prompt grows, in full or index mode, and no r
   for (const r of loadRoles(ROOT)) for (const s of [...PIECES, 'gate-refusals-skills']) assert.ok(![...r.skills, ...r.index].includes(s), `${r.name}: ${s}`);
 });
 
-test('trade-session split: the gate requires setup-judgment and trade-plan at entry, apart from the per-cycle list', () => {
+test('trade-session split: the gate requires setup-judgment and trade-plan at entry, and every cycle loads them', () => {
   const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
   for (const s of REQUIRED_AT_ENTRY) assert.ok(!REQUIRED_FOR_ENTRY.includes(s), s);
-  // Not on the runner's per-cycle load list: the prompt doesn't name them.
+  // On the runner's per-cycle load list too (ALSO_LOAD), never left to "before an entry": a Claude Code replay lost 2 of 6
+  // approved orders to [skills-at-entry] when the head trader was told to load them only before an entry.
   const A = require('../../scripts/lib/autotrader');
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
-  for (const s of REQUIRED_AT_ENTRY) assert.ok(!p.includes(s), `the cycle prompt names ${s}`);
+  assert.match(p, /also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/);
   // The refusal is taught: its row in the gate-refusals family, which says exits and stops still go.
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);

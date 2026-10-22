@@ -57,7 +57,9 @@ function differences(beforeText, homeTexts, allowed, { structure = true } = {}) 
   }
   for (const a of allowed) {
     if (!before.has(a.old)) bad.push(`allow-list entry not in the old text: ${a.old}`);
-    for (const now of [a.now || []].flat()) if (after.get(now) !== 1) bad.push(`changed sentence in ${after.get(now) || 0} homes, not 1: ${now}`);
+    // nowCopies: an old unit that appeared more than once, each copy changed the same way (default 1).
+    const k = a.nowCopies || 1;
+    for (const now of [a.now || []].flat()) if (after.get(now) !== k) bad.push(`changed sentence in ${after.get(now) || 0} homes, not ${k}: ${now}`);
   }
   if (structure) for (const h of STRUCTURE) if (after.get(h) !== homeTexts.length) bad.push(`"${h}" heading: ${after.get(h) || 0}, not one per skill`);
   return bad;

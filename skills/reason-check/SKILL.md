@@ -29,6 +29,6 @@ reason_check {"symbol": "MNQ", "reasons": "CYCLE RESULT: no-trade - opening prin
   - FALSE no-entry-window: "opening print window until 10:00 ET" - the opening drive window allows entries (09:57 ET)
   - FALSE no-attempt: "no prop attempt running" - the my_50k attempt is active
   The priority order, step by step, as the facts answer it:
-  - <name> short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room no-trade (VWAP (rth) at 0.4R before the 2R it needs); ...
+  - <name> short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room judgment (VWAP (rth) at 0.4R ahead, it aims for 2R: a read, never a no trade alone); ...
   2 reasons FALSE: name each, drop them, and make the decision again from the facts.
 ```

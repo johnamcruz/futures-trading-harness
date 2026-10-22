@@ -348,3 +348,52 @@ test('CLI: scan, index, pin and show on fixture bars', () => {
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /^history library [0-9a-f]{16}: \d+ records, 2020-04-\d\d to 2020-05-\d\d; one fixed standard/);
 });
+
+test('planLine: the briefing states a setup\'s standard plan as code computes it (composeAt -> planOf), OK or refused, as of the bar\'s close (no look-ahead)', () => {
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const B = require('../../scripts/lib/trading/briefing');
+  const { setupMoment } = require('../../scripts/lib/learning/setup-moments');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  const at = (i, list = bars) => buildBriefing({ symbol: 'MNQ', bars: list.slice(Math.max(0, i - 1399), i + 1), minutes: 3, now: new Date(Date.parse(list[i].t) + 180000) });
+  // 2026-04-23 18:45 UTC: a confirmation close after the 15m candle rejected the IB low down (a short).
+  const b = at(409);
+  const m3 = b.sections.m3.data;
+  const mo = setupMoment(m3.candles, { barClose: Date.parse(m3.bar.t) + 180000 });
+  assert.deepStrictEqual([mo.moment, mo.phase], [true, 'confirmation']);
+  const r = L.composeAt(b, mo.reactions.find(x => x.dir === 'down'), { side: 'short', tick: 0.25 });
+  assert.strictEqual(r.status, 'traded');
+  const line = L.planLine(b);
+  // The code's own numbers, never the model's: entry, stop, target, R:R and the reads compose_check verifies.
+  assert.strictEqual(line, `- Standard plan (code, as compose_check plans it): short "15m rejected ib low down": plan OK: entry ${r.plan.entry.price}, stop ${r.plan.stop.price} (${r.plan.stop.ticks}t), target ${r.plan.target.price}, R:R ${r.plan.rr}; reads ${r.reads.map(x => `"${x.read}"`).join(', ')}. OK -> compose_check with its reads; never estimate R:R.`);
+  assert.match(line, /plan OK: entry 26935\.75, stop 26982\.5 \(187t\), target 26681\.75, R:R 5\.43;/);
+  // The rendered briefing carries it under its "Setups to check" line.
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  assert.ok(text.includes(`${line}\n`) && text.indexOf('- Setups to check') < text.indexOf('- Standard plan'));
+  // No look-ahead: the bars after the decision bar, however different, change nothing (the briefing is built from the
+  // closed bars up to it, as the runner builds it).
+  const altered = bars.map((x, k) => (k > 409 ? { ...x, h: x.h + 500, l: x.l - 500, c: x.c + 300 } : x));
+  assert.strictEqual(L.planLine(at(409, altered)), line);
+  // The next close has no confirming entry read: the plan says so, and nothing tells the model to compose.
+  assert.strictEqual(L.planLine(at(410)), '- Standard plan (code, as compose_check plans it): short "15m rejected ib low down": plan refused (no confirming entry read).');
+  // No setup moment, no entries in the window, or a broken briefing: no line, never an error.
+  assert.strictEqual(L.planLine({ ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...m3, windowEntries: 'none' } } } }), null);
+  assert.strictEqual(L.planLine(null), null);
+  assert.strictEqual(L.planLine({ minutes: 3, sections: { m3: { data: { bar: { t: 'x' }, windowEntries: 'allowed' } } } }), null);
+});
+
+test('planLine: a side the trend rule allows only as a reversal gets no standard plan (its CHoCH tier), never "OK -> compose_check"', () => {
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  const b = buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, 410), minutes: 3, now: new Date(Date.parse(bars[409].t) + 180000) });
+  const rule = trendRule => ({ ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, trendRule } } } });
+  const against = rule('Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).');
+  assert.strictEqual(L.planLine(against), '- Standard plan (code, as compose_check plans it): short "15m rejected ib low down": against the trend rule: only as a reversal (its 1h CHoCH tier).');
+  assert.deepStrictEqual(L.standardPlans(against).map(p => [p.side, p.status]), [['short', 'against']]);
+  // The allowed side keeps its plan.
+  assert.match(L.planLine(rule('Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).')), /short "15m rejected ib low down": plan OK: .* OK -> compose_check with its reads/);
+});
+
+test('the standard plan\'s R:R minimum is the composed strategy\'s risk.min_rr: the briefing\'s OK and compose_check\'s never differ', () => {
+  const doc = require('../../scripts/lib/trading/strategies').loadStrategies(path.join(__dirname, '..', '..'), {}).strategies.find(x => x.name === require('../../scripts/lib/trading/trade-lifecycle').STRATEGY);
+  assert.strictEqual(L.MIN_RR, doc.risk.min_rr);
+});

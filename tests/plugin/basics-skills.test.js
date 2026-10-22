@@ -47,7 +47,7 @@ const ROLES = {
   'news-calendar-analyst': [],
 };
 
-const READ = 'A read, never a veto: the priority order (strategy-library) decides take, skip and size; the gate and the rulebook are untouched.';
+const READ = 'A read, never a veto: the count decides (`confluence-counting`).';
 
 // Key sentences, by skill: each must be present; a test below shows a changed one fails.
 const PINS = {
@@ -88,7 +88,7 @@ const PINS = {
     'gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
     'a filled gap is in neither list. Never mark one by eye.',
     'The briefing does not rank gaps among the levels in a setup\'s way',
-    'The room step stays the priority order\'s, on `inTheWay`.',
+    'Like the first level ahead, a read in the count, never a pass alone.',
     'Evidence**: not measured;',
   ],
   'momentum-and-volume': [
@@ -116,17 +116,32 @@ const PINS = {
     'on a lower one it is mostly noise.',
   ],
   'confluence-counting': [
-    'each in exactly one bucket, so for + against + neutral = 6',
-    // Keyed on the briefing's fields and reads (no scan candidate): the same fact counts once, in item 6.
-    '**Other reads of the same fact count once** (item 6)',
-    '| 6 | Other reads of a fact already counted | - | - | always |',
-    '| 3 | VWAP, `m3.vwap.side` | its side | the other side | `at` |',
-    '**Indicators together are one item**: EMA, ADX and SuperTrend readings count together in item 5, never separately.',
-    '**An HTF structure break is read in item 1**',
-    '| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |',
-    'The counts never overrule it.',
-    '**Not counted**: the trend rule, the regime fit, the room, the window, the news',
-    'a 15m or 1h break its way (`bos-vs-choch`;',
+    // Independent categories, never labels (the owner's principle, fix/confluence-not-vetoes): reads of the same price
+    // move are one piece of evidence; the trend rule is the side rule and never counted.
+    '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
+    // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
+    // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
+    '**Compose first.** The trend rule\'s side (or its CHoCH tier), a rejection or breakout at a key level or FVG, the trigger closed → call `compose_check`.',
+    'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
+    'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
+    // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
+    '**Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH against: the trend rule\'s tier, `trade-lifecycle`), or a hard step fails.',
+    '**Serious** → half (`floor`, at least 1): 2+ categories against, location against (the trigger into the other side\'s level), or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`).',
+    'Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
+    '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing" (no edge in the census), no pullback yet, mixed reads.',
+    'A missing read is no reason to pass.',
+    // A pullback inside the trend is never counted against itself (fix/confluence-not-vetoes).
+    '**The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe structure against the trend; for once it breaks back.',
+    '| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |',
+    '| location | the level, POI or FVG it reacts at |',
+    '| liquidity | a sweep taken, or liquidity as the target |',
+    '| trigger | the rejection or engulfing candle and its close |',
+    '| participation | volume, delta, absorption; thin is neutral |',
+    '| context | VWAP side, value area, day type, session |',
+    '**One vote**: all its reads your way → for; all against → against; mixed, none or `unknown` → neutral.',
+    'Labels never add: a 3m BOS, an EMA slope and ADX are one structure vote.',
+    '**Not counted**: the trend rule and the 1h and 4h direction (the side rule; compose step bias), R:R, the window, the news.',
+    // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
   ],
   'candle-reading': [
     'A pattern away from a level is not evidence.',
@@ -145,7 +160,7 @@ const PINS = {
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
     '**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
-    'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
+    'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is the trend rule\'s CHoCH tier (`trade-lifecycle`), never counted.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
     '**Paired with `breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
@@ -268,11 +283,15 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
 test('basics skills: a read, never a veto; the priority order decides', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
-    assert.ok(flat(text).includes(READ), s);
+    // confluence-counting is the count that decides (fix/confluence-not-vetoes); every other basics skill is a read in it.
+    if (s === 'confluence-counting') assert.ok(flat(text).includes('**a valid setup is the trade**'), s);
+    else assert.ok(flat(text).includes(READ), s);
     assert.ok(vetoFree(text), `${s}: veto language`);
     // A skip in an example is the priority order's (or no fired strategy), never the skill's.
     const skip = text.slice(text.indexOf('Skip:')).split('\nLoser:')[0];
-    assert.match(flat(skip), /[Pp]riority order[^.]*skip|No setup without a fired strategy/, s);
+    // ...or a missing read's pass, the level ahead never the reason (fix/confluence-not-vetoes).
+    assert.match(flat(skip), /[Pp]riority order[^.]*skip|No setup without a fired strategy|-> pass\b/, s);
+    assert.doesNotMatch(flat(skip), /\(step 3, room\)/, `${s}: a skip on the room alone`);
   }
   for (const bad of ['Never take a long here.', 'You must skip it.', 'Stand aside on a doji.', 'Do not enter after a sweep.', 'This vetoes the trade.',
     'Without one do not buy.', 'Never short into support.', 'Do not go long here.', 'No entry on a doji.']) {
@@ -309,17 +328,13 @@ test('basics skills: the regime rule is regime.js\'s, and the participation wind
 
 test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {
   for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred|counts as one AGAINST/, s);
-  // The HTF structure break is item 1's, the level reaction (item 4) never claims it, and no seventh item appears.
+  // The categories (fix/confluence-not-vetoes): six, each once; the HTF break is the side rule's, never a category.
   const cc = flat(read(file('confluence-counting')));
-  assert.match(cc, /\| 1 \| HTF read, `m15\.alignment` for its side \(HTF breaks included\) \|/);
-  assert.doesNotMatch(cc, /break[^|.]*item 4|item 4[^|.]*break/);
-  assert.doesNotMatch(cc, /\| 7 \|/);
-  assert.ok(flat(read(file('rejection'))).includes('is read in item 1 of `confluence-counting`'));
-  // A rejection is item 4's, once, on however many timeframes it shows; item 4 points to the setup.
-  assert.ok(cc.includes('**A reaction counts once in item 4.** A rejection on several timeframes is one reaction, not one per timeframe.'));
-  assert.match(cc, /\| 4 \| Reaction at the nearest level \(`levels-and-reactions`, `rejection`\) \|/);
-  // momentum-and-volume and confluence-counting define item 5 the same way.
-  assert.match(cc, /\| 5 \|[^\n]*\| all with it \| all against it \| mixed or thin \|/);
+  const cats = [...cc.matchAll(/\| (structure|location|liquidity|trigger|participation|context) \|/g)].map(m => m[1]);
+  assert.deepStrictEqual(cats, ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
+  assert.ok(flat(read(file('rejection'))).includes('is the trend rule\'s CHoCH tier (`trade-lifecycle`), never counted'));
+  // momentum-and-volume puts the indicators in structure, the same vote rule.
+  assert.ok(flat(read(file('momentum-and-volume'))).includes('are structure (`confluence-counting`): all with its side FOR, all against AGAINST, mixed neutral.'));
   // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js), stated once,
   // in levels-and-reactions (liquidity-concepts retired: skill-retire.test.js).
   const ms = read('scripts/lib/trading/market-snapshot.js');
@@ -389,13 +404,13 @@ test('basics skills: no example moves a stop away from risk', () => {
   assert.ok(!stopsNeverWiden(inv.replace('in one move', 'in one move; the stop was widened')));
 });
 
-test('basics skills: confluence-counting\'s examples count six items', () => {
+test('basics skills: confluence-counting\'s examples count six categories', () => {
   const ex = read(file('confluence-counting')).split('## Examples')[1];
   const counts = [...ex.matchAll(/for (\d), against (\d), neutral (\d)/g)];
   assert.ok(counts.length >= 3);
   for (const [, a, b, c] of counts) assert.strictEqual(Number(a) + Number(b) + Number(c), 6);
-  // Item 6 (other reads of a fact already counted) is neutral in every example, never for or against.
-  for (const line of ex.split('\n').filter(l => /^(?:Take|Skip):/.test(l))) assert.match(line, /\b6(?: values)?:? (?:\(?neutral)/, line);
+  // Each example names the categories it counts, never the trend rule's frames as one.
+  for (const line of ex.split('\n').filter(l => /^(?:Take|Skip):/.test(l))) assert.match(line, /structure \(/, line);
   // trader-process's own example uses the same six.
   const tp = /5 Confluence: for (\d), against (\d), neutral (\d)/.exec(read('skills/trader-process/SKILL.md').split('## Examples')[1]);
   assert.strictEqual(Number(tp[1]) + Number(tp[2]) + Number(tp[3]), 6);
@@ -472,8 +487,8 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   const tp = read('skills/trader-process/SKILL.md');
   const step = n => tp.slice(tp.indexOf(`${n}. **`), tp.indexOf(`${n + 1}. **`) > 0 ? tp.indexOf(`${n + 1}. **`) : tp.indexOf('### Roles'));
   const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal', 'cisd'], 6: ['candle-reading'], 9: ['invalidation'] };
-  // Step 5 counts confluence-counting's six items.
-  assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`.'));
+  // Step 5 counts confluence-counting's six categories.
+  assert.ok(flat(step(5)).includes('The six categories of `confluence-counting`.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
   assert.match(flat(step(4)), /setups: `rejection`, `breakout`, `fair-value-gaps`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.
@@ -709,7 +724,7 @@ test('daily-bias and top-down-entry: reads that yield to the trend rule; the sto
   for (const pin of [
     '**HTF: side and level.** The side the trend rule allows (`m3.trendRule`); today\'s bias (`daily-bias`) sets the confidence, never a side the rule refuses.',
     'check that the strategy\'s stop sits beyond it.',
-    'check that the room to it allows the trade.',
+    'is the first level ahead: a read to weigh, not a pass.',
     'The stop and exit stay the strategy\'s (the priority order, step 2: a reversal takes the nearest target).',
     'Completed candles only, on every timeframe.',
     'the HTF gives the side, the LTF only the timing.',
@@ -758,7 +773,8 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
   // bytes, is no more than at the split's merge (foundation batch B, on main at 507adfbd, whose same load without htf-to-ltf
   // was 58878): 55733.
   const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x) && !/^strategy-/.test(x));
-  assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'trade-lifecycle', 'trade-session', 'trader-process']);
+  // confluence-counting every cycle too (fix/confluence-not-vetoes: the count that decides take or pass).
+  assert.deepStrictEqual(loads.sort(), ['confluence-counting', 'htf-to-ltf', 'multi-timeframe-analysis', 'trade-lifecycle', 'trade-session', 'trader-process']);
   const bytes = loads.reduce((a, x) => a + Buffer.byteLength(read(file(x))), 0);
   assert.ok(bytes <= 55733, `the head trader's per-cycle load: ${bytes} bytes`);
 });

@@ -14,8 +14,7 @@ description: Use after an impulse to judge pullback depth, or for a CISD's OTE z
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; the numbers are the code's (`scripts/lib/trading/fib.js`
 `LEVELS` and `OTE`); a missing field is `unknown`.
 

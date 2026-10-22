@@ -54,6 +54,8 @@ test('rendered on the candle\'s line: "momentum up" or "momentum down", nothing 
     assert.strictEqual(lines.length, plain.length);
     for (const [k, line] of lines.entries()) {
       if (line === plain[k]) continue;
+      // The standard plan (setup-library.js planLine) composes from the candles, momentum among its entry reads.
+      if (line.startsWith('- Standard plan')) continue;
       const tf = /^- (\w+) \(closed/.exec(line)[1];
       const m = b.sections.m3.data.candles[tf].momentum;
       assert.ok(m === 'up' || m === 'down');

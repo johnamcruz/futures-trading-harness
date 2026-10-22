@@ -1,54 +1,67 @@
 ---
 name: confluence-counting
-description: Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time. A read, never a veto; the priority order decides.
+description: Trader-process step 5 - a valid setup is the trade; six independent categories, each counted once, set its size by the reads against.
 ---
 
 # Confluence Counting
 
 ## When to Use
 
-- Trader-process step 5: `5 Confluence: for <n>, against <n>, neutral <n>: <main ones>`.
+- Trader-process step 5: `5 Confluence: for <n>, against <n>, neutral <n>: <categories>`.
 
 ## How It Works
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. The counts never
-overrule it. A missing field is `unknown` and counts neutral.
+**Compose first.** The trend rule's side (or its CHoCH tier), a
+rejection or breakout at a key level or FVG, the trigger closed → call
+`compose_check`. Never estimate room or R:R: the briefing's "Standard
+plan" line states it; OK → compose with its reads, refused → pass,
+naming it.
+OK → **a valid setup is the trade**: full size within the verdict's
+ceiling; the against sets the size:
 
-**Six items**, each in exactly one bucket, so for + against + neutral = 6:
+- **Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH
+  against: the trend rule's tier, `trade-lifecycle`), or a hard step fails.
+- **Serious** → half (`floor`, at least 1): 2+ categories against,
+  location against (the trigger into the other side's level), or a 3m
+  close beyond the leg's 15m swing (`m3.htfLevels` `brokenAt`). Closed
+  back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.
+- **Minor** → full size, never a reason not to compose: thin volume, the
+  first level ahead, VWAP distance or "chasing" (no edge in the census),
+  no pullback yet, mixed reads.
 
-| # | Item | For | Against | Neutral |
-|---|---|---|---|---|
-| 1 | HTF read, `m15.alignment` for its side (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
-| 2 | Setup-timeframe structure: a CISD, OTE, a 3m or 5m break (`cisd`, `bos-vs-choch`) | any its way | any against it | none |
-| 3 | VWAP, `m3.vwap.side` | its side | the other side | `at` |
-| 4 | Reaction at the nearest level (`levels-and-reactions`, `rejection`) | rejection or sweep its way | acceptance against it | none yet |
-| 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
-| 6 | Other reads of a fact already counted | - | - | always |
+A missing read is no reason to pass.
+
+**Six independent categories**, one vote each, so for + against +
+neutral = 6: reads of one price move are one piece of evidence.
+
+| Category | Its reads |
+|---|---|
+| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |
+| location | the level, POI or FVG it reacts at |
+| liquidity | a sweep taken, or liquidity as the target |
+| trigger | the rejection or engulfing candle and its close |
+| participation | volume, delta, absorption; thin is neutral |
+| context | VWAP side, value area, day type, session |
 
 **Rules.**
 
-- **Other reads of the same fact count once** (item 6): a pattern on the
-  candle that made item 4's rejection, a CISD or a sweep on that candle, a
-  second timeframe of the same reaction.
-- **Indicators together are one item**: EMA, ADX and SuperTrend readings
-  count together in item 5, never separately.
-- **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
-  `m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
-  the HTF read, never an item of its own.
-- **A reaction counts once in item 4.** A rejection on several timeframes
-  is one reaction, not one per timeframe.
-- **Not counted**: the trend rule, the regime fit, the room, the window,
-  the news: the priority order's own steps or the gate's.
+- **One vote**: all its reads your way → for; all against → against;
+  mixed, none or `unknown` → neutral. Labels never add: a 3m BOS, an EMA
+  slope and ADX are one structure vote.
+- **The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe
+  structure against the trend; for once it breaks back.
+- **Not counted**: the trend rule and the 1h and 4h direction (the side
+  rule; compose step bias), R:R, the window, the news.
 
 ## Examples
 
 ```text
-Take: long: 6 neutral (15m pattern hammer, the candle of 4); 1 aligned, 2 15m cisd up, 3 vwap above,
-  4 15m rejected prior vah up, 5 momentum: for. 5 Confluence: for 5, against 0, neutral 1.
-  Priority order: room -> take.
-Skip: long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 3m choch down, 3 vwap below: against.
-  5 Confluence: for 0, against 2, neutral 4. The priority order's rule, contradicting facts: skip.
+Take: valid long: structure (15m cisd up, 3m momentum up: one), location, trigger, context: for.
+  for 4, against 0, neutral 2 -> full.
+Skip: long: structure (3m choch down): neutral; the 1h CHoCH down reverses the side.
+  for 2, against 0, neutral 4: decisive -> pass.
+Half: valid long: structure (the pullback): neutral; context, participation: against.
+  for 2, against 2, neutral 2: serious -> half.
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```

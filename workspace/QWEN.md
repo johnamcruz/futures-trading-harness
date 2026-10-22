@@ -39,6 +39,21 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
   trading advice to third parties or present output as financial advice.
 - When unsure whether an action is allowed, ask the user before acting.
 
+## Decision
+
+Always on, every harness, every bar (the detail: `confluence-counting`).
+
+- On the trend rule's side (or its CHoCH tier), a rejection or breakout at a
+  key level or FVG, the trigger closed → call `compose_check`. Never estimate
+  room, R:R or the target yourself: the briefing's "Standard plan" line
+  states them, and the refusal is the R:R check. The line refused → pass.
+- `compose_check` OK → a valid setup is the trade: full size within the
+  verdict's ceiling; serious against (a 3m close beyond the leg's 15m swing
+  among them) → half; decisive against (a 1h CHoCH against the side) →
+  pass. Refused → pass, naming it.
+- Thin volume, the first level ahead, the VWAP distance, "chasing", no
+  pullback yet: minor reads, never a reason not to compose.
+
 ## Execution
 
 - **Hard rule: trade only in the harness's hours inside the Topstep trading day (its 17:00 CT reset): the day opens at 18:00 ET
@@ -139,12 +154,12 @@ user; numbers here are the harness defaults, not any firm's official limits.
   its verdict sets the size in the selected contract, sized from the
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
   order gate enforces the verdict instead. Never exceed the verdict.
-- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise
+- Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
   (for a trailing exit with no target, the trail activation `trailActivateR`
   stands in for it).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
-- Skip the trade when unsure. Standing aside is a position.
+- Pass when the count says so. Standing aside is a position.
 
 ## Skills
 

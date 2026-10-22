@@ -227,12 +227,12 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
   const full = prompts(validateConfig({}), now).trade(items);
-  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding/);
+  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/);
   // Codex has no skill tool (it carries the skills in AGENTS.md): it reads them, and its gate can't see them loaded.
   const cx = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
-  assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf before deciding, then run/);
-  assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf before deciding, then run/);
-  assert.match(full, /trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf before deciding, then run/);
+  assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding, then run/);
+  assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, and trade-lifecycle; also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding, then run/);
+  assert.match(full, /trade-lifecycle \(the order gate refuses an entry without them\); also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding, then run/);
   assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   // No entries possible: no roster.
@@ -725,8 +725,10 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   // 4950: the load sentence names the two skills strategy-library was split into (an entry needs them loaded).
   // Still 4950 with "; also load htf-to-ltf" (ALSO_LOAD): the bar line's "use that file for the 3-minute timeframe
   // instead of fetching it" became "use that file; don't fetch 3-minute bars".
+  // 5000: setup-judgment and trade-plan on the every-cycle load list (ALSO_LOAD: the gate's skills-at-entry; a head trader
+  // that loads its own skills, Claude Code, was refused [skills-at-entry] without them; fix/confluence-not-vetoes).
   if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
-  assert.ok(p.length < 4950, `the prompt grew to ${p.length} characters`);
+  assert.ok(p.length < 5000, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /no-trade ×\d @|no-trade ×\d:/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
@@ -1014,14 +1016,14 @@ test('the cycle prompt: opencode in index mode says the skills are in the head t
     delete process.env.FTH_ROLE_SKILLS;
     const oc = prompts(validateConfig({ harness: 'opencode' }), now).trade(items);
     assert.strictEqual(embedsSkills(validateConfig({ harness: 'opencode' })), true);
-    assert.match(oc, /Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, and htf-to-ltf are in your prompt, already loaded \(don't load them again\): decide by them, then run the trade-session skill for MNQ/);
+    assert.match(oc, /Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded \(don't load them again\): decide by them, then run the trade-session skill for MNQ/);
     assert.doesNotMatch(oc, /With your skill tool, load/);
     for (const s of REQUIRED_FOR_ENTRY) assert.ok(oc.includes(s), s);
     // Only on the attestation the runner gives the gate (headAttestation): a workspace without the file, or whose head
     // prompt leaves out a skill the sentence names, gets the load sentence, never "already loaded".
     const root = tmpDir();
     fs.mkdirSync(path.join(root, 'workspace'));
-    const loads = /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/;
+    const loads = /With your skill tool, load trade-session, [^.]* setup-judgment, and trade-plan before deciding, then run the trade-session skill/;
     assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'no opencode.json');
     fs.symlinkSync(path.join(ROOT, 'skills'), path.join(root, 'skills'));
     const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
@@ -1032,10 +1034,10 @@ test('the cycle prompt: opencode in index mode says the skills are in the head t
     assert.strictEqual(embedsSkills(validateConfig({ harness: 'opencode' }), root), false, 'htf-to-ltf not embedded');
     assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'partial');
     process.env.FTH_ROLE_SKILLS = 'full';
-    assert.match(prompts(validateConfig({ harness: 'opencode' }), now).trade(items), /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/);
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now).trade(items), /With your skill tool, load trade-session, [^.]* setup-judgment, and trade-plan before deciding, then run the trade-session skill/);
     delete process.env.FTH_ROLE_SKILLS;
-    for (const harness of ['claude', 'qwen']) assert.match(prompts(validateConfig({ harness }), now).trade(items), /With your skill tool, load trade-session, [^.]* before deciding, then run/, harness);
-    assert.match(prompts(validateConfig({ harness: 'codex' }), now).trade(items), /Read the skills trade-session, [^.]* before deciding, then run/);
+    for (const harness of ['claude', 'qwen']) assert.match(prompts(validateConfig({ harness }), now).trade(items), /With your skill tool, load trade-session, [^.]* setup-judgment, and trade-plan before deciding, then run/, harness);
+    assert.match(prompts(validateConfig({ harness: 'codex' }), now).trade(items), /Read the skills trade-session, [^.]* setup-judgment, and trade-plan before deciding, then run/);
   } finally {
     if (saved === undefined) delete process.env.FTH_ROLE_SKILLS; else process.env.FTH_ROLE_SKILLS = saved;
   }
@@ -1346,6 +1348,18 @@ test('the result line\'s outcomes: the prompt and the autonomous-trading skill l
   assert.ok(prompts(validateConfig({ harness: 'custom', command: ['a', '{prompt}'], symbols: ['MNQ'] }), new Date('2026-10-07T14:00:00Z'), '/r').premarket('MNQ').includes(RESULT_TEMPLATE));
 });
 
+test('every cycle loads the gate\'s skills-at-entry too (ALSO_LOAD): "before an entry" relied on the head trader remembering, and a Claude Code replay lost 2 of 6 approved orders to [skills-at-entry]', () => {
+  const { prompts } = require('../../scripts/lib/autotrader');
+  const { REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(REQUIRED_AT_ENTRY, ['setup-judgment', 'trade-plan']);
+  const items = [{ symbol: 'MNQ', bar: { t: new Date('2026-04-28T14:00:00Z').getTime(), c: 1, contractId: 'MNQ', file: '/tmp/b.json' } }];
+  for (const harness of ['claude', 'qwen']) {
+    const t = prompts(validateConfig({ harness, premarketAt: '', timeframe: 3, account: '7' }), new Date('2026-04-28T14:03:02Z')).trade(items);
+    assert.match(t, /also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/, harness);
+    assert.doesNotMatch(t, /before an entry, also load/, harness);
+  }
+});
+
 test('loadList: the gate\'s skills, its parenthetical when the harness is gated, then the skills it does not require', () => {
   const { loadList } = require('../../scripts/lib/autotrader');
   const req = ['a', 'b', 'c'];
@@ -1356,9 +1370,10 @@ test('loadList: the gate\'s skills, its parenthetical when the harness is gated,
   assert.strictEqual(loadList(true, req, ['x', 'y']), 'a, b, and c (the order gate refuses an entry without them); also load x and y');
   assert.strictEqual(loadList(false, req, ['x', 'y']), 'a, b, and c; also load x and y');
   // The default is the gate's list for trade_lifecycle, the one entry strategy (skills-loaded.js REQUIRED_FOR_COMPOSED),
-  // then htf-to-ltf (trade-session step 0 loads it every cycle: the alignment labels and the reversal rule).
+  // then htf-to-ltf (trade-session step 0 loads it every cycle: the alignment labels and the reversal rule) and
+  // confluence-counting (the count that decides, every cycle too: fix/confluence-not-vetoes).
   const { REQUIRED_FOR_COMPOSED: REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
-  assert.strictEqual(loadList(false), `${REQUIRED_FOR_ENTRY.slice(0, -1).join(', ')}, and ${REQUIRED_FOR_ENTRY[REQUIRED_FOR_ENTRY.length - 1]}; also load htf-to-ltf`);
+  assert.strictEqual(loadList(false), `${REQUIRED_FOR_ENTRY.slice(0, -1).join(', ')}, and ${REQUIRED_FOR_ENTRY[REQUIRED_FOR_ENTRY.length - 1]}; also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan`);
 });
 
 test('childEnv: several lanes, the gate learns each symbol\'s lanes whose bar closed this cycle (FTH_CYCLE_LANE_BARS); one lane or a manual run: none', () => {

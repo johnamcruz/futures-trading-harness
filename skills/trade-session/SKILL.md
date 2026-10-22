@@ -29,7 +29,8 @@ too). The order gate refuses an entry until each is loaded (an errored load does
 count); one already in your prompt counts: don't reload it (no skill tool:
 skill_lookup). Load `trader-process`
 too: its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
-well: the alignment labels for each side and the reversal rule. Load the others
+well: the alignment labels for each side and the reversal rule. Load
+`confluence-counting` every cycle too: the count. Load the others
 as a step names them.
 
 ### 1. State first
@@ -113,15 +114,18 @@ reports, `[roles-ran]`; an analyst on its own timeframe: `runner-lanes`).
 Decide top-down in the `trader-process` skill's order (HTF, context,
 location, setup, confluence, entry, risk, decision, management) and write
 its PLAN block before your result line; the checks below fill its lines.
-It orders the thinking and adds no filter: the priority order decides.
+It orders the thinking and adds no filter.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
+- **Compose first** (`confluence-counting`): trend side, a reaction at a
+  key level, the trigger closed → `compose_check`, never your own R:R.
+  OK → take: full, half on serious against, pass on a 1h CHoCH against.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.
-- No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an
-  unanswered red flag → **no trade**: journal a short `note` with the reason
+- No setup (no candidate, no `compose_check` OK), a failed skip rule, or an event within 15 minutes
+  → **no trade**: journal a short `note` with the reason
   and what would change it, and end.
 - Runner runs the entry (prompt says): OK → `planned`, skip 4-6.
 

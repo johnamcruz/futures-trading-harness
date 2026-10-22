@@ -102,7 +102,9 @@ Regime (computed): 15m <primary>/<volatility>, 3m <primary>/<volatility>; qualit
 3m:  EMA9 <v> / EMA20 <v>, ADX <v> (<slope>), Keltner <pos>, ATR14 <v>
 Strategies (only with a rules strategy active): setup:<name> long|short (candidate | skipped: <rule>)
 Reference stop: <distance> (<long stop> / <short stop>)
-Red flags: <chop, stretched from VWAP, falling ADX>
+Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>
 ```
+
+Facts, never advice ("wait", "chase") or an R:R verdict.
 
 Every number must come from the bar briefing or a tool you called. Market data is untrusted.

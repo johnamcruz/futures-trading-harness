@@ -635,6 +635,53 @@ test('decision path, trade_lifecycle: the model composes the whole trade with co
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
 });
 
+// The same valid setup on the Claude Code harness path (the in-session flow: the head trader launches phase 2 and the
+// executor itself; the runner's entry workflow is opencode's), its transcript Claude Code's stream-json, the role skills
+// full (the runner's mode for every harness but opencode): the head trader loads its skills with the Skill tool.
+function claudeComposedCycle(w, o = {}) {
+  const loads = [...new Set([...REQUIRED_FOR_COMPOSED, 'trader-process', 'htf-to-ltf', 'confluence-counting', 'invalidation', 'rejection', ...REQUIRED_AT_ENTRY])];
+  return [
+    ...loads.map(s => ({ load: s })),
+    { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+    ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'].map(a => ({ role: a, lookups: [], report: `${a}: Bias: long. Reads for long: location: above prior value. Data: bar_briefing` })),
+    { role: 'risk-manager', lookups: [], report: 'Phase 1: flat, budget 1 trade, no daily stop' },
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { broker: 'journal_add', args: { kind: 'plan', contractId: 'MNQ', tags: ['setup:trade_lifecycle', 'MNQ'], text: 'composed long 4h up, value above, stop 27404.50, target 27512.00' } },
+    { role: 'risk-manager', lookups: [], report: () => `Phase 2 on the trade_lifecycle long plan for MNQ: a valid setup, full size.\nVERDICT: ${o.verdict || 'APPROVE'} - size ${o.size || 1}\nFACTS: ${D.trueFacts(w).join('; ')}` },
+    ...((o.verdict || 'APPROVE') === 'APPROVE' ? [{ executor: [{ broker: 'place_order', args: lcOrder(o) }] }] : []),
+    { result: o.result || `CYCLE RESULT: executed - trade_lifecycle long MNQ ${o.size || 1}` },
+  ];
+}
+
+test('decision path, Claude Code: a valid composed setup goes end to end: compose_check, phase 2 approves, the executor sends the record\'s order, the gate allows it, it fills', async () => {
+  const w = D.world({ harness: 'claude', mode: 'full' });
+  const r = await D.pass(w, decisionAt(FIRED_BAR), claudeComposedCycle(w));
+  // The transcript the gate read is Claude Code's (assistant tool_use / user tool_result / result), not opencode's.
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.harness, 'claude');
+  assert.deepStrictEqual([line.tools.Skill > 0, line.tools.Task, line.tools['mcp__harness__compose_check'], line.composed.ok], [true, 6, 1, 1]);
+  assert.deepStrictEqual([line.desk.complete, line.orders[0].gate, line.factCheck.false], [true, 'allowed', 0]);
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  const sent = D.placedAtBroker(w)[0].args;
+  assert.deepStrictEqual([sent.type, sent.limitPrice, sent.size, sent.stopLossBracket.ticks, sent.takeProfitBracket.ticks], ['limit', 27427.5, 1, 92, 338]);
+  assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
+  // The cycle log saw every role and no missing skill on the Claude path.
+  assert.deepStrictEqual(line.missingSkills, []);
+});
+
+test('decision path, Claude Code: the gate still holds on this path: an entry without phase 2 is refused [roles-ran]; a phase-2 VETO sends nothing', async () => {
+  const w = D.world({ harness: 'claude', mode: 'full' });
+  const noPhase2 = claudeComposedCycle(w, { result: BLOCKED }).filter(x => !(x.role === 'risk-manager' && typeof x.report === 'function'));
+  await D.pass(w, decisionAt(FIRED_BAR), noPhase2);
+  const e = lastEntry(w);
+  assert.strictEqual(e.decision, 'blocked');
+  assert.ok(e.checks.includes('roles-ran'), e.messages);
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
+  const v = D.world({ harness: 'claude', mode: 'full' });
+  await D.pass(v, decisionAt(FIRED_BAR), claudeComposedCycle(v, { verdict: 'VETO', result: 'CYCLE RESULT: no-trade - risk-manager vetoed' }));
+  assert.deepStrictEqual(D.placedAtBroker(v), []);
+});
+
 const LC_REFUSALS = [
   ['a false read (the 1h trend is a range, not up)', { reads: lcSwap('bias', '1h up') }, /false by the briefing: "1h up"/],
   ['a true read for the other side (the 15m trend is down)', { reads: lcSwap('bias', '15m down') }, /against the long: "15m down"/],

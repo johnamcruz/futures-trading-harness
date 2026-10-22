@@ -44,6 +44,20 @@ test('Claude: a Task/Agent call counts once its tool_result returned without an 
   assert.deepStrictEqual(calls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
 });
 
+test('Claude: a role\'s report is read without Claude Code\'s subagent footer (its agentId and how to continue it, its usage): the report\'s FACTS line stays its last line', () => {
+  const call = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'r', name: 'Agent', input: { subagent_type: 'futures-trading-harness:risk-manager', prompt: 'p' } }] } });
+  const report = 'VERDICT: APPROVE - size 1, risk $14\nFACTS: window london; entries allowed; trend long allowed';
+  const footer = "agentId: afd8373ed55f8f174 (use SendMessage with to: 'afd8373ed55f8f174', summary: '<5-10 word recap>' to continue this agent)\n<usage>subagent_tokens: 64139\ntool_uses: 12\nduration_ms: 81234</usage>";
+  for (const content of [`${report}\n\n${footer}`, [{ type: 'text', text: report }, { type: 'text', text: footer }]]) {
+    const result = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'r', content }] } });
+    assert.deepStrictEqual(calls([call, result].join('\n')).map(c => c.text), [report], JSON.stringify(content).slice(0, 40));
+  }
+  // A report's own words that merely mention an agent are kept.
+  const own = 'VERDICT: APPROVE - size 1\nThe agentId field is not a fact here.\nFACTS: entries allowed; trend long allowed';
+  const r2 = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'r', content: own }] } });
+  assert.deepStrictEqual(calls([call, r2].join('\n')).map(c => c.text), [own]);
+});
+
 test('Qwen Code parts: a task call counts once answered with no error', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response } }] } });

@@ -15,8 +15,7 @@ description: Use when a completed candle, on any timeframe, may have closed beyo
 **A setup read, not an entry by itself.** It is stated with the other
 steps' reads and `compose_check` verifies them (`trade_lifecycle`).
 
-A read, never a veto: the priority order (strategy-library) decides take,
-skip and size; the gate and the rulebook are untouched. Thresholds are
+A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 5m, 15m, 1h and 4h (`candle-reading`).
 
@@ -51,8 +50,8 @@ By PLAN step:
    there (preferred), or a continuation displacement. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
    low (high for a short): the stop read names it (`invalidation`). Aim for
-   the next swing (`m3.swingTargets`); the room to the next level
-   (`inTheWay`) is step 3's.
+   the next swing (`m3.swingTargets`); the first level ahead
+   (`inTheWay`) is a read (step 3).
 - **9 Manage**: a close back inside the level means the breakout failed:
    invalidation. A CHoCH against the trade on its timeframe or higher
    (`bos-vs-choch`) is one too.
@@ -72,7 +71,7 @@ Take: at the prior RTH low 21385.00, 1h and 15m down: on the 15m close a body be
   prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50,
   target 1h swing 21368.00. short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ), 2.26R -> take.
 Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (touched, no broke
-  read); the session VAH 0.5R in the way. Priority order (step 3, room): skip.
+  read): no setup read -> pass. The session VAH 0.5R ahead is a read, not the reason.
 Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a
   retest held. long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   a 15m close back inside at 21611.00. -34 ticks, -$17.00.
