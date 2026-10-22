@@ -596,6 +596,9 @@ function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
 function claudeHeadAttestation(cfg, root, base, context, env) {
   if (!claudeHeadOn(cfg)) return null;
   const c = context || {};
+  // A probe (the replay preflight's no-web check, web-access.js replayStep): no run, so nothing is written or attested.
+  // Writing would create the run home before the replay does, and the replay starts a run only in a fresh home.
+  if (c.probe === true) return null;
   // A role the runner runs on its own (cycle-run.js runRole: `roleRun`) has no prompt addition: never a new attestation.
   if (typeof c.roleRun === 'string' && c.roleRun && !(typeof c.cycleId === 'string' && c.cycleId)) return null;
   if (typeof c.cycleId === 'string' && c.cycleId) {

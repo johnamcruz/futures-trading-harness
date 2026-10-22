@@ -292,7 +292,8 @@ function replayStep(run, { root, env = process.env, home = (env && env.HOME) || 
   // A replay step's clock (replay/config.js replayEnv sets FTH_REPLAY_NOW on every step) in its run home; the rest of
   // replayEnv points at the run home's copies, which aren't seeded before the preflight, and decides no permission.
   const base = { ...env, ...(run.paths && run.paths.runHome ? { FTH_HOME: run.paths.runHome } : {}), FTH_REPLAY_NOW: new Date(run.start).toISOString() };
-  const stepEnv = autotrader.childEnv(cfg, root, base, { action: 'premarket' });
+  // A probe: the step's env and argv as a run would build them, but nothing written (autotrader.js claudeHeadAttestation).
+  const stepEnv = autotrader.childEnv(cfg, root, base, { action: 'premarket', probe: true });
   const argv = autotrader.buildCommand(cfg, '<prompt>', root, stepEnv);
   const workdir = cfg.workdir ? path.resolve(root, cfg.workdir) : path.join(root, 'workspace');
   // The run's copy of the workspace once seeded, else the one it is copied from.
