@@ -203,7 +203,7 @@ function skillsInTranscript(text) {
 /**
  * The skills a Claude Code session read whole with the harness tool skill_lookup (its stream-json, or its session file):
  * a `…skill_lookup` tool_use naming a skill whose tool_result (no error) is that skill's text (`<skill name="<it>">`).
- * A subagent's calls (parent_tool_use_id) aren't the session's. Counted by the gate only for a Claude Code head trader
+ * A subagent's calls (parent_tool_use_id, or a sidechain turn) aren't the session's. Counted by the gate only for a Claude Code head trader
  * the runner attested in index mode (head-prompt.js claudeAttested); never otherwise, so other runs are as before.
  */
 function claudeLookupsInTranscript(text) {
@@ -213,7 +213,7 @@ function claudeLookupsInTranscript(text) {
     if (!line.includes('skill_lookup') && !line.includes('tool_result')) continue;
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
-    if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id) continue;
+    if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id || ev.isSidechain === true) continue;
     const content = ev.message && typeof ev.message === 'object' && Array.isArray(ev.message.content) ? ev.message.content : [];
     for (const c of content) {
       if (!c || typeof c !== 'object') continue;

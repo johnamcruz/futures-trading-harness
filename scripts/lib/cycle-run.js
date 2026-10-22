@@ -112,8 +112,10 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
 async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, deps = {}) {
   if (!ROLE_RUNS.has(cfg.harness)) throw new Error(`cycle-run: the runner runs a role on its own on ${[...ROLE_RUNS].join(' and ')} only (harness ${cfg.harness}: its head trader launches its roles)`);
   const env = deps.env || process.env;
-  const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, context), { agent: role });
-  const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
+  // The run is the role's (`roleRun`): the head trader's prompt addition is never attested for it (autotrader.js).
+  const roleContext = { ...(context || {}), roleRun: role };
+  const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, roleContext), { agent: role });
+  const res = await runOnce(cfg, argv, timeoutMs, roleContext, { ...deps, env });
   const { text, tools } = runResultOf(cfg.harness, typeof res.stdout === 'string' ? res.stdout : res.output);
   let lookups;
   try {

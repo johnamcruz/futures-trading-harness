@@ -143,6 +143,7 @@ test('claudeLookupsInTranscript: a Claude Code skill_lookup counts only answered
     use('d', 'absorption'), res('d', 'Every skill of the harness (88)'),
     use('e', 'session-timing', { parent_tool_use_id: 'p1' }), res('e', '<skill name="session-timing">\n...\n</skill>\n'),
     use('f', 'day-context'),
+    use('i', 'breakout-vs-fakeout', { isSidechain: true }), res('i', '<skill name="breakout-vs-fakeout">\n...\n</skill>\n'),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', content: '<skill name="trade-plan">\n</skill>' }] } }),
     use('h', 'trade-plan'), JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'h', content: '<skill name="trade-plan">\n...\n</skill>' }] } }),
   ].join('\n');

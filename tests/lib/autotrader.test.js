@@ -1560,6 +1560,9 @@ test('headSkillsInPrompt true (Claude Code): the head trader gets its index-mode
   assert.strictEqual(childEnv(on, ROOT, { FTH_HOME: home }, { cycleId: id, headPrompt: env.FTH_HEAD_PROMPT }).FTH_HEAD_PROMPT, JSON.stringify(att));
   assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home }, { cycleId: 'f'.repeat(16), headPrompt: env.FTH_HEAD_PROMPT })), 'another cycle\'s');
   assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: env.FTH_HEAD_PROMPT }, { cycleId: id })), 'none passed: an inherited one never counts');
+  // A desk role's own run (cycle-run.js runRole: roleRun, no cycle id): no prompt addition, so no attestation.
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(on, ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: env.FTH_HEAD_PROMPT }, { roleRun: 'market-structure-analyst' })));
+  assert.strictEqual(childEnv(on, ROOT, { FTH_HOME: home }, { roleRun: 'trade-executor', cycleId: id, headPrompt: env.FTH_HEAD_PROMPT }).FTH_HEAD_PROMPT, JSON.stringify(att), 'the entry\'s role: the head trader\'s');
   // Two runs: one file (named by its text's hash), each run its own cycle.
   const env2 = childEnv(on, ROOT, { FTH_HOME: home });
   const att2 = H.parseAttestation(env2.FTH_HEAD_PROMPT);

@@ -750,6 +750,8 @@ test('entry workflow, Claude Code with headSkillsInPrompt (this machine\'s opt-i
   const exec = R.runs.at(-1);
   assert.strictEqual(exec.role, 'trade-executor');
   assert.strictEqual(exec.env.FTH_HEAD_PROMPT, r.ctx.env.FTH_HEAD_PROMPT);
+  // The desk's runs (before the head trader, no cycle id): none.
+  for (const x of R.runs.slice(0, 4)) assert.ok(!('FTH_HEAD_PROMPT' in x.env), x.role);
   // The order went, allowed by the gate, and filled.
   assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
   assert.strictEqual(D.placedAtBroker(w).length, 1);

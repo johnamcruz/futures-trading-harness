@@ -728,10 +728,19 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     // Claude Code's head trader in index mode: the prompt addition as the runner builds it (its hash is the file's name).
     claudeHead: once(() => {
       const hp = require('../head-prompt');
+      // Written as the runner writes it (a scratch home) and read back as the gate reads it: its hash against the text built now.
       let prompt;
-      try { prompt = hp.claudeHeadText(root); } catch (_err) { prompt = null; }
-      const sha = prompt ? hp.sha256(prompt) : null;
-      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: sha ? { sha256: sha } : null, expectedSha256: sha };
+      let expected;
+      const scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-head-'));
+      try {
+        expected = hp.claudeHeadText(root);
+        prompt = hp.claudeHeadIn(hp.writeClaudeHead(scratch, root).file);
+      } catch (_err) {
+        prompt = null;
+      } finally {
+        fs.rmSync(scratch, { recursive: true, force: true });
+      }
+      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
     }),
     replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),

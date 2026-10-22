@@ -590,12 +590,14 @@ function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
 /**
  * The attestation of a Claude head trader's prompt addition for this run (claudeHeadOn only), or null. A role the runner
  * runs for the head trader's cycle (`context.cycleId`: the entry's) carries the head trader's own attestation
- * (`context.headPrompt`, as its run had it) when it is for that cycle, never a new one; any other run (the head
- * trader's) writes the file it is given and attests it for its own cycle.
+ * (`context.headPrompt`, as its run had it) when it is for that cycle, never a new one; another role's run
+ * (`context.roleRun`: the desk's) none; the head trader's own run writes the file it is given and attests it for its cycle.
  */
 function claudeHeadAttestation(cfg, root, base, context, env) {
   if (!claudeHeadOn(cfg)) return null;
   const c = context || {};
+  // A role the runner runs on its own (cycle-run.js runRole: `roleRun`) has no prompt addition: never a new attestation.
+  if (typeof c.roleRun === 'string' && c.roleRun && !(typeof c.cycleId === 'string' && c.cycleId)) return null;
   if (typeof c.cycleId === 'string' && c.cycleId) {
     const att = headPrompt.parseAttestation(c.headPrompt);
     return att && att.harness === 'claude' && att.cycle === c.cycleId ? att : null;
