@@ -122,10 +122,12 @@ const PINS = {
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
     // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
     '**Compose first.** The trend rule\'s side (or its CHoCH tier), a rejection or breakout at a key level or FVG, the trigger closed → call `compose_check`.',
-    'Never estimate room or R:R: the plan does; its refusal is the R:R check. Refused → pass, naming it.',
+    'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
     'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
-    '**Decisive** → pass: a 3m close broke the leg\'s 15m/1h swing (`m3.htfLevels` `brokenAt`: a reversal, `pullback-vs-reversal`).',
-    '**Serious** → half (`floor`, at least 1): 2+ categories against, or location against (the trigger into the other side\'s level).',
+    // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
+    '**Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH against: the trend rule\'s tier, `trade-lifecycle`), or a hard step fails.',
+    '**Serious** → half (`floor`, at least 1): 2+ categories against, location against (the trigger into the other side\'s level), or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`).',
+    'Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
     '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing" (no edge in the census), no pullback yet, mixed reads.',
     'A missing read is no reason to pass.',
     // A pullback inside the trend is never counted against itself (fix/confluence-not-vetoes).

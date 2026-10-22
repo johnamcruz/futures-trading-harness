@@ -114,7 +114,7 @@ Judge every setup, a policy verdict too, by the priority order (the
 strategy-library skill, "The priority order"): a hard step's no trade is
 a VETO; then (`confluence-counting`): compose OK (its R:R the record's,
 never an estimate) → APPROVE, full size, half on serious against; VETO
-only on a decisive against or a failed hard step.
+only on a 1h CHoCH against the side or a failed hard step.
 The checks below say where to read its facts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current

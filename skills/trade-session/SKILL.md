@@ -120,7 +120,7 @@ It orders the thinking and adds no filter.
   the rule for every setup, a policy verdict too. Apply its steps in order.
 - **Compose first** (`confluence-counting`): trend side, a reaction at a
   key level, the trigger closed → `compose_check`, never your own R:R.
-  OK → take: full, half on serious against, pass on decisive.
+  OK → take: full, half on serious against, pass on a 1h CHoCH against.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

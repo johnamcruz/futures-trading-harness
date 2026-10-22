@@ -13,15 +13,18 @@ description: Trader-process step 5 - a valid setup is the trade; six independent
 
 **Compose first.** The trend rule's side (or its CHoCH tier), a
 rejection or breakout at a key level or FVG, the trigger closed → call
-`compose_check`. Never estimate room or R:R: the plan does; its refusal
-is the R:R check. Refused → pass, naming it.
+`compose_check`. Never estimate room or R:R: the briefing's "Standard
+plan" line states it; OK → compose with its reads, refused → pass,
+naming it.
 OK → **a valid setup is the trade**: full size within the verdict's
 ceiling; the against sets the size:
 
-- **Decisive** → pass: a 3m close broke the leg's 15m/1h swing
-  (`m3.htfLevels` `brokenAt`: a reversal, `pullback-vs-reversal`).
-- **Serious** → half (`floor`, at least 1): 2+ categories against, or
-  location against (the trigger into the other side's level).
+- **Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH
+  against: the trend rule's tier, `trade-lifecycle`), or a hard step fails.
+- **Serious** → half (`floor`, at least 1): 2+ categories against,
+  location against (the trigger into the other side's level), or a 3m
+  close beyond the leg's 15m swing (`m3.htfLevels` `brokenAt`). Closed
+  back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.
 - **Minor** → full size, never a reason not to compose: thin volume, the
   first level ahead, VWAP distance or "chasing" (no edge in the census),
   no pullback yet, mixed reads.
@@ -55,8 +58,8 @@ neutral = 6: reads of one price move are one piece of evidence.
 ```text
 Take: valid long: structure (15m cisd up, 3m momentum up: one), location, trigger, context: for.
   for 4, against 0, neutral 2 -> full.
-Skip: long: structure (3m close broke the 15m swing low: a reversal): against.
-  for 0, against 1, neutral 5: decisive -> pass.
+Skip: long: structure (3m choch down): neutral; the 1h CHoCH down reverses the side.
+  for 2, against 0, neutral 4: decisive -> pass.
 Half: valid long: structure (the pullback): neutral; context, participation: against.
   for 2, against 2, neutral 2: serious -> half.
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50

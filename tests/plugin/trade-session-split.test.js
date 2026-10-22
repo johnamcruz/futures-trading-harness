@@ -260,7 +260,7 @@ const LATE = [
   { from: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): run trade-review (`trade-reviewer` role) first.", to: "**Flat, with an earlier entry today that has no review** (it closed or was cancelled between cycles): the runner reviews it next bar.",
     reason: "fix/runner-writes-reviews: the runner writes the factual review of each entry it sees end (runner-reviews.js); the trade-reviewer adds the grade" },
   { from: "It orders the thinking and adds no filter: the priority order decides.",
-    to: ["It orders the thinking and adds no filter.", "**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R.", "OK → take: full, half on serious against, pass on decisive."],
+    to: ["It orders the thinking and adds no filter.", "**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R.", "OK → take: full, half on serious against, pass on a 1h CHoCH against."],
     copies: 0,
     reason: "fix/confluence-not-vetoes: a soft read (the room, the analysts, a red flag, the middle of balance) is a read in the count, never a pass alone; the count under the bias decides (owner, 2026-10-21)" },
   { from: "Trade only when at least two of the three market analysts agree and none is strongly opposed.",
@@ -408,9 +408,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // analysts +51 to +60 (trader-process's decision line; the owner's OK while performance holds).
 // Then compose first (the plan, never the model, works out R:R), its wording tightened: every role shrank or held but the
 // strategy researcher (+2, strategy-library's R:R line).
+// Then decisive is a 1h CHoCH against (a 15m swing broken is serious, a sweep a read for) and the briefing's Standard plan
+// line is named: the risk manager +211 (confluence-counting; the owner's OK while performance holds).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90033, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 75910, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90244, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 76121, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

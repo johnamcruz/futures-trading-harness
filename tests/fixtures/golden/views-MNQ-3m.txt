@@ -126,6 +126,7 @@ Summary (MNQ 3m, 10:33 ET):
 - FVGs near price or retested (completed candles): 1h bullish 27297.25-27360 (04-24 11:00) filled to 27298.5, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27356.5 (closed 10:33, strong), no key-level sweep, OTE 27359.75-27370.25 (mid 27365), waiting; 15m bearish at 27475.5 (closed 08:15, strong), no key-level sweep, OTE 27423.5-27458 (mid 27440.75), waiting; 1h bearish at 27425 (closed 09:00, strong, engulfing) after a sweep of the prior RTH high 27462.5, OTE 27423.5-27458 (mid 27440.75), waiting.
 - Setups to check (the 15m candle closed 10:30): "15m rejected opening range low up" (long, 27353.5); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
+- Standard plan (code, as compose_check plans it): long "15m rejected opening range low up": plan refused (no confirming entry read).
 - Setups:
   - fx_orb short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level ahead: round number at 1.76R; it aims for 2R; confluence: none with it; price below the VWAP (its side). Stop 14.51 pts (its own 1R); aims for 2R; levels ahead in its R: round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
 
@@ -219,6 +220,7 @@ Summary (MNQ 3m, 13:18 ET):
 - FVGs near price or retested (completed candles): 1h bullish 27297.25-27360 (04-24 11:00) filled to 27298.5, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27397.5 (closed 13:18, strong, engulfing), no key-level sweep, OTE 27408.75-27413 (mid 27410.75), waiting; 15m bullish at 27377.75 (closed 12:45, weak) after a sweep of the overnight low 27344.25, a weak displacement: no zone; 1h bearish at 27425 (closed 09:00, strong, engulfing) after a sweep of the prior RTH high 27462.5, OTE 27423.5-27458 (mid 27440.75), waiting.
 - Setups to check (the 15m candle closed 13:15): "15m rejected prior POC down" (short, 27414.32); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
+- Standard plan (code, as compose_check plans it): short "15m rejected prior poc down": plan OK: entry 27394.25, stop 27414.75 (82t), target 27347.75, R:R 2.27; reads "1h range", "at prior poc", "15m rejected prior poc down", "3m pattern bearish engulfing", "stop 15m high 27414.5", "target prior 1h low 27347.75". OK -> compose_check with its reads; never estimate R:R.
 - Setups:
   - fx_value_area short: the trend rule allows a short; multi-timeframe read for a short: mixed; first level ahead: last 3m swing low at 0.54R; it aims for 5.26R; confluence: none with it; price above the VWAP (the other side); lunch lull. Stop 28.07 pts (its own 1R); target 147.71 pts (5.26R); aims for 5.26R; levels ahead in its R: last 3m swing low 27379 (15.25 pts, 0.54R), session POC 27373 (21.33 pts, 0.76R), VWAP (rth) 27368.55 (25.7 pts, 0.92R). Values: field("flow.windows.3.ofiTrade")=-0.239.
 
@@ -311,6 +313,7 @@ Summary (MNQ 3m, 19:21 ET):
 - FVGs near price or retested (completed candles): 1h bearish 27456-27508 (01:00) filled to 27501.5, retest closed inside.
 - CISD (completed candles; a read, not a signal): 3m bullish at 27487.5 (closed 19:21, weak), no key-level sweep, a weak displacement: no zone; 15m bullish at 27444.75 (closed 18:15, strong), no key-level sweep, OTE 27430.25-27445.5 (mid 27437.75), waiting; 1h bullish at 27482 (closed 19:00, strong), no key-level sweep, OTE 27341.25-27375.75 (mid 27358.5), waiting.
 - Setups to check (the 15m candle closed 19:15): "15m rejected VWAP (session) up" (long, 27475.22); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
+- Standard plan (code, as compose_check plans it): long "15m rejected vwap session up": plan refused (no confirming entry read).
 - Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:

@@ -60,6 +60,11 @@
  *   baseBars(bars, minutes)                a bars file's bars as base bars (1m bars aggregated), by time
  *   runnerClock({ from, to, sessions })    { inSession(closeMs), eodOf(ms) }: the runner's decision times and end of day
  *                                          (its default sessions, the exchange calendar for those years)
+ *   planLine(briefing, { setupTf })        the briefing's "Standard plan" line: on a confirmation close of a "Setups to
+ *                                          check" moment, the strongest reaction each side composed by composeAt (the
+ *                                          census's path: checkReads, then planOf) on that briefing alone, so as of the
+ *                                          bar's close: OK with its entry, stop, target, R:R and reads, or what refused it;
+ *                                          null with no such moment, no entries in the window, or on any error
  */
 
 const crypto = require('crypto');
@@ -74,6 +79,7 @@ const { assertUse, sessionDate } = require('./splits');
 const { cellStats, cellKey, contextKey, knownDay, assertPracticeTrain, MIN_N, MIN_DAYS, LEVEL } = require('./experience-index');
 const { CONTEXT_KEYS, contextOf: recordContext } = require('./lifecycle-record');
 const { barMinutes, aggregate } = require('../backtest/data');
+const { tickOf } = require('../trading/contracts');
 
 // 2: the limit window is the strategy's valid_bars (1 held it one bar); a version-1 library is rebuilt.
 const VERSION = 2;
@@ -412,7 +418,39 @@ function runnerClock({ from, to, sessions = null }) {
   return { inSession: ms => isTradeTime(cfg, new Date(ms)), eodOf: ms => eodOf(cfg, ms) };
 }
 
-module.exports = { strategyValidBars,
+/**
+ * The briefing's "Standard plan" line (see the header): the plan compose_check would make of the strongest reaction
+ * each side, stated as the code's fact so the model never works out room or R:R itself. Never throws.
+ */
+function planLine(b, { setupTf = DEFAULTS.setupTf } = {}) {
+  try {
+    const m3 = m3Of(b);
+    if (!m3 || !m3.bar || m3.windowEntries !== 'allowed') return null;
+    const mo = setupMoment(m3.candles, { setupTf, barClose: Date.parse(m3.bar.t) + b.minutes * 60000 });
+    if (!mo.moment || mo.phase !== 'confirmation') return null;
+    // The contract's tick (contracts.js); a root it doesn't list gets no plan line (never a guessed tick).
+    const tick = tickOf(b.symbol);
+    if (!tick) return null;
+    const stf = tfLabel(setupTf);
+    const parts = [];
+    for (const side of ['long', 'short']) {
+      const reaction = mo.reactions.find(r => sideOf(r.dir) === side);
+      if (!reaction) continue;
+      const r = composeAt(b, reaction, { side, tick, setupTf });
+      const what = `${side} "${stf} ${reaction.rel} ${levelWords(reaction.name)} ${reaction.dir}"`;
+      if (r.status !== 'traded') { parts.push(`${what}: plan refused (${r.why})`); continue; }
+      const p = r.plan;
+      parts.push(`${what}: plan OK: entry ${p.entry.price}, stop ${p.stop.price} (${p.stop.ticks}t), target ${p.target.price}, R:R ${p.rr}; reads ${r.reads.map(x => `"${x.read}"`).join(', ')}`);
+    }
+    if (!parts.length) return null;
+    const ok = parts.some(x => / plan OK: /.test(x));
+    return `- Standard plan (code, as compose_check plans it): ${parts.join('; ')}.${ok ? ' OK -> compose_check with its reads; never estimate R:R.' : ''}`;
+  } catch (_err) {
+    return null;
+  }
+}
+
+module.exports = { strategyValidBars, planLine,
   baseBars, runnerClock,
   VERSION, KIND, MIN_RR, STANDARD, scanLibrary, composeAt, entryRead, targetCandidates, setupKeyOf, buildLibraryIndex, libraryCellAt, noRoomBefore,
   libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary, libraryShown,

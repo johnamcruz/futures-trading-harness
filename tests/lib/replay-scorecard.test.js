@@ -762,7 +762,9 @@ test('a composed pass: right with no OK record; on one (a valid setup) excessive
   // A valid setup is the trade (fix/confluence-not-vetoes): a pass on soft reads is excessive abstention; a decisive one
   // (a reversal, which no claim checks) is unchecked; a false reason stays a wrong stated reason.
   assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the reads are thin, passing'), { category: 'excessive abstention', agrees: false, why: ['a valid setup (the verified compose record rec1) passed without a decisive reason'] });
-  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the 3m close broke the 15m swing low: a reversal').category, 'unchecked');
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the 1h CHoCH down turned the trend against the long').category, 'unchecked');
+  // A 3m close beyond the leg's 15m swing is serious (half size), never a pass: passing on it is abstention.
+  assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the 3m close broke the 15m swing low: a reversal').category, 'excessive abstention');
   assert.strictEqual(run(label(), f, 'CYCLE RESULT: no-trade - opening print window until 10:00 ET').category, 'wrong stated reason');
   // "No rules strategy fired" (the runner's own words) stays true beside a composed setup: it is no strategy that fired.
   // ...but it is no reason to pass the composed setup beside it.
