@@ -391,7 +391,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       },
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}), ...(watchMs ? { composedWatchMs: watchMs } : {}), ...(recordPrice ? { recordPrice } : {}),
-    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; if (cycleWait && action === 'trade') await cycleWait(clockRef); clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
+    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; if (cycleWait && (action === 'trade' || action === 'manage')) await cycleWait(clockRef); clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
     isKillSwitchOn: () => killed || (killFile !== null && require('fs').existsSync(killFile)), createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; if (realKill) killed = true; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan,
     entryOrders: () => [...extraEntries, { orderId: 5, contractId: 'MNQ', setup: 'trendy', side: short ? 'sell' : 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
@@ -560,6 +560,9 @@ test('a composed fill: the stop moves to the plan\'s price only on the newest 1m
   assert.ok(unknown.logs.some(l => /\[exit\] the price now is unknown, so the stop can't be moved to the plan's 21490 safely/.test(l)), unknown.logs.join('\n'));
   const fine = await trailSim({ ...base, price1m: 21497 });
   assert.deepStrictEqual([fine.modified, fine.closedIds, fine.bars1m.length >= 1], [[21490], [], true]);
+  // An old 1m bar (a data stall): no current price, so out, never a stop moved on it.
+  const stale = await trailSim({ ...base, price1m: (_n, t) => [{ t: new Date(t - 10 * 60000).toISOString(), o: 21497, h: 21497, l: 21497, c: 21497, v: 1 }] });
+  assert.deepStrictEqual([stale.modified, stale.closedIds], [[], ['MNQ']], stale.logs.join('\n'));
 });
 
 test('a composed short filled better than its plan: the trail\'s 1R is the risk actually taken to the plan\'s stop (14981.5 to 14986.5: 5 points), not the bracket\'s 28 ticks', async () => {
@@ -604,6 +607,10 @@ test('during a trade cycle the runner keeps the latest 1m price for the gate (an
   // No trade cycle (manage-only, or none at all): no 1m reads for the gate.
   const quiet = await trailSim({ tape: {}, startFlat: true, exit: { mode: 'target' }, price1m: bars, watchMs: 5, until: et(10, 4), cfgOver: { closedDates: ['2026-10-07'] } });
   assert.strictEqual((quiet.bars1m || []).length, 0);
+  // A manage-only cycle (the day's cycles used up, a position open): it runs, but reads no 1m bars for the gate.
+  const manage = await trailSim({ tape: {}, exit: { mode: 'target' }, price1m: bars, watchMs: 5, cycleWait: async clockRef => { for (let i = 0; i < 4; i += 1) { clockRef.t += 20000; await new Promise(r => setTimeout(r, 15)); } }, until: et(10, 4), recordPrice: () => {}, cfgOver: { maxCyclesPerDay: 1 }, stateIn: { day: '2026-10-07', premarketDone: true, eodDone: false, cycles: 1, lastCycleAt: null } });
+  assert.ok(manage.cycles.length > 0 && manage.cycles.every(a => a === 'manage'), `manage cycles ran: ${manage.cycles}`);
+  assert.strictEqual((manage.bars1m || []).length, 0, manage.logs.join('\n'));
 });
 
 test('time stop: max_bars counts the strategy\'s bars, scaled to the runner\'s timeframe', async () => {

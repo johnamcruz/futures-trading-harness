@@ -730,9 +730,13 @@ function createRunner(deps) {
         // The market now, before a stop moves: the newest closed 1m bar; through the plan's stop, or unknown, out.
         let now1m = null;
         try {
+          const nowMs = clock.now().getTime();
           const bars = await client.closedBars(p.contractId, { minutes: 1, limit: SIGNAL_BARS, now: clock.now() });
           const b = Array.isArray(bars) && bars.length ? bars[bars.length - 1] : null;
-          now1m = b && Number.isFinite(Number(b.c)) ? Number(b.c) : null;
+          // Closed by now and current (within the signal age of 1m bars): an old bar after a data stall is unknown.
+          const closed = b ? Date.parse(b.t) + 60000 : NaN;
+          const current = Number.isFinite(closed) && closed <= nowMs && nowMs - closed <= SIGNAL_BARS * 60000;
+          now1m = b && current && Number.isFinite(Number(b.c)) ? Number(b.c) : null;
         } catch (err) {
           log(`${item.symbol}: the latest 1m bar can't be read before moving the composed fill's stop (${err.message})`, 'error');
         }
