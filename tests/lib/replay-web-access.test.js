@@ -206,3 +206,16 @@ test('qwen and codex: the user\'s settings and config: a shell or fetch-like all
   const c = userRun('codex', { '.codex/config.toml': toml });
   assert.deepStrictEqual(c.map(f => f.replace(/^codex: .*?config\.toml /, '')), ['configures the MCP server web-fetch', 'configures the MCP server search', 'configures the MCP server dotted']);
 });
+
+test('the replay preflight\'s step probe writes nothing: with headSkillsInPrompt on, the run home stays uncreated (the replay starts a run only in a fresh home); a head trader\'s run still writes and attests its prompt addition', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-probe-'));
+  const runHome = path.join(tmp, 'run-home');
+  const cfg = at.validateConfig({ harness: 'claude', symbols: ['MNQ'], account: '7', timeframe: 3, headSkillsInPrompt: true });
+  const step = W.replayStep({ cfg, start: '2022-04-21T13:00:00Z', paths: { runHome } }, { root: ROOT, env: { HOME: tmp } });
+  assert.strictEqual(fs.existsSync(runHome), false, 'the probe created the run home');
+  assert.strictEqual(step.env.FTH_HEAD_PROMPT, undefined, 'a probe attests nothing');
+  // The head trader's own run (no probe) writes its file in the harness home and attests it, as before.
+  const env = at.childEnv(cfg, ROOT, { HOME: tmp, FTH_HOME: runHome, FTH_REPLAY_NOW: '2022-04-21T13:00:00Z' }, { action: 'trade', symbols: [] });
+  assert.ok(env.FTH_HEAD_PROMPT, 'a run attests its prompt addition');
+  assert.ok(fs.readdirSync(path.join(runHome, 'head-prompt')).some(f => /^claude-head-[0-9a-f]{64}\.md$/.test(f)));
+});
