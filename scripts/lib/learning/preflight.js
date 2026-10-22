@@ -139,17 +139,23 @@ function skillsCrosswalk(ctx) {
 /** Why the head prompt doesn't apply to this run (another harness, full mode), or null. */
 function headNotApplicable(ctx) {
   const harness = ctx.run.cfg && ctx.run.cfg.harness;
+  // Claude Code's head trader in index mode (the runner config's headSkillsInPrompt: its prompt addition, head-prompt.js).
+  if (claudeHead(ctx)) return null;
   if (harness !== 'opencode') return `the head prompt is opencode's; this run's harness is ${harness}`;
   const mode = ctx.read.roleSkillsMode();
   if (mode !== 'index') return `role skills in ${mode} mode: no embedded head prompt`;
   return null;
 }
 
+const claudeHead = ctx => Boolean(ctx.run.cfg && ctx.run.cfg.harness === 'claude' && ctx.run.cfg.headSkillsInPrompt === true);
+/** The head prompt this run's head trader has: opencode's (its opencode.json), or Claude Code's prompt addition. */
+const headOf = ctx => (claudeHead(ctx) ? ctx.read.claudeHead() : ctx.read.head());
+
 function headPromptCheck(ctx) {
   const why = headNotApplicable(ctx);
   if (why) return r('head-prompt', NA, why);
-  const h = ctx.read.head();
-  if (!h.prompt) return r('head-prompt', FAIL, 'the workspace opencode.json has no head prompt (run node scripts/sync-harness.js)');
+  const h = headOf(ctx);
+  if (!h.prompt) return r('head-prompt', FAIL, claudeHead(ctx) ? 'the Claude head trader\'s prompt addition can\'t be built (head-prompt.js claudeHeadText)' : 'the workspace opencode.json has no head prompt (run node scripts/sync-harness.js)');
   const missing = h.core.filter(s => !h.embedded.includes(s));
   if (missing.length) return r('head-prompt', FAIL, `the head prompt doesn't embed the current text of ${missing.join(', ')} (run node scripts/sync-harness.js)`);
   if (!h.attestation || h.attestation.sha256 !== h.expectedSha256) return r('head-prompt', FAIL, `the attestation hash ${h.attestation ? h.attestation.sha256.slice(0, 12) : 'none'} is not the generated prompt's ${String(h.expectedSha256).slice(0, 12)} (run node scripts/sync-harness.js)`);
@@ -157,9 +163,9 @@ function headPromptCheck(ctx) {
 }
 
 function headComposedReads(ctx) {
-  const h = ctx.read.head();
   const why = headNotApplicable(ctx);
   if (why) return r('head-composed-reads', NA, why);
+  const h = headOf(ctx);
   if (!Array.isArray(h.composedReads)) return r('head-composed-reads', FAIL, 'head-prompt.js lists no composed reads (COMPOSED_READS)');
   const notCore = h.composedReads.filter(s => !h.core.includes(s));
   const notIn = h.composedReads.filter(s => !h.embedded.includes(s));
@@ -718,6 +724,14 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
         embedded: hp.embeddedSkills(prompt, root), attestation: hp.attestation(config, root),
         expectedSha256: hp.sha256(hp.headPrompt(hp.headPlan(root, 'index'))),
       };
+    }),
+    // Claude Code's head trader in index mode: the prompt addition as the runner builds it (its hash is the file's name).
+    claudeHead: once(() => {
+      const hp = require('../head-prompt');
+      let prompt;
+      try { prompt = hp.claudeHeadText(root); } catch (_err) { prompt = null; }
+      const sha = prompt ? hp.sha256(prompt) : null;
+      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: sha ? { sha256: sha } : null, expectedSha256: sha };
     }),
     replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),

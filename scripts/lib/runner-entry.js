@@ -51,7 +51,7 @@ const { outcomeOf } = require('./autotrader');
 const { verdictOf } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
-const { skillsInTranscript } = require('./trading/skills-loaded');
+const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
 const { familyRoot } = require('./trading/contracts');
 const { contractRoot } = require('./trading/journal');
 const { isOpen } = require('./trading/positions');
@@ -106,6 +106,14 @@ function gateRefusal(env, id, sinceMs) {
 }
 
 /**
+ * The order tool a gate log entry judged: the gateway names it (`tool`); the hook's refusal (trading-order-gate.js)
+ * names none, and is a place_order's when it carries the order's contract or rationale, a modify_order's otherwise (as
+ * replay/labels.js gateTool reads it). A Claude Code executor's place_order refused by the hook never reaches the
+ * gateway, so the hook's entry is the only record of why.
+ */
+const orderTool = e => (typeof e.tool === 'string' ? e.tool : e.source === 'hook' ? (e.contractId || e.rationale ? 'place_order' : 'modify_order') : null);
+
+/**
  * The gate's last place_order decision of this cycle at or after `sinceMs`: { decision: allowed | blocked, checks,
  * message } or null. `allowed` means the order went to the broker (whatever its reply). Never throws.
  */
@@ -129,7 +137,7 @@ function gateDecision(env, id, sinceMs) {
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
-      if (!e || e.cycle !== id || e.tool !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
+      if (!e || e.cycle !== id || orderTool(e) !== 'place_order' || !['allowed', 'blocked'].includes(e.decision) || !(Date.parse(e.ts) >= sinceMs)) continue;
       last = e;
     }
     if (!last) return null;
@@ -189,9 +197,13 @@ async function runEntry(deps, c) {
     log('the entry: no role record for the cycle: nothing runs', 'error');
     return say('process-failure', c.result, { failure: 'no role record' });
   }
-  // 2. The head trader's loads, for the gate's skills checks in the executor's run.
+  // 2. The head trader's loads, for the gate's skills checks in the executor's run. A Claude Code head trader in index
+  // mode (attested by the runner: autotrader.js claudeHeadOn, this machine's opt-in) also read skills whole with
+  // skill_lookup; those are its loads too. Without that attestation, as before.
+  const headAtt = require('./head-prompt').parseAttestation((c.headEnv || {}).FTH_HEAD_PROMPT);
+  const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
   try {
-    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output)].filter(Boolean));
+    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : [])].filter(Boolean));
   } catch (err) {
     log(`the entry: the head trader's skills could not be recorded (${err.message}): the gate sees none`, 'error');
   }
@@ -200,7 +212,9 @@ async function runEntry(deps, c) {
   const { cycleId } = require('./trading/check-order');
   const id = cycleId(c.headEnv || {});
   // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
-  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}) };
+  // A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate counts what
+  // the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's).
+  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
   // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's
   // start (c.at), then the wall clock since the head trader's run began (c.startedWall).

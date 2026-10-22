@@ -723,3 +723,45 @@ test('entry workflow, Claude Code: a desk the runner couldn\'t complete (an anal
   const files = fs.readdirSync(require('path').join(w.home, 'logs')).filter(f => /^cycle-roles/.test(f));
   assert.deepStrictEqual(files, [], 'the dropped record is removed');
 });
+
+test('entry workflow, Claude Code with headSkillsInPrompt (this machine\'s opt-in): the head trader gets its index-mode skills as a system-prompt file, loads none, composes and says planned; the runner\'s entry places the order (the gate counts the attested skills for the executor); without the key the same head trader is refused [skills-loaded]', async () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const headScript = [
+    { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 1 } },
+    { result: 'CYCLE RESULT: planned - trade_lifecycle long 1' },
+  ];
+  const w = D.world({ harness: 'claude' });
+  w.cfg = { ...w.cfg, headSkillsInPrompt: true };
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { deskRuns: true });
+  const r = await D.pass(w, at, headScript, { runRole: R.runRole });
+  // The head trader's run: told its skills are in its prompt, the file attested for its cycle.
+  assert.match(r.ran[0].prompt, /are in your prompt, already loaded \(don't load them again\)/);
+  const att = H.parseAttestation(r.ctx.env.FTH_HEAD_PROMPT);
+  assert.ok(att && att.harness === 'claude', r.ctx.env.FTH_HEAD_PROMPT);
+  assert.strictEqual(att.cycle, require('../../scripts/lib/trading/check-order').cycleId(r.ctx.env));
+  assert.ok(fs.readFileSync(att.config, 'utf8').includes('<skill name="trade-lifecycle">'));
+  const { buildCommand } = require('../../scripts/lib/autotrader');
+  const argv = buildCommand(w.cfg, r.ran[0].prompt, D.ROOT, D.passEnv(w, at));
+  assert.strictEqual(argv[argv.indexOf('--append-system-prompt-file') + 1], att.config, 'the head trader\'s argv names the attested file');
+  // The roles' runs: no prompt addition; the trade-executor carries the head trader's attestation.
+  for (const x of R.runs) assert.ok(!x.argv.includes('--append-system-prompt-file'), x.role);
+  const exec = R.runs.at(-1);
+  assert.strictEqual(exec.role, 'trade-executor');
+  assert.strictEqual(exec.env.FTH_HEAD_PROMPT, r.ctx.env.FTH_HEAD_PROMPT);
+  // The order went, allowed by the gate, and filled.
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+  assert.strictEqual(D.placedAtBroker(w).length, 1);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ/);
+  // The same head trader without the key: it loaded nothing, so the gate refuses the executor's order.
+  const v = D.world({ harness: 'claude' });
+  const r2 = await D.pass(v, at, headScript, { runRole: roles(v, at, { deskRuns: true }).runRole });
+  assert.ok(!('FTH_HEAD_PROMPT' in r2.ctx.env));
+  assert.ok(!require('../../scripts/lib/autotrader').buildCommand(v.cfg, r2.ran[0].prompt, D.ROOT, D.passEnv(v, at)).includes('--append-system-prompt-file'));
+  const e = entries(v).at(-1);
+  assert.strictEqual(e.decision, 'blocked');
+  assert.deepStrictEqual(e.violations.map(x => x.check), ['skills-loaded', 'skills-at-entry']);
+  assert.deepStrictEqual(D.placedAtBroker(v), []);
+  assert.match(r2.ran[0].result, /^CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: \[skills-loaded\]/);
+});

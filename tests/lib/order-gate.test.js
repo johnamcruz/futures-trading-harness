@@ -3545,3 +3545,155 @@ test('managed-cycle (FTH_CYCLE_MANAGE, the runner\'s, on this machine\'s opt-in)
   for (const v of [undefined, '', '  ']) assert.strictEqual(loadConfig({ FTH_CYCLE_MANAGE: v }).cycleManage, false, JSON.stringify(v));
   assert.deepStrictEqual(evaluate(entryOrder(), [plan()]).violations, []);
 });
+
+// --- Claude Code's head trader in index mode (the runner config's headSkillsInPrompt, this machine's opt-in): its
+// prompt addition's skills count, and its skill_lookup reads, only on the runner's attestation for this cycle, checked
+// against the file, the skills' current text and the run's own Claude transcript (head-prompt.js claudeAttested). ---
+
+const CLAUDE_SESSION = '0b6f3a52-7c1e-4d3a-9f00-claudehead01';
+/** A Claude Code `-p` stream (init, then the given skill_lookup reads), or the same calls as a session file (no init). */
+function claudeLines(skills, { init = CLAUDE_SESSION, idBase = 'tu' } = {}) {
+  const out = init ? [JSON.stringify({ type: 'system', subtype: 'init', session_id: init, tools: [] })] : [];
+  skills.forEach((skill, i) => {
+    out.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `${idBase}${i}`, name: 'mcp__harness__skill_lookup', input: { skill } }] } }));
+    out.push(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `${idBase}${i}`, content: [{ type: 'text', text: `<skill name="${skill}">\n...\n</skill>\n` }] }] } }));
+  });
+  return out.join('\n');
+}
+const RULES_LOOKUPS = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+/** A Claude head trader's run: its prompt addition in the harness home, the runner's stream, its session file, the attestation. */
+function claudeHeadRun() {
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const root = path.resolve(__dirname, '..', '..');
+  const dir = require('../helpers').tmpDir();
+  const { file, text } = H.writeClaudeHead(dir, root);
+  const stream = path.join(dir, 'logs', 'cycle-transcript-1-abc.jsonl');
+  fs.mkdirSync(path.dirname(stream), { recursive: true });
+  // The head trader loaded no skill with its skill tool: it read its prompt's, and looked up the rules entry's three.
+  fs.writeFileSync(stream, claudeLines(RULES_LOOKUPS));
+  const session = path.join(dir, 'projects', `${CLAUDE_SESSION}.jsonl`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, claudeLines(RULES_LOOKUPS, { init: null }));
+  const cycle = cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream });
+  const att = H.claudeAttestation({ file, text, root, cycle });
+  const cfg = { ...config, autonomous: true, roleSkills: 'full', cycle: null, cycleTranscript: stream, headPromptAttestation: JSON.stringify(att) };
+  return { H, root, dir, file, text, stream, session, cycle, att, cfg };
+}
+
+test('claude head prompt (gate): the attested prompt addition\'s skills and the head trader\'s skill_lookup reads count, on the runner\'s stream and on the head trader\'s own session (a hook), its subagent\'s too', () => {
+  const { att, cfg, session, dir } = claudeHeadRun();
+  const { REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  for (const s of [...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY]) assert.ok(att.skills.includes(s), `attested: ${s}`);
+  assert.strictEqual(att.harness, 'claude');
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'the gateway: the runner\'s stream');
+  assert.deepStrictEqual(skillChecks(headGate(cfg, entryOrder(), { transcriptPath: session })), [], 'the hook: the head trader\'s own session file');
+  // A subagent's hook (the head trader's trade-executor): its file, paired with the session's main one.
+  const sub = path.join(dir, 'projects', CLAUDE_SESSION, 'subagents', 'agent-1.jsonl');
+  fs.mkdirSync(path.dirname(sub), { recursive: true });
+  fs.writeFileSync(sub, '');
+  assert.deepStrictEqual(skillChecks(headGate(cfg, entryOrder(), { transcriptPath: sub })), [], 'the hook: a subagent of that session');
+  // Without the attestation (the key off): the transcript decides as before; a Claude skill_lookup is no load there.
+  const none = headGate({ ...cfg, headPromptAttestation: null });
+  assert.deepStrictEqual(skillChecks(none), ['skills-at-entry', 'skills-loaded']);
+  assert.match(none.violations.find(v => v.check === 'skills-loaded').message, /not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks\./);
+  assert.deepStrictEqual(skillChecks(headGate({ ...cfg, headPromptAttestation: null }, entryOrder(), { transcriptPath: session })), ['skills-at-entry', 'skills-loaded']);
+});
+
+test('claude head prompt (gate): never fails open: another cycle, an edited file or skill, another file, another session, an opencode stream, not autonomous, a malformed attestation; exits never held', () => {
+  const { H, root, att, cfg, file, text, stream, session, dir } = claudeHeadRun();
+  const refusedBoth = (label, c, extra) => {
+    const r = headGate(c, entryOrder(), extra);
+    assert.deepStrictEqual(skillChecks(r), ['skills-at-entry', 'skills-loaded'], label);
+    for (const rationale of HEAD_RISK_REDUCING) assert.deepStrictEqual(skillChecks(headGate(c, entryOrder({ rationale }), extra)), [], `${label}: ${rationale}`);
+  };
+  refusedBoth('not autonomous', { ...cfg, autonomous: false });
+  // The attestation is for one cycle: inherited by, or copied into, another run (its own cycle id), none counts.
+  refusedBoth('another cycle (a role run for it)', { ...cfg, cycleIdGiven: 'f'.repeat(16) });
+  // The same stream at another run's path (another cycle's id): none.
+  const copy = path.join(dir, 'logs', 'cycle-transcript-9-zzz.jsonl');
+  fs.copyFileSync(stream, copy);
+  refusedBoth('another run\'s transcript', { ...cfg, cycleTranscript: copy });
+  refusedBoth('attested for another cycle', { ...cfg, headPromptAttestation: JSON.stringify({ ...att, cycle: 'a'.repeat(16) }) });
+  // Another session's hook transcript (not the runner's stream's session).
+  const other = path.join(dir, 'projects', 'another-session.jsonl');
+  fs.writeFileSync(other, claudeLines(RULES_LOOKUPS, { init: null }));
+  refusedBoth('another session', cfg, { transcriptPath: other });
+  // The runner's stream not a Claude run's (an opencode stream, none): none.
+  const oc = path.join(dir, 'logs', 'oc.jsonl');
+  fs.writeFileSync(oc, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), claudeLines(RULES_LOOKUPS, { init: null })].join('\n'));
+  refusedBoth('an opencode stream', { ...cfg, cycleTranscript: oc }, { transcriptPath: session });
+  refusedBoth('no stream', { ...cfg, cycleTranscript: null }, { transcriptPath: session });
+  // Malformed, or another file (not the runner's name, a relative path, gone).
+  const renamed = path.join(path.dirname(file), 'other.md');
+  fs.writeFileSync(renamed, text);
+  for (const bad of [JSON.stringify({ ...att, harness: 'qwen' }), JSON.stringify({ ...att, cycle: 'xyz' }), JSON.stringify({ ...att, config: renamed }), JSON.stringify({ ...att, config: path.relative(process.cwd(), file) }), JSON.stringify({ ...att, config: `${file}.gone` }), JSON.stringify({ ...att, sha256: 'abc' })]) {
+    refusedBoth(`attestation ${bad.slice(0, 80)}`, { ...cfg, headPromptAttestation: bad });
+  }
+  // The file edited after the runner hashed it: none.
+  fs.writeFileSync(file, text.replace('Read them here', 'Read them  here'));
+  refusedBoth('an edited file', cfg);
+  // A forged hash of an edited skill text: it must still embed each skill's current text whole.
+  const edited = text.replace(/<skill name="trade-plan">\n[^]*?\n<\/skill>/, '<skill name="trade-plan">\nPlan anything.\n</skill>');
+  fs.writeFileSync(file, edited);
+  const forged = { ...att, sha256: H.sha256(edited) };
+  const r = headGate({ ...cfg, headPromptAttestation: JSON.stringify(forged) });
+  assert.deepStrictEqual(skillChecks(r), ['skills-at-entry']);
+  assert.match(r.violations.find(v => v.check === 'skills-at-entry').message, /not read in this session: trade-plan\./);
+  fs.writeFileSync(file, text);
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'restored: counted again');
+  // A skill the attestation names but the file doesn't embed (an indexed one) is not counted.
+  assert.deepStrictEqual(H.claudeAttested({ ...att, skills: ['trade-session', 'absorption'] }, root, { stream, cycle: att.cycle }), ['trade-session']);
+  // The opencode check never takes a Claude attestation, and claudeAttested only a Claude one.
+  assert.deepStrictEqual(H.attestedSkills(att, root, { transcript: stream }), []);
+  assert.deepStrictEqual(H.claudeAttested({ ...att, harness: undefined }, root, { stream, cycle: att.cycle }), []);
+});
+
+test('claude head prompt (gate): index mode\'s situational rules apply to the attested head trader as to opencode\'s (a lookup the bar requires, read with skill_lookup); without the attestation, as before', () => {
+  const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  const { cfg, stream } = claudeHeadRun();
+  const entry = { when: 'candidate.trendRule=reversal', skill: 'session-timing', head: true };
+  SITUATIONAL.push(entry);
+  try {
+    // The cycle's lanes unreadable: every situational skill marked for the head trader is required (index mode).
+    const c = { ...cfg, cycleLaneBars: null };
+    const r = headGate(c);
+    assert.deepStrictEqual(skillChecks(r), ['skills-loaded']);
+    assert.match(r.violations[0].message, /not loaded in this session: session-timing\./);
+    // Without the attestation (the key off): full mode, nothing situational, as before.
+    assert.doesNotMatch(headGate({ ...c, headPromptAttestation: null }).violations.find(v => v.check === 'skills-loaded').message, /session-timing/);
+    // Its skill_lookup read counts; a lookup answered with an error doesn't.
+    fs.appendFileSync(stream, `\n${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'bad', name: 'mcp__harness__skill_lookup', input: { skill: 'session-timing' } }] } })}\n${JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'bad', is_error: true, content: 'no skill' }] } })}`);
+    assert.deepStrictEqual(skillChecks(headGate(c)), ['skills-loaded'], 'an errored lookup is no read');
+    fs.appendFileSync(stream, `\n${claudeLines(['session-timing'], { init: null, idBase: 'st' })}`);
+    assert.deepStrictEqual(skillChecks(headGate(c)), []);
+  } finally {
+    SITUATIONAL.splice(SITUATIONAL.indexOf(entry), 1);
+  }
+});
+
+test('claude head prompt (gateway): checkOrder counts the attestation for the head trader\'s cycle and for the runner\'s entry executor (the head trader\'s cycle id and role record); one for another cycle never', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const { att, stream, dir, cycle } = claudeHeadRun();
+  const has = (r, check) => r.violations.some(v => v.check === check);
+  const skillsOk = r => !has(r, 'skills-loaded') && !has(r, 'skills-at-entry');
+  const run = (env, input = entryOrder()) => checkOrder(input, { env, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW });
+  const base = { FTH_HOME: dir, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full' };
+  const head = { ...base, FTH_CYCLE_TRANSCRIPT: stream, FTH_HEAD_PROMPT: JSON.stringify(att) };
+  assert.ok(skillsOk(run(head)), run(head).message);
+  assert.ok(!skillsOk(run({ ...head, FTH_HEAD_PROMPT: '' })), 'no attestation: refused');
+  // The entry's trade-executor: its own Claude session (no load), the head trader's id, and the record of its lookups.
+  const exec = path.join(dir, 'logs', 'cycle-transcript-2-def.jsonl');
+  fs.writeFileSync(exec, claudeLines([], { init: 'executor-session' }));
+  const roles = path.join(dir, 'logs', 'cycle-roles.jsonl');
+  RR.appendHeadSkills(roles, RULES_LOOKUPS);
+  const executor = { ...base, FTH_CYCLE_TRANSCRIPT: exec, FTH_CYCLE_ID: cycle, FTH_CYCLE_ROLES: roles, FTH_HEAD_PROMPT: JSON.stringify(att) };
+  assert.ok(skillsOk(run(executor)), run(executor).message);
+  // Carried into another run (its own cycle: no FTH_CYCLE_ID, or another's), or none: refused; exits never held.
+  for (const [label, env] of [['without the head trader\'s id', { ...executor, FTH_CYCLE_ID: '' }], ['another cycle\'s id', { ...executor, FTH_CYCLE_ID: '1'.repeat(16) }], ['no attestation', { ...executor, FTH_HEAD_PROMPT: '' }]]) {
+    const r = run(env);
+    assert.ok(has(r, 'skills-loaded') || has(r, 'skills-at-entry'), `${label}: ${r.message}`);
+    assert.ok(skillsOk(run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }))), `${label}: an exit`);
+  }
+});

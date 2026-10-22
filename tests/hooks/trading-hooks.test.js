@@ -3367,3 +3367,67 @@ test('order gate (hook): the head trader\'s loads the runner recorded (FTH_CYCLE
   assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry/);
   assert.match(r.stderr, /\[skills-at-entry\]/);
 });
+
+test('order gate (hook): a Claude Code head trader in index mode (the runner\'s attestation for its cycle): its own session counts the prompt addition\'s skills and its skill_lookup reads; another session, cycle, or no attestation never; the entry executor\'s too', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const SESSION = '4a0c2b6e-claude-head-hook';
+  const RULES = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  const lines = (skills, init) => [...(init ? [JSON.stringify({ type: 'system', subtype: 'init', session_id: init })] : []), ...skills.flatMap((skill, i) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `l${i}`, name: 'mcp__harness__skill_lookup', input: { skill } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `l${i}`, content: [{ type: 'text', text: `<skill name="${skill}">\n...\n</skill>\n` }] }] } }),
+  ])].join('\n');
+  const { file, text } = H.writeClaudeHead(env.FTH_HOME, REPO);
+  const stream = path.join(dir, 'cycle-transcript-head.jsonl');
+  fs.writeFileSync(stream, lines(RULES, SESSION));
+  const session = path.join(dir, 'projects', `${SESSION}.jsonl`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, lines(RULES, null));
+  const att = H.claudeAttestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_TRANSCRIPT: stream, FTH_HEAD_PROMPT: JSON.stringify(att) };
+  const skillsChecks = /\[skills-loaded\]|\[skills-at-entry\]/;
+  const ok = gate({ ...orderPayload(), transcript_path: session }, auto);
+  assert.doesNotMatch(ok.stderr, skillsChecks, ok.stderr);
+  // No attestation (the key off), another session's transcript, the attestation in another cycle's run, an edited file:
+  // the transcript decides as before (a Claude skill_lookup is no load there).
+  const other = path.join(dir, 'projects', 'another-session.jsonl');
+  fs.writeFileSync(other, lines(RULES, null));
+  const otherStream = path.join(dir, 'cycle-transcript-other.jsonl');
+  fs.writeFileSync(otherStream, lines([], SESSION));
+  for (const [what, e, t] of [['no attestation', { ...auto, FTH_HEAD_PROMPT: '' }, session], ['another session', auto, other], ['another cycle\'s run', { ...auto, FTH_CYCLE_TRANSCRIPT: otherStream }, session], ['not autonomous', { ...auto, FTH_AUTONOMOUS: '' }, session]]) {
+    const r = gate({ ...orderPayload(), transcript_path: t }, e);
+    assert.strictEqual(r.code, 2, what);
+    assert.match(r.stderr, /\[skills-loaded\][^\n]*not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library/, what);
+    const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: t }, e);
+    assert.strictEqual(exit.code, 0, `${what}: an exit: ${exit.stderr}`);
+  }
+  fs.writeFileSync(file, `${text} `);
+  assert.match(gate({ ...orderPayload(), transcript_path: session }, auto).stderr, skillsChecks, 'an edited file');
+  fs.writeFileSync(file, text);
+  // The runner's entry executor (the head trader's cycle id, its own stream, the head trader's lookups in the record):
+  // its hook is judged as the gateway judges it, and the head trader's attestation counts there.
+  const roles = path.join(dir, 'logs', 'cycle-roles.jsonl');
+  RR.appendHeadSkills(roles, RULES);
+  const exec = path.join(dir, 'cycle-transcript-exec.jsonl');
+  fs.writeFileSync(exec, lines([], 'executor-session'));
+  const executor = { ...auto, FTH_CYCLE_TRANSCRIPT: exec, FTH_CYCLE_ID: att.cycle, FTH_CYCLE_ROLES: roles };
+  const e1 = gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, executor);
+  assert.doesNotMatch(e1.stderr, skillsChecks, e1.stderr);
+  const e2 = gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, { ...executor, FTH_CYCLE_ID: 'ab'.repeat(8) });
+  assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
+});
+
+test('order gate (hook): its refusal of a runner\'s entry executor is in the gate log with the cycle\'s id, which the runner\'s entry reads as the refusal', () => {
+  const { env, dir } = setup([]);
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_TRANSCRIPT: path.join(dir, 'exec.jsonl'), FTH_CYCLE_ID: '0123456789abcdef' };
+  fs.writeFileSync(auto.FTH_CYCLE_TRANSCRIPT, '');
+  const r = gate({ ...orderPayload(), transcript_path: path.join(dir, 'session.jsonl') }, auto);
+  assert.strictEqual(r.code, 2);
+  const { gateRefusal } = require('../../scripts/lib/runner-entry');
+  const got = gateRefusal(auto, '0123456789abcdef', 0);
+  assert.ok(got && got.checks.includes('plan-required'), JSON.stringify(got));
+  assert.match(got.message, /\[plan-required\]/);
+  assert.strictEqual(gateRefusal(auto, 'fedcba9876543210', 0), null, 'another cycle\'s: none');
+});
