@@ -150,6 +150,18 @@ test('order gate blocks an unplanned entry with exit code 2', () => {
   assert.match(r.stderr, /\[plan-required\]/);
 });
 
+test('order gate (hook): its refusal is logged with the tool it judged, as the gateway logs it (place_order, modify_order), whatever the input names', () => {
+  const { env } = setup([]);
+  assert.strictEqual(gate(orderPayload(), env).code, 2);
+  // A modify_order carrying a contract and a rationale (the old readers took such a record for an entry).
+  const modify = { tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, size: 3, contractId: ORDER.contractId, rationale: ORDER.rationale, reason: 'add size' } };
+  assert.strictEqual(gate(modify, env).code, 2);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(log.map(e => [e.source, e.tool, e.decision, e.violations.map(v => v.check).includes(e.tool === 'place_order' ? 'plan-required' : 'modify-size')]),
+    [['hook', 'place_order', 'blocked', true], ['hook', 'modify_order', 'blocked', true]]);
+  assert.strictEqual(log[0].contractId, ORDER.contractId, 'the rest of the record as before');
+});
+
 test('order gate allows a planned entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(), env);
