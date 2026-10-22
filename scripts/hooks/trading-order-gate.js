@@ -22,18 +22,20 @@ function run(rawInput, ctx = {}, deps = {}) {
 
   const env = deps.env || process.env;
   const input = payload.tool_input || {};
+  const tool = match[1].toLowerCase();
   const result = checkOrder(input, {
     env,
     pluginRoot: ctx.pluginRoot || path.resolve(__dirname, '..', '..'),
     now: deps.now, // else the harness clock (harness-now.js), checked for a replay clock either way
-    tool: match[1].toLowerCase(),
+    tool,
     // Claude Code passes the session transcript: the gate checks the trading skills were loaded (a runner's entry role
     // is judged on its streamed transcript and the cycle's role record, as the gateway judges it: hookTranscript).
     transcriptPath: hookTranscript(payload.transcript_path, env),
   });
   if (result.allowed) return '';
 
-  logDecision({ source: 'hook', decision: 'blocked', violations: result.violations, contractId: input.contractId, rationale: input.rationale }, env);
+  // The tool it judged, as the gateway logs it: a reader takes a hook's refusal of a place_order by its tool, never by its input.
+  logDecision({ source: 'hook', tool, decision: 'blocked', violations: result.violations, contractId: input.contractId, rationale: input.rationale }, env);
   return { stderr: result.message, exitCode: 2 };
 }
 

@@ -284,7 +284,9 @@ Malformed or oversized input, unreadable state, invalid config, a failed
 account query, a position whose size isn't a whole number of contracts, or a
 crash blocks the order. In autonomous runs
 (`FTH_AUTONOMOUS=1`) the gate can't be skipped, dry-run, or disabled.
-Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`.
+Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`, each with
+its `source` (`hook` or `gateway`) and the `tool` it judged (older hook
+records name no tool).
 
 ### Replay clock
 
