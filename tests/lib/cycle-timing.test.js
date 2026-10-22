@@ -97,6 +97,11 @@ test('timing, Claude session lines and Qwen parts: the events\' own ISO or ms ti
   const c = T.transcriptTimes(claude);
   assert.deepStrictEqual([c.roles.map(r => [r.role, r.end - r.start]), c.resultAt], [[['volume-liquidity-analyst', 6000]], w(8)]);
   assert.strictEqual(c.resultAt, w(8));
+  // A subagent's or a sidechain's text is not the head trader's decision (autotrader.js cycleResult reads it the same way).
+  for (const extra of [{ parent_tool_use_id: 'a' }, { isSidechain: true }]) {
+    const sub = jsonl([{ type: 'assistant', timestamp: iso(w(5)), ...extra, message: { content: [{ type: 'text', text: 'CYCLE RESULT: no-trade - a role' }] } }]);
+    assert.strictEqual(T.transcriptTimes(sub).resultAt, null, JSON.stringify(extra));
+  }
   const qwen = jsonl([
     { timestamp: w(2), message: { role: 'model', parts: [{ functionCall: { id: 'q1', name: 'task', args: { subagent_type: 'risk-manager' } } }] } },
     { timestamp: w(9), message: { role: 'user', parts: [{ functionResponse: { id: 'q1', response: { output: 'Phase 1' } } }] } },
