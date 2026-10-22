@@ -636,6 +636,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     entry: entryFor({ home, cfg, root, runRole, client, log, env, now }),
     // The price the runner's entry recorded before its order (trading/late-entry.js), for a composed fill's check.
     latestPrice: symbol => { try { return require('./trading/late-entry').readPrice(home, symbol); } catch (_err) { return null; } },
+    // The latest 1m price kept during a trade cycle for the gate's [late-entry] (runner.js watchPrice), on every harness.
+    recordPrice: (symbol, rec, opts) => require('./trading/late-entry').recordPrice(home, symbol, rec, opts),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),

@@ -54,22 +54,30 @@ test('recordPrice / readPrice: kept per family, never back in time', () => {
   LE.recordPrice(home, 'MNQ', { price: 14980, closedAt: '2021-08-18T17:36:00Z', minutes: 1 });
   assert.strictEqual(LE.readPrice(home, 'MNQ').price, 14997.5, 'an older bar keeps the newer');
   assert.throws(() => LE.recordPrice(home, 'MNQ', { price: 'x', closedAt: '2021-08-18T17:38:00Z' }), /not a price/);
+  // A newer kept one wins, said; one dated after now (past the gate's future tolerance) is replaced.
+  const said = [];
+  LE.recordPrice(home, 'MNQ', { price: 14980, closedAt: '2021-08-18T17:36:00Z', minutes: 1 }, { now: new Date('2021-08-18T17:37:30Z'), log: m => said.push(m) });
+  assert.deepStrictEqual(said, ['the latest price kept for MNQ (14997.5 closed 2021-08-18T17:37:00.000Z) is newer than this one (14980 closed 2021-08-18T17:36:00.000Z): kept']);
+  LE.recordPrice(home, 'MNQ', { price: 15100, closedAt: '2021-08-18T18:30:00Z', minutes: 1 }); // a clock that jumped ahead
+  LE.recordPrice(home, 'MNQ', { price: 14990, closedAt: '2021-08-18T17:38:00Z', minutes: 1 }, { now: new Date('2021-08-18T17:38:30Z'), log: m => said.push(m) });
+  assert.strictEqual(LE.readPrice(home, 'MNQ').price, 14990, 'the future-dated record is replaced');
+  assert.strictEqual(said.length, 1);
   fs.writeFileSync(path.join(home, LE.FILE), 'torn{');
   assert.strictEqual(LE.readPrice(home, 'MNQ'), null);
 });
 
-test('latestPrice: the newer of the recorded 1m price and the briefing\'s close, each within its own age limit; none fresh: none', () => {
+test('latestPrice: the newer of the recorded 1m price and the briefing\'s close, judged alone within its own age limit; a stale newest fails closed', () => {
   const home = tmpDir();
   const briefing = { price: 14979.5, closedAt: '2021-08-18T17:36:00.000Z', minutes: 3 };
   assert.deepStrictEqual(LE.latestPrice({ home, root: 'MNQ', briefing, now: NOW, maxAgeMin: AGE }), { price: 14979.5, closedAt: briefing.closedAt, source: 'briefing' });
   LE.recordPrice(home, 'MNQ', { price: 14997.5, closedAt: '2021-08-18T17:37:00Z', minutes: 1, source: 'runner-entry' });
   assert.deepStrictEqual(LE.latestPrice({ home, root: 'MNQ', briefing, now: NOW, maxAgeMin: AGE }), { price: 14997.5, closedAt: '2021-08-18T17:37:00.000Z', source: 'runner-entry' });
-  // 4 minutes later the 1m price is past its 3 min; the 3m briefing (9 min) still counts.
-  const later = new Date('2021-08-18T17:41:30Z');
-  assert.strictEqual(LE.latestPrice({ home, root: 'MNQ', briefing, now: later, maxAgeMin: AGE }).source, 'briefing');
+  // 4 minutes later the newest (the 1m price) is past its 3 min: refused, never the older 3m briefing within its 9 min.
+  const later = LE.latestPrice({ home, root: 'MNQ', briefing, now: new Date('2021-08-18T17:41:30Z'), maxAgeMin: AGE });
+  assert.deepStrictEqual(later, { price: null, why: 'the newest is not current: runner-entry 14997.5 closed 4.5 min ago (limit 3 min)' });
   const gone = LE.latestPrice({ home, root: 'MNQ', briefing, now: new Date('2021-08-18T17:50:00Z'), maxAgeMin: AGE });
   assert.strictEqual(gone.price, null);
-  assert.match(gone.why, /^none current: runner-entry 14997\.5 closed 13\.0 min ago \(limit 3 min\); briefing 14979\.5 closed 14\.0 min ago \(limit 9 min\)$/);
+  assert.match(gone.why, /^the newest is not current: runner-entry 14997\.5 closed 13\.0 min ago \(limit 3 min\)$/);
   assert.deepStrictEqual(LE.latestPrice({ home: tmpDir(), root: 'MNQ', briefing: null, now: NOW, maxAgeMin: AGE }), { price: null, why: 'no local bar' });
   // Dated after now (beyond the gate's tolerance): not a price of now.
   assert.strictEqual(LE.latestPrice({ home: tmpDir(), root: 'MNQ', briefing: { ...briefing, closedAt: '2021-08-18T17:45:00Z' }, now: NOW, maxAgeMin: AGE }).price, null);
@@ -82,6 +90,6 @@ test('lateEntryRefusal: the replay\'s order is refused, the plan at its price go
   assert.strictEqual(at(), null, 'the market at the plan (the briefing\'s close)');
   LE.recordPrice(home, 'MNQ', { price: 14997.5, closedAt: '2021-08-18T17:37:00Z', minutes: 1, source: 'runner-entry' });
   assert.match(at(), /^the setup was invalidated before the order went \(price 14997\.5 beyond the plan's stop 14986\.5\): no late entry \(the runner-entry price at 2021-08-18T17:37:00\.000Z\)\. Pass; the next bar composes on its own facts$/);
-  assert.match(at({ briefing: null, now: new Date('2021-08-18T17:50:00Z') }), /^no current price for MNQ from local bars \(none current: .*\): the plan's entry and stop can't be checked against the market, so no entry \(fails closed\)$/);
+  assert.match(at({ briefing: null, now: new Date('2021-08-18T17:50:00Z') }), /^no current price for MNQ from local bars \(the newest is not current: .*\): the plan's entry and stop can't be checked against the market, so no entry \(fails closed\)$/);
   assert.match(at({ maxAgeMin: () => { throw new Error('boom'); } }), /^the late-entry check failed \(boom\): no entry \(fails closed\)$/);
 });

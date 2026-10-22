@@ -2925,7 +2925,7 @@ test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest l
   const none = lcEval(home, LC.order(), { config: { signalMaxAgeBars: 3, signalMaxAgeCeilingMin: 45 } });
   assert.deepStrictEqual(lcEval(home).violations, [], 'the same price within a lifted age limit: it counts');
   assert.deepStrictEqual(checks(none), ['late-entry']);
-  assert.match(none.violations[0].message, /no current price for MNQ from local bars \(none current: recorded 21540\.25 closed 4\.0 min ago \(limit 3 min\)\).*no entry \(fails closed\)/);
+  assert.match(none.violations[0].message, /no current price for MNQ from local bars \(the newest is not current: recorded 21540\.25 closed 4\.0 min ago \(limit 3 min\)\).*no entry \(fails closed\)/);
   // Exits, protective stops and closes never reach it, whatever the price.
   for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
     const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale });

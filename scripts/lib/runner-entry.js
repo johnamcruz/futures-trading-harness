@@ -285,7 +285,7 @@ async function runEntry(deps, c) {
         const got = await client.closedBars(o.args.contractId, { minutes: 1, limit: LE_BARS, now: now() });
         const last = Array.isArray(got) && got.length ? got[got.length - 1] : null;
         const closedAt = last ? Date.parse(last.t) + 60000 : NaN;
-        if (last && Number.isFinite(Number(last.c)) && Number.isFinite(closedAt) && closedAt <= now().getTime()) LE.recordPrice(home, root, { price: Number(last.c), closedAt: new Date(closedAt).toISOString(), minutes: 1, source: 'runner-entry' });
+        if (last && Number.isFinite(Number(last.c)) && Number.isFinite(closedAt) && closedAt <= now().getTime()) LE.recordPrice(home, root, { price: Number(last.c), closedAt: new Date(closedAt).toISOString(), minutes: 1, source: 'runner-entry' }, { now: now(), log: m => log(`the entry: ${m}`) });
       } catch (err) {
         log(`the entry: the latest 1m bar can't be read (${err.message}): the local bars decide`, 'error');
       }

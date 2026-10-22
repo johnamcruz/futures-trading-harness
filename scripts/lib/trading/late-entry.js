@@ -10,11 +10,14 @@
  *   - the price the runner recorded just before its entry's order (runner-entry.js: the newest closed 1m bar it read
  *     through the adapter), kept per family root in <home>/latest-price.json (recordPrice);
  *   - the cycle bar briefing's own close (its `price` at its `closedAt`).
- * Each counts only within the signal age limit of its own bars (signal-state.js signalMaxAgeMin, the rule the gate's
+ * The newest of them is judged alone (a stale newest never falls back to an older one), within the signal age limit of its own bars (signal-state.js signalMaxAgeMin, the rule the gate's
  * briefing-age check uses) and not dated after now (beyond the gate's future tolerance); none that counts: refused (fails closed). Entries only: exits,
- * protective stops, stop moves and closes never reach it (order-gate.js returns before every entry check).
+ * protective stops, stop moves and closes never reach it (order-gate.js returns before every entry check). A harness
+ * whose head trader places its own entry (no runner's entry) records no fresh price: there the briefing's close alone
+ * is checked, which is the plan's entry when composed on it, so the check holds little there (not a refusal).
  *
- *   recordPrice(home, root, { price, closedAt, minutes, source })   keep the latest price for the root's family
+ *   recordPrice(home, root, { price, closedAt, minutes, source }, { now, log })   keep the latest price for the root's
+ *                                  family: a newer kept one wins (logged), unless it is dated after now (replaced)
  *   readPrice(home, root)          { price, closedAt, minutes, source } or null
  *   latestPrice({ home, root, briefing, now, maxAgeMin })   { price, closedAt, source } | { price: null, why }
  *                                  maxAgeMin(minutes): the age limit of a price from bars of that many minutes
@@ -37,7 +40,7 @@ const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const keyOf = root => familyRoot(String(root || '').toUpperCase());
 const priceFile = home => path.join(home, FILE);
 
-function recordPrice(home, root, { price, closedAt, minutes = null, source = null } = {}) {
+function recordPrice(home, root, { price, closedAt, minutes = null, source = null } = {}, { now = new Date(), log = () => {} } = {}) {
   const { readJson, writeJsonAtomic } = require('../harness-run');
   const p = Number(price);
   const at = Date.parse(closedAt);
@@ -45,8 +48,13 @@ function recordPrice(home, root, { price, closedAt, minutes = null, source = nul
   const all = readJson(priceFile(home), {});
   const kept = isObj(all) ? all : {};
   const old = isObj(kept[keyOf(root)]) ? Date.parse(kept[keyOf(root)].closedAt) : NaN;
-  // Never back in time: an older bar read late keeps the newer one.
-  if (Number.isFinite(old) && old > at) return kept[keyOf(root)];
+  // Never back in time: an older bar read late keeps the newer one, said; a kept one dated after now (past the gate's
+  // future tolerance: a clock that jumped) is no price of now, and is replaced.
+  const future = Number.isFinite(old) && old > now.getTime() + FUTURE_MIN * 60000;
+  if (Number.isFinite(old) && old > at && !future) {
+    log(`the latest price kept for ${keyOf(root)} (${kept[keyOf(root)].price} closed ${kept[keyOf(root)].closedAt}) is newer than this one (${p} closed ${new Date(at).toISOString()}): kept`);
+    return kept[keyOf(root)];
+  }
   const rec = { price: p, closedAt: new Date(at).toISOString(), minutes: Number.isInteger(minutes) && minutes > 0 ? minutes : null, source };
   writeJsonAtomic(priceFile(home), { ...kept, [keyOf(root)]: rec });
   return rec;
@@ -59,7 +67,6 @@ function readPrice(home, root) {
 }
 
 function latestPrice({ home, root, briefing = null, now = new Date(), maxAgeMin }) {
-  const seen = [];
   const candidates = [];
   let recorded;
   try { recorded = readPrice(home, root); } catch (_err) { recorded = null; }
@@ -67,15 +74,12 @@ function latestPrice({ home, root, briefing = null, now = new Date(), maxAgeMin 
   if (isObj(briefing) && Number.isFinite(Number(briefing.price)) && Number.isFinite(Date.parse(briefing.closedAt))) {
     candidates.push({ price: Number(briefing.price), closedAt: briefing.closedAt, minutes: Number.isInteger(briefing.minutes) && briefing.minutes > 0 ? briefing.minutes : 1, source: 'briefing' });
   }
-  const fresh = candidates.filter(c => {
-    const age = (now.getTime() - Date.parse(c.closedAt)) / 60000;
-    const limit = maxAgeMin(c.minutes);
-    const ok = age >= -FUTURE_MIN && age <= limit;
-    if (!ok) seen.push(`${c.source} ${c.price} closed ${age.toFixed(1)} min ago (limit ${limit} min)`);
-    return ok;
-  });
-  if (!fresh.length) return { price: null, why: seen.length ? `none current: ${seen.join('; ')}` : 'no local bar' };
-  const best = fresh.reduce((a, b) => (Date.parse(b.closedAt) > Date.parse(a.closedAt) ? b : a));
+  if (!candidates.length) return { price: null, why: 'no local bar' };
+  // The newest alone is judged: a stale newest never falls back to an older price (fails closed).
+  const best = candidates.reduce((a, b) => (Date.parse(b.closedAt) > Date.parse(a.closedAt) ? b : a));
+  const age = (now.getTime() - Date.parse(best.closedAt)) / 60000;
+  const limit = maxAgeMin(best.minutes);
+  if (!(age >= -FUTURE_MIN && age <= limit)) return { price: null, why: `the newest is not current: ${best.source} ${best.price} closed ${age.toFixed(1)} min ago (limit ${limit} min)` };
   return { price: best.price, closedAt: best.closedAt, source: best.source };
 }
 
