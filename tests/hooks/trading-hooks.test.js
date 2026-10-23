@@ -2822,6 +2822,10 @@ test('order gate hook: an entry on an account marked as a prop account (the user
   const running = gate(orderPayload(), marked);
   assert.doesNotMatch(running.stderr, /prop-account-attempt/);
   assert.match(running.stderr, /\[combine\] A .* attempt is running/);
+  // An entry tagged with a policy strategy that trades another profile (propped's account isn't the marked one): refused.
+  const propped = gate(orderPayload(entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540, risk $40' })), marked);
+  assert.strictEqual(propped.code, 2);
+  assert.match(propped.stderr, new RegExp(`\\[prop-account-attempt\\] setup:propped is sized for the .* profile, but account 1 is marked as a ${profile.name} prop account`));
   // A malformed marker: entries refused, exits and stops go.
   mark({ 1: profile.name, 7: profile.name });
   assert.match(gate(orderPayload(), marked).stderr, /\[prop-account-attempt\] .*under one profile/);

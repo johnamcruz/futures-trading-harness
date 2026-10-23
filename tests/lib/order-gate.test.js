@@ -1449,6 +1449,21 @@ test('prop account attempt: an entry on an account the user marks as a prop acco
   prop.endAttempt(live.env.FTH_HOME, other.name, new Date(wall));
   prop.startAttempt(live.env.FTH_HOME, mine, new Date(wall));
   assert.deepStrictEqual(checks(at({})), ['combine']);
+  // Wrong profile through the setup tag: both attempts running, account 1 marked under one, the entry tagged with a
+  // policy strategy that trades the other profile: refused as sized for another profile.
+  prop.startAttempt(live.env.FTH_HOME, other, new Date(wall));
+  fs.mkdirSync(path.join(live.root, 'strategies', 'other_pol'), { recursive: true });
+  fs.writeFileSync(path.join(live.root, 'strategies', 'other_pol', 'STRATEGY.md'), [
+    '---', 'name: other_pol', 'description: Test policy strategy that trades the other test profile, for the prop account check.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: policy', 'strategies: [anytime]', `account: ${other.name}`, 'contracts: micro',
+    'risk:', '  stop: strategy', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  const tagged = checkOrder(entryOrder({ rationale: 'setup:other_pol long, stop 21480, target 21540, risk $40' }), { env: at({}), pluginRoot: live.root });
+  const sized = tagged.violations.filter(v => v.check === 'prop-account-attempt');
+  assert.strictEqual(sized.length, 1, tagged.message);
+  assert.match(sized[0].message, new RegExp(`setup:other_pol is sized for the ${other.name} profile, but account 1 is marked as a ${mine.name} prop account`));
+  assert.match(sized[0].message, /sized for the .* profile/);
+  prop.endAttempt(live.env.FTH_HOME, other.name, new Date(wall));
   // The same in a confirmed replay: the rule follows the account, not the mode.
   const sim = replaySetup();
   const simFile = path.join(sim.env.FTH_HOME, 'brokers.json');
