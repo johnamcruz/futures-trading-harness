@@ -328,6 +328,9 @@ async function runEntry(deps, c) {
   // attempt nothing is read and the request is as before. order_plan refusing here: phase 2 runs on the record and the
   // order is refused after it, as before.
   if (require('./trading/prop-state').runningAttempts(home).length) {
+    // The broker's max order size, read through the adapter (its translator records it for this day, as the gateway's
+    // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
+    try { if (client && typeof client.serverConfig === 'function') await client.serverConfig(); } catch (_err) { /* the gate reads its own */ }
     try {
       const pre = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, roleContext), root, tool: true });
       const p = pre && pre.plan;
