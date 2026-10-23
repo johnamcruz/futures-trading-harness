@@ -55,9 +55,14 @@ next day, Sunday evening to Friday afternoon.
   protective stops, stop moves, cancels and closes always go. A malformed
   marker (not an object, an id that isn't one, a name that isn't a profile, or
   two accounts under one profile: an attempt is kept per profile) refuses
-  every entry until it is fixed. Preflight fails a marked account with no
-  attempt running (`prop account`). Replays use their own broker file, so
-  they are never marked.
+  every entry until it is fixed. A live run on a marked account with no
+  attempt running refuses to start, with the gate's message; preflight fails
+  it (`prop account`). A `propAccounts` key the gate never reads (at the top
+  level of a brokers file, under another broker's entry, or in the home's
+  `brokers.json` while `FTH_BROKERS_FILE` names another file) is a preflight
+  warning naming where it was found and the file and broker in force, and a
+  failure for a live run. Replays use their own broker file, so they are never
+  marked.
 
 ## 3. Prop attempt
 

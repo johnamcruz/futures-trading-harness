@@ -43,6 +43,8 @@ const { openAdapter, liveRunBlocked } = require('./broker/adapter');
 const { activeBroker } = require('./broker/config');
 const { acquireAccountLocks, checkAccountLock, lockExemption, serverIdentities, lockSpec, normApi } = require('./account-lock');
 const { normId } = require('./broker/allow-list');
+const { propAccountRefusal, propAccountMessage } = require('./trading/prop-accounts');
+const { loadAccounts } = require('./trading/accounts');
 const { dayKey, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
@@ -86,6 +88,12 @@ async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapt
     const config = cfg.paper ? null : await client.serverConfig();
     const why = cfg.paper ? null : liveRunBlocked({ broker: b, config, env, accountId: cfg.account });
     if (why) throw new Error(why);
+    // A live run on an account the user marks as a prop account starts only with its profile's attempt running: the
+    // gate's own [prop-account-attempt] refusal (prop-accounts.js), here before any cycle. Paper and a confirmed replay
+    // start as before (their entries are still the gate's to judge).
+    const replayed = Boolean(b && b.replay === true && config && config.replay === true);
+    const prop = cfg.paper || replayed ? null : propAccountRefusal({ broker: b, accountId: cfg.account, home: loadConfig(env).home, accounts: loadAccounts(root, env).accounts });
+    if (prop) throw new Error(`[prop-account-attempt] ${propAccountMessage(prop)}`);
     if (lockExemption({ paper: cfg.paper, broker: b, config })) return client;
     // The API it trades keys the lock across installs: a server that names none can't be locked, so no live run.
     if (!normApi(config && config.apiUrl)) throw new Error(`the broker server reports no apiUrl that is a URL with a host (get_server_config: ${JSON.stringify(config && config.apiUrl)}), so its account can't be locked against another install of it: a live run refuses`);
