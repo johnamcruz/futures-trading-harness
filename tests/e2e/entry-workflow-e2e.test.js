@@ -265,7 +265,8 @@ test('entry workflow: phase 2\'s approved size caps the order: over the record\'
   let w = D.world();
   let at = decisionAt(FIRED_BAR);
   let R = roles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 5, risk $230.00, trade_lifecycle long with the trend' }) });
-  let r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  const first = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  assert.match(first.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 2 MNQ/);
   const sent = D.placedAtBroker(w);
   assert.deepStrictEqual(sent.map(c => c.args.size), [2]);
   assert.strictEqual(requestedArgs(R.runs.at(-1).request).size, 2);
@@ -276,7 +277,7 @@ test('entry workflow: phase 2\'s approved size caps the order: over the record\'
   w = D.world();
   at = decisionAt(FIRED_BAR);
   R = roles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend' }) });
-  r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  const r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
   assert.ok(!R.runs.some(x => x.role === 'trade-executor'));
   assert.deepStrictEqual([D.placedAtBroker(w), journal(w).filter(e => e.kind === 'plan')], [[], []]);
   assert.match(r.ran[0].result, /^CYCLE RESULT: no-trade - the runner's entry: risk-manager phase 2 approved size 1, under the compose record's 2 /);
