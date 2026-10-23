@@ -15,11 +15,12 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery, role-prompts,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
+ * prop-portfolio, rulebook-values, rulebook-missing, account-states, combine (stage 2's continuous combine), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
- * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): the account states on a
- * practice-train run, the prop risk rules and the Monte Carlo.
+ * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): one of its two modes on a
+ * practice-train run (the continuous combine, combine, or the account states on a curated list), the prop risk rules and
+ * the Monte Carlo.
  *
  *   CHECKS                                  [check function], in report order
  *   runChecks(ctx)                          { ok, results }; a check that throws is a FAIL with its message
@@ -363,6 +364,8 @@ function latency(ctx) {
 function practiceMode(ctx) {
   const role = roleOf(ctx);
   if (role !== 'practice-train') return r('practice-mode', PASS, `not practice (${role || 'no role'}): not needed`);
+  // A continuous combine steps every decision time of its attempts' days (the config refuses practice with it).
+  if (ctx.run.combine) return r('practice-mode', PASS, 'continuous combine: every decision time of the attempts\' days, no setup focus');
   if (!ctx.run.practice) return r('practice-mode', FAIL, 'a practice-train run sets its practice mode (the replay config\'s practice)');
   return r('practice-mode', PASS, `${ctx.run.practice.mode}, ${ctx.run.practice.setupTf}m setups`);
 }
@@ -438,7 +441,9 @@ function stage(ctx) {
   const role = roleOf(ctx);
   const bad = [];
   if (!req.roles.includes(role)) bad.push(`a stage ${st} run is practice or validate (${req.roles.join(' or ')}), not ${role || 'no role'}`);
-  if (role === req.curatedOn && !ctx.run.curated) bad.push('a stage practice run replays a curated list (curatedList)');
+  const combineMode = Boolean(ctx.run.combine);
+  if (combineMode && req.combine === 'none') bad.push(`no continuous combine in stage ${st} (it is stage 2's)`);
+  if (role === req.curatedOn && !ctx.run.curated && !combineMode) bad.push('a stage practice run replays a curated list (curatedList)');
   if (ctx.run.latency !== req.latency) bad.push('latency is charged');
   if (ctx.run.libraryDisplay !== req.libraryDisplay) bad.push('the history library stays hidden (libraryDisplay off)');
   if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'off') bad.push('the risk record stays hidden (riskRecordDisplay off)');
@@ -447,7 +452,7 @@ function stage(ctx) {
   if (req.accountStates === 'none' && ctx.run.accountStates) bad.push('no account states in stage 1 (they are stage 2\'s)');
   // Stage 2's own: a practice run's days start from drawn account states (a curated run refuses prop, so they are its
   // account), and the prop risk rules and the Monte Carlo are there to judge it.
-  if (req.accountStates === role && !ctx.run.accountStates) bad.push(`a stage ${st} practice run starts its days from drawn account states (accountStates: scripts/account-states.js draw)`);
+  if (req.accountStates === role && !ctx.run.accountStates && !combineMode) bad.push(`a stage ${st} practice run is a continuous combine (combine) or starts its days from drawn account states (accountStates: scripts/account-states.js draw)`);
   if (st === 2) {
     const f = ctx.read.features();
     if (!f.lossStreakStop || !f.exitMode) bad.push(`the prop risk rules are needed (${NEEDS.propMissing})`);
@@ -455,6 +460,7 @@ function stage(ctx) {
   }
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
   const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ', no prop';
+  if (combineMode) return r('stage', PASS, `stage ${st} on ${role}: continuous combine (${ctx.run.combine.attempts.length} attempt(s) on ${ctx.run.combine.account}), latency charged, library hidden${own}`);
   return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden${own}`);
 }
 
@@ -536,6 +542,28 @@ function accountStates(ctx) {
   return r('account-states', PASS, `${doc.hash.slice(0, 12)} on ${doc.account}: ${days} day(s): ${by}`);
 }
 
+/**
+ * Stage 2's continuous combine (replay/config.js combine, replay/combine-run.js): the mode, its account (the one the
+ * policy strategy trades: the runner keeps that account's attempt record) and each attempt's window, every one inside the
+ * run's split window and of the use the run's role allows (practice-train: practice; practice-validate: validate). N/A
+ * for a run without it.
+ */
+function combineCheck(ctx) {
+  const c = ctx.run.combine;
+  if (!c) return r('combine', NA, 'not a continuous combine run');
+  const bad = [];
+  const p = policyOf(ctx);
+  if (!p || p.account !== c.account) bad.push(`combine.account ${c.account}: ${POLICY} trades ${p ? p.account : 'no account'}`);
+  const role = roleOf(ctx);
+  const next = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  for (const a of c.attempts) {
+    try { assertUse(USE_OF[role] || 'practice', a.start, next(a.last)); } catch (e) { bad.push(`combine.attempts ${a.start}..${a.last}: ${errText(e)}`); }
+  }
+  for (let i = 1; i < c.attempts.length; i++) if (c.attempts[i].start <= c.attempts[i - 1].last) bad.push(`combine.attempts ${c.attempts[i].start}: overlaps attempt ${i}`);
+  if (bad.length) return r('combine', FAIL, bad.join('; '));
+  return r('combine', PASS, `continuous combine on ${c.account}, up to ${c.maxSessions} session(s) an attempt, each from zero: ${c.attempts.map(a => `${a.n} ${a.start}..${a.last}`).join(', ')}`);
+}
+
 /** Words that would tell the model its account state was drawn: never in the attempt line. */
 const DRAWN = /\b(drawn|draws?|sampl\w*|bucket\w*|weight\w*|seed\w*|oversampl\w*)\b/i;
 
@@ -573,7 +601,7 @@ function accountFacts(ctx) {
 
 function monteCarlo(ctx) {
   if (!ctx.read.features().monteCarlo) return na('monte-carlo', NEEDS.monteCarlo);
-  return r('monte-carlo', PASS, `the 30-day Monte Carlo scores the run at its end (prop/model-score.js)${ctx.run.accountStates ? ', each decision weighted back to the natural mix of account states' : ''}`);
+  return r('monte-carlo', PASS, `the 30-day Monte Carlo scores the run at its end (prop/model-score.js)${ctx.run.accountStates ? ', each decision weighted back to the natural mix of account states' : ''}${ctx.run.combine ? ', the continuous combine\'s own trades at their natural rate' : ''}`);
 }
 
 /**
@@ -616,7 +644,7 @@ function adapter(ctx) {
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, brokerLimits, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -872,7 +900,12 @@ function gateOptions(run, { candidate = null, evaluation = null, validate = fals
   const { setupHash, setupBase, setupFixed, lookArm } = require('../replay/config');
   // The arm its look names (with the library's when shown), the setup, its base without the display, and the setup
   // without its code digest (what a resumed look keeps: learning/looks.js).
-  return { from: run.start, to: run.end, runId: run.runId, learning: run.learning, candidate, evaluation, validate, reasoningFix, endOfDay: run.endOfDay, practice: run.practice, runDir: run.paths.runDir, arm: lookArm(run), config: setupHash(run), base: setupBase(run), setup: setupFixed(run) };
+  return { from: run.start, to: run.end, runId: run.runId, learning: run.learning, candidate, evaluation, validate, reasoningFix, endOfDay: run.endOfDay, practice: run.practice, runDir: run.paths.runDir, arm: lookArm(run), config: setupHash(run), base: setupBase(run), setup: setupFixed(run), ...trainingMode(run) };
+}
+
+/** A stage-2 mode's name for its look (the continuous combine, the drawn account states), so pools never mix them; {} otherwise. */
+function trainingMode(run) {
+  return run.combine ? { mode: 'combine' } : run.accountStates ? { mode: 'account-states' } : {};
 }
 
 const RECORD = 'preflight.jsonl';
@@ -895,6 +928,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
-  crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
+  crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, trainingMode, preflightForRun,
 };

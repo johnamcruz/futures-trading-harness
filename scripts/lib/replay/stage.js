@@ -8,11 +8,18 @@
  *                             charged; the history library hidden (libraryDisplay off); no prop attempt (account states
  *                             are stage 2's); the risk record hidden (riskRecordDisplay off). At its end: the skill-usage report, the scorecard summary and R by setup;
  *                             on a validate run, the stage-1 exit test (EXIT_TEST) on the candidate's pooled validate runs.
- *   stage 2, pass prop        stage 1's, plus the account states (accountStates: each curated practice day starts from a
- *                             state drawn from the model's own 30-day Monte Carlo paths, prop/account-states.js; required
- *                             on practice-train), the account facts and the prop risk rules;
+ *   stage 2, pass prop        stage 1's, plus one of two modes, one per replay config: the continuous combine (combine:
+ *                             real attempts from zero on consecutive trading days, every decision time stepped, each ended
+ *                             when it passes or blows or after maxSessions; replay/combine-run.js), the main measure; or
+ *                             the account states (accountStates: each curated practice day starts from a state drawn from
+ *                             the model's own 30-day Monte Carlo paths, prop/account-states.js), practice of chosen
+ *                             account situations. A practice-train run takes one of them; the account facts and the prop
+ *                             risk rules;
  *                             the model's risk record (riskRecordDisplay) only on a run declared a comparison arm
- *                             (comparisonArm). At its end: the practice by
+ *                             (comparisonArm). At its end: a combine run's attempts (each one's outcome, sessions, profit,
+ *                             lowest cushion, worst day and trades; the totals; the promotion gate's numbers, labelled
+ *                             practice), then the Monte Carlo of its own trades at their natural rate; a drawn-state run's
+ *                             practice by
  *                             account state (each attempt's end, raw and reweighted to the natural mix of states) and
  *                             the 30-day Monte Carlo by account state; on a validate run, the promotion gate
  *                             (prop/promotion.js, frozen).
@@ -90,8 +97,9 @@ function applyStage(raw) {
 
 function stageRequirements(stage) {
   if (!STAGES[stage]) return null;
-  // accountStates: where the preset requires the run's days to start from drawn account states ('none': refused).
-  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: stage === 1 ? 'off' : 'comparison-arm', prop: stage === 1 ? 'none' : 'allowed', accountStates: stage === 1 ? 'none' : 'practice-train', phase2: false };
+  // accountStates: where the preset requires the run's days to start from drawn account states ('none': refused), unless
+  // the run is a continuous combine (combine: 'none' refused, 'allowed' the other stage-2 mode, on curatedOn's role too).
+  return { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: stage === 1 ? 'off' : 'comparison-arm', prop: stage === 1 ? 'none' : 'allowed', accountStates: stage === 1 ? 'none' : 'practice-train', combine: stage === 1 ? 'none' : 'allowed', phase2: false };
 }
 
 const fmt = x => (x === null || x === undefined || !Number.isFinite(x) ? '-' : x.toFixed(2));
@@ -314,7 +322,14 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
     lines.push(head);
     for (const x of tests) lines.push(`  ${x.status} ${x.test}: ${x.detail}`);
   }
-  if (run.stage === 2) {
+  if (run.stage === 2 && run.combine) {
+    // The continuous combine: its attempts, then the Monte Carlo of its own trades (continuous days: their natural rate).
+    const C = require('./combine-run');
+    const rep = rd.combine ? rd.combine() : C.combineReport(run.paths.runDir, { role: rd.role() });
+    lines.push(...(rep ? C.reportLines(rep) : ['continuous combine: no attempt started']));
+    lines.push(f.monteCarlo ? '30-day Monte Carlo of the run\'s own trades (continuous days, their natural rate): see the prop report' : '30-day Monte Carlo: N/A (needs feat/prop-mc-model)');
+    if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');
+  } else if (run.stage === 2) {
     lines.push(...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir), run.accountStates && run.accountStates.assignment ? run.accountStates.assignment.days.length : null));
     lines.push(f.monteCarlo ? '30-day Monte Carlo by account state: see the prop report' : '30-day Monte Carlo by account state: N/A (phase 2, needs feat/prop-mc-model)');
     if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');

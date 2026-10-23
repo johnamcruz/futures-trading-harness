@@ -46,6 +46,12 @@
  * day's draw and each attempt's end are logged in the run's account-states.jsonl (its scores, stage.js), never shown
  * to the model.
  *
+ * A continuous combine run (replay/config.js combine, replay/combine-run.js) steps every decision time of its attempts'
+ * days and none of the days between them: before each step, its attempt starts from zero (the account flat, a fresh
+ * attempt record, the broker's balance set to the starting balance through the balance schedule) or, passed or blown,
+ * ends: no step runs for it after that (with a position open, only the day's end of day, the runner's flatten), and the
+ * clock moves on to the next attempt's first time. An attempt still active after its last session ends unfinished.
+ *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
  *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
  *                                                clock a charged step's replay clock runs with, Date.now)
@@ -72,6 +78,7 @@ const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fill
 const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../trading/prop-state');
 const combine = require('../trading/combine');
 const { accountNamed } = require('../trading/accounts');
+const combineRun = require('./combine-run');
 
 const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
 // Minutes from the 18:00 ET open to the 16:00 ET close.
@@ -322,7 +329,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   // open (managed every bar, as practice does), checked at each day's first, and skipped once flat until the next
   // window; the broker's fills and brackets work through the gaps.
   const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
-  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : all;
+  // A combine run: only its attempts' days (the days between them have no step).
+  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : run.combine ? all.filter(p => combineRun.attemptOf(run.combine, p.day) !== -1) : all;
+  const combineCtx = { root: root || run.root, manifest, save: () => writeJsonAtomic(paths.manifest, manifest), log };
   const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
   // the window is inside it. Only on a fresh run (nothing recorded yet): a resumed run keeps the attempt it has, or
@@ -343,6 +352,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   }
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
+    // A combine run stopped right after its last step: its attempt under way ends now.
+    if (run.combine) await combineRun.finishCombine(run, startEnv, deps, { ...combineCtx, at: run.end });
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
     return finished(paths, manifest, 0, points);
   }
@@ -414,6 +425,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     } else if (point.kind === 'trade') managing = true;
     // A run with account states: the day's drawn state, before its first step.
     if (run.accountStates && !point.manage) await seedDay(run, point, ranAt, env, deps, root, log);
+    // A combine run: its attempt started before its first step, and no step once it passed or blew (combine-run.js).
+    if (run.combine && !(await combineRun.beforeStep(run, point, ranAt, env, deps, combineCtx))) {
+      const nextPoint = queue[0];
+      if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
+      continue;
+    }
     const started = Date.now();
     // Marked before it runs: a driver stopped before its line is written never runs this time twice.
     manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
@@ -547,6 +564,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
   }
   if (run.accountStates) endEpisode(run, accountNamed(root || run.root, run.accountStates.account, startEnv));
+  if (run.combine) await combineRun.finishCombine(run, replayEnv(baseEnv, run, { at: new Date(latency.runAt(points[points.length - 1], clockMs)) }), deps, { ...combineCtx, at: new Date(latency.runAt(points[points.length - 1], clockMs)) });
   return finished(paths, manifest, cycles, points);
 }
 

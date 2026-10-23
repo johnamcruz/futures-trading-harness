@@ -38,7 +38,8 @@
  *       without), `+library:<hash>` when it is shown the history library (looks.js ARM); config: the run setup's hash
  *       (replay/config.js setupHash), so the arms differ in their index only; base: the setup without the library
  *       display (replay/config.js setupBase), which a library-display pair shares; setup: the setup without its code
- *       (replay/config.js setupFixed), which a resume keeps
+ *       (replay/config.js setupFixed), which a resume keeps; mode: a stage-2 mode's name (combine, account-states), in
+ *       its look so pools never mix the modes
  *       { learning, role, look, hideOutcomes, taken }; throws when refused
  *   readLearningRun(dir)        the decision kept in a run dir or a run home, or null (a run started before the gate)
  */
@@ -111,7 +112,7 @@ function checkLearningRun(opts = {}) {
   if (d.look) {
     const file = ledgerPath(opts.env || process.env);
     const ledger = fs.existsSync(file) ? readLedger(file) : [];
-    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null, setup: opts.setup || null }, ledger);
+    const r = checkLook({ ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null, setup: opts.setup || null, mode: opts.mode || null }, ledger);
     if (!r.ok) throw new Error(`look refused: ${r.refusals.join('; ')}`);
     // Before the home is seeded: a repeat with no record of the run's start (in its run dir) is no resume (startLearningRun).
     if (r.repeat && opts.runDir && !readLearningRun(opts.runDir)) throw new Error(repeatRefusal(opts, d));
@@ -136,7 +137,7 @@ function startLearningRun(runHome, opts = {}) {
   if (d.look) {
     ledger = ledgerPath(env);
     if (before && before.ledger && before.ledger !== ledger) throw new Error(`learning run refused: this run's look is in ${before.ledger}, not ${ledger}: one ledger (the same home) for a run and its resumes`);
-    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null, setup: opts.setup || null }, { create: true, now });
+    taken = recordLook(ledger, { ...d.look, runId: opts.runId, from: opts.from, to: opts.to, arm: opts.arm || 'without', config: opts.config || null, base: opts.base || null, setup: opts.setup || null, mode: opts.mode || null }, { create: true, now });
     // A repeat look is free only for a resume: the run's own record of its start is in its home. A fresh home (deleted,
     // or under another workDir) for a runId that took its look is a new run, not a resume (start another runId).
     // Checked again here for a caller without a run dir (checkLearningRun refuses it before seeding when it has one).
