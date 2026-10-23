@@ -183,7 +183,7 @@ function worstPrice(bars, long) {
  * equity was down. Throws on anything it can't read (a size, a side, an entry price, a price, a tick spec): an open loss
  * is never assumed away. positions: the broker's list_open_positions (size, type 1 long / 2 short, averagePrice).
  */
-function openPnlAt(positions, { worstOf, specOf, feeOf = () => 0 }) {
+function openPnlAt(positions, { worstOf, specOf, feeOf }) {
   const { signedSize } = require('../trading/positions');
   const { contractRoot } = require('../trading/journal');
   let sum = 0;
@@ -199,16 +199,102 @@ function openPnlAt(positions, { worstOf, specOf, feeOf = () => 0 }) {
     const spec = specOf(root);
     if (!Number.isFinite(entry) || !Number.isFinite(worst)) throw new Error(`position ${p.contractId}: no entry or market price to value it`);
     if (!(spec && spec.tickSize > 0 && Number.isFinite(spec.tickValue))) throw new Error(`position ${p.contractId}: no tick spec for ${root}`);
-    const fee = Number(feeOf(root)) || 0;
+    const fee = feeOfRoot(feeOf, root);
     sum += (worst - entry) * (long ? 1 : -1) * size * (spec.tickValue / spec.tickSize) - fee * size;
   }
   return r2(sum);
 }
 
+/** The account's fee per contract per side for a root (feeOf: accounts.js requireFee), never assumed: throws without one. */
+function feeOfRoot(feeOf, root) {
+  const f = typeof feeOf === 'function' ? feeOf(root) : undefined;
+  if (!(typeof f === 'number' && Number.isFinite(f) && f >= 0)) throw new Error(`no fee for ${root}: a fee is never assumed`);
+  return f;
+}
+
+/**
+ * The round trips the account's fills make (`fills`: search_trades, any order), per contract in time order: each from
+ * the fill that opened it (flat to a position) to the one that flattened it, with its side, entry (average), largest
+ * size, and realized net (P&L less every fill's fees). A reversal closes one trip and opens the next. Throws on a fill it
+ * can't read (time, side, size, price), and on a closing fill with no opening one since `fills` began (an attempt
+ * starts flat, so its fills pair). Returns { trips: [...closed], open: [...still open] }.
+ */
+function roundTrips(fills) {
+  const read = f => {
+    const at = Date.parse(f && f.creationTimestamp);
+    const size = Number(f && f.size);
+    const price = f && typeof f.price === 'number' ? f.price : NaN;
+    if (!Number.isFinite(at) || !(f.side === 0 || f.side === 1) || !(Number.isInteger(size) && size > 0) || !Number.isFinite(price)) throw new Error(`a fill it can't read (${JSON.stringify(f)})`);
+    const pnl = f.profitAndLoss === null || f.profitAndLoss === undefined ? 0 : Number(f.profitAndLoss);
+    const fees = (f.fees === null || f.fees === undefined ? 0 : Number(f.fees)) + (f.commissions === null || f.commissions === undefined ? 0 : Number(f.commissions));
+    if (!Number.isFinite(pnl) || !Number.isFinite(fees)) throw new Error(`a fill with no readable P&L or fees (${JSON.stringify(f)})`);
+    return { at, sign: f.side === 0 ? 1 : -1, size, price, pnl, fees, contractId: f.contractId };
+  };
+  const list = (fills || []).filter(f => !(f && f.voided)).map(read).sort((a, b) => a.at - b.at);
+  const book = new Map();
+  const trips = [];
+  for (const x of list) {
+    let left = x.size;
+    while (left > 0) {
+      const t = book.get(x.contractId);
+      if (!t) {
+        book.set(x.contractId, { contractId: x.contractId, long: x.sign > 0, entryAt: x.at, entry: x.price, net: x.sign * left, size: left, realized: -x.fees, opening: [x] });
+        left = 0;
+        continue;
+      }
+      const dir = Math.sign(t.net);
+      if (dir === x.sign) {
+        const n = Math.abs(t.net);
+        t.entry = (t.entry * n + x.price * left) / (n + left);
+        t.net += x.sign * left;
+        t.size = Math.max(t.size, Math.abs(t.net));
+        t.realized -= x.fees;
+        left = 0;
+        continue;
+      }
+      const closed = Math.min(Math.abs(t.net), left);
+      t.net += x.sign * closed;
+      // A fill's P&L and fees once, on the part that first touches it.
+      if (left === x.size) t.realized += x.pnl - x.fees;
+      left -= closed;
+      if (t.net === 0) {
+        trips.push({ contractId: t.contractId, long: t.long, entryAt: t.entryAt, exitAt: x.at, entry: t.entry, size: t.size, net: r2(t.realized) });
+        book.delete(x.contractId);
+      }
+    }
+  }
+  return { trips, open: [...book.values()] };
+}
+
+/**
+ * The lowest equity a closed round trip reached, against the balance now (a negative offset, or 0): the balance just
+ * before it (the balance now less its own net and every later trip's), plus its worst open P&L over its life (worstOf:
+ * the worst price between its entry and exit), less its exit fee. trips: roundTrips' (time order).
+ */
+function tripsLow(trips, { worstOf, specOf, feeOf }) {
+  const { contractRoot } = require('../trading/journal');
+  let low = 0;
+  let after = 0; // the net of the trips closed after this one, back to the balance now
+  for (let i = trips.length - 1; i >= 0; i -= 1) {
+    const t = trips[i];
+    after += t.net;
+    const root = contractRoot(t.contractId) || t.contractId;
+    const spec = specOf(root);
+    if (!(spec && spec.tickSize > 0 && Number.isFinite(spec.tickValue))) throw new Error(`trip on ${t.contractId}: no tick spec for ${root}`);
+    const worst = worstOf(t);
+    if (!(typeof worst === 'number' && Number.isFinite(worst))) throw new Error(`trip on ${t.contractId}: no price to value it`);
+    const fee = feeOfRoot(feeOf, root);
+    // Before it: the balance now less every net from it on; its entry fee paid; at its worst, the exit fee still to pay.
+    const openWorst = (worst - t.entry) * (t.long ? 1 : -1) * t.size * (spec.tickValue / spec.tickSize) - 2 * fee * t.size;
+    low = Math.min(low, -after + openWorst);
+  }
+  return r2(low);
+}
+
 /** The open P&L before a step (deps.openPnl: 0 flat); one it can't read refuses the step (fails closed). */
-async function openPnlOf(run, env, deps, account, sinceMs, at) {
+async function openPnlOf(run, env, deps, account, sinceMs, at, fromMs = sinceMs) {
   if (!deps.openPnl) throw refused('a combine run reads the open position\'s P&L before each step (deps.openPnl)');
-  const v = await Promise.resolve().then(() => deps.openPnl(env, run.cfg.account, { account, sinceMs, at })).then(Number, err => {
+  const v = await Promise.resolve().then(() => deps.openPnl(env, run.cfg.account, { account, sinceMs, fromMs, at })).then(Number, err => {
     throw refused(`can't value the open position for the combine attempt (${String((err && err.message) || err).split('\n')[0]}): the step waits, never assuming no loss`);
   });
   if (!Number.isFinite(v)) throw refused('the open position\'s P&L is not a number: the step waits, never assuming no loss');
@@ -295,7 +381,9 @@ async function beforeStep(run, point, ranAt, env, deps, ctx) {
   // Equity: the balance plus the open position's P&L at its worst price since the last check (a touch of the floor
   // between two steps is seen at the next one, even after the trade recovered).
   const since = t.lastCheck ? Date.parse(t.lastCheck) : Date.parse(record.startedAt);
-  const openPnl = await openPnlOf(run, env, deps, account, since, ranAt);
+  // The lowest equity since the last check against the balance now: the open position at its worst, and every round
+  // trip closed since at its worst (a dip inside one interval is seen too). fromMs: the attempt's start (its fills pair).
+  const openPnl = await openPnlOf(run, env, deps, account, since, ranAt, Date.parse(record.startedAt));
   t.lastCheck = ranAt.toISOString();
   const cushion = cs.balance + Math.min(0, openPnl) - cs.floor;
   t.low = t.low === null ? r2(cushion) : Math.min(t.low, r2(cushion));
@@ -408,4 +496,4 @@ function reportLines(rep) {
   return lines;
 }
 
-module.exports = { LOG, validateCombineConfig, combineForRun, attemptOf, attemptSummary, worstPrice, openPnlAt, passedOn, beforeStep, finishCombine, readLog, combineReport, reportLines };
+module.exports = { LOG, validateCombineConfig, combineForRun, attemptOf, attemptSummary, worstPrice, openPnlAt, roundTrips, tripsLow, passedOn, beforeStep, finishCombine, readLog, combineReport, reportLines };

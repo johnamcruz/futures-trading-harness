@@ -16,6 +16,7 @@ const { accountNamed } = require('../../scripts/lib/trading/accounts');
 
 const REPO = path.join(__dirname, '..', '..');
 const { tmpDir: tmp } = require('../helpers');
+const r2 = x => Math.round(x * 100) / 100;
 // The account the active policy strategy trades (the runner keeps that account's attempt record): the attempts'.
 const POLICY_ACCOUNT = loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio').account;
 const ACCOUNT = accountNamed(REPO, POLICY_ACCOUNT, {});
@@ -308,14 +309,44 @@ test('openPnlAt and worstPrice: each open position at its worst price, less its 
   // Long 2 MNQ from 100 at a worst of 97: -3 points x $2 x 2 = -$12, less a $0.37 fee each.
   const long = { contractId: 'MNQ', type: 1, size: 2, averagePrice: 100 };
   assert.strictEqual(C.openPnlAt([long], { worstOf: () => 97, specOf, feeOf: () => 0.37 }), -12.74);
-  assert.strictEqual(C.openPnlAt([{ ...long, type: 2 }], { worstOf: () => 105, specOf }), -20);
+  assert.strictEqual(C.openPnlAt([{ ...long, type: 2 }], { worstOf: () => 105, specOf, feeOf: () => 0 }), -20);
+  // A fee is never assumed: a root the account states no fee for (requireFee's null) refuses the valuation.
+  assert.throws(() => C.openPnlAt([long], { worstOf: () => 97, specOf, feeOf: () => null }), /no fee for MNQ: a fee is never assumed/);
+  assert.throws(() => C.openPnlAt([long], { worstOf: () => 97, specOf }), /no fee for MNQ/);
   assert.strictEqual(C.openPnlAt([], { worstOf: () => null, specOf }), 0);
   assert.throws(() => C.openPnlAt([long], { worstOf: () => null, specOf }), /no entry or market price/);
-  assert.throws(() => C.openPnlAt([long], { worstOf: () => 97, specOf: () => null }), /no tick spec/);
-  assert.throws(() => C.openPnlAt([{ ...long, type: 9 }], { worstOf: () => 97, specOf }), /unknown type/);
+  assert.throws(() => C.openPnlAt([long], { worstOf: () => 97, specOf: () => null, feeOf: () => 0 }), /no tick spec/);
+  assert.throws(() => C.openPnlAt([{ ...long, type: 9 }], { worstOf: () => 97, specOf, feeOf: () => 0 }), /unknown type/);
   assert.throws(() => C.openPnlAt([{ ...long, size: 'x' }], { worstOf: () => 97, specOf }), /no valid size/);
   assert.strictEqual(C.passedOn(ACCOUNT, { days: [{ day: 'a', balance: S0 + HALF, pnl: HALF }, { day: 'b', balance: S0 + 2 * HALF, pnl: HALF }] }), 'b');
   assert.strictEqual(C.passedOn(ACCOUNT, { days: [{ day: 'a', balance: S0 + 2 * HALF, pnl: 2 * HALF }] }), null, 'consistency: one day can\'t pass');
+});
+
+test('roundTrips and tripsLow: a trip opened and closed inside one interval is valued at its worst; the balance before it is the balance now less its net', () => {
+  const f = (at, side, size, price, pnl = null, fees = 0.37 * size) => ({ creationTimestamp: at, side, size, price, profitAndLoss: pnl, fees, contractId: 'MNQ' });
+  // A long of 2 from 100, added 1 at 103 (average 101), out at 106; then a short of 1 reversed into a long; a voided fill.
+  const { trips, open } = C.roundTrips([
+    f('2022-03-02T14:40:00Z', 1, 3, 106, 30), f('2022-03-02T14:31:00Z', 0, 2, 100), f('2022-03-02T14:35:00Z', 0, 1, 103),
+    f('2022-03-02T15:00:00Z', 1, 1, 110), f('2022-03-02T15:05:00Z', 0, 2, 108, 4), { ...f('2022-03-02T15:06:00Z', 1, 9, 1), voided: true },
+  ]);
+  assert.deepStrictEqual(trips.map(t => [t.long, t.entry, t.size, t.net, t.entryAt, t.exitAt]), [
+    [true, 101, 3, r2(30 - 0.74 - 0.37 - 1.11), Date.parse('2022-03-02T14:31:00Z'), Date.parse('2022-03-02T14:40:00Z')],
+    [false, 110, 1, r2(4 - 0.37 - 0.74), Date.parse('2022-03-02T15:00:00Z'), Date.parse('2022-03-02T15:05:00Z')],
+  ]);
+  assert.deepStrictEqual(open.map(t => [t.long, t.net, t.entry]), [[true, 1, 108]], 'the reversal\'s remainder is open');
+  assert.throws(() => C.roundTrips([{ creationTimestamp: 'x', side: 0, size: 1, price: 1 }]), /a fill it can't read/);
+  assert.throws(() => C.roundTrips([f('2022-03-02T14:31:00Z', 2, 1, 100)]), /a fill it can't read/);
+  // tripsLow: the long dipped to 90 between its fills (-11 points x $2 x 3, less fees): the lowest equity against now is
+  // that dip from the balance before it (now less both trips' nets).
+  const specOf = () => ({ tickSize: 0.25, tickValue: 0.5 });
+  const worstOf = t => (t.long ? 90 : 111);
+  const low = C.tripsLow(trips, { worstOf, specOf, feeOf: () => 0.37 });
+  const before1 = -(trips[0].net + trips[1].net);
+  assert.strictEqual(low, r2(Math.min(before1 + (90 - 101) * 2 * 3 - 2 * 0.37 * 3, -trips[1].net + (110 - 111) * 2 - 2 * 0.37)));
+  assert.strictEqual(C.tripsLow([], { worstOf, specOf, feeOf: () => 0 }), 0);
+  assert.throws(() => C.tripsLow(trips, { worstOf: () => null, specOf, feeOf: () => 0 }), /no price to value it/);
+  assert.throws(() => C.tripsLow(trips, { worstOf, specOf, feeOf: () => undefined }), /a fee is never assumed/);
+  assert.throws(() => C.tripsLow(trips, { worstOf, specOf: () => null, feeOf: () => 0 }), /no tick spec/);
 });
 
 test('maxSessions: at most the profile\'s sessions (fewer stops a smoke early); a combine without the harness root is refused', () => {
@@ -324,6 +355,36 @@ test('maxSessions: at most the profile\'s sessions (fewer stops a smoke early); 
   assert.strictEqual(w.resolve({ end: '2022-06-30T00:00:00Z', combine: { account: POLICY_ACCOUNT, attempts: ['2022-03-01'], maxSessions: ACCOUNT.sessions } }).combine.maxSessions, ACCOUNT.sessions);
   const { resolveReplay } = require('../../scripts/lib/replay/config');
   assert.throws(() => resolveReplay(w.raw({}), { baseDir: w.dir, env: w.env, home: w.dir }), /combine: needs the harness root/);
+});
+
+test('readPool: a counted validate run whose home holds a drawn-state log, a combine log or an attempt record is stage 2: never pooled', () => {
+  const S = require('../../scripts/lib/replay/stage');
+  const looks = require('../../scripts/lib/learning/looks');
+  const W = require('../../scripts/lib/schedule').current().learning.windows;
+  const from = W['practice-validate'][0];
+  const to = new Date(Date.parse(`${from}T00:00:00Z`) + 3 * 86400000).toISOString().slice(0, 10);
+  for (const [id, file] of [['as', 'replay/as/account-states.jsonl'], ['cb', 'replay/cb/combine.jsonl'], ['pp', 'combine/acct.json']]) {
+    const work = tmp();
+    const ledger = path.join(work, 'looks.jsonl');
+    // Looks from before the mode tag: none says its mode.
+    for (const runId of ['s1', id, 'me']) looks.recordLook(ledger, { evaluation: runId, candidate: 'cand', purpose: 'validate', runId, from, to, arm: 'without', config: `c-${runId}` }, { create: true });
+    const homeOf = runId => { const h = path.join(work, runId); fs.mkdirSync(path.join(h, 'replay', runId), { recursive: true }); return h; };
+    for (const runId of ['s1', id]) {
+      const h = homeOf(runId);
+      fs.mkdirSync(path.join(h, 'experience'), { recursive: true });
+      fs.writeFileSync(path.join(h, 'experience', 'decisions.jsonl'), '');
+    }
+    const stage2 = path.join(work, id, file);
+    fs.mkdirSync(path.dirname(stage2), { recursive: true });
+    fs.writeFileSync(stage2, '{}\n');
+    const me = homeOf('me');
+    fs.writeFileSync(path.join(me, 'learning-run.json'), JSON.stringify({ learning: true, role: 'practice-validate', look: { candidate: 'cand', purpose: 'validate', evaluation: 'me' }, ledger }));
+    const pool = S.readPool({ runId: 'me', paths: { runHome: me } }, { env: {}, scoreOf: () => ({ agree: 0, disagree: 0 }) });
+    assert.deepStrictEqual(pool.foreign, [id], id);
+    assert.ok(!pool.counted.some(r => r.runId === id), id);
+    assert.strictEqual(S.pooledExitTest(pool).pass, false, id);
+    assert.match(S.pooledExitTest(pool).tests[0].detail, new RegExp(`${id} are stage-2 runs`));
+  }
 });
 
 test('a stage-2 look recorded without a mode never pools with stage 1: its run home shows the attempt, and the pool can\'t pass', () => {

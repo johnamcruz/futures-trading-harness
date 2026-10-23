@@ -247,6 +247,28 @@ test('stage 2, combine: an open loss through the floor between two steps blows t
   assertClean(w, 'touch-e2e', r.out);
 });
 
+test('stage 2, combine: a trade opened and closed inside one decision interval that dips through the floor and closes at a gain blows the attempt', { timeout: 600000 }, () => {
+  // A long of 10 MNQ from 09:31 to 09:32:30 ET, between the 09:30 and 09:33 steps, priced 149.75 points above its minutes'
+  // lowest low, closed +$100: at its worst, from the balance before it, equity was $2,995 plus its fees ($7.40) down, past
+  // the $3,000 cushion only with the fees (never assumed). The 09:33 check finds it in the fills and blows the attempt.
+  const openAt = '2022-04-21T13:31:00.000Z';
+  const until = '2022-04-21T13:32:30.000Z';
+  const shift = shiftOf(MONDAYS[0]);
+  const bars = D.MINUTE_BARS.map(b => ({ ...b, t: iso(Date.parse(b.t) + shift) })).filter(b => b.t >= openAt && b.t <= until);
+  assert.strictEqual(bars.length, 2);
+  const averagePrice = Math.min(...bars.map(b => b.l)) + 149.75;
+  const w = world({ scriptedPositions: [{ at: openAt, until, type: 1, size: 10, averagePrice, pnl: 100 }] });
+  const config = replayConfig(w, 'dip-e2e', { start: '2022-04-21T13:30:00Z', end: '2022-04-23T00:00:00Z', combine: { account: ACCOUNT.name, attempts: ['2022-04-21'], maxSessions: 2 } });
+  const r = sh(script('replay.js'), ['run', '--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
+  assert.strictEqual(r.code, 0, r.out);
+  const days = recordsOf(w, 'dip-e2e');
+  assert.deepStrictEqual(days['2022-04-21'].map(x => [x.t, x.kind]), [['2022-04-21T13:30:02.000Z', 'trade'], ['2022-04-21T19:50:00.000Z', 'eod']]);
+  const end = fs.readFileSync(path.join(runHomeOf(w, 'dip-e2e'), 'replay', 'dip-e2e', 'combine.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).find(x => x.kind === 'end');
+  assert.deepStrictEqual([end.outcome, end.profit], ['blown', 100]);
+  assert.ok(end.lowCushion < 0, JSON.stringify(end));
+  assertClean(w, 'dip-e2e', r.out);
+});
+
 test('stage 2, accountStates: two curated days, each opening at its drawn balance shown in the prompt; finished and scored', { timeout: 600000 }, () => {
   const w = world();
   // The curated lists: one moment on each of two days, scanned from the bars (scripts/curated-lists.js).

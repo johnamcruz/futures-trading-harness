@@ -77,7 +77,7 @@ const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../trading/prop-state');
 const combine = require('../trading/combine');
-const { accountNamed, feePerSide } = require('../trading/accounts');
+const { accountNamed, requireFee } = require('../trading/accounts');
 const { isOpen, signedSize } = require('../trading/positions');
 const combineRun = require('./combine-run');
 
@@ -160,22 +160,39 @@ function defaultDeps(run, root) {
     async balance(env, account) {
       return withAdapter({ root, env }, a => a.accountBalance(account));
     },
-    // A combine run's open P&L before a step (combine-run.js): each open position at its worst 1-minute price since the
-    // later of the last check and its fill (the bars at the clock), less its exit fee; 0 when flat. Throws on what it can't read.
-    async openPnl(env, account, { account: profile, sinceMs, at }) {
+    // A combine run's lowest equity since the last check against the balance now (combine-run.js), a negative offset or
+    // 0: each open position at its worst 1-minute price since the later of the last check and its fill, and each round
+    // trip closed since the last check at its worst price between its entry and exit (fills since the attempt's start,
+    // `fromMs`, so they pair), less the account's fees (never assumed). Throws on anything it can't read.
+    async openPnl(env, account, { account: profile, sinceMs, fromMs = sinceMs, at }) {
       return withAdapter({ root, env }, async a => {
+        const specOf = liveSpecs(env);
+        const feeOf = r => requireFee(profile, r);
+        const worstOver = async (contractId, long, from, to, extra = []) => {
+          // The 1-minute bars from the one holding `from` (its minute) to the one holding `to`.
+          const minute = new Date(from);
+          minute.setUTCSeconds(0, 0);
+          const bars = (await a.history(contractId, { from: minute, to: new Date(Math.max(to, from)), timeframe: 1 }))
+            .filter(b => Date.parse(b.t) >= minute.getTime() && Date.parse(b.t) <= to);
+          return combineRun.worstPrice([...bars, ...extra.map(p => ({ l: p, h: p }))], long);
+        };
         const open = (await a.accountState(account)).positions.filter(isOpen);
-        if (!open.length) return 0;
         const worst = new Map();
         for (const p of open) {
           const from = Math.max(sinceMs, Date.parse(p.creationTimestamp) || sinceMs);
-          const bars = (await a.history(p.contractId, { from: new Date(from), to: at, timeframe: 1 })).filter(b => Date.parse(b.t) >= from);
           const long = signedSize(p) > 0;
           // No closed bar since (the fill's own minute): the last closed one prices it.
-          const w = combineRun.worstPrice(bars, long) ?? combineRun.worstPrice((await a.closedBars(p.contractId, { minutes: 1, limit: 1, now: at })), long);
+          const w = (await worstOver(p.contractId, long, from, at.getTime())) ?? combineRun.worstPrice((await a.closedBars(p.contractId, { minutes: 1, limit: 1, now: at })), long);
           worst.set(p.contractId, w);
         }
-        return combineRun.openPnlAt(open, { worstOf: id => worst.get(id), specOf: liveSpecs(env), feeOf: r => feePerSide(profile, r) });
+        const openLow = open.length ? combineRun.openPnlAt(open, { worstOf: id => worst.get(id), specOf, feeOf }) : 0;
+        const { trips } = combineRun.roundTrips(await a.fillsSince(account, new Date(fromMs)));
+        const recent = trips.filter(t => t.exitAt >= sinceMs);
+        const tripWorst = new Map();
+        for (const t of recent) tripWorst.set(t, await worstOver(t.contractId, t.long, Math.max(t.entryAt, sinceMs), t.exitAt, [t.entry]));
+        // The trips close in time order, so every trip closed after a recent one is recent too (tripsLow's balance before each).
+        const tripLow = recent.length ? combineRun.tripsLow(recent, { worstOf: t => tripWorst.get(t), specOf, feeOf }) : 0;
+        return Math.min(openLow, tripLow);
       });
     },
     async trades(env, account, since, until) {

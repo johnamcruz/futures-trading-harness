@@ -493,11 +493,12 @@ What the run does:
 3. **It ends when it passes or blows,** under the account's rules (the pass is
    checked at a close, with consistency where the profile has it), or after
    `maxSessions` sessions (`unfinished`). Before each step the driver reads the
-   attempt from its record, the broker's balance and the open position's P&L
-   at its worst price since the last check (the broker's positions and
-   1-minute bars, less the exit fee). Equity (balance plus that open P&L) at
-   or below the floor is a blow, as in a real combine, even if the trade later
-   recovers. The check runs at each decision time, so a touch between two
+   attempt from its record, the broker's balance and the lowest equity since
+   the last check: the open position at its worst price since then, and each
+   trade opened and closed since then at its worst price between its fills
+   (the broker's positions, fills and 1-minute bars, less the account's fees,
+   never assumed). Equity at or below the floor is a blow, as in a real
+   combine, even if the trade later recovers or closed at a gain. The check runs at each decision time, so a touch between two
    steps is caught at the next step. An open position it can't value refuses
    the step (the run stops, resumable): an open loss is never assumed away.
    After a blow during a day, no trade cycle runs: only that day's end of day
