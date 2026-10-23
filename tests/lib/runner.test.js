@@ -1924,4 +1924,12 @@ test('cycleDataInPrompt: the runner hands a trade cycle its reads\' collector on
   const got = await on[0][3].precollect({ FTH_HOME: '/nonexistent-home' });
   assert.deepStrictEqual(got.missing.map(m => [m.tool, m.args]), [['bar_briefing', { symbol: 'MNQ' }]]);
   assert.deepStrictEqual(got.blocks.map(b => [b.tool, b.args, b.text]), [['get_account_snapshot', { accountId: 7 }, '[]'], ['list_open_positions', { accountId: 7 }, '[]'], ['list_open_orders', { accountId: 7 }, '[]']]);
+  // Paper mode: the runner's own client isn't under the broker's paper settings, so no account read is made for it.
+  const paperSeen = await run({ cycleDataInPrompt: true, paper: true });
+  const paper = paperSeen.filter(x => x[0] === 'cycle' && x[1] === 'trade');
+  assert.ok(paper.length >= 1);
+  const p = await paper[0][3].precollect({ FTH_HOME: '/nonexistent-home' });
+  assert.deepStrictEqual(p.blocks, []);
+  assert.ok(p.missing.filter(m => m.tool !== 'bar_briefing').every(m => /paper mode/.test(m.why)) && p.missing.length === 4);
+  assert.ok(!paperSeen.some(x => x[0] === 'read'), 'no account read made');
 });

@@ -1832,7 +1832,7 @@ function createRunner(deps) {
           // made by the runner with its run's own environment just before its run (cycle-run.js), in its prompt (cycle-data.js).
           const precollect = CD.on(cfg) ? runEnv => CD.collect({
             symbols: [...new Set(items.map(x => x.symbol))], accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
-            env: runEnv, root, broker: client, now: () => clock.now(),
+            env: runEnv, root, broker: client, now: () => clock.now(), paper: Boolean(cfg.paper),
           }) : null;
           let r;
           let ranRuns = [];

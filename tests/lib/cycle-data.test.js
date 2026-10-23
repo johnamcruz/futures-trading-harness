@@ -26,6 +26,9 @@ const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'));
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
+// The head trader's floor (config/runner.json cycle.timeoutMinMinutes); a cycle limit with a minute of reads above it.
+const FLOOR = require('../../scripts/lib/tunables').runner().cycle.timeoutMinMinutes * 60000;
+const LIMIT = FLOOR + 60000;
 const ON = () => validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], cycleDataInPrompt: true });
 
 /** A harness home with this bar's briefing, and the head trader's run's environment for the cycle on `bar` (childEnv). */
@@ -218,10 +221,10 @@ test('cycle run with the reads: made with the run\'s own environment, in the pro
   const precollect = async runEnv => { envGiven = runEnv; wall += 4000; return CD.collect({ symbols: ['MNQ'], accountId: 7, env: runEnv, root: ROOT, broker: { readText: async () => ({ text: '[]', isError: false }) }, now: () => new Date(w.b.closedAt) }); };
   const base = { FTH_HOME: w.h, HOME: w.h, NODE_ENV: 'test', FTH_TEST_NOW: w.b.closedAt };
   const deps = { root: ROOT, home: w.h, env: base, run, out: () => {}, err: () => {}, now: () => new Date(w.b.closedAt), wallNow: () => wall, guard: () => true };
-  await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: 60000, context: w.context, precollect }, deps);
+  await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: LIMIT, context: w.context, precollect }, deps);
   const [{ argv, env, timeoutMs }] = seen;
   assert.strictEqual(envGiven, env, 'the very environment the run gets');
-  assert.strictEqual(timeoutMs, 56000, 'the reads\' time comes off the run\'s limit');
+  assert.strictEqual(timeoutMs, LIMIT - 4000, 'the reads\' time comes off the run\'s limit');
   const given = argv[2];
   assert.ok(given.startsWith(prompt.slice(0, -RESULT_LINE.length)) && given.endsWith(RESULT_LINE) && given.length > prompt.length);
   assert.strictEqual(bodyOf(given, 'bar_briefing'), (await callTool('bar_briefing', { symbol: 'MNQ' }, { env, root: ROOT })).content[0].text);
@@ -234,18 +237,18 @@ test('cycle run with the reads: made with the run\'s own environment, in the pro
   // Only the prompt differs from the same cycle without the key: the argv otherwise, and the environment, are the same.
   const plainRun = [];
   const offCfg = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'] });
-  await runCycle(offCfg, 'trade', prompt, {}, { timeoutMs: 60000, context: w.context }, { ...deps, run: async (a, o) => { plainRun.push({ argv: a, env: o.env }); return run(a, o); } });
+  await runCycle(offCfg, 'trade', prompt, {}, { timeoutMs: LIMIT, context: w.context }, { ...deps, run: async (a, o) => { plainRun.push({ argv: a, env: o.env }); return run(a, o); } });
   const strip = e => { const { FTH_CYCLE_TRANSCRIPT: _t, ...rest } = e; return rest; };
   assert.deepStrictEqual(strip(plainRun[0].env), strip(env));
   assert.deepStrictEqual(plainRun[0].argv.map(a => (a === prompt ? '<p>' : a)), argv.map(a => (a === given ? '<p>' : a)));
   // A collection that throws: the run goes on with a line saying so, and nothing recorded as given.
   seen.length = 0;
-  await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: 60000, context: w.context, precollect: async () => { throw new Error('boom'); } }, deps);
+  await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: LIMIT, context: w.context, precollect: async () => { throw new Error('boom'); } }, deps);
   assert.match(seen[0].argv[2], /The runner's reads for this cycle could not be made \(boom\): make your reads yourself\./);
   assert.ok(seen[0].argv[2].endsWith(RESULT_LINE));
   // A prompt without its result line (not a trade prompt): run unchanged, the reason recorded.
   seen.length = 0;
-  await runCycle(w.cfg, 'trade', 'odd prompt', {}, { timeoutMs: 60000, context: w.context, precollect }, deps);
+  await runCycle(w.cfg, 'trade', 'odd prompt', {}, { timeoutMs: LIMIT, context: w.context, precollect }, deps);
   assert.strictEqual(seen[0].argv[2], 'odd prompt');
 });
 
@@ -284,4 +287,69 @@ test('callText: the reply\'s text exactly as sent, only when it is one text item
   } finally {
     c.close();
   }
+});
+
+test('the reads get only the cycle\'s time above the head trader\'s floor: none left, none made; too slow, dropped; the run keeps its floor either way', async () => {
+  const w = home();
+  const prompt = prompts(w.cfg, new Date(w.b.closedAt), ROOT).trade([{ symbol: 'MNQ', bar: { t: w.b.asOf, c: 1, file: '/b.json', contractId: 'MNQ' } }]);
+  const seen = [];
+  const run = async (argv, o) => { seen.push({ argv, timeoutMs: o.timeoutMs }); return { ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' }; };
+  const deps = { root: ROOT, home: w.h, env: { FTH_HOME: w.h, HOME: w.h, NODE_ENV: 'test', FTH_TEST_NOW: w.b.closedAt }, run, out: () => {}, err: () => {}, now: () => new Date(w.b.closedAt), guard: () => true };
+  // At or under the floor: no read made, the run gets the whole limit and the line.
+  let called = 0;
+  const precollect = async env => { called += 1; return CD.collect({ symbols: ['MNQ'], env, root: ROOT }); };
+  const r = await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: FLOOR, context: w.context, precollect }, deps);
+  assert.strictEqual(called, 0);
+  assert.strictEqual(r.ok, true, 'an ordinary cycle, never an error');
+  assert.strictEqual(seen[0].timeoutMs, FLOOR);
+  assert.match(seen[0].argv[2], /The runner made no reads for this cycle \(too little of the cycle's time is left above the \d+ min its run keeps\): make your reads yourself\./);
+  assert.strictEqual(bodyOf(seen[0].argv[2], 'bar_briefing'), null);
+  // Reads slower than the time above the floor: dropped when it runs out, and the run still gets at least its floor.
+  seen.length = 0;
+  const slow = () => new Promise(resolve => { setTimeout(() => resolve({ blocks: [{ tool: 'bar_briefing', args: { symbol: 'MNQ' }, asOf: 'x', text: 'LATE' }], missing: [] }), 600); });
+  const r2 = await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: FLOOR + 150, context: w.context, precollect: slow }, { ...deps, wallNow: Date.now });
+  assert.strictEqual(r2.ok, true);
+  assert.ok(seen[0].timeoutMs >= FLOOR && seen[0].timeoutMs <= FLOOR + 150, String(seen[0].timeoutMs));
+  assert.match(seen[0].argv[2], /could not be made \(the reads took longer than the 0 s the cycle could spare\): make your reads yourself/);
+  assert.doesNotMatch(seen[0].argv[2], /LATE/);
+});
+
+test('paper mode: no broker read is made for the head trader (its gateway runs under the paper settings, the runner\'s client doesn\'t); each a line', async () => {
+  const w = home();
+  let reads = 0;
+  const got = await CD.collect({ symbols: ['MNQ'], accountId: 7, env: w.env, root: ROOT, broker: { readText: async () => { reads += 1; return { text: '[]', isError: false }; } }, paper: true });
+  assert.strictEqual(reads, 0);
+  assert.deepStrictEqual(got.blocks.map(b => b.tool), ['bar_briefing'], 'the harness tool still (the run\'s own environment)');
+  assert.deepStrictEqual(got.missing.map(m => [m.tool, m.why]), CD.READS.map(t => [t, 'paper mode: the runner reads no account for you']));
+  assert.match(CD.render(got), /Not collected: get_account_snapshot \{"accountId":7\} \(paper mode: the runner reads no account for you\); read it yourself if you need it\./);
+});
+
+test('the size cap: the section stays under prompt.cycleDataMaxBytes, the largest blocks dropped first, each a line and recorded', async () => {
+  assert.ok(Number.isInteger(CD.MAX_BYTES) && CD.MAX_BYTES > 0 && CD.MAX_BYTES < 128 * 1024 / 2, 'well under one argv string\'s limit');
+  const blk = (tool, n) => ({ tool, args: { accountId: 7 }, asOf: 'x', text: 'é'.repeat(n) });
+  const got = { blocks: [blk('get_account_snapshot', 300), blk('list_open_positions', 2000), blk('list_open_orders', 900)], missing: [] };
+  // Room for two blocks and the dropped one's line, not for the third (its 900 characters are 1800 bytes).
+  const fits = Buffer.byteLength(CD.render({ ...got, blocks: [got.blocks[0], got.blocks[2]] })) + 300;
+  const c = CD.capped(got, fits);
+  assert.deepStrictEqual(c.blocks.map(b => b.tool), ['get_account_snapshot', 'list_open_orders'], 'the largest (in bytes) went first');
+  assert.match(c.missing[0].why, /^its 4000 bytes would take this cycle's reads past \d+ \(config\/runner\.json prompt\.cycleDataMaxBytes\)$/);
+  assert.ok(Buffer.byteLength(CD.render(c)) <= fits);
+  assert.strictEqual(CD.capped(got, 10).blocks.length, 0, 'none fits: every block a line');
+  // Bytes, as the prompt goes out, never characters: a section a byte over is capped though its characters fit.
+  assert.ok(CD.render(got).length < Buffer.byteLength(CD.render(got)) - 1);
+  assert.strictEqual(CD.capped(got, Buffer.byteLength(CD.render(got)) - 1).blocks.length, 2);
+  assert.deepStrictEqual(CD.capped(got, 1e9), got, 'under the cap: as collected');
+  // In the cycle: a block past the config's cap never reaches the prompt; the cycle log says why.
+  const w = home();
+  const seen = [];
+  const run = async argv => { seen.push(argv); return { ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' }; };
+  const prompt = prompts(w.cfg, new Date(w.b.closedAt), ROOT).trade([{ symbol: 'MNQ', bar: { t: w.b.asOf, c: 1, file: '/b.json', contractId: 'MNQ' } }]);
+  const huge = async () => ({ blocks: [blk('get_account_snapshot', CD.MAX_BYTES)], missing: [] });
+  await runCycle(w.cfg, 'trade', prompt, {}, { timeoutMs: LIMIT, context: w.context, precollect: huge }, { root: ROOT, home: w.h, env: { FTH_HOME: w.h, HOME: w.h }, run, out: () => {}, err: () => {}, now: () => new Date(w.b.closedAt), guard: () => true });
+  assert.ok(Buffer.byteLength(seen[0][2]) < Buffer.byteLength(prompt) + CD.MAX_BYTES);
+  assert.match(seen[0][2], /Not collected: get_account_snapshot \{"accountId":7\} \(its \d+ bytes would take/);
+  const summary = JSON.parse(fs.readFileSync(path.join(w.h, 'logs', `cycles-${w.b.closedAt.slice(0, 10)}.jsonl`), 'utf8').trim().split('\n').pop());
+  const line = JSON.parse(fs.readFileSync(summary.file, 'utf8'));
+  assert.deepStrictEqual(line.context.precollected, []);
+  assert.match(line.context.notCollected[0].why, /cycleDataMaxBytes/);
 });

@@ -19,17 +19,25 @@
  * refuses, a broker client that reads no raw text, a throw) gives no block: a plain line names it and tells the model
  * to read it itself. Nothing is retried, nothing guessed.
  *
- * No gate or check reads these blocks: the order gate, compose_check and the cycle checks recompute from the harness
- * home's own state, never from the prompt, so a block can't count for anything. The cycle log records what was given
- * (records: tool, args, asOf, sha256, chars; and what wasn't).
+ * The blocks are data, as tool results are: nothing reads them back. No gate or check parses them (the order gate,
+ * compose_check and the cycle checks recompute from the harness home's own state, never from the prompt), so a block
+ * can't count for anything, and nothing trusts its header or footer: the footer's sha256 is a record of the text given
+ * (the cycle log's), never a check. The cycle log records what was given (records: tool, args, asOf, sha256, chars; and
+ * what wasn't).
+ *
+ * Paper mode (the runner config's paper): no broker read is collected (the runner's own broker client doesn't run under
+ * the broker's paper settings the head trader's gateway does), each one a "read it yourself" line. The whole section
+ * stays under config/runner.json prompt.cycleDataMaxBytes (capped: the largest blocks give way to their lines first).
  *
  *   on(cfg)                     the key is on (harness claude, cycleDataInPrompt true)
  *   READS                       the broker reads collected, in prompt order
  *   briefingServed(env, symbol) { briefing, digest } when bar_briefing serves this cycle's bar's briefing, else { why }
- *   collect({ symbols, accountId, env, root, broker, now, callTool })   { blocks: [{ tool, args, asOf, text }], missing: [{ tool, args, why }] }
+ *   collect({ symbols, accountId, env, root, broker, now, callTool, paper })   { blocks: [{ tool, args, asOf, text }], missing: [{ tool, args, why }] }
+ *   capped(collected, maxBytes) the same, the largest blocks dropped (each a missing read) until the section fits
  *   render({ blocks, missing }) the prompt's data section ('' when there is nothing to say)
  *   records({ blocks })         [{ tool, args, asOf, sha256, chars }] for the cycle log
  *   failed(why)                 a collection that threw as a whole: no block, one line
+ *   skipped(why)                no collection at all (too little time left): no block, one line
  */
 
 const crypto = require('crypto');
@@ -40,6 +48,7 @@ const { briefingAfterClock } = require('./trading/look-ahead');
 const { replayAt } = require('./trading/harness-now');
 
 const REASON_CHARS = require('./tunables').runner().prompt.reasonChars; // config/runner.json prompt.reasonChars
+const MAX_BYTES = require('./tunables').runner().prompt.cycleDataMaxBytes; // config/runner.json prompt.cycleDataMaxBytes
 const READS = Object.freeze(['get_account_snapshot', 'list_open_positions', 'list_open_orders']);
 const BRIEFING = 'bar_briefing';
 
@@ -100,11 +109,15 @@ async function brokerRead(tool, accountId, { broker, now }) {
  * Every read, in prompt order: each symbol's bar briefing, then the account's reads (none without an account). `env`:
  * the head trader's run's environment. A read that throws is a missing one; collect itself never throws.
  */
-async function collect({ symbols = [], accountId = null, env, root, broker = null, now = () => new Date(), callTool = require('./harness-tools/protocol').callTool }) {
+async function collect({ symbols = [], accountId = null, env, root, broker = null, now = () => new Date(), callTool = require('./harness-tools/protocol').callTool, paper = false }) {
   const safe = (first, p) => p.catch(err => ({ ...first, why: `the read failed (${errText(err)})` }));
   const jobs = [...new Set(symbols.filter(Boolean))].map(s => safe({ tool: BRIEFING, args: { symbol: s } }, Promise.resolve().then(() => briefingRead(s, { env, root, callTool }))));
   if (Number.isInteger(accountId) && accountId >= 1) {
-    for (const tool of READS) jobs.push(safe({ tool, args: { accountId } }, Promise.resolve().then(() => brokerRead(tool, accountId, { broker, now }))));
+    for (const tool of READS) {
+      // Paper mode: the runner's read client isn't under the broker's paper settings (the head trader's gateway is).
+      if (paper) jobs.push(Promise.resolve({ tool, args: { accountId }, why: 'paper mode: the runner reads no account for you' }));
+      else jobs.push(safe({ tool, args: { accountId } }, Promise.resolve().then(() => brokerRead(tool, accountId, { broker, now }))));
+    }
   }
   const done = await Promise.all(jobs);
   return { blocks: done.filter(x => typeof x.text === 'string'), missing: done.filter(x => typeof x.text !== 'string').map(({ tool, args, why }) => ({ tool, args, why })) };
@@ -128,7 +141,25 @@ function render({ blocks = [], missing = [], note = null } = {}) {
 /** What the cycle log records of the blocks given. */
 const records = ({ blocks = [] } = {}) => blocks.map(b => ({ tool: b.tool, args: b.args, asOf: b.asOf, sha256: sha256(b.text), chars: b.text.length }));
 
+/**
+ * The collection with its section under `maxBytes` (UTF-8, as the prompt goes out: well under one argv string's limit):
+ * the largest block dropped first, each one a missing read, until the rendered section fits.
+ */
+function capped(got, maxBytes = MAX_BYTES) {
+  let blocks = [...(got.blocks || [])];
+  const missing = [...(got.missing || [])];
+  while (blocks.length && Buffer.byteLength(render({ ...got, blocks, missing })) > maxBytes) {
+    const big = blocks.reduce((a, b) => (Buffer.byteLength(b.text) > Buffer.byteLength(a.text) ? b : a));
+    blocks = blocks.filter(b => b !== big);
+    missing.push({ tool: big.tool, args: big.args, why: `its ${Buffer.byteLength(big.text)} bytes would take this cycle's reads past ${maxBytes} (config/runner.json prompt.cycleDataMaxBytes)` });
+  }
+  return { ...got, blocks, missing };
+}
+
+/** No collection at all (too little of the cycle's time left): no block, one line saying so. */
+const skipped = why => ({ blocks: [], missing: [], note: `The runner made no reads for this cycle (${errText(why)}): make your reads yourself.` });
+
 /** A collection that threw as a whole: no block, one line saying so. */
 const failed = why => ({ blocks: [], missing: [], note: `The runner's reads for this cycle could not be made (${errText(why)}): make your reads yourself.` });
 
-module.exports = { READS, BRIEFING, INTRO, on, sha256, briefingServed, onlyText, collect, render, records, failed };
+module.exports = { READS, BRIEFING, INTRO, MAX_BYTES, on, sha256, briefingServed, onlyText, collect, capped, render, records, failed, skipped };

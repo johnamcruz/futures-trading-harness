@@ -40,14 +40,27 @@ function runOnce(cfg, argv, timeoutMs, context, deps, given = null) {
     .then(r => ({ ...r, transcript: env.FTH_CYCLE_TRANSCRIPT || null, roleSkills: env.FTH_ROLE_SKILLS || null, headPrompt: env.FTH_HEAD_PROMPT || null, env }));
 }
 
+// The least of the cycle's limit the head trader's run keeps (config/runner.json cycle.timeoutMinMinutes, the runner's own
+// floor for the head trader after its desk): the reads get only what is left above it.
+const minHeadMs = () => require('./tunables').runner().cycle.timeoutMinMinutes * 60000;
+
 /**
  * The cycle's reads made before its run (limits.precollect): the run's own environment, the prompt with the reads at its
- * end, the context recording them, and the time left. A collection that throws, or a prompt it can't go in, gives none.
+ * end, the context recording them. They get the cycle's limit above the head trader's floor (minHeadMs): with none
+ * left they aren't made, and reads still going when it runs out are dropped; either way the run goes with the
+ * "read it yourself" line, never with less than its floor because of them (a slow broker never fails a cycle). A
+ * collection that throws, or a prompt it can't go in, gives none; the section is capped (cycle-data.js capped).
  */
-async function precollected(cfg, prompt, context, precollect, deps) {
+async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   const runEnv = childEnv(cfg, deps.root, deps.env, context);
   let got;
-  try { got = await precollect(runEnv); } catch (e) { got = CD.failed(e); }
+  if (!(budgetMs > 0)) got = CD.skipped(`too little of the cycle's time is left above the ${minHeadMs() / 60000} min its run keeps`);
+  else {
+    let timer;
+    const late = new Promise(resolve => { timer = setTimeout(() => resolve(CD.failed(new Error(`the reads took longer than the ${Math.round(budgetMs / 1000)} s the cycle could spare`))), budgetMs); });
+    try { got = await Promise.race([Promise.resolve().then(() => precollect(runEnv)), late]); } catch (e) { got = CD.failed(e); } finally { clearTimeout(timer); }
+  }
+  got = CD.capped(got);
   let withData;
   try { withData = withCycleData(prompt, CD.render(got)); } catch (e) { got = { blocks: [], missing: [], note: `none given: ${e.message}` }; withData = prompt; }
   const missing = [...(got.missing || []), ...(got.note ? [{ why: got.note }] : [])];
@@ -73,14 +86,15 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const wallNow = deps.wallNow || Date.now;
   const startedMs = wallNow();
   // This machine's opt-in only (cycleDataInPrompt): the cycle's reads made first, in its time, with the run's own environment.
-  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }) : null;
+  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, timeoutMs - minHeadMs()) : null;
   if (pre) {
     prompt = pre.prompt;
     context = pre.context;
     argv = buildCommand(cfg, prompt, deps.root, env);
   }
   // The run gets what is left of the cycle's limit after the reads (none made: the whole limit, as without them).
-  const res = await runOnce(cfg, argv, pre ? Math.max(0, timeoutMs - (wallNow() - startedMs)) : timeoutMs, context, { ...deps, env }, pre ? pre.runEnv : null);
+  // (Never under its floor because of them: a deadline's lag aside, as the runner's desk leaves it.)
+  const res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, pre ? pre.runEnv : null);
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
   const { reportedResult, resultNote } = scored;
