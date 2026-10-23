@@ -83,7 +83,7 @@ test('prop account refusal: fails closed on a malformed marker, a missing or inv
   assert.match(propAccountRefusal({ broker: broker({ 7: 'p100' }), accountId: 7, home }), /not an account profile/, 'no profiles loaded');
 });
 
-test('misplaced prop accounts: a propAccounts key the gate never reads is named with where it sits and what is in force; the active broker\'s own is not', () => {
+test('misplaced prop accounts: a propAccounts key the gate never reads is found with its kind, where it sits and whether moving it applies; the active broker\'s own is not', () => {
   const fs = require('fs');
   const path = require('path');
   const { misplacedPropAccounts } = require('../../scripts/lib/trading/prop-accounts');
@@ -91,25 +91,29 @@ test('misplaced prop accounts: a propAccounts key the gate never reads is named 
   const own = path.join(home, 'brokers.json');
   const write = (file, cfg) => fs.writeFileSync(file, JSON.stringify(cfg));
   const env = { FTH_HOME: home };
-  const at = (file = own) => misplacedPropAccounts(env, { file, broker: 'sim' });
+  const at = (file = own, replay = false) => misplacedPropAccounts(env, { file, broker: 'sim', replay });
+  const moveTo = file => `move it under broker "sim" in ${file} to mark the account`;
   // None anywhere, a missing file, an unreadable one: nothing.
   assert.deepStrictEqual(at(), []);
   write(own, { broker: 'sim', brokers: { sim: { propAccounts: { 7: 'p100' } } } });
   assert.deepStrictEqual(at(), [], 'under the active broker: read, not misplaced');
   fs.writeFileSync(own, '{ not json');
   assert.deepStrictEqual(at(), []);
-  // At the top level.
+  // At the top level: moving it under the active broker's entry is the fix.
   write(own, { broker: 'sim', propAccounts: { 7: 'p100' }, brokers: { sim: {} } });
-  assert.deepStrictEqual(at(), [`"propAccounts" found at the top level of ${own}: the active broker is "sim" in ${own}, and only its entry's "propAccounts" is read`]);
-  // Under another broker's entry.
+  assert.deepStrictEqual(at(), [{ kind: 'top-level', message: `"propAccounts" found at the top level of ${own}: only the active broker's entry is read ("sim")`, fix: moveTo(own) }]);
+  // Under another broker's entry: that broker's own mark, not read while sim is active; nothing to move.
   write(own, { broker: 'sim', brokers: { sim: {}, other: { propAccounts: { 7: 'p100' } } } });
-  assert.deepStrictEqual(at(), [`"propAccounts" found under broker "other" in ${own}: the active broker is "sim" in ${own}, and only its entry's "propAccounts" is read`]);
+  assert.deepStrictEqual(at(), [{ kind: 'other-broker', message: `"propAccounts" found under broker "other" in ${own}: not read while "sim" is the active broker`, fix: null }]);
   // The home's file while FTH_BROKERS_FILE names another: every key in it, the active broker's too.
   const other = path.join(tmpDir(), 'brokers.json');
   write(other, { broker: 'sim', brokers: { sim: {} } });
   write(own, { brokers: { sim: { propAccounts: { 7: 'p100' } } } });
-  assert.deepStrictEqual(at(other), [`"propAccounts" found under broker "sim" in ${own} (FTH_BROKERS_FILE names another file, so it isn't read): the active broker is "sim" in ${other}, and only its entry's "propAccounts" is read`]);
-  // The file in force with its own misplaced key, and the home's: both named.
+  const shadowed = `"propAccounts" found under broker "sim" in ${own}: not read while FTH_BROKERS_FILE names ${other} ("sim" is the active broker)`;
+  assert.deepStrictEqual(at(other), [{ kind: 'shadowed', message: shadowed, fix: moveTo(other) }]);
+  // ... under a replay broker, whose own file is meant to stand: the same finding, no move advice.
+  assert.deepStrictEqual(at(other, true), [{ kind: 'shadowed', message: shadowed, fix: null }]);
+  // The file in force with its own misplaced key, and the home's: both found.
   write(other, { broker: 'sim', propAccounts: {}, brokers: { sim: {} } });
-  assert.strictEqual(at(other).length, 2);
+  assert.deepStrictEqual(at(other).map(m => m.kind), ['top-level', 'shadowed']);
 });

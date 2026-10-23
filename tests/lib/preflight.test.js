@@ -155,14 +155,19 @@ test('preflight prop account: a run on an account marked as a prop account needs
   assert.deepStrictEqual([bad.status, /under one profile.*refuses every entry until it is fixed/.test(bad.detail)], ['fail', true]);
   prop.startAttempt(home, PROFILE, NOW);
   assert.deepStrictEqual(at({ 7: 'p100' }), [{ check: 'prop account', status: 'ok', detail: 'account 7 is a p100 prop account, its attempt running' }]);
-  // A key the gate never reads: a warning, a failure for a live run (never a replay broker's), before the rest.
-  const lost = ['"propAccounts" found at the top level of /x/brokers.json: the active broker is "live" in /x/brokers.json'];
-  const misplaced = (c, b = LIVE) => P.propAccountChecks({ cfg: c, broker: b, accounts, home, misplaced: lost });
-  assert.deepStrictEqual(misplaced(cfg).map(x => [x.check, x.status]), [['prop account', 'fail']]);
-  assert.match(misplaced(cfg)[0].detail, /found at the top level of \/x\/brokers\.json: the active broker is "live".*; move it under that entry to mark the account$/);
-  assert.deepStrictEqual(misplaced({ ...cfg, paper: true }).map(x => x.status), ['warn']);
-  assert.deepStrictEqual(misplaced(cfg, { ...LIVE, replay: true }).map(x => x.status), ['warn']);
-  assert.deepStrictEqual(P.propAccountChecks({ cfg, broker: { ...LIVE, propAccounts: { 7: 'p100' } }, accounts, home, misplaced: lost }).map(x => x.status), ['fail', 'ok'], 'with the marked account\'s own row');
+  // A key the gate never reads: at the top level or in a shadowed home file, a failure for a live run (never a replay
+  // broker's) and a warning otherwise; under another broker's entry, a warning in every mode. Each before the rest.
+  const found = (kind, fix = 'move it under broker "live" in /x/brokers.json to mark the account') => ({ kind, message: `"propAccounts" found (${kind})`, fix });
+  const statuses = (misplaced, c = cfg, b = LIVE) => P.propAccountChecks({ cfg: c, broker: b, accounts, home, misplaced }).map(x => x.status);
+  for (const kind of ['top-level', 'shadowed']) {
+    assert.deepStrictEqual(statuses([found(kind)]), ['fail'], kind);
+    assert.deepStrictEqual(statuses([found(kind)], { ...cfg, paper: true }), ['warn'], kind);
+    assert.deepStrictEqual(statuses([found(kind)], cfg, { ...LIVE, replay: true }), ['warn'], kind);
+  }
+  for (const c of [cfg, { ...cfg, paper: true }]) assert.deepStrictEqual(statuses([found('other-broker', null)], c), ['warn']);
+  const rows = P.propAccountChecks({ cfg, broker: LIVE, accounts, home, misplaced: [found('top-level'), found('other-broker', null)] });
+  assert.deepStrictEqual(rows.map(x => x.detail), ['"propAccounts" found (top-level); move it under broker "live" in /x/brokers.json to mark the account', '"propAccounts" found (other-broker)'], 'the fix only where it applies');
+  assert.deepStrictEqual(statuses([found('top-level')], cfg, { ...LIVE, propAccounts: { 7: 'p100' } }), ['fail', 'ok'], 'with the marked account\'s own row');
 });
 
 test('preflight bar fields: an active rules strategy on the runner\'s timeframe needs its field() paths on the broker\'s bars (a warning)', () => {
@@ -234,8 +239,8 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   const marked = await P.runPreflight({ raw: RAW, root: ROOT, env, home, deps: { now: () => NOW, open, resolve: () => '/bin/agent' } });
   assert.strictEqual(status(marked.results, 'prop account'), 'fail');
   assert.match(marked.results.find(x => x.check === 'prop account').detail, new RegExp(`no ${profile} attempt is running`));
-  // Misplaced markers, each found from the local files and named: at the top level, under another broker, and in the
-  // home's file while FTH_BROKERS_FILE names another. A live run fails on each; a paper run warns.
+  // Misplaced markers, each found from the local files and named: at the top level and in the home's file while
+  // FTH_BROKERS_FILE names another, a live run fails and a paper run warns; under another broker, a warning in every mode.
   const brokersFile = path.join(home, 'brokers.json');
   const shipped = JSON.parse(fs.readFileSync(brokersFile, 'utf8'));
   const liveEntry = { command: ['live-mcp'], allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'] };
@@ -243,18 +248,24 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   fs.writeFileSync(brokersFile, JSON.stringify({ ...shipped, propAccounts: { 7: profile }, brokers: { ...shipped.brokers, live: liveEntry } }));
   let rows = await rowsOf();
   assert.deepStrictEqual(rows.map(x => x.status), ['fail']);
-  assert.ok(rows[0].detail.startsWith(`"propAccounts" found at the top level of ${brokersFile}: the active broker is "live"`), rows[0].detail);
+  assert.strictEqual(rows[0].detail, `"propAccounts" found at the top level of ${brokersFile}: only the active broker's entry is read ("live"); move it under broker "live" in ${brokersFile} to mark the account`);
   assert.deepStrictEqual((await rowsOf({ ...RAW, paper: true })).map(x => x.status), ['warn']);
   fs.writeFileSync(brokersFile, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: liveEntry, fake: { ...shipped.brokers.fake, propAccounts: { 7: profile } } } }));
-  rows = await rowsOf();
-  assert.deepStrictEqual(rows.map(x => x.status), ['fail']);
-  assert.match(rows[0].detail, /under broker "fake" in .*: the active broker is "live"/);
+  for (const raw of [RAW, { ...RAW, paper: true }]) {
+    rows = await rowsOf(raw);
+    assert.deepStrictEqual(rows.map(x => x.status), ['warn'], JSON.stringify(raw.paper));
+    assert.strictEqual(rows[0].detail, `"propAccounts" found under broker "fake" in ${brokersFile}: not read while "live" is the active broker`);
+  }
   const elsewhere = path.join(tmpDir(), 'brokers.json');
   fs.writeFileSync(elsewhere, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: liveEntry } }));
   fs.writeFileSync(brokersFile, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: { ...liveEntry, propAccounts: { 7: profile } } } }));
   rows = await rowsOf(RAW, { ...env, FTH_BROKERS_FILE: elsewhere });
   assert.deepStrictEqual(rows.map(x => x.status), ['fail']);
-  assert.match(rows[0].detail, /under broker "live" in .*\(FTH_BROKERS_FILE names another file, so it isn't read\): the active broker is "live" in /);
+  assert.strictEqual(rows[0].detail, `"propAccounts" found under broker "live" in ${brokersFile}: not read while FTH_BROKERS_FILE names ${elsewhere} ("live" is the active broker); move it under broker "live" in ${elsewhere} to mark the account`);
+  // A replay broker's run under its own file: a warning, with no advice to move the live mark into it.
+  fs.writeFileSync(elsewhere, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: { ...liveEntry, replay: true } } }));
+  rows = await rowsOf(RAW, { ...env, FTH_BROKERS_FILE: elsewhere });
+  assert.deepStrictEqual(rows.map(x => [x.status, x.detail]), [['warn', `"propAccounts" found under broker "live" in ${brokersFile}: not read while FTH_BROKERS_FILE names ${elsewhere} ("live" is the active broker)`]]);
   fs.writeFileSync(brokersFile, JSON.stringify(shipped));
   // A broken config stops before the broker is started.
   const bad = await P.runPreflight({ raw: { ...RAW, eodAt: '' }, root: ROOT, env, home, deps: { open: () => assert.fail('not opened') } });

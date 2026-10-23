@@ -11,7 +11,8 @@
  * a marked account goes only while that profile's challenge attempt runs (prop-state.js readAttempt: started with
  * node scripts/combine.js start --account <profile>), so no entry trades a prop account without its floor and daily
  * limits tracked. The rule follows the account, not the mode: a marked practice account is judged as a live one.
- * A broker without `propAccounts` (the shipped config, a replay's own file) is judged exactly as before. Callers
+ * A broker without `propAccounts` (the shipped config; a replay's, whose broker entry is the active one, so only a
+ * mark in that entry would mark it) is judged exactly as before. Callers
  * apply it to entries only: exits, protective stops, stop moves, cancels and closes are never refused by it.
  *
  *   propAccountMarks(broker)       { marks: { id: profile }, error }: the marked accounts by normalized id; a
@@ -23,10 +24,13 @@
  *                                  running for its profile
  *
  *   propAccountMessage(why)        a refusal as the gate and the runner's start give it (exits still go)
- *   misplacedPropAccounts(env, { file, broker })   where a "propAccounts" key sits that the gate never reads, one line
- *                                  each: at the top level of a brokers file, under another broker's entry, or anywhere in
- *                                  the home's brokers.json while FTH_BROKERS_FILE names another file (local files only;
- *                                  `file` is the brokers file in force, `broker` the active broker's name)
+ *   misplacedPropAccounts(env, { file, broker, replay })   where a "propAccounts" key sits that the gate never reads:
+ *                                  [{ kind, message, fix }], kind 'top-level' (of the file in force), 'other-broker'
+ *                                  (another broker's entry: that broker's, read when it is the active one) or
+ *                                  'shadowed' (anywhere in the home's brokers.json while FTH_BROKERS_FILE names another
+ *                                  file); `fix` says where to move it, null where moving it doesn't apply (another
+ *                                  broker's entry; a replay broker's run, whose own file is meant to stand). Local
+ *                                  files only; `file` is the brokers file in force, `broker` the active broker's name
  *
  * Attempts are kept per profile (combine/<profile>.json), so a profile marks one account at most: two accounts
  * under one profile would share one attempt's floor, and the marker is refused.
@@ -97,25 +101,32 @@ function readJson(file) {
   }
 }
 
-/** Every place in `cfg` (one brokers file) a propAccounts key sits, the active broker's entry left out when `active`. */
-function keysIn(cfg, file, { active = null } = {}) {
+/** Every place in `cfg` (one brokers file) a propAccounts key sits: [{ top, name }], the active broker's entry left out when `active`. */
+function keysIn(cfg, { active = null } = {}) {
   const out = [];
   if (!cfg) return out;
-  if (KEY in cfg) out.push(`at the top level of ${file}`);
+  if (KEY in cfg) out.push({ top: true, name: null });
   const brokers = cfg.brokers && typeof cfg.brokers === 'object' && !Array.isArray(cfg.brokers) ? cfg.brokers : {};
   for (const [name, b] of Object.entries(brokers)) {
-    if (name !== active && b && typeof b === 'object' && KEY in b) out.push(`under broker "${name}" in ${file}`);
+    if (name !== active && b && typeof b === 'object' && KEY in b) out.push({ top: false, name });
   }
   return out;
 }
 
-function misplacedPropAccounts(env = process.env, { file, broker }) {
+function misplacedPropAccounts(env = process.env, { file, broker, replay = false }) {
   const active = path.resolve(String(file));
-  const home = path.join(harnessHome(env), 'brokers.json');
-  const where = keysIn(readJson(active), active, { active: broker });
-  if (path.resolve(home) !== active) where.push(...keysIn(readJson(home), home).map(w => `${w} (FTH_BROKERS_FILE names another file, so it isn't read)`));
-  const inForce = `the active broker is "${broker}" in ${active}, and only its entry's "${KEY}" is read`;
-  return where.map(w => `"${KEY}" found ${w}: ${inForce}`);
+  const home = path.resolve(path.join(harnessHome(env), 'brokers.json'));
+  const where = (k, f) => (k.top ? `at the top level of ${f}` : `under broker "${k.name}" in ${f}`);
+  const moveTo = `move it under broker "${broker}" in ${active} to mark the account`;
+  const out = keysIn(readJson(active), { active: broker }).map(k => (k.top
+    ? { kind: 'top-level', message: `"${KEY}" found ${where(k, active)}: only the active broker's entry is read ("${broker}")`, fix: moveTo }
+    : { kind: 'other-broker', message: `"${KEY}" found ${where(k, active)}: not read while "${broker}" is the active broker`, fix: null }));
+  if (home !== active) {
+    for (const k of keysIn(readJson(home))) {
+      out.push({ kind: 'shadowed', message: `"${KEY}" found ${where(k, home)}: not read while FTH_BROKERS_FILE names ${active} ("${broker}" is the active broker)`, fix: replay ? null : moveTo });
+    }
+  }
+  return out;
 }
 
 module.exports = { propAccountMarks, propAccountRefusal, propAccountMessage, misplacedPropAccounts };
