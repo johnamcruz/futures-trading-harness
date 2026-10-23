@@ -69,7 +69,8 @@ const HEAD_MARK = 'You are the head trader of the futures trading harness.';
 // needs those three, read with skill_lookup (the gate requires them for it).
 // Last, the composed bar's own reads (SITUATIONAL entries taught in trade-lifecycle: confluence-counting, invalidation,
 // rejection, breakout), which the gate requires on every composed bar: embedded, they cost no lookup turn per bar (the
-// owner's exception to the prompt's no-growth rule, about 13 KB).
+// owner's exception to the prompt's no-growth rule, about 13 KB), in the embedded mode; under headEntrySkills lookup
+// they are indexed and named in entryLookupLines.
 const COMPOSED_READS = [...new Set(SITUATIONAL.filter(e => e.taughtIn).map(e => e.skill))];
 const CORE = [...new Set([
   ...REQUIRED_FOR_COMPOSED, ...REQUIRED_AT_ENTRY,
@@ -117,7 +118,8 @@ function headPlan(root, mode) {
 }
 
 /** The situational skills the head trader must read when the bar shows them (SITUATIONAL entries marked head). */
-// An entry taught in a skill (`taughtIn`: trade-lifecycle) is named there and embedded below (CORE), not listed here.
+// An entry taught in a skill (`taughtIn`: trade-lifecycle) is named there and embedded below (CORE), not listed here, in
+// the embedded mode; under headEntrySkills lookup they are indexed and named in entryLookupLines.
 const listed = e => e.head === true && !e.taughtIn;
 const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(listed).map(e => e.skill))]
   .map(skill => ({ skill, when: table.filter(e => listed(e) && e.skill === skill).map(e => parseTrigger(e.when)) }));
@@ -214,6 +216,8 @@ function entryLookupLines(table = SITUATIONAL) {
     `- Before \`compose_check\`: ${andList([...COMPOSED_ONLY, ...always])}.`,
     `- Before an entry: ${andList(REQUIRED_AT_ENTRY)}.`,
     ...when.map(r => `- Before an entry, when ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\`.`),
+    // The gate's degraded case (order-gate.js: FTH_CYCLE_LANE_BARS set but unreadable): every head-marked composed read.
+    `- If the order gate can't read this cycle's lanes, it requires every composed read: then read ${andList([...always, ...when.map(r => r.skill)])} before an entry.`,
     '',
   ];
 }

@@ -3485,3 +3485,43 @@ test('order gate (hook): a Claude Code head trader with headEntrySkills lookup: 
   const looked = run('lookup', [...RULES, 'setup-judgment', 'trade-plan']);
   assert.strictEqual(looked.entry.code, 0, looked.entry.stderr);
 });
+
+test('order gate (hook): the runner\'s entry executor under headEntrySkills lookup: the head trader\'s lookups in its role record (FTH_CYCLE_ROLES) let the entry go; without the entry skills among them, or without the record, refused', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env);
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const SESSION = '6c2e4d8a-claude-head-lookup-exec';
+  const RULES = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  const LOOKED = [...RULES, 'setup-judgment', 'trade-plan'];
+  const lines = (skills, init) => [...(init ? [JSON.stringify({ type: 'system', subtype: 'init', session_id: init })] : []), ...skills.flatMap((skill, i) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `l${i}`, name: 'mcp__harness__skill_lookup', input: { skill } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `l${i}`, content: [{ type: 'text', text: `<skill name="${skill}">\n...\n</skill>\n` }] }] } }),
+  ])].join('\n');
+  // The head trader's run in lookup mode: its stream holds its lookups; the attestation names only the skills still embedded.
+  const stream = path.join(dir, 'cycle-transcript-head.jsonl');
+  fs.writeFileSync(stream, lines(LOOKED, SESSION));
+  const { file, text } = H.writeClaudeHead(env.FTH_HOME, REPO, { entry: 'lookup' });
+  const att = H.claudeAttestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  for (const s of H.ENTRY) assert.ok(!att.skills.includes(s), `not attested: ${s}`);
+  // The entry's trade-executor: its own stream and session, the head trader's cycle id and attestation, the role record.
+  const exec = path.join(dir, 'cycle-transcript-exec.jsonl');
+  fs.writeFileSync(exec, lines([], 'executor-session'));
+  const executor = roles => ({ ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_HEAD_PROMPT: JSON.stringify(att), FTH_CYCLE_TRANSCRIPT: exec, FTH_CYCLE_ID: att.cycle, ...(roles ? { FTH_CYCLE_ROLES: roles } : {}) });
+  const hook = e => gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, e);
+  const record = (name, skills) => { const f = path.join(dir, 'logs', name); RR.appendHeadSkills(f, skills); return f; };
+  const skillsChecks = /\[skills-loaded\]|\[skills-at-entry\]/;
+  // The record as runner-entry.js writes it from the head trader's output (its skill_lookup reads): it goes.
+  const full = record('roles-full.jsonl', [...require('../../scripts/lib/trading/skills-loaded').claudeLookupsInTranscript(fs.readFileSync(stream, 'utf8'))]);
+  const ok = hook(executor(full));
+  assert.strictEqual(ok.code, 0, ok.stderr);
+  // The head trader didn't look up the entry skills (its record holds the rules entry's three only): refused for them.
+  const rulesOnly = hook(executor(record('roles-rules.jsonl', RULES)));
+  assert.strictEqual(rulesOnly.code, 2);
+  assert.match(rulesOnly.stderr, /\[skills-at-entry\][^\n]*not read in this session: setup-judgment, trade-plan\./);
+  // No record at all: refused.
+  const none = hook(executor(null));
+  assert.strictEqual(none.code, 2);
+  assert.match(none.stderr, skillsChecks);
+});

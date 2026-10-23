@@ -643,6 +643,9 @@ test('head-prompt and head-composed-reads (Claude, headEntrySkills lookup): buil
   failWith('embedded', h => ({ embedded: [...h.embedded, 'rejection'] }), /rejection embedded/);
   failWith('not indexed', h => ({ indexed: h.indexed.filter(s => s !== 'invalidation') }), /invalidation not indexed/);
   failWith('not in the lines', h => ({ lookupLines: h.lookupLines.replace(/`breakout`/g, 'breakout') }), /breakout not in the lookup lines/);
+  // The rejection relation's instruction line removed (from the lines and the prompt): the header naming it is not enough.
+  const noRelation = h => { const line = h.lookupLines.split('\n').find(l => /^- Before an entry, when [^\n]*`rejection`\.$/.test(l)); assert.ok(line, 'the relation line'); return { lookupLines: h.lookupLines.replace(`${line}\n`, ''), prompt: h.prompt.replace(`${line}\n`, '') }; };
+  failWith('the rejection relation line removed', noRelation, /rejection not in the lookup lines/);
   failWith('no lines in the prompt', h => ({ prompt: h.prompt.replace(h.lookupLines, '') }), /the prompt has no lookup lines/);
   failWith('not an entry skill', h => ({ lookups: h.lookups.filter(s => s !== 'confluence-counting') }), /confluence-counting not an entry skill/);
 });

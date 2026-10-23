@@ -177,7 +177,8 @@ function headComposedReads(ctx) {
       ...(h.lookups.includes(s) ? [] : [`${s} not an entry skill`]),
       ...(h.embedded.includes(s) ? [`${s} embedded`] : []),
       ...((h.indexed || []).includes(s) ? [] : [`${s} not indexed`]),
-      ...(lines.includes(`\`${s}\``) ? [] : [`${s} not in the lookup lines`]),
+      // An instruction line naming it (`- Before ...: ... \`<skill>\`.`), not only the header's list of the entry skills.
+      ...(new RegExp(`^- Before [^\\n]*\`${s}\`[,.]`, 'm').test(lines) ? [] : [`${s} not in the lookup lines`]),
     ]);
     if (few || !lines || !String(h.prompt || '').includes(lines) || off.length) {
       return r('head-composed-reads', FAIL, `the composed reads (${h.composedReads.join(', ') || 'none'}), looked up: ${[...off, ...(lines && String(h.prompt || '').includes(lines) ? [] : ['the prompt has no lookup lines'])].join('; ') || 'fewer than 4'}`);

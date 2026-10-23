@@ -213,6 +213,8 @@ test('claudeHeadText lookup: the entry skills left out of the embedded ones and 
   for (const e of SITUATIONAL.filter(x => x.taughtIn && parseTrigger(x.when).value !== null)) {
     assert.ok(lines.includes(`- Before an entry, when ${describeTrigger(parseTrigger(e.when))}: \`${e.skill}\`.`), e.skill);
   }
+  // The gate's degraded case (the cycle's lanes unreadable): every composed read, named in one line.
+  assert.ok(lines.includes(`- If the order gate can't read this cycle's lanes, it requires every composed read: then read ${H.COMPOSED_READS.map(x => `\`${x}\``).join(', ').replace(/, (`[^`]+`)$/, ', and $1')} before an entry.`), lines);
   // Every entry skill is named in a lookup line.
   for (const s of H.ENTRY) assert.match(lines.split('\n').slice(1).join('\n'), new RegExp(`\`${s}\``), s);
   // Smaller by about the entry skills' text (the owner's goal: the local model's memory and speed).

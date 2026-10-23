@@ -1791,3 +1791,22 @@ test('headEntrySkills absent: with headSkillsInPrompt the argv, env, prompt and 
   assert.deepStrictEqual(att.skills, H.CORE);
   assert.strictEqual(fs.readFileSync(att.config, 'utf8'), H.claudeHeadText(ROOT));
 });
+
+test('headEntrySkills lookup: a head file that still embeds an entry skill is no lookup-mode prompt: embedsSkills false, and the cycle prompt falls back to the load sentence', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const { embedsSkills, skillsText } = require('../../scripts/lib/autotrader');
+  const look = validateConfig({ harness: 'claude', headSkillsInPrompt: true, headEntrySkills: 'lookup' });
+  const body = s => require('../../scripts/lib/frontmatter').parseFrontmatter(fs.readFileSync(path.join(ROOT, 'skills', s, 'SKILL.md'), 'utf8')).body.trim();
+  assert.strictEqual(embedsSkills(look, ROOT), true, 'the real lookup file');
+  const orig = H.claudeHeadText;
+  for (const s of H.ENTRY) {
+    H.claudeHeadText = (root, opts) => `${orig(root, opts)}\n<skill name="${s}">\n${body(s)}\n</skill>\n`;
+    try {
+      assert.strictEqual(embedsSkills(look, ROOT), false, s);
+      assert.match(skillsText(look, ROOT), /^With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle .* before deciding$/, s);
+    } finally {
+      H.claudeHeadText = orig;
+    }
+  }
+  assert.strictEqual(embedsSkills(look, ROOT), true, 'restored');
+});
