@@ -129,6 +129,12 @@ test('a role prompt that can\'t be built or written fails that role\'s run with 
   await assert.rejects(runRole(on, TREND, 'report', { timeoutMs: 5000 }, { root: ROOT, home, env, run }), /^Error: role-prompt: trend-momentum-analyst's prompt addition \(roleSkillsInPrompt\) can't be built or written: /);
   const off = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
   assert.strictEqual((await runRole(off, TREND, 'report', { timeoutMs: 5000 }, { root: ROOT, home, env, run })).ok, true);
+  // The key off, buildCommand throwing (a role the runner never runs on its own): its own error, unchanged.
+  await assert.rejects(runRole(off, 'strategy-researcher', 'x', { timeoutMs: 5000 }, { root: ROOT, home, env, run }), err => {
+    assert.strictEqual(err.message, 'autotrader: strategy-researcher is not a role the runner runs on its own');
+    assert.doesNotMatch(err.message, /role-prompt/);
+    return true;
+  });
 });
 
 test('the key on: the embedded skills count, so none is missing', () => {
