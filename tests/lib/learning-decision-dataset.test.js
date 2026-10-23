@@ -379,8 +379,10 @@ test('a delivery key on: the decisions\' digest names it, the dataset is another
       assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === k));
     }
   }
-  // Both: in the list's order, one delivery.
-  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), HEAD_DELIVERY_KEYS.join(','));
+  // Every one: in the list's order, one delivery.
+  assert.strictEqual(DS.deliveryOf({ config: Object.fromEntries([...HEAD_DELIVERY_KEYS].reverse().map(k => [`cfg.${k}`, 'true'])) }, null), HEAD_DELIVERY_KEYS.join(','));
+  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), 'headSkillsInPrompt,cycleDataInPrompt');
+  assert.strictEqual(DS.deliveryOf(null, { roleSkillsInPrompt: true }), 'roleSkillsInPrompt');
   assert.strictEqual(DS.deliveryOf(null, { cycleDataInPrompt: true }), 'cycleDataInPrompt');
   assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'false' } }, { headSkillsInPrompt: false }), null);
   assert.strictEqual(DS.deliveryOf(null, null), null);

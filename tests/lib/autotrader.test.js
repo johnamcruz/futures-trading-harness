@@ -1636,6 +1636,8 @@ test('roleSkillsInPrompt (this machine\'s runner config): a boolean or absent, h
   const on = validateConfig({ harness: 'claude', roleSkillsInPrompt: true });
   const off = validateConfig({ harness: 'claude' });
   assert.deepStrictEqual([claudeRolesOn(on), claudeRolesOn(off), claudeRolesOn(validateConfig({ harness: 'claude', roleSkillsInPrompt: false }))], [true, false, false]);
+  // Another harness's config (validateConfig refuses it; a caller handing one anyway): never on, nothing written.
+  assert.deepStrictEqual([claudeRolesOn({ harness: 'opencode', roleSkillsInPrompt: true }), writeRolePrompt({ harness: 'opencode', roleSkillsInPrompt: true }, ROOT, env, 'risk-manager')], [false, null]);
   // The head trader's own run: unchanged by the key.
   assert.deepStrictEqual(buildCommand(on, 'p', ROOT, env), buildCommand(off, 'p', ROOT, env));
   for (const role of require('../../scripts/lib/opencode').RUNNER_RUN_ROLES()) {

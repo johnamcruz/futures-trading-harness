@@ -65,8 +65,9 @@ function loadedInRun(output, home) {
 }
 
 function roleSkills({ root, role, output = '', home = null, embedded = [] }) {
-  let expected = [];
-  try { expected = (require('./role-skills').loadRoles(root).find(a => a.name === role) || { skills: [] }).skills; } catch (_err) { expected = []; }
+  const expected = (() => {
+    try { return (require('./role-skills').loadRoles(root).find(a => a.name === role) || { skills: [] }).skills; } catch (_err) { return []; }
+  })();
   const emb = [...new Set((embedded || []).filter(s => typeof s === 'string'))].sort();
   const loaded = loadedInRun(output, home);
   const had = [...new Set([...emb, ...loaded])].sort();

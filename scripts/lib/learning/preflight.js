@@ -789,7 +789,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       const lookup = `mcp__${require('../harness-tools/registry').SERVER_NAME}__skill_lookup`;
       return require('../opencode').RUNNER_RUN_ROLES().map(role => {
         const agent = require('../role-skills').loadRoles(root).find(a => a.name === role) || { skills: [], index: [], tools: [] };
-        let prompt = null;
+        let prompt;
         let expected = null;
         let scratch = null;
         try {
