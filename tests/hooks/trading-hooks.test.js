@@ -1931,6 +1931,42 @@ test('order gate hook: a prop entry under the rulebook\'s min_contracts is refus
   }
 });
 
+test('MCP gateway wiring: a prop entry under the rulebook\'s min_contracts is refused on the floor alone ([min-contracts]) before the broker sees it, even with the checks skipped; at the floor it is forwarded', { timeout: 60000 }, async () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  // The gateway loads the shipped accounts first, so the floored copy is an account and a policy of its own names:
+  // `floored` (propped's document) on `floor_50k` (propped's account profile and rulebook, the policy at a floor of 3).
+  const shipped = fs.readFileSync(path.join(ROOT, 'strategies', 'propped', 'STRATEGY.md'), 'utf8');
+  const from = shipped.match(/^account: (\S+)/m)[1];
+  const strategies = path.join(tmpDir(), 'strategies');
+  for (const s of ['crossing', 'drifting']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(strategies, s), { recursive: true });
+  fs.mkdirSync(path.join(strategies, 'floored'), { recursive: true });
+  fs.writeFileSync(path.join(strategies, 'floored', 'STRATEGY.md'), shipped.replace('name: propped', 'name: floored').replace(`account: ${from}`, 'account: floor_50k'));
+  const accounts = path.join(tmpDir(), 'accounts');
+  fs.mkdirSync(path.join(accounts, 'floor_50k'), { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'floor_50k', 'ACCOUNT.md'), fs.readFileSync(path.join(HOOK_ACCOUNTS, from, 'ACCOUNT.md'), 'utf8').replace(`name: ${from}`, 'name: floor_50k'));
+  fs.writeFileSync(path.join(accounts, 'floor_50k', 'RULEBOOK.md'), fs.readFileSync(path.join(HOOK_ACCOUNTS, from, 'RULEBOOK.md'), 'utf8')
+    .replace(`name: ${from}`, 'name: floor_50k').replace(/^ {2}propped:$/m, '  floored:').replace(/^ {6}min_contracts: 1$/m, '      min_contracts: 3'));
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(path.dirname(accounts), {}).accounts.find(a => a.name === 'floor_50k');
+  assert.ok(account && account.valid, JSON.stringify(account && account.errors));
+  const now = Date.parse(TEST_NOW);
+  const send = async size => {
+    const home = tmpDir();
+    prop.startAttempt(home, account);
+    prop.snapshot(home, account, 50000, new Date(now - 60000), { fills: [] });
+    prop.appendVerdict(home, {
+      strategy: 'floored', component: 'crossing', contractId: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, maxSize: 18,
+      bar: HOOK_BAR, at: new Date(now - 60000).toISOString(), expiresAt: new Date(now + 120000).toISOString(),
+    });
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: accounts, FTH_SYMBOLS: 'MNQ', FTH_ORDER_GATE_SKIP: 'combine,policy,strategy', FTH_STRATEGIES_DIRS: strategies, FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: TEST_NOW, allowedAccountIds: [1] }) });
+    const r = await gatewayRun(env, [call(1, 'place_order', entryOrder({ contractId: 'MNQ', size, rationale: 'setup:floored long, stop 21480, target 21540' }))]);
+    return r.byId[1].result.content[0].text;
+  };
+  const under = await send(2);
+  assert.match(under, /\[min-contracts\] setup:floored: size 2 MNQ is under the floor of 3 contracts/);
+  assert.deepStrictEqual([...under.matchAll(/\[([a-z0-9-]+)\]/g)].map(m => m[1]).filter(c => c !== 'protect' && c !== 'exit'), ['min-contracts'], `the floor alone: ${under}`);
+  assert.strictEqual(await send(3), 'forwarded:tools/call:place_order');
+});
+
 test('MCP gateway wiring: a prop entry under the shipped rulebook\'s min_contracts is refused ([min-contracts]) before the broker sees it; at the floor no such refusal; an exit is forwarded', { timeout: 60000 }, async () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { loadAccounts } = require('../../scripts/lib/trading/accounts');

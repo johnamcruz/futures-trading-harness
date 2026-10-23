@@ -255,7 +255,7 @@ function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto'
   // Never more than the whole budget; a fraction that isn't a number sizes nothing (fails closed).
   const f = typeof fraction === 'number' && Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
   if (f < 1 && n > 0) n = Math.floor(n * f);
-  if (!n || n < minContracts) return null;
+  if (!n) return null;
   const minis = Math.floor(n / ratio);
   const useMini = canMini && (mode === 'mini' || (mode === 'auto' && (minis >= 1 || !canMicro)));
   if (useMini) {

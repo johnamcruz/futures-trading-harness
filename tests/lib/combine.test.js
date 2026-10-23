@@ -210,6 +210,9 @@ test('contractPlan: the floor (min_contracts) in micro-equivalents: fewer fit is
   assert.strictEqual(plan({ fraction: 0.17 }).size, 3);
   // The account's own max under the floor sizes nothing.
   assert.strictEqual(plan({ legs: { ...MNQ_LEGS, micro: { ...MNQ_LEGS.micro, max: 2 } } }), null);
+  // auto with minis allowed: the budget's 5 micros are under a mini, and the account's 2-micro max is under the floor.
+  assert.strictEqual(plan({ mode: 'auto', dollars: 110, legs: { ...MNQ_LEGS, micro: { ...MNQ_LEGS.micro, max: 2 } } }), null);
+  assert.deepStrictEqual(plan({ mode: 'auto', dollars: 110, minContracts: 2, legs: { ...MNQ_LEGS, micro: { ...MNQ_LEGS.micro, max: 2 } } }), { root: 'MNQ', size: 2, riskPerContract: 21.24 });
   // auto: micros below a mini at the floor of 3 micros; any whole mini clears it (10 micro-equivalents).
   assert.strictEqual(plan({ mode: 'auto', dollars: 50 }), null, '2 micros');
   assert.deepStrictEqual(plan({ mode: 'auto', dollars: 70 }), { root: 'MNQ', size: 3, riskPerContract: 21.24 });
