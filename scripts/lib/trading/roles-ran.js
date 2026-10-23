@@ -210,8 +210,9 @@ const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdic
 //   - any decision that isn't approve, approved, full (the prop verdict's action) or take (the trader-process "8
 //     Decision: take") refuses; an approval is a verdict that says approve, approved or full;
 //   - VETO (vetoed, vetoes) in capitals anywhere, or any case on a decision line, refuses ("a read, never a veto" doesn't).
-// A markdown heading line (its first non-space character '#') is never a decision line: "## Phase 2: Plan verdict, MNQ
-// short" decides nothing. The veto rules read every line, headings too ("## VETO", "## Phase 2 verdict: veto").
+// A markdown heading line (up to 3 spaces, 1 to 6 '#', a space) never approves: "## Phase 2: Plan verdict, MNQ short"
+// decides nothing. It still refuses when its first word after the keyword is a refusal or a number ("## Decision: skip",
+// "# Verdict" then "PASS"), and the veto rules read every line, headings too ("## VETO", "## Phase 2 verdict: veto").
 // `full` is the prop verdict's own approving action (`skip` its other), so a model copying "verdict full" agrees.
 const AGREE = new Set(['approve', 'approved', 'full', 'take']);
 const APPROVE_WORDS = new Set(['approve', 'approved', 'full']);
@@ -221,7 +222,14 @@ const PROSE = new Set(['is', 'was', 'to', 'says', 'said']);
 const BRACKETS = { '(': ')', '[': ']', '\u00ab': '\u00bb' };
 const VETO_WORD = /\bveto(?:ed|es)?\b/i;
 const VETO_CAPS = /\bVETO(?:ED|ES)?\b/;
-const HEADING = /^\s*#/;
+const HEADING = /^\s{0,3}#{1,6}\s/;
+// The refusals a heading still states ("## Decision: skip", "# Verdict: BLOCKED", "## Decision: 0 contracts"): its
+// first word after the keyword, one of these or a number. Any other word ("## Phase 2: Plan verdict, MNQ short") is no
+// decision, and a heading never approves.
+const REFUSALS = new Set(['pass', 'passed', 'passing', 'reject', 'rejected', 'rejection', 'skip', 'skipped', 'wait', 'waiting', 'hold', 'holding', 'held',
+  'defer', 'deferred', 'stand', 'standing', 'blocked', 'block', 'no', 'none', 'nogo', 'not', 'half', 'decline', 'declined', 'deny', 'denied', 'abort',
+  'aborted', 'cancel', 'cancelled', 'canceled', 'avoid', 'flat', 'refuse', 'refused', 'stop', 'reduce', 'reduced', 'cut', 'partial', 'fail', 'failed',
+  'pending', 'conditional', 'nothing', 'veto', 'vetoed', 'vetoes']);
 
 /** A line read plain: format characters dropped (markup, quotes and emoji are separators the decision reader skips). */
 const plainLine = l => String(l).replace(/\p{Cf}/gu, '');
@@ -259,14 +267,46 @@ function decisionAfter(rest) {
   return { word: '' };
 }
 
+/** A heading's first word after the keyword (after separators, brackets' marks and qualifiers), lower case, or ''. */
+function firstWord(rest) {
+  for (const m of String(rest).matchAll(/[A-Za-z0-9]+/g)) {
+    const w = m[0].toLowerCase();
+    if (!QUALIFIERS.has(w)) return w;
+  }
+  return '';
+}
+
+/**
+ * The refusal a heading states after one occurrence of the word: { word, line } or null. Nothing after it on the line:
+ * the next non-empty line's first word ("# Verdict" then "PASS"), unless that line holds the word itself.
+ */
+function headingRefusal(lines, i, rest) {
+  const lead = /^\s+([A-Za-z]+)\b/.exec(rest);
+  if (lead && PROSE.has(lead[1].toLowerCase())) return null;
+  let word = firstWord(rest);
+  let line = lines[i];
+  if (!word) {
+    const j = lines.findIndex((l, k) => k > i && l.trim());
+    if (j === -1 || new RegExp(KEYWORD_ALL.source, 'i').test(lines[j])) return null;
+    word = firstWord(lines[j]);
+    line = `${lines[i]} ${lines[j]}`;
+  }
+  return REFUSALS.has(word) || /^\d/.test(word) ? { word, line } : null;
+}
+
 /** Every decision in a text: [{ keyword, word (lower case), line }], one per occurrence of the word. */
 function decisionLines(text) {
   const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').map(plainLine);
   const out = [];
   for (let i = 0; i < lines.length; i += 1) {
-    // A markdown heading ("## Phase 2: Plan verdict, MNQ short") is never a decision line; the veto rules still read it.
-    if (HEADING.test(lines[i])) continue;
+    // A markdown heading ("## Phase 2: Plan verdict, MNQ short") never approves: it counts only when it refuses.
+    const heading = HEADING.test(lines[i]);
     for (const m of lines[i].matchAll(KEYWORD_ALL)) {
+      if (heading) {
+        const refused = headingRefusal(lines, i, lines[i].slice(m.index + m[0].length));
+        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
+        continue;
+      }
       const d = decisionAfter(lines[i].slice(m.index + m[0].length));
       if (d === null) continue;
       let { word } = d;
@@ -314,19 +354,35 @@ function approvalReadAsVeto(text) {
   return ok ? { why: verdictProblem(text), line: ok.line.trim() } : null;
 }
 
+// "size <n>" on a verdict line, a "Size: <n>" line (a list bullet or quote mark before it), and "cut to <n>", "→ <n>",
+// "-> <n>" on either: each token must be a whole size of 1 or more.
+const SIZE_SAID = /\bsize\s*[:=]?\s*([^\s,;)]+)/gi;
+const SIZE_LINE = /^[ \t>]*(?:[-*+][ \t]+)?[*_]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)(.*)$/gim;
+const CUT_TO = /(?:\bcut\s+to|\u2192|->)\s*([^\s,;):]+)/gi;
+
 /**
  * The size an approving report approves: { size } (a whole number, 1 or more), or { error }. Each approving VERDICT line
- * must say `size <n>` (agents/risk-manager.md); a `Size: <n>` line counts too; the smallest of them binds. A line whose
- * size can't be read (none, 0, a fraction, a placeholder) is an error, never a size (fails closed).
+ * must say `size <n>` (agents/risk-manager.md); a `Size: <n>` line counts too, and every size and cut on either; the
+ * smallest of them binds. A size that can't be read (none, 0, a fraction, a placeholder, a range, a word, markup before
+ * it) is an error, never a size (fails closed).
  */
 function approvedSize(text) {
   const sizes = [];
   const bad = [];
-  const read = (tok, line) => { tok = String(tok || '').replace(/[.*_]+$/, ''); return /^0*[1-9]\d*$/.test(tok) ? sizes.push(Number(tok)) : bad.push(line); };
+  const read = (tok, line) => { const t = String(tok || '').replace(/[.*_]+$/, ''); return /^0*[1-9]\d*$/.test(t) ? sizes.push(Number(t)) : bad.push(line); };
+  // Every number a line cuts to binds too ("size 2 cut to 1", "size 8 -> 1"): the smallest is the size.
+  // A word after it is prose, not a size ("size within budget"); anything else must read as one.
+  const word = tok => /^[A-Za-z]/.test(String(tok || ''));
+  const cuts = (line, shown) => { for (const m of line.matchAll(CUT_TO)) if (!word(m[1])) read(m[1], shown); };
   const approving = decisionLines(text).filter(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
   if (!approving.length) return { error: 'no approving VERDICT line' };
-  for (const l of approving) read((/\bsize\s*[:=]?\s*([^\s,;)]+)/i.exec(l.line) || [])[1], l.line.trim());
-  for (const m of String(text || '').matchAll(/^[ \t*_>]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)/gim)) read(m[1], m[0].trim());
+  for (const l of approving) {
+    const said = [...l.line.matchAll(SIZE_SAID)].filter(m => !word(m[1]));
+    if (!said.length) bad.push(l.line.trim());
+    for (const m of said) read(m[1], l.line.trim());
+    cuts(l.line, l.line.trim());
+  }
+  for (const m of String(text || '').matchAll(SIZE_LINE)) { read(m[1], m[0].trim()); cuts(m[2], m[0].trim()); }
   if (bad.length) return { error: `no whole size of 1 or more in "${bad[0].replace(/\s+/g, ' ')}"` };
   return { size: Math.min(...sizes) };
 }
@@ -341,7 +397,7 @@ function sizeRefusal(report, size) {
   if (report.error) return `The cycle's transcript can't be read (${report.error}), so the gate can't check the size risk-manager phase 2 approved: no entry this cycle.`;
   const a = approvedSize(report.text);
   if (a.error) return `Risk-manager phase 2's approval states no size the gate can read (${a.error}); its VERDICT line says "size <n>": no entry this cycle.`;
-  if (!(Number(size) <= a.size)) return `size ${JSON.stringify(size)} is over the ${a.size} risk-manager phase 2 approved: an entry is at most phase 2's size (it only ever cuts one).`;
+  if (!(Number.isInteger(size) && size >= 1 && size <= a.size)) return `size ${JSON.stringify(size)} is over the ${a.size} risk-manager phase 2 approved: an entry is at most phase 2's size (it only ever cuts one).`;
   return null;
 }
 

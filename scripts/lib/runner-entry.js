@@ -266,7 +266,8 @@ async function runEntry(deps, c) {
     log(`the entry: ${drift}: a process failure; nothing runs`, 'error');
     return say('process-failure', c.result, { failure: drift, record: rec.id });
   }
-  const label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
+  // The entry as the results name it: the record's size until the order is built, then the size ordered (a cut named).
+  let label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
   info.record = rec.id;
   if (!c.rolesFile) {
     log('the entry: no role record for the cycle: nothing runs', 'error');
@@ -370,6 +371,7 @@ async function runEntry(deps, c) {
     if (!(Number.isInteger(ordered) && ordered >= 1)) { stop = { outcome: 'no-trade', why: `order_plan gave no size (${JSON.stringify(ordered)})` }; return { stop: stop.why }; }
     info.size = { approved: approved.size, record: recordSize, ordered: ordered <= approved.size ? ordered : null };
     if (ordered > approved.size) { stop = { outcome: 'no-trade', why: `order_plan's size ${ordered} is over the ${approved.size} risk-manager phase 2 approved` }; return { stop: stop.why }; }
+    if (ordered < recordSize) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol} (phase 2 cut the record's ${recordSize})`;
     const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut the record's ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.

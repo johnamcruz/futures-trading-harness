@@ -289,7 +289,7 @@ test('entry workflow: phase 2\'s approved size sets the order: over the record\'
   assert.deepStrictEqual(entries(w).map(e => [e.decision, e.size, (e.violations || []).map(v => v.check)]), [['allowed', 1, []]]);
   assert.match(journal(w).filter(e => e.kind === 'plan')[0].text, /long 1 MNQ: .*risk \$46; size 1: phase 2 cut the record's 2; compose record /);
   assert.strictEqual(D.position(w).size, 1);
-  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 2 MNQ \(the runner's entry: phase 2 approved, the order filled\)$/);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ \(phase 2 cut the record's 2\) \(the runner's entry: phase 2 approved, the order filled\)$/);
   const line = D.cycleLines(w).at(-1);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).entry.size, { approved: 1, record: 2, ordered: 1 });
 });

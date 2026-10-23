@@ -409,6 +409,7 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   s = setup({ ...p2(`Size: 1 (record 8 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: cutPlan });
   r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));
   assert.deepStrictEqual([asked, r.entry.outcome, r.entry.size], [[1], 'executed', { approved: 1, record: 8, ordered: 1 }]);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ \(phase 2 cut the record's 8\) \(the runner's entry: phase 2 approved/);
   assert.match(s.journal[0].text, /long 1 MNQ: limit 21500, stop 21490, target 21520, risk \$20; size 1: phase 2 cut the record's 8;/);
   assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 1);
   // Phase 2 at or over the record's: no cut asked for.
@@ -416,6 +417,7 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   s = setup({ ...p2(`VERDICT: APPROVE - size 9, risk $180\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: cutPlan });
   r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));
   assert.deepStrictEqual([asked, r.entry.size], [[undefined], { approved: 9, record: 8, ordered: 8 }]);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 8 MNQ \(the runner's entry/);
   // order_plan giving more than phase 2 approved (it ignored the cut): no order, never sent (fails closed).
   s = setup({ ...p2(`VERDICT: APPROVE - size 1, risk $20\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: () => cutPlan({}) });
   r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));

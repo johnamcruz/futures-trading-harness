@@ -249,7 +249,7 @@ test('verdictOf: read as a model writes it; any decision other than approve, or 
     'VERDICT: APPROVE - size 1, MNQ long\nVERDICT: APPROVE - size 2, opening long, risk $40',
   ]) assert.strictEqual(verdictOf(t), 'APPROVE', JSON.stringify(t));
   for (const t of [
-    'Overall verdict: REJECT', 'Risk Verdict: STAND ASIDE', '\u274c VERDICT: REJECT', '8 Decision: skip',
+    'Overall verdict: REJECT', 'Risk Verdict: STAND ASIDE', '\u274c VERDICT: REJECT', '8 Decision: skip', '## Verdict\nREJECT', '## Verdict\n\n**STAND ASIDE**',
     'VERDICT: VETO - room', 'VERDICT: VETOED', 'VERDICT:\nSTAND ASIDE', 'VERDICT: Approvement pending', 'VERDICT: BLOCKED', 'Decision = wait',
     'VERDICT: APPROVE - size 1\nVERDICT: SKIP', 'VERDICT: APPROVE - size 1\n8 Decision: skip - no room', 'VERDICT: APPROVE - size 1\n### Decision: **VETO** on room',
     'VERDICT: APPROVE - size 1\nVERDICT (phase 2): VETO', 'VERDICT: APPROVE\nVERDICT [phase 2]: VETO', 'VERDICT: APPROVE\n| VERDICT | VETO |',
@@ -258,9 +258,8 @@ test('verdictOf: read as a model writes it; any decision other than approve, or 
     'VERDICT: APPROVE\nVE\u200bTO from phase 1',
     'Decision: (skip)', 'VERDICT: [REJECT]', 'VERDICT: \u00abreject\u00bb', 'Decision: 0 contracts', 'Decision: 0', 'Verdict [phase 2]: reject', 'VERDICT: APPROVE | Decision: skip', 'Verdict\u2014reject', 'Verdict\u2026: reject', 'Verdict \u2192 reject', 'Verdict / reject', 'Verdict = reject', 'Verdict | reject', 'VERDICT: APPROVE\ndecision-making: wait', 'VERDICT: APPROVE - size 1 | final decision: skip', 'Decision: to wait', 'Verdict: is pending', 'VERDICT: NOT APPROVE', 'VERDICT: not approved', 'VERDICT: skip', 'VERDICT: APPROVE\nthe verdict is veto', 'VERDICT: APPROVE\nthe decision was a veto', 'VERDICT (vetoed): approve', 'VERDICT (vetoes): approve',
   ]) assert.strictEqual(verdictOf(t), 'VETO', JSON.stringify(t));
-  // A markdown heading is never a decision line (owner-approved 2026-10-22): a heading alone decides nothing, an
-  // approval needs its VERDICT line.
-  for (const t of ['## VERDICT: APPROVE', '## Verdict\n\u2705 APPROVE - size 1', '## Verdict\n\u00a0APPROVE', '## Verdict\nREJECT', '## Verdict\n\n**STAND ASIDE**']) assert.strictEqual(verdictOf(t), null, JSON.stringify(t));
+  // A markdown heading never approves (owner-approved 2026-10-22): an approval needs its VERDICT line; a heading still refuses.
+  for (const t of ['## VERDICT: APPROVE', '## Verdict\n\u2705 APPROVE - size 1', '## Verdict\n\u00a0APPROVE']) assert.strictEqual(verdictOf(t), null, JSON.stringify(t));
   for (const t of ['looks fine', 'APPROVE', 'risk state: 2 trades left', '', null, 'the decision is mine', 'the decision is to wait', 'the verdict was in', 'VERDICT: take', 'Decision: take', 'Decision: full', '8 Decision: take']) assert.strictEqual(verdictOf(t), null, String(t));
 });
 
@@ -323,6 +322,60 @@ test('a markdown heading is never a decision line: a heading naming the verdict 
   for (const h of ['## VETO', '## Phase 2 verdict: veto', '# Decision: veto', '  ### Plan VETOED', '## Phase 2 decision: vetoed']) assert.strictEqual(verdictOf(`${h}\n${V}`), 'VETO', h);
   // Not a heading: a '#' later in the line (an issue number, a hashtag) keeps the line a decision line.
   assert.strictEqual(verdictOf(`Decision #2: wait\n${V}`), 'VETO');
+});
+
+test('a heading never approves but still refuses: a refusal word or a number after its keyword, or on the line after it; a heading is a real markdown one', () => {
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  const V = 'VERDICT: APPROVE - size 1, risk $46.00, trade_lifecycle short\nFACTS: window rth; trend short allowed';
+  for (const h of ['# Verdict: REJECT', '## Decision: PASS, stand aside', '## Decision: skip', '## Decision: wait', '## Verdict: hold', '# Verdict: BLOCKED',
+    '## verdict: stand aside', '# Decision: no trade', '## Decision: 0 contracts', '## Verdict: half', '# Verdict\nPASS', '   ### Decision: defer',
+    // Not markdown headings: read as decision lines.
+    '#1 Decision: pass', '#Decision: pass', '    # Decision: pass']) assert.strictEqual(verdictOf(`${h}\n${V}`), 'VETO', JSON.stringify(h));
+  // A heading that merely names the verdict: no decision; the body's APPROVE approves.
+  for (const h of ['## Phase 2: Plan verdict, MNQ short', '## Phase 2: Plan verdict, MNQ short, bar 2026-10-22T22:06:00.000Z', '## Verdict', '## Verdict: APPROVE']) assert.strictEqual(verdictOf(`${h}\n${V}`), 'APPROVE', h);
+  // A heading alone never approves.
+  for (const t of ['## VERDICT: APPROVE', '## Verdict\nAPPROVE', '# Decision: take']) assert.strictEqual(verdictOf(t), null, JSON.stringify(t));
+  // Not a markdown heading ('#' with no space after it, or indented four spaces): its approval counts.
+  for (const t of ['#1 VERDICT: APPROVE - size 1', '#VERDICT: APPROVE - size 1', '    # VERDICT: APPROVE - size 1']) assert.strictEqual(verdictOf(t), 'APPROVE', JSON.stringify(t));
+  // A veto word anywhere in a heading naming the verdict still vetoes (the veto rule reads every line).
+  assert.strictEqual(verdictOf(`## Plan verdict, MNQ short: a veto\n${V}`), 'VETO');
+});
+
+test('approvedSize: the verdict line\'s size, a Size line, every size and cut on either (the smallest binds); anything unreadable is an error', () => {
+  const { approvedSize } = require('../../scripts/lib/trading/roles-ran');
+  const A = 'VERDICT: APPROVE';
+  for (const [text, size] of [
+    [`${A} - size 2, risk $40`, 2],
+    [`Size: 1 (record 8 cut to 1: no reviewed trades yet)\n${A} - size 1, risk $20`, 1],
+    [`Size: 1\n${A} - size 3, risk $60`, 1], // between lines
+    [`${A} - size 3\nSize: 2`, 2],
+    [`${A} - size 2 cut to 1, risk $20`, 1], // within a line
+    [`${A} - size 3 -> 2, risk $40`, 2],
+    [`${A} - size 3 → 1, risk $20`, 1],
+    [`Size: 4 (record 8 cut to 2)\n${A} - size 4`, 2],
+    [`- Size: 1\n${A} - size 2`, 1], // bulleted
+    [`* Size: 1\n${A} - size 2`, 1],
+    [`+ Size: 1\n${A} - size 2`, 1],
+    [`> Size: 1\n${A} - size 2`, 1],
+    [`**Size:** 1\n${A} - size 2`, 1],
+    [`${A} - **size 2**, risk $40`, 2],
+    [`${A} - size 1, half size if it fills late`, 1], // a word after "size" is prose
+    [`${A} - size 3, final size 1`, 1], // two sizes on one line
+  ]) assert.deepStrictEqual(approvedSize(text), { size }, JSON.stringify(text));
+  for (const text of [`${A} - size <n>`, `${A} - size 0`, `${A} - size 1.5`, `${A} - size one`, `${A} - size 1-2`, `${A} - size **2**`, `${A} - risk $40`,
+    `Size: 0\n${A} - size 1`, `- Size: half\n${A} - size 1`, `${A} - size 2 cut to 0`, `${A} - size 2 -> 1.5`, 'VERDICT: VETO - room', 'no verdict']) {
+    assert.ok(approvedSize(text).error, JSON.stringify(text));
+  }
+});
+
+test('sizeRefusal: no phase 2 required, nothing; an unreadable report or size refuses; an entry over phase 2\'s size refuses; a whole size at or under it goes', () => {
+  const { sizeRefusal } = require('../../scripts/lib/trading/roles-ran');
+  const R = { text: 'VERDICT: APPROVE - size 2, risk $40' };
+  assert.strictEqual(sizeRefusal(null, 5), null);
+  assert.match(sizeRefusal({ error: 'ENOENT' }, 1), /transcript can't be read \(ENOENT\)/);
+  assert.match(sizeRefusal({ text: 'VERDICT: APPROVE - risk $40' }, 1), /states no size the gate can read/);
+  for (const s of [1, 2]) assert.strictEqual(sizeRefusal(R, s), null, String(s));
+  for (const s of [3, null, undefined, '', '1', [1], true, 0, -1, 1.5, NaN]) assert.match(sizeRefusal(R, s) || '', /is over the 2 risk-manager phase 2 approved/, JSON.stringify(s));
 });
 
 test('approvalReadAsVeto: an APPROVE line the reading takes as a veto gives the reason and the line; an approval, a plain veto or no verdict is null', () => {
