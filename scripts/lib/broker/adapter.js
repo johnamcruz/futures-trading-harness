@@ -24,8 +24,9 @@
  *                                          wrote, or throws
  *   serverConfig()                         get_server_config
  *   readText(name, args)                   a read tool's raw reply ({ text, isError }: mcp-client.js callText), straight to
- *                                          the server through the translator, as the gateway passes the model's reads;
- *                                          an order tool or any tool not a read of the interface throws (cycle-data.js)
+ *                                          the server through the translator, as the gateway passes the model's reads
+ *                                          (the interface's reads, and journal_read: the journal's one read); an order
+ *                                          tool, journal_add or any tool not a read of the interface throws (cycle-data.js)
  *   close()
  *
  * createAdapter({ mcp, writeMcp })   over MCP clients (mcp-client.js): reads on
@@ -284,7 +285,7 @@ function createAdapter({ mcp, writeMcp = mcp }) {
      */
     async readText(name, args = {}) {
       const tool = INTERFACE_TOOLS[name];
-      if (!tool || tool.role !== 'read') throw new BrokerError(`readText: ${JSON.stringify(String(name))} is not a read of the broker interface`);
+      if (!tool || !(tool.role === 'read' || name === 'journal_read')) throw new BrokerError(`readText: ${JSON.stringify(String(name))} is not a read of the broker interface`);
       if (typeof mcp.callText !== 'function') throw new BrokerError('readText: the broker client reads no raw text');
       return mcp.callText(name, args);
     },

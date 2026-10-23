@@ -1,0 +1,52 @@
+=== claude (no briefing) ===
+--- market-structure-analyst request (sha256 f7dd9946f4e17a5b8db0abfdd3b7ae0d912a131266f7dfad8f4926a06cf95b51, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- trend-momentum-analyst request (sha256 f7dd9946f4e17a5b8db0abfdd3b7ae0d912a131266f7dfad8f4926a06cf95b51, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- volume-liquidity-analyst request (sha256 f7dd9946f4e17a5b8db0abfdd3b7ae0d912a131266f7dfad8f4926a06cf95b51, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- risk-manager request (sha256 07ba220155604a8f64d6f3ce146be0508b291f0ba1c18b7e2116d7951c24e1f3, 382 chars, of its neutral text):
+Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
+read-data market-structure-analyst: no tools -> "read no data"; its read -> null
+read-data trend-momentum-analyst: no tools -> "read no data"; its read -> null
+read-data volume-liquidity-analyst: no tools -> "read no data"; its read -> null
+read-data risk-manager: no tools -> "read no data"; its read -> null
+=== claude (this bar's briefing) ===
+--- market-structure-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- trend-momentum-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- volume-liquidity-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- risk-manager request (sha256 bd3dabeca8aeeb5487803ea1e83edb8f5a1f1c440ab1e6265d71159ba4b0e9cb, 382 chars, of its neutral text):
+Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
+read-data market-structure-analyst: no tools -> "read no data"; its read -> null
+read-data trend-momentum-analyst: no tools -> "read no data"; its read -> null
+read-data volume-liquidity-analyst: no tools -> "read no data"; its read -> null
+read-data risk-manager: no tools -> "read no data"; its read -> null
+=== opencode (no briefing) ===
+--- market-structure-analyst request (sha256 6ece0ab27ad0f37deb3623b1000d76e5fea21c89bb43a8122a98897c6c1c812f, 639 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. This bar requires you to look up `pullback-vs-reversal`, `breakout-vs-fakeout`, `rejection`, `breakout` before your report: `skill_lookup {"skill": "<skill>", "role": "market-structure-analyst"}` for each (without them your report doesn't count). Report in your output format, its Data line first.
+--- trend-momentum-analyst request (sha256 d392dd3483b2677ce0615c4f9ca202a4aacfe4c4ed9947ecbc70bd80d1ac4a2a, 589 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. This bar requires you to look up `pullback-vs-reversal` before your report: `skill_lookup {"skill": "<skill>", "role": "trend-momentum-analyst"}` for each (without them your report doesn't count). Report in your output format, its Data line first.
+--- volume-liquidity-analyst request (sha256 f7dd9946f4e17a5b8db0abfdd3b7ae0d912a131266f7dfad8f4926a06cf95b51, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- risk-manager request (sha256 07ba220155604a8f64d6f3ce146be0508b291f0ba1c18b7e2116d7951c24e1f3, 382 chars, of its neutral text):
+Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
+read-data market-structure-analyst: no tools -> "read no data"; its read -> null
+read-data trend-momentum-analyst: no tools -> "read no data"; its read -> null
+read-data volume-liquidity-analyst: no tools -> "read no data"; its read -> null
+read-data risk-manager: no tools -> "read no data"; its read -> null
+=== opencode (this bar's briefing) ===
+--- market-structure-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- trend-momentum-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- volume-liquidity-analyst request (sha256 8c86274a1b1dd909417f25efced032ec2b95798984eb20b2aba25783b369376f, 392 chars, of its neutral text):
+Your report for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read your own data first (bar_briefing for MNQ, then what your method needs). Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your output format, its Data line first.
+--- risk-manager request (sha256 bd3dabeca8aeeb5487803ea1e83edb8f5a1f1c440ab1e6265d71159ba4b0e9cb, 382 chars, of its neutral text):
+Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-04-27T17:18:00.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
+read-data market-structure-analyst: no tools -> "read no data"; its read -> null
+read-data trend-momentum-analyst: no tools -> "read no data"; its read -> null
+read-data volume-liquidity-analyst: no tools -> "read no data"; its read -> null
+read-data risk-manager: no tools -> "read no data"; its read -> null

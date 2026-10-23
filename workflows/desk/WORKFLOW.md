@@ -25,7 +25,14 @@ A role's report counts only if its own run read market or account data
 (`read-data`) and it is its role's report (`report-shape`: an analyst's names its
 `Data:` line, phase 1 is a risk state), and, in index mode, it looked up every
 skill the bar requires of its role (`lookups`: the request names them; the order
-gate counts its report only then). A role that fails is run once more, then
+gate counts its report only then). Where this machine opts in to
+`cycleDataInPrompt` (Claude Code), the runner makes each role's every-cycle
+reads first and puts their exact text in its request. A role's run that
+called no data tool then counts on `read-data` only when the runner's own
+record for that role says its primary read was made whole and given to it
+(an analyst's bar briefing, this cycle's; phase 1's account snapshot). No
+other role's record counts, and neither does a failed read, nor anything a
+request or report says. A role that fails is run once more, then
 recorded missing and not given to the head trader: it launches that role itself,
 and the order gate refuses an entry without it.
 
