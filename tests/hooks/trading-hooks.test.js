@@ -585,6 +585,79 @@ function composedPropWorld(home, size) {
   return { order: n => LC.order({ size: n, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
+/**
+ * The same world on a policy whose account states no fee for MNQ: `pmc_policy` (prop_portfolio's document) on
+ * `nofee_100k` (the shipped profile and rulebook, the MNQ fee line left out), both in folders of their own.
+ */
+function noFeePropWorld(home, size) {
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const shipped = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const dir = tmpDir();
+  const strategies = path.join(dir, 'strategies');
+  fs.mkdirSync(path.join(strategies, 'pmc_policy'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'strategies', 'trade_lifecycle'), path.join(strategies, 'trade_lifecycle'), { recursive: true });
+  fs.writeFileSync(path.join(strategies, 'pmc_policy', 'STRATEGY.md'), fs.readFileSync(path.join(REPO, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: pmc_policy').replace(new RegExp(`^account: ${shipped.account}`, 'm'), 'account: nofee_100k'));
+  const accounts = path.join(dir, 'accounts', 'nofee_100k');
+  fs.mkdirSync(accounts, { recursive: true });
+  const profile = fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'ACCOUNT.md'), 'utf8');
+  assert.match(profile, /^ {2}MNQ: 0\.37$/m);
+  fs.writeFileSync(path.join(accounts, 'ACCOUNT.md'), profile.replace(`name: ${shipped.account}`, 'name: nofee_100k').replace(/^ {2}MNQ: 0\.37\n/m, ''));
+  fs.writeFileSync(path.join(accounts, 'RULEBOOK.md'), fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'RULEBOOK.md'), 'utf8')
+    .replace(`name: ${shipped.account}`, 'name: nofee_100k').replace(/^ {2}prop_portfolio:$/m, '  pmc_policy:'));
+  const env = { FTH_STRATEGIES_DIRS: strategies, FTH_ACCOUNTS_DIRS: path.dirname(accounts) };
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(REPO, env).accounts.find(a => a.name === 'nofee_100k');
+  assert.strictEqual(require('../../scripts/lib/trading/accounts').feePerSide(account, 'MNQ'), null, 'no MNQ fee stated');
+  const now = new Date('2026-10-07T14:00:02.000Z');
+  prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
+  prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
+  const rec = LC.writeScenario(home, { size });
+  // The policy's verdict on the record (as order_plan records it; no fee, so a skip): it names the composed component.
+  prop.appendVerdict(home, { strategy: 'pmc_policy', component: 'trade_lifecycle', contract: null, contractId: 'MNQ', symbol: 'MNQ', direction: 'long', action: 'skip', multiplier: 0, maxSize: 0, stopTicks: 111, bar: LC.BAR, at: new Date(now.getTime() - 30000).toISOString(), expiresAt: now.toISOString(), reason: 'no fees_per_side.MNQ', record: rec.id });
+  return { order: n => LC.order({ size: n, rationale: 'setup:pmc_policy long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+}
+
+test('order gate, hook and gateway: a composed prop entry whose all-in loss can\'t be worked out (no fee for the root, no tick spec, no stop bracket) is refused [max-risk], never read as no risk', { timeout: 120000 }, async () => {
+  // No fee, or no stop bracket (the stop's risk alone known from the rationale's stop price): the all-in check's own
+  // refusal. No tick spec: the stop's risk itself can't be computed, so the cap's stop check refuses first. [max-risk]
+  // either way, never read as no risk.
+  const ALL_IN = /\[max-risk\] setup:trade_lifecycle: 5 MNQ risk an all-in loss that can't be worked out, over its risk\.max_risk_usd \$300/;
+  const STOP = /\[max-risk\] setup:trade_lifecycle caps risk at \$300\.00 \(risk\.max_risk_usd\) but this entry's risk can't be computed/;
+  const plan = [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }];
+  const cases = [];
+  // No fees_per_side for MNQ in the policy's account.
+  {
+    const home = tmpDir();
+    const w = noFeePropWorld(home, 5);
+    cases.push(['no fee', setup(plan, { FTH_HOME: home, ...w.env }).env, w.order(5), ALL_IN]);
+  }
+  // No tick spec for MNQ (the broker's recorded specs gone from the home).
+  {
+    const home = tmpDir();
+    const w = composedPropWorld(home, 5);
+    const { env } = setup(plan, { FTH_HOME: home, ...w.env });
+    for (const f of fs.readdirSync(home).filter(n => /^contracts-/.test(n))) fs.rmSync(path.join(home, f));
+    cases.push(['no tick spec', env, w.order(5), STOP]);
+  }
+  // No readable stop bracket on the entry.
+  {
+    const home = tmpDir();
+    const w = composedPropWorld(home, 5);
+    const { stopLossBracket: _sl, ...noBracket } = w.order(5);
+    cases.push(['no stop bracket', setup(plan, { FTH_HOME: home, ...w.env }).env, noBracket, ALL_IN]);
+  }
+  for (const [label, env, input, UNKNOWN] of cases) {
+    const r = gate(orderPayload(input), env);
+    assert.strictEqual(r.code, 2, `${label} (hook): ${r.stderr}`);
+    assert.match(r.stderr, UNKNOWN, `${label} (hook)`);
+    const g = await gatewayRun(env, [call(1, 'place_order', input)]);
+    const text = g.byId[1].result.content[0].text;
+    assert.ok(g.byId[1].result.isError, `${label} (gateway): ${text}`);
+    assert.match(text, UNKNOWN, `${label} (gateway)`);
+  }
+});
+
 test('order gate hook: in a prop attempt the record\'s size is a suggestion: the translated size passes composed-reads, the model\'s raw 1 and any other size are refused; exits go', () => {
   const home = tmpDir();
   const w = composedPropWorld(home, 1);
