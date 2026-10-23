@@ -1,5 +1,5 @@
 === claude: trade ===
-prompt (sha256 of its neutral text 80a51d2c6c3e5d747551266bc944d262c7003daba53b3ecf55a336d172ab3f06, 2012 chars less the home path):
+prompt (sha256 80a51d2c6c3e5d747551266bc944d262c7003daba53b3ecf55a336d172ab3f06, 1941 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -40,7 +40,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude: managed ===
-prompt (sha256 of its neutral text 401e6857e407b53acea27acaa5e90a0dbd9823357ba6b2380462e85309c791f8, 3444 chars less the home path):
+prompt (sha256 401e6857e407b53acea27acaa5e90a0dbd9823357ba6b2380462e85309c791f8, 3373 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -102,7 +102,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: entry ===
-prompt (sha256 of its neutral text f406d3b05d8a91462836e3902bc5c15f7adc341479f70d550e9d168e80b91ba3, 3487 chars less the home path):
+prompt (sha256 f406d3b05d8a91462836e3902bc5c15f7adc341479f70d550e9d168e80b91ba3, 3416 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -164,7 +164,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: multi-lane ===
-prompt (sha256 of its neutral text c7ce0f0ddaa322ca4482123d1a4b55562e933e9f79943014e10ebecc6f437533, 2469 chars less the home path):
+prompt (sha256 c7ce0f0ddaa322ca4482123d1a4b55562e933e9f79943014e10ebecc6f437533, 2398 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -210,7 +210,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: trade ===
-prompt (sha256 of its neutral text 74c7029455d98b69fe269cc841081d3838107efc6aa960def652131876b6f978, 1995 chars less the home path):
+prompt (sha256 74c7029455d98b69fe269cc841081d3838107efc6aa960def652131876b6f978, 1924 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -252,7 +252,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: managed ===
-prompt (sha256 of its neutral text 3ac43ade16e32b37ea149d771f532019b507d71dcc332501f11f62c292ec95cd, 3427 chars less the home path):
+prompt (sha256 3ac43ade16e32b37ea149d771f532019b507d71dcc332501f11f62c292ec95cd, 3356 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -315,7 +315,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: entry ===
-prompt (sha256 of its neutral text e7646194db9231e252f700dea9507568bc826ad5fb5288c7d038e3a4c1af9699, 3470 chars less the home path):
+prompt (sha256 e7646194db9231e252f700dea9507568bc826ad5fb5288c7d038e3a4c1af9699, 3399 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -378,7 +378,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: multi-lane ===
-prompt (sha256 of its neutral text 633e8d3ca87fd2935635d281cb6d6ebb4a3253cd355c1ab9ae5b4de5727bdbbb, 2452 chars less the home path):
+prompt (sha256 633e8d3ca87fd2935635d281cb6d6ebb4a3253cd355c1ab9ae5b4de5727bdbbb, 2381 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -425,7 +425,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === opencode: trade ===
-prompt (sha256 of its neutral text 74c7029455d98b69fe269cc841081d3838107efc6aa960def652131876b6f978, 1995 chars less the home path):
+prompt (sha256 74c7029455d98b69fe269cc841081d3838107efc6aa960def652131876b6f978, 1924 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -474,7 +474,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === opencode: managed ===
-prompt (sha256 of its neutral text 3ac43ade16e32b37ea149d771f532019b507d71dcc332501f11f62c292ec95cd, 3427 chars less the home path):
+prompt (sha256 3ac43ade16e32b37ea149d771f532019b507d71dcc332501f11f62c292ec95cd, 3356 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -544,7 +544,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: entry ===
-prompt (sha256 of its neutral text e7646194db9231e252f700dea9507568bc826ad5fb5288c7d038e3a4c1af9699, 3470 chars less the home path):
+prompt (sha256 e7646194db9231e252f700dea9507568bc826ad5fb5288c7d038e3a4c1af9699, 3399 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -614,7 +614,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: multi-lane ===
-prompt (sha256 of its neutral text 633e8d3ca87fd2935635d281cb6d6ebb4a3253cd355c1ab9ae5b4de5727bdbbb, 2452 chars less the home path):
+prompt (sha256 633e8d3ca87fd2935635d281cb6d6ebb4a3253cd355c1ab9ae5b4de5727bdbbb, 2381 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -668,7 +668,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === codex: trade ===
-prompt (sha256 of its neutral text 3a2d7d109a73b8d7c8a3c6f8768ec98d3cbfdab55e2652126c083e68a252168c, 1889 chars less the home path):
+prompt (sha256 3a2d7d109a73b8d7c8a3c6f8768ec98d3cbfdab55e2652126c083e68a252168c, 1818 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -707,7 +707,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === codex: managed ===
-prompt (sha256 of its neutral text 3e134121b2723d8f667ee2064b80d5c7d3941a08b00892147f3a95c65263bbf8, 3386 chars less the home path):
+prompt (sha256 3e134121b2723d8f667ee2064b80d5c7d3941a08b00892147f3a95c65263bbf8, 3315 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -767,7 +767,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === codex: entry ===
-prompt (sha256 of its neutral text cad46d02e4fb44304c21887484cd460e5bab48ebad2a1b9044551cf8350c21ce, 3429 chars less the home path):
+prompt (sha256 cad46d02e4fb44304c21887484cd460e5bab48ebad2a1b9044551cf8350c21ce, 3358 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -827,7 +827,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === codex: multi-lane ===
-prompt (sha256 of its neutral text 4cbb4d512e31ff78a23973fdcf8c01a73ebdae157ef81325db9b2b97394a0e00, 2346 chars less the home path):
+prompt (sha256 4cbb4d512e31ff78a23973fdcf8c01a73ebdae157ef81325db9b2b97394a0e00, 2275 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -871,7 +871,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === qwen: trade ===
-prompt (sha256 of its neutral text 80a51d2c6c3e5d747551266bc944d262c7003daba53b3ecf55a336d172ab3f06, 2012 chars less the home path):
+prompt (sha256 80a51d2c6c3e5d747551266bc944d262c7003daba53b3ecf55a336d172ab3f06, 1941 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -910,7 +910,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === qwen: managed ===
-prompt (sha256 of its neutral text 401e6857e407b53acea27acaa5e90a0dbd9823357ba6b2380462e85309c791f8, 3444 chars less the home path):
+prompt (sha256 401e6857e407b53acea27acaa5e90a0dbd9823357ba6b2380462e85309c791f8, 3373 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -970,7 +970,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === qwen: entry ===
-prompt (sha256 of its neutral text f406d3b05d8a91462836e3902bc5c15f7adc341479f70d550e9d168e80b91ba3, 3487 chars less the home path):
+prompt (sha256 f406d3b05d8a91462836e3902bc5c15f7adc341479f70d550e9d168e80b91ba3, 3416 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -1030,7 +1030,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === qwen: multi-lane ===
-prompt (sha256 of its neutral text c7ce0f0ddaa322ca4482123d1a4b55562e933e9f79943014e10ebecc6f437533, 2469 chars less the home path):
+prompt (sha256 c7ce0f0ddaa322ca4482123d1a4b55562e933e9f79943014e10ebecc6f437533, 2398 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.

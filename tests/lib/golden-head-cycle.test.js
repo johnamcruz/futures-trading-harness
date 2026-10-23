@@ -75,7 +75,11 @@ function neutral(text, home) {
 async function cycle(label, over, kase) {
   const home = tmpDir();
   const cfg = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), ...over });
-  const saved = process.env.FTH_HOME;
+  // The prompt reads the harness home and this machine's harness settings from the process (stableHead, the role-skills
+  // mode): every FTH_* variable but the run's own home is taken out while the cycle is built, so none of this machine's
+  // settings reaches the golden.
+  const saved = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('FTH_')));
+  for (const k of Object.keys(saved)) delete process.env[k];
   process.env.FTH_HOME = home;
   try {
     const prompt = prompts(cfg, NOW, ROOT).trade(kase.items, kase.opts);
@@ -91,7 +95,9 @@ async function cycle(label, over, kase) {
     const envText = Object.keys(env).sort().map(k => `  ${k}=${env[k]}`).join('\n');
     const out = [
       `=== ${label}: ${kase.label} ===`,
-      `prompt (sha256 of its neutral text ${crypto.createHash('sha256').update(neutral(prompt, home)).digest('hex')}, ${prompt.length - (prompt.split(home).length - 1) * home.length} chars less the home path):`,
+      // The hash and size of the prompt as shown below (every machine path masked), never of the raw text: the
+      // checkout's and the home's paths differ by machine, the prompt otherwise byte for byte.
+      `prompt (sha256 ${crypto.createHash('sha256').update(neutral(prompt, home)).digest('hex')}, ${neutral(prompt, home).length} chars, of its neutral text):`,
       `  ${prompt.split('. ').join('.\n  ')}`,
       `the run's prompt is the runner's: ${argv.includes(prompt)}`,
       `the cycle log's prompt is the runner's: ${line.prompt === prompt}`,
@@ -103,8 +109,8 @@ async function cycle(label, over, kase) {
     ];
     return neutral(out.join('\n'), home);
   } finally {
-    if (saved === undefined) delete process.env.FTH_HOME;
-    else process.env.FTH_HOME = saved;
+    delete process.env.FTH_HOME;
+    Object.assign(process.env, saved);
   }
 }
 
