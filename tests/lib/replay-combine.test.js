@@ -8,7 +8,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const C = require('../../scripts/lib/replay/combine-run');
 const prop = require('../../scripts/lib/trading/prop-state');
@@ -16,7 +15,7 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
 
 const REPO = path.join(__dirname, '..', '..');
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-combine-'));
+const { tmpDir: tmp } = require('../helpers');
 // The account the active policy strategy trades (the runner keeps that account's attempt record): the attempts'.
 const POLICY_ACCOUNT = loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio').account;
 const ACCOUNT = accountNamed(REPO, POLICY_ACCOUNT, {});
@@ -142,7 +141,7 @@ test('a learning run\'s look names its stage-2 mode, and the validate pool reads
  * plus every scripted P&L after it up to the clock (`pnl`: [{ at, usd }]); end of day records the close (as the runner
  * does). `open(now)` says whether a position is open.
  */
-async function combineRun(w, { pnl = [], open = () => false, applies = true, run = null, resolved = null, maxCycles = Infinity, failAfter = null } = {}) {
+async function combineRun(w, { pnl = [], open = () => false, openLoss = () => 0, applies = true, run = null, resolved = null, maxCycles = Infinity, failAfter = null } = {}) {
   const { seedRunHome, runReplay } = require('../../scripts/lib/replay/driver');
   const r = run || resolved || w.resolve({});
   if (!run) seedRunHome(r, { root: REPO, userEnv: w.env });
@@ -171,6 +170,8 @@ async function combineRun(w, { pnl = [], open = () => false, applies = true, run
     },
     async trades() { return []; },
     async open(env) { return open(env.FTH_REPLAY_NOW); },
+    // The open position's P&L at its worst since the last check (scripted: `openLoss(now)`), 0 when flat.
+    async openPnl(env) { return openLoss(env.FTH_REPLAY_NOW); },
     async balance(env) {
       if (failing) throw new Error('broker down');
       return balanceAt(env.FTH_REPLAY_NOW);
@@ -232,7 +233,9 @@ test('the driver: an attempt still active after maxSessions ends unfinished; end
   const u = world();
   const late = await combineRun(u, { pnl: PASS, open: now => now >= '2022-03-09T00:00:00Z' && now < '2022-03-09T20:51:00Z' });
   assert.deepStrictEqual(late.steps.filter(s => s.day === '2022-03-09').map(s => s.kind), ['eod']);
-  assert.deepStrictEqual(late.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome, x.sessions]), [[1, 'unfinished', 3], [2, 'passed', 3]]);
+  // Its sessions count to the close that passed it (03-08), not the next day's flatten.
+  assert.deepStrictEqual(late.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome, x.sessions]), [[1, 'unfinished', 3], [2, 'passed', 2]]);
+  assert.deepStrictEqual(late.log.find(x => x.kind === 'end' && x.attempt === 2).days, ['2022-03-07', '2022-03-08']);
 });
 
 test('the driver: a resume keeps the attempt under way and starts none twice; it refuses a broker that ignores the schedule or an attempt that would start open', async () => {
@@ -253,6 +256,86 @@ test('the driver: a resume keeps the attempt under way and starts none twice; it
   await assert.rejects(combineRun(world(), { applies: false }), /replay refused: the replay broker reports a balance of 50000, not .*'s starting \d+: it doesn't apply the balance schedule/);
   await assert.rejects(combineRun(world(), { open: () => true }), /replay refused: combine attempt 1 \(2022-03-01\) would start with a position or working order open/);
   await assert.rejects(combineRun(world(), { open: () => { throw new Error('broker down'); } }), /replay refused: can't read the account to start combine attempt 1 \(broker down\)/);
+});
+
+test('equity: an open loss that touches the floor between steps blows the attempt, even after the trade recovers', async () => {
+  const w = world();
+  // A position open on 03-02 from 14:31; at the 14:36 check its worst price since the last check put equity $100 under
+  // the floor; it recovers (0) by the next check; the balance never moves.
+  // After it, the position can't be valued (the broker's bars gone): an ended attempt reads nothing more, so no refusal.
+  const touch = now => {
+    if (now > '2022-03-02T14:37:00Z' && now < '2022-03-02T20:00:00Z') throw new Error('no bars');
+    return now >= '2022-03-02T14:36:00Z' && now < '2022-03-02T14:37:00Z' ? -(ACCOUNT.max_loss + 100) : 0;
+  };
+  const r = await combineRun(w, { openLoss: touch, open: now => now >= '2022-03-02T14:31:00Z' && now < '2022-03-02T20:51:00Z' });
+  assert.deepStrictEqual(r.steps.filter(s => s.day === '2022-03-02').map(s => s.kind), ['trade', 'trade', 'eod'], 'no trade cycle after the touch; its day\'s end of day');
+  const e1 = r.log.find(x => x.kind === 'end' && x.attempt === 1);
+  assert.deepStrictEqual([e1.outcome, e1.profit, e1.lowCushion, e1.worstDay], ['blown', 0, -100, -(ACCOUNT.max_loss + 100)]);
+  // An open position it can't value refuses the step: never assumed whole.
+  await assert.rejects(combineRun(world(), { openLoss: now => { if (now >= '2022-03-02T14:36:00Z') throw new Error('no bars'); return 0; } }), /replay refused: can't value the open position for the combine attempt \(no bars\): the step waits, never assuming no loss/);
+  await assert.rejects(combineRun(world(), { openLoss: () => NaN }), /the open position's P&L is not a number/);
+  // Blown on its last session with a position open, then flattened at a gain at that day's end: still blown (the
+  // attempt's end at the next attempt's start keeps the blow).
+  const v = world();
+  const last = await combineRun(v, {
+    openLoss: now => (now >= '2022-03-03T14:36:00Z' && now < '2022-03-03T14:37:00Z' ? -(ACCOUNT.max_loss + 100) : 0),
+    open: now => now >= '2022-03-03T14:31:00Z' && now < '2022-03-03T20:50:00Z',
+    pnl: [{ at: '2022-03-03T20:49:00Z', usd: 100 }],
+  });
+  const e = last.log.find(x => x.kind === 'end' && x.attempt === 1);
+  assert.deepStrictEqual([e.outcome, e.profit, e.sessions], ['blown', 100, 3]);
+});
+
+test('fails closed: a blow found before the day\'s first step, the open check throwing, runs only that day\'s end of day, then ends', async () => {
+  const w = world();
+  // Blown overnight (after 03-01's close); on 03-02 the account can't be read: counted open.
+  const r = await combineRun(w, { pnl: [{ at: '2022-03-01T21:00:00Z', usd: -(ACCOUNT.max_loss + 100) }], open: now => { if (now.startsWith('2022-03-02')) throw new Error('broker down'); return false; } });
+  assert.deepStrictEqual(r.steps.filter(s => s.day === '2022-03-02').map(s => s.kind), ['eod']);
+  assert.deepStrictEqual(r.steps.filter(s => s.day === '2022-03-03'), []);
+  assert.deepStrictEqual(r.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome]), [[1, 'blown'], [2, 'unfinished']]);
+});
+
+test('openPnlAt and worstPrice: each open position at its worst price, less its exit fee; anything unreadable throws', () => {
+  const specOf = () => ({ tickSize: 0.25, tickValue: 0.5 });
+  assert.strictEqual(C.worstPrice([{ l: 99, h: 105 }, { l: 97, h: 102 }], true), 97);
+  assert.strictEqual(C.worstPrice([{ l: 99, h: 105 }, { l: 97, h: 102 }], false), 105);
+  assert.strictEqual(C.worstPrice([], true), null);
+  assert.strictEqual(C.worstPrice([{ l: null, h: null }], true), null, 'a bar without the price is no price (never 0)');
+  assert.throws(() => C.openPnlAt([{ contractId: 'MNQ', type: 2, size: 1, averagePrice: null }], { worstOf: () => 100, specOf }), /no entry or market price/);
+  // Long 2 MNQ from 100 at a worst of 97: -3 points x $2 x 2 = -$12, less a $0.37 fee each.
+  const long = { contractId: 'MNQ', type: 1, size: 2, averagePrice: 100 };
+  assert.strictEqual(C.openPnlAt([long], { worstOf: () => 97, specOf, feeOf: () => 0.37 }), -12.74);
+  assert.strictEqual(C.openPnlAt([{ ...long, type: 2 }], { worstOf: () => 105, specOf }), -20);
+  assert.strictEqual(C.openPnlAt([], { worstOf: () => null, specOf }), 0);
+  assert.throws(() => C.openPnlAt([long], { worstOf: () => null, specOf }), /no entry or market price/);
+  assert.throws(() => C.openPnlAt([long], { worstOf: () => 97, specOf: () => null }), /no tick spec/);
+  assert.throws(() => C.openPnlAt([{ ...long, type: 9 }], { worstOf: () => 97, specOf }), /unknown type/);
+  assert.throws(() => C.openPnlAt([{ ...long, size: 'x' }], { worstOf: () => 97, specOf }), /no valid size/);
+  assert.strictEqual(C.passedOn(ACCOUNT, { days: [{ day: 'a', balance: S0 + HALF, pnl: HALF }, { day: 'b', balance: S0 + 2 * HALF, pnl: HALF }] }), 'b');
+  assert.strictEqual(C.passedOn(ACCOUNT, { days: [{ day: 'a', balance: S0 + 2 * HALF, pnl: 2 * HALF }] }), null, 'consistency: one day can\'t pass');
+});
+
+test('maxSessions: at most the profile\'s sessions (fewer stops a smoke early); a combine without the harness root is refused', () => {
+  const w = world();
+  assert.throws(() => w.resolve({ end: '2022-06-30T00:00:00Z', combine: { account: POLICY_ACCOUNT, attempts: ['2022-03-01'], maxSessions: ACCOUNT.sessions + 1 } }), new RegExp(`combine.maxSessions: ${ACCOUNT.sessions + 1} is more than .*'s sessions \\(${ACCOUNT.sessions}\\)`));
+  assert.strictEqual(w.resolve({ end: '2022-06-30T00:00:00Z', combine: { account: POLICY_ACCOUNT, attempts: ['2022-03-01'], maxSessions: ACCOUNT.sessions } }).combine.maxSessions, ACCOUNT.sessions);
+  const { resolveReplay } = require('../../scripts/lib/replay/config');
+  assert.throws(() => resolveReplay(w.raw({}), { baseDir: w.dir, env: w.env, home: w.dir }), /combine: needs the harness root/);
+});
+
+test('a stage-2 look recorded without a mode never pools with stage 1: its run home shows the attempt, and the pool can\'t pass', () => {
+  const S = require('../../scripts/lib/replay/stage');
+  const dir = tmp();
+  const mk = (id, files = []) => { const home = path.join(dir, id); fs.mkdirSync(path.join(home, 'replay', id), { recursive: true }); for (const f of files) { fs.mkdirSync(path.dirname(path.join(home, f)), { recursive: true }); fs.writeFileSync(path.join(home, f), '{}'); } return home; };
+  assert.strictEqual(S.stageTwoHome(mk('s1'), 's1'), false);
+  assert.strictEqual(S.stageTwoHome(mk('cb', ['replay/cb/combine.jsonl']), 'cb'), true);
+  assert.strictEqual(S.stageTwoHome(mk('as', ['replay/as/account-states.jsonl']), 'as'), true);
+  assert.strictEqual(S.stageTwoHome(mk('pp', ['combine/acct.json']), 'pp'), true);
+  const pool = { candidate: 'cand', named: true, runId: 's1', counted: [{ runId: 's1', decisions: [], adherence: { agree: 0, disagree: 0 } }], missing: [], foreign: ['as'], windows: [], beyond: [], all: { runs: 2, candidates: 1 } };
+  const r = S.pooledExitTest(pool);
+  assert.strictEqual(r.pass, false);
+  assert.deepStrictEqual([r.tests[0].test, r.tests[0].status], ['pool', 'INSUFFICIENT']);
+  assert.match(r.tests[0].detail, /as are stage-2 runs .*never pool with stage 1/);
 });
 
 test('the report: per attempt and totals (pass rate, blows, median sessions to pass), the promotion gate\'s numbers labelled practice', async () => {

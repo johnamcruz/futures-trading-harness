@@ -54,6 +54,8 @@ function composedCycle(w, s, { reads = s.reads, size = 1, result = null, order =
     ...D.roundSteps(w, { lookups: roleLookups(w) }),
     ...D.entryLoads(w).map(x => ({ load: x })),
     ...headLookups(reads).map(x => ({ lookup: x })),
+    // An entry inside a policy is a rules setup's (setup:<policy>): it reads the strategy skills too (index mode looks them up).
+    ...(policy && w.mode !== 'full' ? D.STRATEGY_SKILLS.map(x => ({ lookup: x })) : []),
     { harness: 'compose_check', args: { symbol: 'MNQ', side: s.side, reads: asReads(reads), size } },
     // Inside a policy (an account's attempt): order_plan sizes the record into the policy's verdict, which the gate reads.
     ...(policy ? [{ harness: 'order_plan', args: ctx => ({ bars: path.join(ctx.env.FTH_BARS_DIR, 'MNQ-3m.json'), symbol: 'MNQ', strategy: policy, side: s.side, accountId: 7 }) }] : []),

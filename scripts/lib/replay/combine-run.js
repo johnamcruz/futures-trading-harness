@@ -9,7 +9,9 @@
  *   { account: <profile>, attempts: ['YYYY-MM-DD', ...], maxSessions?: n }
  *   account      the account profile the attempts trade (accounts/<name>/ACCOUNT.md); the active policy strategy's
  *   attempts     each attempt's first trading day, in order
- *   maxSessions  the most trading sessions an attempt runs before it is `unfinished` (default: the profile's `sessions`)
+ *   maxSessions  the most trading sessions an attempt runs before it is `unfinished` (default and most: the profile's
+ *                `sessions`; fewer only stops the run early, for a smoke: the model's horizon and clock sizing stay the
+ *                profile's, as live)
  * Each attempt's window is its first maxSessions trading days of the run (the days the run's sessions hold a decision
  * time, from its start date): inside the run's window, inside one learning split window, and never overlapping another.
  *
@@ -18,8 +20,11 @@
  *     (prop-state endAttempt: kept, renamed), the replay broker's balance set to the profile's starting balance through
  *     the balance schedule (as a drawn state's day is), a fresh attempt record (prop-state startAttempt), and the broker's
  *     balance checked to be the starting balance (else refused);
- *   - the attempt's state is read from its record and the broker's balance (prop-state stateFrom, combine.js): passed or
- *     blown ends it. Before the day's first step (a pass at the last close), flat, it ends at once and no step runs;
+ *   - the attempt's state is read from its record, the broker's balance and the open position's P&L at its worst price
+ *     since the last check (the broker's positions and its 1-minute bars: deps.openPnl, openPnlAt): passed, blown, or
+ *     equity (balance plus that open P&L) at or below the floor ends it (a blow, as combine.js touches). The check runs at
+ *     each decision time, so a touch between two steps is caught at the next one; an open position it can't value
+ *     refuses the step (never assumed flat or whole). Before the day's first step (a pass at the last close), flat, it ends at once and no step runs;
  *     during a day it stepped (a blow), or with a position or a working order still open, no trade cycle runs: only the
  *     day's end of day (the runner's own flatten and the day's close, as live; the gate already refuses new entries),
  *     and it ends at the next time after it. Every later time of an ended attempt runs no step: the clock moves to the
@@ -70,6 +75,8 @@ const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOStr
 function combineForRun(spec, { points, account, rolesBetween }) {
   const maxSessions = spec.maxSessions === null ? account.sessions : spec.maxSessions;
   if (!(Number.isInteger(maxSessions) && maxSessions >= 1)) throw new Error(`combine.maxSessions: ${spec.account} states no sessions; set maxSessions`);
+  // Shorter only (a smoke): the model's horizon and clock sizing stay the profile's, so a longer stop would trade past it.
+  if (Number.isInteger(account.sessions) && maxSessions > account.sessions) throw new Error(`combine.maxSessions: ${maxSessions} is more than ${spec.account}'s sessions (${account.sessions}): an attempt runs at most the profile's sessions`);
   const days = [...new Set(points.map(p => p.day))].sort();
   const errors = [];
   const attempts = spec.attempts.map((start, i) => {
@@ -138,6 +145,17 @@ function attemptSummary(account, record, balance, track = {}) {
   };
 }
 
+/** The day whose close passed the attempt (its record's closes replayed), or null. */
+function passedOn(account, record) {
+  const combine = require('../trading/combine');
+  let cs = combine.start(account);
+  for (const d of record.days) {
+    cs = combine.endDay({ ...cs, status: 'active', balance: d.balance, dayPnl: d.pnl });
+    if (cs.status === 'passed') return d.day;
+  }
+  return null;
+}
+
 const state = manifest => {
   if (!manifest.combine) manifest.combine = { current: null, ended: [], closing: null, track: null };
   return manifest.combine;
@@ -151,6 +169,50 @@ async function balanceOf(run, env, deps) {
   });
   if (!Number.isFinite(b)) throw refused('the replay broker reports no balance for the combine attempt');
   return b;
+}
+
+/** The worst price over bars for a position's side: the lowest low long, the highest high short; null without one. */
+function worstPrice(bars, long) {
+  const xs = (bars || []).map(b => (long ? b.l : b.h)).filter(x => typeof x === 'number' && Number.isFinite(x));
+  if (!xs.length) return null;
+  return long ? Math.min(...xs) : Math.max(...xs);
+}
+
+/**
+ * The open positions' P&L at their worst prices (`worstOf(contractId, long)`), less each one's exit fee: the most the
+ * equity was down. Throws on anything it can't read (a size, a side, an entry price, a price, a tick spec): an open loss
+ * is never assumed away. positions: the broker's list_open_positions (size, type 1 long / 2 short, averagePrice).
+ */
+function openPnlAt(positions, { worstOf, specOf, feeOf = () => 0 }) {
+  const { signedSize } = require('../trading/positions');
+  const { contractRoot } = require('../trading/journal');
+  let sum = 0;
+  for (const p of positions) {
+    const signed = signedSize(p); // throws on a size or a side it can't read (type 1 long, 2 short)
+    const size = Math.abs(signed);
+    if (!size) continue;
+    const long = signed > 0;
+    const price = x => (typeof x === 'number' || (typeof x === 'string' && x.trim()) ? Number(x) : NaN); // never null as 0
+    const entry = price(p.averagePrice);
+    const worst = price(worstOf(p.contractId, long));
+    const root = contractRoot(p.contractId) || p.contractId;
+    const spec = specOf(root);
+    if (!Number.isFinite(entry) || !Number.isFinite(worst)) throw new Error(`position ${p.contractId}: no entry or market price to value it`);
+    if (!(spec && spec.tickSize > 0 && Number.isFinite(spec.tickValue))) throw new Error(`position ${p.contractId}: no tick spec for ${root}`);
+    const fee = Number(feeOf(root)) || 0;
+    sum += (worst - entry) * (long ? 1 : -1) * size * (spec.tickValue / spec.tickSize) - fee * size;
+  }
+  return r2(sum);
+}
+
+/** The open P&L before a step (deps.openPnl: 0 flat); one it can't read refuses the step (fails closed). */
+async function openPnlOf(run, env, deps, account, sinceMs, at) {
+  if (!deps.openPnl) throw refused('a combine run reads the open position\'s P&L before each step (deps.openPnl)');
+  const v = await Promise.resolve().then(() => deps.openPnl(env, run.cfg.account, { account, sinceMs, at })).then(Number, err => {
+    throw refused(`can't value the open position for the combine attempt (${String((err && err.message) || err).split('\n')[0]}): the step waits, never assuming no loss`);
+  });
+  if (!Number.isFinite(v)) throw refused('the open position\'s P&L is not a number: the step waits, never assuming no loss');
+  return v;
 }
 
 /** Start attempt `idx` before its first step (see the header). */
@@ -198,7 +260,10 @@ async function endOne(run, env, deps, { root, manifest, save, log, outcome = nul
   const cs = ps.stateFrom(account, record, bal);
   const out = outcome || (cs.status === 'blown' ? 'blown' : cs.status === 'passed' ? 'passed' : 'unfinished');
   const sum = attemptSummary(account, record, bal, st.track || {});
-  const days = (st.track && st.track.days) || [];
+  const stepped = (st.track && st.track.days) || [];
+  // A pass counts its sessions to the close that passed it (a later day's flatten is not a session of it).
+  const passDay = out === 'passed' ? passedOn(account, record) : null;
+  const days = passDay ? stepped.filter(d => d <= passDay) : stepped;
   appendLog(run.paths.runDir, { kind: 'end', attempt: a.n, start: a.start, outcome: out, sessions: days.length, days, at: at.toISOString(), ...sum });
   st.ended.push(idx);
   st.current = null;
@@ -214,9 +279,11 @@ async function beforeStep(run, point, ranAt, env, deps, ctx) {
   const idx = attemptOf(run.combine, point.day);
   if (idx === -1 || st.ended.includes(idx)) return false;
   if (st.current !== idx) {
-    if (st.current !== null) await endOne(run, env, deps, { ...ctx, at: ranAt });
+    if (st.current !== null) await endOne(run, env, deps, { ...ctx, outcome: st.closing ? st.closing.outcome : null, at: ranAt });
     await startOne(run, idx, point, ranAt, env, deps, ctx);
   }
+  // Ended, waiting for its day's end of day (or to be flat): nothing more to read; only that end of day may run.
+  if (st.closing) return closingStep(run, point, ranAt, env, deps, ctx, st, idx, null);
   const ps = require('../trading/prop-state');
   const account = require('../trading/accounts').accountNamed(ctx.root || run.root, run.combine.account, env);
   const record = ps.readAttempt(run.paths.runHome, account.name);
@@ -224,15 +291,31 @@ async function beforeStep(run, point, ranAt, env, deps, ctx) {
   const balance = await balanceOf(run, env, deps);
   const cs = ps.stateFrom(account, record, balance);
   const t = st.track || (st.track = { low: null, worst: null, days: [] });
-  const cushion = cs.balance - cs.floor;
+  // Equity: the balance plus the open position's P&L at its worst price since the last check (a touch of the floor
+  // between two steps is seen at the next one, even after the trade recovered).
+  const since = t.lastCheck ? Date.parse(t.lastCheck) : Date.parse(record.startedAt);
+  const openPnl = await openPnlOf(run, env, deps, account, since, ranAt);
+  t.lastCheck = ranAt.toISOString();
+  const cushion = cs.balance + Math.min(0, openPnl) - cs.floor;
   t.low = t.low === null ? r2(cushion) : Math.min(t.low, r2(cushion));
-  t.worst = t.worst === null ? r2(cs.dayPnl) : Math.min(t.worst, r2(cs.dayPnl));
-  const outcome = st.closing ? st.closing.outcome : cs.status === 'blown' ? 'blown' : cs.status === 'passed' ? 'passed' : null;
+  t.worst = t.worst === null ? r2(cs.dayPnl + Math.min(0, openPnl)) : Math.min(t.worst, r2(cs.dayPnl + Math.min(0, openPnl)));
+  const touched = cs.status === 'active' && require('../trading/combine').touches(cs, openPnl);
+  const outcome = cs.status === 'blown' || touched ? 'blown' : cs.status === 'passed' ? 'passed' : null;
   if (!outcome) {
     if (!t.days.includes(point.day)) t.days.push(point.day);
     ctx.save();
     return true;
   }
+  return closingStep(run, point, ranAt, env, deps, ctx, st, idx, { outcome, balance });
+}
+
+/**
+ * The step of an attempt that ended (`ended`: its outcome and the balance it was found at, or null when it is already
+ * closing): only a day's end of day runs until it is flat, then it ends.
+ */
+async function closingStep(run, point, ranAt, env, deps, ctx, st, idx, ended) {
+  const t = st.track || (st.track = { low: null, worst: null, days: [] });
+  const outcome = st.closing ? st.closing.outcome : ended.outcome;
   // Ended during a day it stepped: only that day's end of day runs (the runner's flatten and the day's close, as live;
   // never a trade cycle), then it ends. Ended before the day's first step (passed at the last close): it ends now, unless
   // a position or working order is still open (a check that fails counts as open: never left alone).
@@ -246,7 +329,7 @@ async function beforeStep(run, point, ranAt, env, deps, ctx) {
     ctx.save();
     return eod;
   }
-  await endOne(run, env, deps, { ...ctx, outcome, balance, at: ranAt });
+  await endOne(run, env, deps, { ...ctx, outcome, balance: ended ? ended.balance : null, at: ranAt });
   return false;
 }
 
@@ -324,4 +407,4 @@ function reportLines(rep) {
   return lines;
 }
 
-module.exports = { LOG, validateCombineConfig, combineForRun, attemptOf, attemptSummary, beforeStep, finishCombine, readLog, combineReport, reportLines };
+module.exports = { LOG, validateCombineConfig, combineForRun, attemptOf, attemptSummary, worstPrice, openPnlAt, passedOn, beforeStep, finishCombine, readLog, combineReport, reportLines };

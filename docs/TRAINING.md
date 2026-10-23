@@ -464,15 +464,18 @@ never mixes a combine run, a drawn-state run and a stage-1 run.
   policy strategy (`prop_portfolio`) trades: the runner keeps that account's
   attempt record.
 - `attempts`: each attempt's first trading day, in order.
-- `maxSessions`: the most trading sessions an attempt runs (default: the
-  profile's `sessions`).
+- `maxSessions`: the most trading sessions an attempt runs (default and most:
+  the profile's `sessions`). Fewer is for a short smoke only: the model's
+  horizon and clock sizing stay the profile's, so it trades a real
+  `sessions`-long combine and the run just stops early.
 
 Each attempt's window is its first `maxSessions` trading days of the run from
 its start date. The config refuses an attempt that starts on no trading day of
 the run, whose window runs past the run's end or spans two split windows, or
 that overlaps the attempt before it. It also refuses `combine` outside stage 2,
 with `accountStates`, `curatedList`, `prop` or `practice`, with `everyNthBar`
-above 1, and an account that isn't the policy's. Narrower sessions are fine.
+above 1, a `maxSessions` above the profile's `sessions`, and an account that
+isn't the policy's. Narrower sessions are fine.
 The combine block is in both run hashes. The preflight's `combine` check shows
 the account, `maxSessions` and every attempt's window.
 
@@ -490,19 +493,29 @@ What the run does:
 3. **It ends when it passes or blows,** under the account's rules (the pass is
    checked at a close, with consistency where the profile has it), or after
    `maxSessions` sessions (`unfinished`). Before each step the driver reads the
-   attempt from its record and the broker's balance. After a blow during a
-   day, no trade cycle runs: only that day's end of day (the runner's flatten
-   and the day's close, as live). After a pass at a close, nothing more runs
-   for the attempt. The days left in its window are not stepped: the clock
+   attempt from its record, the broker's balance and the open position's P&L
+   at its worst price since the last check (the broker's positions and
+   1-minute bars, less the exit fee). Equity (balance plus that open P&L) at
+   or below the floor is a blow, as in a real combine, even if the trade later
+   recovers. The check runs at each decision time, so a touch between two
+   steps is caught at the next step. An open position it can't value refuses
+   the step (the run stops, resumable): an open loss is never assumed away.
+   After a blow during a day, no trade cycle runs: only that day's end of day
+   (the runner's flatten and the day's close, as live). After a pass at a
+   close, nothing more runs for the attempt, unless a position or working
+   order is still open the next day: then only that day's end of day (the
+   flatten) runs. The days left in its window are not stepped: the clock
    moves to the next attempt's start, and the run finishes after the last
    attempt ends.
 
 Each attempt's start and end are in the run's `combine.jsonl`, never shown to
 the model. At the end, the stage report (and `replay.js report`) prints, for
-each attempt: its start, sessions run, outcome (passed, blown or unfinished),
+each attempt: its start, sessions run (a pass: up to the close that passed
+it), outcome (passed, blown or unfinished),
 final profit, lowest cushion to the floor, worst day against the daily limit
 (the lowest day P&L seen, $0 when no day was down), and its trades, win rate
-and mean R. Then the totals: pass rate, blows and median sessions to pass.
+and mean R. Then the totals: pass rate (passed over every ended attempt: an
+unfinished one counts as not passed), blows and median sessions to pass.
 Then the promotion gate's numbers (`scripts/lib/prop/promotion.js`, frozen)
 applied to the attempts, labelled practice: these attempts are never a
 promotion score. Then the 30-day Monte Carlo of the run's own trades. The days

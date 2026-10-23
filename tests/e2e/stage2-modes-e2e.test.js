@@ -6,12 +6,19 @@
  * replay server, its P&L scripted: tests/fixtures/mock-exchange.js scriptedFills), with the scripted model as the harness
  * CLI (tests/fixtures/scripted-opencode.js, as the pipeline smoke test runs it). No model, no network.
  *
- *   combine         two attempts on practice-train days: the first blows on its first day (no cycle after it, its second
- *                   day never stepped), the second starts fresh at the starting balance and passes at its second close;
- *                   the stage report's attempt lines and the Monte Carlo of the finished run
+ *   combine         two attempts on practice-train days. The first: one model entry composed, sized by the policy
+ *                   (order_plan's verdict), through the gate to the broker, filled, and taken out a bar later; then a
+ *                   scripted loss past the max loss: no trade cycle after it, only that day's end of day, its second day
+ *                   never stepped. The second starts fresh at the starting balance (the prompt's attempt line: day 1, no
+ *                   profit), goes past the target on its first day, where the gate refuses the model's entry on the
+ *                   account's own block (past the target with today the best day; the refusal carries other checks of
+ *                   the replayed bar too), and passes at its second close. Then the stage report's attempt lines, and
+ *                   the Monte Carlo run on the finished run as a real score, which refuses the scripted fills (no order
+ *                   of the model placed them)
  *   accountStates   two curated days, each opening at its drawn balance (the attempt line in the prompt shows it); the run
- *                   finishes, its practice by account state and its Monte Carlo reported
- * Both finish with no error, refusal or warning in their output, their runner steps or the gate's log.
+ *                   finishes, its practice by account state and its Monte Carlo reported (scored)
+ * Both finish with no error, refusal or warning in their output, their runner steps or the gate's log, but the one
+ * refusal the combine run expects.
  */
 
 const test = require('node:test');
@@ -47,7 +54,7 @@ const sh = (file, args, env) => {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 };
 
-function world({ scriptedFills = [] } = {}) {
+function world({ scriptedFills = [], scriptedPositions = [] } = {}) {
   const home = tmpDir();
   const live = path.join(home, 'live-home');
   const bin = path.join(home, 'bin');
@@ -60,7 +67,7 @@ function world({ scriptedFills = [] } = {}) {
   const moved = (bars, monday) => bars.map(b => ({ ...b, t: new Date(Date.parse(b.t) + shiftOf(monday)).toISOString() }));
   const both = bars => MONDAYS.flatMap(m => moved(bars, m)).sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
   const init = path.join(home, 'exchange.json');
-  fs.writeFileSync(init, JSON.stringify({ prices: { [D.MNQ_ID]: D.BARS[0].c }, bars: { [D.MNQ_ID]: both(D.BARS), [`${D.MNQ_ID}@1m`]: both(D.MINUTE_BARS) }, scriptedFills }));
+  fs.writeFileSync(init, JSON.stringify({ prices: { [D.MNQ_ID]: D.BARS[0].c }, bars: { [D.MNQ_ID]: both(D.BARS), [`${D.MNQ_ID}@1m`]: both(D.MINUTE_BARS) }, scriptedFills, scriptedPositions }));
   const model = path.join(home, 'model-script.json');
   fs.writeFileSync(model, JSON.stringify({ bars: {} }));
   const env = {
@@ -78,7 +85,7 @@ function replayConfig(w, runId, over) {
     runId, workDir: path.join(w.home, 'replays'), broker: 'replaymock', stage: 2, premarket: false,
     autotrader: {
       harness: 'opencode', model: '', symbols: ['MNQ'], account: '7', timeframe: 3, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }],
-      sessions: ['09:30-09:40@America/New_York'], eodAt: '15:50@America/New_York',
+      sessions: ['09:30-09:45@America/New_York', '12:15-12:36@America/New_York'], eodAt: '15:50@America/New_York',
     },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null, balanceSchedule: 'MOCK_BALANCE_SCHEDULE' },
     ...over,
@@ -90,23 +97,60 @@ const runHomeOf = (w, runId) => path.join(w.home, 'replays', runId);
 const recordsOf = (w, runId) => readRun(path.join(runHomeOf(w, runId), 'replay', runId)).days;
 
 /** No error, refusal or warning anywhere the run writes one: its output, its runner steps, the gate's log. */
-function assertClean(w, runId, out) {
+function assertClean(w, runId, out, { refused = [] } = {}) {
   const home = runHomeOf(w, runId);
   const steps = fs.readFileSync(path.join(home, 'replay', runId, 'steps.log'), 'utf8');
-  const bad = re => [...out.split('\n'), ...steps.split('\n')].filter(l => re.test(l));
+  // The expected refusal's own lines aside (the gate's block and the model's result naming it).
+  const expected = l => refused.length > 0 && /order gate refused the entry|past the profit target|gate refusal/.test(l);
+  const bad = re => [...out.split('\n'), ...steps.split('\n')].filter(l => re.test(l) && !expected(l));
   assert.deepStrictEqual(bad(/\b(ERROR|error:|WARN|warning|refused|FAIL\b)/), [], 'no error, refusal or warning in the output or the steps');
   const gateLog = path.join(home, 'logs', 'gate-log.jsonl');
   const gated = fs.existsSync(gateLog) ? fs.readFileSync(gateLog, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
-  assert.deepStrictEqual(gated.filter(e => e.decision !== 'allowed'), [], 'the gate refused nothing');
-  for (const recs of Object.values(recordsOf(w, runId))) for (const r of recs) assert.deepStrictEqual([r.refusals, (r.ran || []).filter(x => !x.ok)], [[], []], r.t);
+  assert.strictEqual(gated.filter(e => e.decision !== 'allowed').length, refused.length, 'the gate refused only what the test expects');
+  // No failed cycle, and no refusal but the expected ones (`refused`: their bars).
+  for (const recs of Object.values(recordsOf(w, runId))) {
+    for (const r of recs) {
+      assert.deepStrictEqual((r.ran || []).filter(x => !x.ok), [], r.t);
+      assert.strictEqual(r.refusals.length, refused.includes(barOf(r)) ? 1 : 0, r.t);
+    }
+  }
 }
 
-test('stage 2, combine: two attempts from zero; the first blows (no cycle after it), the second passes; report and Monte Carlo', { timeout: 600000 }, () => {
-  // Attempt 1 (Thu 04-21, Fri 04-22): a loss past the max loss at 09:34 ET of its first day. Attempt 2 (Thu 04-28, Fri
-  // 04-29): half the target and a little more on each day, so its second close passes under the consistency rule.
-  const half = Math.ceil(ACCOUNT.profit_target / 2) + 100;
-  const blowAt = '2022-04-21T13:34:00Z';
-  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 100) }, { at: '2022-04-28T13:34:00Z', pnl: half }, { at: '2022-04-29T13:34:00Z', pnl: half }] });
+/** The scripted model's script file (scripted-opencode.js): bar open time -> step; a bar with none is quiet. */
+const playScript = (w, bars) => fs.writeFileSync(w.env.SMOKE_MODEL_SCRIPT, JSON.stringify({ bars }));
+/** The composed scenario of a scanned moment: one true read of each step, as the scan stored them. */
+const scenarioOf = m => ({ side: m.side, skill: 'rejection', reads: ['bias', 'location', 'setup', 'entry', 'stop', 'target'].map(step => { const x = m.reads.find(r => r.step === step && r.agrees); return [step, x.skill, x.read]; }) });
+/** The setup moments the scan finds on the first week's Thursday and Friday (scripts/curated-lists.js scan). */
+function scanMoments(w) {
+  const file = path.join(w.home, 'moments.jsonl');
+  const scan = sh(script('curated-lists.js'), ['scan', '--bars', w.bars1m, '--root', 'MNQ', '--from', '2022-04-21', '--to', '2022-04-23', '--use', 'practice', '--out', file], w.env);
+  assert.strictEqual(scan.code, 0, scan.out);
+  return fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+}
+const iso = ms => new Date(ms).toISOString();
+/** The bar a decision record decided: it closed 2 s before the decision time. */
+const barOf = x => iso(Date.parse(x.t) - 2000 - D.STEP);
+
+test('stage 2, combine: two attempts from zero; a model entry fills, the first attempt blows (no trade cycle after it), the second passes; an entry at the target is refused; report and Monte Carlo', { timeout: 600000 }, () => {
+  // Two session windows a day (09:30-09:45 and 12:15-12:36 ET). Attempt 1 (Thu 04-21, Fri 04-22): the model composes a
+  // long on the 12:21 ET bar, through the gate to the broker, and takes it out a bar later; then a loss past the max loss
+  // at 12:28 ET. Attempt 2 (Thu 04-28, Fri 04-29): the whole target and more at 09:34 ET of its first day, so the gate
+  // refuses the model's entry on the same 12:21 bar a week later (past the target with today the best day: more today
+  // can't meet consistency); as much again the next day, so its second close passes under the consistency rule.
+  const big = ACCOUNT.profit_target + 200;
+  const blowAt = '2022-04-21T16:28:00Z';
+  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 100) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
+  const moments = scanMoments(w);
+  const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
+  assert.ok(entry, moments.map(m => m.bar).join(', '));
+  const exitBar = iso(Date.parse(entry.bar) + D.STEP);
+  const refusedBar = iso(Date.parse(entry.bar) + 7 * 86400000); // the same bar a week later (the second week's Thursday)
+  const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
+  playScript(w, {
+    [entry.bar]: compose(entry),
+    [exitBar]: { do: 'exit', side: entry.side },
+    [refusedBar]: { ...compose(entry), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
+  });
   const config = replayConfig(w, 'combine-e2e', {
     start: '2022-04-21T13:30:00Z', end: '2022-04-30T00:00:00Z',
     combine: { account: ACCOUNT.name, attempts: ['2022-04-21', '2022-04-28'], maxSessions: 2 },
@@ -117,15 +161,22 @@ test('stage 2, combine: two attempts from zero; the first blows (no cycle after 
   assert.match(pre.out, /PASS stage: stage 2 on practice-train: continuous combine/);
   assert.match(pre.out, /PASS practice-mode: continuous combine/);
   const r = sh(script('replay.js'), ['run', '--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
+ 
   assert.strictEqual(r.code, 0, r.out);
   assert.match(r.out, /new run combine-e2e .*learning: practice-train/);
   const days = recordsOf(w, 'combine-e2e');
-  // Attempt 1: its first day up to the blow and then only its end of day (the runner's flatten and close), never its
-  // second day; attempt 2: both its days, every decision time.
+  // The model's entry went through the gate and filled, and its exit closed it.
+  const entered = days['2022-04-21'].find(x => barOf(x) === entry.bar);
+  assert.match(entered.ran[0].result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle ${entry.side} MNQ`), JSON.stringify(entered.ran));
+  assert.deepStrictEqual(entered.refusals, []);
+  const out = days['2022-04-21'].find(x => barOf(x) === exitBar);
+  assert.match(out.ran[0].result, /^CYCLE RESULT: managed - out/);
+  const fills = days['2022-04-21'].flatMap(x => x.trades || []).filter(f => !(f.creationTimestamp || '').startsWith(blowAt.slice(0, 16)));
+  assert.strictEqual(fills.length, 2, JSON.stringify(fills));
+  // Attempt 1: every bar up to the blow, then only its end of day (the runner's flatten and close), never its second day.
   assert.deepStrictEqual(Object.keys(days).sort(), ['2022-04-21', '2022-04-28', '2022-04-29']);
-  assert.deepStrictEqual(days['2022-04-21'].map(x => x.kind), ['trade', 'trade', 'eod']);
-  assert.ok(days['2022-04-21'].filter(x => x.kind === 'trade').every(x => x.t < blowAt), 'no trade cycle of attempt 1 after its blow');
-  for (const d of ['2022-04-28', '2022-04-29']) assert.deepStrictEqual(days[d].map(x => x.kind), ['trade', 'trade', 'trade', 'trade', 'eod'], d);
+  assert.deepStrictEqual(days['2022-04-21'].filter(x => x.t > blowAt).map(x => x.kind), ['eod'], 'no trade cycle of attempt 1 after its blow');
+  for (const d of ['2022-04-28', '2022-04-29']) assert.strictEqual(days[d].filter(x => x.kind === 'eod').length, 1, d);
   // No end of day caught up for a skipped day: every step ran its own day's action.
   for (const recs of Object.values(days)) for (const x of recs) assert.deepStrictEqual((x.ran || []).map(c => c.action), [x.kind], x.t);
   const log = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'replay', 'combine-e2e', 'combine.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
@@ -137,20 +188,51 @@ test('stage 2, combine: two attempts from zero; the first blows (no cycle after 
   assert.match(prompt, new RegExp(`${ACCOUNT.name} attempt \\(active\\)`));
   assert.match(prompt, /profit \+?\$0 of /);
   assert.match(prompt, /\bday 1\b/);
+  // Past the target (before the close that passes it), the gate refused the model's entry on the account's own block.
+  const refused = days['2022-04-28'].find(x => barOf(x) === refusedBar);
+  assert.strictEqual(refused.refusals.length, 1, JSON.stringify(refused.refusals));
+  const gated = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision !== 'allowed');
+  assert.strictEqual(gated.length, 1, JSON.stringify(gated));
+  assert.match(gated[0].violations.find(v => v.check === 'combine').message, /past the profit target with today the best day .*more today can't meet consistency/);
   // The stage report's attempt lines, then the Monte Carlo of the finished run.
   assert.match(r.out, /stage 2 \(pass prop\) report:/);
   assert.match(r.out, /continuous combine: 2 attempt\(s\), each from zero at the starting balance/);
-  assert.match(r.out, /attempt 1 from 2022-04-21: blown after 1 session\(s\); profit -\$\d+\.00 of .*1 trade\(s\), win rate 0\.0%/);
+  assert.match(r.out, /attempt 1 from 2022-04-21: blown after 1 session\(s\); profit -\$\d+\.\d\d of .*2 trade\(s\)/);
   assert.match(r.out, /attempt 2 from 2022-04-28: passed after 2 session\(s\); profit \$\d+\.00 of .*2 trade\(s\), win rate 100\.0%/);
   assert.match(r.out, /totals: 2 attempt\(s\) ended: 1 passed \(pass rate 50\.0%\), 1 blown, 0 unfinished; median sessions to pass 2/);
   assert.match(r.out, /promotion gate numbers \(prop\/promotion\.js, frozen.*practice \(practice-train\), never a promotion score/);
   // The Monte Carlo reads the finished run as a real (full-day) score: it refuses only the scripted fills, which no
   // order of the model placed (a real score never leaves an entry out).
-  assert.match(r.out, /Prop Monte Carlo: not scored \(3 entries without a settled outcome \(MNQ 2022-04-21T13:34:00\.000Z: a fill no record placed;.*a real score never leaves one out\)/);
+  assert.match(r.out, /Prop Monte Carlo: not scored \(3 entries without a settled outcome \(MNQ 2022-04-21T16:28:00\.000Z: a fill no record placed;.*a real score never leaves one out\)/);
   const report = sh(script('replay.js'), ['report', path.join(runHomeOf(w, 'combine-e2e'), 'replay', 'combine-e2e')], w.env);
   assert.strictEqual(report.code, 0, report.out);
   assert.match(report.out, /continuous combine: 2 attempt\(s\)/);
-  assertClean(w, 'combine-e2e', r.out);
+  assertClean(w, 'combine-e2e', r.out, { refused: [refusedBar] });
+});
+
+test('stage 2, combine: an open loss through the floor between two steps blows the attempt, though the position closes whole', { timeout: 600000 }, () => {
+  // A long of 10 MNQ opened at 09:31 ET, priced 151 points above the lowest 1-minute low before the 09:33 step (equity
+  // $3,020 and the exit fees down at its worst: past the $3,000 cushion; at those bars' highs it would not be), closed by
+  // the script at its entry price at 10:00 ET (no loss).
+  const openAt = '2022-04-21T13:31:00.000Z';
+  const shift = shiftOf(MONDAYS[0]);
+  const lows = D.MINUTE_BARS.map(b => ({ ...b, t: iso(Date.parse(b.t) + shift) })).filter(b => b.t >= openAt && Date.parse(b.t) + 60000 <= Date.parse('2022-04-21T13:33:02Z'));
+  assert.strictEqual(lows.length, 2);
+  const averagePrice = Math.min(...lows.map(b => b.l)) + 151;
+  assert.ok(Math.max(...lows.map(b => b.h)) - Math.min(...lows.map(b => b.l)) > 2, 'only the worst price touches the floor');
+  const w = world({ scriptedPositions: [{ at: openAt, until: '2022-04-21T14:00:00.000Z', type: 1, size: 10, averagePrice, pnl: 0 }] });
+  const config = replayConfig(w, 'touch-e2e', { start: '2022-04-21T13:30:00Z', end: '2022-04-23T00:00:00Z', combine: { account: ACCOUNT.name, attempts: ['2022-04-21'], maxSessions: 2 } });
+  const r = sh(script('replay.js'), ['run', '--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
+  assert.strictEqual(r.code, 0, r.out);
+  const days = recordsOf(w, 'touch-e2e');
+  // The 09:30 step, then (the touch seen before the 09:33 step) only the day's end of day; the second day never stepped.
+  assert.deepStrictEqual(Object.keys(days), ['2022-04-21']);
+  assert.deepStrictEqual(days['2022-04-21'].map(x => [x.t, x.kind]), [['2022-04-21T13:30:02.000Z', 'trade'], ['2022-04-21T19:50:00.000Z', 'eod']]);
+  const end = fs.readFileSync(path.join(runHomeOf(w, 'touch-e2e'), 'replay', 'touch-e2e', 'combine.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).find(x => x.kind === 'end');
+  assert.deepStrictEqual([end.outcome, end.profit, end.sessions], ['blown', 0, 1]);
+  assert.ok(end.lowCushion < 0 && end.worstDay < -ACCOUNT.max_loss, JSON.stringify(end));
+  assert.match(r.out, /attempt 1 from 2022-04-21: blown after 1 session\(s\); profit \$0\.00 of/);
+  assertClean(w, 'touch-e2e', r.out);
 });
 
 test('stage 2, accountStates: two curated days, each opening at its drawn balance shown in the prompt; finished and scored', { timeout: 600000 }, () => {
@@ -163,7 +245,6 @@ test('stage 2, accountStates: two curated days, each opening at its drawn balanc
   const all = fs.readFileSync(scanned, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   // A moment inside the day's cash session (its bar between 09:40 and 15:00 ET: the run's sessions hold its window).
   const pick = day => all.find(m => m.day === day && m.bar >= `${day}T13:40` && m.bar <= `${day}T19:00`);
-  const iso = ms => new Date(ms).toISOString();
   const kept = ['2022-04-21', '2022-04-22'].map(pick).map((m, i) => ({ ...m, list: i ? 'trend-down' : 'trend-up', window: { from: iso(Date.parse(m.bar) - D.STEP), to: iso(Date.parse(m.bar) + 2 * D.STEP) } }));
   assert.strictEqual(kept.length, 2, all.map(m => m.day).join(','));
   fs.writeFileSync(scanned, kept.map(m => `${JSON.stringify(m)}\n`).join(''));

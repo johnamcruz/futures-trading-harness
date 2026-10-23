@@ -34,7 +34,8 @@
  *   stageRequirements(stage)    what the preflight checks for it
  *   exitTest({ decisions, adherence })   [{ test, status: PASS | FAIL | INSUFFICIENT | N/A | SANITY, detail }]
  *   pooledExitTest(pool, { scorecardComposed })   { pass, tests, head }: the exit test on a candidate's pooled validate runs
- *   readPool(run, { env, scoreOf })   that pool from the run's ledger and the run homes beside it
+ *   readPool(run, { env, scoreOf })   that pool from the run's ledger and the run homes beside it (a stage-2 run among
+ *                               them, its look untagged: `foreign`, and the pool can't pass)
  *   rBySetup(decisions)         [{ setup, n, entered, meanR }]: composed decisions with an R, by their setup step's skills
  *   stageReport(run, { root, env, read })   the end-of-run lines (scripts/replay.js run, when the run is done)
  */
@@ -184,6 +185,7 @@ function pooledExitTest(pool, { scorecardComposed = true } = {}) {
   const ids = pool.counted.map(r => r.runId);
   let poolLine;
   if (!pool.named) poolLine = { test: 'pool', status: 'N/A', detail: `run ${pool.runId} names no candidate (--candidate <name> with --validate): an unnamed run is its own candidate, so its retries never pool and the cap never counts them` };
+  else if ((pool.foreign || []).length) poolLine = { test: 'pool', status: 'INSUFFICIENT', detail: `candidate ${pool.candidate}'s validate run(s) ${pool.foreign.join(', ')} are stage-2 runs (their run homes hold a prop attempt; their looks predate the mode tag): they never pool with stage 1, so the pool can't be judged` };
   else if (pool.missing.length) poolLine = { test: 'pool', status: 'INSUFFICIENT', detail: `candidate ${pool.candidate}'s validate run(s) ${pool.missing.join(', ')} not found beside this one: a pool without them could flatter it` };
   else poolLine = { test: 'pool', status: 'PASS', detail: `candidate ${pool.candidate}: ${ids.join(', ')} pooled (the first ${learningLooks.VALIDATE_RUNS_PER_CANDIDATE} validate runs at most)` };
   const errored = pool.counted.find(r => r.adherence && r.adherence.error);
@@ -235,15 +237,28 @@ function readPool(run, { env = process.env, scoreOf }) {
   const v = looks.validateRuns(fs.existsSync(file) ? readLedger(file) : [], candidate);
   const counted = [];
   const missing = [];
+  const foreign = [];
   for (const id of v.counted) {
     const home = path.join(path.dirname(run.paths.runHome), id);
+    // A look from before the mode tag (looks.js) has none: a run home that holds an attempt shows a stage-2 run.
+    if (stageTwoHome(home, id)) { foreign.push(id); continue; }
     const l = readLearning(home);
     if (!l) { missing.push(id); continue; }
     let adherence;
     try { adherence = scoreOf(path.join(home, 'replay', id)); } catch (e) { adherence = { error: String(e.message).split('\n')[0] }; }
     counted.push({ runId: id, decisions: l.decisions, adherence });
   }
-  return { candidate, named: Boolean(candidate) && candidate !== run.runId, runId: run.runId, counted, missing, windows: v.windows, beyond: v.beyond, all: v.all };
+  return { candidate, named: Boolean(candidate) && candidate !== run.runId, runId: run.runId, counted, missing, foreign, windows: v.windows, beyond: v.beyond, all: v.all };
+}
+
+/**
+ * Whether a run home is a stage-2 (or prop) run's: its drawn-state log, its combine log, or an attempt record of its own
+ * (stage 1 starts none). Such a run never pools with stage 1, whatever its look says.
+ */
+function stageTwoHome(home, runId) {
+  const dir = path.join(home, 'replay', runId);
+  if (['account-states.jsonl', require('./combine-run').LOG].some(f => fs.existsSync(path.join(dir, f)))) return true;
+  try { return fs.readdirSync(path.join(home, 'combine')).some(f => f.endsWith('.json')); } catch (_err) { return false; }
 }
 
 /** The default readers of a finished run: its learning log, its scorecard, its role, its candidate's validate pool, the merged features. */
@@ -347,4 +362,4 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
   return lines;
 }
 
-module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, pooledExitTest, readPool, rBySetup, stageReport, practiceLines };
+module.exports = { STAGES, EXIT_TEST, applyStage, stageRequirements, exitTest, pooledExitTest, readPool, stageTwoHome, rBySetup, stageReport, practiceLines };

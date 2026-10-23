@@ -43,6 +43,9 @@
  * scriptedFills (a state field, from MOCK_INIT or MOCK_INIT_FILE): [{ at, pnl, contractId? }], each a round trip the account
  * makes once the clock reaches its `at` (an opening fill and a closing fill with that realized P&L, no fees; the
  * balance moves by it): an account's P&L scripted without a model, as a replay server's fills would move it.
+ * scriptedPositions (a state field): [{ at, until, type, size, averagePrice, pnl?, contractId? }], each a position the
+ * account holds from `at` (an opening fill at averagePrice) until `until` (a closing fill with realized `pnl`, default 0):
+ * an open position whose unrealized P&L the test sets by its entry price, closed by the script.
  */
 
 const fs = require('fs');
@@ -331,6 +334,25 @@ function applyScriptedFills(s) {
   }
 }
 
+/** scriptedPositions: each position opened once the clock reaches its `at`, and closed once it reaches its `until`. */
+function applyScriptedPositions(s) {
+  for (const p of s.scriptedPositions) {
+    const contractId = p.contractId || CONTRACTS[0].id;
+    if (!p.opened && Date.parse(p.at) <= s.nowMs) {
+      p.opened = true;
+      p.id = s.nextId++;
+      s.fills.push({ id: s.nextId++, orderId: s.nextId++, accountId: ACCOUNT, contractId, creationTimestamp: p.at, price: p.averagePrice, profitAndLoss: null, fees: 0, side: p.type === 1 ? 0 : 1, size: p.size, voided: false });
+      s.positions.push({ id: p.id, accountId: ACCOUNT, contractId, creationTimestamp: p.at, type: p.type, size: p.size, averagePrice: p.averagePrice });
+    }
+    if (p.opened && !p.closed && Date.parse(p.until) <= s.nowMs) {
+      p.closed = true;
+      s.positions = s.positions.filter(x => x.id !== p.id);
+      s.fills.push({ id: s.nextId++, orderId: s.nextId++, accountId: ACCOUNT, contractId, creationTimestamp: p.until, price: p.averagePrice, profitAndLoss: p.pnl || 0, fees: 0, side: p.type === 1 ? 1 : 0, size: p.size, voided: false });
+      s.balance = Math.round((s.balance + (p.pnl || 0)) * 100) / 100;
+    }
+  }
+}
+
 /** One tool call against the shared state; every call is logged in state.calls. */
 function handle(file, tool, args = {}, env = process.env) {
   let thrown = null;
@@ -340,6 +362,7 @@ function handle(file, tool, args = {}, env = process.env) {
     if (env.MOCK_PRICE_FROM_BARS === '1') followBars(s);
     if (env.MOCK_BALANCE_SCHEDULE) applySchedule(s, env.MOCK_BALANCE_SCHEDULE);
     if (Array.isArray(s.scriptedFills)) applyScriptedFills(s);
+    if (Array.isArray(s.scriptedPositions)) applyScriptedPositions(s);
     // With whether a position was open when the call came (an order cancelled while one was, say).
     s.calls.push({ tool, args, open: s.positions.length > 0 });
     if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);

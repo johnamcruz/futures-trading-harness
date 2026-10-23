@@ -77,7 +77,8 @@ const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../trading/prop-state');
 const combine = require('../trading/combine');
-const { accountNamed } = require('../trading/accounts');
+const { accountNamed, feePerSide } = require('../trading/accounts');
+const { isOpen, signedSize } = require('../trading/positions');
 const combineRun = require('./combine-run');
 
 const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
@@ -158,6 +159,24 @@ function defaultDeps(run, root) {
     // The account's balance as the broker reports it (a run with account states checks the drawn one took).
     async balance(env, account) {
       return withAdapter({ root, env }, a => a.accountBalance(account));
+    },
+    // A combine run's open P&L before a step (combine-run.js): each open position at its worst 1-minute price since the
+    // later of the last check and its fill (the bars at the clock), less its exit fee; 0 when flat. Throws on what it can't read.
+    async openPnl(env, account, { account: profile, sinceMs, at }) {
+      return withAdapter({ root, env }, async a => {
+        const open = (await a.accountState(account)).positions.filter(isOpen);
+        if (!open.length) return 0;
+        const worst = new Map();
+        for (const p of open) {
+          const from = Math.max(sinceMs, Date.parse(p.creationTimestamp) || sinceMs);
+          const bars = (await a.history(p.contractId, { from: new Date(from), to: at, timeframe: 1 })).filter(b => Date.parse(b.t) >= from);
+          const long = signedSize(p) > 0;
+          // No closed bar since (the fill's own minute): the last closed one prices it.
+          const w = combineRun.worstPrice(bars, long) ?? combineRun.worstPrice((await a.closedBars(p.contractId, { minutes: 1, limit: 1, now: at })), long);
+          worst.set(p.contractId, w);
+        }
+        return combineRun.openPnlAt(open, { worstOf: id => worst.get(id), specOf: liveSpecs(env), feeOf: r => feePerSide(profile, r) });
+      });
     },
     async trades(env, account, since, until) {
       // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).

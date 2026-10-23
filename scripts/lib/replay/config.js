@@ -242,6 +242,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     if (r.prop !== undefined) errors.push('combine: not with prop (combine.account is the attempts\' account)');
     if (practice.practice) errors.push('combine: not with practice (no setup-focus skipping: every decision time is stepped)');
     if (everyNth !== 1) errors.push('combine: every bar of an attempt\'s days runs (everyNthBar 1)');
+    if (combineCfg.combine && !root) errors.push('combine: needs the harness root to load its account and the policy strategy (resolveReplay { root })');
     if (combineCfg.combine && root) {
       try { combineAccount = require('../trading/accounts').accountNamed(root, combineCfg.combine.account, env); } catch (err) { errors.push(`combine.account: ${err.message}`); }
       // The runner snapshots and closes the days of the account its policy strategy trades: the attempts must be it.
