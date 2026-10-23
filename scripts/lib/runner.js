@@ -95,6 +95,7 @@ const { ENUMS } = require('./broker/interface');
 const SIGNAL_BARS = TUN.gate.signalMaxAgeBars;
 const { expectedRoles } = require('./trading/desk-check');
 const { withSkillsMissing } = require('./role-skills-record');
+const { historySince } = require('./prop/attempt-scope');
 const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
 const FILL_GRACE_MS = RUN.fillGraceMs;
 // The account read for a run's prompt never holds a run up longer than this.
@@ -161,6 +162,9 @@ function createRunner(deps) {
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
     recentTrades = () => [],
+    // When a fresh combine attempt's in-prompt history starts (prop/attempt-scope.js historyFrom: ms), or null: the
+    // prompt's last cycles are only its own. null (any other run): every one, as before.
+    historyFrom = () => null,
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     prop = null, // prop-challenge hooks (prop/live-runner.js createPropHooks)
     // A closed bar this pass polled: (symbol, { bar, stale, action, contractId, bars }), stale when it closed too long
@@ -1769,9 +1773,11 @@ function createRunner(deps) {
           // last few), never a fast lane's flood; one lane: the last 10, as before.
           const firstLane = `${lanes[0].timeframe}m`;
           const openLanes = multi ? [...new Set(tradeObjs.map(t => { try { const s = t.setup ? strategyNamed(t.setup) : null; return s && s.timeframe ? s.timeframe : null; } catch (_err) { return null; } }).filter(Boolean))] : [];
+          // A fresh combine attempt's prompt shows only its own decisions (the history itself stays whole).
+          const ownHistory = historySince((state && state.history) || [], attempt('the attempt\'s start', () => historyFrom(), null));
           const shownHistory = multi
-            ? laneHistory((state && state.history) || [], { closed: closedLanes.map(l => `${l.timeframe}m`), first: firstLane, open: openLanes })
-            : (state && state.history) || [];
+            ? laneHistory(ownHistory, { closed: closedLanes.map(l => `${l.timeframe}m`), first: firstLane, open: openLanes })
+            : ownHistory;
           // The recent decisions as the prompt shows them (its own call builds the same lines), for the session record.
           const historyShown = attempt('your recent decisions', () => historyShownLines(shownHistory, multi, marketOf(items, cfg.timeframe)), []);
           const runsEntry = entryCycle && Boolean(rolesFile);

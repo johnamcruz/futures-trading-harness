@@ -200,6 +200,9 @@ test('the driver: each attempt from zero; no step after a blow or a pass; the ne
   // Attempt 2 starts fresh: the broker at the starting balance, a new record (no closed days), started on its first day.
   const first2 = steps.find(s => s.day === '2022-03-07');
   assert.deepStrictEqual([first2.balance, first2.days, first2.startedAt.slice(0, 10)], [S0, 0, '2022-03-07']);
+  // Its prompt history starts at its start (prop/attempt-scope.js): the record says so.
+  const rec2 = prop.readAttempt(run.paths.runHome, POLICY_ACCOUNT);
+  assert.strictEqual(rec2.historyFrom, rec2.startedAt);
   // It passes at the second day's close: the third day (03-09) is never stepped.
   assert.deepStrictEqual([...new Set(steps.filter(s => s.day >= '2022-03-07').map(s => s.day))], ['2022-03-07', '2022-03-08']);
   assert.deepStrictEqual(log.map(x => [x.kind, x.attempt, x.outcome || null]), [['start', 1, null], ['end', 1, 'blown'], ['start', 2, null], ['end', 2, 'passed']]);

@@ -232,7 +232,8 @@ async function startOne(run, idx, point, ranAt, env, deps, { root, manifest, sav
     writeJsonAtomic(run.paths.balanceSchedule, schedule);
   }
   if (ps.readAttempt(run.paths.runHome, account.name)) ps.endAttempt(run.paths.runHome, account.name, ranAt);
-  ps.startAttempt(run.paths.runHome, account, ranAt);
+  // Its prompt history starts here: none of the earlier attempt's reviewed trades or decisions (prop/attempt-scope.js).
+  ps.startAttempt(run.paths.runHome, account, ranAt, { historyFrom: ranAt });
   const balance = await balanceOf(run, env, deps);
   // To the cent, as a broker reports a balance.
   if (Math.round(balance * 100) !== Math.round(account.starting_balance * 100)) {

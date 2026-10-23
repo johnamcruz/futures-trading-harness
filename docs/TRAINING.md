@@ -508,6 +508,17 @@ What the run does:
    moves to the next attempt's start, and the run finishes after the last
    attempt ends.
 
+**What resets per attempt.** A fresh attempt's prompt starts with no history
+of its own: the attempt line is the fresh record's (day 1, no profit, no trades,
+losses or streak today), and "Your last N reviewed trade(s)" and "Your last N
+cycle(s)" count only the attempt's own trades and decisions (reads scoped to
+the attempt's start, its record's `historyFrom`; the journal and the decision
+history stay whole for reviews, labels and the experience log). An entry of
+an earlier attempt left without a review is still named (the gate still
+requires its review). What doesn't reset: lessons and the experience lookup,
+the learning that every run gets. A live attempt, a drawn state's seeded day
+and a stage-1 run show their history as before.
+
 Each attempt's start and end are in the run's `combine.jsonl`, never shown to
 the model. At the end, the stage report (and `replay.js report`) prints, for
 each attempt: its start, sessions run (a pass: up to the close that passed

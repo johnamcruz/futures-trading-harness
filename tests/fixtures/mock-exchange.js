@@ -286,7 +286,8 @@ const HANDLERS = {
       s.failJournal -= 1;
       throw new Error('HTTP 503 service unavailable');
     }
-    const entry = { ts: new Date().toISOString(), ...a };
+    // MOCK_JOURNAL_CLOCK=1: stamped at the exchange's clock (a replay server's time), else the wall clock.
+    const entry = { ts: env.MOCK_JOURNAL_CLOCK === '1' ? iso(s.nowMs) : new Date().toISOString(), ...a };
     if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify(entry)}\n`);
     return entry;
   },

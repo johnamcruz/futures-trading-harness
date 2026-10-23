@@ -61,7 +61,7 @@ function world({ scriptedFills = [], scriptedPositions = [] } = {}) {
   fs.mkdirSync(live);
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({
-    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE', 'MOCK_PRICE_FROM_BARS', 'MOCK_BALANCE_SCHEDULE', 'MOCK_MAX_ORDER_SIZE', 'MOCK_MAX_POSITION_SIZE', 'MOCK_MAX_DAILY_LOSS'], limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' } } },
+    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT_FILE', 'MOCK_PRICE_FROM_BARS', 'MOCK_BALANCE_SCHEDULE', 'MOCK_MAX_ORDER_SIZE', 'MOCK_MAX_POSITION_SIZE', 'MOCK_MAX_DAILY_LOSS', 'MOCK_JOURNAL_CLOCK'], limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' } } },
   }));
   fs.writeFileSync(path.join(bin, 'opencode'), `#!/bin/sh\nexec "${process.execPath}" "${STANDIN}" "$@"\n`, { mode: 0o755 });
   const moved = (bars, monday) => bars.map(b => ({ ...b, t: new Date(Date.parse(b.t) + shiftOf(monday)).toISOString() }));
@@ -72,7 +72,8 @@ function world({ scriptedFills = [], scriptedPositions = [] } = {}) {
   fs.writeFileSync(model, JSON.stringify({ bars: {} }));
   const env = {
     PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: home, FTH_HOME: live, NODE_ENV: 'test',
-    MOCK_REPLAY: '1', MOCK_PRICE_FROM_BARS: '1', MOCK_INIT_FILE: init, SMOKE_MODEL_SCRIPT: model,
+    // The journal stamped at the replay clock, as a replay server's (its entries' times are the run's).
+    MOCK_REPLAY: '1', MOCK_PRICE_FROM_BARS: '1', MOCK_JOURNAL_CLOCK: '1', MOCK_INIT_FILE: init, SMOKE_MODEL_SCRIPT: model,
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
   };
   return { home, live, env, bars1m: PF.writeMinuteBars(path.join(home, 'MNQ-1m.csv'), MONDAYS[0]) };
@@ -85,7 +86,7 @@ function replayConfig(w, runId, over) {
     runId, workDir: path.join(w.home, 'replays'), broker: 'replaymock', stage: 2, premarket: false,
     autotrader: {
       harness: 'opencode', model: '', symbols: ['MNQ'], account: '7', timeframe: 3, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }],
-      sessions: ['09:30-09:45@America/New_York', '12:15-12:36@America/New_York'], eodAt: '15:50@America/New_York',
+      sessions: ['09:30-09:45@America/New_York', '12:15-12:45@America/New_York'], eodAt: '15:50@America/New_York',
     },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null, balanceSchedule: 'MOCK_BALANCE_SCHEDULE' },
     ...over,
@@ -133,12 +134,12 @@ const barOf = x => iso(Date.parse(x.t) - 2000 - D.STEP);
 
 test('stage 2, combine: two attempts from zero; a model entry fills, the first attempt blows (no trade cycle after it), the second passes; an entry at the target is refused; report and Monte Carlo', { timeout: 600000 }, () => {
   // Two session windows a day (09:30-09:45 and 12:15-12:36 ET). Attempt 1 (Thu 04-21, Fri 04-22): the model composes a
-  // long on the 12:21 ET bar, through the gate to the broker, and takes it out a bar later; then a loss past the max loss
-  // at 12:28 ET. Attempt 2 (Thu 04-28, Fri 04-29): the whole target and more at 09:34 ET of its first day, so the gate
+  // long on the 12:21 ET bar, through the gate to the broker, takes it out a bar later and reviews it; then a loss past
+  // the max loss at 12:40 ET. Attempt 2 (Thu 04-28, Fri 04-29): the whole target and more at 09:34 ET of its first day, so the gate
   // refuses the model's entry on the same 12:21 bar a week later (past the target with today the best day: more today
   // can't meet consistency); as much again the next day, so its second close passes under the consistency rule.
   const big = ACCOUNT.profit_target + 200;
-  const blowAt = '2022-04-21T16:28:00Z';
+  const blowAt = '2022-04-21T16:40:00Z';
   const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 100) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
   const moments = scanMoments(w);
   const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
@@ -148,7 +149,7 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
   playScript(w, {
     [entry.bar]: compose(entry),
-    [exitBar]: { do: 'exit', side: entry.side },
+    [exitBar]: { do: 'exit', side: entry.side, review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
     [refusedBar]: { ...compose(entry), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
   });
   const config = replayConfig(w, 'combine-e2e', {
@@ -188,6 +189,17 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   assert.match(prompt, new RegExp(`${ACCOUNT.name} attempt \\(active\\)`));
   assert.match(prompt, /profit \+?\$0 of /);
   assert.match(prompt, /\bday 1\b/);
+  // Each attempt's prompt history is its own (prop/attempt-scope.js): attempt 1's cycles after its review show it and
+  // its earlier decisions; attempt 2's first prompt shows nothing of attempt 1 (no reviewed trade, no earlier cycle).
+  const promptOf = x => JSON.parse(fs.readFileSync(x.cycles[0].file, 'utf8')).prompt;
+  const later1 = days['2022-04-21'].filter(x => x.kind === 'trade' && x.t > iso(Date.parse(exitBar) + D.STEP + 2000) && x.t < blowAt);
+  assert.ok(later1.length >= 2, later1.map(x => x.t).join(', '));
+  for (const x of later1) {
+    assert.match(promptOf(x), /Your last 1 reviewed trade\(s\)/, x.t);
+    assert.match(promptOf(x), /Your last \d+ cycle\(s\)/, x.t);
+  }
+  assert.doesNotMatch(prompt, /Your last \d+ reviewed trade|Your last \d+ cycle/, 'attempt 2 starts with no history');
+  assert.match(prompt, /No reviewed trades in the journal yet/);
   // Past the target (before the close that passes it), the gate refused the model's entry on the account's own block.
   const refused = days['2022-04-28'].find(x => barOf(x) === refusedBar);
   assert.strictEqual(refused.refusals.length, 1, JSON.stringify(refused.refusals));
@@ -203,7 +215,7 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   assert.match(r.out, /promotion gate numbers \(prop\/promotion\.js, frozen.*practice \(practice-train\), never a promotion score/);
   // The Monte Carlo reads the finished run as a real (full-day) score: it refuses only the scripted fills, which no
   // order of the model placed (a real score never leaves an entry out).
-  assert.match(r.out, /Prop Monte Carlo: not scored \(3 entries without a settled outcome \(MNQ 2022-04-21T16:28:00\.000Z: a fill no record placed;.*a real score never leaves one out\)/);
+  assert.match(r.out, /Prop Monte Carlo: not scored \(3 entries without a settled outcome \(MNQ 2022-04-21T16:40:00\.000Z: a fill no record placed;.*a real score never leaves one out\)/);
   const report = sh(script('replay.js'), ['report', path.join(runHomeOf(w, 'combine-e2e'), 'replay', 'combine-e2e')], w.env);
   assert.strictEqual(report.code, 0, report.out);
   assert.match(report.out, /continuous combine: 2 attempt\(s\)/);

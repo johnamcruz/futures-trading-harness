@@ -65,8 +65,9 @@ function readAttempt(home, account) {
 const missedOf = record => [...new Set([...(record.missedCloses || []), ...(record.missedClose ? [record.missedClose] : [])])]
   .filter(d => !record.days.some(x => x.day === d)).sort();
 
-function startAttempt(home, account, now = new Date()) {
-  const r = { account: account.name, startedAt: now.toISOString(), startDay: tradingDayKey(now), days: [], snapshot: null, missedClose: null };
+function startAttempt(home, account, now = new Date(), { historyFrom = null } = {}) {
+  // historyFrom: a combine replay's fresh attempt (prop/attempt-scope.js): its prompt history starts here.
+  const r = { account: account.name, startedAt: now.toISOString(), startDay: tradingDayKey(now), days: [], snapshot: null, missedClose: null, ...(historyFrom ? { historyFrom: new Date(historyFrom).toISOString() } : {}) };
   writeJson(combineFile(home, account.name), r);
   return r;
 }
