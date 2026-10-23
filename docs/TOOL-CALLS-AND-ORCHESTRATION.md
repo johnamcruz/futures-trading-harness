@@ -278,6 +278,41 @@ phases:
    (`--append-system-prompt-file`, `scripts/lib/role-prompt.js`, opencode's
    index-mode selection), so `missing` is empty.
 
+Two of the machine's opt-in keys (the runner config's, Claude Code only;
+absent, the requests and checks are byte for byte as above) change how the
+desk's data and reports are delivered, never what a role is told or checked
+against:
+
+- `cycleDataInPrompt` (the head trader's key, for the desk too): before the
+  roles run, the runner makes each role's every-cycle reads, as its agent body
+  names them, in the cycle's store (`scripts/lib/cycle-data.js` `createStore`,
+  `collectDesk`). Analysts get `bar_briefing`, market structure also gets
+  `strategies_list`, and volume and liquidity also gets `get_quote`. Phase 1
+  gets `get_server_config`, `list_accounts`, `get_account_snapshot`, its two
+  `journal_read`s and `combine_status`. Each read is made once a cycle
+  (the analysts' shared briefing once), with the environment the roles' runs
+  get. Each role's request ends with exactly the text each tool returned,
+  and a line for each read not made ("read it yourself"). The store is
+  the runner's, in memory, one per cycle: no session writes it and no tool
+  serves from it. The head trader's reads take the same entries, but the
+  account's reads are made again for it, since they change with fills. A
+  reader of another cycle never takes from it.
+  `read-data` then also counts a role that called no data tool when the
+  runner's own record for that role (`collectedFor`, from the workflow's
+  context built in code) says its primary read was made whole and is in its
+  request: an analyst's briefing, served as this cycle's, or phase 1's account
+  snapshot. Another role's record, a failed read, another bar's briefing or a
+  block dropped by the size cap gives no credit; nothing parses the blocks.
+  Each read has a kind: `preload` (only `strategies_list`, which depends on
+  neither the closing bar, the clock, the account nor the journal) or `close`.
+  The store's `preload` is the seam for a later preloader between cycles; it
+  never makes a `close` read before the bar closes.
+- `deskBriefReports`: each desk request adds one instruction: write only the
+  report block, in the role's own output format, with no preamble or
+  narration. Every consumer of a desk report (these checks, the report cache's
+  Data-line versions and phase 1's Attempt line, the head trader's prompt,
+  the gate's credit from the runner's record) reads only that block.
+
 The model no longer decides whether the desk runs; it is complete by
 construction. The multi-agent design is kept: the same roles, their own
 skills, their own analysis.
