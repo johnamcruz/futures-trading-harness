@@ -1,14 +1,14 @@
 ---
 name: gate-refusals-limits
-description: Use when the gate refuses an entry with [combine], [policy], [strategy], [max-order-size] or [max-risk].
+description: Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [strategy], [max-order-size] or [max-risk].
 ---
 
 # Gate refusals: limits
 
 ## When to Use
 
-- The gate refused an entry with `[combine]`, `[policy]`, `[strategy]`,
-  `[max-order-size]` or `[max-risk]`.
+- The gate refused an entry with `[combine]`, `[prop-account-attempt]`,
+  `[policy]`, `[strategy]`, `[max-order-size]` or `[max-risk]`.
 
 ## How It Works
 
@@ -17,6 +17,7 @@ description: Use when the gate refuses an entry with [combine], [policy], [strat
 | `[combine] <account>: the account balance doesn't reconcile: the broker reports $X, but … gives $Y` | Each bar the runner checks the broker's balance against the day's opening balance plus every fill since (P&L less fees and commissions, from `search_trades`); they disagree, so the cushion every size comes from can't be trusted | No entry this bar; don't work around it or "correct" the balance. It clears on its own when a later snapshot reconciles (a broker that was slow to book a fill). If it stays, tell the user: the account's balance needs checking with the broker. Exits and `[protect]` stops always go. |
 | `[combine] <account>: N losing trades in a row this session, at the loss streak stop (loss_streak_stop N): no new entries until the next session` | The rulebook's loss streak stop: that many losses in a row this session (from the broker's closing fills; a win ends the streak, a scratch neither) | Stand aside for the rest of the session; don't retry or wait it out: it lifts only at the next session. Write the lesson from the losses. Exits and `[protect]` stops always go. |
 | `[combine] <account>: the account balance couldn't be checked against the broker's fills (…)` | `search_trades` failed or returned a fill the harness can't read, so the balance is unchecked | No entry until a snapshot can check it; exits and stops go. Don't retry the entry this bar. |
+| `[prop-account-attempt] account <id> is a <profile> prop account and no <profile> attempt is running` (or its marker or profile is invalid) | The user marked the account a prop account: no entry without its attempt (floor, daily limits). Hard, any mode | Stand aside; don't switch accounts. Starting it (`node scripts/combine.js start --account <profile>`) or fixing the marker is the user's: tell them. Exits and stops go. |
 | `[policy] setup:<policy>: the latest verdict's setup is from <name>: <name> has status "paper": <policy> trades only its active strategies live` (or `is not a known strategy`, `is not one of <policy>'s strategies`) | A paper strategy stays paper inside a policy: the verdict is for a setup of a strategy that isn't active (or one the gate can't find), so no live entry from it. Hard: it can't be skipped | Stand aside; don't relabel the setup or wait it out. Activating a strategy is the user's call. Exits and `[protect]` stops always go. |
 | `[strategy] setup:<name> trades <SELECTED> (the selected contract), not <ROOT>` | The user selected the other contract of that micro/mini family (the runner's `symbols`, or `FTH_SYMBOLS`); every strategy (a policy strategy too) trades only the selected one, never both | Plan and send the entry on the contract it names, or stand aside. Don't switch legs or change the selection; that is the user's. Exits and `[protect]` stops on either contract always go. |
 | `[strategy] setup:<name> lists both <MICRO> and <MINI>, and neither is selected` | No contract of that index is selected, and the strategy lists both: which one to trade is the user's choice | Stand aside. Tell the user to select one contract per index (the runner's `symbols`, or `FTH_SYMBOLS`). Exits and stops still go. |

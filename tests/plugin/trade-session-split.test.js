@@ -410,9 +410,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // strategy researcher (+2, strategy-library's R:R line).
 // Then decisive is a 1h CHoCH against (a 15m swing broken is serious, a sweep a read for) and the briefing's Standard plan
 // line is named: the risk manager +211 (confluence-counting; the owner's OK while performance holds).
+// Then the gate's [prop-account-attempt] refusal (feat/prop-account-marker, owner-approved 2026-10-23): the risk manager
+// +432 bytes each mode (its row in gate-refusals-limits).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90244, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 76121, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90676, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 76553, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
