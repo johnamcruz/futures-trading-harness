@@ -598,13 +598,51 @@ test('head-delivery: the run\'s head trader delivery keys (autotrader.js HEAD_DE
   const of = cfg => P.headDelivery({ run: { cfg } });
   assert.deepStrictEqual([of({ harness: 'claude' }).status, of({ harness: 'claude' }).detail], [P.PASS, 'none: the head trader loads its skills and makes its reads itself']);
   assert.strictEqual(of({ harness: 'opencode', cycleDataInPrompt: false, headSkillsInPrompt: false }).detail, 'none: the head trader loads its skills and makes its reads itself');
-  for (const k of require('../../scripts/lib/autotrader').HEAD_DELIVERY_KEYS) {
-    const on = of({ harness: 'claude', [k]: true });
-    assert.deepStrictEqual([on.status, on.detail.startsWith(`on: ${k} `)], [P.PASS, true], k);
+  const A = require('../../scripts/lib/autotrader');
+  for (const k of A.HEAD_DELIVERY_KEYS) {
+    const mode = A.HEAD_DELIVERY_MODES.includes(k);
+    const v = mode ? A.ENTRY_SKILLS_MODES[0] : true;
+    const base = mode ? { harness: 'claude', headSkillsInPrompt: true } : { harness: 'claude' };
+    const on = of({ ...base, [k]: v });
+    assert.deepStrictEqual([on.status, on.detail.includes(mode ? `${k}=${v} ` : `on: ${k} `)], [P.PASS, true], `${k}: ${on.detail}`);
     // A config validateConfig would refuse: FAIL, never a PASS.
-    assert.strictEqual(of({ harness: 'opencode', [k]: true }).status, P.FAIL, k);
-    assert.strictEqual(of({ harness: 'claude', [k]: 'yes' }).status, P.FAIL, k);
+    assert.strictEqual(of({ harness: 'opencode', [k]: v }).status, P.FAIL, k);
+    assert.strictEqual(of({ ...base, [k]: 'yes' }).status, P.FAIL, k);
   }
+  // headEntrySkills without the prompt addition it changes: FAIL (validateConfig refuses it too).
+  assert.strictEqual(of({ harness: 'claude', headEntrySkills: 'lookup' }).status, P.FAIL);
+  assert.match(of({ harness: 'claude', headEntrySkills: 'lookup' }).detail, /needs headSkillsInPrompt true/);
+  assert.match(of({ harness: 'claude', headSkillsInPrompt: true, headEntrySkills: 'lookup' }).detail, /^on: headSkillsInPrompt, headEntrySkills=lookup /);
   assert.match(of({ harness: 'claude', headSkillsInPrompt: true, cycleDataInPrompt: true }).detail, /^on: headSkillsInPrompt, cycleDataInPrompt .*never pooled with a run without them/);
   assert.strictEqual(P.headDelivery({ run: {} }).status, P.PASS, 'no runner config: none');
+});
+
+test('head-prompt and head-composed-reads (Claude, headEntrySkills lookup): built with the run\'s own options; the composed reads indexed and in the lookup lines PASS, embedded or unlisted FAIL', () => {
+  const claude = { ...ctx().run.cfg, harness: 'claude', headSkillsInPrompt: true };
+  const real = P.defaultReaders(ROOT, {}, {});
+  const on = { run: { cfg: { ...claude, headEntrySkills: 'lookup' } }, read: { roleSkillsMode: () => 'full', claudeHead: real.claudeHead } };
+  const hp = require('../../scripts/lib/head-prompt');
+  const built = real.claudeHead({ entry: 'lookup' });
+  assert.strictEqual(built.prompt, hp.claudeHeadText(ROOT, { entry: 'lookup' }), 'the lookup mode\'s file');
+  assert.deepStrictEqual(built.core, hp.CORE.filter(s => !hp.ENTRY.includes(s)));
+  assert.strictEqual(P.headPromptCheck(ctx(on)).status, P.PASS, P.headPromptCheck(ctx(on)).detail);
+  const res = P.headComposedReads(ctx(on));
+  assert.strictEqual(res.status, P.PASS, res.detail);
+  assert.match(res.detail, /^indexes the 4 composed reads \(confluence-counting, invalidation, rejection, breakout\) and names them to look up before an entry/);
+  // The key absent: the embedded file and its check, as before.
+  const emb = { ...on, run: { cfg: claude } };
+  assert.match(P.headComposedReads(ctx(emb)).detail, /^embeds the 4 composed reads/);
+  assert.strictEqual(real.claudeHead({ entry: 'embedded' }).prompt, hp.claudeHeadText(ROOT));
+  // A lookup-mode prompt that embeds one, doesn't index one, or has no lookup lines: FAIL.
+  const lk = () => real.claudeHead({ entry: 'lookup' });
+  const failWith = (label, patch, re) => {
+    const r = P.headComposedReads(ctx({ ...on, read: { ...on.read, claudeHead: () => ({ ...lk(), ...patch(lk()) }) } }));
+    assert.strictEqual(r.status, P.FAIL, `${label}: ${r.detail}`);
+    assert.match(r.detail, re, label);
+  };
+  failWith('embedded', h => ({ embedded: [...h.embedded, 'rejection'] }), /rejection embedded/);
+  failWith('not indexed', h => ({ indexed: h.indexed.filter(s => s !== 'invalidation') }), /invalidation not indexed/);
+  failWith('not in the lines', h => ({ lookupLines: h.lookupLines.replace(/`breakout`/g, 'breakout') }), /breakout not in the lookup lines/);
+  failWith('no lines in the prompt', h => ({ prompt: h.prompt.replace(h.lookupLines, '') }), /the prompt has no lookup lines/);
+  failWith('not an entry skill', h => ({ lookups: h.lookups.filter(s => s !== 'confluence-counting') }), /confluence-counting not an entry skill/);
 });

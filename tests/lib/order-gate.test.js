@@ -3706,3 +3706,94 @@ test('claude head prompt (gateway): checkOrder counts the attestation for the he
     assert.ok(skillsOk(run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }))), `${label}: an exit`);
   }
 });
+
+// --- headEntrySkills lookup (the runner config's, with headSkillsInPrompt): the entry skills (head-prompt.js ENTRY)
+// are left out of the Claude head trader's prompt addition, so they never count as embedded: a composed entry needs
+// them read with skill_lookup, in the head trader's stream (claudeLooked) or the runner's record of its loads (headLoaded).
+// The gate itself is unchanged. ---
+
+/** A Claude head trader's run in `entry` mode on a composed bar (`read`: the setup step's read), its stream the given lookups. */
+function claudeComposedRun(entry, lookups, read = '15m rejected prior vah up') {
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const root = path.resolve(__dirname, '..', '..');
+  const dir = require('../helpers').tmpDir();
+  const { file, text } = H.writeClaudeHead(dir, root, { entry });
+  const stream = path.join(dir, 'logs', 'cycle-transcript-1-lkp.jsonl');
+  fs.mkdirSync(path.dirname(stream), { recursive: true });
+  fs.writeFileSync(stream, claudeLines(lookups));
+  const cycle = cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream });
+  const att = H.claudeAttestation({ file, text, root, cycle });
+  const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
+  const cfg = { autonomous: true, roleSkills: 'full', cycle: null, cycleLaneBars: {}, cycleTranscript: stream, headPromptAttestation: JSON.stringify(att) };
+  return { H, root, dir, file, text, stream, cycle, att, home, cfg };
+}
+const lookupMsgs = r => r.violations.filter(v => v.check.startsWith('skills-')).map(v => `${v.check}: ${v.message}`);
+const composedLookups = relation => ['trade-lifecycle', 'setup-judgment', 'trade-plan', 'confluence-counting', 'invalidation', relation === 'broke' ? 'breakout' : 'rejection'];
+
+test('headEntrySkills lookup (gate): the entry skills are not attested, so a composed entry without their lookups is refused ([skills-loaded], [skills-at-entry]); with them it goes; embedded (the key absent) as before', () => {
+  for (const [relation, read] of [['rejected', '15m rejected prior vah up'], ['broke', '15m broke prior vah up']]) {
+    const off = claudeComposedRun('embedded', [], read);
+    assert.deepStrictEqual(off.att.skills, off.H.CORE, 'the key absent: every core skill attested');
+    assert.deepStrictEqual(lookupMsgs(lcEval(off.home, LC.order(), { config: off.cfg })), [], `${relation}: embedded, no lookup needed`);
+    const bare = claudeComposedRun('lookup', [], read);
+    assert.deepStrictEqual(bare.att.skills, bare.H.CORE.filter(s => !bare.H.ENTRY.includes(s)), 'lookup: the entry skills are not attested');
+    for (const s of bare.H.ENTRY) assert.ok(!bare.att.skills.includes(s), `not attested: ${s}`);
+    // No lookup: refused for exactly the entry skills this composed bar needs.
+    const r = lcEval(bare.home, LC.order(), { config: bare.cfg });
+    const need = composedLookups(relation);
+    assert.deepStrictEqual(checks(r).filter(c => c.startsWith('skills-')).sort(), ['skills-at-entry', 'skills-loaded'], relation);
+    assert.match(r.violations.find(v => v.check === 'skills-loaded').message, new RegExp(`not loaded in this session: trade-lifecycle, ${need.slice(3).join(', ')}\\.`), relation);
+    assert.match(r.violations.find(v => v.check === 'skills-at-entry').message, /not read in this session: setup-judgment, trade-plan\./, relation);
+    // Every one looked up: it goes.
+    const ok = claudeComposedRun('lookup', need, read);
+    assert.deepStrictEqual(lookupMsgs(lcEval(ok.home, LC.order(), { config: ok.cfg })), [], `${relation}: looked up`);
+    // Each one left out: refused for exactly it (the gate counts no lookup it didn't see).
+    for (const s of need) {
+      const one = claudeComposedRun('lookup', need.filter(x => x !== s), read);
+      const msgs = lookupMsgs(lcEval(one.home, LC.order(), { config: one.cfg }));
+      assert.strictEqual(msgs.length, 1, `${relation} without ${s}: ${msgs.join(' | ')}`);
+      assert.match(msgs[0], new RegExp(`session: ${s}\\.`), `${relation} without ${s}`);
+    }
+    // Exits are never held by it.
+    assert.deepStrictEqual(lookupMsgs(lcEval(bare.home, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }), { config: bare.cfg })), [], `${relation}: exit`);
+  }
+});
+
+test('headEntrySkills lookup (gate): a forged attestation naming the entry skills for the lookup file counts none of them; the embedded file\'s hash at the lookup file\'s path, none at all', () => {
+  const run = claudeComposedRun('lookup', []);
+  const forged = { ...run.att, skills: [...run.att.skills, ...run.H.ENTRY] };
+  const msgs = lookupMsgs(lcEval(run.home, LC.order(), { config: { ...run.cfg, headPromptAttestation: JSON.stringify(forged) } })).join('\n');
+  for (const s of composedLookups('rejected')) assert.match(msgs, new RegExp(`\\b${s}\\b`), s);
+  const emb = claudeComposedRun('embedded', []);
+  const swapped = { ...emb.att, config: run.file, cycle: run.cycle };
+  assert.match(lookupMsgs(lcEval(run.home, LC.order(), { config: { ...run.cfg, headPromptAttestation: JSON.stringify(swapped) } })).join('\n'), /skills-loaded: [^\n]*trade-session/);
+});
+
+test('headEntrySkills lookup (gateway): the runner\'s entry executor counts the head trader\'s entry-skill lookups from its role record (runner-entry.js appendHeadSkills of claudeLookupsInTranscript); without the record, refused', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const { claudeLookupsInTranscript } = require('../../scripts/lib/trading/skills-loaded');
+  const need = composedLookups('rejected');
+  const run = claudeComposedRun('lookup', need);
+  const has = (r, check) => r.violations.some(v => v.check === check);
+  const skillsOk = r => !has(r, 'skills-loaded') && !has(r, 'skills-at-entry');
+  const judge = env => checkOrder(LC.order(), { env, pluginRoot: run.root, now: LC_NOW });
+  const base = { FTH_HOME: run.home, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_CYCLE_LANE_BARS: JSON.stringify({}) };
+  // The head trader's own run: its stream's lookups count.
+  const head = { ...base, FTH_CYCLE_TRANSCRIPT: run.stream, FTH_HEAD_PROMPT: JSON.stringify(run.att) };
+  assert.ok(skillsOk(judge(head)), judge(head).message);
+  // The entry's trade-executor: its own Claude session (no lookup), the head trader's cycle id and attestation.
+  const exec = path.join(run.dir, 'logs', 'cycle-transcript-2-exe.jsonl');
+  fs.writeFileSync(exec, claudeLines([], { init: 'executor-session' }));
+  const roles = path.join(run.dir, 'logs', 'cycle-roles.jsonl');
+  const executor = { ...base, FTH_CYCLE_TRANSCRIPT: exec, FTH_CYCLE_ID: run.cycle, FTH_CYCLE_ROLES: roles, FTH_HEAD_PROMPT: JSON.stringify(run.att) };
+  const without = judge(executor);
+  assert.ok(has(without, 'skills-loaded') && has(without, 'skills-at-entry'), `no record: ${without.message}`);
+  // The record as runner-entry.js writes it from the head trader's output: the lookups are its loads.
+  RR.appendHeadSkills(roles, [...claudeLookupsInTranscript(fs.readFileSync(run.stream, 'utf8'))]);
+  assert.deepStrictEqual(RR.readHeadSkills(roles).sort(), [...need].sort());
+  assert.ok(skillsOk(judge(executor)), judge(executor).message);
+  // Another cycle's id: the attestation doesn't count, so the record's lookups alone leave the cycle's skills unread.
+  assert.ok(!skillsOk(judge({ ...executor, FTH_CYCLE_ID: '1'.repeat(16) })), 'another cycle');
+});

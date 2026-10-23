@@ -1614,14 +1614,30 @@ test('cycleDataInPrompt (this machine\'s runner config): a boolean or absent, fo
   assert.strictEqual(validateConfig({ harness: 'opencode', cycleDataInPrompt: false }).cycleDataInPrompt, false);
 });
 
-test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only)', () => {
-  const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
-  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt']);
+test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean, or a mode key\'s mode, or absent; claude only)', () => {
+  const { HEAD_DELIVERY_KEYS, HEAD_DELIVERY_MODES, ENTRY_SKILLS_MODES } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'headEntrySkills']);
+  assert.deepStrictEqual([...HEAD_DELIVERY_MODES], ['headEntrySkills']);
   for (const k of HEAD_DELIVERY_KEYS) {
-    assert.strictEqual(validateConfig({ harness: 'claude', [k]: true })[k], true, k);
-    assert.throws(() => validateConfig({ harness: 'claude', [k]: 'yes' }), new RegExp(`${k}: true or false`), k);
-    for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: true }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
+    const mode = HEAD_DELIVERY_MODES.includes(k);
+    const on = mode ? ENTRY_SKILLS_MODES[0] : true;
+    // A mode key needs the Claude head trader's prompt addition (headSkillsInPrompt).
+    const base = mode ? { harness: 'claude', headSkillsInPrompt: true } : { harness: 'claude' };
+    assert.strictEqual(validateConfig({ ...base, [k]: on })[k], on, k);
+    assert.throws(() => validateConfig({ ...base, [k]: 'yes' }), new RegExp(mode ? `${k}: "lookup", or absent` : `${k}: true or false`), k);
+    for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: on }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
   }
+});
+
+test('headEntrySkills (this machine\'s runner config): "lookup" or absent, for harness claude with headSkillsInPrompt true only', () => {
+  const ok = { harness: 'claude', headSkillsInPrompt: true };
+  assert.strictEqual(validateConfig(ok).headEntrySkills, undefined, 'absent stays absent');
+  assert.strictEqual(validateConfig({ ...ok, headEntrySkills: 'lookup' }).headEntrySkills, 'lookup');
+  for (const v of ['embedded', 'inject', 'Lookup', '', true, false, null, 1, {}, ['lookup']]) assert.throws(() => validateConfig({ ...ok, headEntrySkills: v }), /headEntrySkills: "lookup", or absent/, JSON.stringify(v));
+  assert.throws(() => validateConfig({ harness: 'claude', headEntrySkills: 'lookup' }), /headEntrySkills: needs headSkillsInPrompt true/);
+  assert.throws(() => validateConfig({ harness: 'claude', headSkillsInPrompt: false, headEntrySkills: 'lookup' }), /headEntrySkills: needs headSkillsInPrompt true/);
+  for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, headEntrySkills: 'lookup' }), /headEntrySkills: for harness "claude" only/, harness);
+  assert.throws(() => validateConfig({ harness: 'custom', command: ['x', '{prompt}'], headEntrySkills: 'lookup' }), /headEntrySkills: for harness "claude" only/);
 });
 
 test('headSkillsInPrompt absent or false: the Claude head trader\'s argv, env and prompts are as before (no prompt addition, no attestation, an inherited one dropped, the load sentence)', () => {
@@ -1721,4 +1737,57 @@ test('headSkillsInPrompt: a new prompt addition (a skill changed) prunes the old
   assert.ok(fs.existsSync(files[2]));
   // The attested one is never pruned by its own write, and a missing directory is no error.
   assert.ok(fs.existsSync(file));
+});
+
+test('headEntrySkills lookup (Claude Code, with headSkillsInPrompt): one claudeHeadOpts builds the argv\'s file, the attestation, embedsSkills and the cycle prompt\'s sentence, so they never disagree', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const { claudeHeadOpts, entryLookups, embedsSkills, skillsText } = require('../../scripts/lib/autotrader');
+  const home = tmpDir();
+  const on = validateConfig({ harness: 'claude', headSkillsInPrompt: true });
+  const look = validateConfig({ harness: 'claude', headSkillsInPrompt: true, headEntrySkills: 'lookup' });
+  assert.deepStrictEqual(claudeHeadOpts(on), { entry: 'embedded' });
+  assert.deepStrictEqual(claudeHeadOpts(look), { entry: 'lookup' });
+  assert.deepStrictEqual(entryLookups(on), []);
+  assert.deepStrictEqual(entryLookups(look), H.ENTRY);
+  // The argv names the lookup mode's file; the env attests that very file, with the core less the entry skills.
+  const argv = buildCommand(look, 'p', ROOT, { FTH_HOME: home });
+  const file = argv[argv.indexOf('--append-system-prompt-file') + 1];
+  assert.strictEqual(file, H.claudeHeadFile(home, H.claudeHeadText(ROOT, { entry: 'lookup' })));
+  assert.notStrictEqual(file, buildCommand(on, 'p', ROOT, { FTH_HOME: home })[argv.indexOf('--append-system-prompt-file') + 1]);
+  // Only the file differs from the embedded mode's argv.
+  const onArgv = buildCommand(on, 'p', ROOT, { FTH_HOME: home });
+  assert.deepStrictEqual(argv.map((a, i) => (a === file ? onArgv[i] : a)), onArgv);
+  const env = childEnv(look, ROOT, { FTH_HOME: home });
+  const att = H.parseAttestation(env.FTH_HEAD_PROMPT);
+  assert.strictEqual(att.config, file);
+  assert.strictEqual(att.sha256, H.sha256(fs.readFileSync(file, 'utf8')));
+  assert.deepStrictEqual(att.skills, H.CORE.filter(s => !H.ENTRY.includes(s)));
+  for (const s of H.ENTRY) assert.ok(!att.skills.includes(s), s);
+  // The cycle prompt: the skills it holds are named loaded, the entry skills named to look up, never "load".
+  assert.strictEqual(embedsSkills(look, ROOT), true);
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }];
+  const trade = prompts(look, new Date('2026-10-07T14:30:00Z')).trade(items);
+  assert.ok(trade.includes(skillsText(look, ROOT)));
+  assert.match(trade, /Your skills trade-session, multi-timeframe-analysis, and htf-to-ltf are in your prompt, already loaded \(don't load them again\): decide by them; your entry skills trade-lifecycle, setup-judgment, trade-plan, confluence-counting, invalidation, rejection, and breakout are not: when a setup appears, read the ones your prompt names with skill_lookup, before compose_check and before the entry \(the order gate refuses an entry without them\), then run the trade-session skill/);
+  assert.doesNotMatch(trade, /With your skill tool, load/);
+  // Every skill the sentence names loaded is attested; every one it names to look up is not.
+  const named = /Your skills (.*?) are in your prompt/.exec(trade)[1].split(/, and |, | and /);
+  for (const s of named) assert.ok(att.skills.includes(s), `named loaded and attested: ${s}`);
+  // The embedded mode (the key absent) keeps its sentence, byte for byte.
+  assert.match(prompts(on, new Date('2026-10-07T14:30:00Z')).trade(items), /Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded \(don't load them again\): decide by them, then run/);
+  // A role's run: no file, and no attestation of its own (as in the embedded mode).
+  assert.ok(!buildCommand(look, 'r', ROOT, { FTH_HOME: home }, { agent: 'trade-executor' }).includes('--append-system-prompt-file'));
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(look, ROOT, { FTH_HOME: home }, { roleRun: 'market-structure-analyst' })));
+});
+
+test('headEntrySkills absent: with headSkillsInPrompt the argv, env, prompt and head file are those of before the key existed (the head-cycle golden pins them too)', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = tmpDir();
+  const on = validateConfig({ harness: 'claude', headSkillsInPrompt: true });
+  assert.ok(!('headEntrySkills' in on), 'absent stays absent (no default written)');
+  const argv = buildCommand(on, 'p', ROOT, { FTH_HOME: home });
+  assert.strictEqual(argv[argv.indexOf('--append-system-prompt-file') + 1], H.claudeHeadFile(home, H.claudeHeadText(ROOT)));
+  const att = H.parseAttestation(childEnv(on, ROOT, { FTH_HOME: home }).FTH_HEAD_PROMPT);
+  assert.deepStrictEqual(att.skills, H.CORE);
+  assert.strictEqual(fs.readFileSync(att.config, 'utf8'), H.claudeHeadText(ROOT));
 });

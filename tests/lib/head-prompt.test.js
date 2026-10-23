@@ -161,3 +161,77 @@ test('isOpencodeTranscript / attestedSkills: an opencode stream and the attested
   // Only what was attested, of what is embedded.
   assert.deepStrictEqual(H.attestedSkills({ ...att, skills: ['trade-plan', 'manage-position'] }, ROOT, { transcript: oc }), ['trade-plan']);
 });
+
+// --- The Claude head trader's entry skills (the runner config's headEntrySkills, autotrader.js claudeHeadOpts) ---
+
+test('ENTRY: the entry skills, from the gate\'s own lists: the composed entry\'s own (REQUIRED_FOR_COMPOSED but the rules entry\'s), REQUIRED_AT_ENTRY, and the composed bar\'s reads (SITUATIONAL taughtIn)', () => {
+  const { REQUIRED_FOR_COMPOSED, SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  assert.deepStrictEqual(H.ENTRY, ['trade-lifecycle', 'setup-judgment', 'trade-plan', 'confluence-counting', 'invalidation', 'rejection', 'breakout']);
+  assert.deepStrictEqual(H.ENTRY, [...new Set([...REQUIRED_FOR_COMPOSED.filter(s => !REQUIRED_FOR_ENTRY.includes(s)), ...REQUIRED_AT_ENTRY, ...SITUATIONAL.filter(e => e.taughtIn).map(e => e.skill)])]);
+  for (const s of H.ENTRY) assert.ok(H.CORE.includes(s), `in the core (embedded with the key absent): ${s}`);
+  // The every-cycle skills the gate requires stay embedded in either mode.
+  for (const s of REQUIRED_FOR_COMPOSED.filter(x => REQUIRED_FOR_ENTRY.includes(x))) assert.ok(H.claudeCore({ entry: 'lookup' }).includes(s), s);
+});
+
+test('claudeHeadText with the key absent (embedded): the same text as before the modes existed (the golden head-cycle hash pins it), every core skill embedded, no lookup lines', () => {
+  const text = H.claudeHeadText(ROOT);
+  assert.strictEqual(H.claudeHeadText(ROOT, {}), text);
+  assert.strictEqual(H.claudeHeadText(ROOT, { entry: 'embedded' }), text);
+  assert.deepStrictEqual(H.claudeCore(), H.CORE);
+  assert.deepStrictEqual(H.claudeCore({ entry: 'embedded' }), H.CORE);
+  assert.deepStrictEqual(H.embeddedSkills(text, ROOT), H.CORE);
+  assert.doesNotMatch(text, /Your entry skills/);
+  assert.doesNotMatch(text, /Before `compose_check`/);
+  const dir = tmpDir();
+  assert.strictEqual(H.writeClaudeHead(dir, ROOT).file, H.writeClaudeHead(dir, ROOT, { entry: 'embedded' }).file, 'one file, one hash');
+});
+
+test('claudeHeadText lookup: the entry skills left out of the embedded ones and indexed, the lookup lines from the gate\'s lists; a smaller file, attested without them', () => {
+  const { REQUIRED_FOR_COMPOSED, SITUATIONAL, describeTrigger, parseTrigger } = require('../../scripts/lib/trading/skills-loaded');
+  const embedded = H.claudeHeadText(ROOT);
+  const text = H.claudeHeadText(ROOT, { entry: 'lookup' });
+  const core = H.CORE.filter(s => !H.ENTRY.includes(s));
+  assert.deepStrictEqual(H.claudeCore({ entry: 'lookup' }), core);
+  assert.deepStrictEqual(H.embeddedSkills(text, ROOT), core);
+  for (const s of H.ENTRY) {
+    assert.ok(!text.includes(`<skill name="${s}">`), `not embedded: ${s}`);
+    assert.match(text, new RegExp(`^- ${s}: `, 'm'), `indexed: ${s}`);
+  }
+  for (const s of core) assert.ok(text.includes(`<skill name="${s}">\n${body(s)}\n</skill>`), `embedded whole: ${s}`);
+  // The lookup lines: before compose_check the composed entry's own and the always-on composed reads; before the entry
+  // REQUIRED_AT_ENTRY; each relation's read with its trigger's words.
+  const lines = H.entryLookupLines().join('\n');
+  assert.ok(text.includes(lines), 'the lookup lines are in the file');
+  assert.ok(text.indexOf(lines) < text.indexOf('## Your skills (already loaded)'), 'before the skills');
+  assert.match(lines, /^Your entry skills are not loaded: `trade-lifecycle`, `setup-judgment`, `trade-plan`, `confluence-counting`, `invalidation`, `rejection`, and `breakout`\./);
+  assert.match(lines, /mcp__harness__skill_lookup \{"skill": "<name>"\}/);
+  assert.match(lines, /the order gate refuses an entry without them \(exits and stops never need them\)/);
+  const composedOnly = REQUIRED_FOR_COMPOSED.filter(s => !REQUIRED_FOR_ENTRY.includes(s));
+  const always = SITUATIONAL.filter(e => e.taughtIn && parseTrigger(e.when).value === null).map(e => e.skill);
+  assert.ok(lines.includes(`- Before \`compose_check\`: ${[...composedOnly, ...always].map(s => `\`${s}\``).join(', ').replace(/, (`[^`]+`)$/, ', and $1')}.`), lines);
+  assert.ok(lines.includes(`- Before an entry: ${REQUIRED_AT_ENTRY.map(s => `\`${s}\``).join(' and ')}.`), lines);
+  for (const e of SITUATIONAL.filter(x => x.taughtIn && parseTrigger(x.when).value !== null)) {
+    assert.ok(lines.includes(`- Before an entry, when ${describeTrigger(parseTrigger(e.when))}: \`${e.skill}\`.`), e.skill);
+  }
+  // Every entry skill is named in a lookup line.
+  for (const s of H.ENTRY) assert.match(lines.split('\n').slice(1).join('\n'), new RegExp(`\`${s}\``), s);
+  // Smaller by about the entry skills' text (the owner's goal: the local model's memory and speed).
+  const cut = H.ENTRY.reduce((n, s) => n + body(s).length, 0);
+  assert.ok(embedded.length - text.length > cut * 0.9, `${embedded.length} -> ${text.length} (entry skills ${cut} chars)`);
+  // Another file (its hash), attested with the core less ENTRY only.
+  const dir = tmpDir();
+  const a = H.writeClaudeHead(dir, ROOT);
+  const b = H.writeClaudeHead(dir, ROOT, { entry: 'lookup' });
+  assert.notStrictEqual(a.file, b.file);
+  assert.strictEqual(fs.readFileSync(b.file, 'utf8'), text);
+  const att = H.claudeAttestation({ file: b.file, text: b.text, root: ROOT, cycle: '0123456789abcdef' });
+  assert.deepStrictEqual(att.skills, core);
+});
+
+test('claudeHeadText: an entry mode not in CLAUDE_ENTRY throws (never a silent fallback to another prompt)', () => {
+  assert.deepStrictEqual(Object.keys(H.CLAUDE_ENTRY), ['embedded', 'lookup']);
+  for (const entry of ['inject', 'Lookup', '', null, 1]) {
+    assert.throws(() => H.claudeHeadText(ROOT, { entry }), /no entry-skills mode/, String(entry));
+    assert.throws(() => H.claudeCore({ entry }), /no entry-skills mode/, String(entry));
+  }
+});

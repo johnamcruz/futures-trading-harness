@@ -266,7 +266,37 @@ function deskConcurrencyProblem(v) {
  * without it reads this list: the decision dataset (learning/decision-dataset.js: never pooled), the training preflight
  * (learning/preflight.js head-delivery). A key added here is validated below, or the autotrader tests fail.
  */
-const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt']);
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'headEntrySkills']);
+/*
+ * The delivery keys that take a mode (a string) rather than true: a run's delivery names the mode too ('<key>=<mode>'),
+ * so runs under two modes of one key are never pooled either.
+ */
+const HEAD_DELIVERY_MODES = Object.freeze(['headEntrySkills']);
+/** headEntrySkills' modes a runner config may name (head-prompt.js CLAUDE_ENTRY, but the default, which is the key absent). */
+const ENTRY_SKILLS_MODES = Object.freeze(Object.keys(headPrompt.CLAUDE_ENTRY).filter(m => m !== 'embedded'));
+/**
+ * The problems of a runner config's head trader delivery keys (validateConfig's, and the training preflight's
+ * head-delivery check): each a boolean or absent, headEntrySkills one of its modes or absent; all for harness claude
+ * only, and headEntrySkills with headSkillsInPrompt true (it changes which skills that prompt addition embeds).
+ */
+function headDeliveryProblems(cfg) {
+  const errors = [];
+  // headSkillsInPrompt true: Claude Code's head trader in index mode (claudeHeadOn; head-prompt.js), absent or false as before.
+  if (cfg.headSkillsInPrompt !== undefined && typeof cfg.headSkillsInPrompt !== 'boolean') errors.push('headSkillsInPrompt: true or false, or absent (as before: the head trader loads its skills)');
+  if (cfg.headSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`headSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's head trader has its own index mode, FTH_ROLE_SKILLS)`);
+  // cycleDataInPrompt true: Claude Code's head trader gets this cycle's reads already made, in its prompt (cycle-data.js),
+  // absent or false as before.
+  if (cfg.cycleDataInPrompt !== undefined && typeof cfg.cycleDataInPrompt !== 'boolean') errors.push('cycleDataInPrompt: true or false, or absent (as before: the head trader makes its own reads)');
+  if (cfg.cycleDataInPrompt === true && cfg.harness !== 'claude') errors.push(`cycleDataInPrompt: for harness "claude" only (harness ${cfg.harness})`);
+  // headEntrySkills "lookup": the entry skills (head-prompt.js ENTRY) are left out of the prompt addition and read with
+  // skill_lookup when a setup appears (claudeHeadOpts); absent, they are embedded, as before.
+  if (cfg.headEntrySkills !== undefined) {
+    if (!ENTRY_SKILLS_MODES.includes(cfg.headEntrySkills)) errors.push(`headEntrySkills: ${ENTRY_SKILLS_MODES.map(m => `"${m}"`).join(' or ')}, or absent (as before: the entry skills are embedded in the head trader's prompt addition); got ${JSON.stringify(cfg.headEntrySkills)}`);
+    else if (cfg.harness !== 'claude') errors.push(`headEntrySkills: for harness "claude" only (harness ${cfg.harness})`);
+    else if (cfg.headSkillsInPrompt !== true) errors.push('headEntrySkills: needs headSkillsInPrompt true (it sets which skills that prompt addition embeds)');
+  }
+  return errors;
+}
 /**
  * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
  * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
@@ -277,7 +307,9 @@ function headDeliveryOf(setup, ...runCfgs) {
   const conf = setup && isObj(setup.config) ? setup.config : {};
   const parsed = v => { try { return JSON.parse(v); } catch (_err) { return v; } };
   const on = HEAD_DELIVERY_KEYS.filter(k => Boolean(parsed(conf[`cfg.${k}`])) || runCfgs.some(c => isObj(c) && Boolean(c[k])));
-  return on.length ? on.join(',') : null;
+  // A mode key: named with its mode (the setup record's first, else the first runner config's).
+  const modeOf = k => [parsed(conf[`cfg.${k}`]), ...runCfgs.filter(isObj).map(c => c[k])].find(Boolean);
+  return on.length ? on.map(k => (HEAD_DELIVERY_MODES.includes(k) ? `${k}=${modeOf(k)}` : k)).join(',') : null;
 }
 /** The one delivery of a pool of records (each one's `delivery`, absent for none), or throws naming them (`what`). */
 function oneDelivery(records, what) {
@@ -360,13 +392,8 @@ function validateConfig(raw) {
   // own launches (runner.js managedDesk: that cycle manages, no entry).
   if (cfg.deskOnManagedCycles !== undefined && typeof cfg.deskOnManagedCycles !== 'boolean') errors.push('deskOnManagedCycles: true or false, or absent (as before: a managed cycle runs no desk of the runner\'s on such a harness)');
   if (cfg.deskConcurrency !== undefined && cfg.deskConcurrency !== null) { const p = deskConcurrencyProblem(cfg.deskConcurrency); if (p) errors.push(p); }
-  // headSkillsInPrompt true: Claude Code's head trader in index mode (claudeHeadOn; head-prompt.js), absent or false as before.
-  if (cfg.headSkillsInPrompt !== undefined && typeof cfg.headSkillsInPrompt !== 'boolean') errors.push('headSkillsInPrompt: true or false, or absent (as before: the head trader loads its skills)');
-  if (cfg.headSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`headSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's head trader has its own index mode, FTH_ROLE_SKILLS)`);
-  // cycleDataInPrompt true: Claude Code's head trader gets this cycle's reads already made, in its prompt (cycle-data.js),
-  // absent or false as before.
-  if (cfg.cycleDataInPrompt !== undefined && typeof cfg.cycleDataInPrompt !== 'boolean') errors.push('cycleDataInPrompt: true or false, or absent (as before: the head trader makes its own reads)');
-  if (cfg.cycleDataInPrompt === true && cfg.harness !== 'claude') errors.push(`cycleDataInPrompt: for harness "claude" only (harness ${cfg.harness})`);
+  // The head trader's delivery keys (HEAD_DELIVERY_KEYS: headSkillsInPrompt, cycleDataInPrompt, headEntrySkills).
+  errors.push(...headDeliveryProblems(cfg));
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -607,11 +634,24 @@ function headAttestation(cfg, root, env = process.env) {
  * buildCommand's --append-system-prompt-file), which the runner attests per run (childEnv) for the gate.
  */
 const claudeHeadOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.headSkillsInPrompt === true;
-/** Whether the head trader's prompt holds every skill the cycle prompt would have it load: attested, none left out. */
+/**
+ * The options of the Claude head trader's prompt addition (head-prompt.js claudeHeadText): the one source every reader
+ * of it builds from (buildCommand's file, claudeHeadAttestation's, embedsSkills and skillsText), so they never disagree.
+ * `entry`: the runner config's headEntrySkills (validateConfig), absent the default `embedded`, as before.
+ */
+const claudeHeadOpts = cfg => ({ entry: (cfg && cfg.headEntrySkills) || 'embedded' });
+/** The skills the Claude head trader reads with skill_lookup when a setup appears (headEntrySkills lookup), or []. */
+const entryLookups = cfg => (claudeHeadOn(cfg) && headPrompt.claudeEntryMode(claudeHeadOpts(cfg).entry).lookup ? [...headPrompt.ENTRY] : []);
+/**
+ * Whether the head trader's prompt holds every skill the cycle prompt would have it load (but the entry skills its mode
+ * has it look up, entryLookups, which it must not hold): attested, none left out.
+ */
 function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
   if (claudeHeadOn(cfg)) {
-    const skills = headPrompt.embeddedSkills(headPrompt.claudeHeadText(root || PLUGIN_ROOT), root || PLUGIN_ROOT);
-    return [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].every(s => skills.includes(s));
+    const skills = headPrompt.embeddedSkills(headPrompt.claudeHeadText(root || PLUGIN_ROOT, claudeHeadOpts(cfg)), root || PLUGIN_ROOT);
+    const looked = entryLookups(cfg);
+    // And none it is told to look up is in it (the cycle prompt says they are not loaded).
+    return [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].filter(s => !looked.includes(s)).every(s => skills.includes(s)) && !looked.some(s => skills.includes(s));
   }
   const att = headAttestation(cfg, root || PLUGIN_ROOT, env);
   return Boolean(att) && [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].every(s => att.skills.includes(s));
@@ -636,16 +676,22 @@ function claudeHeadAttestation(cfg, root, base, context, env) {
     return att && att.harness === 'claude' && att.cycle === c.cycleId ? att : null;
   }
   try {
-    const { file, text } = headPrompt.writeClaudeHead(harnessHome(base), root);
+    const { file, text } = headPrompt.writeClaudeHead(harnessHome(base), root, claudeHeadOpts(cfg));
     return headPrompt.claudeAttestation({ file, text, root, cycle: require('./trading/check-order').cycleId(env) });
   } catch (_err) {
     return null; // no attestation: the gate counts no embedded skill (the transcript decides)
   }
 }
-/** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
-const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
-  ? `Your skills ${andList([...REQUIRED_FOR_ENTRY, ...ALSO_LOAD])} are in your prompt, already loaded (don't load them again): decide by them`
-  : `${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding`);
+/**
+ * What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already;
+ * in headEntrySkills lookup mode, the entry skills (entryLookups) not: they are read with skill_lookup when a setup appears.
+ */
+function skillsText(cfg, root, env = process.env) {
+  if (!embedsSkills(cfg, root, env)) return `${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding`;
+  const looked = entryLookups(cfg);
+  const held = [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].filter(s => !looked.includes(s));
+  return `Your skills ${andList(held)} are in your prompt, already loaded (don't load them again): decide by them${looked.length ? `; your entry skills ${andList(looked)} are not: when a setup appears, read the ones your prompt names with skill_lookup, before compose_check and before the entry (the order gate refuses an entry without them)` : ''}`;
+}
 
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 // The outcomes a cycle may report (its result line's first word): the prompt and the autonomous-trading skill list
@@ -938,7 +984,7 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {
       const role = agent ? runnerRole(agent) : null;
       // The head trader in index mode (claudeHeadOn, this machine's opt-in): its skills as a system-prompt addition, in
       // the cached prefix (head-prompt.js; childEnv writes the file and attests it). A role's own run: never.
-      const head = claudeHeadOn(cfg) && !role ? ['--append-system-prompt-file', headPrompt.claudeHeadFile(harnessHome(env), headPrompt.claudeHeadText(root))] : [];
+      const head = claudeHeadOn(cfg) && !role ? ['--append-system-prompt-file', headPrompt.claudeHeadFile(harnessHome(env), headPrompt.claudeHeadText(root, claudeHeadOpts(cfg)))] : [];
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []), ...head,
         '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
@@ -1304,6 +1350,11 @@ module.exports = {
   loadList,
   embedsSkills,
   claudeHeadOn,
+  claudeHeadOpts,
+  entryLookups,
+  headDeliveryProblems,
+  HEAD_DELIVERY_MODES,
+  ENTRY_SKILLS_MODES,
   claudeHeadAttestation,
   headAttestation,
   skillsText,

@@ -3446,3 +3446,42 @@ test('order gate (hook): a Claude Code head trader in index mode (the runner\'s 
   const e2 = gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, { ...executor, FTH_CYCLE_ID: 'ab'.repeat(8) });
   assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
 });
+
+test('order gate (hook): a Claude Code head trader with headEntrySkills lookup: its entry skills are not in its prompt addition, so its own session\'s entry is refused [skills-at-entry] until it looks them up; the key absent, they count as embedded', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env);
+  const H = require('../../scripts/lib/head-prompt');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const SESSION = '5b1d3c7f-claude-head-lookup';
+  const RULES = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  const lines = (skills, init) => [...(init ? [JSON.stringify({ type: 'system', subtype: 'init', session_id: init })] : []), ...skills.flatMap((skill, i) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `l${i}`, name: 'mcp__harness__skill_lookup', input: { skill } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `l${i}`, content: [{ type: 'text', text: `<skill name="${skill}">\n...\n</skill>\n` }] }] } }),
+  ])].join('\n');
+  const stream = path.join(dir, 'cycle-transcript-head.jsonl');
+  const session = path.join(dir, 'projects', `${SESSION}.jsonl`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  const run = (entry, skills) => {
+    fs.writeFileSync(stream, lines(skills, SESSION));
+    fs.writeFileSync(session, lines(skills, null));
+    const { file, text } = H.writeClaudeHead(env.FTH_HOME, REPO, { entry });
+    const att = H.claudeAttestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+    const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_CYCLE_TRANSCRIPT: stream, FTH_HEAD_PROMPT: JSON.stringify(att) };
+    return { att, entry: gate({ ...orderPayload(), transcript_path: session }, auto), exit: gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: session }, auto) };
+  };
+  // The key absent (embedded): setup-judgment and trade-plan are in the prompt addition; the rules entry's three looked up.
+  const embedded = run('embedded', RULES);
+  assert.strictEqual(embedded.entry.code, 0, embedded.entry.stderr);
+  // lookup: not in it, not attested, so the same session is refused for exactly them; an exit still goes.
+  const bare = run('lookup', RULES);
+  for (const s of H.ENTRY) assert.ok(!bare.att.skills.includes(s), `not attested: ${s}`);
+  assert.strictEqual(bare.entry.code, 2);
+  assert.match(bare.entry.stderr, /\[skills-at-entry\][^\n]*not read in this session: setup-judgment, trade-plan\./);
+  assert.doesNotMatch(bare.entry.stderr, /\[skills-loaded\]/);
+  assert.strictEqual(bare.exit.code, 0, bare.exit.stderr);
+  // One of them looked up: refused for the other.
+  assert.match(run('lookup', [...RULES, 'setup-judgment']).entry.stderr, /\[skills-at-entry\][^\n]*not read in this session: trade-plan\./);
+  // Both looked up (with skill_lookup, in the head trader's own session): it goes.
+  const looked = run('lookup', [...RULES, 'setup-judgment', 'trade-plan']);
+  assert.strictEqual(looked.entry.code, 0, looked.entry.stderr);
+});

@@ -1512,3 +1512,23 @@ test('cycleDataInPrompt is part of what makes a run a run: absent, nothing is ad
   assert.strictEqual(cmp.ok, false);
   assert.ok(cmp.refusals.some(x => /cfg\.cycleDataInPrompt/.test(x)), JSON.stringify(cmp.refusals));
 });
+
+test('headEntrySkills is part of what makes a run a run: on (with headSkillsInPrompt), every hash and the setup record tell it apart from the embedded mode', () => {
+  const RC = require('../../scripts/lib/replay/config');
+  const AB = require('../../scripts/lib/train/ab-compare');
+  const base = replayConfig(tmpDir()).autotrader;
+  const off = userWorld({ autotrader: { ...base, harness: 'claude', command: undefined, headSkillsInPrompt: true } });
+  seedRunHome(off.run, { root: ROOT, userEnv: off.env });
+  assert.ok(!('headEntrySkills' in off.run.cfg), 'absent stays absent (no default written)');
+  assert.strictEqual(userWorld({ autotrader: { ...base, harness: 'claude', command: undefined, headSkillsInPrompt: true, headEntrySkills: 'lookup' } }).run.cfg.headEntrySkills, 'lookup');
+  const withKey = run => ({ ...run, cfg: { ...run.cfg, headEntrySkills: 'lookup' } });
+  for (const [name, fn] of [['configHash', x => RC.configHash(x, off.env)], ['setupHash', RC.setupHash], ['setupBase', RC.setupBase], ['setupFixed', RC.setupFixed]]) {
+    assert.notStrictEqual(fn(withKey(off.run)), fn(off.run), name);
+  }
+  const recOn = AB.setupRecord(withKey(off.run), { env: off.env });
+  assert.strictEqual(recOn.config['cfg.headEntrySkills'], '"lookup"');
+  assert.strictEqual(require('../../scripts/lib/autotrader').headDeliveryOf(recOn), 'headSkillsInPrompt,headEntrySkills=lookup');
+  const cmp = AB.compareSetups(AB.setupRecord(off.run, { env: off.env }), recOn, {});
+  assert.strictEqual(cmp.ok, false);
+  assert.ok(cmp.refusals.some(x => /cfg\.headEntrySkills/.test(x)), JSON.stringify(cmp.refusals));
+});

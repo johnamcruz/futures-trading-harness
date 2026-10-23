@@ -149,7 +149,8 @@ function headNotApplicable(ctx) {
 
 const claudeHead = ctx => Boolean(ctx.run.cfg && ctx.run.cfg.harness === 'claude' && ctx.run.cfg.headSkillsInPrompt === true);
 /** The head prompt this run's head trader has: opencode's (its opencode.json), or Claude Code's prompt addition. */
-const headOf = ctx => (claudeHead(ctx) ? ctx.read.claudeHead() : ctx.read.head());
+// Claude Code's is built with the run's own options (autotrader.js claudeHeadOpts: headEntrySkills), as the runner builds it.
+const headOf = ctx => (claudeHead(ctx) ? ctx.read.claudeHead(require('../autotrader').claudeHeadOpts(ctx.run.cfg)) : ctx.read.head());
 
 function headPromptCheck(ctx) {
   const why = headNotApplicable(ctx);
@@ -167,9 +168,25 @@ function headComposedReads(ctx) {
   if (why) return r('head-composed-reads', NA, why);
   const h = headOf(ctx);
   if (!Array.isArray(h.composedReads)) return r('head-composed-reads', FAIL, 'head-prompt.js lists no composed reads (COMPOSED_READS)');
+  const few = h.composedReads.length < 4;
+  // headEntrySkills lookup (Claude Code): the composed reads are entry skills, read with skill_lookup when a setup
+  // appears: each one left out of the embedded skills, indexed, and named in the prompt's lookup lines.
+  if (Array.isArray(h.lookups) && h.lookups.length) {
+    const lines = String(h.lookupLines || '');
+    const off = h.composedReads.flatMap(s => [
+      ...(h.lookups.includes(s) ? [] : [`${s} not an entry skill`]),
+      ...(h.embedded.includes(s) ? [`${s} embedded`] : []),
+      ...((h.indexed || []).includes(s) ? [] : [`${s} not indexed`]),
+      ...(lines.includes(`\`${s}\``) ? [] : [`${s} not in the lookup lines`]),
+    ]);
+    if (few || !lines || !String(h.prompt || '').includes(lines) || off.length) {
+      return r('head-composed-reads', FAIL, `the composed reads (${h.composedReads.join(', ') || 'none'}), looked up: ${[...off, ...(lines && String(h.prompt || '').includes(lines) ? [] : ['the prompt has no lookup lines'])].join('; ') || 'fewer than 4'}`);
+    }
+    return r('head-composed-reads', PASS, `indexes the ${h.composedReads.length} composed reads (${h.composedReads.join(', ')}) and names them to look up before an entry (headEntrySkills lookup)`);
+  }
   const notCore = h.composedReads.filter(s => !h.core.includes(s));
   const notIn = h.composedReads.filter(s => !h.embedded.includes(s));
-  if (h.composedReads.length < 4 || notCore.length || notIn.length) {
+  if (few || notCore.length || notIn.length) {
     return r('head-composed-reads', FAIL, `the composed reads (${h.composedReads.join(', ') || 'none'}): ${[...notCore.map(s => `${s} not in the core`), ...notIn.map(s => `${s} not embedded`)].join('; ') || 'fewer than 4'}`);
   }
   return r('head-composed-reads', PASS, `embeds the ${h.composedReads.length} composed reads (${h.composedReads.join(', ')})`);
@@ -186,9 +203,11 @@ function headDelivery(ctx) {
   const cfg = ctx.run.cfg || {};
   const set = require('../autotrader').HEAD_DELIVERY_KEYS.filter(k => cfg[k] !== undefined && cfg[k] !== false);
   if (!set.length) return r('head-delivery', PASS, 'none: the head trader loads its skills and makes its reads itself');
-  const bad = set.filter(k => cfg[k] !== true || cfg.harness !== 'claude');
-  if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false, for harness claude only`);
-  return r('head-delivery', PASS, `on: ${set.join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
+  // validateConfig's own problems (autotrader.js headDeliveryProblems): a config it would refuse never PASSes.
+  const bad = require('../autotrader').headDeliveryProblems(cfg);
+  if (bad.length) return r('head-delivery', FAIL, `on harness ${cfg.harness}: ${bad.join('; ')}`);
+  const modes = require('../autotrader').HEAD_DELIVERY_MODES;
+  return r('head-delivery', PASS, `on: ${set.map(k => (modes.includes(k) ? `${k}=${cfg[k]}` : k)).join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
 }
 
 function adaptersInSync(ctx) {
@@ -726,6 +745,34 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     }
   };
   const exists = rel => fs.existsSync(path.join(root, rel));
+  // Claude Code's head trader in index mode: the prompt addition as the runner builds it with `opts` (autotrader.js
+  // claudeHeadOpts; its hash is the file's name).
+  const claudeHeadOf = opts => {
+    const hp = require('../head-prompt');
+    // Written as the runner writes it (a scratch home) and read back as the gate reads it: its hash against the text built now.
+    // Any failure (no scratch home, not written, not read back): no prompt, so the check FAILs, never throws.
+    let prompt;
+    let expected;
+    let scratch = null;
+    try {
+      scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-head-'));
+      expected = hp.claudeHeadText(root, opts);
+      prompt = hp.claudeHeadIn(hp.writeClaudeHead(scratch, root, opts).file);
+    } catch (_err) {
+      prompt = null;
+    } finally {
+      if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
+    }
+    // headEntrySkills lookup: the core less the entry skills (claudeCore), which are indexed and named in its lookup lines.
+    let core;
+    let lookup;
+    try { core = hp.claudeCore(opts); lookup = hp.claudeEntryMode(opts.entry).lookup; } catch (_err) { core = [...hp.CORE]; lookup = false; prompt = null; }
+    const indexed = prompt ? require('../harness-tools/skills').skillCatalog(root).map(k => k.name).filter(n => new RegExp(`^- ${n}: `, 'm').test(prompt)) : [];
+    return {
+      prompt, core, composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null,
+      ...(lookup ? { lookups: [...hp.ENTRY], lookupLines: hp.entryLookupLines().join('\n'), indexed } : {}),
+    };
+  };
   return {
     strategies: once(() => require('../trading/strategies').loadStrategies(root, env).strategies),
     skillText: name => fs.readFileSync(path.join(root, 'skills', name, 'SKILL.md'), 'utf8'),
@@ -742,24 +789,14 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       };
     }),
     // Claude Code's head trader in index mode: the prompt addition as the runner builds it (its hash is the file's name).
-    claudeHead: once(() => {
-      const hp = require('../head-prompt');
-      // Written as the runner writes it (a scratch home) and read back as the gate reads it: its hash against the text built now.
-      // Any failure (no scratch home, not written, not read back): no prompt, so the check FAILs, never throws.
-      let prompt;
-      let expected;
-      let scratch = null;
-      try {
-        scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-head-'));
-        expected = hp.claudeHeadText(root);
-        prompt = hp.claudeHeadIn(hp.writeClaudeHead(scratch, root).file);
-      } catch (_err) {
-        prompt = null;
-      } finally {
-        if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
-      }
-      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
-    }),
+    claudeHead: (() => {
+      const built = new Map();
+      return (opts = {}) => {
+        const key = JSON.stringify(opts);
+        if (!built.has(key)) built.set(key, claudeHeadOf(opts));
+        return built.get(key);
+      };
+    })(),
     replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),
     sampleBriefing: opts => sampleBriefing({ barsFiles, env }, opts),

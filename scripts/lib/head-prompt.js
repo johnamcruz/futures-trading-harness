@@ -39,9 +39,13 @@
  * that run's own session). Anything off: none counts, and the transcript decides as before. Without the key nothing of
  * this runs: the argv, the prompt, the env and the gate are as before.
  *
- *   claudeHeadText(root)          the Claude head trader's prompt addition (index mode)
+ *   ENTRY                         the entry skills (a setup bar's, required at an entry), from the gate's lists
+ *   CLAUDE_ENTRY                  the entry-skills modes (the runner config's headEntrySkills): embedded (absent), lookup
+ *   claudeCore({ entry })         the skills the prompt addition embeds in that mode (lookup: CORE but ENTRY)
+ *   claudeHeadText(root, { entry })   the Claude head trader's prompt addition (index mode; lookup: ENTRY indexed, and
+ *                                 lines saying which to look up before compose_check and before an entry)
  *   claudeHeadFile(home, text)    where the runner keeps it: <home>/head-prompt/claude-head-<sha256>.md
- *   writeClaudeHead(home, root)   { file, text }, written when missing or different (older ones pruned: the newest kept)
+ *   writeClaudeHead(home, root, { entry })   { file, text }, written when missing or different (older ones pruned: the newest kept)
  *   claudeAttestation({ file, text, root, cycle })   the runner's attestation of it
  */
 
@@ -50,7 +54,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('./frontmatter');
 const { isOpencodeEvent } = require('./transcript');
-const { REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, describeTrigger } = require('./trading/skills-loaded');
+const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, parseTrigger, describeTrigger } = require('./trading/skills-loaded');
 
 const HEAD_AGENT = 'fth-head-trader';
 const ATTEST_ENV = 'FTH_HEAD_PROMPT';
@@ -72,6 +76,27 @@ const CORE = [...new Set([
   'autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context',
   ...COMPOSED_READS,
 ])];
+/*
+ * The entry skills: the ones a bar needs only when it has a setup, which the gate requires at an entry. A composed
+ * entry's own list less the per-cycle ones (REQUIRED_FOR_COMPOSED but REQUIRED_FOR_ENTRY: trade-lifecycle), the
+ * entry's reads (REQUIRED_AT_ENTRY), and the composed bar's (COMPOSED_READS). From the gate's own lists, so they can't drift.
+ */
+const COMPOSED_ONLY = REQUIRED_FOR_COMPOSED.filter(s => !REQUIRED_FOR_ENTRY.includes(s));
+const ENTRY = [...new Set([...COMPOSED_ONLY, ...REQUIRED_AT_ENTRY, ...COMPOSED_READS])];
+/*
+ * How a Claude head trader's prompt addition carries the entry skills (the runner config's headEntrySkills, this
+ * machine's opt-in; autotrader.js claudeHeadOpts): `embedded` (the key absent: in CORE, as before), or `lookup` (left
+ * out of the embedded skills and indexed, read with skill_lookup when a setup appears; the gate requires them then, as
+ * it does any skill not embedded). A mode with `lookup` true leaves them out; a new mode is a new entry here.
+ */
+const CLAUDE_ENTRY = Object.freeze({ embedded: Object.freeze({ lookup: false }), lookup: Object.freeze({ lookup: true }) });
+/** The entry mode's options, or throws on a mode not in CLAUDE_ENTRY (never a silent fallback to another prompt). */
+function claudeEntryMode(entry = 'embedded') {
+  if (!Object.prototype.hasOwnProperty.call(CLAUDE_ENTRY, entry)) throw new Error(`head-prompt: no entry-skills mode "${entry}" (${Object.keys(CLAUDE_ENTRY).join(', ')})`);
+  return CLAUDE_ENTRY[entry];
+}
+/** The skills a Claude head trader's prompt addition embeds in `entry` mode, in prompt order. */
+const claudeCore = ({ entry = 'embedded' } = {}) => (claudeEntryMode(entry).lookup ? CORE.filter(s => !ENTRY.includes(s)) : [...CORE]);
 const MAX_CONFIG_BYTES = require('./tunables').runner().limits.headPromptConfigBytes; // config/runner.json
 const SHA = /^[0-9a-f]{64}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -173,8 +198,30 @@ function parseAttestation(text) {
 const CLAUDE_FILE = /^claude-head-[0-9a-f]{64}\.md$/;
 const LOOKUP_TOOL = () => `mcp__${require('./harness-tools/registry').SERVER_NAME}__skill_lookup`;
 
-function claudeHeadText(root, table = SITUATIONAL) {
-  const plan = headPlan(root, 'index');
+/**
+ * The lookup lines of `lookup` mode: what to read before compose_check, and before an entry, from the gate's own lists
+ * (COMPOSED_ONLY and the composed bar's reads taught in it before compose_check; REQUIRED_AT_ENTRY, and the composed
+ * triggers' skills, before the entry). Each with what it is for; the gate refuses the entry without them.
+ */
+function entryLookupLines(table = SITUATIONAL) {
+  const tool = LOOKUP_TOOL();
+  const taught = table.filter(e => e.taughtIn && ENTRY.includes(e.skill));
+  const always = [...new Set(taught.filter(e => parseTrigger(e.when).value === null).map(e => e.skill))];
+  const when = [...new Set(taught.map(e => e.skill))].filter(s => !always.includes(s))
+    .map(skill => ({ skill, when: taught.filter(e => e.skill === skill).map(e => parseTrigger(e.when)) }));
+  return [
+    `Your entry skills are not loaded: ${andList(ENTRY)}. A bar with no setup needs none of them. When a setup appears, read each one whole with \`${tool} {"skill": "<name>"}\` in this order; the order gate refuses an entry without them (exits and stops never need them).`, '',
+    `- Before \`compose_check\`: ${andList([...COMPOSED_ONLY, ...always])}.`,
+    `- Before an entry: ${andList(REQUIRED_AT_ENTRY)}.`,
+    ...when.map(r => `- Before an entry, when ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\`.`),
+    '',
+  ];
+}
+
+function claudeHeadText(root, { entry = 'embedded', table = SITUATIONAL } = {}) {
+  const lookup = claudeEntryMode(entry).lookup;
+  const core = claudeCore({ entry });
+  const plan = { docs: core.map(name => ({ name, body: skillBody(root, name) })) };
   const names = plan.docs.map(d => d.name);
   const index = require('./harness-tools/skills').skillCatalog(root).filter(k => !names.includes(k.name));
   const out = [
@@ -188,6 +235,7 @@ function claudeHeadText(root, table = SITUATIONAL) {
     out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
       ...required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
   }
+  if (lookup) out.push(...entryLookupLines(table));
   out.push('## Your skills (already loaded)', '',
     `The skills you use every cycle (${names.join(', ')}) are below in full: they are loaded.`, '',
     ...plan.docs.flatMap(d => [block(d.name, d.body), '']),
@@ -200,8 +248,8 @@ function claudeHeadText(root, table = SITUATIONAL) {
 const claudeHeadFile = (home, text) => path.join(home, 'head-prompt', `claude-head-${sha256(text)}.md`);
 
 /** The Claude head trader's prompt addition in the harness home: { file, text }, written (atomically) when missing or different. */
-function writeClaudeHead(home, root) {
-  const text = claudeHeadText(root);
+function writeClaudeHead(home, root, opts = {}) {
+  const text = claudeHeadText(root, opts);
   const file = claudeHeadFile(home, text);
   let same;
   try { same = fs.readFileSync(file, 'utf8') === text; } catch (_err) { same = false; }
@@ -333,6 +381,6 @@ function attestedSkills(att, root, { transcript } = {}) {
 }
 
 module.exports = {
-  HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256,
+  HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, ENTRY, CLAUDE_ENTRY, claudeEntryMode, claudeCore, entryLookupLines, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256,
   claudeHeadText, claudeHeadFile, writeClaudeHead, claudeAttestation, claudeHeadIn, claudeStreamSession, claudeSessionOfPath, claudeAttested,
 };

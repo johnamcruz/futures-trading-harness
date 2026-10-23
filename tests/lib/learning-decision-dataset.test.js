@@ -366,21 +366,28 @@ test('delivery keys absent (or false): the digest, the files and dataset.json ex
   assert.strictEqual(b.dataset.fingerprint, a.dataset.fingerprint);
 });
 
+// A delivery key's "on" value (a mode key: its first mode, autotrader.js HEAD_DELIVERY_MODES) and its name in a delivery.
+const { HEAD_DELIVERY_MODES, ENTRY_SKILLS_MODES } = require('../../scripts/lib/autotrader');
+const onValue = k => (HEAD_DELIVERY_MODES.includes(k) ? ENTRY_SKILLS_MODES[0] : true);
+const named = k => (HEAD_DELIVERY_MODES.includes(k) ? `${k}=${onValue(k)}` : k);
+
 test('a delivery key on: the decisions\' digest names it, the dataset is another one; read from the setup record or the runner config', () => {
   const base = buildAll();
   for (const k of HEAD_DELIVERY_KEYS) {
     for (const via of ['setup', 'runner']) {
       const r = runs();
-      for (const x of [r.t1, r.t2, r.v]) withDelivery(x, { [k]: true }, { via });
-      assert.ok(sourceOf(r.t1).decisions.every(d => d.digest.delivery === k), `${k} via ${via}`);
+      for (const x of [r.t1, r.t2, r.v]) withDelivery(x, { [k]: onValue(k) }, { via });
+      assert.ok(sourceOf(r.t1).decisions.every(d => d.digest.delivery === named(k)), `${k} via ${via}`);
       const on = build3(r.t1, r.t2, r.v);
       assert.notStrictEqual(on.dataset.fingerprint, base.dataset.fingerprint, `${k} via ${via}`);
-      assert.strictEqual(on.dataset.delivery, k);
-      assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === k));
+      assert.strictEqual(on.dataset.delivery, named(k));
+      assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === named(k)));
     }
   }
-  // Both: in the list's order, one delivery.
-  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), HEAD_DELIVERY_KEYS.join(','));
+  // Every one: in the list's order, one delivery (a mode key with its mode).
+  assert.strictEqual(DS.deliveryOf({ config: Object.fromEntries(HEAD_DELIVERY_KEYS.map(k => [`cfg.${k}`, JSON.stringify(onValue(k))])) }, null), HEAD_DELIVERY_KEYS.map(named).join(','));
+  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), 'headSkillsInPrompt,cycleDataInPrompt');
+  assert.strictEqual(DS.deliveryOf(null, { headSkillsInPrompt: true, headEntrySkills: 'lookup' }), 'headSkillsInPrompt,headEntrySkills=lookup');
   assert.strictEqual(DS.deliveryOf(null, { cycleDataInPrompt: true }), 'cycleDataInPrompt');
   assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'false' } }, { headSkillsInPrompt: false }), null);
   assert.strictEqual(DS.deliveryOf(null, null), null);
@@ -389,7 +396,7 @@ test('a delivery key on: the decisions\' digest names it, the dataset is another
 test('a mixed pool (decisions made with a delivery key on and without it) is refused, in a set or across train and validate', () => {
   const r = runs();
   withDelivery(r.t2, { cycleDataInPrompt: true });
-  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt\): build from runs under one/);
+  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, headEntrySkills\): build from runs under one/);
   const r2 = runs();
   withDelivery(r2.v, { headSkillsInPrompt: true }, { via: 'runner' });
   assert.throws(() => build3(r2.t1, r2.t2, r2.v), /2 head trader deliveries/);
@@ -398,4 +405,9 @@ test('a mixed pool (decisions made with a delivery key on and without it) is ref
   for (const x of [r3.t1, r3.t2]) withDelivery(x, { cycleDataInPrompt: true, headSkillsInPrompt: true });
   withDelivery(r3.v, { cycleDataInPrompt: true });
   assert.throws(() => build3(r3.t1, r3.t2, r3.v), /2 head trader deliveries/);
+  // The entry skills looked up (headEntrySkills) against embedded (absent): refused, the mode named.
+  const r4 = runs();
+  for (const x of [r4.t1, r4.t2]) withDelivery(x, { headSkillsInPrompt: true, headEntrySkills: 'lookup' });
+  withDelivery(r4.v, { headSkillsInPrompt: true });
+  assert.throws(() => build3(r4.t1, r4.t2, r4.v), /2 head trader deliveries \(headSkillsInPrompt,headEntrySkills=lookup \| headSkillsInPrompt|2 head trader deliveries \(headSkillsInPrompt \| headSkillsInPrompt,headEntrySkills=lookup/);
 });
