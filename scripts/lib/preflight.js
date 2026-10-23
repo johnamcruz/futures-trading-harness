@@ -21,6 +21,9 @@
  *   agentChecks(cfg, agents)                 each agent role's effective timeframe; a non-analyst off the first lane's, or an analyst on one it can't be given, fails
  *   propProfiles(strategies, accounts, cfg)  the prop profiles this run trades (active policy strategies, its lanes and symbols)
  *   propChecks({ profiles, home })            every prop account a policy strategy trades has its attempt started
+ *   propAccountChecks({ cfg, broker, accounts, home })   the run's account, when the user marks it a prop account
+ *                                             (its broker's propAccounts, trading/prop-accounts.js), has its profile's
+ *                                             attempt running (the gate refuses its entries otherwise); a malformed marker fails
  *   barFieldChecks({ strategies, cfg, barsBySymbol })   bars carry the field("...") paths active strategies read
  *   localChecks({ now, killSwitchFile, exists })        market hours, kill switch
  *   fieldPaths(strategy)                      the field("a.b") paths a strategy's rules read
@@ -42,6 +45,7 @@ const { lanesOf, lanePolicies, retireLanes, laneStrategyErrors, signalLaneErrors
 const { loadAgents } = require('./harness-sync');
 const { loadAccounts } = require('./trading/accounts');
 const { readAttempt } = require('./trading/prop-state');
+const { propAccountMarks, propAccountRefusal } = require('./trading/prop-accounts');
 const { familyRoot } = require('./trading/contracts');
 const { readField } = require('./trading/rules');
 const { loadConfig } = require('./trading/config');
@@ -218,6 +222,21 @@ function propChecks({ profiles, home }) {
     : r(`prop attempt (${p.name})`, 'fail', `no attempt started, so the gate refuses the entries its policy strategies size: node scripts/combine.js start --account ${p.name}`)));
 }
 
+/**
+ * The run's account as the gate judges it (prop-accounts.js): none marked, no row (as before); marked, its profile's
+ * attempt must run, or every entry is refused (a warning in a paper run, which enters nothing anyway).
+ */
+function propAccountChecks({ cfg, broker, accounts, home }) {
+  const { marks, error } = propAccountMarks(broker);
+  if (error) return [r('prop account', 'fail', `${error}: the gate refuses every entry until it is fixed`)];
+  if (!Object.keys(marks).length) return [];
+  const id = normId(cfg.account);
+  if (id === null || !Object.keys(marks).includes(id)) return [r('prop account', 'ok', `account ${cfg.account || '(none)'} is not marked as a prop account`)];
+  const why = propAccountRefusal({ broker, accountId: id, home, accounts });
+  return [why ? r('prop account', cfg.paper ? 'warn' : 'fail', `${why}; the gate refuses every entry on it until then`)
+    : r('prop account', 'ok', `account ${id} is a ${marks[id]} prop account, its attempt running`)];
+}
+
 /** The field("a.b") paths in a strategy's rules. */
 function fieldPaths(s) {
   const text = JSON.stringify((s && s.rules) || {});
@@ -279,8 +298,10 @@ async function runPreflight({ raw, root, env = process.env, home = loadConfig(en
   const all = loadStrategies(root, env).strategies;
   results.push(...laneChecks(cfg, all, home));
   results.push(...agentChecks(cfg, (deps.agents || loadAgents)(root)));
-  const profiles = propProfiles(all, loadAccounts(root, env).accounts, cfg);
+  const profileList = loadAccounts(root, env).accounts;
+  const profiles = propProfiles(all, profileList, cfg);
   results.push(...propChecks({ profiles, home }));
+  results.push(...propAccountChecks({ cfg, broker, accounts: profileList, home }));
   let opened;
   try {
     opened = (deps.open || openReadOnly)({ broker, root, env });
@@ -322,4 +343,4 @@ function formatReport({ ok, results }) {
   return `${lines.join('\n')}\n`;
 }
 
-module.exports = { laneChecks, agentChecks, propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountLockChecks, accountChecks, propChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };
+module.exports = { laneChecks, agentChecks, propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountLockChecks, accountChecks, propChecks, propAccountChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };

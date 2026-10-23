@@ -138,6 +138,25 @@ test('preflight prop: every profile a policy strategy trades has its attempt sta
   assert.deepStrictEqual(P.propChecks({ profiles: [], home }), []);
 });
 
+test('preflight prop account: a run on an account marked as a prop account needs its profile\'s attempt; unmarked brokers add no row; a malformed marker fails', () => {
+  const home = tmpDir();
+  const accounts = [{ ...PROFILE, valid: true }];
+  const cfg = { account: '7', paper: false };
+  const at = (propAccounts, c = cfg) => P.propAccountChecks({ cfg: c, broker: { ...LIVE, ...(propAccounts === undefined ? {} : { propAccounts }) }, accounts, home });
+  assert.deepStrictEqual(at(undefined), [], 'no marker: no row, as before');
+  assert.deepStrictEqual(at({}), []);
+  assert.deepStrictEqual([at({ 9: 'p100' })[0].status, at({ 9: 'p100' })[0].detail], ['ok', 'account 7 is not marked as a prop account']);
+  const none = at({ '007': 'p100' })[0];
+  assert.deepStrictEqual([none.check, none.status], ['prop account', 'fail']);
+  assert.match(none.detail, /no p100 attempt is running.*combine\.js start --account p100; the gate refuses every entry on it until then/);
+  assert.strictEqual(at({ 7: 'p100' }, { ...cfg, paper: true })[0].status, 'warn', 'a paper run enters nothing anyway');
+  assert.strictEqual(at({ 7: 'p999' })[0].status, 'fail', 'a profile that is not one');
+  const bad = at({ 7: 'p100', 8: 'p100' })[0];
+  assert.deepStrictEqual([bad.status, /under one profile.*refuses every entry until it is fixed/.test(bad.detail)], ['fail', true]);
+  prop.startAttempt(home, PROFILE, NOW);
+  assert.deepStrictEqual(at({ 7: 'p100' }), [{ check: 'prop account', status: 'ok', detail: 'account 7 is a p100 prop account, its attempt running' }]);
+});
+
 test('preflight bar fields: an active rules strategy on the runner\'s timeframe needs its field() paths on the broker\'s bars (a warning)', () => {
   const cfg = P.configChecks(RAW).cfg;
   const strat = (over = {}) => ({ name: 's', valid: true, status: 'active', signal: 'rules', timeframe: '3m', rules: { long: ['field("a.b") > 0', { any: ['field(\'c\') < 1', 'close > open'] }], short: ['close < open'] }, ...over });
@@ -195,10 +214,18 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   assert.strictEqual(status(report.results, 'agent timeframes'), 'ok');
   assert.match(report.results.find(x => x.check === 'agent timeframes').detail, /risk-manager 3m/);
   assert.strictEqual(status(report.results, 'account lock'), 'ok');
+  assert.strictEqual(status(report.results, 'prop account'), undefined, 'an unmarked broker adds no row');
   assert.ok(!calls.some(n => /order|close_position|journal_add/.test(n)), calls.join(', '));
   assert.ok(calls.includes('close'), 'the server is closed after');
   assert.match(P.formatReport(report), /FAIL broker: tools\/list[\s\S]*preflight FAILED: \d+ check\(s\)/);
   assert.match(P.formatReport({ ok: true, results: [{ check: 'x', status: 'warn', detail: 'y' }] }), /^warn x: y\npreflight passed/);
+  // The account marked as a prop account under a profile with no attempt running: a failure before the session.
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const profile = loadAccounts(ROOT, env).accounts.find(a => a.valid).name;
+  homeBrokers(home, { live: { command: ['live-mcp'], allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'], propAccounts: { 7: profile } } }, { env });
+  const marked = await P.runPreflight({ raw: RAW, root: ROOT, env, home, deps: { now: () => NOW, open, resolve: () => '/bin/agent' } });
+  assert.strictEqual(status(marked.results, 'prop account'), 'fail');
+  assert.match(marked.results.find(x => x.check === 'prop account').detail, new RegExp(`no ${profile} attempt is running`));
   // A broken config stops before the broker is started.
   const bad = await P.runPreflight({ raw: { ...RAW, eodAt: '' }, root: ROOT, env, home, deps: { open: () => assert.fail('not opened') } });
   assert.deepStrictEqual(bad.results.map(x => x.status), ['fail']);
