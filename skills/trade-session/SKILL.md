@@ -159,6 +159,6 @@ to watch next. After the position closes, run trade-review.
 Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium), volume
 long (rel-vol 1.6x), no events until 14:00. compose_check long OK. Plan (numbers
 from the record): limit long 21540.25, stop 21512.50 (111 ticks = $55.50),
-target 21598.00 (231 ticks, 2.08R), 5 MNQ ($277.50).
+target 21598.00 (231 ticks, 2.08R), 1 MNQ.
 Verdict APPROVE. Executed with stop and target brackets, stop working.
 ```

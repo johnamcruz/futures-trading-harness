@@ -63,11 +63,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // setting its size (the owner's decision, 2026-10-21: +267), then 73396 with compose first:
   // the plan, never the model, works out R:R (+80, the confluence table's compose-step notes dropped), then 73608 with decisive a 1h CHoCH against and
   // the briefing's Standard plan named (with the always-on decision rule's and every-cycle entry loads before it: +212), then 73727
-  // with the owner's no-late-entry rule (2026-10-21) taught (fix/no-late-entry: trade-lifecycle's one [late-entry] line: +119, for the owner's OK),
-  // then 73754 with the owner's prop sizing floor (feat/prop-min-contracts, 2026-10-23: the examples at a full size 5, $277.50,
-  // never size 1, in trade-session, trader-process and trade-lifecycle: +27). It may shrink;
+  // with the owner's no-late-entry rule (2026-10-21) taught (fix/no-late-entry: trade-lifecycle's one [late-entry] line: +119, for the owner's OK). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 73754,`the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 73727, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

@@ -110,13 +110,13 @@ it:
   contract name `NQ` as the contractId (the harness translates it to the
   broker's id), and write the plan **and** the order with it; a plan for
   `MNQ` doesn't count for an NQ order.
-- The order gate refuses (`[combine]`, `[policy]`, `[min-contracts]`, `[prop-one-position]`;
+- The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;
   none can be skipped): no started attempt
   (`node <root>/scripts/combine.js start --account <name>`, the user's call); a
   snapshot older than 10 minutes or dated in the future (a clock that
   stepped back: tell the user); a missed close (the user records it with
   `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
-  daily limit; the loss streak stop; a size over the budget (at the verdict's multiplier) or under the rulebook's `min_contracts` (fewer fit: skip, never a tighter stop); a verdict
+  daily limit; the loss streak stop; a size over the budget (at the verdict's multiplier); a verdict
   that isn't `full`, or carries no multiplier above 0 and at most 1; any entry that doesn't match the
   verdict, or whose verdict is not for the last recorded bar, or is for a
   setup of a strategy that isn't active; any position already open on the account, or any order working

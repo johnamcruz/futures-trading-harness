@@ -48,12 +48,7 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    ticks were sized from the attempt's budget (`combine_status`), each
    contract's risk counting its stop plus a tick of expected slippage
    (`sizing.stop_slippage_ticks`) and fees both ways; place at
-   most that size and don't apply the 25% / 10% / size-1 caps to it: a full
-   verdict's size is the verdict's, never 1 by habit. **The floor:** a prop
-   entry is at least the rulebook's `min_contracts` (micro-equivalents: a
-   mini counts as 10). Fewer fit at the stop: skip (the verdict says so);
-   never a tighter stop, never a size under the floor (the gate refuses it,
-   `[min-contracts]`). The gate
+   most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
@@ -84,7 +79,4 @@ Plan: 1 MNQ, risk $35.
 compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):
 risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick
 (the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)
-
-in a prop attempt, min_contracts 3: that MNQ record at 5 stands ($277.50);
-the MES one at 2 is under the floor: skip it (never a tighter stop)
 ```

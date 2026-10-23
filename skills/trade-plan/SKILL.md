@@ -85,5 +85,5 @@ numbers by the rules above and position-sizing.
 ## Examples
 
 ```text
-plan: trade_lifecycle long, stop 111 ticks, target 231 ticks, size 5 ($277.50) from the compose record
+plan: trade_lifecycle long, stop 111 ticks, target 231 ticks, size 1 from the compose record
 ```
