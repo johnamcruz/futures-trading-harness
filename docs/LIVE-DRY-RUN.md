@@ -40,6 +40,33 @@ next day, Sunday evening to Friday afternoon.
   the server refuses every order) and confirmed replays need no list.
 - In the runner config (`mcp-configs/autotrader.example.json`), set `account`
   to the same id and keep `"paper": true` until a paper day has run cleanly.
+- A prop account (a challenge account, practice or paid): mark it in your own
+  `~/.futures-trading-harness/brokers.json` (never the repo's), under the
+  broker's entry, with the account profile it trades under:
+
+  ```json
+  { "brokers": { "<broker>": { "propAccounts": { "12345": "<profile name>" } } } }
+  ```
+
+  The harness can't tell a prop account from a simulated one at the broker, so
+  the mark is yours. The order gate (hook and gateway) then refuses every entry
+  on that account (`[prop-account-attempt]`) unless the profile's attempt is
+  running (section 3), in every mode: paper, practice and live alike. Exits,
+  protective stops, stop moves, cancels and closes always go. A malformed
+  marker (not an object, an id that isn't one, a name that isn't a profile, or
+  two accounts under one profile: an attempt is kept per profile) refuses
+  every entry until it is fixed. A live run on a marked account with no
+  attempt running refuses to start, with the gate's message. Preflight
+  (`prop account`) fails a marked account with no attempt running on a live
+  run, and warns about it in a paper run. A `propAccounts` key the gate never
+  reads is a preflight row naming where it was found and the file and broker
+  in force: at the top level of a brokers file, or in the home's
+  `brokers.json` while `FTH_BROKERS_FILE` names another file, it fails a live
+  run and warns otherwise; under another broker's entry (that broker's own
+  mark, read only while it is the active broker) it warns in every mode.
+  Only the active broker's entry is read, so a replay (its replay broker's
+  entry active) is unmarked by a mark on the live broker; marking the replay
+  broker's own entry would mark the replay.
 
 ## 3. Prop attempt
 
@@ -52,8 +79,9 @@ node scripts/combine.js start --account <profile name>
 node scripts/combine.js status
 ```
 
-The gate refuses that strategy's entries until it is started. The account's
-balance must fit the profile's size (preflight checks it).
+The gate refuses that strategy's entries until it is started, and every entry
+on an account marked as a prop account under that profile (section 2). The
+account's balance must fit the profile's size (preflight checks it).
 
 ## 4. Preflight
 

@@ -2794,6 +2794,80 @@ test('MCP gateway: a live entry on an account off the allow-list is refused befo
   assert.match(textOf((await through({ SIM_ALLOWED_ACCOUNTS: '1' }, [call(3, 'place_order', ORDER)]))[3]), /"orderId":\s*5/);
 });
 
+test('order gate hook: an entry on an account marked as a prop account (the user\'s brokers.json propAccounts) is refused without its profile\'s attempt; exits and protective stops go; a malformed marker refuses entries', () => {
+  const { TEST_ACCOUNTS } = require('../helpers');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { dir, env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const profile = loadAccounts(ROOT, { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS }).accounts.find(a => a.valid);
+  const file = path.join(dir, 'brokers.json');
+  const fake = JSON.parse(fs.readFileSync(FAKE_BROKERS, 'utf8'));
+  const mark = propAccounts => fs.writeFileSync(file, JSON.stringify({ ...fake, brokers: { fake: { ...fake.brokers.fake, propAccounts } } }));
+  const marked = { ...env, FTH_BROKERS_FILE: file, FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS };
+  const exits = [{ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' }];
+  // Unmarked: the entry goes, as before.
+  assert.strictEqual(gate(orderPayload(), env).code, 0);
+  mark({ 9: profile.name });
+  assert.strictEqual(gate(orderPayload(), marked).code, 0, 'another account marked');
+  // Marked, no attempt: refused, also autonomous with the check named as skipped.
+  mark({ 1: profile.name });
+  for (const extra of [{}, { FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'prop-account-attempt' }]) {
+    const r = gate(orderPayload(), { ...marked, ...extra });
+    assert.strictEqual(r.code, 2, JSON.stringify(extra));
+    assert.match(r.stderr, new RegExp(`\\[prop-account-attempt\\] account 1 is a ${profile.name} prop account and no ${profile.name} attempt is running`));
+  }
+  for (const input of exits) assert.strictEqual(gate(orderPayload(input), marked).code, 0, input.rationale);
+  // Its attempt running: this check passes (the attempt's own checks then apply: a non-policy entry is refused by [combine]).
+  prop.startAttempt(env.FTH_HOME, profile, new Date(TEST_NOW));
+  const running = gate(orderPayload(), marked);
+  assert.doesNotMatch(running.stderr, /prop-account-attempt/);
+  assert.match(running.stderr, /\[combine\] A .* attempt is running/);
+  // An entry tagged with a policy strategy that trades another profile (propped's account isn't the marked one): refused.
+  const propped = gate(orderPayload(entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540, risk $40' })), marked);
+  assert.strictEqual(propped.code, 2);
+  assert.match(propped.stderr, new RegExp(`\\[prop-account-attempt\\] setup:propped is sized for the .* profile, but account 1 is marked as a ${profile.name} prop account`));
+  // A malformed marker: entries refused, exits and stops go.
+  mark({ 1: profile.name, 7: profile.name });
+  assert.match(gate(orderPayload(), marked).stderr, /\[prop-account-attempt\] .*under one profile/);
+  for (const input of exits) assert.strictEqual(gate(orderPayload(input), marked).code, 0, input.rationale);
+});
+
+test('MCP gateway: an entry on a marked prop account without its attempt is refused before the broker sees it; exits and closes go; with the attempt the check passes', async () => {
+  const { TEST_ACCOUNTS } = require('../helpers');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const profile = loadAccounts(ROOT, { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS }).accounts.find(a => a.valid);
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS, SIM_ALLOWED_ACCOUNTS: '1', FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, allowedAccountIds: [1] }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
+  const through = async (propAccounts, msgs, { extra = {}, attempt = false } = {}) => {
+    const dir = tmpDir();
+    const { home, file } = simHome(dir, { replay: false, journalEntries: [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }] });
+    trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (propAccounts !== undefined) fs.writeFileSync(file, JSON.stringify({ ...cfg, brokers: { sim: { ...cfg.brokers.sim, propAccounts } } }));
+    if (attempt) prop.startAttempt(home, profile, new Date(TEST_NOW));
+    return gatewayCfg({ ...base, ...extra }, [call(1, 'search_contracts', { searchText: 'MNQ' }), call(2, 'get_server_config', {}), ...msgs], { dir });
+  };
+  // Control: unmarked, the entry reaches the broker.
+  assert.match(textOf((await through(undefined, [call(3, 'place_order', ORDER)]))[3]), /"orderId":\s*5/);
+  // Marked, no attempt: refused at the gateway.
+  const refused = textOf((await through({ 1: profile.name }, [call(3, 'place_order', ORDER)]))[3]);
+  assert.match(refused, new RegExp(`\\[prop-account-attempt\\] account 1 is a ${profile.name} prop account and no ${profile.name} attempt is running`));
+  assert.doesNotMatch(refused, /"orderId"/);
+  // Risk-reducing calls go, each in a run of its own.
+  for (const m of [
+    call(3, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
+    call(3, 'close_position', { accountId: 1, contractId: 'MNQ' }),
+    call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
+  ]) {
+    const r = await through({ 1: profile.name }, [m], { extra: { FAKE_POSITIONS: LONG1, FAKE_PLACE_RESULT: '' } });
+    assert.strictEqual(textOf(r[3]), `forwarded:tools/call:${m.params.name}`);
+  }
+  // With its attempt running the check passes (the attempt's own [combine] check then judges this non-policy entry).
+  const withAttempt = textOf((await through({ 1: profile.name }, [call(3, 'place_order', ORDER)], { attempt: true }))[3]);
+  assert.doesNotMatch(withAttempt, /prop-account-attempt/);
+  assert.match(withAttempt, /\[combine\] A .* attempt is running/);
+});
+
 test('MCP gateway: the server attests live entries - an override can\'t spoof a shipped broker\'s paper or allow-list settings, a server that trades overrides a paper claim, its own allowed accounts must list the account, and an unreadable config refuses entries only', async () => {
   const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }];
   const server = over => JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, allowedAccountIds: [1], ...over });

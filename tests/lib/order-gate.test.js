@@ -1389,6 +1389,91 @@ test('allowed accounts: a live entry needs the broker\'s allow-list holding its 
   assert.deepStrictEqual(checkOrder(ANYTIME, { env: at({ SIM_ALLOWED_ACCOUNTS: '9, 1' }), pluginRoot: live.root }).violations, []);
 });
 
+test('prop account attempt: an entry on an account the user marks as a prop account goes only while its profile\'s attempt runs (unskippable, in every mode); unmarked accounts unchanged; risk-reducing actions never refused', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { TEST_ACCOUNTS } = require('../helpers');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const live = replaySetup({ replay: false });
+  const wall = '2026-10-07T14:30:00.000Z';
+  const at = extra => ({ ...live.env, FTH_TEST_NOW: wall, FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS, ...extra });
+  const [mine, other] = loadAccounts(live.root, at({})).accounts.filter(a => a.valid);
+  const file = path.join(live.env.FTH_HOME, 'brokers.json');
+  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const mark = propAccounts => fs.writeFileSync(file, JSON.stringify({ ...cfg, brokers: { sim: { ...cfg.brokers.sim, propAccounts } } }));
+  const checks = (env, input = ANYTIME, opts = {}) => checkOrder(input, { env, pluginRoot: live.root, ...opts }).violations.map(v => v.check);
+  // Unmarked (the control, as every other test): the entry goes; account 1 is in the allow-list.
+  assert.deepStrictEqual(checks(at({})), []);
+  mark({});
+  assert.deepStrictEqual(checks(at({})), [], 'an empty marker marks nothing');
+  mark({ 9: mine.name });
+  assert.deepStrictEqual(checks(at({})), [], 'another account marked');
+  // Marked, no attempt: refused, whatever skips or mode.
+  mark({ 1: mine.name });
+  const r = checkOrder(ANYTIME, { env: at({}), pluginRoot: live.root });
+  assert.deepStrictEqual(r.violations.map(v => v.check), ['prop-account-attempt'], r.message);
+  assert.match(r.message, new RegExp(`account 1 is a ${mine.name} prop account and no ${mine.name} attempt is running`));
+  assert.match(r.message, new RegExp(`node scripts/combine\\.js start --account ${mine.name}`));
+  assert.match(r.message, /close_position still go/);
+  for (const extra of [{ FTH_ORDER_GATE_SKIP: 'prop-account-attempt' }, { FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'prop-account-attempt' }, { FTH_PAPER: '1' }]) {
+    assert.ok(checks(at(extra)).includes('prop-account-attempt'), JSON.stringify(extra));
+  }
+  // Every risk-reducing action goes, marked with no attempt and under a malformed marker alike.
+  const riskReducing = [
+    ['place_order', { ...entryOrder({ rationale: '[exit] flatten' }), side: 'sell' }],
+    ['place_order', { ...entryOrder({ rationale: '[protect] stop for the long at 21480' }), side: 'sell', type: 'stop', stopPrice: 21480 }],
+    ['modify_order', { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }],
+    ['cancel_order', { accountId: 1, orderId: 9 }],
+    ['partial_close_position', { accountId: 1, contractId: CONTRACT, size: 1 }],
+  ];
+  for (const marker of [{ 1: mine.name }, { 1: mine.name, 2: mine.name }, 'all']) {
+    mark(marker);
+    for (const [tool, input] of riskReducing) assert.deepStrictEqual(checks(at({}), input, { tool }), [], `${tool} ${JSON.stringify(marker)}`);
+  }
+  // Malformed: every entry refused, on any account.
+  mark({ 1: mine.name, 2: mine.name });
+  assert.match(checkOrder(ANYTIME, { env: at({}), pluginRoot: live.root }).message, /\[prop-account-attempt\] broker "sim": "propAccounts" in brokers\.json marks accounts 1 and 2 under one profile/);
+  mark({ 9: 'NOT A PROFILE' });
+  assert.deepStrictEqual(checks(at({})), ['prop-account-attempt'], 'an unmarked account under a malformed marker');
+  // Wrong profile: another profile's attempt doesn't count; a profile that isn't one is refused.
+  mark({ 1: mine.name });
+  prop.startAttempt(live.env.FTH_HOME, other, new Date(wall));
+  const wrong = checkOrder(ANYTIME, { env: at({}), pluginRoot: live.root });
+  assert.ok(wrong.violations.some(v => v.check === 'prop-account-attempt' && new RegExp(`no ${mine.name} attempt`).test(v.message)), wrong.message);
+  mark({ 1: 'no_such_profile' });
+  assert.match(checkOrder(ANYTIME, { env: at({}), pluginRoot: live.root }).message, /\[prop-account-attempt\] account 1 is marked as a prop account under "no_such_profile", which is not an account profile/);
+  // Its own profile's attempt running: this check passes, and the attempt's own checks apply as today (here, the
+  // combine check: while an attempt runs only a policy strategy that trades it may enter).
+  mark({ 1: mine.name });
+  prop.endAttempt(live.env.FTH_HOME, other.name, new Date(wall));
+  prop.startAttempt(live.env.FTH_HOME, mine, new Date(wall));
+  assert.deepStrictEqual(checks(at({})), ['combine']);
+  // Wrong profile through the setup tag: both attempts running, account 1 marked under one, the entry tagged with a
+  // policy strategy that trades the other profile: refused as sized for another profile.
+  prop.startAttempt(live.env.FTH_HOME, other, new Date(wall));
+  fs.mkdirSync(path.join(live.root, 'strategies', 'other_pol'), { recursive: true });
+  fs.writeFileSync(path.join(live.root, 'strategies', 'other_pol', 'STRATEGY.md'), [
+    '---', 'name: other_pol', 'description: Test policy strategy that trades the other test profile, for the prop account check.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: policy', 'strategies: [anytime]', `account: ${other.name}`, 'contracts: micro',
+    'risk:', '  stop: strategy', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  const tagged = checkOrder(entryOrder({ rationale: 'setup:other_pol long, stop 21480, target 21540, risk $40' }), { env: at({}), pluginRoot: live.root });
+  const sized = tagged.violations.filter(v => v.check === 'prop-account-attempt');
+  assert.strictEqual(sized.length, 1, tagged.message);
+  assert.match(sized[0].message, new RegExp(`setup:other_pol is sized for the ${other.name} profile, but account 1 is marked as a ${mine.name} prop account`));
+  assert.match(sized[0].message, /sized for the .* profile/);
+  prop.endAttempt(live.env.FTH_HOME, other.name, new Date(wall));
+  // The same in a confirmed replay: the rule follows the account, not the mode.
+  const sim = replaySetup();
+  const simFile = path.join(sim.env.FTH_HOME, 'brokers.json');
+  const simCfg = JSON.parse(fs.readFileSync(simFile, 'utf8'));
+  const replayed = { ...sim.env, FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS, FTH_TEST_NOW: '2026-10-10T15:00:00Z', FTH_REPLAY_NOW: wall };
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: replayed, pluginRoot: sim.root }).violations, []);
+  fs.writeFileSync(simFile, JSON.stringify({ ...simCfg, brokers: { sim: { ...simCfg.brokers.sim, propAccounts: { 1: mine.name } } } }));
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: replayed, pluginRoot: sim.root }).violations.map(v => v.check), ['prop-account-attempt']);
+});
+
 test('replay clock: a broker labelled replay that looks live is refused (same server, entry variable, or a live broker\'s variables)', () => {
   const path = require('path');
   const fs = require('fs');

@@ -826,6 +826,39 @@ test('runner wiring: the broker must trade for a live account; the runner is bui
   assert.strictEqual(typeof (await runner.step()), 'number', 'a Saturday: nothing to do');
 });
 
+test('runner wiring: a live run on an account marked as a prop account refuses to start without its profile\'s attempt, with the gate\'s message; paper and a confirmed replay start as before', async () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { TEST_ACCOUNTS } = require('../helpers');
+  const closed = [];
+  const fake = (extra = {}) => ({ verify: async () => {}, serverConfig: async () => ({ apiUrl: 'https://api.example.test', tradingEnabled: true, allowedAccountIds: [7], ...extra }), close: () => closed.push(1) });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-prop-'));
+  const profile = loadAccounts(ROOT, { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS }).accounts.find(a => a.valid);
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'], propAccounts: { 7: profile.name } };
+  const env = () => ({ LIVE_ALLOWED: '7', LIVE_API_URL: 'https://api.example.test', FTH_LOCK_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'fth-locks-')), FTH_TEST_LOCKS: '1', FTH_HOME: home, FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS });
+  const live = { account: '7', paper: false };
+  const gateSays = require('../../scripts/lib/trading/prop-accounts').propAccountRefusal({ broker, accountId: 7, home, accounts: loadAccounts(ROOT, { FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS }).accounts });
+  await assert.rejects(openRunnerBroker({ cfg: live, root: ROOT, env: env(), broker, open: () => fake() }), err => {
+    assert.strictEqual(err.message, `[prop-account-attempt] ${gateSays}. Exits, protective stops, stop moves, cancels and close_position still go.`);
+    return true;
+  });
+  assert.strictEqual(closed.length, 1, 'closed when refused');
+  // Unmarked (or another account marked): starts as before.
+  const { propAccounts: _marks, ...unmarked } = broker;
+  for (const b of [unmarked, { ...broker, propAccounts: { 9: profile.name } }]) (await openRunnerBroker({ cfg: live, root: ROOT, env: env(), broker: b, open: () => fake() })).close();
+  // A malformed marker refuses the start too.
+  await assert.rejects(openRunnerBroker({ cfg: live, root: ROOT, env: env(), broker: { ...broker, propAccounts: [] }, open: () => fake() }), /\[prop-account-attempt\] .*is not an object/);
+  // Paper and a confirmed replay start as before (the gate still judges their entries).
+  for (const [cfg, b, extra] of [[{ account: '7', paper: true }, broker, {}], [live, { ...broker, replay: true }, { replay: true }]]) {
+    (await openRunnerBroker({ cfg, root: ROOT, env: env(), broker: b, open: () => fake(extra) })).close();
+  }
+  // A broker labelled replay whose server doesn't confirm it is live: refused.
+  await assert.rejects(openRunnerBroker({ cfg: live, root: ROOT, env: env(), broker: { ...broker, replay: true }, open: () => fake() }), /prop-account-attempt/);
+  // Its attempt running: the live run starts.
+  prop.startAttempt(home, profile, new Date('2026-10-07T14:00:00Z'));
+  (await openRunnerBroker({ cfg: live, root: ROOT, env: env(), broker, open: () => fake() })).close();
+});
+
 test('runner wiring: a live run holds its account\'s lock across harness homes until its adapter closes; paper and a confirmed replay never take or check it', async () => {
   const { lockFileFor, serverIdentities } = require('../../scripts/lib/account-lock');
   const closed = [];

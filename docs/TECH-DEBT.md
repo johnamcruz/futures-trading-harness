@@ -103,15 +103,14 @@ item is removed from the list in the PR that fixes it.
 
 - Skills added to `skills/` reach Codex and Qwen only after
   `node scripts/sync-harness.js`; CI fails until then (`npm run sync:check`).
-- **An entry on a prop account needs no attempt unless it is a policy
-  strategy's:** the gate refuses a policy strategy's entries without a running
-  attempt, but a composed entry (`trade_lifecycle`, active today) or a rules
-  strategy's (none active) has no such check: the attempt check runs only for a
-  strategy that names an account, and preflight's prop checks count policy
-  strategies only. With no attempt, sizing skips the cushion cap. The gate then
-  enforces only the strategy's `max_risk_usd` ($300 for a composed trade), the
-  broker's max order size and the loss-count checks (the 25% of the room before
-  the daily limit is taught in `position-sizing`, not enforced): live on a prop account mid-combine with a $600 cushion, one composed trade
-  could risk half of it. Stage 1 runs in replay with no prop account at risk;
-  before a live run on a prop account, have the gate refuse any entry on an
-  account with a prop profile while no attempt runs.
+
+## Resolved
+
+- **An entry on a prop account needed no attempt unless it was a policy
+  strategy's** (recorded in #228): a composed or rules entry on a prop account
+  with no running attempt had no floor tracking. Fixed by the user's prop
+  account marker (`propAccounts` in their own `brokers.json`,
+  `scripts/lib/trading/prop-accounts.js`): the gate refuses every entry on a
+  marked account (`[prop-account-attempt]`) unless its profile's attempt runs,
+  in every mode, and preflight fails a marked account with none. Stage 1's
+  replays are unmarked, so they are unchanged (docs/LIVE-DRY-RUN.md, section 2).
