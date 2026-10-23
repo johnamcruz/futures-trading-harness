@@ -257,7 +257,11 @@ test('no gate or check reads the blocks: nothing outside cycle-data.js and the p
   const walk = d => { for (const n of fs.readdirSync(d)) { const f = path.join(d, n); if (fs.statSync(f).isDirectory()) walk(f); else if (f.endsWith('.js')) files.push(f); } };
   walk(path.join(ROOT, 'scripts'));
   const users = files.filter(f => /cycle-data|precollect|withCycleData/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f)).sort();
-  assert.deepStrictEqual(users, ['scripts/lib/autotrader.js', 'scripts/lib/broker/adapter.js', 'scripts/lib/broker/mcp-client.js', 'scripts/lib/cycle-data.js', 'scripts/lib/cycle-run.js', 'scripts/lib/runner.js']);
+  // The desk's (the same key): its wiring (runner-wiring.js), its requests (requests.js renders a role's blocks), and the
+  // read-data check (checks.js), which reads the runner's own record for the role (primaryOk), never a block.
+  assert.deepStrictEqual(users, ['scripts/lib/autotrader.js', 'scripts/lib/broker/adapter.js', 'scripts/lib/broker/mcp-client.js', 'scripts/lib/cycle-data.js', 'scripts/lib/cycle-run.js', 'scripts/lib/orchestrate/checks.js', 'scripts/lib/orchestrate/requests.js', 'scripts/lib/runner-wiring.js', 'scripts/lib/runner.js']);
+  // The check names only the record's primaryOk, never a block's text.
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'scripts/lib/orchestrate/checks.js'), 'utf8'), /\.blocks|\.text\b.*precollected|require\('\.\.\/cycle-data'\)/);
   // The gate's own code never mentions them.
   for (const f of ['scripts/lib/trading/order-gate.js', 'scripts/lib/trading/account-gate.js', 'scripts/lib/trading/check-order.js', 'scripts/mcp-gateway.js']) {
     assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), 'utf8'), /cycle-data|precollect|This cycle's reads/, f);

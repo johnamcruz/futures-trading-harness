@@ -59,6 +59,7 @@ const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-sta
 const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBriefing, wholeBars, readFrameBriefing, writeFrameBriefing, removeFrameBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals, syncRetiredMarks } = require('./trading/signal-state');
 const RC = require('./trading/report-cache');
+const CD = require('./cycle-data');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const LR = require('./trading/lifecycle-runner');
@@ -391,6 +392,30 @@ function managedDeskNote(cfg) {
 }
 
 /**
+ * The desk's reads in the cycle's store (cycle-data.js collectDesk), made with the environment the roles' runs get
+ * (childEnv on the cycle's context: a role's run differs only in its own variables, cycle-data.js PER_RUN), within `ms`
+ * and the desk's signal: a collection that runs out or fails gives every role a line and no credit, never an error.
+ */
+async function deskReads({ cfg, root, env, context, store, roles, symbols, signal, ms }) {
+  const accountId = Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null;
+  let timer;
+  let onAbort = null;
+  const late = new Promise(resolve => {
+    timer = setTimeout(() => resolve(CD.deskFailed(roles, `the reads took longer than the ${Math.round(ms / 1000)} s the desk could spare`)), ms);
+    if (signal) { onAbort = () => resolve(CD.deskFailed(roles, 'the desk\'s time ran out')); signal.addEventListener('abort', onAbort, { once: true }); }
+  });
+  try {
+    const roleEnv = require('./autotrader').childEnv(cfg, root, env, context);
+    return await Promise.race([CD.collectDesk({ roles, symbol: symbols[0].symbol, contractId: symbols[0].contractId || null, accountId, env: roleEnv, store }), late]);
+  } catch (err) {
+    return CD.deskFailed(roles, err);
+  } finally {
+    clearTimeout(timer);
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
  * The runner's desk (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The desk, the first workflow"): each full trade cycle the
  * runner runs the desk's roles the report cache didn't serve, as workflows/desk/WORKFLOW.md says, through the
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
@@ -406,6 +431,11 @@ function managedDeskNote(cfg) {
  *     counted) is written to the cycle's role record (`rolesFile`, runner-roles.js), which the head trader's run gets as
  *     FTH_CYCLE_ROLES: the order gate credits the desk from it. `recorded`: the roles whose counted run it holds (a
  *     record that can't be written credits none: logged, and the head trader may launch them).
+ *     `store` (this machine's cycleDataInPrompt only, Claude Code: the cycle's store, cycle-data.js createStore): each
+ *     role's every-cycle reads are made in it first, once each, with the cycle's environment for the roles' runs, within
+ *     the desk's time, and go at the end of each role's request; the read-data check credits a role from that record
+ *     (checks.js collectedFor). The runner config's deskBriefReports (Claude Code): each request asks for the report
+ *     block alone. Neither: the requests and checks as before.
  */
 function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Date.now, env = process.env }) {
   const note = managedDeskNote(cfg);
@@ -422,7 +452,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
     // Whether the head trader's own launches are timed in its transcript (autotrader.js TIMED_LAUNCHES): runner.js runs an
     // untimed harness's desk only in a cycle whose entry it runs or a managed one (no entry that cycle: runner.js managedDesk).
     timed: TIMED_LAUNCHES.has(cfg.harness),
-    run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null }) => {
+    run: async ({ symbols, roles, now, laneBars = {}, at, bars = null, context = null, signal = null, budgetMs = null, store = null }) => {
       const b = Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
       const key = lookupsKeyOf(home, b, symbols, now, laneBars);
       const perRoleMs = timeoutMinutes * 60000;
@@ -438,6 +468,9 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
       // desk's `lookups` check holds a run that missed one (retried, then missing, never served).
       const lookups = lookupNeeds(b, now, rolesEnv(cfg, env), { home, laneBars });
       const ctx = { symbol: symbols.map(s => s.symbol).join(', '), contractId: symbols.length === 1 ? symbols[0].contractId : null, at, timeframe: cfg.timeframe, bars, lookups };
+      if (cfg.harness === 'claude' && cfg.deskBriefReports === true) ctx.brief = true;
+      // This machine's opt-in (cycleDataInPrompt): the roles' reads made first, in the cycle's store, within the desk's time.
+      if (store && CD.on(cfg) && symbols.length === 1) ctx.precollected = await deskReads({ cfg, root, env, context, store, roles, symbols, signal, ms: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
       const res = await runWorkflow(workflow, { run: createRun({ engine, signal, onEvent: e => { if (e.type === 'agent-end' && e.stop !== 'completed') log(`the desk: ${e.role} ${e.stop}${e.why ? ` (${e.why})` : ''}`); } }), ctx, roles, concurrency, timeoutMs: Number.isFinite(budgetMs) ? Math.min(perRoleMs, budgetMs) : perRoleMs });
       const results = res.phases.flatMap(p => p.results);
       const reports = results.filter(r => r.ok).map(r => ({ role: r.role, text: r.text, at: now.toISOString(), until: null, lookups: key ? (r.lookups || []) : [], lookupsKey: key && (r.lookups || []).length ? key : null, source: 'desk' }));
