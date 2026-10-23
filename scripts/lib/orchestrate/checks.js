@@ -14,6 +14,8 @@
  *   ORDER_REFUSED              a report's refusal line (agents/trade-executor.md output: BLOCKED or ABORTED first)
  *   READS_NO_DATA              the harness tools that read no market or account data (skills, past decisions)
  *   readData(tools, servers)   true when one of them read market or account data
+ *   collectedFor(role, ctx)    the runner's own record says it read this role's primary data for it this cycle
+ *                              (ctx.precollected[role].primaryOk, cycle-data.js collectDesk: the cycleDataInPrompt opt-in)
  */
 
 const { ANALYSTS, verdictOf } = require('../trading/roles-ran');
@@ -31,9 +33,20 @@ function readData(tools, { harnessServer = 'harness', brokerServer = 'broker' } 
     || (t.startsWith(`${harnessServer}_`) && !READS_NO_DATA.includes(t.slice(harnessServer.length + 1)))));
 }
 
+/**
+ * The runner read this role's primary data for it this cycle (its bar briefing, served as this cycle's; phase 1's
+ * account snapshot, answered whole) and put it in its request: the record the runner made in code for this role
+ * (deskFor's ctx), never another role's, never the report's own word, nothing a block in a request says.
+ */
+function collectedFor(role, ctx) {
+  const p = ctx && ctx.precollected && typeof ctx.precollected === 'object' ? ctx.precollected : null;
+  return Boolean(p && Object.prototype.hasOwnProperty.call(p, role) && p[role] && p[role].primaryOk === true);
+}
+
 const CHECKS = Object.freeze({
-  // Its own run read data (a subagent sees only its request: a report from no read is empty or invented).
-  'read-data': (role, r) => (readData(r && r.tools) ? null : 'read no data'),
+  // Its own run read data (a subagent sees only its request: a report from no read is empty or invented), or the runner
+  // read its primary data for it this cycle and gave it in its request (collectedFor).
+  'read-data': (role, r, ctx) => (readData(r && r.tools) || collectedFor(role, ctx) ? null : 'read no data'),
   // Its role's report shape: an analyst's names what it rests on; phase 1 is a risk state.
   'report-shape': (role, r) => {
     const text = r && typeof r.text === 'string' ? r.text : '';
@@ -70,4 +83,4 @@ const CHECKS = Object.freeze({
   },
 });
 
-module.exports = { CHECKS, READS_NO_DATA, ORDER_REFUSED, readData };
+module.exports = { CHECKS, READS_NO_DATA, ORDER_REFUSED, readData, collectedFor };

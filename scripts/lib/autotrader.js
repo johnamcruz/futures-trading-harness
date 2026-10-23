@@ -268,7 +268,7 @@ function deskConcurrencyProblem(v) {
  */
 // roleSkillsInPrompt is the roles' (the runner's role runs: their skills in a prompt addition, role-prompt.js), listed
 // here so a run with it is never pooled with one without it either.
-const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt']);
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports']);
 /**
  * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
  * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
@@ -373,6 +373,10 @@ function validateConfig(raw) {
   // role-prompt.js), absent or false as before.
   if (cfg.roleSkillsInPrompt !== undefined && typeof cfg.roleSkillsInPrompt !== 'boolean') errors.push('roleSkillsInPrompt: true or false, or absent (as before: the roles the runner runs load their skills)');
   if (cfg.roleSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`roleSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's roles have their own index mode, FTH_ROLE_SKILLS)`);
+  // deskBriefReports true: the runner's desk asks each role for its report block alone (orchestrate/requests.js desk),
+  // absent or false as before.
+  if (cfg.deskBriefReports !== undefined && typeof cfg.deskBriefReports !== 'boolean') errors.push('deskBriefReports: true or false, or absent (as before: the desk\'s requests as they are)');
+  if (cfg.deskBriefReports === true && cfg.harness !== 'claude') errors.push(`deskBriefReports: for harness "claude" only (harness ${cfg.harness})`);
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');

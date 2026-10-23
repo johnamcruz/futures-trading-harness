@@ -1695,6 +1695,9 @@ function createRunner(deps) {
           // refuses every entry in it (FTH_CYCLE_MANAGE, order-gate.js managed-cycle); exits, stop moves, closes and cancels
           // are risk-reducing and go before that check, as always.
           const managedCycle = startedManaging && Boolean(desk) && desk.timed === false && again.action === 'trade' && !manageOnly && !cfg.paper && cacheSymbols.length === 1;
+          // This machine's opt-in (cycleDataInPrompt, Claude Code only): the cycle's store of reads (cycle-data.js), filled by
+          // the runner once a cycle, the desk's reads first; the desk's roles and the head trader take their reads from it.
+          const cycleStore = CD.on(cfg) ? CD.createStore({ root, broker: client, now: () => clock.now(), paper: Boolean(cfg.paper) }) : null;
           let deskRun = null;
           let deskMs = 0;
           if (deskRoles.length) {
@@ -1716,7 +1719,7 @@ function createRunner(deps) {
               ...(analystFrames.length ? { cycleAt: cycleNow.toISOString(), frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
             };
             try {
-              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), bars: (items.find(x => x.minutes === cfg.timeframe) || items[0] || { bar: {} }).bar.file || null, context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs });
+              deskRun = await desk.run({ symbols: cacheSymbols, roles: deskRoles, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, at: cycleNow.toISOString(), bars: (items.find(x => x.minutes === cfg.timeframe) || items[0] || { bar: {} }).bar.file || null, context: deskContext, signal: stop.signal, budgetMs: deskBudgetMs, ...(cycleStore ? { store: cycleStore } : {}) });
             } catch (err) {
               failed('the desk: the head trader launches it', err);
             } finally {
@@ -1834,7 +1837,7 @@ function createRunner(deps) {
           // made by the runner with its run's own environment just before its run (cycle-run.js), in its prompt (cycle-data.js).
           const precollect = CD.on(cfg) ? runEnv => CD.collect({
             symbols: [...new Set(items.map(x => x.symbol))], accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
-            env: runEnv, root, broker: client, now: () => clock.now(), paper: Boolean(cfg.paper),
+            env: runEnv, root, broker: client, now: () => clock.now(), paper: Boolean(cfg.paper), store: cycleStore,
           }) : null;
           let r;
           let ranRuns = [];
