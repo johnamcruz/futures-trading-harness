@@ -260,6 +260,14 @@ function deskConcurrencyProblem(v) {
   return Number.isInteger(v) && v >= 1 && v <= max ? null : `deskConcurrency: a whole number from 1 to ${max} (config/runner.json desk.concurrency; this machine may only lower it), or null for that value; got ${JSON.stringify(v)}`;
 }
 
+/**
+ * The head trader's machine-local delivery keys (the runner config's, Claude Code only; validateConfig below checks each):
+ * how its skills or data reach it, never what it is told. Every reader that must keep runs with one apart from runs
+ * without it reads this list: the decision dataset (learning/decision-dataset.js: never pooled), the training preflight
+ * (learning/preflight.js head-delivery). A key added here is validated below, or the autotrader tests fail.
+ */
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt']);
+
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
@@ -1283,6 +1291,7 @@ module.exports = {
   skillsText,
   stableHead,
   withCycleData,
+  HEAD_DELIVERY_KEYS,
   RESULT_LINE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,

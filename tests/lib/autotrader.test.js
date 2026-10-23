@@ -1614,6 +1614,16 @@ test('cycleDataInPrompt (this machine\'s runner config): a boolean or absent, fo
   assert.strictEqual(validateConfig({ harness: 'opencode', cycleDataInPrompt: false }).cycleDataInPrompt, false);
 });
 
+test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only)', () => {
+  const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt']);
+  for (const k of HEAD_DELIVERY_KEYS) {
+    assert.strictEqual(validateConfig({ harness: 'claude', [k]: true })[k], true, k);
+    assert.throws(() => validateConfig({ harness: 'claude', [k]: 'yes' }), new RegExp(`${k}: true or false`), k);
+    for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: true }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
+  }
+});
+
 test('headSkillsInPrompt absent or false: the Claude head trader\'s argv, env and prompts are as before (no prompt addition, no attestation, an inherited one dropped, the load sentence)', () => {
   const home = tmpDir();
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }];

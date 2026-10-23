@@ -334,3 +334,68 @@ test('examplesOf: the head trader\'s turns by default; the fingerprint names the
   fs.writeFileSync(setupFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(setupFile, 'utf8')), codeChanged: true }));
   assert.ok(sourceOf(r).decisions.every(d => d.digest.code === null));
 });
+
+// --- The head trader's machine-local delivery keys (autotrader.js HEAD_DELIVERY_KEYS): never pooled.
+const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
+/** A run's delivery keys, as its setup record's config (cfg.<key>, JSON values) or its runner config (autotrader.json) holds them. */
+function withDelivery(r, keys, { via = 'setup' } = {}) {
+  if (via === 'setup') {
+    const f = path.join(r.runDir, 'setup.json');
+    fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, 'utf8')), config: Object.fromEntries(Object.entries(keys).map(([k, v]) => [`cfg.${k}`, JSON.stringify(v)])) }));
+  } else fs.writeFileSync(path.join(r.runDir, 'autotrader.json'), JSON.stringify({ timeframe: 3, ...keys }));
+  return r;
+}
+const build3 = (t1, t2, v) => DS.buildDataset({ train: [sourceOf(t1), sourceOf(t2)], validate: [sourceOf(v)], spec: SPEC, rules: RULES, current: CURRENT });
+function runs(home = tmpDir()) {
+  return { t1: trainRun(path.join(home, 'a')), t2: stage2Run(path.join(home, 'b')), v: validateRun(path.join(home, 'c')) };
+}
+
+test('delivery keys absent (or false): the digest, the files and dataset.json exactly as before the keys existed', () => {
+  // Captured from the base branch's builder for this fixture (buildAll), before the delivery keys were read.
+  const a = buildAll();
+  assert.strictEqual(a.dataset.fingerprint, 'a5b0bc194d1dd06b07c3bd7455795c0057db239d1db7ec10d0e2cb7aa5496f12');
+  assert.ok(!('delivery' in a.dataset));
+  assert.ok(lines(a.files['meta.jsonl']).every(m => !('delivery' in m.digest)));
+  assert.ok(sourceOf(trainRun(path.join(tmpDir(), 'a'))).decisions.every(d => !('delivery' in d.digest)));
+  // False, or a runner config without them: the same bytes.
+  const r = runs();
+  withDelivery(r.t1, { headSkillsInPrompt: false, cycleDataInPrompt: false });
+  withDelivery(r.t2, { cycleDataInPrompt: false }, { via: 'runner' });
+  const b = build3(r.t1, r.t2, r.v);
+  assert.deepStrictEqual(b.files, a.files);
+  assert.strictEqual(b.dataset.fingerprint, a.dataset.fingerprint);
+});
+
+test('a delivery key on: the decisions\' digest names it, the dataset is another one; read from the setup record or the runner config', () => {
+  const base = buildAll();
+  for (const k of HEAD_DELIVERY_KEYS) {
+    for (const via of ['setup', 'runner']) {
+      const r = runs();
+      for (const x of [r.t1, r.t2, r.v]) withDelivery(x, { [k]: true }, { via });
+      assert.ok(sourceOf(r.t1).decisions.every(d => d.digest.delivery === k), `${k} via ${via}`);
+      const on = build3(r.t1, r.t2, r.v);
+      assert.notStrictEqual(on.dataset.fingerprint, base.dataset.fingerprint, `${k} via ${via}`);
+      assert.strictEqual(on.dataset.delivery, k);
+      assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === k));
+    }
+  }
+  // Both: in the list's order, one delivery.
+  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), HEAD_DELIVERY_KEYS.join(','));
+  assert.strictEqual(DS.deliveryOf(null, { cycleDataInPrompt: true }), 'cycleDataInPrompt');
+  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'false' } }, { headSkillsInPrompt: false }), null);
+  assert.strictEqual(DS.deliveryOf(null, null), null);
+});
+
+test('a mixed pool (decisions made with a delivery key on and without it) is refused, in a set or across train and validate', () => {
+  const r = runs();
+  withDelivery(r.t2, { cycleDataInPrompt: true });
+  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt\): build from runs under one/);
+  const r2 = runs();
+  withDelivery(r2.v, { headSkillsInPrompt: true }, { via: 'runner' });
+  assert.throws(() => build3(r2.t1, r2.t2, r2.v), /2 head trader deliveries/);
+  // Two keys against one: another delivery, refused too.
+  const r3 = runs();
+  for (const x of [r3.t1, r3.t2]) withDelivery(x, { cycleDataInPrompt: true, headSkillsInPrompt: true });
+  withDelivery(r3.v, { cycleDataInPrompt: true });
+  assert.throws(() => build3(r3.t1, r3.t2, r3.v), /2 head trader deliveries/);
+});
