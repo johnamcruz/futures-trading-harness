@@ -592,3 +592,19 @@ test('the training preflight\'s own readers create no run home (headSkillsInProm
   read.claudeHead(); // the head-prompt check (its scratch home)
   assert.strictEqual(fs.existsSync(runHome), false, 'a preflight reader created the run home');
 });
+
+test('head-delivery: the run\'s head trader delivery keys (autotrader.js HEAD_DELIVERY_KEYS) said in its preflight record, never on another harness', () => {
+  assert.ok(P.CHECKS.includes(P.headDelivery), 'one of the checks every learning run records');
+  const of = cfg => P.headDelivery({ run: { cfg } });
+  assert.deepStrictEqual([of({ harness: 'claude' }).status, of({ harness: 'claude' }).detail], [P.PASS, 'none: the head trader loads its skills and makes its reads itself']);
+  assert.strictEqual(of({ harness: 'opencode', cycleDataInPrompt: false, headSkillsInPrompt: false }).detail, 'none: the head trader loads its skills and makes its reads itself');
+  for (const k of require('../../scripts/lib/autotrader').HEAD_DELIVERY_KEYS) {
+    const on = of({ harness: 'claude', [k]: true });
+    assert.deepStrictEqual([on.status, on.detail.startsWith(`on: ${k} `)], [P.PASS, true], k);
+    // A config validateConfig would refuse: FAIL, never a PASS.
+    assert.strictEqual(of({ harness: 'opencode', [k]: true }).status, P.FAIL, k);
+    assert.strictEqual(of({ harness: 'claude', [k]: 'yes' }).status, P.FAIL, k);
+  }
+  assert.match(of({ harness: 'claude', headSkillsInPrompt: true, cycleDataInPrompt: true }).detail, /^on: headSkillsInPrompt, cycleDataInPrompt .*never pooled with a run without them/);
+  assert.strictEqual(P.headDelivery({ run: {} }).status, P.PASS, 'no runner config: none');
+});

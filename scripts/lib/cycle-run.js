@@ -9,16 +9,21 @@
  *
  *   runCycle(cfg, action, prompt, opts, limits, deps)   the runner's cycle result ({ ok, timedOut, result, ... })
  *     opts:   { dryRun }: print the argv only
- *     limits: { timeoutMs, context, entry } (runner.js; `entry`: the runner's entry, runner-entry.js, run after the
+ *     limits: { timeoutMs, context, entry, precollect } (runner.js; `entry`: the runner's entry, runner-entry.js, run after the
  *             head trader's run inside the cycle's time and before its log: ({ result, output, env, startedWall, budgetMs }) ->
- *             null | { result, entry }: the cycle's result becomes its result, and the cycle log records `entry`)
+ *             null | { result, entry }: the cycle's result becomes its result, and the cycle log records `entry`;
+ *             `precollect`: the cycle's pre-collected reads (cycle-data.js; the runner config's cycleDataInPrompt only):
+ *             (runEnv) -> cycle-data collect's result, made with the very environment the head trader's run gets, inside
+ *             the cycle's time; its blocks go at the end of the prompt (autotrader.js withCycleData) and the cycle log's
+ *             context records them (`precollected`, and `notCollected`). Absent: the cycle runs exactly as without it)
  *     deps:   { root, home, env, run (runHarness), onChild, out(text), err(text), appendLog(now, text),
  *               guard(killSwitchFile, when) (the workspace guard: false when it tripped; required, never defaulted
  *               open), now(), wallNow() (the wall clock in ms the cycle's timing reads: Date.now) }
  */
 
 const path = require('path');
-const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, ROLES_CHECKED, ROLE_RUNS } = require('./autotrader');
+const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, withCycleData, ROLES_CHECKED, ROLE_RUNS } = require('./autotrader');
+const CD = require('./cycle-data');
 const { runHarness } = require('./harness-run');
 const { writeCycleLog } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
@@ -28,14 +33,41 @@ const { readRoleRuns, roleRunsFile, asRoleCalls } = require('./trading/runner-ro
 const { expectedRoles, deskCheck, deskWarning } = require('./trading/desk-check');
 
 /** One run of the harness with the cycle's environment: its result, the transcript file, the role-skills mode and the env (the cycle log reads its clock and lanes there, as the gate). */
-function runOnce(cfg, argv, timeoutMs, context, deps) {
-  const env = childEnv(cfg, deps.root, deps.env, context);
+function runOnce(cfg, argv, timeoutMs, context, deps, given = null) {
+  const env = given || childEnv(cfg, deps.root, deps.env, context);
   const run = deps.run || runHarness;
   return run(argv, { cwd: path.resolve(deps.root, cfg.workdir), env, timeoutMs, liveFile: env.FTH_CYCLE_TRANSCRIPT, onChild: deps.onChild || (() => {}) })
     .then(r => ({ ...r, transcript: env.FTH_CYCLE_TRANSCRIPT || null, roleSkills: env.FTH_ROLE_SKILLS || null, headPrompt: env.FTH_HEAD_PROMPT || null, env }));
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null } = {}, deps = {}) {
+// The least of the cycle's limit the head trader's run keeps (config/runner.json cycle.timeoutMinMinutes, the runner's own
+// floor for the head trader after its desk): the reads get only what is left above it.
+const minHeadMs = () => require('./tunables').runner().cycle.timeoutMinMinutes * 60000;
+
+/**
+ * The cycle's reads made before its run (limits.precollect): the run's own environment, the prompt with the reads at its
+ * end, the context recording them. They get the cycle's limit above the head trader's floor (minHeadMs): with none
+ * left they aren't made, and reads still going when it runs out are dropped; either way the run goes with the
+ * "read it yourself" line, never with less than its floor because of them (a slow broker never fails a cycle). A
+ * collection that throws, or a prompt it can't go in, gives none; the section is capped (cycle-data.js capped).
+ */
+async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
+  const runEnv = childEnv(cfg, deps.root, deps.env, context);
+  let got;
+  if (!(budgetMs > 0)) got = CD.skipped(`too little of the cycle's time is left above the ${minHeadMs() / 60000} min its run keeps`);
+  else {
+    let timer;
+    const late = new Promise(resolve => { timer = setTimeout(() => resolve(CD.failed(new Error(`the reads took longer than the ${Math.round(budgetMs / 1000)} s the cycle could spare`))), budgetMs); });
+    try { got = await Promise.race([Promise.resolve().then(() => precollect(runEnv)), late]); } catch (e) { got = CD.failed(e); } finally { clearTimeout(timer); }
+  }
+  got = CD.capped(got);
+  let withData;
+  try { withData = withCycleData(prompt, CD.render(got)); } catch (e) { got = { blocks: [], missing: [], note: `none given: ${e.message}` }; withData = prompt; }
+  const missing = [...(got.missing || []), ...(got.note ? [{ why: got.note }] : [])];
+  return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
+}
+
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null } = {}, deps = {}) {
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
@@ -43,7 +75,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const out = deps.out || (() => {});
   const err = deps.err || (() => {});
   const now = (deps.now || (() => new Date()))();
-  const argv = buildCommand(cfg, prompt, deps.root, env);
+  let argv = buildCommand(cfg, prompt, deps.root, env);
   if (opts && opts.dryRun) {
     out(`${JSON.stringify(argv)}\n`);
     return { ok: true, timedOut: false };
@@ -53,7 +85,16 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   out(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const wallNow = deps.wallNow || Date.now;
   const startedMs = wallNow();
-  const res = await runOnce(cfg, argv, timeoutMs, context, { ...deps, env });
+  // This machine's opt-in only (cycleDataInPrompt): the cycle's reads made first, in its time, with the run's own environment.
+  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, timeoutMs - minHeadMs()) : null;
+  if (pre) {
+    prompt = pre.prompt;
+    context = pre.context;
+    argv = buildCommand(cfg, prompt, deps.root, env);
+  }
+  // The run gets what is left of the cycle's limit after the reads (none made: the whole limit, as without them).
+  // (Never under its floor because of them: a deadline's lag aside, as the runner's desk leaves it.)
+  const res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, pre ? pre.runEnv : null);
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
   const { reportedResult, resultNote } = scored;

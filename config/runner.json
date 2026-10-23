@@ -99,7 +99,8 @@
     "valuesPerStrategy": 6,
     "brokerFieldsKept": 3,
     "brokerFieldsBytes": 600,
-    "brokerFieldChars": 250
+    "brokerFieldChars": 250,
+    "cycleDataMaxBytes": 48000
   },
   "session": {
     "fillsTimeoutMs": 10000,

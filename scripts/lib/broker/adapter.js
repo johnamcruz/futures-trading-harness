@@ -23,6 +23,9 @@
  *   journalAdd(entry)                      journal_add (the runner's plan and its factual reviews): the entry the server
  *                                          wrote, or throws
  *   serverConfig()                         get_server_config
+ *   readText(name, args)                   a read tool's raw reply ({ text, isError }: mcp-client.js callText), straight to
+ *                                          the server through the translator, as the gateway passes the model's reads;
+ *                                          an order tool or any tool not a read of the interface throws (cycle-data.js)
  *   close()
  *
  * createAdapter({ mcp, writeMcp })   over MCP clients (mcp-client.js): reads on
@@ -35,7 +38,7 @@
 
 const path = require('path');
 const { createMcpClient } = require('./mcp-client');
-const { validateTools } = require('./interface');
+const { validateTools, TOOLS: INTERFACE_TOOLS } = require('./interface');
 const { activeBroker, translatedCommand } = require('./config');
 const { allowListProblem, normId } = require('./allow-list');
 const { signedSize } = require('../trading/positions');
@@ -273,6 +276,17 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       const res = await call('journal_add', entry);
       if (!res || typeof res !== 'object' || typeof res.kind !== 'string' || typeof res.ts !== 'string') throw new BrokerError('journal_add returned no journal entry');
       return res;
+    },
+
+    /**
+     * A read tool's reply as the server sent it ({ text, isError }), never parsed: what the model's own call of it returns
+     * (the gateway passes reads through unchanged). Only the interface's reads; anything else throws, never sent.
+     */
+    async readText(name, args = {}) {
+      const tool = INTERFACE_TOOLS[name];
+      if (!tool || tool.role !== 'read') throw new BrokerError(`readText: ${JSON.stringify(String(name))} is not a read of the broker interface`);
+      if (typeof mcp.callText !== 'function') throw new BrokerError('readText: the broker client reads no raw text');
+      return mcp.callText(name, args);
     },
 
     /** The server's own config: whether it trades at all, and its guardrails (get_server_config). */

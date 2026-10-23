@@ -45,6 +45,8 @@
  *   balance(decisions, rules, { stage, seed }) { kept, dropped, report } (throws when a constraint can't be met)
  *   buildDataset({ train, validate, spec, rules, current, include, roles })   { files: { name: text }, dataset }
  *   digestStatus(digest, current, include)   'current' | 'included' | 'stale' (skills, prompt and code digests)
+ *   deliveryOf(setup, runCfg)                 the head trader's delivery keys a run was made under ('a,b'), or null:
+ *                                             decisions under two are never pooled (refused), as two exit plans
  *   fingerprintOf(files)                      sha256 hex over the data files
  *   writeDataset(dir, built), readDataset(dir)
  *   scorer({ root, env })                     runDir -> its scorecard records: its scorecard.jsonl when written after the
@@ -253,7 +255,7 @@ const metaOf = (x, file, stage) => ({
   decision: { key: x.decision.key, kind: x.decision.kind, action: x.decision.action, skill: x.decision.skill, accountState: x.decision.accountState, year: x.decision.year },
   label: x.decision.label.reasons,
   // The skills and prompt digest it was made under; `current: false` marks one included under another digest by name.
-  digest: { ...Object.fromEntries([...DIGEST_KEYS, 'exitPlan'].map(k => [k, x.decision.digest ? x.decision.digest[k] || null : null])), current: x.decision.digestStatus === 'current' },
+  digest: { ...Object.fromEntries([...DIGEST_KEYS, 'exitPlan'].map(k => [k, x.decision.digest ? x.decision.digest[k] || null : null])), ...(x.decision.digest && x.decision.digest.delivery ? { delivery: x.decision.digest.delivery } : {}), current: x.decision.digestStatus === 'current' },
 });
 
 function fingerprintOf(files) {
@@ -281,6 +283,9 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
   // One exit plan: examples made under different exits are never mixed (the run's manifest exit record, #207).
   const plans = [...new Set([...tr.decisions, ...va.decisions].map(d => d.digest.exitPlan))];
   if (plans.length > 1) throw new Error(`the correct decisions were made under ${plans.length} exit plans (${plans.map(x => x.slice(0, 12)).join(', ')}): build from runs under one exit plan`);
+  // One head trader delivery (deliveryOf): decisions made with its skills or data delivered another way are never pooled.
+  const deliveries = [...new Set([...tr.decisions, ...va.decisions].map(d => d.digest.delivery || 'none'))];
+  if (deliveries.length > 1) throw new Error(`the correct decisions were made under ${deliveries.length} head trader deliveries (${deliveries.join(' | ')}; the runner config's ${require('../autotrader').HEAD_DELIVERY_KEYS.join(', ')}): build from runs under one`);
   if (!tr.decisions.length && tr.stale.decisions) throw new Error(`every correct train decision was made under another skills or prompt digest than the harness's now (${tr.stale.examples} example(s) dropped): rerun the moments on this harness, or include those digests by name`);
   const stageOf = (xs, n) => xs.filter(d => d.stage === n);
   const bal1 = stageOf(tr.decisions, 1).length ? balance(stageOf(tr.decisions, 1), b, { stage: 1 }) : null;
@@ -305,6 +310,8 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
   const dataset = {
     v: FORMAT_VERSION, fingerprint, format: 'chat-jsonl', toolCalls: true, spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed,
     harness: { skills: current.skills, harness: current.prompt, code: current.code }, exitPlan: plans[0] || null,
+    // The head trader's delivery keys its decisions were made under, named only when one is on.
+    ...(deliveries[0] && deliveries[0] !== 'none' ? { delivery: deliveries[0] } : {}),
     // The roles trained on (the head trader by default; a subagent only by name, its turns marked in meta.jsonl).
     roles,
     // Decisions dropped because their run has no exit-plan record (its exit can't be told).
@@ -361,6 +368,14 @@ function scorer({ root, env = process.env }) {
 
 const readJsonOr = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return fallback; } };
 
+/**
+ * The head trader's machine-local delivery keys (autotrader.js HEAD_DELIVERY_KEYS) a run was made under, present and
+ * truthy: from its setup record's config (cfg.<key>, written at its fresh start) or its runner config as the replay
+ * driver wrote it (autotrader.json). 'a,b' in the list's order, or null when none is on (a run's digest then is the one
+ * it had before the keys existed). Decisions under two deliveries are never pooled (buildDataset refuses them).
+ */
+const deliveryOf = (setup, runCfg) => require('../autotrader').headDeliveryOf(setup, runCfg);
+
 function sourceFromRun(runDir, { score, times = null, sample = null }) {
   const manifest = readJsonOr(path.join(runDir, 'manifest.json'), null);
   if (!manifest) throw new Error(`${runDir}: not a replay run dir (no manifest.json)`);
@@ -372,7 +387,11 @@ function sourceFromRun(runDir, { score, times = null, sample = null }) {
   const { manifestExit } = require('./run-experience');
   const exitPlan = manifestExit(manifest).hash || null;
   const code = setup && !setup.codeChanged && typeof setup.code === 'string' ? setup.code : null;
-  const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null, code, exitPlan } : { exitPlan };
+  // The head trader's machine-local delivery keys it ran under (deliveryOf), named only when one is on.
+  // (run-experience.js runDelivery: its setup record and every runner config it ran with; a run under two throws.)
+  const delivery = require('./run-experience').runDelivery(runDir, manifest);
+  const on = delivery ? { delivery } : {};
+  const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null, code, exitPlan, ...on } : { exitPlan, ...on };
   return {
     runId: manifest.runId, start: manifest.start, end: manifest.end, configHash: manifest.hash || null,
     documents, decisions: runDecisions(runDir, { score, times, sample }).map(d => ({ ...d, digest })),
@@ -389,4 +408,4 @@ function sourceFromSamples(file, { score }) {
   return { ...first, decisions: parts.flatMap(p => p.decisions), samples: recs.length };
 }
 
-module.exports = { FORMAT_VERSION, DIGEST_KEYS, repeatedSamples, digestStatus, scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };
+module.exports = { FORMAT_VERSION, DIGEST_KEYS, deliveryOf, repeatedSamples, digestStatus, scorer, sourceFromRun, sourceFromSamples, REFUSED_ROLES, DATA_FILES, checkSource, examplesOf, dedupe, balance, buildDataset, fingerprintOf, writeDataset, readDataset };

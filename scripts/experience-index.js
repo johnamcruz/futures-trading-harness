@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { harnessHome } = require('./lib/paths');
 const { readDecisions, logFile } = require('./lib/learning/experience-log');
-const { buildIndex, writeIndex, readIndex, pinIndex, cellAt } = require('./lib/learning/experience-index');
+const { buildIndex, withRunDelivery, writeIndex, readIndex, pinIndex, cellAt } = require('./lib/learning/experience-index');
 const { weighCurated } = require('./lib/learning/curated-weights');
 const { readLists } = require('./lib/learning/curated-lists');
 
@@ -52,7 +52,8 @@ function build(argv) {
   for (const s of sources) {
     const file = fs.existsSync(s) && fs.statSync(s).isDirectory() ? logFile(path.resolve(s)) : path.resolve(s);
     if (!fs.existsSync(file)) throw new Error(`no experience log at ${file}`);
-    const lines = readDecisions(file);
+    // Each line's delivery from its own run (withRunDelivery), never on the line's word.
+    const lines = withRunDelivery(readDecisions(file), path.resolve(path.dirname(file), '..'));
     runs.push({ runId: lines.length ? lines[0].runId : null, file, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') });
     // A curated run's log (its home pinned a curated list): every line tagged and weighted (or counted only).
     decisions.push(...weighCurated(lines, { home: path.resolve(path.dirname(file), '..'), docs }));

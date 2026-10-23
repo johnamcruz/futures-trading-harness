@@ -56,7 +56,7 @@ function defaultReadRun(runDir, { root, barsFiles }) {
   const manifest = JSON.parse(fs.readFileSync(path.join(runDir, 'manifest.json'), 'utf8'));
   const { stream, run } = require('../prop/model-stream').readModelStream(runDir, { root, barsFiles });
   const curated = Boolean(require('./curated-lists').loadPinnedCurated(run.home || path.resolve(runDir, '..', '..')));
-  return { stream, run: { ...run, curated }, finished: manifest.finished === true };
+  return { stream, run: { ...run, curated, delivery: require('./run-experience').runDelivery(runDir, manifest) }, finished: manifest.finished === true };
 }
 
 function runRiskEntries(runDir, { root = null, env = process.env, account, policy = null, seed = 1, paths = PATHS, reps = REPS, barsFiles = {}, now = new Date(), readRun = null } = {}) {
@@ -80,9 +80,9 @@ function runRiskEntries(runDir, { root = null, env = process.env, account, polic
       pass: checkModelWindow({ run, diagnostic, now }), account, rulebook: { sizing: policy ? policy.sizing || null : null },
       contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps,
     });
-    return riskDayEntry(day, result, { role: run.role });
+    return riskDayEntry(day, result, { role: run.role, delivery: run.delivery || null });
   });
-  return { run: { runId: id, from: run.from, to: run.to, days: stream.days.length, acted: entries.length }, entries };
+  return { run: { runId: id, from: run.from, to: run.to, days: stream.days.length, acted: entries.length, ...(run.delivery ? { delivery: run.delivery } : {}) }, entries };
 }
 
 function buildFromRuns(runDirs, opts = {}) {

@@ -260,6 +260,32 @@ function deskConcurrencyProblem(v) {
   return Number.isInteger(v) && v >= 1 && v <= max ? null : `deskConcurrency: a whole number from 1 to ${max} (config/runner.json desk.concurrency; this machine may only lower it), or null for that value; got ${JSON.stringify(v)}`;
 }
 
+/**
+ * The head trader's machine-local delivery keys (the runner config's, Claude Code only; validateConfig below checks each):
+ * how its skills or data reach it, never what it is told. Every reader that must keep runs with one apart from runs
+ * without it reads this list: the decision dataset (learning/decision-dataset.js: never pooled), the training preflight
+ * (learning/preflight.js head-delivery). A key added here is validated below, or the autotrader tests fail.
+ */
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt']);
+/**
+ * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
+ * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
+ * null when none is on (then every learning record of the run is the one it had before the keys existed).
+ */
+function headDeliveryOf(setup, ...runCfgs) {
+  const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+  const conf = setup && isObj(setup.config) ? setup.config : {};
+  const parsed = v => { try { return JSON.parse(v); } catch (_err) { return v; } };
+  const on = HEAD_DELIVERY_KEYS.filter(k => Boolean(parsed(conf[`cfg.${k}`])) || runCfgs.some(c => isObj(c) && Boolean(c[k])));
+  return on.length ? on.join(',') : null;
+}
+/** The one delivery of a pool of records (each one's `delivery`, absent for none), or throws naming them (`what`). */
+function oneDelivery(records, what) {
+  const all = [...new Set(records.map(x => (x && typeof x.delivery === 'string' && x.delivery) || 'none'))];
+  if (all.length > 1) throw new Error(`${what} refused: made under ${all.length} head trader deliveries (${all.join(' | ')}; the runner config's ${HEAD_DELIVERY_KEYS.join(', ')}): build from runs under one`);
+  return all.length && all[0] !== 'none' ? all[0] : null;
+}
+
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
@@ -337,6 +363,10 @@ function validateConfig(raw) {
   // headSkillsInPrompt true: Claude Code's head trader in index mode (claudeHeadOn; head-prompt.js), absent or false as before.
   if (cfg.headSkillsInPrompt !== undefined && typeof cfg.headSkillsInPrompt !== 'boolean') errors.push('headSkillsInPrompt: true or false, or absent (as before: the head trader loads its skills)');
   if (cfg.headSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`headSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's head trader has its own index mode, FTH_ROLE_SKILLS)`);
+  // cycleDataInPrompt true: Claude Code's head trader gets this cycle's reads already made, in its prompt (cycle-data.js),
+  // absent or false as before.
+  if (cfg.cycleDataInPrompt !== undefined && typeof cfg.cycleDataInPrompt !== 'boolean') errors.push('cycleDataInPrompt: true or false, or absent (as before: the head trader makes its own reads)');
+  if (cfg.cycleDataInPrompt === true && cfg.harness !== 'claude') errors.push(`cycleDataInPrompt: for harness "claude" only (harness ${cfg.harness})`);
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -627,6 +657,18 @@ const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason
 const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry', 'Risk', 'Decision', 'Manage'];
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
+
+/**
+ * A trade cycle's prompt with this cycle's pre-collected reads (cycle-data.js render: the runner config's
+ * cycleDataInPrompt, Claude Code only) put at its end, just before the result line, so everything before them is the
+ * prompt as built (prompts().trade, untouched) and the fixed prefix stays cached. No data: the prompt as it is. A prompt
+ * that doesn't end with the result line throws (the caller gives it unchanged).
+ */
+function withCycleData(prompt, data) {
+  if (!data) return prompt;
+  if (typeof prompt !== 'string' || !prompt.endsWith(RESULT_LINE)) throw new Error('withCycleData: the prompt does not end with its result line');
+  return `${prompt.slice(0, -RESULT_LINE.length)}${data}${RESULT_LINE}`;
+}
 
 /**
  * The start of every cycle's prompt (premarket, trade, end of day): what the cycle is and where the harness is, the
@@ -1266,6 +1308,11 @@ module.exports = {
   headAttestation,
   skillsText,
   stableHead,
+  withCycleData,
+  HEAD_DELIVERY_KEYS,
+  headDeliveryOf,
+  oneDelivery,
+  RESULT_LINE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

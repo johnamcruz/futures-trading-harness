@@ -175,3 +175,26 @@ test('scripts/risk-record.js: builds and shows a fingerprinted record; refuses w
   assert.match(held.stderr, /is final, not practice-train/);
   assert.strictEqual(cli([]).status, 1);
 });
+
+// --- The head trader's delivery keys (autotrader.js HEAD_DELIVERY_KEYS): a risk record never pools key-on with key-off.
+test('delivery: no key on, the record exactly as before; on, named on its days and another hash; a mixed pool refused', () => {
+  const doc = B.buildFromRuns([run().dir], OPTS);
+  // Captured from the base branch's builder for this fixture, before the delivery keys were read.
+  assert.strictEqual(doc.hash, '090dbf61dd42366e1920316dcf2b4143f6f71dcc94a44dd416144994aecbd952');
+  assert.ok(!('delivery' in doc) && doc.entries.every(e => !('delivery' in e)));
+  assert.strictEqual(B.buildFromRuns([run(DAYS, { autotrader: { timeframe: 3, symbols: ['MNQ'], cycleDataInPrompt: false } }).dir], OPTS).hash, doc.hash, 'false is none');
+  const on = B.buildFromRuns([run(DAYS, { autotrader: { timeframe: 3, symbols: ['MNQ'], cycleDataInPrompt: true } }).dir], OPTS);
+  assert.strictEqual(on.delivery, 'cycleDataInPrompt');
+  assert.ok(on.entries.every(e => e.delivery === 'cycleDataInPrompt'));
+  assert.strictEqual(on.sources.runs[0].delivery, 'cycleDataInPrompt');
+  assert.notStrictEqual(on.hash, doc.hash);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-rr-delivery-'));
+  assert.strictEqual(R.readRiskIndex(R.writeRiskIndex(dir, on)).delivery, 'cycleDataInPrompt', 'read back');
+  // Two runs, one with a key on and one without (other days): refused, by the build and by the index itself.
+  const entries = on.entries;
+  assert.throws(() => R.buildRiskIndex([...doc.entries.slice(0, 1), ...entries.slice(1)], { now: NOW }), /risk record refused: made under 2 head trader deliveries \(none \| cycleDataInPrompt/);
+  assert.throws(() => R.buildRiskIndex([{ ...doc.entries[0], delivery: '' }], { now: NOW }), /delivery is the head trader's delivery keys/);
+  const { stream, run: r } = readModelStream(run().dir);
+  let k = 0;
+  assert.throws(() => B.buildFromRuns(['a', 'b'], { ...OPTS, readRun: () => { k += 1; const days = k === 1 ? ['2023-03-15'] : ['2023-03-16']; return { stream: { ...stream, days: stream.days.filter(d => days.includes(d.day)) }, run: { ...r, runId: `run${k}`, delivery: k === 1 ? 'cycleDataInPrompt' : null }, finished: true }; } }), /2 head trader deliveries/);
+});

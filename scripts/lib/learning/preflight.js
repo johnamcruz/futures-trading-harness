@@ -12,7 +12,7 @@
  *   ctx.gate      the learning gate's options (replay.js run): from, to, runId, learning, candidate, evaluation, ...
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
- * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads,
+ * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
@@ -173,6 +173,22 @@ function headComposedReads(ctx) {
     return r('head-composed-reads', FAIL, `the composed reads (${h.composedReads.join(', ') || 'none'}): ${[...notCore.map(s => `${s} not in the core`), ...notIn.map(s => `${s} not embedded`)].join('; ') || 'fewer than 4'}`);
   }
   return r('head-composed-reads', PASS, `embeds the ${h.composedReads.length} composed reads (${h.composedReads.join(', ')})`);
+}
+
+/**
+ * The head trader's machine-local delivery keys (autotrader.js HEAD_DELIVERY_KEYS: headSkillsInPrompt, cycleDataInPrompt,
+ * Claude Code only). Each is part of the run's runner config, so its config hash, setup hash and setup record
+ * (cfg.<key>) name it, and its decisions carry it (decision-dataset.js deliveryOf): a run with one is never one
+ * evaluation's arm, an A/B pair, a resume or a dataset pooled with a run without it. Said here, so the run's preflight
+ * record carries it too.
+ */
+function headDelivery(ctx) {
+  const cfg = ctx.run.cfg || {};
+  const set = require('../autotrader').HEAD_DELIVERY_KEYS.filter(k => cfg[k] !== undefined && cfg[k] !== false);
+  if (!set.length) return r('head-delivery', PASS, 'none: the head trader loads its skills and makes its reads itself');
+  const bad = set.filter(k => cfg[k] !== true || cfg.harness !== 'claude');
+  if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false, for harness claude only`);
+  return r('head-delivery', PASS, `on: ${set.join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
 }
 
 function adaptersInSync(ctx) {
@@ -576,7 +592,7 @@ function adapter(ctx) {
 }
 
 const CHECKS = Object.freeze([
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, noWebInReplay, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
@@ -833,7 +849,7 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, n
 
 module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, adaptersInSync, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,

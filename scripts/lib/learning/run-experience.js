@@ -25,6 +25,7 @@
  *   experienceLine(result)                                 the CLI's one line
  */
 
+const fs = require('fs');
 const path = require('path');
 const { readRun } = require('../replay/store');
 const { entryOrders } = require('../harness-run');
@@ -77,6 +78,23 @@ function plannedExit(run, { root = null, env = process.env } = {}) {
   return manifest ? manifestExit(manifest) : exitRecord(runExit(root, env));
 }
 
+/**
+ * The head trader's delivery keys a run was made under (autotrader.js headDeliveryOf: HEAD_DELIVERY_KEYS present and
+ * truthy), from its setup record and every runner config it ran with (autotrader.json and any later version a resume
+ * recorded in its manifest), or null when none is on. A run under two (a resume that changed one) throws: its decisions
+ * can't be given one delivery. Every learning record built from the run's decisions carries it, so key-on decisions are
+ * never pooled with key-off ones (the experience index, the risk record, the decision dataset refuse a mix).
+ */
+function runDelivery(dir, manifest = null) {
+  const { headDeliveryOf } = require('../autotrader');
+  const read = f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (_err) { return null; } };
+  const setup = read('setup.json');
+  const names = ['autotrader.json', ...((manifest && Array.isArray(manifest.versions) ? manifest.versions : []).map(v => v && v.config).filter(n => typeof n === 'string' && /^autotrader-[A-Za-z0-9-]+\.json$/.test(n)))];
+  const per = [...new Set(names.map((n, i) => headDeliveryOf(i === 0 ? setup : null, read(n)) || 'none'))];
+  if (per.length > 1) throw new Error(`run ${(manifest && manifest.runId) || dir} ran under ${per.length} head trader deliveries (${per.join(' | ')}): its decisions can't be given one`);
+  return per[0] === 'none' ? null : per[0];
+}
+
 function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
@@ -112,7 +130,9 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
     cycles, records: readRecords(home, { runId: manifest.runId }), trips, stamps, gateRefusals, barsFor, tfMs,
     tickOf: r => (specFor(r) ? specFor(r).tickSize : null), eodOf: ms => labels.eodOf(cfg, ms), runId: manifest.runId, now, exit: manifestExit(manifest),
   });
-  return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions, barsFor, trips };
+  // The head trader's delivery keys the run was made under (runDelivery), on each decision only when one is on.
+  const delivery = runDelivery(dir, manifest);
+  return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions: delivery ? decisions.map(d => ({ ...d, delivery })) : decisions, delivery, barsFor, trips };
 }
 
 function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
@@ -133,4 +153,4 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
 
 const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
 
-module.exports = { runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };
+module.exports = { runDelivery, runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };

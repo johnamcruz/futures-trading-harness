@@ -181,6 +181,38 @@ test('writeRunExperience: a finished practice run\'s log in its home; an unfinis
   assert.throws(() => writeRunExperience(dir), /not finished/);
 });
 
+test('writeRunExperience: the head trader\'s delivery keys (runDelivery) on every line only when one is on; a run under two refused', () => {
+  const { runDelivery } = require('../../scripts/lib/learning/run-experience');
+  const times = [T0, new Date(ms(T0) + M3).toISOString()];
+  const fills = [
+    { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+    { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
+  ];
+  const make = () => runDir({ times, fills, records: [record({ at: T0 })], barRows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5]] });
+  const off = make();
+  const plain = writeRunExperience(off.dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.ok(plain.decisions.every(d => !('delivery' in d)));
+  assert.ok(E.readDecisions(plain.file).every(d => !('delivery' in d)), 'the log as before');
+  assert.strictEqual(runDelivery(off.dir), null);
+  const on = make();
+  const cfgFile = path.join(on.dir, 'autotrader.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), cycleDataInPrompt: true }));
+  const tagged = writeRunExperience(on.dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.ok(tagged.decisions.length && tagged.decisions.every(d => d.delivery === 'cycleDataInPrompt'));
+  assert.ok(E.readDecisions(tagged.file).every(d => d.delivery === 'cycleDataInPrompt'), 'on every logged line');
+  assert.deepStrictEqual(tagged.decisions.map(d => d.id), plain.decisions.map(d => d.id), 'the same decisions otherwise');
+  // From the setup record too (its config: cfg.<key>, JSON values), and both keys in the list's order.
+  const both = make();
+  fs.writeFileSync(path.join(both.dir, 'setup.json'), JSON.stringify({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }));
+  assert.strictEqual(runDelivery(both.dir), 'headSkillsInPrompt,cycleDataInPrompt');
+  // A resume under another runner config with another delivery: the run can't be given one.
+  const resumed = make();
+  fs.writeFileSync(path.join(resumed.dir, 'autotrader-v2.json'), JSON.stringify({ timeframe: 3, symbols: ['MNQ'], cycleDataInPrompt: true }));
+  const m = JSON.parse(fs.readFileSync(path.join(resumed.dir, 'manifest.json'), 'utf8'));
+  fs.writeFileSync(path.join(resumed.dir, 'manifest.json'), JSON.stringify({ ...m, versions: [{ config: 'autotrader.json' }, { config: 'autotrader-v2.json' }] }));
+  assert.throws(() => runDelivery(resumed.dir, JSON.parse(fs.readFileSync(path.join(resumed.dir, 'manifest.json'), 'utf8'))), /ran under 2 head trader deliveries \(none \| cycleDataInPrompt\)/);
+});
+
 test('writeRunExperience: only a learning run that passed the gate; a reasoning-fix look hides the outcomes', () => {
   const t0 = '2025-03-14T14:00:00.000Z';
   const rows = [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]];
