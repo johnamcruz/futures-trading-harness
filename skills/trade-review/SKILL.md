@@ -62,9 +62,9 @@ description: Use after every closed or cancelled entry (the gate blocks the next
 
 ```text
 review: "Composed long MNQ: 1h up, at prior vah, 15m rejected prior vah up, 3m close top.
-Plan: limit 21540.25, stop 21512.50 (111 ticks), target 21598.00, 1 contract, $55.50 risk.
-Filled 21540.25. Stopped at 21512.50 after the 1h closed back below the VAH: 111 ticks =
-$55.50 + $0.74 fees = $56.24 net loss, R = -56.24 / 55.50 = -1.01. Process B: reads true,
+Plan: limit 21540.25, stop 21512.50 (111 ticks), target 21598.00, 5 MNQ, $277.50 risk.
+Filled 21540.25. Stopped at 21512.50 after the 1h closed back below the VAH: 5 x 111 ticks =
+$277.50 + $3.70 fees = $281.20 loss, R = -281.20 / 277.50 = -1.01. Process B: reads true,
 but the 3m momentum read was missing and the bar's volume was 0.6x."
 tags: ["result:loss", "setup:trade_lifecycle", "MNQ", "regime:trend-up", "r:-1.01"]
 

@@ -51,7 +51,7 @@ test('the sizing verdict under the rulebook\'s floor (min_contracts): fewer than
   // A 300-tick stop (75 points): 301 x $0.50 + $0.74 = $151.24 a micro, 2 within the $400 budget; 3 would be $453.72.
   const wide = decideSetup(args({ strategy: floored, scan: { direction: 'long', stopDistance: 75 } }));
   assert.deepStrictEqual([wide.action, wide.maxSize, wide.multiplier, wide.contract], ['skip', 0, 0, null]);
-  assert.strictEqual(wide.reason, '3 MNQ at this stop risk $453.72, over the $400.00 budget or the $1000.00 room (the rulebook\'s min_contracts 3; 2 MNQ would fit): skip; never a tighter stop');
+  assert.strictEqual(wide.reason, '3 MNQ at this stop risk $453.72, over the $400.00 budget (the rulebook\'s min_contracts 3; 2 MNQ would fit): skip; never a tighter stop');
   // At a floor of 1 the same stop is full at 2.
   assert.deepStrictEqual([decideSetup(args({ scan: { direction: 'long', stopDistance: 75 } })).action, decideSetup(args({ scan: { direction: 'long', stopDistance: 75 } })).maxSize], ['full', 2]);
   // One micro over the budget but within min_size_guard (1.5x): taken at a floor of 1, a skip at 3.

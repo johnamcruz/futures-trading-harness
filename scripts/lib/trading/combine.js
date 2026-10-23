@@ -282,8 +282,15 @@ function floorReason(args) {
   // The floor in the contract that would trade: minis, the whole minis it takes (a mini is the ratio contractPlan sized with).
   const mini = under.root === (args.legs.mini && args.legs.mini.root);
   const need = mini ? Math.ceil(min / args.ratio) : min;
-  return `${need} ${under.root}${mini ? ` (the floor of ${min} micro-equivalents)` : ''} at this stop risk $${round2(need * under.riskPerContract).toFixed(2)}, over the $${round2(args.dollars).toFixed(2)} budget`
-    + `${Number.isFinite(args.room) ? ` or the $${round2(args.room).toFixed(2)} room` : ''} (the rulebook's min_contracts ${min}; ${under.size} ${under.root} would fit): skip; never a tighter stop`;
+  const risk = round2(need * under.riskPerContract);
+  // The cap that binds, as contractPlan applies them: the budget, the room (a cent kept off it), else the account's max.
+  const f = typeof args.fraction === 'number' && args.fraction > 0 && args.fraction < 1 ? args.fraction : 1;
+  const caps = [
+    ...(risk > args.dollars * f ? [`over the $${round2(args.dollars * f).toFixed(2)} budget${f < 1 ? ` (${f} x $${round2(args.dollars).toFixed(2)}, the rulebook's multiplier)` : ''}`] : []),
+    ...(Number.isFinite(args.room) && risk > args.room - 0.01 ? [`over the $${round2(args.room).toFixed(2)} room`] : []),
+  ];
+  return `${need} ${under.root}${mini ? ` (the floor of ${min} micro-equivalents)` : ''} at this stop risk $${risk.toFixed(2)}, ${caps.length ? caps.join(' and ') : 'more than the account\'s max contracts allow'}`
+    + ` (the rulebook's min_contracts ${min}; ${under.size} ${under.root} would fit): skip; never a tighter stop`;
 }
 
 /** Dollars a stopped trade may lose without touching the floor or the firm's daily limit. */

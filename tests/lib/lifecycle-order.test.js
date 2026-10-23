@@ -104,6 +104,11 @@ test('order_plan, composed, in an attempt: never under the policy\'s floor (min_
   assert.match(probe(live, 2), /size 2 MNQ is under the floor of 3 contracts/);
   assert.strictEqual(probe(live, 3), null);
   assert.strictEqual(probe(trendHome(), 1), null, 'no attempt (stage 1): no floor');
+  // The policy's account missing (accounts: []) on a mini: a refusal or none, never a throw.
+  const noAccount = (size, policySizing) => attemptFloorProblem({ home: live, strategy: P.LC_DOC, strategies: P.registry({ instruments: ['MNQ', 'NQ'], sizing: require('../helpers').testSizing({ min_contracts: policySizing }) }), accounts: [], root: 'NQ', size, specOf: SPEC });
+  assert.strictEqual(noAccount(1, 3), null);
+  assert.match(noAccount(1, 12), /size 1 NQ is under the floor of 12 contracts/);
+  assert.match(probe(live, null), /no size stated on MNQ; the floor is 3 contracts/);
 });
 
 test('the order_plan tool routes trade_lifecycle (and a policy listing it) to the compose record; the bars are not read', () => {

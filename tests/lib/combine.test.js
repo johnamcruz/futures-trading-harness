@@ -231,7 +231,12 @@ test('contractPlan: the floor (min_contracts) in micro-equivalents: fewer fit is
 
 test('floorReason: why the floor alone sized nothing (what the floor\'s size risks against the budget), else null', () => {
   const args = extra => ({ minContracts: 3, dollars: 50, room: 250, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro', ratio: 10, ...extra });
-  assert.strictEqual(c.floorReason(args()), '3 MNQ at this stop risk $63.72, over the $50.00 budget or the $250.00 room (the rulebook\'s min_contracts 3; 2 MNQ would fit): skip; never a tighter stop');
+  assert.strictEqual(c.floorReason(args()), '3 MNQ at this stop risk $63.72, over the $50.00 budget (the rulebook\'s min_contracts 3; 2 MNQ would fit): skip; never a tighter stop');
+  // Only the cap that binds is named: the room alone, both, the multiplier's share, or the account's max.
+  assert.match(c.floorReason(args({ dollars: 400, room: 60 })), /risk \$63\.72, over the \$60\.00 room \(the rulebook/);
+  assert.match(c.floorReason(args({ room: 60 })), /risk \$63\.72, over the \$50\.00 budget and over the \$60\.00 room \(/);
+  assert.match(c.floorReason(args({ dollars: 400, fraction: 0.15 })), /risk \$63\.72, over the \$60\.00 budget \(0\.15 x \$400\.00, the rulebook's multiplier\) \(/);
+  assert.match(c.floorReason(args({ dollars: 400, legs: { ...MNQ_LEGS, micro: { ...MNQ_LEGS.micro, max: 2 } } })), /risk \$63\.72, more than the account's max contracts allow \(the rulebook's min_contracts 3; 2 MNQ would fit\)/);
   // A plan fits: no reason. Not even one fits (the budget, not the floor): no reason. A floor of 1: none.
   assert.strictEqual(c.floorReason(args({ dollars: 400 })), null);
   assert.strictEqual(c.floorReason(args({ dollars: 10 })), null);

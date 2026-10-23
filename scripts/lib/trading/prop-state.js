@@ -614,9 +614,13 @@ function minContractsRefusal(strategy, account, root, size, specOf = specFor) {
     return `setup:${strategy && strategy.name}: its account's rulebook states no sizing.min_contracts (${JSON.stringify(min)}), so no floor can be checked: no entry (fails closed). Exits and protective stops still go.`;
   }
   const fam = familyOf(root);
-  const ratio = fam && root === fam.mini ? legsFor(account, root, specOf).ratio : 1;
+  // No account (missing or invalid): the family's own ratio, never a throw (the account check refuses it on its own).
+  const ratio = fam && root === fam.mini ? (account ? legsFor(account, root, specOf).ratio : fam.ratio) : 1;
   const n = Number(size);
-  if (Number.isInteger(n) && n >= 1 && n * ratio >= min) return null;
+  if (size !== null && size !== undefined && Number.isInteger(n) && n >= 1 && n * ratio >= min) return null;
+  if (size === null || size === undefined || size === '') {
+    return `setup:${strategy.name}: no size stated on ${root}; the floor is ${min} contracts (its account's rulebook, sizing.min_contracts): state ${min} or more within the size budget, or no trade.`;
+  }
   return `setup:${strategy.name}: size ${size} ${root} is under the floor of ${min} contracts${ratio > 1 ? ` (a ${root} counts as ${ratio})` : ''} (its account's rulebook, sizing.min_contracts): trade ${min} or more within the size budget, or no trade; never a tighter stop. Exits, protective stops, stop moves, cancels and closes still go.`;
 }
 

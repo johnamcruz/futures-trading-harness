@@ -971,7 +971,18 @@ test('min-contracts: a prop entry under the rulebook\'s floor is refused (hard, 
   // A $250 cushion (balance $48,250, yesterday's close): 0.2 x $250 = $50, 2 micros at $21.24; 3 would risk $63.72.
   const thin = ev(entryOrder({ size: 2 }), { balance: 48250, days: [['2026-10-06', 48250]] });
   assert.deepStrictEqual(thin.map(x => x.check), ['combine', 'min-contracts']);
-  assert.match(thin[0].message, /2 MNQ is not within the account's size budget for a 40-tick stop \(nothing: 3 MNQ at this stop risk \$63\.72, over the \$50\.00 budget or the \$250\.00 room \(the rulebook's min_contracts 3; 2 MNQ would fit\): skip; never a tighter stop/);
+  assert.match(thin[0].message, /2 MNQ is not within the account's size budget for a 40-tick stop \(nothing: 3 MNQ at this stop risk \$63\.72, over the \$50\.00 budget \(the rulebook's min_contracts 3; 2 MNQ would fit\): skip; never a tighter stop/);
+  // An entry block (the soft daily limit) and a size under the floor: both refuse, the floor checked whatever the block.
+  const blocked = ev(entryOrder({ size: 2 }), { balance: 49400 });
+  assert.deepStrictEqual(blocked.map(x => x.check), ['combine', 'min-contracts'], JSON.stringify(blocked));
+  assert.match(blocked[0].message, /soft daily limit/);
+  // No size stated: refused, saying so (never "size undefined").
+  const { size: _s, ...noSize } = entryOrder();
+  assert.match(ev(noSize).find(x => x.check === 'min-contracts').message, /setup:orb: no size stated on MNQ; the floor is 3 contracts/);
+  // No account (missing or invalid) on a mini: a refusal, never a throw; the family's ratio counts.
+  const floor3 = floored(3);
+  assert.strictEqual(prop.minContractsRefusal(floor3, null, 'NQ', 1), null, '1 NQ is 10 micro-equivalents');
+  assert.match(prop.minContractsRefusal(floored(12), null, 'NQ', 1), /size 1 NQ is under the floor of 12 contracts \(a NQ counts as 10\)/);
   // A strategy that trades no account (no attempt's policy) is never held by a floor.
   const rules = { ...EMA_CROSS, name: 'orb', signal: 'rules' };
   const free = evaluateOrder({ input: entryOrder({ size: 1 }), entries: [plan()], now: NOW, config: { ...config, home: trendHome() }, strategies: [rules], accounts: [MINI] }).violations;
