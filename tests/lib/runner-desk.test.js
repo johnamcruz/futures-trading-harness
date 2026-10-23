@@ -160,3 +160,26 @@ test('deskConcurrency null is the committed value (as absent); managedDeskNote: 
   deskFor({ home: tmpDir(), cfg: cfg({ harness: 'codex', deskOnManagedCycles: true }), root: ROOT, log: m => logs.push(m) });
   assert.strictEqual(logs.filter(l => /deskOnManagedCycles/.test(l)).length, 1);
 });
+
+test('the desk\'s results keep each role\'s report: an accepted one\'s text; a rejected one\'s every attempt with why the checks refused it; cut at prompt.reportMaxText', async () => {
+  const max = require('../../scripts/lib/tunables').runner().prompt.reportMaxText;
+  let n = 0;
+  const runRole = async role => {
+    if (role === 'risk-manager') return { ok: true, text: '## Risk state: account 1', tools: ['broker_get_account_snapshot'] };
+    n += 1;
+    // The analyst never names its data: rejected on each attempt (the second over the limit).
+    return { ok: true, text: n === 1 ? 'Bias: long' : `Bias: long ${'x'.repeat(max)}`, tools: ['harness_bar_briefing'] };
+  };
+  const desk = deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT, runRole });
+  const now = new Date('2026-10-07T14:03:02Z');
+  const d = await desk.run({ symbols: [{ symbol: 'MNQ' }], roles: ['volume-liquidity-analyst', 'risk-manager'], now, at: now.toISOString() });
+  const rm = d.results.find(r => r.role === 'risk-manager');
+  assert.deepStrictEqual([rm.stop, rm.text, 'tries' in rm], ['completed', '## Risk state: account 1', false]);
+  const va = d.results.find(r => r.role === 'volume-liquidity-analyst');
+  assert.strictEqual(va.stop, 'invalid');
+  assert.strictEqual(va.tries.length, va.attempts, 'one per attempt, bounded by the workflow\'s retries');
+  assert.ok(va.attempts >= 2);
+  assert.deepStrictEqual(va.tries[0], { text: 'Bias: long', rejected: d.missing[0].why });
+  assert.match(va.tries[0].rejected, /no Data line/);
+  assert.deepStrictEqual([va.tries[1].text.length, va.tries[1].cut, va.cut, va.text.length], [max, true, true, max]);
+});
