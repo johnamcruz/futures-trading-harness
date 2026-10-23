@@ -266,6 +266,11 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   fs.writeFileSync(elsewhere, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: { ...liveEntry, replay: true } } }));
   rows = await rowsOf(RAW, { ...env, FTH_BROKERS_FILE: elsewhere });
   assert.deepStrictEqual(rows.map(x => [x.status, x.detail]), [['warn', `"propAccounts" found under broker "live" in ${brokersFile}: not read while FTH_BROKERS_FILE names ${elsewhere} ("live" is the active broker)`]]);
+  // A top-level key while a replay broker is active: a warning, with no advice (moving it would mark the replay).
+  fs.writeFileSync(brokersFile, JSON.stringify({ ...shipped, brokers: { ...shipped.brokers, live: { ...liveEntry, replay: true } } }));
+  fs.writeFileSync(elsewhere, JSON.stringify({ ...shipped, propAccounts: { 7: profile }, brokers: { ...shipped.brokers, live: { ...liveEntry, replay: true } } }));
+  rows = await rowsOf(RAW, { ...env, FTH_BROKERS_FILE: elsewhere });
+  assert.deepStrictEqual(rows.map(x => [x.status, x.detail]), [['warn', `"propAccounts" found at the top level of ${elsewhere}: only the active broker's entry is read ("live")`]]);
   fs.writeFileSync(brokersFile, JSON.stringify(shipped));
   // A broken config stops before the broker is started.
   const bad = await P.runPreflight({ raw: { ...RAW, eodAt: '' }, root: ROOT, env, home, deps: { open: () => assert.fail('not opened') } });

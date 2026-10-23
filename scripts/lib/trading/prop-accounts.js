@@ -29,8 +29,9 @@
  *                                  (another broker's entry: that broker's, read when it is the active one) or
  *                                  'shadowed' (anywhere in the home's brokers.json while FTH_BROKERS_FILE names another
  *                                  file); `fix` says where to move it, null where moving it doesn't apply (another
- *                                  broker's entry; a replay broker's run, whose own file is meant to stand). Local
- *                                  files only; `file` is the brokers file in force, `broker` the active broker's name
+ *                                  broker's entry; any key while a replay broker is active: moving it would mark the
+ *                                  replay). Local files only; `file` is the brokers file in force, `broker` the active
+ *                                  broker's name
  *
  * Attempts are kept per profile (combine/<profile>.json), so a profile marks one account at most: two accounts
  * under one profile would share one attempt's floor, and the marker is refused.
@@ -119,7 +120,7 @@ function misplacedPropAccounts(env = process.env, { file, broker, replay = false
   const where = (k, f) => (k.top ? `at the top level of ${f}` : `under broker "${k.name}" in ${f}`);
   const moveTo = `move it under broker "${broker}" in ${active} to mark the account`;
   const out = keysIn(readJson(active), { active: broker }).map(k => (k.top
-    ? { kind: 'top-level', message: `"${KEY}" found ${where(k, active)}: only the active broker's entry is read ("${broker}")`, fix: moveTo }
+    ? { kind: 'top-level', message: `"${KEY}" found ${where(k, active)}: only the active broker's entry is read ("${broker}")`, fix: replay ? null : moveTo }
     : { kind: 'other-broker', message: `"${KEY}" found ${where(k, active)}: not read while "${broker}" is the active broker`, fix: null }));
   if (home !== active) {
     for (const k of keysIn(readJson(home))) {

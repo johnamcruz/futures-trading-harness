@@ -102,6 +102,8 @@ test('misplaced prop accounts: a propAccounts key the gate never reads is found 
   // At the top level: moving it under the active broker's entry is the fix.
   write(own, { broker: 'sim', propAccounts: { 7: 'p100' }, brokers: { sim: {} } });
   assert.deepStrictEqual(at(), [{ kind: 'top-level', message: `"propAccounts" found at the top level of ${own}: only the active broker's entry is read ("sim")`, fix: moveTo(own) }]);
+  // ... under a replay broker: moving it would mark the replay, so no advice.
+  assert.deepStrictEqual(at(own, true), [{ kind: 'top-level', message: `"propAccounts" found at the top level of ${own}: only the active broker's entry is read ("sim")`, fix: null }]);
   // Under another broker's entry: that broker's own mark, not read while sim is active; nothing to move.
   write(own, { broker: 'sim', brokers: { sim: {}, other: { propAccounts: { 7: 'p100' } } } });
   assert.deepStrictEqual(at(), [{ kind: 'other-broker', message: `"propAccounts" found under broker "other" in ${own}: not read while "sim" is the active broker`, fix: null }]);
