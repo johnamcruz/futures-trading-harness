@@ -100,7 +100,7 @@ function report(argv) {
   if (!dir || dir.startsWith('--')) throw new Error(USAGE);
   outcomesShown(dir, 'report');
   const { manifest, days } = readRun(path.resolve(dir));
-  const summary = summarize(days);
+  const summary = summarize(days, { runDir: path.resolve(dir) }); // a combine run's attempts too (replay/combine-run.js)
   // The 30-day Monte Carlo of the model's trades (prop/model-score.js): the account named, else the run's attempt, ...
   const prop = propScoreSection(dir, { root: ROOT, override: arg(argv, '--account'), ratesFile: arg(argv, '--natural-rates') || null, curated: cfg && cfg.curated, barsFiles: barsArgs(argv), faults: parseFaults(arg(argv, '--faults')) });
   const file = path.join(path.resolve(dir), 'report.md');

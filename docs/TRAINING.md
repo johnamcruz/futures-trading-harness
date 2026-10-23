@@ -426,18 +426,129 @@ concurrency setting, in your local config).
 
 The `stage: 2` preset is stage 1 plus:
 
-- account states (`accountStates`; required on a practice-train run);
+- one of two modes, one per replay config, never both (the config refuses
+  `combine` with `accountStates`):
+  1. **the continuous combine** (`combine`): the main stage-2 measure, the
+     test that judges the model;
+  2. **drawn account states** (`accountStates`): extra practice of chosen
+     account situations (near the max loss limit, after losses);
+
+  a practice-train run takes one of them;
 - account facts (the attempt line);
 - the prop risk rules: `loss_streak_stop` and the exit mode.
 
 `prop` is allowed in stage 2, but a curated list can't be combined with
 `prop` (the replay config refuses it), so a curated stage-2 run gets its
-account from the account states.
+account from the account states. A plain `prop` replay is no stage-2 mode:
+it keeps cycling after its attempt passes or blows, and no report shows its
+attempts.
 
-**Practice with account states.** Stage 2 teaches the model to pass the
-combine: grow the balance to the target, never touch the max loss limit, in 30
-days or fewer. So each practice day starts from an account state, not always a
-fresh account:
+Use the continuous combine to see how the model does: can it start at zero
+and make the profit target without touching the max loss limit, and how often.
+Use drawn states to give it more practice of the situations a combine reaches
+rarely. Both are learning runs (practice-train, or practice-validate with
+`--validate`); each run's look names its mode, so the stage-1 exit test's pool
+never mixes a combine run, a drawn-state run and a stage-1 run.
+
+**The continuous combine (`combine`).** The replay config:
+
+```json
+{
+  "runId": "s2-combine-1", "stage": 2, "start": "2022-04-04T13:30:00Z", "end": "2022-08-12T00:00:00Z",
+  "combine": { "account": "<prop_portfolio's account>", "attempts": ["2022-04-04", "2022-05-17", "2022-06-30"], "maxSessions": 30 },
+  "autotrader": { "...": "the trader's runner config", "sessions": ["09:30-12:00@America/New_York"] }
+}
+```
+
+- `account`: the profile the attempts trade. It must be the account the active
+  policy strategy (`prop_portfolio`) trades: the runner keeps that account's
+  attempt record.
+- `attempts`: each attempt's first trading day, in order.
+- `maxSessions`: the most trading sessions an attempt runs (default and most:
+  the profile's `sessions`). Fewer is for a short smoke only: the model's
+  horizon and clock sizing stay the profile's, so it trades a real
+  `sessions`-long combine and the run just stops early.
+
+Each attempt's window is its first `maxSessions` trading days of the run from
+its start date. The config refuses an attempt that starts on no trading day of
+the run, whose window runs past the run's end or spans two split windows, or
+that overlaps the attempt before it. It also refuses `combine` outside stage 2,
+with `accountStates`, `curatedList`, `prop` or `practice`, with `everyNthBar`
+above 1, a `maxSessions` above the profile's `sessions`, and an account that
+isn't the policy's. Narrower sessions are fine.
+The combine block is in both run hashes. The preflight's `combine` check shows
+the account, `maxSessions` and every attempt's window.
+
+What the run does:
+
+1. **Each attempt is a real combine from zero.** Before its first step, with
+   the account flat (else refused), the driver ends the previous attempt's
+   record (kept, renamed), sets the replay broker's balance to the profile's
+   starting balance through the balance schedule, starts a fresh attempt
+   record (no closed days, profit 0), and checks the broker now reports the
+   starting balance (else refused).
+2. **Every decision time of the attempt's days is stepped**, on consecutive
+   trading days, as a non-learning prop replay steps them: no curated list, no
+   setup-focus skipping.
+3. **It ends when it passes or blows,** under the account's rules (the pass is
+   checked at a close, with consistency where the profile has it), or after
+   `maxSessions` sessions (`unfinished`). Before each step the driver reads the
+   attempt from its record, the broker's balance and the lowest equity since
+   the last check: the open position at its worst price since then, and each
+   trade opened and closed since then at its worst price between its fills
+   (the broker's positions, fills and 1-minute bars, less the account's fees,
+   never assumed). Equity at or below the floor is a blow, as in a real
+   combine, even if the trade later recovers or closed at a gain. The check runs at each decision time, so a touch between two
+   steps is caught at the next step. An open position it can't value refuses
+   the step (the run stops, resumable): an open loss is never assumed away.
+   After a blow during a day, no trade cycle runs: only that day's end of day
+   (the runner's flatten and the day's close, as live). After a pass at a
+   close, nothing more runs for the attempt, unless a position or working
+   order is still open the next day: then only that day's end of day (the
+   flatten) runs. The days left in its window are not stepped: the clock
+   moves to the next attempt's start, and the run finishes after the last
+   attempt ends.
+
+**What resets per attempt.** A fresh attempt's prompt starts with no history
+of its own: the attempt line is the fresh record's (day 1, no profit, no trades,
+losses or streak today), and "Your last N reviewed trade(s)" and "Your last N
+cycle(s)" count only the attempt's own trades and decisions (reads scoped to
+the attempt's start, its record's `historyFrom`; the journal and the decision
+history stay whole for reviews, labels and the experience log). An entry of
+an earlier attempt left without a review is still named (the gate still
+requires its review). What doesn't reset: lessons and the experience lookup,
+the learning that every run gets. A live attempt, a drawn state's seeded day
+and a stage-1 run show their history as before.
+
+Each attempt's start and end are in the run's `combine.jsonl`, never shown to
+the model. At the end, the stage report (and `replay.js report`) prints, for
+each attempt: its start, sessions run (a pass: up to the close that passed
+it), outcome (passed, blown or unfinished),
+final profit, lowest cushion to the floor, worst day against the daily limit
+(the lowest day P&L seen, $0 when no day was down), and its trades, win rate
+and mean R. Then the totals: pass rate (passed over every ended attempt: an
+unfinished one counts as not passed), blows and median sessions to pass.
+Then the promotion gate's numbers (`scripts/lib/prop/promotion.js`, frozen)
+applied to the attempts, labelled practice: these attempts are never a
+promotion score. Then the 30-day Monte Carlo of the run's own trades. The days
+are continuous, so the trades come at their natural rate and the score is a
+real (full-day) one, not reweighted.
+
+**Drawn account states (`accountStates`): a training config.** The replay
+config:
+
+```json
+{
+  "runId": "s2-states-1", "stage": 2, "start": "...", "end": "...",
+  "practice": { "mode": "setup-focus", "...": "as stage 1" },
+  "curatedList": { "file": "<curated lists>", "list": "mix" },
+  "accountStates": { "file": "<the drawn states document>" }
+}
+```
+
+Stage 2 teaches the model to pass the combine: grow the balance to the target,
+never touch the max loss limit, in 30 days or fewer. With drawn states, each
+practice day starts from an account state, not always a fresh account:
 
 1. **Draw the states** from practice-train runs of the model (its own trades):
 
@@ -544,15 +655,17 @@ so it is train-derived evidence like the walk-forward experience index, and
 validation outcomes never enter it. The run pins the record with its display
 and its `comparisonArm`, and a resume can't change any of them.
 
-**The 30-day Monte Carlo** is printed at the end of a stage-2 run. Read it in this order:
+**The 30-day Monte Carlo** is printed at the end of a stage-2 run (after a
+combine run's attempt lines). Read it in this order:
 
 1. **0 blows.** This is a hard rule: any blow fails.
 2. **Passes within 30 days.**
 3. **The median and p90 days to pass.**
 4. **The breakdown by account state.**
 
-The Monte Carlo of a curated run is diagnostic only: the curated moments are
-reweighted, not a calendar of whole days.
+The Monte Carlo of a curated run (drawn states) is diagnostic only: the
+curated moments are reweighted, not a calendar of whole days. A continuous
+combine run's is a real score of its whole days.
 
 ## 6. The training loop's keep rule
 

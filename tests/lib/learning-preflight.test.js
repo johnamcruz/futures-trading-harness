@@ -99,10 +99,10 @@ test('the good fixture: every check passes (every feature merged); the risk reco
   // A stage-2 practice run, its days from drawn account states: every check judged and passing.
   const two = P.runChecks(ctx({ run: { stage: 2, accountStates: STATES_RUN } }));
   // No adapter selected (a base run): the adapter check is N/A.
-  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['adapter', P.NA]], P.formatReport(two));
+  assert.deepStrictEqual(two.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['combine', P.NA], ['adapter', P.NA]], P.formatReport(two));
   // A stage-1 run: the same, but for the account states it has none of (N/A, never a FAIL).
   const res = P.runChecks(ctx());
-  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['account-states', P.NA], ['adapter', P.NA]], P.formatReport(res));
+  assert.deepStrictEqual(res.results.filter(x => x.status !== P.PASS).map(x => [x.check, x.status]), [['risk-record', P.NA], ['account-states', P.NA], ['combine', P.NA], ['adapter', P.NA]], P.formatReport(res));
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.results.length, P.CHECKS.length);
   assert.deepStrictEqual(res.results.find(x => x.check === 'curated-source'), { check: 'curated-source', status: P.PASS, detail: '1 list moment(s) closed at their entry in the bars given: one source' });
@@ -244,7 +244,7 @@ test('passing variants: a library comparison arm, a validate run, no curated lis
   // a validate run doesn't need them; the prop risk rules and the Monte Carlo must be there.
   const two = P.stage(ctx({ run: { stage: 2 } }));
   assert.strictEqual(two.status, P.FAIL);
-  assert.match(two.detail, /stage 2: a stage 2 practice run starts its days from drawn account states/);
+  assert.match(two.detail, /stage 2: a stage 2 practice run is a continuous combine \(combine\) or starts its days from drawn account states/);
   assert.match(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN } })).detail, /stage 2 on practice-train: .*days from account states dddddddddddd, the prop risk rules and the Monte Carlo/);
   assert.strictEqual(P.stage(ctx({ run: { stage: 2, prop: 'acct', curated: null }, gate: { from: D('2024-08-05T14:30:00Z'), to: D('2024-08-05T15:00:00Z') } })).status, P.PASS);
   assert.match(P.stage(ctx({ run: { stage: 2, accountStates: STATES_RUN }, read: { features: () => ({ ...ctx().read.features(), lossStreakStop: false }) } })).detail, /prop risk rules are needed/);
@@ -271,7 +271,7 @@ test('N/A never fails: a feature not merged reports "not available (needs <branc
   assert.strictEqual(res.ok, true, P.formatReport(res));
   // The risk record's check is N/A when the display is off (it doesn't wait for a branch); so are account-states on a stage-1 run,
   // and the adapter with none selected.
-  const own = ['risk-record', 'account-states', 'adapter'];
+  const own = ['risk-record', 'account-states', 'combine', 'adapter'];
   const na = res.results.filter(x => x.status === P.NA && !own.includes(x.check)).map(x => x.check);
   assert.deepStrictEqual(na.sort(), ['account-facts', 'monte-carlo', 'rulebook-missing', 'scorecard-composed']);
   for (const x of res.results.filter(y => y.status === P.NA && !own.includes(y.check))) assert.match(x.detail, /^not available \(needs .+\)$/, x.check);

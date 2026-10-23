@@ -47,7 +47,8 @@
  *   recordResult(file, result, { now })     a test evaluation's result (pass lets its candidate take the final look)
  *   recordScore(file, entry)                a Monte Carlo score of a run, beside its look (refused without it)
  *   scoresOf(ledger)                        the scores logged
- *   validateRuns(ledger, candidate)         { counted, beyond, all }: the validate runs the stage-1 exit test pools
+ *   validateRuns(ledger, candidate, mode)   { counted, beyond, all }: the validate runs the stage-1 exit test pools (of one
+ *                                           training mode: a look's `mode`, none for stage 1)
  *   lookUsage(ledger)                       per role: looks, runs, evaluations spent
  *   ledgerPath(env)
  */
@@ -241,6 +242,8 @@ function recordLook(file, look, { create = false, now = new Date() } = {}) {
         kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId, arm: look.arm || null, config: look.config || null,
         ...(look.base && look.base !== look.config ? { base: look.base } : {}),
         ...(look.setup ? { setup: look.setup } : {}),
+        // A stage-2 mode's run (gateOptions mode: combine, account-states) names it, so pools never mix the modes.
+        ...(look.mode ? { mode: look.mode } : {}),
         from: sessionDate(look.from), to: sessionDate(look.to), role: r.role, at: now.toISOString(),
       });
     }
@@ -284,8 +287,10 @@ function recordScore(file, entry) {
  * counted run's look window { runId, from, to } (runs over the same days overlap: the pooled test counts a day and a
  * moment once).
  */
-function validateRuns(ledger, candidate) {
-  const validate = looksOf(Array.isArray(ledger) ? ledger : []).filter(e => e.purpose === 'validate' && roleOfLook(e) === 'practice-validate');
+function validateRuns(ledger, candidate, mode = null) {
+  // Only the runs of the same training mode (a look's `mode`: none for stage 1): a combine run, a drawn-state run and a
+  // stage-1 run never pool.
+  const validate = looksOf(Array.isArray(ledger) ? ledger : []).filter(e => e.purpose === 'validate' && roleOfLook(e) === 'practice-validate' && (e.mode || null) === mode);
   const ids = [...new Set(validate.filter(e => e.candidate === candidate).map(e => e.runId))];
   const cap = S().validateRunsPerCandidate;
   const counted = ids.slice(0, cap);

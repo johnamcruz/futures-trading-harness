@@ -22,7 +22,10 @@
  * config's `latency`) the latency is the run's own, as live; with a pinned replay clock it is projected (the clock at
  * the decision time plus the run's own time; fills at the bar).
  *
- *   summarize(days)            { months: [row], total: row, timing }
+ * A continuous combine run (replay/combine-run.js): each attempt's start, sessions, outcome, profit, lowest cushion, worst
+ * day and trades, the totals and the promotion gate's numbers, labelled practice (combineReport, from the run's folder).
+ *
+ *   summarize(days, { runDir })   { months: [row], total: row, timing, combine? } (runDir: the run's folder, for a combine run)
  *   toMarkdown(summary, manifest)   report.md
  *   toText(summary)            the terminal table
  */
@@ -76,7 +79,7 @@ function finish(row) {
   };
 }
 
-function summarize(days) {
+function summarize(days, { runDir = null } = {}) {
   const months = new Map();
   const total = blankRow('total');
   const open = new Map();
@@ -116,7 +119,15 @@ function summarize(days) {
     }
   }
   const practice = practiceSummary(days);
-  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}) };
+  const combine = runDir ? combineOf(runDir, days) : null;
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}) };
+}
+
+/** A combine run's attempts (combine-run.js combineReport), labelled with the run's learning role; null for any other run. */
+function combineOf(runDir, days) {
+  const path = require('path');
+  const gate = require('../learning/run-gate').readLearningRun(path.resolve(runDir, '..', '..'));
+  return require('./combine-run').combineReport(runDir, { days, role: gate ? gate.role || null : null });
 }
 
 const pct = x => (x === null ? '-' : `${(x * 100).toFixed(1)}%`);
@@ -171,15 +182,17 @@ function toMarkdown(summary, manifest = {}) {
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
+    ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
   ].join('\n');
 }
 
 function toText(summary) {
-  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null);
+  const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);
   const note = kind === 'charged' ? ' (replay: latency charged, as live)' : kind === 'mixed' ? ' (replay: latency charged on some cycles, projected on others)' : kind ? ' (replay: projected live latency)' : '';
   return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
-module.exports = { summarize, tradesOf, toMarkdown, toText };
+module.exports = { summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };

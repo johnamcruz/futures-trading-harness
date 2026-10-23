@@ -64,6 +64,7 @@ const RC = require('./trading/report-cache');
 const CD = require('./cycle-data');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
+const { historyFrom, journalSince } = require('./prop/attempt-scope');
 const LR = require('./trading/lifecycle-runner');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -706,8 +707,11 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
     // its experience record, not the journal's instincts (the composed-entry design, PR 14).
     lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false })),
-    recentTrades: ({ entries } = {}) => recentTrades(entries || journal(), 10),
-    tradesSummary: ({ entries } = {}) => formSummary(entries || journal(), 10),
+    // A fresh combine attempt's prompt shows only its own reviewed trades (prop/attempt-scope.js); any other run, all.
+    recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), 10),
+    tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), 10),
+    // The time a fresh combine attempt's in-prompt history starts at (its record's historyFrom), or null.
+    historyFrom: () => historyFrom(home),
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
     unreviewed: (symbols, entries, positions, at, orders) => unreviewedLine(symbols, entries, positions, at, orders),
     news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),

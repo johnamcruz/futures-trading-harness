@@ -46,6 +46,12 @@
  * day's draw and each attempt's end are logged in the run's account-states.jsonl (its scores, stage.js), never shown
  * to the model.
  *
+ * A continuous combine run (replay/config.js combine, replay/combine-run.js) steps every decision time of its attempts'
+ * days and none of the days between them: before each step, its attempt starts from zero (the account flat, a fresh
+ * attempt record, the broker's balance set to the starting balance through the balance schedule) or, passed or blown,
+ * ends: no step runs for it after that (with a position open, only the day's end of day, the runner's flatten), and the
+ * clock moves on to the next attempt's first time. An attempt still active after its last session ends unfinished.
+ *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
  *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
  *                                                clock a charged step's replay clock runs with, Date.now)
@@ -71,7 +77,9 @@ const store = require('./store');
 const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt, seedAttempt, stateFrom } = require('../trading/prop-state');
 const combine = require('../trading/combine');
-const { accountNamed } = require('../trading/accounts');
+const { accountNamed, requireFee } = require('../trading/accounts');
+const { isOpen, signedSize } = require('../trading/positions');
+const combineRun = require('./combine-run');
 
 const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
 // Minutes from the 18:00 ET open to the 16:00 ET close.
@@ -151,6 +159,41 @@ function defaultDeps(run, root) {
     // The account's balance as the broker reports it (a run with account states checks the drawn one took).
     async balance(env, account) {
       return withAdapter({ root, env }, a => a.accountBalance(account));
+    },
+    // A combine run's lowest equity since the last check against the balance now (combine-run.js), a negative offset or
+    // 0: each open position at its worst 1-minute price since the later of the last check and its fill, and each round
+    // trip closed since the last check at its worst price between its entry and exit (fills since the attempt's start,
+    // `fromMs`, so they pair), less the account's fees (never assumed). Throws on anything it can't read.
+    async openPnl(env, account, { account: profile, sinceMs, fromMs = sinceMs, at }) {
+      return withAdapter({ root, env }, async a => {
+        const specOf = liveSpecs(env);
+        const feeOf = r => requireFee(profile, r);
+        const worstOver = async (contractId, long, from, to, extra = []) => {
+          // The 1-minute bars from the one holding `from` (its minute) to the one holding `to`.
+          const minute = new Date(from);
+          minute.setUTCSeconds(0, 0);
+          const bars = (await a.history(contractId, { from: minute, to: new Date(Math.max(to, from)), timeframe: 1 }))
+            .filter(b => Date.parse(b.t) >= minute.getTime() && Date.parse(b.t) <= to);
+          return combineRun.worstPrice([...bars, ...extra.map(p => ({ l: p, h: p }))], long);
+        };
+        const open = (await a.accountState(account)).positions.filter(isOpen);
+        const worst = new Map();
+        for (const p of open) {
+          const from = Math.max(sinceMs, Date.parse(p.creationTimestamp) || sinceMs);
+          const long = signedSize(p) > 0;
+          // No closed bar since (the fill's own minute): the last closed one prices it.
+          const w = (await worstOver(p.contractId, long, from, at.getTime())) ?? combineRun.worstPrice((await a.closedBars(p.contractId, { minutes: 1, limit: 1, now: at })), long);
+          worst.set(p.contractId, w);
+        }
+        const openLow = open.length ? combineRun.openPnlAt(open, { worstOf: id => worst.get(id), specOf, feeOf }) : 0;
+        const { trips } = combineRun.roundTrips(await a.fillsSince(account, new Date(fromMs)));
+        const recent = trips.filter(t => t.exitAt >= sinceMs);
+        const tripWorst = new Map();
+        for (const t of recent) tripWorst.set(t, await worstOver(t.contractId, t.long, Math.max(t.entryAt, sinceMs), t.exitAt, [t.entry]));
+        // The trips close in time order, so every trip closed after a recent one is recent too (tripsLow's balance before each).
+        const tripLow = recent.length ? combineRun.tripsLow(recent, { worstOf: t => tripWorst.get(t), specOf, feeOf }) : 0;
+        return Math.min(openLow, tripLow);
+      });
     },
     async trades(env, account, since, until) {
       // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).
@@ -322,7 +365,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   // open (managed every bar, as practice does), checked at each day's first, and skipped once flat until the next
   // window; the broker's fills and brackets work through the gaps.
   const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
-  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : all;
+  // A combine run: only its attempts' days (the days between them have no step).
+  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : run.combine ? all.filter(p => combineRun.attemptOf(run.combine, p.day) !== -1) : all;
+  const combineCtx = { root: root || run.root, manifest, save: () => writeJsonAtomic(paths.manifest, manifest), log };
   const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
   // the window is inside it. Only on a fresh run (nothing recorded yet): a resumed run keeps the attempt it has, or
@@ -343,6 +388,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   }
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
+    // A combine run stopped right after its last step: its attempt under way ends now.
+    if (run.combine) {
+      // At the last time recorded (the broker's balance as the run left it), never the window's start.
+      const at = Number.isFinite(lastAtStart) ? new Date(lastAtStart) : run.start;
+      await combineRun.finishCombine(run, replayEnv(baseEnv, run, { at }), deps, { ...combineCtx, at });
+    }
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
     return finished(paths, manifest, 0, points);
   }
@@ -414,6 +465,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     } else if (point.kind === 'trade') managing = true;
     // A run with account states: the day's drawn state, before its first step.
     if (run.accountStates && !point.manage) await seedDay(run, point, ranAt, env, deps, root, log);
+    // A combine run: its attempt started before its first step, and no step once it passed or blew (combine-run.js).
+    if (run.combine && !(await combineRun.beforeStep(run, point, ranAt, env, deps, combineCtx))) {
+      const nextPoint = queue[0];
+      if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
+      continue;
+    }
     const started = Date.now();
     // Marked before it runs: a driver stopped before its line is written never runs this time twice.
     manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
@@ -547,6 +604,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
   }
   if (run.accountStates) endEpisode(run, accountNamed(root || run.root, run.accountStates.account, startEnv));
+  if (run.combine) await combineRun.finishCombine(run, replayEnv(baseEnv, run, { at: new Date(latency.runAt(points[points.length - 1], clockMs)) }), deps, { ...combineCtx, at: new Date(latency.runAt(points[points.length - 1], clockMs)) });
   return finished(paths, manifest, cycles, points);
 }
 

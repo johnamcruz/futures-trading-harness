@@ -262,7 +262,8 @@ test('stageReport: stage 2 prints the practice by account state, each attempt\'s
 });
 
 test('stageRequirements: what the preflight checks for each preset', () => {
-  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: 'off', prop: 'none', accountStates: 'none', phase2: false });
+  assert.deepStrictEqual(S.stageRequirements(1), { roles: ['practice-train', 'practice-validate'], curatedOn: 'practice-train', latency: true, libraryDisplay: false, riskRecordDisplay: 'off', prop: 'none', accountStates: 'none', combine: 'none', phase2: false });
+  assert.strictEqual(S.stageRequirements(2).combine, 'allowed');
   assert.strictEqual(S.stageRequirements(2).prop, 'allowed');
   assert.strictEqual(S.stageRequirements(2).accountStates, 'practice-train');
   assert.strictEqual(S.stageRequirements(2).phase2, false);
