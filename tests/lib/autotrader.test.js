@@ -1616,12 +1616,47 @@ test('cycleDataInPrompt (this machine\'s runner config): a boolean or absent, fo
 
 test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only)', () => {
   const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
-  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt']);
+  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt']);
   for (const k of HEAD_DELIVERY_KEYS) {
     assert.strictEqual(validateConfig({ harness: 'claude', [k]: true })[k], true, k);
     assert.throws(() => validateConfig({ harness: 'claude', [k]: 'yes' }), new RegExp(`${k}: true or false`), k);
     for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: true }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
   }
+});
+
+test('roleSkillsInPrompt (this machine\'s runner config): a boolean or absent, harness claude only; on, each role\'s own run (never the head trader\'s) gets its prompt addition, the role\'s own tools still allowed', () => {
+  const { claudeRolesOn, writeRolePrompt } = require('../../scripts/lib/autotrader');
+  const RP = require('../../scripts/lib/role-prompt');
+  assert.strictEqual(validateConfig({ harness: 'claude' }).roleSkillsInPrompt, undefined, 'absent stays absent');
+  for (const v of ['yes', 1, null, {}]) assert.throws(() => validateConfig({ harness: 'claude', roleSkillsInPrompt: v }), /roleSkillsInPrompt: true or false/, JSON.stringify(v));
+  for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, roleSkillsInPrompt: true }), /roleSkillsInPrompt: for harness "claude" only/, harness);
+  assert.strictEqual(validateConfig({ harness: 'opencode', roleSkillsInPrompt: false }).roleSkillsInPrompt, false);
+  const home = tmpDir();
+  const env = { FTH_HOME: home };
+  const on = validateConfig({ harness: 'claude', roleSkillsInPrompt: true });
+  const off = validateConfig({ harness: 'claude' });
+  assert.deepStrictEqual([claudeRolesOn(on), claudeRolesOn(off), claudeRolesOn(validateConfig({ harness: 'claude', roleSkillsInPrompt: false }))], [true, false, false]);
+  // The head trader's own run: unchanged by the key.
+  assert.deepStrictEqual(buildCommand(on, 'p', ROOT, env), buildCommand(off, 'p', ROOT, env));
+  for (const role of require('../../scripts/lib/opencode').RUNNER_RUN_ROLES()) {
+    const argv = buildCommand(on, 'p', ROOT, env, { agent: role });
+    const at = argv.indexOf('--append-system-prompt-file');
+    assert.strictEqual(argv[at + 1], RP.claudeRoleFile(home, role, RP.claudeRoleText(ROOT, role)), role);
+    // The only difference from the key off: the flag and its file, right after --agent.
+    assert.deepStrictEqual([...argv.slice(0, at), ...argv.slice(at + 2)], buildCommand(off, 'p', ROOT, env, { agent: role }), role);
+    assert.strictEqual(argv[at - 2], '--agent');
+    // A role with an index can read it: skill_lookup is in its allowed tools.
+    if (RP.rolePlan(ROOT, role).agent.index.length) assert.ok(argv[argv.indexOf('--allowedTools') + 1].split(',').includes('mcp__harness__skill_lookup'), role);
+    const w = writeRolePrompt(on, ROOT, env, role);
+    assert.strictEqual(w.file, argv[at + 1]);
+    assert.strictEqual(require('fs').readFileSync(w.file, 'utf8'), w.text);
+  }
+  assert.strictEqual(writeRolePrompt(off, ROOT, env, 'risk-manager'), null, 'the key off: nothing written');
+  // Nothing attested, the env unchanged: FTH_ROLE_SKILLS full, no FTH_HEAD_PROMPT.
+  const ctx = { roleRun: 'risk-manager' };
+  const { FTH_CYCLE_TRANSCRIPT: _a, ...envOn } = childEnv(on, ROOT, env, ctx);
+  const { FTH_CYCLE_TRANSCRIPT: _b, ...envOff } = childEnv(off, ROOT, env, ctx);
+  assert.deepStrictEqual(envOn, envOff);
 });
 
 test('headSkillsInPrompt absent or false: the Claude head trader\'s argv, env and prompts are as before (no prompt addition, no attestation, an inherited one dropped, the load sentence)', () => {

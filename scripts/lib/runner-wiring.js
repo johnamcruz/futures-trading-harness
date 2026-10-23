@@ -452,7 +452,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
           log(`the desk: ${r.role}'s run could not be recorded for the gate (${err.message}): the head trader may launch it`);
         }
       }
-      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms })), rolesFile, recorded };
+      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.skills ? { skills: r.skills } : {}) })), rolesFile, recorded };
     },
   };
 }

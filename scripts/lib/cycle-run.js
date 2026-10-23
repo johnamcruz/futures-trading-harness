@@ -22,7 +22,9 @@
  */
 
 const path = require('path');
-const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, withCycleData, ROLES_CHECKED, ROLE_RUNS } = require('./autotrader');
+const { buildCommand, childEnv, scoreRun, cycleOutcome, outcomeOf, withCycleData, writeRolePrompt, ROLES_CHECKED, ROLE_RUNS } = require('./autotrader');
+const { harnessHome } = require('./paths');
+const { roleSkills, withSkillsMissing, missingLine } = require('./role-skills-record');
 const CD = require('./cycle-data');
 const { runHarness } = require('./harness-run');
 const { writeCycleLog } = require('./cycle-log');
@@ -114,6 +116,10 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
       }
     }
   }
+  // The entry's roles that ran without some of their skills (role-skills-record.js): its record says so, as the desk's.
+  if (entry && Array.isArray(entry.ran)) entry = { ...entry, ...withSkillsMissing(entry.ran) };
+  // One runner log line a cycle when any role the runner ran lacked a skill (detection only: no report is refused).
+  for (const [what, m] of [['desk', context && context.desk && context.desk.skillsMissing], ['entry', entry && entry.skillsMissing]]) if (m) err(`[autotrader] ${missingLine(m, what)}\n`);
   const endedMs = wallNow();
   // When it acted against its bar (cycle-timing.js): measurement only.
   // The runner's desk ran before this run (runner.js): its time counts in the cycle's (context.desk.ms).
@@ -155,7 +161,10 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
   const env = deps.env || process.env;
   // The run is the role's (`roleRun`): the head trader's prompt addition is never attested for it (autotrader.js).
   const roleContext = { ...(context || {}), roleRun: role };
-  const argv = buildCommand(cfg, request, deps.root, childEnv(cfg, deps.root, env, roleContext), { agent: role });
+  const runEnv = childEnv(cfg, deps.root, env, roleContext);
+  // roleSkillsInPrompt (this machine's opt-in, Claude Code): the role's prompt addition written for its argv (role-prompt.js).
+  const added = writeRolePrompt(cfg, deps.root, runEnv, role);
+  const argv = buildCommand(cfg, request, deps.root, runEnv, { agent: role });
   const res = await runOnce(cfg, argv, timeoutMs, roleContext, { ...deps, env });
   const { text, tools } = runResultOf(cfg.harness, typeof res.stdout === 'string' ? res.stdout : res.output);
   let lookups;
@@ -165,7 +174,23 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
     lookups = [...new Set(readLookups(res.transcript).filter(r => r && r.role === role).map(r => r.skill).filter(s => typeof s === 'string'))].sort();
     try { require('fs').unlinkSync(lookupsFile(res.transcript)); } catch (_err) { /* none */ }
   } catch (_err) { lookups = []; }
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups };
+  // Which skills it had (role-skills-record.js), for the cycle log's desk and entry records: detection only.
+  const skills = roleSkills({ root: deps.root, role, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), home: harnessHome(runEnv), embedded: embeddedFor(cfg, deps.root, role, added) });
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills };
+}
+
+/** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */
+function embeddedFor(cfg, root, role, added) {
+  const { embeddedSkills } = require('./head-prompt');
+  if (added) return embeddedSkills(added.text, root);
+  if (cfg.harness !== 'opencode') return [];
+  try {
+    const conf = JSON.parse(require('fs').readFileSync(path.join(path.resolve(root, cfg.workdir), 'opencode.json'), 'utf8'));
+    const a = conf && conf.agent && conf.agent[role];
+    return a && typeof a.prompt === 'string' ? embeddedSkills(a.prompt, root) : [];
+  } catch (_err) {
+    return [];
+  }
 }
 
 /** A role's run as the engine reads it, { text, tools }: Claude Code's stream-json (transcript.js), opencode's events (opencode.js). */

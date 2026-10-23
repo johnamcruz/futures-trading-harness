@@ -266,7 +266,9 @@ function deskConcurrencyProblem(v) {
  * without it reads this list: the decision dataset (learning/decision-dataset.js: never pooled), the training preflight
  * (learning/preflight.js head-delivery). A key added here is validated below, or the autotrader tests fail.
  */
-const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt']);
+// roleSkillsInPrompt is the roles' (the runner's role runs: their skills in a prompt addition, role-prompt.js), listed
+// here so a run with it is never pooled with one without it either.
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt']);
 /**
  * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
  * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
@@ -367,6 +369,10 @@ function validateConfig(raw) {
   // absent or false as before.
   if (cfg.cycleDataInPrompt !== undefined && typeof cfg.cycleDataInPrompt !== 'boolean') errors.push('cycleDataInPrompt: true or false, or absent (as before: the head trader makes its own reads)');
   if (cfg.cycleDataInPrompt === true && cfg.harness !== 'claude') errors.push(`cycleDataInPrompt: for harness "claude" only (harness ${cfg.harness})`);
+  // roleSkillsInPrompt true: every role the runner runs on its own gets its skills in a prompt addition (claudeRolesOn;
+  // role-prompt.js), absent or false as before.
+  if (cfg.roleSkillsInPrompt !== undefined && typeof cfg.roleSkillsInPrompt !== 'boolean') errors.push('roleSkillsInPrompt: true or false, or absent (as before: the roles the runner runs load their skills)');
+  if (cfg.roleSkillsInPrompt === true && cfg.harness !== 'claude') errors.push(`roleSkillsInPrompt: for harness "claude" only (harness ${cfg.harness}; opencode's roles have their own index mode, FTH_ROLE_SKILLS)`);
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -607,6 +613,13 @@ function headAttestation(cfg, root, env = process.env) {
  * buildCommand's --append-system-prompt-file), which the runner attests per run (childEnv) for the gate.
  */
 const claudeHeadOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.headSkillsInPrompt === true;
+/**
+ * Claude Code's roles the runner runs on its own (cycle-run.js runRole) with their skills in a system-prompt addition:
+ * this machine's runner config sets roleSkillsInPrompt (validateConfig; absent or false, as before). The file is
+ * role-prompt.js's (buildCommand's --append-system-prompt-file; runRole writes it). Nothing is attested: no gate check
+ * credits a desk role's skills.
+ */
+const claudeRolesOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.roleSkillsInPrompt === true;
 /** Whether the head trader's prompt holds every skill the cycle prompt would have it load: attested, none left out. */
 function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
   if (claudeHeadOn(cfg)) {
@@ -925,6 +938,11 @@ function claudeRoleTools(root, agent, opts = {}) {
  */
 const claudeRoleDenied = agent => ['Agent', 'Task', ...ORDER_TOOL_NAMES.map(t => `mcp__${SERVER_NAME}__${t}`).filter(t => !(agent.tools || []).includes(t))];
 
+/** Where a role's prompt addition is (claudeRolesOn): role-prompt.js's file of its text, in the run's harness home. */
+const rolePromptFile = (root, env, role) => { const RP = require('./role-prompt'); return RP.claudeRoleFile(harnessHome(env), role, RP.claudeRoleText(root, role)); };
+/** A role's prompt addition written for its run (claudeRolesOn only): { file, text }, or null with the key off. */
+const writeRolePrompt = (cfg, root, env, role) => (claudeRolesOn(cfg) ? require('./role-prompt').writeClaudeRole(harnessHome(env), root, role) : null);
+
 /** argv for one headless run; `agent`: one role run on its own by the runner (ROLE_RUNS only, else throws). */
 function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {}) {
   const extra = cfg.extraArgs.map(String);
@@ -938,7 +956,9 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {
       const role = agent ? runnerRole(agent) : null;
       // The head trader in index mode (claudeHeadOn, this machine's opt-in): its skills as a system-prompt addition, in
       // the cached prefix (head-prompt.js; childEnv writes the file and attests it). A role's own run: never.
-      const head = claudeHeadOn(cfg) && !role ? ['--append-system-prompt-file', headPrompt.claudeHeadFile(harnessHome(env), headPrompt.claudeHeadText(root))] : [];
+      const head = claudeHeadOn(cfg) && !role ? ['--append-system-prompt-file', headPrompt.claudeHeadFile(harnessHome(env), headPrompt.claudeHeadText(root))]
+        // A role's own run with roleSkillsInPrompt (claudeRolesOn): its skills likewise (role-prompt.js; runRole writes it).
+        : claudeRolesOn(cfg) && role ? ['--append-system-prompt-file', rolePromptFile(root, env, role.name)] : [];
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []), ...head,
         '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
@@ -1304,6 +1324,8 @@ module.exports = {
   loadList,
   embedsSkills,
   claudeHeadOn,
+  claudeRolesOn,
+  writeRolePrompt,
   claudeHeadAttestation,
   headAttestation,
   skillsText,

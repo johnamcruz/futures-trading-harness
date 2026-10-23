@@ -236,6 +236,13 @@ function cycleClock(env, at, wallMs = at.getTime()) {
  * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
  * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
  */
+/** { roleSkillsMissing: { desk, entry } } when the desk's or the entry's record names roles missing skills, else {}. */
+function roleSkillsMissing(context, entry) {
+  const desk = context && context.desk && context.desk.skillsMissing;
+  const ent = entry && entry.skillsMissing;
+  return desk || ent ? { roleSkillsMissing: { ...(desk ? { desk } : {}), ...(ent ? { entry: ent } : {}) } } : {};
+}
+
 function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
@@ -296,6 +303,8 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
       ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}) } } : {}),
+      // The roles the runner ran without some of their skills (role-skills-record.js; the cycle's desk and entry records).
+      ...roleSkillsMissing(context, entry),
     })}\n`);
   } catch (_err) {
     // best effort

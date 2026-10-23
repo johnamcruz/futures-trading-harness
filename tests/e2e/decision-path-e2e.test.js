@@ -109,7 +109,9 @@ test('decision path, the runner runs the desk: every role run before the head tr
     const text = role === 'risk-manager' ? '## Risk state: account 1 @ now\nTradable: yes' : `## ${role}\nData: bar_briefing m3@x\nBias: long`;
     assert.match(request, /MNQ/);
     assert.match(request, /Closed 3-minute bars, oldest first, are in \/\S+MNQ-3m\.json/, 'the cycle\'s bars file, named exactly');
-    return { ok: true, timedOut: false, text, tools: read, lookups: [], output: '' };
+    // Its own run's skills record (cycle-run.js runRole): trend-momentum-analyst's lacks one.
+    const missing = role === 'trend-momentum-analyst' ? ['bos-vs-choch'] : [];
+    return { ok: true, timedOut: false, text, tools: read, lookups: [], output: '', skills: { expected: ['bos-vs-choch'], embedded: [], loaded: [], had: [], missing } };
   };
   const script = [...D.headLoads(w).map(s => ({ load: s })), { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { result: 'CYCLE RESULT: no-trade - nothing fired' }];
   const r = await D.pass(w, decisionAt(QUIET_BAR), script, { runRole });
@@ -126,6 +128,9 @@ test('decision path, the runner runs the desk: every role run before the head tr
   assert.deepStrictEqual(context.desk.missing, []);
   assert.ok(Number.isFinite(context.desk.ms) && context.desk.ms >= 0, 'the desk\'s time is the cycle\'s');
   assert.deepStrictEqual(context.desk.results.find(x => x.role === 'volume-liquidity-analyst').attempts, 2);
+  // Which skills each role had: in the desk record, and the roles lacking any named (detection only: the desk is complete).
+  assert.deepStrictEqual(context.desk.results.find(x => x.role === 'trend-momentum-analyst').skills.missing, ['bos-vs-choch']);
+  assert.deepStrictEqual(context.desk.skillsMissing, { 'trend-momentum-analyst': ['bos-vs-choch'] });
   // The head trader launched no role: the cycle log counts the desk the runner ran (its record), complete.
   const line = D.cycleLines(w).at(-1);
   const ALL4 = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];

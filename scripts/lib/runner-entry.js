@@ -304,11 +304,11 @@ async function runEntry(deps, c) {
   const record = r => {
     try {
       RR.appendRoleRun(c.rolesFile, { role: r.role, ...times.get(r.role), text: r.text || '', lookups: r.lookups || [], ok: r.ok });
-      info.ran.push({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.why ? { why: r.why } : {}) });
+      info.ran.push({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.why ? { why: r.why } : {}), ...(r.skills ? { skills: r.skills } : {}) });
       return true;
     } catch (err) {
       log(`the entry: ${r.role}'s run could not be recorded for the gate (${err.message})`, 'error');
-      info.ran.push({ role: r.role, stop: r.stop, unrecorded: err.message });
+      info.ran.push({ role: r.role, stop: r.stop, unrecorded: err.message, ...(r.skills ? { skills: r.skills } : {}) });
       return false;
     }
   };

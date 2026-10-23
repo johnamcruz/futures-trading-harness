@@ -593,6 +593,28 @@ test('the training preflight\'s own readers create no run home (headSkillsInProm
   assert.strictEqual(fs.existsSync(runHome), false, 'a preflight reader created the run home');
 });
 
+test('role-prompts (roleSkillsInPrompt): every runner role\'s file builds, is read back, embeds exactly its role-skills and indexes exactly its role-index; off, a PASS saying so', () => {
+  assert.ok(P.CHECKS.includes(P.rolePrompts));
+  const off = P.rolePrompts({ run: { cfg: { harness: 'claude' } } });
+  assert.deepStrictEqual([off.status, /^off: /.test(off.detail)], [P.PASS, true]);
+  assert.strictEqual(P.rolePrompts({ run: { cfg: { harness: 'opencode', roleSkillsInPrompt: true } } }).status, P.PASS, 'not Claude Code: the key does nothing (validateConfig refuses it)');
+  const real = P.defaultReaders(ROOT, {}, {});
+  const roles = real.claudeRoles();
+  assert.deepStrictEqual(roles.map(x => x.role), require('../../scripts/lib/opencode').RUNNER_RUN_ROLES());
+  const on = read => P.rolePrompts({ run: { cfg: { harness: 'claude', roleSkillsInPrompt: true } }, read: { claudeRoles: read } });
+  const ok = on(() => roles);
+  assert.strictEqual(ok.status, P.PASS, ok.detail);
+  assert.match(ok.detail, /^5 roles' prompt additions .*risk-manager \d+/);
+  // Each rule, broken: FAIL.
+  const bend = (role, over) => () => roles.map(x => (x.role === role ? { ...x, ...over } : x));
+  assert.match(on(bend('risk-manager', { prompt: null })).detail, /risk-manager: its prompt addition can't be built/);
+  assert.match(on(bend('risk-manager', { prompt: `${roles[3].prompt}x` })).detail, /risk-manager: its prompt addition can't be built or read back/);
+  assert.match(on(bend('trade-executor', { embedded: roles[4].embedded.slice(1) })).detail, /trade-executor: embeds .* not its role-skills/);
+  assert.match(on(bend('trend-momentum-analyst', { indexed: [] })).detail, /trend-momentum-analyst: indexes none, not its role-index/);
+  assert.match(on(bend('volume-liquidity-analyst', { lookupTool: false })).detail, /volume-liquidity-analyst: a role-index without the skill_lookup tool/);
+  for (const f of [bend('risk-manager', { prompt: null }), bend('trade-executor', { embedded: [] })]) assert.strictEqual(on(f).status, P.FAIL);
+});
+
 test('head-delivery: the run\'s head trader delivery keys (autotrader.js HEAD_DELIVERY_KEYS) said in its preflight record, never on another harness', () => {
   assert.ok(P.CHECKS.includes(P.headDelivery), 'one of the checks every learning run records');
   const of = cfg => P.headDelivery({ run: { cfg } });

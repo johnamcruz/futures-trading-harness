@@ -389,7 +389,7 @@ test('a delivery key on: the decisions\' digest names it, the dataset is another
 test('a mixed pool (decisions made with a delivery key on and without it) is refused, in a set or across train and validate', () => {
   const r = runs();
   withDelivery(r.t2, { cycleDataInPrompt: true });
-  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt\): build from runs under one/);
+  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, roleSkillsInPrompt\): build from runs under one/);
   const r2 = runs();
   withDelivery(r2.v, { headSkillsInPrompt: true }, { via: 'runner' });
   assert.throws(() => build3(r2.t1, r2.t2, r2.v), /2 head trader deliveries/);

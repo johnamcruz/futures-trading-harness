@@ -62,6 +62,23 @@ test('the desk runs the roles still to run with their request; a report counts o
   assert.strictEqual(seen[0].timeoutMs, 90000);
 });
 
+test('the desk\'s results carry each role run\'s own skills record (role-skills-record.js), and skillsMissing names the roles lacking any; a failed run\'s too', async () => {
+  const { withSkillsMissing } = require('../../scripts/lib/role-skills-record');
+  const rec = missing => ({ expected: ['a', 'b'], embedded: [], loaded: ['a', 'b'].filter(s => !missing.includes(s)), had: ['a', 'b'].filter(s => !missing.includes(s)), missing });
+  const runRole = async role => (role === 'risk-manager'
+    ? { ok: true, text: '## Risk state: account 1', tools: ['broker_get_account_snapshot'], skills: rec(['b']) }
+    : { ok: false, text: '', tools: [], skills: rec(['a', 'b']) });
+  const desk = deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT, runRole });
+  const now = new Date('2026-10-07T14:03:02Z');
+  const d = await desk.run({ symbols: [{ symbol: 'MNQ' }], roles: ['volume-liquidity-analyst', 'risk-manager'], now, at: now.toISOString() });
+  assert.deepStrictEqual(d.results.map(r => [r.role, r.skills.missing]), [['volume-liquidity-analyst', ['a', 'b']], ['risk-manager', ['b']]]);
+  assert.deepStrictEqual(withSkillsMissing(d.results), { skillsMissing: { 'volume-liquidity-analyst': ['a', 'b'], 'risk-manager': ['b'] } });
+  // A run that returns no record: none in its result (as before).
+  const bare = deskFor({ home: tmpDir(), cfg: cfg(), root: ROOT, runRole: async () => ({ ok: true, text: '## Risk state', tools: ['broker_get_account_snapshot'] }) });
+  const b = await bare.run({ symbols: [{ symbol: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString() });
+  assert.deepStrictEqual([Object.keys(b.results[0]).includes('skills'), withSkillsMissing(b.results)], [false, {}]);
+});
+
 test('the desk\'s record that can\'t be written credits none: logged, and the role is not recorded', async () => {
   const home = tmpDir();
   require('fs').writeFileSync(path.join(home, 'logs'), 'a file where the logs directory goes');
