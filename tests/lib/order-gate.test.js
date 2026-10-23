@@ -1992,12 +1992,55 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
     assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], rationale);
     assert.deepStrictEqual(run(entryOrder({ rationale }), { ...auto, cycleTranscript: `${file}.gone` }).violations, [], rationale);
   }
-  // The transcript can't be read: refused by the three checks that read it (fails closed).
+  // The transcript can't be read: refused by the four checks that read it (fails closed).
   // The pinned bar's briefing unreadable: its data's age can't be checked either (briefing-age).
-  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['briefing-age', 'phase2-facts', 'roles-ran', 'skills-at-entry']);
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['briefing-age', 'phase2-facts', 'phase2-size', 'roles-ran', 'skills-at-entry']);
   // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
   assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
   for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));
+});
+
+test('phase2-size: an autonomous entry over the size phase 2 approved is refused; at or under it goes; no readable size refuses; exits and a cycle that needs no phase 2 are unchanged', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.', vwap: { side: 'above' }, candidates: [{ name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: null }] } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
+  } });
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const run = (verdict, input = entryOrder(), cfg = auto) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\n${FACTS}`)].join('\n'));
+    return evaluateOrder({ input, entries: [plan(1)], now: NOW, config: cfg });
+  };
+  const size = r => r.violations.filter(v => v.check === 'phase2-size').map(v => v.message);
+  // At the approved size, or under it: no refusal (the whole order passes).
+  assert.deepStrictEqual(run('VERDICT: APPROVE - size 1, risk $8').violations, []);
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 3, risk $24', entryOrder({ size: 2 }))), []);
+  // Over it: refused, naming both; the Size line's smaller size binds too.
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1, risk $8', entryOrder({ size: 2 }))), ['size 2 is over the 1 risk-manager phase 2 approved: an entry is at most phase 2\'s size (it only ever cuts one).']);
+  assert.strictEqual(size(run('Size: 1 (cut)\nVERDICT: APPROVE - size 2, risk $16', entryOrder({ size: 2 }))).length, 1);
+  // No readable size on the approval: refused (fails closed).
+  for (const v of ['VERDICT: APPROVE - risk $8', 'VERDICT: APPROVE - size 0', 'VERDICT: APPROVE - size 1.5', 'VERDICT: APPROVE - size <n>']) {
+    assert.match(size(run(v))[0] || '', /approval states no size the gate can read/, v);
+  }
+  // A size the order doesn't state as a number: refused.
+  assert.strictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 'one' }))).length, 1);
+  // Risk-reducing orders never reach it, whatever phase 2 said.
+  for (const rationale of ['[exit] flatten', '[protect] stop for the long at 21480']) {
+    assert.deepStrictEqual(run('VERDICT: APPROVE - risk $8', entryOrder({ rationale, size: 5 })).violations, [], rationale);
+  }
+  // No phase 2 required (not a runner's cycle, or not autonomous): no phase2-size check, as before.
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 2 }), { ...auto, cycle: null })), []);
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 2 }), { ...auto, autonomous: false })), []);
+  // A veto is roles-ran's refusal, not this one's (no approving report to size).
+  assert.deepStrictEqual(size(run('VERDICT: VETO - room')), []);
+  // The cycle's transcript can't be read: refused, naming it.
+  assert.match(size(evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config: { ...auto, cycleTranscript: `${file}.gone` } }))[0] || '', /The cycle's transcript can't be read \(ENOENT\), so the gate can't check the size risk-manager phase 2 approved/);
 });
 
 test('phase2-facts: a soft read alone never refuses (the room short, the VWAP on the other side, a mixed read); a false trend fact still does (fix/confluence-not-vetoes)', () => {
@@ -2985,6 +3028,37 @@ test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it 
   const r = lcEval(home, LC.order(), { strategies: paper });
   assert.deepStrictEqual(checks(r), ['strategy']);
   assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
+});
+
+test('trade_lifecycle: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22): record 8, phase 2 at 1, only 1 goes; phase 2 at or over the record\'s, only the record\'s; no phase 2, equality; exits unaffected', () => {
+  // Record 8 at $55.50 a contract ($444): the registry's trade_lifecycle under a $1000 cap.
+  const wide = LC_REGISTRY.map(x => (x.name === 'trade_lifecycle' ? { ...x, risk: { ...x.risk, max_risk_usd: 1000 } } : x));
+  const home = lcHome({ size: 8, maxRiskUsd: 1000 });
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const auto = { autonomous: true, cycle: 'full', cycleTranscript: file };
+  const reads = (verdict, size, cfg = auto) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\nFACTS: none`)].join('\n'));
+    return lcEval(home, LC.order({ size }), { strategies: wide, config: cfg }).violations.filter(v => v.check === 'composed-reads').map(v => v.message);
+  };
+  const V1 = 'Size: 1 (record 8 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $55.50';
+  assert.deepStrictEqual(reads(V1, 1), []);
+  for (const n of [2, 7, 8]) assert.match(reads(V1, n)[0] || '', new RegExp(`size ${n} is not 1, risk-manager phase 2's cut of the record's 8`), String(n));
+  for (const a of [8, 12]) {
+    assert.deepStrictEqual(reads(`VERDICT: APPROVE - size ${a}, risk $444`, 8), [], String(a));
+    assert.match(reads(`VERDICT: APPROVE - size ${a}, risk $444`, 1)[0] || '', /size 1 is not the size the record states \(8\)/, String(a));
+  }
+  // No phase 2 known (not an autonomous cycle; an approval with no readable size): the record's size, as before.
+  assert.deepStrictEqual(reads(V1, 8, {}), []);
+  assert.match(reads(V1, 1, {})[0] || '', /size 1 is not the size the record states \(8\)/);
+  assert.match(reads('VERDICT: APPROVE - risk $55.50', 1)[0] || '', /size 1 is not the size the record states \(8\)/);
+  // Risk-reducing orders never reach it.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${V1}\nFACTS: none`)].join('\n'));
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 8, rationale }, { strategies: wide, config: auto });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
 });
 
 test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest local price beyond the plan\'s stop, or past its entry against it over the share, refuses; the trade\'s way, or within the share, goes; exits always go', () => {

@@ -48,6 +48,7 @@ const ADDED_ROWS = [
   { row: '`[briefing-age] Stale data: …` (or no bar briefing)', reason: 'fix/skills-match-code: the gate\'s stale-briefing refusal (order-gate.js briefingAgeRefusal) had no row' },
   { row: '`[modify-size] …`', reason: 'fix/skills-match-code: the modify_order size refusal (order-gate.js evaluateModify, account-gate.js) had no row' },
   { row: '`[composed-reprice] …`', reason: 'fix/skills-match-code: a composed entry repriced worse than its record (order-gate.js evaluateModify) had no row' },
+  { row: '`[phase2-size] size <n> is over the <m> risk-manager phase 2 approved`', reason: 'fix/phase2-verdict-format (owner-approved 2026-10-22): the gate\'s new tighten-only phase2-size refusal (order-gate.js, roles-ran.js sizeRefusal)' },
 ];
 
 // Each piece's rows, by label (or the message's start when it has no label), in order: a row in the wrong piece fails.
@@ -55,7 +56,7 @@ const ROWS = {
   'gate-refusals': ['Blocked by trading harness', 'order-pending', 'replay-clock', 'stop-defined', 'account-required', 'contract-specs', 'contract-specs', 'contract-specs', 'order-pending', 'loss-streak', 'briefing-age'],
   'gate-refusals-limits': ['combine', 'combine', 'combine', 'prop-account-attempt', 'policy', 'strategy', 'strategy', 'strategy', 'strategy', 'max-order-size', 'max-order-size', 'max-risk', 'max-risk'],
   'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run', 'modify-size', 'composed-reprice'],
-  'gate-refusals-cycle': ['roles-ran', 'phase2-facts'],
+  'gate-refusals-cycle': ['roles-ran', 'phase2-facts', 'phase2-size'],
 };
 
 const homeTexts = () => HOMES.map(skill);

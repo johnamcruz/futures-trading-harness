@@ -55,12 +55,12 @@ const deskReport = role => ({
 });
 
 /** Phase 2 as the risk manager plays it: the briefing, order_plan on the record, then its verdict and FACTS. */
-const phase2 = (w, { verdict = 'APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend', facts = null } = {}) => prompt => {
+const phase2 = (w, { verdict = 'APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend', facts = null, before = '' } = {}) => prompt => {
   const bars = /are in (\S+) \(get_bars format\)/.exec(prompt)[1];
   return [
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
     { harness: 'order_plan', args: { bars, symbol: 'MNQ', strategy: 'trade_lifecycle', side: 'long', accountId: 7 } },
-    { result: () => `Phase 2 on the trade_lifecycle long plan for MNQ.\nVERDICT: ${verdict}\nFACTS: ${facts || D.trueFacts(w).join('; ')}` },
+    { result: () => `Phase 2 on the trade_lifecycle long plan for MNQ.\n${before}VERDICT: ${verdict}\nFACTS: ${facts || D.trueFacts(w).join('; ')}` },
   ];
 };
 
@@ -237,6 +237,61 @@ test('entry workflow: phase 2 vetoes: no trade-executor runs, nothing reaches th
   const line = D.cycleLines(w).at(-1);
   assert.deepStrictEqual([line.entry.outcome, line.entry.ran], ['vetoed', ['risk-manager']]);
   assert.strictEqual(line.factCheck.reports, 1, 'a veto\'s facts are checked and logged too');
+  // The cycle's record keeps phase 2's report, for the next diagnosis.
+  const rec = JSON.parse(fs.readFileSync(line.file, 'utf8')).entry;
+  assert.match(rec.phase2.text, /VERDICT: VETO - room: the 1h swing is too close, stand aside/);
+  assert.strictEqual(rec.phase2.chars, rec.phase2.text.length);
+});
+
+test('entry workflow: an APPROVE line the gate\'s reading takes as a veto ("Decision: cut to size 1"): no executor, nothing at the broker; recorded as vetoed, the result naming the reading\'s reason', async () => {
+  const w = D.world();
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { phase2: phase2(w, { before: 'Decision: cut to size 1\n' }) });
+  const r = await D.pass(w, at, headPlanned(w), { runRole: R.runRole });
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor'));
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
+  assert.deepStrictEqual(journal(w).filter(e => e.kind === 'plan'), []);
+  assert.strictEqual(r.ran[0].result, 'CYCLE RESULT: no-trade - risk-manager phase 2\'s report reads as a veto (a decision line decides cut, not APPROVE): VERDICT: APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend');
+  assert.strictEqual(r.state.history.at(-1).action, 'vetoed', 'the history reads it as the gate does');
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.entry.outcome, 'vetoed');
+  const rec = JSON.parse(fs.readFileSync(line.file, 'utf8')).entry;
+  assert.strictEqual(rec.why, 'phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1")');
+  assert.match(rec.phase2.text, /^Phase 2 on the trade_lifecycle long plan for MNQ\.\nDecision: cut to size 1\nVERDICT: APPROVE/);
+});
+
+test('entry workflow: phase 2\'s approved size sets the order: over the record\'s 2 the broker gets 2; at 1 (its cut) exactly 1, the gate allowing it', async () => {
+  // Phase 2 approves 5 on a record of 2: the order is the record's 2, at the broker.
+  let w = D.world();
+  let at = decisionAt(FIRED_BAR);
+  let R = roles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 5, risk $230.00, trade_lifecycle long with the trend' }) });
+  const first = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  assert.match(first.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 2 MNQ/);
+  const sent = D.placedAtBroker(w);
+  assert.deepStrictEqual(sent.map(c => c.args.size), [2]);
+  assert.strictEqual(requestedArgs(R.runs.at(-1).request).size, 2);
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, e.size]), [['allowed', 2]]);
+  assert.match(journal(w).filter(e => e.kind === 'plan')[0].text, /risk \$92; size 2: phase 2 approved 5, capped at the record's 2;/);
+  assert.strictEqual(D.position(w).size, 2);
+  // Phase 2 approves 1 on a record of 2 (its cut, owner-approved 2026-10-22): the broker gets exactly 1, the record's
+  // brackets, the gate's composed-reads allowing it; the journal plan and the trade's records say the cut.
+  w = D.world();
+  at = decisionAt(FIRED_BAR);
+  R = roles(w, at, { phase2: phase2(w, { before: 'Size: 1 (record 2 cut to 1: no reviewed trades yet)\n', verdict: 'APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend' }) });
+  const r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  const cut = D.placedAtBroker(w);
+  assert.deepStrictEqual(cut.map(c => [c.args.size, c.args.stopLossBracket.ticks, c.args.takeProfitBracket.ticks]), [[1, 92, 338]]);
+  const args = requestedArgs(R.runs.at(-1).request);
+  assert.strictEqual(args.size, 1);
+  assert.match(args.rationale, /, 1 MNQ risks \$46\.00, record /);
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.strictEqual(rec.plan.size, 2, 'the record keeps its own size');
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, e.size, (e.violations || []).map(v => v.check)]), [['allowed', 1, []]]);
+  assert.match(journal(w).filter(e => e.kind === 'plan')[0].text, /long 1 MNQ: .*risk \$46; size 1: phase 2 cut the record's 2; compose record /);
+  assert.strictEqual(D.position(w).size, 1);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ \(phase 2 cut the record's 2\) \(the runner's entry: phase 2 approved, the order filled\)$/);
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(line.file, 'utf8')).entry.size, { approved: 1, record: 2, ordered: 1 });
 });
 
 test('entry workflow: a stale briefing by the time the trade-executor sends (the cycle took too long): the gate refuses [briefing-age], nothing is placed, the cycle is blocked', async () => {

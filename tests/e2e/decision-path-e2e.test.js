@@ -462,7 +462,7 @@ test('decision path, position open: a stop move, a partial close, the stop cut t
   // The new entry: refused by the entry checks the exits never meet (the transcript can't be read, a position is open).
   const decisions = D.gateLog(w).filter(g => g.tool === 'place_order').slice(1);
   assert.deepStrictEqual(decisions.map(g => g.decision), ['blocked', 'allowed']);
-  assert.deepStrictEqual(decisions[0].violations.map(v => v.check), ['trigger-fired', 'skills-at-entry', 'roles-ran', 'phase2-facts', 'briefing-age', 'review-before-next-entry', 'position-open']);
+  assert.deepStrictEqual(decisions[0].violations.map(v => v.check), ['trigger-fired', 'skills-at-entry', 'roles-ran', 'phase2-facts', 'phase2-size', 'briefing-age', 'review-before-next-entry', 'position-open']);
   // The gate's log: the only risk-reducing call held is the loosened stop, by its own rule.
   const entry = g => g.tool === 'place_order' && !/^\s*\[(exit|protect)\]/i.test(String(g.rationale || ''));
   const held = D.gateLog(w).filter(g => g.decision === 'blocked' && !entry(g));

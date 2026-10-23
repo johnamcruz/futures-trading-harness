@@ -17,7 +17,12 @@
  *   3. phase `review`: risk-manager phase 2 on the record (orchestrate/requests.js review), its run recorded with its
  *      wall-clock times (the gate orders it after phase 1 and the analysts, as a launch);
  *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
- *      VETO is the cycle's no-trade with its line); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
+ *      with the reading's reason: roles-ran.js approvalReadAsVeto); phase 2's report kept in the entry record
+ *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); phase 2's approved size (roles-ran.js approvedSize:
+ *      none readable is a no-trade) sets the order's: exactly the smaller of it and the record's (a cut is built by
+ *      order_plan at it, as the gate's composed-reads takes it), never more than phase 2 approved
+ *      (`size`: { approved, record, ordered }); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
@@ -51,7 +56,7 @@
 
 const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
-const { verdictOf } = require('./trading/roles-ran');
+const { verdictOf, approvalReadAsVeto, approvedSize } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -261,7 +266,8 @@ async function runEntry(deps, c) {
     log(`the entry: ${drift}: a process failure; nothing runs`, 'error');
     return say('process-failure', c.result, { failure: drift, record: rec.id });
   }
-  const label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
+  // The entry as the results name it: the record's size until the order is built, then the size ordered (a cut named).
+  let label = `${STRATEGY} ${rec.side} ${rec.plan && rec.plan.size} ${rec.symbol || c.symbol}`;
   info.record = rec.id;
   if (!c.rolesFile) {
     log('the entry: no role record for the cycle: nothing runs', 'error');
@@ -325,13 +331,33 @@ async function runEntry(deps, c) {
     const rev = (phases[0] && phases[0].results[0]) || null;
     if (!rev) { stop = { outcome: 'no-trade', why: 'phase 2 did not run' }; return { stop: stop.why }; }
     const held = record(rev);
+    // Phase 2's report as it came, for the next diagnosis (the cycle log's entry record), cut at the report cache's
+    // limit (config/runner.json prompt.reportMaxText).
+    if (typeof rev.text === 'string' && rev.text) {
+      const max = require('./tunables').runner().prompt.reportMaxText;
+      info.phase2 = { chars: rev.text.length, text: rev.text.slice(0, max), ...(rev.text.length > max ? { cut: true } : {}) };
+    }
     if (!rev.ok) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 ${rev.stop}${rev.why ? ` (${rev.why})` : ''}` }; return { stop: stop.why }; }
     if (!held) { stop = { outcome: 'no-trade', why: 'risk-manager phase 2 could not be recorded for the gate' }; return { stop: stop.why }; }
     const line = verdictLine(rev.text);
-    if (verdictOf(rev.text) !== 'APPROVE') { stop = { outcome: 'vetoed', why: line || 'phase 2 did not approve' }; return { stop: stop.why }; }
+    if (verdictOf(rev.text) !== 'APPROVE') {
+      // An APPROVE line the gate's reading still takes as a veto (roles-ran.js approvalReadAsVeto): the same outcome,
+      // with the parser's reason, so the cause shows (never the APPROVE line as a veto's reason).
+      const misread = approvalReadAsVeto(rev.text);
+      stop = misread ? { outcome: 'vetoed', why: `phase 2's report reads as a veto: ${misread.why}`, readAs: misread } : { outcome: 'vetoed', why: line || 'phase 2 did not approve' };
+      if (misread) log(`the entry: ${stop.why}: no order`, 'error');
+      return { stop: stop.why };
+    }
+    // Phase 2's size caps the order (it can only shrink it): an approval without a size the runner can read orders nothing.
+    const approved = approvedSize(rev.text);
+    if (approved.error) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved without a size the runner can read (${approved.error})` }; return { stop: stop.why }; }
     const roleEnv = childEnv(cfg, root, env, roleContext);
+    // The order is exactly the smaller of the record's size and phase 2's (owner-approved 2026-10-22): a cut is built by
+    // order_plan at it (the record's brackets, the risk for the size ordered), as the gate's composed-reads takes it.
+    const recSize = rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null;
+    const cutTo = recSize !== null && approved.size < recSize ? approved.size : null;
     try {
-      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
+      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), ...(cutTo !== null ? { size: cutTo } : {}) }, { env: roleEnv, root, tool: true });
     } catch (err) {
       // Only an expired record's refusal is timed as the order's moment (the record ran out by then).
       if (/\bexpired\b/.test(err.message)) info.timing.orderMs = sinceClose(wallNow());
@@ -339,6 +365,14 @@ async function runEntry(deps, c) {
       stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
     }
+    // Never more than phase 2 approved: order_plan's size is checked against it (fails closed).
+    const ordered = order && order.args ? order.args.size : undefined;
+    const recordSize = order && order.plan && Number.isInteger(order.plan.recordSize) ? order.plan.recordSize : ordered;
+    if (!(Number.isInteger(ordered) && ordered >= 1)) { stop = { outcome: 'no-trade', why: `order_plan gave no size (${JSON.stringify(ordered)})` }; return { stop: stop.why }; }
+    info.size = { approved: approved.size, record: recordSize, ordered: ordered <= approved.size ? ordered : null };
+    if (ordered > approved.size) { stop = { outcome: 'no-trade', why: `order_plan's size ${ordered} is over the ${approved.size} risk-manager phase 2 approved` }; return { stop: stop.why }; }
+    if (ordered < recordSize) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol} (phase 2 cut the record's ${recordSize})`;
+    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut the record's ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
     const late = await lateCheck(order, roleEnv);
@@ -352,7 +386,7 @@ async function runEntry(deps, c) {
       const p = order.plan;
       await client.journalAdd({
         kind: 'plan', contractId: order.args.contractId, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), tags: [`setup:${tag}`, contractRoot(order.args.contractId)],
-        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; compose record ${p.record}; phase 2: ${short(line)}`,
+        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2: ${short(line)}`,
       });
     } catch (err) {
       stop = { outcome: 'no-trade', why: `the journal plan could not be written (${err.message})` };
@@ -402,6 +436,9 @@ async function runEntry(deps, c) {
       log(`the entry: ${stop.why}: a pass, no executor run`);
       return say('late', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}`, { why: stop.why });
     }
+    // A misread approval's result names the parser's reason without its quote (the role's words aren't the result's
+    // reasons, which the scorecard checks); the entry's `why` keeps the quote.
+    if (stop.outcome === 'vetoed' && stop.readAs) return say('vetoed', `CYCLE RESULT: no-trade - risk-manager phase 2's report reads as a veto ${short(`(${stop.readAs.why.replace(/ \("[^]*"\)$/, '')}): ${stop.readAs.line}`)}`, { why: stop.why });
     if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
     log(`the entry: ${stop.why}: no order`, 'error');
     return say('no-trade', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}: no order`, { why: stop.why });

@@ -430,6 +430,18 @@ async function deskReads({ cfg, root, env, context, store, roles, symbols, signa
 }
 
 /**
+ * A desk role's report as the cycle log's desk record keeps it, for the next diagnosis: its text (cut at the report cache's
+ * limit, config/runner.json prompt.reportMaxText); a run that didn't count, each attempt's text and why the checks
+ * refused it (`tries`: [{ text, cut?, rejected }], at most the workflow's retries + 1).
+ */
+function deskText(r) {
+  const max = require('./tunables').runner().prompt.reportMaxText;
+  const cut = t => { const s = String(t || ''); return s.length > max ? { text: s.slice(0, max), cut: true } : { text: s }; };
+  const tries = Array.isArray(r.tries) ? r.tries : [];
+  return { ...cut(r.text), ...(r.ok ? {} : { tries: tries.map(t => ({ ...cut(t.text), rejected: t.why || t.stop })) }) };
+}
+
+/**
  * The runner's desk (docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The desk, the first workflow"): each full trade cycle the
  * runner runs the desk's roles the report cache didn't serve, as workflows/desk/WORKFLOW.md says, through the
  * orchestration engine (orchestrate/engine.js) on `runRole` (cycle-run.js: one role's harness run), at once up to
@@ -441,7 +453,7 @@ async function deskReads({ cfg, root, env, context, store, roles, symbols, signa
  *     `context` the cycle's own (its bars, lanes, start: each role reads the cycle's bar), `signal` the cycle's budget
  *     for the desk, `budgetMs` its length: no role's own run outlasts it; each report as the prompt and the report cache
  *     take it ({ role, text, at, until, lookups, lookupsKey, source: 'desk' }); `missing` the roles whose result didn't
- *     count. Each role's run (its last attempt's wall-clock start and end, `wallNow`, its report, its lookups, whether it
+ *     count; `results` each role's stop, attempts, ms, skills and report (deskText: its text, a rejected run's tries). Each role's run (its last attempt's wall-clock start and end, `wallNow`, its report, its lookups, whether it
  *     counted) is written to the cycle's role record (`rolesFile`, runner-roles.js), which the head trader's run gets as
  *     FTH_CYCLE_ROLES: the order gate credits the desk from it. `recorded`: the roles whose counted run it holds (a
  *     record that can't be written credits none: logged, and the head trader may launch them).
@@ -499,7 +511,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
           log(`the desk: ${r.role}'s run could not be recorded for the gate (${err.message}): the head trader may launch it`);
         }
       }
-      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.skills ? { skills: r.skills } : {}) })), rolesFile, recorded };
+      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.skills ? { skills: r.skills } : {}), ...deskText(r) })), rolesFile, recorded };
     },
   };
 }

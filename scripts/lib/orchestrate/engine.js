@@ -6,7 +6,8 @@
  *
  *   createRun({ engine, signal, now, onEvent })   one run's primitives:
  *     agent(role, request, { retries, timeoutMs, accept, meta })  one role's run, as an envelope that never rejects:
- *         { ok, role, text, tools, attempts, ms, stop, why, output, transcript, meta }, `stop` one of completed (it ran and
+ *         { ok, role, text, tools, attempts, tries, ms, stop, why, output, transcript, meta } (`tries`: each attempt that ran,
+ *         { text, stop, why }), `stop` one of completed (it ran and
  *         passed every acceptance check), invalid (it ran, a check failed), failed, timed_out, cancelled. A run that
  *         isn't `completed` is tried again up to `retries` times (never once cancelled).
  *     parallel(tasks, { concurrency })   the tasks (functions returning a promise), at most `concurrency` at once; the
@@ -45,6 +46,8 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
     emit({ type: 'agent-start', seq: id, phase: current, role });
     let last = { stop: 'failed', why: 'not run', output: '', transcript: null, text: '', tools: [] };
     let attempts = 0;
+    // Each attempt as it ended (its report, its stop, why), so a rejected report can be read after the run.
+    const ran = [];
     for (let tries = 0; tries <= retries; tries += 1) {
       if (cancelled()) { last = { ...last, stop: 'cancelled', why: 'the run was cancelled' }; break; }
       attempts += 1;
@@ -53,17 +56,19 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
         res = await engine.run(role, request, { signal, timeoutMs });
       } catch (err) {
         last = { stop: 'failed', why: `the run failed (${err && err.message ? err.message : err})`, output: '', transcript: null, text: '', tools: [] };
+        ran.push({ text: '', stop: last.stop, why: last.why });
         continue;
       }
       const base = { output: (res && res.output) || '', transcript: (res && res.transcript) || null, text: (res && typeof res.text === 'string' ? res.text : ''), tools: Array.isArray(res && res.tools) ? res.tools.filter(t => typeof t === 'string') : [], lookups: Array.isArray(res && res.lookups) ? res.lookups.filter(t => typeof t === 'string') : [], ...(res && res.skills && typeof res.skills === 'object' ? { skills: res.skills } : {}) };
-      if (cancelled()) { last = { ...base, stop: 'cancelled', why: 'the run was cancelled' }; break; }
-      if (!res || !res.ok) { last = { ...base, stop: res && res.timedOut ? 'timed_out' : 'failed', why: res && res.timedOut ? 'timed out' : 'the run failed' }; continue; }
+      if (cancelled()) { last = { ...base, stop: 'cancelled', why: 'the run was cancelled' }; ran.push({ text: base.text, stop: last.stop, why: last.why }); break; }
+      if (!res || !res.ok) { last = { ...base, stop: res && res.timedOut ? 'timed_out' : 'failed', why: res && res.timedOut ? 'timed out' : 'the run failed' }; ran.push({ text: base.text, stop: last.stop, why: last.why }); continue; }
       // A check that throws is a failed check (its reason the error), never a rejection: every start has its end.
       const why = accept.map(c => { try { return c(role, base); } catch (err) { return `a check failed (${err && err.message ? err.message : err})`; } }).find(Boolean) || null;
       last = why ? { ...base, stop: 'invalid', why } : { ...base, stop: 'completed', why: null };
+      ran.push({ text: base.text, stop: last.stop, why: last.why });
       if (!why) break;
     }
-    const env = { ok: last.stop === 'completed', role, text: last.text, tools: last.tools, lookups: last.lookups || [], ...(last.skills ? { skills: last.skills } : {}), attempts, ms: now() - started, stop: last.stop, why: last.why, output: last.output, transcript: last.transcript, meta };
+    const env = { ok: last.stop === 'completed', role, text: last.text, tools: last.tools, lookups: last.lookups || [], ...(last.skills ? { skills: last.skills } : {}), attempts, tries: ran, ms: now() - started, stop: last.stop, why: last.why, output: last.output, transcript: last.transcript, meta };
     emit({ type: 'agent-end', seq: id, phase: current, role, stop: env.stop, attempts, ms: env.ms, why: env.why });
     return env;
   }

@@ -6,7 +6,8 @@
  * harness clock, ready for place_order. Read-only: it never places an order;
  * the order gate still checks every number it gives.
  *
- *   plan { file, symbol, strategy, side, accountId }   strategy and side: the caller's choice (both required)
+ *   plan { file, symbol, strategy, side, accountId, size }   strategy and side: the caller's choice (both required); `size`
+ *       a composed plan's cut only (the runner's entry: phase 2 approved fewer), from 1 to the record's size
  *
  * A calculator, not a decision: the caller picks the strategy and the side
  * (from the skills and STRATEGY.md) and decides whether to trade; order_plan
@@ -146,7 +147,7 @@ function checkBars(bars, timeframe, now, env) {
   return norm[norm.length - 1].t;
 }
 
-function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
+function plan({ file, symbol, strategy: name, side, accountId, size } = {}, ctx) {
   const c = context(ctx);
   const root = String(symbol || '').toUpperCase();
   if (!/^[A-Z0-9]{1,8}$/.test(root)) throw new Error(say(c, '--symbol <ROOT>: a contract root, e.g. MNQ', 'symbol: a contract root, e.g. MNQ'));
@@ -164,7 +165,8 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   if (notTraded) throw new Error(`${name} ${notTraded}`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
   const composed = s.signal === 'composed' ? s : s.signal === 'policy' ? strategies.find(x => (s.strategies || []).includes(x.name) && x.signal === 'composed' && x.valid) : null;
-  if (composed) return composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected });
+  if (composed) return composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected, size });
+  if (size !== undefined && size !== null) throw new Error(`size: only a composed plan takes one (phase 2's cut); ${name} sizes itself`);
   const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now, selected });
@@ -184,12 +186,12 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
 }
 
 /** order_plan for a composed trade (trading/lifecycle-order.js), with the gate's prop checks on its exact arguments in an attempt. */
-function composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected }) {
+function composedPlanOp(c, { s, composed, root, want, now, accountId, strategies, selected, size = null }) {
   const home = harnessHome(c.env);
   const specOf = liveSpecs(c.env);
   const r = composedOrder({
     home, root, side: want, now, cycleBars: loadConfig(c.env).cycleBars, strategy: composed, strategies, accounts: loadAccounts(c.root, c.env).accounts,
-    specOf, accountId: Number.isInteger(accountId) ? accountId : null, selected, paper: c.env.FTH_PAPER === '1',
+    specOf, accountId: Number.isInteger(accountId) ? accountId : null, selected, paper: c.env.FTH_PAPER === '1', size,
   });
   if (s.signal === 'policy' && !r.policy) throw new Error(`${s.name} has no running attempt: plan ${composed.name} itself`);
   if (r.policy) {

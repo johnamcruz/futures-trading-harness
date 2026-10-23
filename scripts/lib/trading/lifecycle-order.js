@@ -12,9 +12,11 @@
  *   - in an attempt: the lower of that cap and the policy's verdict on the record (prop/composed-verdict.js,
  *     recorded once per record) and the size budget now; the order goes under the policy's tag on the verdict's
  *     contract, which must be the record's (a size is a number of its own contract).
- * A stated size over the ceiling is refused, never cut: the model composes again at or below it.
+ * A stated size over the ceiling is refused, never cut: the model composes again at or below it. `size` (the runner's
+ * entry only: phase 2 approved fewer) cuts the order to it, a whole size from 1 to the record's; the brackets are the
+ * record's, the risk worked out for the size ordered (the gate's composed-reads takes exactly that cut).
  *
- *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected })
+ *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected, size })
  *       { args, line, plan, policy, account, verdict } or throws the refusal
  */
 
@@ -37,7 +39,7 @@ function attemptPolicy(home, strategy, strategies, root) {
   return p;
 }
 
-function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, strategy, strategies = [], accounts = [], specOf, accountId = null, selected = null, paper = false }) {
+function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, strategy, strategies = [], accounts = [], specOf, accountId = null, selected = null, paper = false, size = null }) {
   const cycleBar = (cycleBars || {})[familyRoot(root)] || null;
   if (!cycleBar) throw new Error(`no cycle bar for ${familyRoot(root)} (FTH_CYCLE_BARS): a composed trade is planned only in the runner's cycle, on its bar`);
   const got = briefingFor(home, root, { cycleBar, now });
@@ -48,12 +50,16 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   const held = rec.plan && typeof rec.plan === 'object' ? rec.plan : {};
   const stated = Number.isInteger(held.size) && held.size >= 1 ? held.size : null;
   if (stated === null) throw new Error('the compose record states no size: compose again with your size');
+  // A cut (the runner's entry: risk-manager phase 2 approved fewer): a whole size from 1 to the record's, never more.
+  if (size !== null && size !== undefined && !(Number.isInteger(size) && size >= 1 && size <= stated)) throw new Error(`size ${JSON.stringify(size)}: a cut is a whole size from 1 to the record's ${stated}; no order`);
+  const ordered = size === null || size === undefined ? stated : size;
+  const cutWhy = ordered < stated ? `phase 2 cut the record's ${stated}` : null;
   const policy = attemptPolicy(home, strategy, strategies, root);
   const spec = specOf(root);
   if (!spec) throw new Error(`no tick specs for ${root}; no order`);
   const sign = side === 'long' ? 1 : -1;
-  const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: 'limit', size: stated };
-  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, limitPrice: held.entry && held.entry.price, stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } }, now, cycleBars, entries: [], specOf });
+  const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: 'limit', size: ordered };
+  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, limitPrice: held.entry && held.entry.price, stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null });
   if (first.message) throw new Error(`the order gate would refuse it: [composed-reads] ${first.message}`);
   const p = first.plan;
   const tick = spec.tickSize;
@@ -91,19 +97,19 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   }
   if (stated > ceiling) throw new Error(`your stated size ${stated} is over the ceiling ${ceiling} (${ceilingWhy}): compose again at ${ceiling} or less${ceiling < 1 ? ' (none fits: pass)' : ''}; the size is never cut for you`);
   const tag = policy ? `setup:${policy.name} ${side} ${strategy.name}` : `setup:${strategy.name} ${side}`;
-  const risk = perContract * stated;
-  const rationale = `${tag} limit ${fmt(p.entry.price, tick)} (the record's entry price), stop ${fmt(p.stop.price, tick)} (${p.stop.ticks} ticks, one beyond ${fmt(p.stop.level, tick)}), target ${fmt(p.target.price, tick)} (${p.target.ticks} ticks, ${p.rr}R), ${stated} ${contract} risks ${usd(risk)}, record ${rec.id}`;
+  const risk = perContract * ordered;
+  const rationale = `${tag} limit ${fmt(p.entry.price, tick)} (the record's entry price), stop ${fmt(p.stop.price, tick)} (${p.stop.ticks} ticks, one beyond ${fmt(p.stop.level, tick)}), target ${fmt(p.target.price, tick)} (${p.target.ticks} ticks, ${p.rr}R), ${ordered} ${contract} risks ${usd(risk)}, record ${rec.id}`;
   const args = { ...draft, contractId: contract, limitPrice: p.entry.price, stopLossBracket: { ticks: p.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: p.target.ticks, type: 'limit' }, rationale };
   const line = [
-    `${strategy.name} ${side}: ${stated} ${contract} limit at ${fmt(p.entry.price, tick)} (the record's entry price, valid until ${rec.expiresAt})`,
+    `${strategy.name} ${side}: ${ordered} ${contract} limit at ${fmt(p.entry.price, tick)} (the record's entry price, valid until ${rec.expiresAt})`,
     `stop ${fmt(p.stop.price, tick)}: ${p.stop.ticks} ticks, stopLossBracket.ticks ${p.stop.ticks}`,
     `target ${fmt(p.target.price, tick)}: ${p.target.ticks} ticks (${p.rr}R), takeProfitBracket.ticks ${p.target.ticks}`,
-    `risk ${usd(risk)} = ${stated} x ${p.stop.ticks} ticks x ${usd(spec.tickValue)}/tick (before fees)`,
-    `size ${stated}: yours, at or under the ceiling ${ceiling} (${ceilingWhy})`,
+    `risk ${usd(risk)} = ${ordered} x ${p.stop.ticks} ticks x ${usd(spec.tickValue)}/tick (before fees)`,
+    cutWhy ? `size ${ordered}: ${cutWhy} (yours ${stated}, at or under the ceiling ${ceiling}: ${ceilingWhy})` : `size ${stated}: yours, at or under the ceiling ${ceiling} (${ceilingWhy})`,
     ...(strategy.status === 'active' ? [] : [`status ${strategy.status}: plan only, the gate refuses an entry`]),
     ...(paper ? ['paper run: plan only'] : []),
   ].join(' | ');
-  return { args, line, plan: { strategy: strategy.name, side, contract, size: stated, entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
+  return { args, line, plan: { strategy: strategy.name, side, contract, size: ordered, ...(cutWhy ? { recordSize: stated } : {}), entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
 }
 
 module.exports = { composedOrder, attemptPolicy };

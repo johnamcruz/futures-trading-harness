@@ -31,6 +31,9 @@ test('agent: one role\'s run as an envelope that never rejects: completed, inval
   const v = createRun({ engine: fake({ x: good }) });
   const x = await v.agent('x', 'req', { retries: 2, accept: [() => null, (role, res) => (res.text === 'report' ? 'not good enough' : null)] });
   assert.deepStrictEqual([x.ok, x.stop, x.why, x.attempts], [false, 'invalid', 'not good enough', 3]);
+  // Each attempt kept as it ended (its report and why), one per attempt.
+  assert.deepStrictEqual(x.tries, Array(3).fill({ text: 'report', stop: 'invalid', why: 'not good enough' }));
+  assert.deepStrictEqual(d.tries.map(t => [t.stop, t.why]), [['failed', 'the run failed (spawn)']]);
   assert.ok(STOPS.includes(x.stop));
 });
 

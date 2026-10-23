@@ -231,6 +231,7 @@ const passCycle = (w, why, o = {}) => [...roundSteps(w, o), ...entryLoads(w).map
  *   own arguments, manualArgs)         lookups: the required lookups to make (default REQUIRED_LOOKUPS)
  *   pre: a step before anything else
  *   size: the order's size (default order_plan's)          result: the result line
+ *   approved: the size phase 2 approves (default `size`, else 1)
  */
 function entryCycle(w, o = {}) {
   // Read when phase 2 reports, from the briefing the runner wrote for this bar.
@@ -246,7 +247,7 @@ function entryCycle(w, o = {}) {
     ...strategyReads(w).filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
     ...(o.manual ? [] : [{ harness: 'order_plan', args: ctx => ({ bars: path.join(ctx.env.FTH_BARS_DIR, 'MNQ-3m.json'), symbol: 'MNQ', strategy: SETUP.strategy, side: SETUP.side, accountId: 7 }) }]),
     ...(o.plan === false ? [] : [{ broker: 'journal_add', args: ctx => ({ kind: 'plan', contractId: 'MNQ', tags: [`setup:${SETUP.strategy}`, 'MNQ'], text: `${SETUP.strategy} ${SETUP.side}, stop ${plan(ctx).stopPrice}` }) }]),
-    ...roleStep(o, 'risk-manager', () => `Phase 2 on the ${SETUP.strategy} ${SETUP.side} plan for MNQ.\nVERDICT: ${verdict} - size 1\nFACTS: ${facts()}`, 'phase2'),
+    ...roleStep(o, 'risk-manager', () => `Phase 2 on the ${SETUP.strategy} ${SETUP.side} plan for MNQ.\nVERDICT: ${verdict} - size ${o.approved || o.size || 1}\nFACTS: ${facts()}`, 'phase2'),
     ...(o.act ? [{ act: o.act }] : []),
     ...(verdict === 'APPROVE' ? [{ executor: [{ broker: 'place_order', args: ctx => ({ ...plan(ctx).args, ...(o.size ? { size: o.size } : {}), rationale: rationale(plan(ctx)) }) }] }] : []),
     { result: o.result || (verdict === 'APPROVE' ? `CYCLE RESULT: executed - ${SETUP.strategy} ${SETUP.side} MNQ 1` : `CYCLE RESULT: no-trade - risk-manager vetoed the ${SETUP.strategy} ${SETUP.side}`) },
