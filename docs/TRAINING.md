@@ -454,8 +454,8 @@ never mixes a combine run, a drawn-state run and a stage-1 run.
 
 ```json
 {
-  "runId": "s2-combine-1", "stage": 2, "start": "2022-04-04T13:30:00Z", "end": "2022-08-01T00:00:00Z",
-  "combine": { "account": "<prop_portfolio's account>", "attempts": ["2022-04-04", "2022-05-16", "2022-06-27"], "maxSessions": 30 },
+  "runId": "s2-combine-1", "stage": 2, "start": "2022-04-04T13:30:00Z", "end": "2022-08-12T00:00:00Z",
+  "combine": { "account": "<prop_portfolio's account>", "attempts": ["2022-04-04", "2022-05-17", "2022-06-30"], "maxSessions": 30 },
   "autotrader": { "...": "the trader's runner config", "sessions": ["09:30-12:00@America/New_York"] }
 }
 ```

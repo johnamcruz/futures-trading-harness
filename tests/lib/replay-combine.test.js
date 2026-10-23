@@ -142,7 +142,7 @@ test('a learning run\'s look names its stage-2 mode, and the validate pool reads
  * plus every scripted P&L after it up to the clock (`pnl`: [{ at, usd }]); end of day records the close (as the runner
  * does). `open(now)` says whether a position is open.
  */
-async function combineRun(w, { pnl = [], open = () => false, applies = true, run = null, resolved = null, maxCycles = Infinity } = {}) {
+async function combineRun(w, { pnl = [], open = () => false, applies = true, run = null, resolved = null, maxCycles = Infinity, failAfter = null } = {}) {
   const { seedRunHome, runReplay } = require('../../scripts/lib/replay/driver');
   const r = run || resolved || w.resolve({});
   if (!run) seedRunHome(r, { root: REPO, userEnv: w.env });
@@ -154,12 +154,15 @@ async function combineRun(w, { pnl = [], open = () => false, applies = true, run
     return Math.round((base.balance + pnl.filter(p => p.at > base.at && p.at <= now).reduce((a, p) => a + p.usd, 0)) * 100) / 100;
   };
   const steps = [];
+  let failing = false;
   const deps = {
     serverCheck: async () => null,
     async step(point, env) {
       const now = env.FTH_REPLAY_NOW;
       const rec = prop.readAttempt(r.paths.runHome, POLICY_ACCOUNT);
       steps.push({ kind: point.kind, day: point.day, t: point.t.toISOString(), balance: balanceAt(now), startedAt: rec && rec.startedAt, days: rec ? rec.days.length : null });
+      // The broker goes down right after this step (`failAfter`: its time): the run stops before it ends its attempt.
+      if (failAfter && point.t.toISOString() === failAfter) failing = true;
       if (point.kind === 'eod') {
         prop.recordEndOfDay(r.paths.runHome, ACCOUNT, balanceAt(now), point.day);
         fs.writeFileSync(path.join(r.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
@@ -168,7 +171,10 @@ async function combineRun(w, { pnl = [], open = () => false, applies = true, run
     },
     async trades() { return []; },
     async open(env) { return open(env.FTH_REPLAY_NOW); },
-    async balance(env) { return balanceAt(env.FTH_REPLAY_NOW); },
+    async balance(env) {
+      if (failing) throw new Error('broker down');
+      return balanceAt(env.FTH_REPLAY_NOW);
+    },
   };
   const logs = [];
   const res = await runReplay({ run: r, baseEnv: w.env, root: REPO, deps, maxCycles, log: m => logs.push(m) });
@@ -237,6 +243,13 @@ test('the driver: a resume keeps the attempt under way and starts none twice; it
   assert.strictEqual(again.res.done, true);
   assert.deepStrictEqual(again.log.map(x => [x.kind, x.attempt, x.outcome || null]), [['start', 1, null], ['end', 1, 'blown'], ['start', 2, null], ['end', 2, 'passed']]);
   assert.strictEqual(JSON.parse(fs.readFileSync(first.run.paths.balanceSchedule, 'utf8')).length, 2);
+  // Stopped right after the run's last step, before its attempt under way ended: the resume ends it, stepping nothing.
+  const v = world();
+  await assert.rejects(combineRun(v, { failAfter: '2022-03-09T20:50:00.000Z' }), /replay refused: can't read the account's balance for the combine attempt \(broker down\)/);
+  assert.deepStrictEqual(C.readLog(v.resolve({}).paths.runDir).map(x => [x.kind, x.attempt]), [['start', 1], ['end', 1], ['start', 2]]);
+  const resumed = await combineRun(v, { run: v.resolve({}) });
+  assert.deepStrictEqual([resumed.res.done, resumed.steps.length], [true, 0]);
+  assert.deepStrictEqual(resumed.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome, x.sessions]), [[1, 'unfinished', 3], [2, 'unfinished', 3]]);
   await assert.rejects(combineRun(world(), { applies: false }), /replay refused: the replay broker reports a balance of 50000, not .*'s starting \d+: it doesn't apply the balance schedule/);
   await assert.rejects(combineRun(world(), { open: () => true }), /replay refused: combine attempt 1 \(2022-03-01\) would start with a position or working order open/);
   await assert.rejects(combineRun(world(), { open: () => { throw new Error('broker down'); } }), /replay refused: can't read the account to start combine attempt 1 \(broker down\)/);

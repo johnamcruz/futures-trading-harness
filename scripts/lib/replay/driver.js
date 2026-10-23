@@ -353,7 +353,11 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
     // A combine run stopped right after its last step: its attempt under way ends now.
-    if (run.combine) await combineRun.finishCombine(run, startEnv, deps, { ...combineCtx, at: run.end });
+    if (run.combine) {
+      // At the last time recorded (the broker's balance as the run left it), never the window's start.
+      const at = Number.isFinite(lastAtStart) ? new Date(lastAtStart) : run.start;
+      await combineRun.finishCombine(run, replayEnv(baseEnv, run, { at }), deps, { ...combineCtx, at });
+    }
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
     return finished(paths, manifest, 0, points);
   }
