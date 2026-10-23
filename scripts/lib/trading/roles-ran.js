@@ -354,11 +354,12 @@ function approvalReadAsVeto(text) {
   return ok ? { why: verdictProblem(text), line: ok.line.trim() } : null;
 }
 
-// "size <n>" on a verdict line, a "Size: <n>" line (a list bullet or quote mark before it), and "cut to <n>", "→ <n>",
-// "-> <n>" on either: each token must be a whole size of 1 or more.
+// "size <n>" on a verdict line, a "Size: <n>" line (a list bullet, number or quote mark before it), and on either a cut:
+// "cut / cut back / trimmed / reduced / lowered / (scaled) down to [size] <n>", "→ ⇒ -> => <n>" ("to size <n>" on a
+// verdict line is its "size <n>"). Each token must be a whole size of 1 or more.
 const SIZE_SAID = /\bsize\s*[:=]?\s*([^\s,;)]+)/gi;
-const SIZE_LINE = /^[ \t>]*(?:[-*+][ \t]+)?[*_]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)(.*)$/gim;
-const CUT_TO = /(?:\bcut\s+to|\u2192|->)\s*([^\s,;):]+)/gi;
+const SIZE_LINE = /^[ \t>]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)(.*)$/gim;
+const CUT_TO = /(?:\b(?:cut(?:\s+back)?|trimmed|reduced|lowered|down)\s+to(?:\s+size)?|\u2192|\u21d2|->|=>)\s*([^\s,;):]+)/gi;
 
 /**
  * The size an approving report approves: { size } (a whole number, 1 or more), or { error }. Each approving VERDICT line

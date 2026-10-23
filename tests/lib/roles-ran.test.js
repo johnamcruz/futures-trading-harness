@@ -361,9 +361,25 @@ test('approvedSize: the verdict line\'s size, a Size line, every size and cut on
     [`${A} - **size 2**, risk $40`, 2],
     [`${A} - size 1, half size if it fills late`, 1], // a word after "size" is prose
     [`${A} - size 3, final size 1`, 1], // two sizes on one line
+    [`${A} - size 5 => 1`, 1],
+    [`${A} - size 5 \u21d2 1`, 1],
+    [`${A} - size 5, trimmed to 1`, 1],
+    [`${A} - size 5, reduced to 2`, 2],
+    [`${A} - size 5, lowered to 3`, 3],
+    [`${A} - size 5, cut back to 2`, 2],
+    [`${A} - size 5, scaled down to 1`, 1],
+    [`${A} - size 5, down to 2`, 2],
+    [`${A} - size 5, cut to size 1`, 1],
+    [`${A} - size 5, to size 2`, 2],
+    [`Size: 5, trimmed to 1\n${A} - size 5`, 1],
+    [`Size: 5 (cut to size 2)\n${A} - size 5`, 2],
+    [`Size: 5, scaled down to 3\n${A} - size 5`, 3],
+    [`Size: 5 => 4\n${A} - size 5`, 4],
+    [`1. Size: 2\n${A} - size 4`, 2],
+    [`2) Size: 1\n${A} - size 4`, 1],
   ]) assert.deepStrictEqual(approvedSize(text), { size }, JSON.stringify(text));
   for (const text of [`${A} - size <n>`, `${A} - size 0`, `${A} - size 1.5`, `${A} - size one`, `${A} - size 1-2`, `${A} - size **2**`, `${A} - risk $40`,
-    `Size: 0\n${A} - size 1`, `- Size: half\n${A} - size 1`, `${A} - size 2 cut to 0`, `${A} - size 2 -> 1.5`, 'VERDICT: VETO - room', 'no verdict']) {
+    `Size: 0\n${A} - size 1`, `- Size: half\n${A} - size 1`, `${A} - size 2 cut to 0`, `${A} - size 2 -> 1.5`, `${A} - size 5 => 0`, `${A} - size 5 \u21d2 1.5`, `${A} - size 5, trimmed to 0`, `${A} - size 5, reduced to 1.5`, `${A} - size 5, down to size 0`, `1. Size: 0\n${A} - size 1`, 'VERDICT: VETO - room', 'no verdict']) {
     assert.ok(approvedSize(text).error, JSON.stringify(text));
   }
 });
