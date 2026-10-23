@@ -21,16 +21,20 @@
  */
 
 const prop = require('../trading/prop-state');
+const { MIN_STOP_SLIPPAGE_TICKS } = require('../trading/combine');
+const { feePerSide: feePerSideOf } = require('../trading/accounts');
 
 const usd = x => `$${Number(x).toFixed(2)}`;
 
 /**
  * The limits over the rulebook's sizing, as [size, why] pairs: the composed strategy's risk.max_risk_usd at a contract's
- * risk (its stop ticks x its tick value, before fees) and the broker's max order size (none known: no limit).
+ * all-in risk (`perContract`: its stop ticks plus the rulebook's stop_slippage_ticks, times its tick value, plus the
+ * account's fees both ways: the cost contractPlan counts, allInRisk; the owner: "we make sure our risk is good by
+ * calculating tick cost") and the broker's max order size (none known: no limit).
  */
 function capsOf({ capUsd, perContract, orderMax = null }) {
   return [
-    ...(capUsd > 0 && perContract > 0 ? [[Math.floor(capUsd / perContract + 1e-9), `risk.max_risk_usd ${usd(capUsd)} at ${usd(perContract)} a contract`]] : []),
+    ...(capUsd > 0 && perContract > 0 ? [[Math.floor(capUsd / perContract + 1e-9), `risk.max_risk_usd ${usd(capUsd)} at ${usd(perContract)} a contract all in`]] : []),
     ...(Number.isInteger(orderMax) && orderMax >= 1 ? [[orderMax, `the broker's max order size ${orderMax}`]] : []),
   ];
 }
@@ -38,12 +42,13 @@ function capsOf({ capUsd, perContract, orderMax = null }) {
 /**
  * The simulator's size (prop/attempts.js defaultSize, the backtester): a contractPlan result (the budget at the
  * verdict's multiplier, the floor inside it) limited as translateSize limits a live entry, by capsOf on the plan's
- * own contract, then held to the floor again (micro-equivalents: a mini counts as `ratio`). The plan, smaller, or
- * null (under the floor: a skip). `tickValueOf(root)`: the plan contract's tick value. limits: { capUsd, orderMax }.
+ * own contract at its all-in risk (the plan's riskPerContract: the stop, the slippage ticks and the fees, as live), then
+ * held to the floor again (micro-equivalents: a mini counts as `ratio`). The plan, smaller, or null (under the floor: a
+ * skip). limits: { capUsd, orderMax }.
  */
-function limitPlan(plan, { stopTicks, tickValueOf, limits = null, minContracts = 1, ratio, miniRoot = null }) {
+function limitPlan(plan, { limits = null, minContracts = 1, ratio, miniRoot = null }) {
   if (!plan || !limits) return plan;
-  const caps = capsOf({ capUsd: limits.capUsd, perContract: stopTicks * tickValueOf(plan.root), orderMax: limits.orderMax });
+  const caps = capsOf({ capUsd: limits.capUsd, perContract: plan.riskPerContract, orderMax: limits.orderMax });
   const size = Math.min(plan.size, ...caps.map(c => c[0]));
   if (!(size >= 1) || size * (plan.root === miniRoot ? ratio : 1) < minContracts) return null;
   return size === plan.size ? plan : { ...plan, size };
@@ -74,11 +79,22 @@ function translateSize({ suggested = null, home, root, policy, account, verdict,
   return { size, contract: root, suggested, reason: `the rulebook's size at this stop: ${size} ${root} (${binds})` };
 }
 
+/**
+ * A contract's all-in risk at a stop (as combine.contractPlan prices one): the stop's ticks plus the expected slippage
+ * (the rulebook's stop_slippage_ticks, never under its floor) times the tick value, plus the account's fee both ways.
+ * NaN without a fee (none is assumed).
+ */
+function allInRisk({ stopTicks, tickValue, slipTicks, feePerSide }) {
+  const slip = Math.max(MIN_STOP_SLIPPAGE_TICKS, Number(slipTicks) || 0);
+  return typeof feePerSide === 'number' && Number.isFinite(feePerSide) ? (stopTicks + slip) * tickValue + 2 * feePerSide : NaN;
+}
+
 function translatorFor({ home, root, policy, account, strategy, verdict, specOf, selected = null, orderMax = null }) {
   return (plan, spec, suggested = null) => translateSize({
     suggested, home, root, policy, account, verdict, capUsd: strategy && strategy.risk ? strategy.risk.max_risk_usd : null,
-    perContract: plan && plan.stop && spec ? plan.stop.ticks * spec.tickValue : null, specOf, selected, orderMax,
+    perContract: plan && plan.stop && spec && account ? allInRisk({ stopTicks: plan.stop.ticks, tickValue: spec.tickValue, slipTicks: policy && policy.sizing ? policy.sizing.stop_slippage_ticks : null, feePerSide: feePerSideOf(account, root) }) : null,
+    specOf, selected, orderMax,
   });
 }
 
-module.exports = { translateSize, translatorFor, capsOf, limitPlan };
+module.exports = { translateSize, translatorFor, capsOf, limitPlan, allInRisk };

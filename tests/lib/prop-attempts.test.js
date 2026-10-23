@@ -96,7 +96,8 @@ test('attempts: the rulebook\'s floor (min_contracts) skips a trade the budget s
 });
 
 test('attempts: the live entry\'s limits (ctx.limits: the composed cap, the broker\'s max) size each trade as the live translation does', () => {
-  // A 20-tick stop: the $200 budget sizes 17 micros; a $50 cap at $10 a contract is 5, the broker's max 3 under it.
+  // A 20-tick stop: the $200 budget sizes 17 micros; a $50 cap at the all-in (20 + 1) x $0.50 + $0.74 = $11.24 a contract
+  // is floor(50 / 11.24) = 4, the broker's max 3 under it.
   const nets = limits => {
     const out = [];
     at.runAttempt(days([trade(60)]), ctx({ size: undefined, limits, account: { sessions: 1 }, onTrade: x => out.push(x.net) }));
@@ -104,7 +105,7 @@ test('attempts: the live entry\'s limits (ctx.limits: the composed cap, the brok
   };
   const per = n => Math.round((60 * 0.5 * n - 0.74 * n) * 100) / 100; // 60 ticks x $0.50 a micro, $0.74 fees a round trip
   assert.deepStrictEqual(nets(null), [per(17)]);
-  assert.deepStrictEqual(nets({ capUsd: 50, orderMax: null }), [per(5)]);
+  assert.deepStrictEqual(nets({ capUsd: 50, orderMax: null }), [per(4)]);
   assert.deepStrictEqual(nets({ capUsd: 50, orderMax: 3 }), [per(3)]);
 });
 

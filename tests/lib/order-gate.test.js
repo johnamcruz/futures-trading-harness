@@ -3620,18 +3620,24 @@ test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the tra
 });
 
 test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_plan\'s translated size (the rulebook\'s) goes; phase 2\'s cut under the floor refuses; a skip refuses every size; stage 1 is unchanged', () => {
-  // The record suggests 1; the $400 budget's verdict is 7, the $300 cap 5 ($55.50 at 111 ticks): the order is 5.
+  // The record suggests 1; the $400 budget's verdict is 7, the $300 cap 5 (all in: (111 + 1) x $0.50 + $0.74 = $56.74 a
+  // contract, floor(300 / 56.74) = 5): the order is 5.
   const { home } = LCP.propHome({ size: 1 });
   const args = lcPropPlan(home);
   assert.strictEqual(args.size, 5);
   assert.deepStrictEqual(lcPropEval(home, args).violations, []);
   const one = lcPropEval(home, { ...args, size: 1 });
   assert.deepStrictEqual(checks(one), ['composed-reads']);
-  assert.match(one.violations[0].message, /size 1 is not the translated size 5 \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$55.50 a contract\); the record suggested 1\)/);
+  assert.match(one.violations[0].message, /size 1 is not the translated size 5 \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\); the record suggested 1\)/);
   for (const size of [4, 6, 7]) assert.ok(checks(lcPropEval(home, { ...args, size })).includes('composed-reads'), String(size));
   // Over the composed $300 cap (6 x $55.50 = $333): the gate's own max-risk check refuses it too (the composed strategy's cap, not the policy's).
   assert.match(lcPropEval(home, { ...args, size: 6 }).violations.find(v => v.check === 'max-risk').message, /setup:trade_lifecycle/);
   assert.ok(!checks(lcPropEval(home, args)).includes('max-risk'), 'the translated 5 is under it');
+  // The cap all in under a policy: 27 at a 22-tick stop is $297 at the stop alone, but (22 + 1) x $0.50 + $0.74 = $12.24 a
+  // contract all in: $330.48, over $300: refused ([max-risk], whatever else refuses it); 24 ($293.76) is not.
+  const at22 = n => lcPropEval(home, { ...args, size: n, stopLossBracket: { ticks: 22, type: 'stop' }, rationale: 'setup:prop_portfolio long trade_lifecycle' }).violations.filter(v => v.check === 'max-risk');
+  assert.match(at22(27).map(v => v.message).join(), /27 MNQ risk \$330\.48 all in \(the stop, a tick of slippage and fees both ways\), over its risk.max_risk_usd \$300/);
+  assert.deepStrictEqual(at22(24), []);
   // A floor of 3: phase 2's approved 2 (its cut) is under it: refused on the floor; 3 goes.
   const floored = LCP.registry({ sizing: testSizing({ min_contracts: 3 }) });
   const f3 = LCP.propHome({ size: 1 });

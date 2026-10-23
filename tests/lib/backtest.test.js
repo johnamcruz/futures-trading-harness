@@ -662,9 +662,10 @@ test('a prop run never sizes under the rulebook\'s floor (min_contracts), as the
   assert.strictEqual(first(24).size, 24);
   assert.ok(!first(25) || first(25).size >= 25, 'never under the floor');
   // The live entry's limits where the run states them (prop.limits, as prop/size-translate.js limits it): a $140 cap at
-  // the 14-tick stop ($7 a contract) is 20, under the budget's 24; the broker's max 6 under that.
+  // the 14-tick stop all in ((14 + 1) x $0.50 + $0.74 = $8.24 a contract) is floor(140 / 8.24) = 16, under the budget's
+  // 24; the broker's max 6 under that.
   const limited = (limits, min = 1) => runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: min }), start, prop: { limits } }).trades[0];
-  assert.strictEqual(limited({ capUsd: 140, orderMax: null }).size, 20);
+  assert.strictEqual(limited({ capUsd: 140, orderMax: null }).size, 16);
   assert.strictEqual(limited({ capUsd: 140, orderMax: 6 }).size, 6);
   assert.ok(!limited({ capUsd: 140, orderMax: 6 }, 7) || limited({ capUsd: 140, orderMax: 6 }, 7).size >= 7, 'under the floor after the limits: never sized up');
 });

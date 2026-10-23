@@ -28,7 +28,7 @@ function home(balance = 50000, account = MINI) {
   return h;
 }
 // A 40-tick stop: 41 x $0.50 + $0.74 = $21.24 a micro, so the $400 budget is 18 MNQ; the cap $300 at $20 a contract: 15.
-const T = (o = {}) => translateSize({ suggested: 1, home: o.home || home(), root: 'MNQ', policy: o.policy || policy(), account: 'account' in o ? o.account : MINI, verdict: o.verdict || verdict(), capUsd: o.capUsd ?? 1000, perContract: 20, specOf, selected: ['MNQ'], orderMax: o.orderMax ?? null, ...(o.suggested !== undefined ? { suggested: o.suggested } : {}) });
+const T = (o = {}) => translateSize({ suggested: 1, home: o.home || home(), root: 'MNQ', policy: o.policy || policy(), account: 'account' in o ? o.account : MINI, verdict: o.verdict || verdict(), capUsd: o.capUsd ?? 1000, perContract: o.perContract ?? 20, specOf, selected: ['MNQ'], orderMax: o.orderMax ?? null, ...(o.suggested !== undefined ? { suggested: o.suggested } : {}) });
 
 test('translateSize: the suggestion is translated to the rulebook\'s size (the largest the verdict, the budget, the cap and the broker allow); it never changes the result', () => {
   const one = T();
@@ -37,7 +37,7 @@ test('translateSize: the suggestion is translated to the rulebook\'s size (the l
   for (const suggested of [null, 3, 18, 50]) assert.strictEqual(T({ suggested }).size, 18, String(suggested));
   assert.strictEqual(T({ suggested: 50 }).suggested, 50, 'kept beside the result');
   // The composed cap binds: $300 at $20 a contract is 15.
-  assert.match(T({ capUsd: 300 }).reason, /15 MNQ \(risk.max_risk_usd \$300.00 at \$20.00 a contract\)/);
+  assert.match(T({ capUsd: 300 }).reason, /15 MNQ \(risk.max_risk_usd \$300.00 at \$20.00 a contract all in\)/);
   // The broker's max order size binds: 5.
   assert.deepStrictEqual([T({ orderMax: 5 }).size, /the broker's max order size 5/.test(T({ orderMax: 5 }).reason)], [5, true]);
   // The verdict's own size binds (a smaller verdict): 7.
@@ -64,7 +64,7 @@ test('translateSize: under the floor is a skip (never sized up); a skip verdict,
   // The cap at $50: 2 contracts, under a floor of 3: a skip that names the floor and the size the rules give.
   const under = T({ policy: policy({ min_contracts: 3 }), capUsd: 50 });
   assert.deepStrictEqual([under.skip, under.size, under.contract], [true, 0, null]);
-  assert.match(under.reason, /^setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts .*\(the correct size at this stop is 2: risk.max_risk_usd \$50.00 at \$20.00 a contract\)$/);
+  assert.match(under.reason, /^setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts .*\(the correct size at this stop is 2: risk.max_risk_usd \$50.00 at \$20.00 a contract all in\)$/);
   assert.strictEqual(T({ policy: policy({ min_contracts: 3 }), capUsd: 60 }).size, 3, 'at the floor it goes');
   // A budget under the floor: the budget sizes nothing (contractPlan's floor), with its reason.
   assert.match(T({ policy: policy({ min_contracts: 3 }), home: home(48250, MINI) }).reason, /the size budget now allows nothing at a 40-tick stop \(3 MNQ at this stop risk \$63\.72, over the \$50\.00 budget/);
@@ -84,8 +84,17 @@ test('translatorFor: the plan\'s stop ticks and the contract\'s tick value price
   const h = home();
   const tr = translatorFor({ home: h, root: 'MNQ', policy: policy(), account: MINI, strategy: { risk: { max_risk_usd: 300 } }, verdict: verdict(), specOf, selected: ['MNQ'] });
   const plan = { stop: { ticks: 40 } };
-  assert.deepStrictEqual(tr(plan, specOf('MNQ'), 1), T({ home: h, capUsd: 300 }));
-  assert.strictEqual(tr(plan, specOf('MNQ'), 1).size, 15);
+  // A contract all in: (40 + 1 slippage tick) x $0.50 + 2 x $0.37 = $21.24; the $300 cap: floor(300 / 21.24) = 14.
+  assert.deepStrictEqual(tr(plan, specOf('MNQ'), 1), T({ home: h, capUsd: 300, perContract: 21.24 }));
+  assert.strictEqual(tr(plan, specOf('MNQ'), 1).size, 14);
+  // The live smoke's 22-tick stop: $300 / ((22 + 1) x $0.50 + $0.74 = $12.24) = 24, all in $293.76 (never 27 at $11.00 a
+  // contract, whose all-in loss would be $330.48, over the cap).
+  // (Its verdict and budget at 22 ticks are floor(400 / 12.24) = 32: the cap binds.)
+  const t22 = translatorFor({ home: h, root: 'MNQ', policy: policy(), account: MINI, strategy: { risk: { max_risk_usd: 300 } }, verdict: verdict({ stopTicks: 22, maxSize: 32 }), specOf, selected: ['MNQ'] })({ stop: { ticks: 22 } }, specOf('MNQ'), 1);
+  assert.strictEqual(t22.size, 24);
+  assert.ok(t22.size * ((22 + 1) * 0.5 + 2 * 0.37) <= 300, 'the all-in loss at the stop within the cap');
+  // No fee in the profile: none is assumed, no size.
+  assert.ok(translatorFor({ home: h, root: 'MNQ', policy: policy(), account: { ...MINI, fees_per_side: {} }, strategy: { risk: { max_risk_usd: 300 } }, verdict: verdict(), specOf, selected: ['MNQ'] })(plan, specOf('MNQ'), 1).skip);
   assert.ok(tr(null, specOf('MNQ'), 1).skip, 'no plan: no size');
 });
 
@@ -103,7 +112,8 @@ test('parity: the simulator (prop/attempts.js defaultSize with the live limits) 
     for (const stopTicks of [8, 40, 111, 150, 199, 201, 400]) {
       for (const [capUsd, orderMax] of [[300, null], [300, 5], [1000, null], [50, null]]) {
         const v = decideSetup({ account: MINI, cs, strategy: { ...pol, timeframe: '3m' }, component: 'trade_lifecycle', symbol: 'MNQ', contractId: 'MNQ', rawBars: bars, spec: specOf('MNQ'), scan: { direction: 'long', stopDistance: stopTicks * 0.25 }, now: NOW, specOf, selected: ['MNQ'] });
-        const live = translateSize({ suggested: 1, home: h, root: 'MNQ', policy: pol, account: MINI, verdict: v, capUsd, perContract: stopTicks * 0.5, specOf, selected: ['MNQ'], orderMax });
+        // A contract all in, by hand: (stop + 1 slippage tick) x $0.50 + 2 x $0.37.
+        const live = translateSize({ suggested: 1, home: h, root: 'MNQ', policy: pol, account: MINI, verdict: v, capUsd, perContract: (stopTicks + 1) * 0.5 + 0.74, specOf, selected: ['MNQ'], orderMax });
         const sim = at.defaultSize({ cs, trade: { stopTicks }, sizing: pol.sizing, legs, mode: 'micro', ratio, fraction: 1, limits: { capUsd, orderMax } });
         assert.strictEqual(sim ? sim.size : 0, live.skip ? 0 : live.size, `floor ${min}, ${stopTicks} ticks, cap ${capUsd}, max ${orderMax}`);
         if (sim) assert.strictEqual(sim.root, 'MNQ', 'the contract live trades');

@@ -11,9 +11,9 @@
  *
  * The scenario's composed long (the decision-path world's fired bar, tests/e2e/entry-workflow-e2e.test.js): entry
  * 27427.50, stop 27404.50 (one tick under the 27404.75 swing low) = 23 points = 92 ticks, on MNQ (the selected micro).
- *   a contract's risk for the cap:         92 x $0.50                         = $46.00
- *   a contract's risk for the budget:      (92 + 1 slippage tick) x $0.50 + 2 x $0.37 fees = $46.50 + $0.74 = $47.24
- *   the composed cap ($300):               floor(300 / 46.00)                 = 6
+ *   a contract's all-in risk (the budget's and the cap's, "risk is good by calculating tick cost"):
+ *                                          (92 + 1 slippage tick) x $0.50 + 2 x $0.37 fees = $46.50 + $0.74 = $47.24
+ *   the composed cap ($300):               floor(300 / 47.24)                 = 6 ($283.44 all in)
  */
 
 const test = require('node:test');
@@ -39,9 +39,8 @@ const LC = loadStrategies(D.ROOT, {}).strategies.find(s => s.name === 'trade_lif
 // The numbers this test works the sizes out from, checked against their homes (the rulebook, the profile, the strategy).
 const N = { start: 100000, maxLoss: 3000, cushionFrac: 0.3, capUsd: 1000, halveUsd: 1500, slip: 1, floor: 3, fee: 0.37, composedCap: 300, tickValue: 0.5, tick: 0.25 };
 const STOP_TICKS = (27427.5 - 27404.5) / N.tick; // 92
-const CAP_RISK = STOP_TICKS * N.tickValue; // $46.00
-const BUDGET_RISK = (STOP_TICKS + N.slip) * N.tickValue + 2 * N.fee; // $47.24
-const capSize = Math.floor(N.composedCap / CAP_RISK); // 6
+const BUDGET_RISK = (STOP_TICKS + N.slip) * N.tickValue + 2 * N.fee; // $47.24, the cap's per contract too
+const capSize = Math.floor(N.composedCap / BUDGET_RISK); // 6
 const budgetSize = dollars => Math.floor(dollars / BUDGET_RISK + 1e-9);
 
 test('the hand-worked numbers are the shipped rulebook\'s, the profile\'s and the composed strategy\'s', () => {
@@ -50,7 +49,7 @@ test('the hand-worked numbers are the shipped rulebook\'s, the profile\'s and th
   assert.deepStrictEqual([z.cushion_frac, z.cap_usd, z.drawdown_halve_usd, z.stop_slippage_ticks, z.min_contracts, z.clock_k], [N.cushionFrac, N.capUsd, N.halveUsd, N.slip, N.floor, 'off']);
   assert.deepStrictEqual([ACCOUNT.starting_balance, ACCOUNT.max_loss, ACCOUNT.fees_per_side.MNQ], [N.start, N.maxLoss, N.fee]);
   assert.strictEqual(LC.risk.max_risk_usd, N.composedCap);
-  assert.deepStrictEqual([STOP_TICKS, CAP_RISK, Number(BUDGET_RISK.toFixed(2)), capSize], [92, 46, 47.24, 6]);
+  assert.deepStrictEqual([STOP_TICKS, Number(BUDGET_RISK.toFixed(2)), capSize], [92, 47.24, 6]);
 });
 
 // The head trader's planned cycle: the briefing, the composed reads at the suggested size, then `planned`.
@@ -152,7 +151,7 @@ function hook(env, input) {
 // The gateway's refusals of any check (the hook's own, judged above, log beside them).
 const sizingRefusals = w => D.gateLog(w).filter(e => e.source === 'gateway' && e.decision !== 'allowed').flatMap(e => (e.violations || []).map(v => v.check));
 
-test('prop size e2e: the suggestion is ignored: 1, 3 and 20 all order the translated 6 (the $300 cap: floor(300 / 46.00)); phase 2 is asked for 6', async () => {
+test('prop size e2e: the suggestion is ignored: 1, 3 and 20 all order the translated 6 (the $300 cap all in: floor(300 / 47.24)); phase 2 is asked for 6; the all-in loss at the stop within $300', async () => {
   // A fresh attempt: cushion $3,000 x 0.3 = $900 (under cap_usd $1,000): floor(900 / 47.24) = 19 by the budget and the
   // verdict; the composed cap binds: 6.
   assert.strictEqual(budgetSize(N.cushionFrac * N.maxLoss), 19);
@@ -162,6 +161,8 @@ test('prop size e2e: the suggestion is ignored: 1, 3 and 20 all order the transl
     const { R, sent, entry, result } = await cycle(w, { suggest, hooked });
     assert.match(R.runs.find(x => x.role === 'phase2').request, new RegExp(`The entry's size is ${capSize} MNQ: code's translation of the record's suggested ${suggest} `));
     assert.deepStrictEqual(sent, [capSize], `suggested ${suggest}`);
+    // The all-in loss at the stop (the stop, a tick of slippage and fees both ways, per contract) within the $300 cap.
+    assert.ok(sent[0] * BUDGET_RISK <= N.composedCap, `${sent[0]} x $47.24 = $${(sent[0] * BUDGET_RISK).toFixed(2)}`);
     assert.deepStrictEqual([entry.translated.suggested, entry.translated.size, entry.size.approved, entry.size.ordered], [suggest, capSize, capSize, capSize]);
     assert.match(result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle long ${capSize} MNQ`));
     assert.deepStrictEqual(sizingRefusals(w), []);

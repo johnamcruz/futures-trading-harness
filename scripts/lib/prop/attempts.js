@@ -47,8 +47,7 @@ function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = 
     dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: trade.stopTicks, legs, mode,
     guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
   });
-  const leg = r => (legs.micro && legs.micro.root === r ? legs.micro : legs.mini);
-  return limitPlan(plan, { stopTicks: trade.stopTicks, tickValueOf: r => leg(r).tickValue, limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null });
+  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null });
 }
 
 /**
