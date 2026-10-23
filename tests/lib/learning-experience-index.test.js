@@ -404,3 +404,38 @@ test('delivery: no key on, the index exactly as before; on, named and another ha
   assert.throws(() => X.buildIndex(mixed, { reps: 200 }), /index refused: made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt\)/);
   assert.throws(() => X.buildIndex(ds.map((d, i) => ({ ...d, delivery: i % 2 ? 'cycleDataInPrompt' : 'headSkillsInPrompt,cycleDataInPrompt' })), { reps: 200 }), /2 head trader deliveries/);
 });
+
+test('each line\'s delivery comes from its own run (withRunDelivery), never the line\'s word: an old untagged line of a key-on run is tagged; a disagreeing tag refused', () => {
+  const runHome = (autotrader, lines) => {
+    const h = tmpHome();
+    const dir = path.join(h, 'replay', 'r1');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId: 'r1', finished: true }));
+    fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify({ timeframe: 3, ...autotrader }));
+    fs.mkdirSync(path.join(h, 'experience'));
+    fs.writeFileSync(path.join(h, 'experience', 'decisions.jsonl'), lines.map(d => `${JSON.stringify(d)}\n`).join(''));
+    return h;
+  };
+  const ds = decisions(25, 12, i => (i % 2 ? 1.5 : -1));
+  // Key-off: the lines exactly as given (the same objects), with or without the run dir.
+  const off = runHome({}, ds);
+  const same = X.withRunDelivery(ds, off);
+  assert.ok(same.every((d, i) => d === ds[i]));
+  assert.ok(X.withRunDelivery(ds, tmpHome()).every((d, i) => d === ds[i]), 'no run to derive from: as given');
+  // An old log of a key-on run (written before the tag): each line its run's delivery.
+  const on = runHome({ headSkillsInPrompt: true }, ds);
+  assert.ok(X.withRunDelivery(ds, on).every(d => d.delivery === 'headSkillsInPrompt'));
+  // A tag that disagrees with the run: refused, either way.
+  assert.throws(() => X.withRunDelivery(ds.map(d => ({ ...d, delivery: 'cycleDataInPrompt' })), on), /index refused: run r1's line d0 says delivery "cycleDataInPrompt", its run was made under headSkillsInPrompt/);
+  assert.throws(() => X.withRunDelivery(ds.map(d => ({ ...d, delivery: 'cycleDataInPrompt' })), off), /its run was made under none/);
+  // The CLI: an old key-on log pooled with a key-off one is refused; each alone builds.
+  const cli = path.join(__dirname, '..', '..', 'scripts', 'experience-index.js');
+  const out = () => path.join(tmpHome(), 'out');
+  const later = decisions(25, 12, i => (i % 2 ? 1.5 : -1), { tag: 'l', from: '2022-06-01T00:00:00Z' });
+  const offLater = runHome({}, later);
+  const mixed = spawnSync(process.execPath, [cli, 'build', on, offLater, '--out', out()], { encoding: 'utf8' });
+  assert.notStrictEqual(mixed.status, 0);
+  assert.match(mixed.stderr, /index refused: made under 2 head trader deliveries/);
+  const alone = spawnSync(process.execPath, [cli, 'build', on, '--out', out()], { encoding: 'utf8' });
+  assert.strictEqual(alone.status, 0, alone.stderr);
+});

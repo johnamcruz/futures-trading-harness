@@ -329,6 +329,34 @@ function exitOf(decisions) {
 }
 
 /**
+ * A run home's experience-log lines with each run's delivery derived from the run itself (run-experience.js runDelivery:
+ * its setup record and runner configs under <home>/replay/<runId>), never taken on the line's word: a line with no tag
+ * (written before the tag, or by a run with none on) gets its run's; a line whose tag differs from its run's is refused.
+ * A line whose run isn't in that home keeps its own tag (nothing to derive from). With no key on anywhere, the lines are
+ * returned as they are.
+ */
+function withRunDelivery(lines, home) {
+  const { runDelivery } = require('./run-experience');
+  const derived = new Map();
+  const of = runId => {
+    if (!derived.has(runId)) {
+      const dir = /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(runId || '')) ? path.join(home, 'replay', String(runId)) : null;
+      let manifest;
+      try { manifest = dir ? JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) : null; } catch (_err) { manifest = null; }
+      derived.set(runId, manifest ? runDelivery(dir, manifest) : undefined);
+    }
+    return derived.get(runId);
+  };
+  return lines.map(l => {
+    if (!l) return l;
+    const run = of(l.runId);
+    if (run === undefined) return l;
+    if (l.delivery !== undefined && l.delivery !== run) throw new Error(`index refused: run ${l.runId}'s line ${l.id} says delivery ${JSON.stringify(l.delivery)}, its run was made under ${run === null ? 'none' : run}`);
+    return run && l.delivery === undefined ? { ...l, delivery: run } : l;
+  });
+}
+
+/**
  * The index of these decisions (lines of experience logs). `runs`: [{ runId, file, sha256 }] the logs read, for the
  * manifest. Plain passes (no signature) count in `plainPasses` only. `shuffle`: a seed for the shuffled arm.
  */
@@ -446,6 +474,6 @@ function loadPinned(home) {
 }
 
 module.exports = {
-  VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
+  VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, withRunDelivery, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
   cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf, curatedLog,
 };
