@@ -19,7 +19,10 @@
  *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
  *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
  *      with the reading's reason: roles-ran.js approvalReadAsVeto); phase 2's report kept in the entry record
- *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); phase 2's approved size (roles-ran.js approvedSize:
+ *      none readable is a no-trade) caps the order: over the record's size, capped at it; under it, a no-trade (the
+ *      gate's composed-reads takes only the record's stated size), so the order never exceeds what phase 2 approved
+ *      (`size`: { approved, record, ordered }); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
@@ -53,7 +56,7 @@
 
 const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
-const { verdictOf, approvalReadAsVeto } = require('./trading/roles-ran');
+const { verdictOf, approvalReadAsVeto, approvedSize } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -344,6 +347,9 @@ async function runEntry(deps, c) {
       if (misread) log(`the entry: ${stop.why}: no order`, 'error');
       return { stop: stop.why };
     }
+    // Phase 2's size caps the order (it can only shrink it): an approval without a size the runner can read orders nothing.
+    const approved = approvedSize(rev.text);
+    if (approved.error) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved without a size the runner can read (${approved.error})` }; return { stop: stop.why }; }
     const roleEnv = childEnv(cfg, root, env, roleContext);
     try {
       order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
@@ -354,6 +360,13 @@ async function runEntry(deps, c) {
       stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
     }
+    // The order's size is the compose record's (order_plan; the gate's composed-reads takes only that size): phase 2's
+    // approved size over it is capped at it; under it, no order (the order is never cut below the record, never grown).
+    const ordered = order && order.args ? order.args.size : undefined;
+    if (!(Number.isInteger(ordered) && ordered >= 1)) { stop = { outcome: 'no-trade', why: `order_plan gave no size (${JSON.stringify(ordered)})` }; return { stop: stop.why }; }
+    info.size = { approved: approved.size, record: ordered, ordered: approved.size >= ordered ? ordered : null };
+    if (approved.size < ordered) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved size ${approved.size}, under the compose record's ${ordered} (the order gate takes only the record's stated size: composed-reads)` }; return { stop: stop.why }; }
+    const sizeWhy = `size ${ordered}: ${approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
     const late = await lateCheck(order, roleEnv);
@@ -367,7 +380,7 @@ async function runEntry(deps, c) {
       const p = order.plan;
       await client.journalAdd({
         kind: 'plan', contractId: order.args.contractId, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), tags: [`setup:${tag}`, contractRoot(order.args.contractId)],
-        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; compose record ${p.record}; phase 2: ${short(line)}`,
+        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2: ${short(line)}`,
       });
     } catch (err) {
       stop = { outcome: 'no-trade', why: `the journal plan could not be written (${err.message})` };

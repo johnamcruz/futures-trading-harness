@@ -260,6 +260,28 @@ test('entry workflow: an APPROVE line the gate\'s reading takes as a veto ("Deci
   assert.match(rec.phase2.text, /^Phase 2 on the trade_lifecycle long plan for MNQ\.\nDecision: cut to size 1\nVERDICT: APPROVE/);
 });
 
+test('entry workflow: phase 2\'s approved size caps the order: over the record\'s 2 the broker gets 2 (with the gate\'s allow); under it nothing is placed', async () => {
+  // Phase 2 approves 5 on a record of 2: the order is the record's 2, at the broker.
+  let w = D.world();
+  let at = decisionAt(FIRED_BAR);
+  let R = roles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 5, risk $230.00, trade_lifecycle long with the trend' }) });
+  let r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  const sent = D.placedAtBroker(w);
+  assert.deepStrictEqual(sent.map(c => c.args.size), [2]);
+  assert.strictEqual(requestedArgs(R.runs.at(-1).request).size, 2);
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, e.size]), [['allowed', 2]]);
+  assert.match(journal(w).filter(e => e.kind === 'plan')[0].text, /risk \$92; size 2: phase 2 approved 5, capped at the record's 2;/);
+  assert.strictEqual(D.position(w).size, 2);
+  // Phase 2 approves 1 on a record of 2: no executor, nothing placed, no plan; the cycle a no-trade naming why.
+  w = D.world();
+  at = decisionAt(FIRED_BAR);
+  R = roles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 1, risk $46.00, trade_lifecycle long with the trend' }) });
+  r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor'));
+  assert.deepStrictEqual([D.placedAtBroker(w), journal(w).filter(e => e.kind === 'plan')], [[], []]);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: no-trade - the runner's entry: risk-manager phase 2 approved size 1, under the compose record's 2 /);
+});
+
 test('entry workflow: a stale briefing by the time the trade-executor sends (the cycle took too long): the gate refuses [briefing-age], nothing is placed, the cycle is blocked', async () => {
   const w = D.world();
   const at = decisionAt(FIRED_BAR);

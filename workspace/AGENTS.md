@@ -185,7 +185,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `fair-value-gaps` (skills/fair-value-gaps/SKILL.md): Use when an open or partly filled fair value gap is near price, ahead of a setup, or retested after a sweep. A location, never a trigger.
 - `fib-retracement` (skills/fib-retracement/SKILL.md): Use after an impulse to judge pullback depth, or for a CISD's OTE zone (0.62-0.79) - fib levels and a bounce on a completed candle. A read, never a veto.
 - `gate-refusals` (skills/gate-refusals/SKILL.md): Use when the gate refuses an order for itself - its stop, account, tick specs, a pending order, the replay clock.
-- `gate-refusals-cycle` (skills/gate-refusals-cycle/SKILL.md): Use when the gate refuses an entry with [roles-ran] or [phase2-facts].
+- `gate-refusals-cycle` (skills/gate-refusals-cycle/SKILL.md): Use when the gate refuses an entry with [roles-ran], [phase2-facts] or [phase2-size].
 - `gate-refusals-limits` (skills/gate-refusals-limits/SKILL.md): Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [strategy], [max-order-size] or [max-risk].
 - `gate-refusals-positions` (skills/gate-refusals-positions/SKILL.md): Use when the gate refuses managing a position (an exit by contract month, a trading-day change), or can't read one; close_position is never gated.
 - `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].

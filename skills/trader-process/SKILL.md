@@ -80,7 +80,7 @@ PLAN:
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
 6 Entry: <the entry reads | none>
 7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
-8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>
+8 Decision: <take|pass> - <full|half|the failed step>, <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
 
@@ -102,6 +102,6 @@ PLAN:
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
 7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
-8 Decision: valid yes, full - compose_check OK
+8 Decision: take - full, compose_check OK
 9 Manage: flat
 ```

@@ -413,12 +413,14 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then the gate's [prop-account-attempt] refusal (feat/prop-account-marker, owner-approved 2026-10-22): the risk manager's
 // prompt +454 bytes each mode (its row in gate-refusals-limits; 90222 and 76099 on main), the pin +432 (22 bytes of its
 // slack absorbed).
-// Then phase 2's report format (fix/phase2-verdict-format, owner-approved 2026-10-22): the risk manager +548 each mode
-// (its agent's format rules, the phrasings that read as a veto, and a Size line in the example), so a looser model's
-// APPROVE isn't read as a veto.
+// Then phase 2's report format and its size (fix/phase2-verdict-format, owner-approved 2026-10-22): the risk manager
+// +973 each mode over main's 90698 and 76575 (its agent's format rules, the phrasings that read as a veto, a Size line in
+// the example and that a composed entry orders the record's size; gate-refusals-cycle's new [phase2-size] row), so a
+// looser model's APPROVE isn't read as a veto and no entry exceeds the size phase 2 approved; trader-process's step-8
+// line, now take or pass first, shrank every role it is embedded in. With #258, the risk manager +1449 over 90222.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 91246, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 77123, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 91671, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 77548, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

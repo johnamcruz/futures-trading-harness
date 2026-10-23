@@ -569,7 +569,11 @@ test('the count is of independent categories, never labels, and every restatemen
   assert.ok(ts.includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious against, pass on a 1h CHoCH against.'));
   assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R.'));
   const tp = flat(read('skills/trader-process/SKILL.md'));
-  assert.ok(tp.includes('8 Decision: valid <yes|no: step>, <full|half|pass> - <one main reason>'));
+  // take or pass first: the decision word the verdict parser reads (roles-ran.js: "take" agrees, a "valid" first word
+  // read as a veto in a phase-2 report).
+  assert.ok(tp.includes('8 Decision: <take|pass> - <full|half|the failed step>, <one main reason>'));
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  assert.strictEqual(verdictOf('8 Decision: take - full, compose_check OK\nVERDICT: APPROVE - size 1'), 'APPROVE');
   // The PLAN's R:R and target are the compose record's, never the model's estimate.
   assert.ok(tp.includes('7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>') && tp.includes('R:R: the compose record\'s, never yours.'));
   assert.ok(flat(read('skills/strategy-library/SKILL.md')).includes("Hard: R:R to the target at least `risk.min_rr` (compose_check's)."));

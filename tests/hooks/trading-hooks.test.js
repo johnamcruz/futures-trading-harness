@@ -2745,6 +2745,43 @@ test('order gate: in an autonomous cycle, an entry approved on a fact the bar br
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, unpinned).stderr, /phase2-facts/);
 });
 
+test('order gate wiring: phase2-size, in the hook and the gateway: an autonomous entry over the size phase 2 approved, or on an approval with no readable size, is refused; at it goes; exits go', async () => {
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
+  const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
+  // The hook.
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  const transcript = path.join(dir, 'session.jsonl');
+  const hook = (p2, order = ORDER) => { fs.writeFileSync(transcript, cycle(`${p2}\nFACTS: none`)); return gate({ ...orderPayload(order), transcript_path: transcript }, env); };
+  assert.match(hook('VERDICT: APPROVE - size 1, risk $40', { ...ORDER, size: 2 }).stderr, /\[phase2-size\] size 2 is over the 1 risk-manager phase 2 approved/);
+  assert.match(hook('VERDICT: APPROVE - risk $40').stderr, /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
+  assert.doesNotMatch(hook('VERDICT: APPROVE - size 1, risk $40').stderr, /phase2-size/);
+  const exit = hook('VERDICT: APPROVE - risk $40', { ...ORDER, size: 3, side: 'sell', rationale: '[exit] flatten' });
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  // No runner cycle (FTH_CYCLE unset): no phase 2 is required, none checked.
+  const { FTH_CYCLE: _c, ...noCycle } = env;
+  fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: none'));
+  assert.doesNotMatch(gate({ ...orderPayload({ ...ORDER, size: 2 }), transcript_path: transcript }, noCycle).stderr, /phase2-size/);
+  // The gateway, on the runner's cycle transcript.
+  const gdir = tmpDir();
+  const stream = path.join(gdir, 'cycle-transcript.jsonl');
+  const auto = { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream, FAKE_POSITIONS: LONG1 };
+  const text = r => r.result.content[0].text;
+  fs.writeFileSync(stream, cycle('VERDICT: APPROVE - size 1, risk $40\nFACTS: none'));
+  let g = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: 2 }), call(2, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' })], { dir: gdir });
+  assert.match(text(g.byId[1]), /\[phase2-size\] size 2 is over the 1 risk-manager phase 2 approved/);
+  assert.strictEqual(text(g.byId[2]), 'forwarded:tools/call:place_order', 'an exit goes');
+  fs.writeFileSync(stream, cycle('VERDICT: APPROVE - size <n>, risk $40\nFACTS: none'));
+  g = await gatewayRun(auto, [call(1, 'place_order', ORDER)], { dir: gdir });
+  assert.match(text(g.byId[1]), /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
+  fs.writeFileSync(stream, cycle('VERDICT: APPROVE - size 1, risk $40\nFACTS: none'));
+  g = await gatewayRun(auto, [call(1, 'place_order', ORDER)], { dir: gdir });
+  assert.doesNotMatch(text(g.byId[1]), /phase2-size/);
+});
+
 test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['any', /never empty or "any"/], ['7', /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/]]) {

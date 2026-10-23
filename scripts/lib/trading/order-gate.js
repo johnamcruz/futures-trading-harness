@@ -27,7 +27,7 @@ const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript } = require('./skills-loaded');
-const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
+const { checkRolesRan, approvedPhase2, sizeRefusal } = require('./roles-ran');
 const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
@@ -515,8 +515,18 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The cycle's bar per root as the briefing is on it (several lanes: FTH_CYCLE_BRIEFING_BARS, the first lane's, over
   // FTH_CYCLE_BARS, which names the lane bar that closed): the briefing the facts are checked against.
   const factsBars = { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) };
-  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
+  // The approving report, read once for the facts and the size checks (a read that throws: the facts check refuses).
+  let p2 = null;
+  const p2Report = () => (p2 || (p2 = { r: approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) })).r;
+  const factsMsg = config.autonomous ? factsRefusal({ report: p2Report, home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
   if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
+  // Hard rule, tighten-only: the entry's size at most the size that report approved (roles-ran.js sizeRefusal: none
+  // readable refuses); no approval required (not a cycle), none checked.
+  let p2SizeMsg = null;
+  if (config.autonomous) {
+    try { p2SizeMsg = sizeRefusal(p2Report(), input.size); } catch (err) { p2SizeMsg = `the phase-2 size check failed (${err.message}): no entry (fails closed)`; }
+  }
+  if (p2SizeMsg) violations.push({ check: 'phase2-size', message: p2SizeMsg });
   // Hard rule: no entry on stale data (the owner's "data accurate and not stale"): the briefing's bar closed more than
   // the signal age limit of its own bars ago, however long the cycle ran (briefingAgeRefusal).
   const staleMsg = briefingAgeRefusal(config, contractRoot(input.contractId), now);

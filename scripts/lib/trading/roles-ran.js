@@ -67,6 +67,9 @@
  *                                                checkRolesRan judges it: { text } | { error } | null
  *   approvalReadAsVeto(text)                     an approving VERDICT line in a report that reads as a veto: { why, line }
  *                                                | null (the runner's reporting; the gate's reading is verdictOf's)
+ *   approvedSize(text)                           the size an approving report approves: { size } | { error } (fails closed)
+ *   sizeRefusal(report, size)                    the gate's phase2-size check: an entry over phase 2's approved size (or none
+ *                                                readable) refuses; null when no phase 2 is required (report null)
  */
 
 const fs = require('fs');
@@ -306,6 +309,37 @@ function approvalReadAsVeto(text) {
   return ok ? { why: verdictProblem(text), line: ok.line.trim() } : null;
 }
 
+/**
+ * The size an approving report approves: { size } (a whole number, 1 or more), or { error }. Each approving VERDICT line
+ * must say `size <n>` (agents/risk-manager.md); a `Size: <n>` line counts too; the smallest of them binds. A line whose
+ * size can't be read (none, 0, a fraction, a placeholder) is an error, never a size (fails closed).
+ */
+function approvedSize(text) {
+  const sizes = [];
+  const bad = [];
+  const read = (tok, line) => { tok = String(tok || '').replace(/[.*_]+$/, ''); return /^0*[1-9]\d*$/.test(tok) ? sizes.push(Number(tok)) : bad.push(line); };
+  const approving = decisionLines(text).filter(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
+  if (!approving.length) return { error: 'no approving VERDICT line' };
+  for (const l of approving) read((/\bsize\s*[:=]?\s*([^\s,;)]+)/i.exec(l.line) || [])[1], l.line.trim());
+  for (const m of String(text || '').matchAll(/^[ \t*_>]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)/gim)) read(m[1], m[0].trim());
+  if (bad.length) return { error: `no whole size of 1 or more in "${bad[0].replace(/\s+/g, ' ')}"` };
+  return { size: Math.min(...sizes) };
+}
+
+/**
+ * The gate's `phase2-size` check (tighten-only): an entry's size over the size its approving phase-2 report approved
+ * (approvedSize), or none readable, refuses. `report`: approvedPhase2's answer (null: no phase 2 is required, none
+ * checked; { error }: refused). The message, or null.
+ */
+function sizeRefusal(report, size) {
+  if (!report) return null;
+  if (report.error) return `The cycle's transcript can't be read (${report.error}), so the gate can't check the size risk-manager phase 2 approved: no entry this cycle.`;
+  const a = approvedSize(report.text);
+  if (a.error) return `Risk-manager phase 2's approval states no size the gate can read (${a.error}); its VERDICT line says "size <n>": no entry this cycle.`;
+  if (!(Number(size) <= a.size)) return `size ${JSON.stringify(size)} is over the ${a.size} risk-manager phase 2 approved: an entry is at most phase 2's size (it only ever cuts one).`;
+  return null;
+}
+
 /** Kept for callers that count decision lines. */
 const verdictMatches = decisionLines;
 const verdictLines = decisionLines;
@@ -459,4 +493,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, approvedSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };

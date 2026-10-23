@@ -1992,12 +1992,55 @@ test('phase2-facts: an autonomous entry approved on a fact the briefing contradi
     assert.deepStrictEqual(run(entryOrder({ rationale })).violations, [], rationale);
     assert.deepStrictEqual(run(entryOrder({ rationale }), { ...auto, cycleTranscript: `${file}.gone` }).violations, [], rationale);
   }
-  // The transcript can't be read: refused by the three checks that read it (fails closed).
+  // The transcript can't be read: refused by the four checks that read it (fails closed).
   // The pinned bar's briefing unreadable: its data's age can't be checked either (briefing-age).
-  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['briefing-age', 'phase2-facts', 'roles-ran', 'skills-at-entry']);
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` })), ['briefing-age', 'phase2-facts', 'phase2-size', 'roles-ran', 'skills-at-entry']);
   // The gateway's config carries the runner's cycle bars by family root; unreadable: none (the briefing on file).
   assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: JSON.stringify({ NQ: BAR, MES: 7 }) }).cycleBars, { MNQ: BAR });
   for (const raw of [undefined, '', '{bad', '[1]', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_BARS: raw }).cycleBars, {}, String(raw));
+});
+
+test('phase2-size: an autonomous entry over the size phase 2 approved is refused; at or under it goes; no readable size refuses; exits and a cycle that needs no phase 2 are unchanged', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.', vwap: { side: 'above' }, candidates: [{ name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: null }] } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
+  } });
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const run = (verdict, input = entryOrder(), cfg = auto) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\n${FACTS}`)].join('\n'));
+    return evaluateOrder({ input, entries: [plan(1)], now: NOW, config: cfg });
+  };
+  const size = r => r.violations.filter(v => v.check === 'phase2-size').map(v => v.message);
+  // At the approved size, or under it: no refusal (the whole order passes).
+  assert.deepStrictEqual(run('VERDICT: APPROVE - size 1, risk $8').violations, []);
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 3, risk $24', entryOrder({ size: 2 }))), []);
+  // Over it: refused, naming both; the Size line's smaller size binds too.
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1, risk $8', entryOrder({ size: 2 }))), ['size 2 is over the 1 risk-manager phase 2 approved: an entry is at most phase 2\'s size (it only ever cuts one).']);
+  assert.strictEqual(size(run('Size: 1 (cut)\nVERDICT: APPROVE - size 2, risk $16', entryOrder({ size: 2 }))).length, 1);
+  // No readable size on the approval: refused (fails closed).
+  for (const v of ['VERDICT: APPROVE - risk $8', 'VERDICT: APPROVE - size 0', 'VERDICT: APPROVE - size 1.5', 'VERDICT: APPROVE - size <n>']) {
+    assert.match(size(run(v))[0] || '', /approval states no size the gate can read/, v);
+  }
+  // A size the order doesn't state as a number: refused.
+  assert.strictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 'one' }))).length, 1);
+  // Risk-reducing orders never reach it, whatever phase 2 said.
+  for (const rationale of ['[exit] flatten', '[protect] stop for the long at 21480']) {
+    assert.deepStrictEqual(run('VERDICT: APPROVE - risk $8', entryOrder({ rationale, size: 5 })).violations, [], rationale);
+  }
+  // No phase 2 required (not a runner's cycle, or not autonomous): no phase2-size check, as before.
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 2 }), { ...auto, cycle: null })), []);
+  assert.deepStrictEqual(size(run('VERDICT: APPROVE - size 1', entryOrder({ size: 2 }), { ...auto, autonomous: false })), []);
+  // A veto is roles-ran's refusal, not this one's (no approving report to size).
+  assert.deepStrictEqual(size(run('VERDICT: VETO - room')), []);
+  // The cycle's transcript can't be read: refused, naming it.
+  assert.match(size(evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config: { ...auto, cycleTranscript: `${file}.gone` } }))[0] || '', /The cycle's transcript can't be read \(ENOENT\), so the gate can't check the size risk-manager phase 2 approved/);
 });
 
 test('phase2-facts: a soft read alone never refuses (the room short, the VWAP on the other side, a mixed read); a false trend fact still does (fix/confluence-not-vetoes)', () => {

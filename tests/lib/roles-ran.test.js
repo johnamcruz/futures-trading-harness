@@ -283,7 +283,9 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   assert.strictEqual(verdictOf(example), 'APPROVE', example);
   // Its Size line, in the agent's own words, approves beside an APPROVE line.
   const size = /e\.g\. `(Size: [^`]+)`/.exec(rm.replace(/\n\s*/g, ' '))[1];
-  assert.strictEqual(size, 'Size: 1 (record 8 cut to 1: no reviewed trades yet)');
+  assert.strictEqual(size, 'Size: 1 (the record\'s 1)');
+  // A cut below the record's size is no order (runner-entry.js: the gate takes only the record's size): taught as a VETO.
+  assert.ok(rm.replace(/\n\s*/g, ' ').includes('A composed entry orders the record\'s size: approving less is no order, so VETO with the size as the fix.'));
   const V = 'VERDICT: APPROVE - size 1, risk $20.00, trade_lifecycle long with the 1h up trend, 2.08R\nFACTS: window opening drive; trend long allowed';
   assert.strictEqual(verdictOf(`${size}\n${V}`), 'APPROVE');
   // The baseline's taught step line still approves (the parser keeps it).
