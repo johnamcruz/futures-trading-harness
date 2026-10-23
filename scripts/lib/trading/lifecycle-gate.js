@@ -22,8 +22,9 @@
  *     minimum stop, risk.min_rr, the stated size within risk.max_risk_usd), equal to the record's plan:
  *     stopLossBracket.ticks and takeProfitBracket.ticks are its ticks;
  *   - be a limit at the record's entry price or better for its side;
- *   - be the record's stated size. The ceilings over it are the gate's own checks (max-risk, max-order-size, and in a
- *     prop attempt the policy verdict's size): at or below, never above.
+ *   - be the record's stated size, or, where phase 2's approved size is known and smaller (`approvedSize`), exactly that
+ *     size (its cut). The ceilings over it are the gate's own checks (max-risk, max-order-size, and in a prop attempt
+ *     the policy verdict's size): at or below, never above.
  * Anything missing, unreadable or throwing refuses (fails closed).
  *
  *   isComposed(strategy)            a strategy (or a name) of signal composed, or trade_lifecycle
@@ -33,7 +34,7 @@
  *   readsOf(record)                 the reads as the model stated them: [{ step, skill, read, why }]
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
- *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot })
+ *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize })
  *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
@@ -142,7 +143,7 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
   }
 }
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT }) {
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -202,7 +203,11 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const tp = isObj(input.takeProfitBracket) ? input.takeProfitBracket.ticks : undefined;
     if (sl !== p.stop.ticks) return say(`stopLossBracket.ticks ${JSON.stringify(sl)} is not the record's ${p.stop.ticks} (stop ${p.stop.price}, one tick beyond ${p.stop.level})`, check);
     if (tp !== p.target.ticks) return say(`takeProfitBracket.ticks ${JSON.stringify(tp)} is not the record's ${p.target.ticks} (target ${p.target.price})`, check);
-    if (Number(input.size) !== stated) return say(`size ${JSON.stringify(input.size)} is not the size the record states (${stated}); the ceilings over it are the risk cap, the broker's max and, in an attempt, the verdict`, check);
+    // Phase 2's approved size, where it is known (the order gate: the approving report, roles-ran.js approvedSize), cuts
+    // the record's: the order is exactly the smaller (owner-approved 2026-10-22); unknown, the record's, as before.
+    const cut = Number.isInteger(approvedSize) && approvedSize >= 1 && approvedSize < stated;
+    const want = cut ? approvedSize : stated;
+    if (Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the record's ${stated}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the size the record states (${stated}); the ceilings over it are the risk cap, the broker's max and, in an attempt, the verdict`, check);
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,
     // against the R its target needs.
     const room = { stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null };

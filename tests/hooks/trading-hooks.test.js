@@ -816,10 +816,14 @@ test('stop hook asks once for a review of unreviewed entries', () => {
   const auto = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js')).run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1' }, now: new Date(TEST_NOW) });
   assert.strictEqual(auto.exitCode, 2);
   assert.match(auto.stderr, /then you may stop\. Then end your reply with this cycle's CYCLE RESULT line again, as its last line\./);
-  // A role the runner runs on its own (FTH_ROLE_RUN: the trade-executor, the desk) writes no CYCLE RESULT line.
-  const role = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js')).run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1', FTH_ROLE_RUN: 'trade-executor' }, now: new Date(TEST_NOW) });
-  assert.strictEqual(role.exitCode, 2);
-  assert.match(role.stderr, /then you may stop\.$/);
+  // A role the runner runs on its own (FTH_ROLE_RUN: the trade-executor, the desk) is never asked: it reviews no trade,
+  // and its last message is its report (a reminder made a desk role answer it instead of reporting).
+  for (const roleRun of ['trade-executor', 'volume-liquidity-analyst', 'risk-manager']) {
+    assert.strictEqual(require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js')).run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1', FTH_ROLE_RUN: roleRun }, now: new Date(TEST_NOW) }), '', roleRun);
+    assert.strictEqual(runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict', { stop_hook_active: false }, { ...env, FTH_ROLE_RUN: roleRun }).code, 0, `${roleRun}: the wired hook`);
+  }
+  // The head trader's run (no FTH_ROLE_RUN) still is.
+  assert.strictEqual(run({ stop_hook_active: false }).code, 2);
 });
 
 test('MCP gateway blocks a bad order end to end and forwards everything else', async () => {
@@ -3359,6 +3363,72 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
   const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }),
     setup([], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT }).env);
   assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate hook: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22): record 4, phase 2 at 1, only 1 passes; at the record\'s, only it; no phase 2, equality; an exit goes', async () => {
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
+  const cycle = p2 => [...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', `${p2}\nFACTS: none`)].join('\n');
+  const CUT = 'Size: 1 (record 4 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $55.50';
+  const composedOf = text => (String(text).match(/\[composed-reads\][^\n[]*/g) || []).join(' ');
+  // The hook (the session's transcript).
+  const home = trendHome();
+  LC.writeScenario(home, { size: 4 });
+  // An autonomous gate reads the harness clock: a replay broker's replayed time (the record's bar), never the wall's.
+  const { env, dir } = setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, FTH_REPLAY_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full' });
+  simBroker(env);
+  const transcript = path.join(dir, 'session.jsonl');
+  const hook = (p2, size, e = env) => { fs.writeFileSync(transcript, cycle(p2)); return composedOf(gate({ ...orderPayload(LC.order({ size })), transcript_path: transcript }, e).stderr); };
+  assert.strictEqual(hook(CUT, 1), '');
+  for (const n of [2, 4]) assert.match(hook(CUT, n), new RegExp(`size ${n} is not 1, risk-manager phase 2's cut of the record's 4`), String(n));
+  assert.strictEqual(hook('VERDICT: APPROVE - size 4, risk $222', 4), '');
+  assert.match(hook('VERDICT: APPROVE - size 4, risk $222', 1), /size 1 is not the size the record states \(4\)/);
+  const { FTH_AUTONOMOUS: _a, FTH_CYCLE: _c, ...interactive } = env;
+  assert.match(hook(CUT, 1, interactive), /size 1 is not the size the record states \(4\)/, 'no phase 2 required: the record\'s size');
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, size: 4, rationale: '[protect] stop for the composed long' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('MCP gateway wiring: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22), on the runner\'s cycle transcript: record 4, phase 2 at 1, only 1 passes; phase 2 over the record\'s, only the record\'s', async () => {
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
+  const cycle = p2 => [...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', `${p2}\nFACTS: none`)].join('\n');
+  const CUT = 'Size: 1 (record 4 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $55.50';
+  const composedOf = text => (String(text).match(/\[composed-reads\][^\n[]*/g) || []).join(' ');
+  // On a replay broker at the replayed time.
+  const { spawn } = require('child_process');
+  const via = async (p2, size) => {
+    const gdir = tmpDir();
+    const ghome = path.join(gdir, '.futures-trading-harness');
+    fs.mkdirSync(ghome, { recursive: true });
+    trendHome(ghome, { specs: false });
+    LC.writeScenario(ghome, { size: 4 });
+    fs.writeFileSync(path.join(ghome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(gdir, [lcPlan]), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', replay: true } } }));
+    const stream = path.join(gdir, 'cycle-transcript.jsonl');
+    fs.writeFileSync(stream, cycle(p2));
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
+      PATH: process.env.PATH, HOME: gdir, FTH_GATE_LOG: path.join(gdir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', NODE_ENV: 'test',
+      SIM_ALLOWED_ACCOUNTS: '1,7', FTH_REPLAY_NOW: LC_AT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }),
+      FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream,
+      FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: LC_AT, replay: true }),
+      FAKE_CONTRACTS: JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]),
+    } });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+    for (const m of [call(0, 'search_contracts', { searchText: 'MNQ' }), call(1, 'place_order', LC.order({ size }))]) {
+      gw.stdin.write(`${JSON.stringify(m)}\n`);
+      for (let t = 0; t < 400 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
+    }
+    gw.stdin.end();
+    await new Promise(r => gw.on('close', r));
+    return composedOf(replies().find(r => r.id === 1).result.content[0].text);
+  };
+  assert.strictEqual(await via(CUT, 1), '');
+  assert.match(await via(CUT, 4), /size 4 is not 1, risk-manager phase 2's cut of the record's 4/);
+  assert.match(await via('VERDICT: APPROVE - size 9, risk $222', 1), /size 1 is not the size the record states \(4\)/);
 });
 
 test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to the broker; a record for the other side or a false read never reaches it; an exit goes', async () => {

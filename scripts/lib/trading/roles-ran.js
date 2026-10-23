@@ -210,6 +210,8 @@ const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdic
 //   - any decision that isn't approve, approved, full (the prop verdict's action) or take (the trader-process "8
 //     Decision: take") refuses; an approval is a verdict that says approve, approved or full;
 //   - VETO (vetoed, vetoes) in capitals anywhere, or any case on a decision line, refuses ("a read, never a veto" doesn't).
+// A markdown heading line (its first non-space character '#') is never a decision line: "## Phase 2: Plan verdict, MNQ
+// short" decides nothing. The veto rules read every line, headings too ("## VETO", "## Phase 2 verdict: veto").
 // `full` is the prop verdict's own approving action (`skip` its other), so a model copying "verdict full" agrees.
 const AGREE = new Set(['approve', 'approved', 'full', 'take']);
 const APPROVE_WORDS = new Set(['approve', 'approved', 'full']);
@@ -219,6 +221,7 @@ const PROSE = new Set(['is', 'was', 'to', 'says', 'said']);
 const BRACKETS = { '(': ')', '[': ']', '\u00ab': '\u00bb' };
 const VETO_WORD = /\bveto(?:ed|es)?\b/i;
 const VETO_CAPS = /\bVETO(?:ED|ES)?\b/;
+const HEADING = /^\s*#/;
 
 /** A line read plain: format characters dropped (markup, quotes and emoji are separators the decision reader skips). */
 const plainLine = l => String(l).replace(/\p{Cf}/gu, '');
@@ -261,6 +264,8 @@ function decisionLines(text) {
   const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').map(plainLine);
   const out = [];
   for (let i = 0; i < lines.length; i += 1) {
+    // A markdown heading ("## Phase 2: Plan verdict, MNQ short") is never a decision line; the veto rules still read it.
+    if (HEADING.test(lines[i])) continue;
     for (const m of lines[i].matchAll(KEYWORD_ALL)) {
       const d = decisionAfter(lines[i].slice(m.index + m[0].length));
       if (d === null) continue;

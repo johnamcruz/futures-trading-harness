@@ -382,7 +382,7 @@ test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vet
   assert.deepStrictEqual([r.entry.phase2.chars, r.entry.phase2.text.length, r.entry.phase2.cut], [long.length, max, true]);
 });
 
-test('runEntry: phase 2\'s approved size caps the order: the record\'s size when phase 2 approves it or more; under it, or no readable size, no order', async () => {
+test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of it and the record\'s (a cut built by order_plan); no readable size, or order_plan over it, no order', async () => {
   const p2 = text => ({ roles: { phase2: { ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' } } });
   const FACTS = 'FACTS: window opening drive; trend long allowed';
   // Equal: the record's size, the journal saying why.
@@ -398,12 +398,29 @@ test('runEntry: phase 2\'s approved size caps the order: the record\'s size when
   assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { approved: 3, record: 1, ordered: 1 }]);
   assert.match(s.journal[0].text, /size 1: phase 2 approved 3, capped at the record's 1;/);
   assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 1);
-  // Under the record's (record 8, phase 2 at 1): no order, no executor, no plan (the gate takes only the record's size).
-  const eight = { ...ARGS, size: 8 };
-  s = setup({ ...p2(`Size: 1 (record 8 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`), plan: () => ({ args: eight, plan: { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: 8, entry: 21500, stopPrice: 21490, stopTicks: 40, targetPrice: 21520, targetTicks: 80, riskUsd: 160, record: 'rec0000000000001' } }) });
-  r = await E.runEntry(s.deps, s.cycle());
+  // Under the record's (record 8, phase 2 at 1): order_plan is asked for the cut, and the order is exactly 1, its risk
+  // and the journal plan for 1, the executor sent those arguments.
+  const asked = [];
+  const cutPlan = a => {
+    asked.push(a.size);
+    const n = a.size || 8;
+    return { args: { ...ARGS, size: n }, plan: { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: n, ...(n < 8 ? { recordSize: 8 } : {}), entry: 21500, stopPrice: 21490, stopTicks: 40, targetPrice: 21520, targetTicks: 80, riskUsd: 20 * n, record: 'rec0000000000001' } };
+  };
+  s = setup({ ...p2(`Size: 1 (record 8 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: cutPlan });
+  r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));
+  assert.deepStrictEqual([asked, r.entry.outcome, r.entry.size], [[1], 'executed', { approved: 1, record: 8, ordered: 1 }]);
+  assert.match(s.journal[0].text, /long 1 MNQ: limit 21500, stop 21490, target 21520, risk \$20; size 1: phase 2 cut the record's 8;/);
+  assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 1);
+  // Phase 2 at or over the record's: no cut asked for.
+  asked.length = 0;
+  s = setup({ ...p2(`VERDICT: APPROVE - size 9, risk $180\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: cutPlan });
+  r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));
+  assert.deepStrictEqual([asked, r.entry.size], [[undefined], { approved: 9, record: 8, ordered: 8 }]);
+  // order_plan giving more than phase 2 approved (it ignored the cut): no order, never sent (fails closed).
+  s = setup({ ...p2(`VERDICT: APPROVE - size 1, risk $20\n${FACTS}`), records: [record({ plan: { ...PLAN, size: 8 } })], plan: () => cutPlan({}) });
+  r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' }));
   assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role), s.journal, r.entry.size], ['no-trade', ['phase2'], [], { approved: 1, record: 8, ordered: null }]);
-  assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - the runner\'s entry: risk-manager phase 2 approved size 1, under the compose record\'s 8 (the order gate takes only the record\'s stated size: composed-reads): no order');
+  assert.match(r.result, /order_plan's size 8 is over the 1 risk-manager phase 2 approved/);
   // The Size line's smaller size binds too.
   s = setup(p2(`Size: 0 (none)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`));
   r = await E.runEntry(s.deps, s.cycle());

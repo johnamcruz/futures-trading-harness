@@ -27,7 +27,7 @@ const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript } = require('./skills-loaded');
-const { checkRolesRan, approvedPhase2, sizeRefusal } = require('./roles-ran');
+const { checkRolesRan, approvedPhase2, sizeRefusal, approvedSize } = require('./roles-ran');
 const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
@@ -386,12 +386,24 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // Hard rule, keyed on the order (its tag, or a policy whose verdict trades it), outside the skippable checks and
   // whether or not the strategy document loads: a trade_lifecycle entry goes only on its compose record for this
   // cycle's bar and side, every read re-checked now (lifecycle-gate.js). It stands in for trigger-fired.
+  const transcript = transcriptPath || config.cycleTranscript;
+  // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
+  // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
+  const factsBar = briefingBarOf(config, contractRoot(input.contractId));
+  // In index mode, a role's report counts only with the lookups this bar requires of it (see roles-ran below).
+  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
+  // The approving report, read once for the facts and the size checks (a read that throws: the facts check refuses).
+  let p2 = null;
+  const p2Report = () => (p2 || (p2 = { r: approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) })).r;
+  // Phase 2's approved size, where an approving report is known (roles-ran.js approvedSize; none readable: unknown here,
+  // the phase2-size check refuses it): a composed entry is exactly the smaller of it and the record's (composed-reads).
+  const p2Size = () => { try { const r = config.autonomous ? p2Report() : null; const a = r && !r.error ? approvedSize(r.text) : null; return a && !a.error ? a.size : null; } catch (_err) { return null; } };
   const composed = setup ? composedName({ setupName: setup[1].toLowerCase(), named, strategies, home: config.home, root: contractRoot(input.contractId) }) : null;
   let composedCheck = null;
   if (composed) {
     const doc = strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size() });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
@@ -466,12 +478,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
 
   add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
-  const transcript = transcriptPath || config.cycleTranscript;
   // In index mode (the default, FTH_ROLE_SKILLS not full) the situational skills this bar's briefing triggers too (skills-loaded.js).
   // The cycle's lanes unreadable (FTH_CYCLE_LANE_BARS set but not readable): every one marked for the head trader.
-  // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
-  // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
-  const factsBar = briefingBarOf(config, contractRoot(input.contractId));
   // Claude Code's head trader in index mode (the runner config's headSkillsInPrompt): the skills its prompt addition
   // embeds, only on the runner's attestation for this cycle, checked now against that file, the skills' current text and
   // this run's own transcript (head-prompt.js claudeAttested; a hook's, that run's session). Then the head trader's
@@ -506,7 +514,6 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
-  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
   // The roles the runner ran itself (its role record, FTH_CYCLE_ROLES: runner-roles.js) are judged with the transcript's.
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
@@ -515,9 +522,6 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The cycle's bar per root as the briefing is on it (several lanes: FTH_CYCLE_BRIEFING_BARS, the first lane's, over
   // FTH_CYCLE_BARS, which names the lane bar that closed): the briefing the facts are checked against.
   const factsBars = { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) };
-  // The approving report, read once for the facts and the size checks (a read that throws: the facts check refuses).
-  let p2 = null;
-  const p2Report = () => (p2 || (p2 = { r: approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) })).r;
   const factsMsg = config.autonomous ? factsRefusal({ report: p2Report, home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
   if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
   // Hard rule, tighten-only: the entry's size at most the size that report approved (roles-ran.js sizeRefusal: none

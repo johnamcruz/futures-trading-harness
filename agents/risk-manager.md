@@ -191,11 +191,11 @@ Write your VERDICT line, then the FACTS line last; nothing may follow it.
 The code reads your report; anything else reads as a veto:
 
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
-- "verdict" and "decision" nowhere else in the report.
+- "verdict" and "decision" nowhere else in the report, headings included.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
-- Size → its own `Size:` line, e.g. `Size: 1 (the record's 1)`; never
-  "sizing decision" or "sizing verdict". A composed entry orders the
-  record's size: approving less is no order, so VETO with the size as the fix.
+- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no
+  reviewed trades yet)`; never "sizing decision" or "sizing verdict". To
+  cut, approve the smaller size: the order is exactly it.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `The verdict priority order: ...`, `Sizing verdict: skip x0.5`.
 

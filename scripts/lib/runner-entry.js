@@ -20,8 +20,8 @@
  *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
  *      with the reading's reason: roles-ran.js approvalReadAsVeto); phase 2's report kept in the entry record
  *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); phase 2's approved size (roles-ran.js approvedSize:
- *      none readable is a no-trade) caps the order: over the record's size, capped at it; under it, a no-trade (the
- *      gate's composed-reads takes only the record's stated size), so the order never exceeds what phase 2 approved
+ *      none readable is a no-trade) sets the order's: exactly the smaller of it and the record's (a cut is built by
+ *      order_plan at it, as the gate's composed-reads takes it), never more than phase 2 approved
  *      (`size`: { approved, record, ordered }); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
@@ -351,8 +351,12 @@ async function runEntry(deps, c) {
     const approved = approvedSize(rev.text);
     if (approved.error) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved without a size the runner can read (${approved.error})` }; return { stop: stop.why }; }
     const roleEnv = childEnv(cfg, root, env, roleContext);
+    // The order is exactly the smaller of the record's size and phase 2's (owner-approved 2026-10-22): a cut is built by
+    // order_plan at it (the record's brackets, the risk for the size ordered), as the gate's composed-reads takes it.
+    const recSize = rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null;
+    const cutTo = recSize !== null && approved.size < recSize ? approved.size : null;
     try {
-      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
+      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), ...(cutTo !== null ? { size: cutTo } : {}) }, { env: roleEnv, root, tool: true });
     } catch (err) {
       // Only an expired record's refusal is timed as the order's moment (the record ran out by then).
       if (/\bexpired\b/.test(err.message)) info.timing.orderMs = sinceClose(wallNow());
@@ -360,13 +364,13 @@ async function runEntry(deps, c) {
       stop = /\bexpired\b/.test(err.message) ? { outcome: 'expired', why: `the composed record expired before the order (${short(err.message)})` } : { outcome: 'no-trade', why: `order_plan refused the composed plan: ${short(err.message)}` };
       return { stop: stop.why };
     }
-    // The order's size is the compose record's (order_plan; the gate's composed-reads takes only that size): phase 2's
-    // approved size over it is capped at it; under it, no order (the order is never cut below the record, never grown).
+    // Never more than phase 2 approved: order_plan's size is checked against it (fails closed).
     const ordered = order && order.args ? order.args.size : undefined;
+    const recordSize = order && order.plan && Number.isInteger(order.plan.recordSize) ? order.plan.recordSize : ordered;
     if (!(Number.isInteger(ordered) && ordered >= 1)) { stop = { outcome: 'no-trade', why: `order_plan gave no size (${JSON.stringify(ordered)})` }; return { stop: stop.why }; }
-    info.size = { approved: approved.size, record: ordered, ordered: approved.size >= ordered ? ordered : null };
-    if (approved.size < ordered) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved size ${approved.size}, under the compose record's ${ordered} (the order gate takes only the record's stated size: composed-reads)` }; return { stop: stop.why }; }
-    const sizeWhy = `size ${ordered}: ${approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
+    info.size = { approved: approved.size, record: recordSize, ordered: ordered <= approved.size ? ordered : null };
+    if (ordered > approved.size) { stop = { outcome: 'no-trade', why: `order_plan's size ${ordered} is over the ${approved.size} risk-manager phase 2 approved` }; return { stop: stop.why }; }
+    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut the record's ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
     const late = await lateCheck(order, roleEnv);

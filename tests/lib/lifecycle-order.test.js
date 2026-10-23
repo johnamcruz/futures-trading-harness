@@ -30,6 +30,18 @@ test('order_plan, composed: the record\'s limit, brackets and stated size; the d
   assert.throws(() => order(six), /\[composed-reads\] .*size 6 risks \$333, over the strategy's risk.max_risk_usd \$300 \(at most 5 at this stop\)/);
 });
 
+test('order_plan, composed: a cut (`size`, the runner\'s entry: phase 2 approved fewer) orders exactly it at the record\'s brackets, the risk for it; over the record\'s, or not a whole size, refused', () => {
+  const home = trendHome();
+  LC.writeScenario(home, { size: 5 });
+  const r = order(home, { size: 2 });
+  assert.deepStrictEqual([r.args.size, r.args.stopLossBracket.ticks, r.args.takeProfitBracket.ticks, r.args.limitPrice, r.plan.size, r.plan.recordSize, r.plan.riskUsd], [2, 111, 231, 21540.25, 2, 5, 111]);
+  assert.match(r.args.rationale, /, 2 MNQ risks \$111\.00, record /);
+  assert.match(r.line, /size 2: phase 2 cut the record's 5 \(yours 5, at or under the ceiling 5:/);
+  // The record's own size, or none given: no cut.
+  for (const size of [5, undefined, null]) assert.deepStrictEqual([order(home, { size }).args.size, 'recordSize' in order(home, { size }).plan], [5, false], String(size));
+  for (const size of [6, 0, -1, 1.5, '2']) assert.throws(() => order(home, { size }), /a cut is a whole size from 1 to the record's 5; no order/, String(size));
+});
+
 test('order_plan, composed: refused without a cycle bar, a record for the side, or reads that stand now', () => {
   const home = trendHome();
   LC.writeScenario(home);

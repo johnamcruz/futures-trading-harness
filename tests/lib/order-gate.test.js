@@ -3030,6 +3030,37 @@ test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it 
   assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
 });
 
+test('trade_lifecycle: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22): record 8, phase 2 at 1, only 1 goes; phase 2 at or over the record\'s, only the record\'s; no phase 2, equality; exits unaffected', () => {
+  // Record 8 at $55.50 a contract ($444): the registry's trade_lifecycle under a $1000 cap.
+  const wide = LC_REGISTRY.map(x => (x.name === 'trade_lifecycle' ? { ...x, risk: { ...x.risk, max_risk_usd: 1000 } } : x));
+  const home = lcHome({ size: 8, maxRiskUsd: 1000 });
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const auto = { autonomous: true, cycle: 'full', cycleTranscript: file };
+  const reads = (verdict, size, cfg = auto) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\nFACTS: none`)].join('\n'));
+    return lcEval(home, LC.order({ size }), { strategies: wide, config: cfg }).violations.filter(v => v.check === 'composed-reads').map(v => v.message);
+  };
+  const V1 = 'Size: 1 (record 8 cut to 1: no reviewed trades yet)\nVERDICT: APPROVE - size 1, risk $55.50';
+  assert.deepStrictEqual(reads(V1, 1), []);
+  for (const n of [2, 7, 8]) assert.match(reads(V1, n)[0] || '', new RegExp(`size ${n} is not 1, risk-manager phase 2's cut of the record's 8`), String(n));
+  for (const a of [8, 12]) {
+    assert.deepStrictEqual(reads(`VERDICT: APPROVE - size ${a}, risk $444`, 8), [], String(a));
+    assert.match(reads(`VERDICT: APPROVE - size ${a}, risk $444`, 1)[0] || '', /size 1 is not the size the record states \(8\)/, String(a));
+  }
+  // No phase 2 known (not an autonomous cycle; an approval with no readable size): the record's size, as before.
+  assert.deepStrictEqual(reads(V1, 8, {}), []);
+  assert.match(reads(V1, 1, {})[0] || '', /size 1 is not the size the record states \(8\)/);
+  assert.match(reads('VERDICT: APPROVE - risk $55.50', 1)[0] || '', /size 1 is not the size the record states \(8\)/);
+  // Risk-reducing orders never reach it.
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${V1}\nFACTS: none`)].join('\n'));
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 8, rationale }, { strategies: wide, config: auto });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
+});
+
 test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest local price beyond the plan\'s stop, or past its entry against it over the share, refuses; the trade\'s way, or within the share, goes; exits always go', () => {
   const LE = require('../../scripts/lib/trading/late-entry');
   // Scenario 1: a long, limit 21540.25, stop 21512.5 (27.75 points): 0.25 of it = 6.9375 points below the entry.

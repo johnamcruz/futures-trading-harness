@@ -17,9 +17,29 @@ const SPEC = () => ({ tickSize: 0.25, tickValue: 0.5 });
 const NOW = new Date('2026-10-07T14:00:02Z');
 
 function judge(home, o = {}) {
-  return composedRefusal({ name: 'trade_lifecycle', strategy: 'strategy' in o ? o.strategy : DOC, home, root: 'MNQ', input: F.order(o.order || {}), now: o.now || NOW, cycleBars: 'cycleBars' in o ? o.cycleBars : { MNQ: F.BAR }, entries: o.entries || [], specOf: o.specOf || SPEC });
+  return composedRefusal({ name: 'trade_lifecycle', strategy: 'strategy' in o ? o.strategy : DOC, home, root: 'MNQ', input: F.order(o.order || {}), now: o.now || NOW, cycleBars: 'cycleBars' in o ? o.cycleBars : { MNQ: F.BAR }, entries: o.entries || [], specOf: o.specOf || SPEC, ...('approvedSize' in o ? { approvedSize: o.approvedSize } : {}) });
 }
 const world = (o = {}) => { const home = tmpDir(); const rec = F.writeScenario(home, o); return { home, rec }; };
+
+test('composed-reads: phase 2\'s approved size, where known, cuts the record\'s: the order is exactly the smaller; unknown, the record\'s (owner-approved 2026-10-22)', () => {
+  // Record 8 (at $55.50 a contract: $444, under a $1000 cap).
+  const wide = { ...DOC, risk: { ...DOC.risk, max_risk_usd: 1000 } };
+  const { home } = world({ size: 8, maxRiskUsd: 1000 });
+  const size = (n, approvedSize) => judge(home, { strategy: wide, order: { size: n }, ...(approvedSize === undefined ? {} : { approvedSize }) }).message;
+  // Phase 2 at 1: exactly 1; 2, 7 and 8 refused, naming the cut.
+  assert.strictEqual(size(1, 1), null);
+  for (const n of [2, 7, 8]) assert.match(size(n, 1) || '', new RegExp(`size ${n} is not 1, risk-manager phase 2's cut of the record's 8: the order is exactly the smaller`), String(n));
+  // Phase 2 at or over the record's: only the record's size.
+  for (const a of [8, 9, 20]) {
+    assert.strictEqual(size(8, a), null, String(a));
+    for (const n of [1, 7, 9]) assert.match(size(n, a) || '', /is not the size the record states \(8\)/, `${n} vs ${a}`);
+  }
+  // Unknown (no phase 2 required, none readable): equality, as before.
+  for (const a of [undefined, null, 0, 1.5, '1']) {
+    assert.strictEqual(size(8, a), null, String(a));
+    assert.match(size(1, a) || '', /size 1 is not the size the record states \(8\)/, String(a));
+  }
+});
 
 test('composed-reads: scenario 1 stands: the record for this bar and side, every read true now, the order as the record says', () => {
   const { home } = world();
