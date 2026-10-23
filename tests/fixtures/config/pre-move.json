@@ -1070,6 +1070,10 @@
    "value": 250,
    "from": "trading/broker-fields.js TEXT_MAX"
   },
+  "prompt.cycleDataMaxBytes": {
+   "value": 48000,
+   "from": "new in feat/cycle-data-in-prompt (the pre-collected cycle reads' section, in UTF-8 bytes: well under one argv string's 128 KB)"
+  },
   "limits.probeOutputBytes": {
    "value": 67108864,
    "from": "headless-check.js runProbe maxBuffer (64 * 1024 * 1024)"
