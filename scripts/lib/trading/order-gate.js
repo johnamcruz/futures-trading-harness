@@ -406,12 +406,16 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
     // Inside a policy (a prop attempt's account layer), the record's size is a suggestion: the order is the translated
     // size (prop/size-translate.js, the one place), from the policy's latest verdict and the attempt's snapshot, as
-    // order_plan built it; any other size is refused.
-    const translate = named && named.signal === 'policy' && named.account && doc ? translatorFor({
-      home: config.home, root: contractRoot(input.contractId), policy: named, account: accounts.find(a => a.name === named.account) || null, strategy: doc,
-      verdict: latestVerdict(config.home, named.name, contractRoot(input.contractId)), specOf, selected: config.selection ? config.selection.symbols : null,
-      orderMax: brokerOrderLimit(contractsFile).maxOrderSize,
-    }) : null;
+    // order_plan built it; any other size is refused. Only the verdict sized on this record translates it: none (null),
+    // and the [policy] check below refuses the entry.
+    const translate = named && named.signal === 'policy' && named.account && doc ? (plan, spec, stated, rec) => {
+      const v = latestVerdict(config.home, named.name, contractRoot(input.contractId));
+      if (!v || !rec || v.record !== rec.id) return null;
+      return translatorFor({
+        home: config.home, root: contractRoot(input.contractId), policy: named, account: accounts.find(a => a.name === named.account) || null, strategy: doc,
+        verdict: v, specOf, selected: config.selection ? config.selection.symbols : null, orderMax: brokerOrderLimit(contractsFile).maxOrderSize,
+      })(plan, spec, stated);
+    } : null;
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
@@ -470,6 +474,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const stopPrices = [...rationale.matchAll(new RegExp(STOP_PRICE.source, 'gi'))].map(m => Number(m[1].replace(/,/g, '')));
   const riskMsg = checkRiskLimit({ input, stopPrices, strategy: named, specOf });
   if (riskMsg) violations.push({ check: 'max-risk', message: riskMsg });
+  // A composed entry under a policy (setup:prop_portfolio): the composed strategy's own risk.max_risk_usd binds on the
+  // size ordered too (the translation's cap, checked again here: defence in depth).
+  const composedDoc = composed && strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
+  const composedRisk = !riskMsg && composedDoc && composedDoc !== named ? checkRiskLimit({ input, stopPrices, strategy: composedDoc, specOf }) : null;
+  if (composedRisk) violations.push({ check: 'max-risk', message: composedRisk });
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf, selected: config.selection ? config.selection.symbols : null, strategies }));
   } else {

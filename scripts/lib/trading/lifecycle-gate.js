@@ -145,7 +145,10 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
   }
 }
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null }) {
+/** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
+const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
+
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -191,7 +194,9 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const stated = held && Number.isInteger(held.size) && held.size >= 1 ? held.size : null;
     if (stated === null) return say('the compose record states no size (a whole number of contracts, 1 or more)', check);
     const risk = strategy && strategy.risk ? strategy.risk : {};
-    const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null, stopRule: stopRuleOf(risk) });
+    // In a prop attempt (`translate`, or `attempt`: order_plan's own first read) the record's size is a suggestion: never
+    // refused over the cap here, which binds on the translated size the order is.
+    const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null, stopRule: stopRuleOf(risk), suggestion: Boolean(translate || attempt) });
     if (!planned.plan || planned.problems.length) return say(`the plan doesn't stand: ${planned.problems.join('; ') || 'it can\'t be worked out'}`, check);
     const p = planned.plan;
     const same = held && isObj(held.entry) && isObj(held.stop) && isObj(held.target) && held.entry.price === p.entry.price && held.stop.ticks === p.stop.ticks && held.target.ticks === p.target.ticks;
@@ -209,7 +214,9 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     // the record's: the order is exactly the smaller (owner-approved 2026-10-22); unknown, the record's, as before.
     // In a prop attempt (`translate`: prop/size-translate.js, from the same records as order_plan) the base is the
     // translated size, the rulebook's correct one: the record's is a suggestion. A translation that skips refuses.
-    const t = typeof translate === 'function' ? translate(p, spec, stated) : null;
+    const t = typeof translate === 'function' ? translate(p, spec, stated, rec) : undefined;
+    // null: no verdict sized on this record, so no translation; the caller's [policy] check refuses the entry.
+    if (t === null) return { message: null, check, record: rec, plan: p, room: roomOf(p, tick), expiresAt: new Date(expiry).toISOString(), briefing: b, untranslated: true };
     if (t && t.skip) return say(`no size: ${t.reason} (the record suggested ${stated})`, check);
     const base = t ? t.size : stated;
     const cut = Number.isInteger(approvedSize) && approvedSize >= 1 && approvedSize < base;
@@ -218,8 +225,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     if (Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the record's ${stated}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the size the record states (${stated}); the ceilings over it are the risk cap, the broker's max and, in an attempt, the verdict`, check);
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,
     // against the R its target needs.
-    const room = { stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null };
-    return { message: null, check, record: rec, plan: p, room, expiresAt: new Date(expiry).toISOString(), briefing: b };
+    return { message: null, check, record: rec, plan: p, room: roomOf(p, tick), expiresAt: new Date(expiry).toISOString(), briefing: b };
   } catch (err) {
     return say(`the check failed (${err.message}): no entry (fails closed)`);
   }

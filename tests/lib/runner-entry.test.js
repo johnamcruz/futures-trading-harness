@@ -450,13 +450,16 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
   };
   const FACTS = 'FACTS: window opening drive; trend long allowed';
   const p2 = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
+  // The runner's home runs the attempt too: the runner reads the translated size before phase 2 (order_plan's path).
   const run = async (verdict, before = '') => {
-    const s = setup({ roles: { phase2: p2(`${before}VERDICT: ${verdict}\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 1 } })], plan: real(), market: 21540.25 });
+    const s = setup({ roles: { phase2: typeof verdict === 'function' ? (request => p2(`${before}VERDICT: ${verdict(request)}\n${FACTS}`)) : p2(`${before}VERDICT: ${verdict}\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 1 } })], plan: real(), market: 21540.25 });
+    require('../../scripts/lib/trading/prop-state').startAttempt(s.home, P.MINI);
     const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }));
     return { s, r };
   };
-  // Phase 2 approves the translated 5: the order is 5.
-  let { s, r } = await run('APPROVE - size 5, risk $277.50');
+  // Phase 2's request names the translated 5 as the size to approve; phase 2 approving the size its request names: 5.
+  let { s, r } = await run(request => `APPROVE - size ${/The entry's size is (\d+) MNQ/.exec(request)[1]}, risk $277.50`);
+  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$55.50 a contract\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 \(under it: veto instead\); the record's size is a suggestion, never the one to approve\./);
   assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 5, record: 5, ordered: 5 }]);
   assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
   assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\)/);
@@ -465,7 +468,8 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
   ({ r } = await run('APPROVE - size 3, risk $166.50', 'Size: 3 (cut to 3)\n'));
   assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 3, record: 5, ordered: 3 }]);
   assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 3 MNQ \(phase 2 cut the translated 5\)/);
-  // A cut to 2, or phase 2 approving the record's 1: under the floor, no trade, nothing sent or journaled.
+  // A cut to 2, or phase 2 echoing the record's 1 although its request named 5: a cut under the floor, no trade,
+  // nothing sent or journaled.
   for (const n of [2, 1]) {
     ({ s, r } = await run(`APPROVE - size ${n}, risk $${(55.5 * n).toFixed(2)}`));
     assert.strictEqual(r.entry.outcome, 'no-trade', String(n));

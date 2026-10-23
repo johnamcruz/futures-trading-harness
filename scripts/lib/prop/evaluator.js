@@ -204,11 +204,12 @@ function daysFor(stream, pass, rulebook, { keepOwnExits = false } = {}) {
 
 /** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
 function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) {
+  // rulebook.limits: the live entry's limits over the sizing (prop/size-translate.js: the composed cap, the broker's max).
   // The policy's rulebook sizing, every key: none (no policy trades the account) is refused, never a code default.
   const sizing = combine.requireSizing(rulebook.sizing, `${account.name}: the Monte Carlo sizes from a policy's rulebook entry`);
   const legsCache = new Map();
   return {
-    account, sizing, size, multiplier: rulebook.multiplier || at.fullVerdict, mode: contracts, maxDailyLoss,
+    account, sizing, size, multiplier: rulebook.multiplier || at.fullVerdict, mode: contracts, maxDailyLoss, limits: rulebook.limits || null,
     // The order gate's loss limits, as live (attempts.js gateLimits: the gate's own config).
     gate: gate === undefined ? at.gateLimits() : gate,
     legsOf: t => {

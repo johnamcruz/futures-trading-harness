@@ -34,7 +34,8 @@
  *   shardDay(record), dayOf(time)                the trading day a record's shard is, of a time; null when undated
  *   daysNear(time)                               the trading days before, of and after a time (the shards a record
  *                                                live at that time can be in)
- *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd, stopRule })   { plan, problems }
+ *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd, stopRule, suggestion })   { plan, problems }
+ *                                                (suggestion: a prop attempt's size, never refused over the cap)
  *   stopRuleOf(risk)                             { bufferTicks, floorTicks, floorAtr } from a strategy's risk, or null
  *   stopFloorTicks(briefing, tick, stopRule)     D13's floor in ticks, or null when ATR(20) is unknown
  *   expiryOf(briefing, validBars)                when a record on the briefing's bar expires (ms): `validBars` base bars
@@ -139,7 +140,7 @@ function expiryOf(b, validBars = 1) {
 }
 
 /** The plan from the checked reads: { plan, problems } (plan null when it can't be worked out). */
-function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, maxRiskUsd = null, stopRule = null }) {
+function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, maxRiskUsd = null, stopRule = null, suggestion = false }) {
   const problems = [];
   if (!(tick > 0) || !(tickValue > 0)) return { plan: null, problems: ['the contract\'s tick size and value are unknown'] };
   const rule = isObj(stopRule) ? stopRule : null;
@@ -167,7 +168,9 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   const perContract = round2(stopTicks * tickValue);
   const riskUsd = Number.isInteger(size) ? round2(perContract * size) : null;
   if (num(maxRiskUsd) === null) problems.push(`the ${STRATEGY} strategy states no risk.max_risk_usd`);
-  else if (riskUsd !== null && riskUsd > maxRiskUsd) problems.push(`size ${size} risks $${riskUsd}, over the strategy's risk.max_risk_usd $${maxRiskUsd} (at most ${Math.floor(maxRiskUsd / perContract)} at this stop)`);
+  // `suggestion` (a prop attempt: the size is translated at entry, prop/size-translate.js, and the cap binds on the size
+  // ordered there): a stated size over the cap is no problem of the record's.
+  else if (!suggestion && riskUsd !== null && riskUsd > maxRiskUsd) problems.push(`size ${size} risks $${riskUsd}, over the strategy's risk.max_risk_usd $${maxRiskUsd} (at most ${Math.floor(maxRiskUsd / perContract)} at this stop)`);
   const between = x => (long ? x > ref && x < targetPrice : x < ref && x > targetPrice);
   const m3 = briefing.sections.m3.data;
   const near = isObj(m3.nearestLiquidity) && Array.isArray(m3.nearestLiquidity[long ? 'above' : 'below']) ? m3.nearestLiquidity[long ? 'above' : 'below'] : [];

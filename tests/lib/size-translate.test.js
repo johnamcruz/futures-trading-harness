@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { translateSize, translatorFor } = require('../../scripts/lib/prop/size-translate');
-const { trendHome, testSizing } = require('../helpers');
+const { trendHome, testSizing, tmpDir: tmpDirOf } = require('../helpers');
 
 const NOW = new Date('2026-10-07T14:00:02Z');
 // A $2,000 cushion: 0.2 x = $400 a trade. MNQ $0.50 a tick, $0.37 a side; NQ $5, $1.40.
@@ -87,4 +87,47 @@ test('translatorFor: the plan\'s stop ticks and the contract\'s tick value price
   assert.deepStrictEqual(tr(plan, specOf('MNQ'), 1), T({ home: h, capUsd: 300 }));
   assert.strictEqual(tr(plan, specOf('MNQ'), 1).size, 15);
   assert.ok(tr(null, specOf('MNQ'), 1).skip, 'no plan: no size');
+});
+
+test('parity: the simulator (prop/attempts.js defaultSize with the live limits) sizes as translateSize does, stop by stop', () => {
+  const at = require('../../scripts/lib/prop/attempts');
+  const { decideSetup } = require('../../scripts/lib/prop/verdict');
+  const h = home();
+  const r = prop.readAttempt(h, MINI.name);
+  const cs = prop.stateFrom(MINI, r, r.snapshot.balance);
+  const { legs, ratio } = at.legsFor(MINI, 'MNQ', { tickValue: 0.5 });
+  const bars = [{ t: '2026-10-07T13:57:00.000Z', o: 21500, h: 21502, l: 21498, c: 21500, v: 1 }];
+  let compared = 0;
+  for (const min of [1, 3]) {
+    const pol = policy({ min_contracts: min });
+    for (const stopTicks of [8, 40, 111, 150, 199, 201, 400]) {
+      for (const [capUsd, orderMax] of [[300, null], [300, 5], [1000, null], [50, null]]) {
+        const v = decideSetup({ account: MINI, cs, strategy: { ...pol, timeframe: '3m' }, component: 'trade_lifecycle', symbol: 'MNQ', contractId: 'MNQ', rawBars: bars, spec: specOf('MNQ'), scan: { direction: 'long', stopDistance: stopTicks * 0.25 }, now: NOW, specOf, selected: ['MNQ'] });
+        const live = translateSize({ suggested: 1, home: h, root: 'MNQ', policy: pol, account: MINI, verdict: v, capUsd, perContract: stopTicks * 0.5, specOf, selected: ['MNQ'], orderMax });
+        const sim = at.defaultSize({ cs, trade: { stopTicks }, sizing: pol.sizing, legs, mode: 'micro', ratio, fraction: 1, limits: { capUsd, orderMax } });
+        assert.strictEqual(sim ? sim.size : 0, live.skip ? 0 : live.size, `floor ${min}, ${stopTicks} ticks, cap ${capUsd}, max ${orderMax}`);
+        if (sim) assert.strictEqual(sim.root, 'MNQ', 'the contract live trades');
+        compared += 1;
+      }
+    }
+  }
+  assert.strictEqual(compared, 56);
+  // Without the limits the simulator sized past the live entry: the cap is what live binds on.
+  assert.ok(at.defaultSize({ cs, trade: { stopTicks: 40 }, sizing: policy().sizing, legs, mode: 'micro', ratio, fraction: 1 }).size > 15);
+});
+
+test('liveSizing: the run\'s Monte Carlo takes the composed cap, the broker\'s max and the contract the run traded', () => {
+  const { liveSizing } = require('../../scripts/lib/prop/model-score');
+  const pol = { name: 'prop_portfolio', strategies: ['trade_lifecycle'] };
+  const comp = { name: 'trade_lifecycle', signal: 'composed', risk: { max_risk_usd: 300 } };
+  const h = trendHome();
+  // The broker's max order size as this home recorded it (the gate's own read).
+  const { brokerOrderLimit, contractsFileFor } = require('../../scripts/lib/trading/broker-specs');
+  const orderMax = brokerOrderLimit(contractsFileFor(h, {})).maxOrderSize;
+  assert.ok(Number.isInteger(orderMax), 'the fixture home records one');
+  assert.deepStrictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: h, runner: { symbols: ['MNQ'] }, env: {} }), { limits: { capUsd: 300, orderMax }, contracts: 'micro' });
+  assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: tmpDirOf(), runner: {}, env: {} }).limits.orderMax, null, 'none recorded: no limit');
+  assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: h, runner: { symbols: ['NQ'] }, env: {} }).contracts, 'mini');
+  assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: h, runner: { symbols: ['MNQ', 'ES'] }, env: {} }).contracts, null, 'mixed legs: the policy\'s own');
+  assert.strictEqual(liveSizing({ policy: pol, strategies: [pol], home: h, runner: {}, env: {} }).limits, null, 'no composed component: no limits');
 });

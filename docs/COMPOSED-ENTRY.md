@@ -430,7 +430,9 @@ suggestion: the order is the translated size (`prop/size-translate.js`, the
 one place: the largest the verdict, the size budget now, the dollar cap and
 the broker's max allow, never under the floor), which `order_plan` builds and
 the gate's composed-reads check accepts exactly, or phase 2's smaller cut (a
-cut under the floor is no trade). Outside an attempt the record's size stands. Code changes
+cut under the floor is no trade). The runner's entry reads the translated size
+before phase 2 and names it in phase 2's request as the size to approve or
+cut. Outside an attempt the record's size stands. Code changes
 this needs:
 
 - `strategies.js` (the policy component check after the load) and

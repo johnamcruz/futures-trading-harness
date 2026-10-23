@@ -323,6 +323,22 @@ async function runEntry(deps, c) {
     strategy: STRATEGY, side: rec.side, accountId: Number.isInteger(c.accountId) ? c.accountId : null,
     record: renderRecord(rec), reports: c.reports || [],
   };
+  // In a prop attempt the entry's size is code's translation (order_plan's own path: prop/size-translate.js), read
+  // before phase 2 so its request names the size to approve or cut; the record's size is a suggestion. Outside an
+  // attempt nothing is read and the request is as before. order_plan refusing here: phase 2 runs on the record and the
+  // order is refused after it, as before.
+  if (require('./trading/prop-state').runningAttempts(home).length) {
+    try {
+      const pre = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, roleContext), root, tool: true });
+      const p = pre && pre.plan;
+      if (p && Number.isInteger(p.translatedSize)) {
+        ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
+        info.translated = ctx.entrySize;
+      }
+    } catch (err) {
+      log(`the entry: order_plan before phase 2 refused (${short(err.message)}); phase 2 sees the record's size`, 'warn');
+    }
+  }
   let stop = null;
   let order = null;
   // 4. Between the phases: the verdict, the order built in code, the journal plan.

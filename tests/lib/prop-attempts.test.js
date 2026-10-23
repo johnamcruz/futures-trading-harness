@@ -95,6 +95,19 @@ test('attempts: the rulebook\'s floor (min_contracts) skips a trade the budget s
   assert.strictEqual(plan(undefined), null);
 });
 
+test('attempts: the live entry\'s limits (ctx.limits: the composed cap, the broker\'s max) size each trade as the live translation does', () => {
+  // A 20-tick stop: the $200 budget sizes 17 micros; a $50 cap at $10 a contract is 5, the broker's max 3 under it.
+  const nets = limits => {
+    const out = [];
+    at.runAttempt(days([trade(60)]), ctx({ size: undefined, limits, account: { sessions: 1 }, onTrade: x => out.push(x.net) }));
+    return out;
+  };
+  const per = n => Math.round((60 * 0.5 * n - 0.74 * n) * 100) / 100; // 60 ticks x $0.50 a micro, $0.74 fees a round trip
+  assert.deepStrictEqual(nets(null), [per(17)]);
+  assert.deepStrictEqual(nets({ capUsd: 50, orderMax: null }), [per(5)]);
+  assert.deepStrictEqual(nets({ capUsd: 50, orderMax: 3 }), [per(3)]);
+});
+
 test('attempts: entry blocks and the realized daily stop skip trades', () => {
   const o = at.runAttempt(days([trade(-30), trade(-30), trade(60)]), ctx({ account: { daily_loss_soft: 250, sessions: 1 } }));
   // -30 ticks: -$157.40 each; after two (-$314.80) the soft limit ($250) blocks the third.

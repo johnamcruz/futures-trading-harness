@@ -122,6 +122,11 @@ verdict, the size budget now, the composed strategy's dollar cap and the
 broker's max order size allow, never under the floor (under it: no trade)
 and never with a tighter stop. `order_plan` builds the order at it, the gate
 accepts exactly it (or phase 2's smaller cut) and refuses any other size.
+With the floor at 3 and the composed $300 cap, a stop wider than 200 ticks
+on MNQ (50 points, $100 a contract) or 80 ticks on MES can't be traded: 3
+contracts would risk over $300, so those setups skip. The run's Monte Carlo
+(prop/model-score.js) sizes with the same limits (the cap, the broker's max
+order size, the contract the run traded).
 
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the

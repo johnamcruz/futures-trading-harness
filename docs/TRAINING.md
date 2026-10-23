@@ -483,11 +483,15 @@ Each attempt's entries are sized as live: the policy's verdict from the
 account's rulebook, never under its floor (`sizing.min_contracts`, in
 micro-equivalents: a mini counts as its family's ratio). A setup that fits
 fewer at its stop is a skip, and the gate refuses an entry under it
-(`[min-contracts]`); the backtester and the prop Monte Carlo's attempt
-simulator skip the same setups, so a combine run and its Monte Carlo size
-alike. The size the model states is a suggestion: the order is the translated
-size (`prop/size-translate.js`: the largest the verdict, the budget, the
-composed cap and the broker allow), in a combine run as live.
+(`[min-contracts]`). The size the model states is a suggestion: the order
+is the translated size (`prop/size-translate.js`: the largest the verdict,
+the budget, the composed cap and the broker's max order size allow), in a
+combine run as live. The run's prop Monte Carlo (`prop/model-score.js`)
+sizes its attempt simulator the same way: the rulebook's sizing and floor,
+then the composed cap and the broker's max order size recorded in the run's
+home (`prop/size-translate.js limitPlan`), in the contract the run traded
+(its runner's symbols). A backtest applies those limits only when its run
+config states them (`prop.limits`).
 
 What the run does:
 

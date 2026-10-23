@@ -66,7 +66,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   const brackets = { limitPrice: held.entry && held.entry.price, stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } };
   const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: 'limit' };
   // The reads and the plan as the gate re-checks them, at the record's own size (its plan stands as written).
-  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf });
+  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy) });
   if (first.message) throw new Error(`the order gate would refuse it: [composed-reads] ${first.message}`);
   const p = first.plan;
   const tick = spec.tickSize;
@@ -125,7 +125,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
     ...(strategy.status === 'active' ? [] : [`status ${strategy.status}: plan only, the gate refuses an entry`]),
     ...(paper ? ['paper run: plan only'] : []),
   ].join(' | ');
-  const sizes = policy ? { suggestedSize: stated, translatedSize: translated } : {};
+  const sizes = policy ? { suggestedSize: stated, translatedSize: translated, minContracts: policy.sizing ? policy.sizing.min_contracts : null, translation: baseWhy } : {};
   return { args, line, plan: { strategy: strategy.name, side, contract: root, size: ordered, ...(cutWhy ? { recordSize: base } : {}), ...sizes, entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
 }
 

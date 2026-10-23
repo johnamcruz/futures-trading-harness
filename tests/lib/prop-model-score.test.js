@@ -458,6 +458,10 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   assert.match(propScoreSection(dir, { root, ratesFile }).text, /not scored \(rates by hand reweight a curated run: its candidates are the curated moments it stepped/);
   assert.strictEqual(looks.scoresOf(readLedger(ledger)).length, 1, 'nothing scored, nothing logged');
   assert.match(propScoreSection(dir, { root, override: 'no_such_account' }).text, /Prop Monte Carlo: not scored/);
+  // The run's section sizes as the live entry does (liveSizing): the shipped policy's composed cap and the run's contract.
+  const sec = propScoreSection(dir, { root });
+  assert.ok(sec.result, sec.text);
+  assert.strictEqual(sec.result.sizedWith.limits.capUsd, require('../../scripts/lib/trading/strategies').loadStrategies(root, {}).strategies.find(s => s.name === 'trade_lifecycle').risk.max_risk_usd);
   // No account: not scored, said why.
   assert.deepStrictEqual(resolveAccount({ accounts: [{ name: 'a' }, { name: 'b' }], strategies: [] }).name, null);
   assert.strictEqual(resolveAccount({ attempts: ['a'], accounts: [{ name: 'a' }] }).name, 'a');

@@ -74,8 +74,12 @@ test('order_plan, composed, in an attempt: the policy sizes the record once (its
   assert.match(three.line, /size 3: the rulebook's size at this stop: 3 MNQ \(the verdict's 3, the size budget's 3\); the record suggested 4/);
   assert.strictEqual(latestVerdict(over.home, 'prop_portfolio', 'MNQ').record, over.rec.id);
   assert.strictEqual(order(P.propHome({ size: 3, account: P.THIN }).home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] }).args.size, 3);
-  // The $400 budget's verdict (7) over the cap: 6 ($333.00) is refused by the cap (the plan, as the gate's).
-  assert.throws(() => order(P.propHome({ size: 6 }).home, { strategy: P.LC_DOC, strategies }), /size 6 risks \$333, over the strategy's risk.max_risk_usd \$300/);
+  // A suggestion over the cap (6, $333.00; 20) is never refused in an attempt: it translates to the cap's 5.
+  for (const size of [6, 20]) assert.deepStrictEqual([order(P.propHome({ size }).home, { strategy: P.LC_DOC, strategies }).args.size], [5], String(size));
+  // Outside an attempt the record's 6 over the cap is refused, as before.
+  const free = trendHome();
+  LC.writeScenario(free, { size: 6 });
+  assert.throws(() => order(free), /size 6 risks \$333, over the strategy's risk.max_risk_usd \$300/);
   // A verdict on another contract than the record's: refused.
   const nq = P.propHome({ size: 1 });
   require('../../scripts/lib/trading/prop-state').appendVerdict(nq.home, { ...order(nq.home, { strategy: P.LC_DOC, strategies }).verdict, contract: 'NQ' });

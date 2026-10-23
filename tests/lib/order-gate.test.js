@@ -3612,6 +3612,8 @@ test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the tra
   // (the translated 5: the $300 cap at $55.50, the other record's verdict at 7)
   const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 5, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
   assert.deepStrictEqual(checks(two), ['policy']);
+  // Only this record's verdict translates it: any size on another record's verdict is refused on the verdict ([policy]) alone.
+  assert.deepStrictEqual(checks(lcPropEval(p.home, LC.order({ accountId: 1, size: 2, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }))), ['policy']);
   assert.match(two.violations[0].message, /the latest verdict is not the one sized on the compose record/);
   // An exit under the policy goes with nothing.
   assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 2, rationale: '[exit] flatten the prop_portfolio long' }).violations, []);
@@ -3627,6 +3629,9 @@ test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_pla
   assert.deepStrictEqual(checks(one), ['composed-reads']);
   assert.match(one.violations[0].message, /size 1 is not the translated size 5 \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$55.50 a contract\); the record suggested 1\)/);
   for (const size of [4, 6, 7]) assert.ok(checks(lcPropEval(home, { ...args, size })).includes('composed-reads'), String(size));
+  // Over the composed $300 cap (6 x $55.50 = $333): the gate's own max-risk check refuses it too (the composed strategy's cap, not the policy's).
+  assert.match(lcPropEval(home, { ...args, size: 6 }).violations.find(v => v.check === 'max-risk').message, /setup:trade_lifecycle/);
+  assert.ok(!checks(lcPropEval(home, args)).includes('max-risk'), 'the translated 5 is under it');
   // A floor of 3: phase 2's approved 2 (its cut) is under it: refused on the floor; 3 goes.
   const floored = LCP.registry({ sizing: testSizing({ min_contracts: 3 }) });
   const f3 = LCP.propHome({ size: 1 });

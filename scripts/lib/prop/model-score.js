@@ -66,6 +66,27 @@ function resolveAccount({ override = null, attempts = [], runnerAccount = null, 
   return { name: null, why: prop.length > 1 ? `the policy strategies name several accounts (${prop.join(', ')}): pass --account` : 'no account: pass --account (no default account)' };
 }
 
+/**
+ * The live entry's sizing beyond the rulebook, for the Monte Carlo of a run (prop/size-translate.js, as live sizes it):
+ * limits { capUsd: the policy's composed component's risk.max_risk_usd, orderMax: the run home's broker's recorded max
+ * order size, null when none }, and the contract the run traded (its runner's selected symbols: micro when every one is a
+ * micro, mini when every one is a mini; else the policy's contracts).
+ */
+function liveSizing({ policy, strategies = [], home, runner = {}, env = process.env }) {
+  const { familyOf } = require('../trading/contracts');
+  const comp = policy ? (strategies || []).find(s => s && (policy.strategies || []).includes(s.name) && s.signal === 'composed') : null;
+  let orderMax = null;
+  try {
+    const { brokerOrderLimit, contractsFileFor } = require('../trading/broker-specs');
+    orderMax = brokerOrderLimit(contractsFileFor(home, env)).maxOrderSize;
+  } catch (_err) { /* none recorded */ }
+  const syms = Array.isArray(runner.symbols) ? runner.symbols.map(s => String(s).toUpperCase()) : [];
+  const legOf = s => { const f = familyOf(s); return !f ? null : s === f.micro ? 'micro' : s === f.mini ? 'mini' : null; };
+  const legs = [...new Set(syms.map(legOf))];
+  const contracts = legs.length === 1 && legs[0] ? legs[0] : null;
+  return { limits: comp && comp.risk && comp.risk.max_risk_usd > 0 ? { capUsd: comp.risk.max_risk_usd, orderMax } : null, contracts };
+}
+
 /** The policy strategy that trades `account` (its sizing and contracts), or null. */
 function policyFor(strategies, accountName) {
   return (strategies || []).find(s => s && s.valid !== false && s.signal === 'policy' && s.account === accountName && s.status !== 'disabled') || null;
@@ -103,14 +124,14 @@ function reweightRun(runDir, stream, { root = null, barsFiles = {}, rates = null
   return reweightStream(stream, decisions, { rates, weights, listOf, momentOf, seed, stateWeightOf });
 }
 
-function scoreRun(runDir, { root = null, account, policy = null, rates = null, weights = null, listOf, momentOf, barsFiles = {}, seed = 1, paths = MC_SIZE.paths, reps = MC_SIZE.reps, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
+function scoreRun(runDir, { root = null, account, policy = null, limits = null, contracts = null, rates = null, weights = null, listOf, momentOf, barsFiles = {}, seed = 1, paths = MC_SIZE.paths, reps = MC_SIZE.reps, faults = {}, attribution = true, riskActions = true, env = process.env, now = new Date() }) {
   if (!account) throw new Error('an account profile to score against');
   requireSizing(policy && policy.sizing, `${account.name}: no policy strategy with a whole rulebook sizing trades it, so nothing is scored`);
   const { stream, run, diagnostic, pass } = streamAndPass(runDir, { root, barsFiles, rates, weights, faults, env, now });
   const s = diagnostic === 'reweighted' ? reweightRun(runDir, stream, { root, barsFiles, rates, weights, listOf, momentOf, seed }) : stream;
   const sizing = policy ? policy.sizing || null : null;
   const result = scoreStream(s, {
-    pass, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, attribution,
+    pass, account, rulebook: { sizing, limits }, contracts: contracts || (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, attribution,
   });
   // The model's risk actions against their counterfactuals (prop/risk-actions.js): on the run's own days, a scoring of
   // its own (logged beside the run's look as every scoring is); not for a reweighted stream (its days are drawn).
@@ -118,11 +139,12 @@ function scoreRun(runDir, { root = null, account, policy = null, rates = null, w
   let risk = null;
   if (riskActions && acted && diagnostic !== 'reweighted') {
     const again = checkModelWindow({ run, diagnostic, logScore: entry => recordScore(run.ledger || ledgerPath(env), entry), now });
-    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing }, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults });
+    risk = scoreRiskActions(stream, { pass: again, account, rulebook: { sizing, limits }, contracts: contracts || (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults });
   }
   return {
     ...result, riskActions: risk, runId: run.runId, role: run.role, account: account.name, policy: policy ? policy.name : null,
     sizingFrom: `${policy.name}'s rulebook`, // none: refused above (no code default sizing)
+    sizedWith: { limits, contracts: contracts || (policy && policy.contracts) || 'auto' }, // the live entry's limits and contract (liveSizing), or none
     trades: stream.trades.length, runDays: stream.days.length, excluded: stream.excluded, adverse: stream.adverse, reweighted: s.reweighted || null,
   };
 }
@@ -304,7 +326,9 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
     if (!pick.name) throw new Error(pick.why);
     const account = accountNamed(root, pick.name, env);
     const nat = ratesFor(dir, { ratesFile, curated });
-    const result = scoreRun(dir, { root, env, account, policy: policyFor(strategies, account.name), rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, momentOf: nat ? nat.momentOf : undefined, barsFiles, faults, riskActions, now });
+    const policy = policyFor(strategies, account.name);
+    const live = liveSizing({ policy, strategies, home: path.resolve(dir, '..', '..'), runner, env });
+    const result = scoreRun(dir, { root, env, account, policy, limits: live.limits, contracts: live.contracts, rates: nat ? nat.rates : null, listOf: nat ? nat.listOf : undefined, momentOf: nat ? nat.momentOf : undefined, barsFiles, faults, riskActions, now });
     if (nat) result.ratesFrom = nat.from;
     result.accountWhy = pick.why;
     return { result, text: `\n${scoreText(result)}`, markdown: scoreMarkdown(result), summary: scoreSummary(result) };
@@ -314,4 +338,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { ratesFor, reweightRun, resolveAccount, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { ratesFor, reweightRun, resolveAccount, liveSizing, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
