@@ -267,6 +267,24 @@ function deskConcurrencyProblem(v) {
  * (learning/preflight.js head-delivery). A key added here is validated below, or the autotrader tests fail.
  */
 const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt']);
+/**
+ * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
+ * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
+ * null when none is on (then every learning record of the run is the one it had before the keys existed).
+ */
+function headDeliveryOf(setup, ...runCfgs) {
+  const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+  const conf = setup && isObj(setup.config) ? setup.config : {};
+  const parsed = v => { try { return JSON.parse(v); } catch (_err) { return v; } };
+  const on = HEAD_DELIVERY_KEYS.filter(k => Boolean(parsed(conf[`cfg.${k}`])) || runCfgs.some(c => isObj(c) && Boolean(c[k])));
+  return on.length ? on.join(',') : null;
+}
+/** The one delivery of a pool of records (each one's `delivery`, absent for none), or throws naming them (`what`). */
+function oneDelivery(records, what) {
+  const all = [...new Set(records.map(x => (x && typeof x.delivery === 'string' && x.delivery) || 'none'))];
+  if (all.length > 1) throw new Error(`${what} refused: made under ${all.length} head trader deliveries (${all.join(' | ')}; the runner config's ${HEAD_DELIVERY_KEYS.join(', ')}): build from runs under one`);
+  return all.length && all[0] !== 'none' ? all[0] : null;
+}
 
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
@@ -1292,6 +1310,8 @@ module.exports = {
   stableHead,
   withCycleData,
   HEAD_DELIVERY_KEYS,
+  headDeliveryOf,
+  oneDelivery,
   RESULT_LINE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,

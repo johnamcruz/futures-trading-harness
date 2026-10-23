@@ -374,13 +374,7 @@ const readJsonOr = (file, fallback) => { try { return JSON.parse(fs.readFileSync
  * driver wrote it (autotrader.json). 'a,b' in the list's order, or null when none is on (a run's digest then is the one
  * it had before the keys existed). Decisions under two deliveries are never pooled (buildDataset refuses them).
  */
-function deliveryOf(setup, runCfg) {
-  const { HEAD_DELIVERY_KEYS } = require('../autotrader');
-  const conf = setup && isObj(setup.config) ? setup.config : {};
-  const parsed = v => { try { return JSON.parse(v); } catch (_err) { return v; } };
-  const on = HEAD_DELIVERY_KEYS.filter(k => Boolean(parsed(conf[`cfg.${k}`])) || (isObj(runCfg) && Boolean(runCfg[k])));
-  return on.length ? on.join(',') : null;
-}
+const deliveryOf = (setup, runCfg) => require('../autotrader').headDeliveryOf(setup, runCfg);
 
 function sourceFromRun(runDir, { score, times = null, sample = null }) {
   const manifest = readJsonOr(path.join(runDir, 'manifest.json'), null);
@@ -394,7 +388,8 @@ function sourceFromRun(runDir, { score, times = null, sample = null }) {
   const exitPlan = manifestExit(manifest).hash || null;
   const code = setup && !setup.codeChanged && typeof setup.code === 'string' ? setup.code : null;
   // The head trader's machine-local delivery keys it ran under (deliveryOf), named only when one is on.
-  const delivery = deliveryOf(setup, readJsonOr(path.join(runDir, 'autotrader.json'), null));
+  // (run-experience.js runDelivery: its setup record and every runner config it ran with; a run under two throws.)
+  const delivery = require('./run-experience').runDelivery(runDir, manifest);
   const on = delivery ? { delivery } : {};
   const digest = documents ? { skills: documents.skills || null, prompt: documents.harness || null, code, exitPlan, ...on } : { exitPlan, ...on };
   return {

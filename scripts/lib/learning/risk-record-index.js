@@ -14,7 +14,9 @@
  * session. Off by default: the model sees it only when the replay config enables riskRecordDisplay (kept in the pin:
  * riskShown; pinning alone shows nothing). A cell under minN paths reads "too few", never a count of outcomes.
  *
- *   riskDayEntry(day, result, { role })          the entry of one day's scoreRiskActions result
+ *   riskDayEntry(day, result, { role, delivery }) the entry of one day's scoreRiskActions result (delivery: the head
+ *                                                trader's delivery keys its run was made under, only when one is on;
+ *                                                buildRiskIndex refuses entries under two)
  *   buildRiskIndex(entries, { minN, now, sources })   the index document, with its hash (sources, when given: the runs
  *                                                and settings it was built from, learning/risk-record-build.js; hashed)
  *   readRiskIndex(file), writeRiskIndex(dir, doc), pinRiskRecord(runHome, file, { display }), loadPinnedRiskRecord(home)
@@ -46,7 +48,7 @@ function assertTrainDay(day) {
 }
 
 /** One day's entry from its scoreRiskActions result: what its actions changed, by kind and state. */
-function riskDayEntry(day, result, { role = null } = {}) {
+function riskDayEntry(day, result, { role = null, delivery = null } = {}) {
   const sealed = HELD_OUT.find(r => r === role || (result && result.look && r === result.look.role));
   if (sealed) throw new Error(`a ${sealed} run's outcomes are judged, never shown to the model: no risk record`);
   if (!result || !isObj(result.actions)) throw new Error('riskDayEntry: a scoreRiskActions result');
@@ -59,7 +61,8 @@ function riskDayEntry(day, result, { role = null } = {}) {
       cells[`${kind}|${state}`] = { n: row.applied, savedBlows: row.savedBlows || 0, causedBlows: row.causedBlows || 0, costPasses: row.costPasses || 0, gainedPasses: row.gainedPasses || 0 };
     }
   }
-  return { day, role: 'practice-train', cells };
+  // The head trader's delivery keys the day's run was made under (run-experience.js runDelivery), only when one is on.
+  return { day, role: 'practice-train', cells, ...(delivery ? { delivery } : {}) };
 }
 
 function indexHash(doc) {
@@ -76,6 +79,7 @@ function checkEntries(entries) {
     assertTrainDay(e.day);
     if (seen.has(e.day)) throw new Error(`risk record: ${e.day} twice`);
     seen.add(e.day);
+    if (e.delivery !== undefined && !(typeof e.delivery === 'string' && e.delivery)) throw new Error(`risk record: ${e.day}'s delivery is the head trader's delivery keys ('a,b'), or absent`);
     for (const [k, c] of Object.entries(e.cells)) {
       const [kind, state] = k.split('|');
       if (!KINDS.includes(kind) || !STATES.includes(state) || !isObj(c) || !FIELDS.every(f => Number.isInteger(c[f]) && c[f] >= 0)) throw new Error(`risk record: ${e.day} cell "${k}" is not a kind|state of whole counts`);
@@ -87,8 +91,11 @@ function buildRiskIndex(entries, { minN = MIN_N, now = new Date(), sources = nul
   if (!(Number.isInteger(minN) && minN >= 1)) throw new Error('minN: a whole number from 1');
   if (sources !== null && !isObj(sources)) throw new Error('sources: what the record was built from, an object');
   checkEntries(entries);
-  const sorted = [...entries].sort((a, b) => (a.day < b.day ? -1 : 1)).map(e => ({ day: e.day, role: 'practice-train', cells: Object.fromEntries(Object.entries(e.cells).sort(([a], [b]) => a.localeCompare(b))) }));
-  const doc = { v: VERSION, kind: KIND, builtAt: now.toISOString(), counterfactual: true, walkForward: true, roles: ['practice-train'], minN, days: sorted.length, ...(sources ? { sources } : {}), entries: sorted };
+  // One head trader delivery (autotrader.js HEAD_DELIVERY_KEYS): days of runs made with its skills or data delivered
+  // another way are never pooled.
+  const delivery = require('../autotrader').oneDelivery(entries, 'risk record');
+  const sorted = [...entries].sort((a, b) => (a.day < b.day ? -1 : 1)).map(e => ({ day: e.day, role: 'practice-train', cells: Object.fromEntries(Object.entries(e.cells).sort(([a], [b]) => a.localeCompare(b))), ...(e.delivery ? { delivery: e.delivery } : {}) }));
+  const doc = { v: VERSION, kind: KIND, builtAt: now.toISOString(), counterfactual: true, walkForward: true, roles: ['practice-train'], minN, days: sorted.length, ...(delivery ? { delivery } : {}), ...(sources ? { sources } : {}), entries: sorted };
   return { ...doc, hash: indexHash(doc) };
 }
 
