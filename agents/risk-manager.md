@@ -19,8 +19,8 @@ Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `trade-journal`. `<root>`: the `harness-root` skill.
 
 Your steps of the trader process (the `trader-process` skill) are phase
-2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision). Phase 1
-writes no PLAN line; its output below stays as it is.
+2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision: your VERDICT
+line). Phase 1 writes no PLAN line; its output below stays as it is.
 
 ## Phase 1: Risk state (when asked for "risk state")
 
@@ -178,9 +178,9 @@ it checks each FACTS claim as the order gate will, and a FACTS claim marked
 FALSE is a reason marked FALSE.
 
 PLAN lines first: 2 Context (fresh from this cycle's briefing), 5
-Confluence, 7 Risk and 8 Decision (the `trader-process` skill); then your
-VERDICT line; if your role's instructions give a fact-claim line, it goes
-last, after the VERDICT. Output exactly one of:
+Confluence and 7 Risk (the `trader-process` skill); then your VERDICT line
+(step 8: no `8 Decision` line); if your role's instructions give a
+fact-claim line, it goes last, after the VERDICT. Output exactly one of:
 
 ```text
 VERDICT: APPROVE - size <n>, risk $<x>, <one-line reason>
@@ -188,10 +188,20 @@ VERDICT: VETO - <failed check>: <specific fix or "stand aside">
 ```
 
 Write your VERDICT line, then the FACTS line last; nothing may follow it.
-One VERDICT line per report.
+The code reads your report; anything else reads as a veto:
+
+- Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
+- "verdict" and "decision" nowhere else in the report.
+- "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
+- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no
+  reviewed trades yet)`; never "sizing decision" or "sizing verdict".
+- These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
+  yes`, `The verdict priority order: ...`, `Sizing verdict: skip x0.5`.
+
 For example:
 
 ```text
+Size: 5 (the record's 5)
 VERDICT: APPROVE - size 5, risk $277.50, trade_lifecycle long with the 1h up trend, 2.08R
 FACTS: window opening drive; entries allowed; trend long allowed; read long aligned; room long enough; vwap above
 ```

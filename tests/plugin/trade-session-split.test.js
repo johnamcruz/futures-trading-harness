@@ -413,9 +413,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then the gate's [prop-account-attempt] refusal (feat/prop-account-marker, owner-approved 2026-10-22): the risk manager's
 // prompt +454 bytes each mode (its row in gate-refusals-limits; 90222 and 76099 on main), the pin +432 (22 bytes of its
 // slack absorbed).
+// Then phase 2's report format (fix/phase2-verdict-format, owner-approved 2026-10-22): the risk manager +548 each mode
+// (its agent's format rules, the phrasings that read as a veto, and a Size line in the example), so a looser model's
+// APPROVE isn't read as a veto.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 90676, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 76553, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 91246, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 77123, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

@@ -274,6 +274,39 @@ test('verdictProblem: names the decision that isn\'t approve, or the veto; sever
   assert.deepStrictEqual(decisionLines('## Verdict\nVERDICT: APPROVE\n8 Decision: take\nthe decision is mine').map(l => [l.keyword, l.word]), [['verdict', 'approve'], ['decision', 'take']]);
 });
 
+test('the risk-manager\'s phase-2 format: its example approves; each phrasing it names reads as a veto, the parser unchanged', () => {
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  const rm = fs.readFileSync(path.join(__dirname, '..', '..', 'agents', 'risk-manager.md'), 'utf8');
+  // The example report the agent teaches (the code block after "For example:" in phase 2) approves.
+  const example = /For example:\n\n```text\n([^]*?)```/.exec(rm.slice(rm.indexOf('## Phase 2')))[1];
+  assert.match(example, /^Size: /m);
+  assert.strictEqual(verdictOf(example), 'APPROVE', example);
+  // Its Size line, in the agent's own words, approves beside an APPROVE line.
+  const size = /e\.g\. `(Size: [^`]+)`/.exec(rm.replace(/\n\s*/g, ' '))[1];
+  assert.strictEqual(size, 'Size: 1 (record 8 cut to 1: no reviewed trades yet)');
+  const V = 'VERDICT: APPROVE - size 1, risk $20.00, trade_lifecycle long with the 1h up trend, 2.08R\nFACTS: window opening drive; trend long allowed';
+  assert.strictEqual(verdictOf(`${size}\n${V}`), 'APPROVE');
+  // The baseline's taught step line still approves (the parser keeps it).
+  assert.strictEqual(verdictOf(`8 Decision: take - aligned continuation with room\n${V}`), 'APPROVE');
+  // Each phrasing that reads as a veto, beside an APPROVE line: a veto (the gate's reading, unchanged).
+  for (const bad of ['Sizing decision: size 1', 'Decision: cut to size 1', 'The verdict priority order: step 2 allows', 'VETO rules: none apply', 'Sizing verdict: skip x0.5', '8 Decision: valid yes, full - compose_check OK', 'not a VETO']) {
+    assert.strictEqual(verdictOf(`${bad}\n${V}`), 'VETO', bad);
+  }
+  // The agent states each rule and names the phrasings it warns of.
+  const flatRm = rm.replace(/\n\s*/g, ' ');
+  for (const rule of ['The code reads your report; anything else reads as a veto:', '- "verdict" and "decision" nowhere else in the report.', '- These read as a veto: `Decision: cut to size 1`,']) assert.ok(flatRm.includes(rule), rule);
+  for (const named of ['`Decision: cut to size 1`', '`8 Decision: valid yes`', '`The verdict priority order: ...`', '`Sizing verdict: skip x0.5`', '"VETO rules: none"', '"not a VETO"', '"sizing decision"']) assert.ok(flatRm.includes(named), named);
+});
+
+test('approvalReadAsVeto: an APPROVE line the reading takes as a veto gives the reason and the line; an approval, a plain veto or no verdict is null', () => {
+  const { approvalReadAsVeto, verdictProblem } = require('../../scripts/lib/trading/roles-ran');
+  const V = 'VERDICT: APPROVE - size 1, risk $20.00, orb long';
+  assert.deepStrictEqual(approvalReadAsVeto(`Decision: cut to size 1\n${V}`), { why: 'a decision line decides cut, not APPROVE ("Decision: cut to size 1")', line: V });
+  assert.deepStrictEqual(approvalReadAsVeto(`${V}\nVETO rules: none apply`), { why: 'the report says VETO', line: V });
+  assert.strictEqual(approvalReadAsVeto(`Sizing verdict: skip x0.5\n${V}`).why, verdictProblem(`Sizing verdict: skip x0.5\n${V}`));
+  for (const t of [V, 'VERDICT: VETO - room: stand aside', 'VERDICT: maybe', 'no verdict', '', null]) assert.strictEqual(approvalReadAsVeto(t), null, String(t));
+});
+
 test('assessRound: the approving report is the latest COUNTED phase-2 call; an uncounted call never approves, and a later uncounted veto refuses', () => {
   const { assessRound } = require('../../scripts/lib/trading/roles-ran');
   const call = (role, start, end, text = 'report') => ({ role, start, end, text });

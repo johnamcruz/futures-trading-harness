@@ -349,6 +349,39 @@ test('runEntry: a VETO (or no approval) stops before the order: no order built, 
   }
 });
 
+test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vetoed, with the reading\'s reason (never the APPROVE line as a veto); a genuine VETO is unchanged; phase 2\'s report is kept in the entry record', async () => {
+  const misread = 'Phase 2.\nDecision: cut to size 1\nVERDICT: APPROVE - size 1, risk $20.00\nFACTS: window opening drive; trend long allowed';
+  let built = false;
+  let s = setup({ roles: { phase2: { ok: true, timedOut: false, text: misread, tools: ['harness_order_plan'], lookups: [], output: '' } }, plan: () => { built = true; return null; } });
+  let r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([s.calls.map(c => c.role), built, s.journal], [['phase2'], false, []]);
+  assert.strictEqual(r.entry.outcome, 'vetoed', 'learning counts the same outcome');
+  assert.strictEqual(r.entry.why, 'phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1")');
+  assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - risk-manager phase 2\'s report reads as a veto (a decision line decides cut, not APPROVE): VERDICT: APPROVE - size 1, risk $20.00');
+  assert.deepStrictEqual(r.entry.phase2, { chars: misread.length, text: misread });
+  assert.ok(s.logs.some(l => l === 'error the entry: phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1"): no order'), s.logs.join('\n'));
+  // The VERDICT line is the approving one, though a looser verdict line comes first.
+  s = setup({ roles: { phase2: { ok: true, timedOut: false, text: `Sizing verdict: skip x0.5\n${P2}`, tools: ['harness_order_plan'], lookups: [], output: '' } } });
+  r = await E.runEntry(s.deps, s.cycle());
+  assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - risk-manager phase 2\'s report reads as a veto (a verdict line decides skip, not APPROVE): VERDICT: APPROVE - size 1, risk $20.00');
+  // A genuine VETO: its line, as before; its report kept too.
+  const veto = 'Phase 2.\nVERDICT: VETO - room: stand aside\nFACTS: window asia; trend long allowed';
+  s = setup({ roles: { phase2: { ok: true, timedOut: false, text: veto, tools: ['harness_order_plan'], lookups: [], output: '' } } });
+  r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.entry.why, r.result], ['vetoed', 'VERDICT: VETO - room: stand aside', 'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - room: stand aside']);
+  assert.deepStrictEqual(r.entry.phase2, { chars: veto.length, text: veto });
+  assert.ok(!s.logs.some(l => /reads as a veto/.test(l)));
+  // An approval: its report kept; over the limit (config/runner.json prompt.reportMaxText), cut and marked.
+  s = setup();
+  r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.entry.phase2], ['executed', { chars: P2.length, text: P2 }]);
+  const max = require('../../scripts/lib/tunables').runner().prompt.reportMaxText;
+  const long = `${'x'.repeat(max)}\n${P2}`;
+  s = setup({ roles: { phase2: { ok: true, timedOut: false, text: long, tools: ['harness_order_plan'], lookups: [], output: '' } } });
+  r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.phase2.chars, r.entry.phase2.text.length, r.entry.phase2.cut], [long.length, max, true]);
+});
+
 test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing, or the plan unjournaled: no executor, logged, a no-trade naming it; a phase 2 that reads no data doesn\'t count', async () => {
   const cases = [
     [{ roles: { phase2: { ok: false, timedOut: true, text: '', tools: [], output: '' } } }, /risk-manager phase 2 timed_out \(timed out\)/, 2],

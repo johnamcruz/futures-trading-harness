@@ -353,21 +353,22 @@ test('facts: one canonical FACTS line decides; every other line is free text, ne
 
 test('facts: the taught order - numbered step lines, then the VERDICT line, then the FACTS line last - passes the gate', () => {
   const rm = fs.readFileSync(path.join(__dirname, '..', '..', 'agents', 'risk-manager.md'), 'utf8');
-  assert.match(rm.replace(/\s+/g, ' '), /Write your VERDICT line, then the FACTS line last; nothing may follow it\. One VERDICT line per report\./);
+  assert.match(rm.replace(/\s+/g, ' '), /Write your VERDICT line, then the FACTS line last; nothing may follow it\. The code reads your report; anything else reads as a veto: - Exactly one `VERDICT: APPROVE - \.\.\.` or `VERDICT: VETO - \.\.\.` line\./);
   const home = tmpDir();
   B.writeBriefing(home, briefing({ candidates: [ORB], m3: { trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.', vwap: { side: 'above' } }, m15: { alignment: { long: 'aligned', short: 'counter' } } }));
   const gate = text => F.gateRefusal({ report: { text }, home, root: 'MNQ', now: new Date('2026-06-10T13:58:00.000Z'), order: { strategy: 'orb', side: 'long' } });
-  // The agent's example, alone and after a realistic block of the trader-process step lines 2, 5, 7 and 8.
-  const example = /```text\n(VERDICT: APPROVE[^`\n]*\nFACTS: [^`]*?)```/.exec(rm)[1];
-  assert.deepStrictEqual(example.trim().split('\n').map(l => l.split(':')[0]), ['VERDICT', 'FACTS']);
+  // The agent's example (its Size line, the VERDICT, the FACTS), alone and after a realistic block of the trader-process
+  // step lines 2, 5 and 7 (phase 2's step 8 is its VERDICT line); the baseline's "8 Decision: take" line passes too.
+  const example = /```text\n(Size: [^\n]*\nVERDICT: APPROVE[^`\n]*\nFACTS: [^`]*?)```/.exec(rm)[1];
+  assert.deepStrictEqual(example.trim().split('\n').map(l => l.split(':')[0]), ['Size', 'VERDICT', 'FACTS']);
   assert.strictEqual(gate(example), null);
   const steps = [
     '2 Context: window opening drive, entries allowed, news clear, regime trend-up, account budget $40, attempt none',
     '5 Confluence: for 3, against 0, neutral 1: read aligned, values agree',
     '7 Risk: stop 21 ticks from order_plan, size 1, exit trail, room inTheWay past needR (risk $10.50 = 21 ticks x $0.50)',
-    '8 Decision: take - aligned continuation with room (priority order: full)',
   ].join('\n');
   assert.strictEqual(gate(`${steps}\n${example}`), null);
+  assert.strictEqual(gate(`${steps}\n8 Decision: take - aligned continuation with room (priority order: full)\n${example}`), null);
   // The same block with the facts last but a step line after them: refused (nothing may follow the FACTS line).
   assert.match(gate(`${example}\n8 Decision: take`), /in no known form: "8 decision: take"/);
 });

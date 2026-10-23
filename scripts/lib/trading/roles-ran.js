@@ -65,6 +65,8 @@
  *                                                such a call doesn't count; `rolesFile`: the runner's role record
  *   approvedPhase2(transcriptPath, cycle, cached, lookups, rolesFile) the phase-2 report that approves this entry, judged as
  *                                                checkRolesRan judges it: { text } | { error } | null
+ *   approvalReadAsVeto(text)                     an approving VERDICT line in a report that reads as a veto: { why, line }
+ *                                                | null (the runner's reporting; the gate's reading is verdictOf's)
  */
 
 const fs = require('fs');
@@ -293,6 +295,17 @@ function verdictOf(text) {
   return decisionLines(text).some(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word)) ? 'APPROVE' : null;
 }
 
+/**
+ * A report that holds an approving VERDICT line and still reads as a veto (verdictOf: VETO; a model's looser wording,
+ * "Decision: cut to size 1"): { why: verdictProblem's reason, line: the approving verdict line as written }, else null
+ * (an approval, a plain veto, no verdict). Reporting only: what the gate reads is verdictOf's, unchanged.
+ */
+function approvalReadAsVeto(text) {
+  if (verdictOf(text) !== 'VETO') return null;
+  const ok = decisionLines(text).find(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
+  return ok ? { why: verdictProblem(text), line: ok.line.trim() } : null;
+}
+
 /** Kept for callers that count decision lines. */
 const verdictMatches = decisionLines;
 const verdictLines = decisionLines;
@@ -446,4 +459,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, verdictMatches, verdictLines, decisionLines, verdictProblem };

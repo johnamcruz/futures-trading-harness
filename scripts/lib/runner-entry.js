@@ -17,7 +17,9 @@
  *   3. phase `review`: risk-manager phase 2 on the record (orchestrate/requests.js review), its run recorded with its
  *      wall-clock times (the gate orders it after phase 1 and the analysts, as a launch);
  *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
- *      VETO is the cycle's no-trade with its line); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
+ *      with the reading's reason: roles-ran.js approvalReadAsVeto); phase 2's report kept in the entry record
+ *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
@@ -51,7 +53,7 @@
 
 const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
-const { verdictOf } = require('./trading/roles-ran');
+const { verdictOf, approvalReadAsVeto } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -325,10 +327,23 @@ async function runEntry(deps, c) {
     const rev = (phases[0] && phases[0].results[0]) || null;
     if (!rev) { stop = { outcome: 'no-trade', why: 'phase 2 did not run' }; return { stop: stop.why }; }
     const held = record(rev);
+    // Phase 2's report as it came, for the next diagnosis (the cycle log's entry record), cut at the report cache's
+    // limit (config/runner.json prompt.reportMaxText).
+    if (typeof rev.text === 'string' && rev.text) {
+      const max = require('./tunables').runner().prompt.reportMaxText;
+      info.phase2 = { chars: rev.text.length, text: rev.text.slice(0, max), ...(rev.text.length > max ? { cut: true } : {}) };
+    }
     if (!rev.ok) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 ${rev.stop}${rev.why ? ` (${rev.why})` : ''}` }; return { stop: stop.why }; }
     if (!held) { stop = { outcome: 'no-trade', why: 'risk-manager phase 2 could not be recorded for the gate' }; return { stop: stop.why }; }
     const line = verdictLine(rev.text);
-    if (verdictOf(rev.text) !== 'APPROVE') { stop = { outcome: 'vetoed', why: line || 'phase 2 did not approve' }; return { stop: stop.why }; }
+    if (verdictOf(rev.text) !== 'APPROVE') {
+      // An APPROVE line the gate's reading still takes as a veto (roles-ran.js approvalReadAsVeto): the same outcome,
+      // with the parser's reason, so the cause shows (never the APPROVE line as a veto's reason).
+      const misread = approvalReadAsVeto(rev.text);
+      stop = misread ? { outcome: 'vetoed', why: `phase 2's report reads as a veto: ${misread.why}`, readAs: misread } : { outcome: 'vetoed', why: line || 'phase 2 did not approve' };
+      if (misread) log(`the entry: ${stop.why}: no order`, 'error');
+      return { stop: stop.why };
+    }
     const roleEnv = childEnv(cfg, root, env, roleContext);
     try {
       order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: roleEnv, root, tool: true });
@@ -402,6 +417,9 @@ async function runEntry(deps, c) {
       log(`the entry: ${stop.why}: a pass, no executor run`);
       return say('late', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}`, { why: stop.why });
     }
+    // A misread approval's result names the parser's reason without its quote (the role's words aren't the result's
+    // reasons, which the scorecard checks); the entry's `why` keeps the quote.
+    if (stop.outcome === 'vetoed' && stop.readAs) return say('vetoed', `CYCLE RESULT: no-trade - risk-manager phase 2's report reads as a veto ${short(`(${stop.readAs.why.replace(/ \("[^]*"\)$/, '')}): ${stop.readAs.line}`)}`, { why: stop.why });
     if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
     log(`the entry: ${stop.why}: no order`, 'error');
     return say('no-trade', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}: no order`, { why: stop.why });

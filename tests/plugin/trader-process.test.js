@@ -236,8 +236,12 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   }
   const rm = flat(read('agents/risk-manager.md'));
   // Phase 2: the PLAN lines (line 2 fresh), then the VERDICT line; a fact-claim line, where the role's instructions
-  // give one, comes last (the fact-check reads from it to the end of the report). Phase 1 writes none.
-  const order = "PLAN lines first: 2 Context (fresh from this cycle's briefing), 5 Confluence, 7 Risk and 8 Decision (the `trader-process` skill); then your VERDICT line; if your role's instructions give a fact-claim line, it goes last, after the VERDICT. Output exactly one of:";
+  // give one, comes last (the fact-check reads from it to the end of the report). Phase 1 writes none. Step 8 is the
+  // VERDICT line: the template's "8 Decision: valid yes, full" reads as a veto in a phase-2 report (roles-ran.js verdictOf).
+  const order = "PLAN lines first: 2 Context (fresh from this cycle's briefing), 5 Confluence and 7 Risk (the `trader-process` skill); then your VERDICT line (step 8: no `8 Decision` line); if your role's instructions give a fact-claim line, it goes last, after the VERDICT. Output exactly one of:";
+  assert.ok(rm.includes('2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision: your VERDICT line).'));
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  assert.strictEqual(verdictOf('8 Decision: valid yes, full - compose_check OK\nVERDICT: APPROVE - size 1'), 'VETO', 'why phase 2 writes no step-8 line');
   assert.ok(rm.includes(order));
   // PLAN before VERDICT, in the instructions and in the output block that follows them.
   const at = rm.indexOf(order);
