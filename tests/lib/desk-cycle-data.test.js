@@ -367,3 +367,91 @@ test('each entry\'s kind: a preload read may be made before the close (the seam)
   assert.strictEqual(pre[1].text, (await callTool('strategies_list', {}, { env: w.env, root: ROOT })).content[0].text, 'byte for byte the tool\'s');
   assert.ok(d['market-structure-analyst'].blocks.find(b => b.tool === 'bar_briefing'));
 });
+
+/** An analyst on 15m bars: its briefing written beside the runner's, the cycle's context naming it (runner.js deskContext). */
+function framed({ cycleAt = null, write = true } = {}) {
+  const w = home();
+  const { candles } = require('../../scripts/lib/trading/mtf');
+  const whole = candles(BARS.slice(0, 1300), 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  if (write) B.writeFrameBriefing(w.h, B.buildFrameBriefing({ symbol: 'NQ', contractId: null, bars: whole, minutes: 15, first: w.b }));
+  const context = { ...w.context, cycleAt: cycleAt || w.b.closedAt, frames: [{ role: 'trend-momentum-analyst', timeframe: '15m' }] };
+  return { ...w, context, env: childEnv(ON(), ROOT, w.base, context) };
+}
+
+test('an analyst on its own timeframe: its timeframe\'s briefing is its primary read, credited only when it is the one holding at the cycle\'s start', async () => {
+  const rd = CHECKS['read-data'];
+  const none = { text: 'Data: bar_briefing bar15m@x', tools: [] };
+  const frames = { 'trend-momentum-analyst': '15m' };
+  const tma = 'trend-momentum-analyst';
+  assert.deepStrictEqual(CD.deskReads(tma, { symbol: 'MNQ', timeframe: '15m' }).map(x => x.args), [{ symbol: 'MNQ', timeframe: '15m' }, { symbol: 'MNQ' }]);
+  const w = framed();
+  const d = await CD.collectDesk({ roles: [tma, 'market-structure-analyst'], symbol: 'MNQ', env: w.env, store: CD.createStore({ root: ROOT }), frames });
+  assert.strictEqual(d[tma].primaryOk, true);
+  assert.deepStrictEqual(d[tma].blocks.map(b => b.args), [{ symbol: 'MNQ', timeframe: '15m' }, { symbol: 'MNQ' }]);
+  const roleEnv = childEnv(ON(), ROOT, w.base, { ...w.context, roleRun: tma });
+  const raw = await callTool('bar_briefing', { symbol: 'MNQ', timeframe: '15m' }, { env: roleEnv, root: ROOT });
+  assert.strictEqual(d[tma].blocks[0].text, raw.content[0].text, 'byte for byte the tool\'s, with its run\'s environment');
+  assert.match(raw.content[0].text, /15m/);
+  assert.strictEqual(rd(tma, none, { precollected: d }), null);
+  assert.deepStrictEqual(d['market-structure-analyst'].blocks.map(b => b.args), [{ symbol: 'MNQ' }, {}], 'an analyst without a frame: as before');
+  // No 15m briefing built: the runner's briefing alone is no credit for it (it reads its own timeframe's itself).
+  const nof = framed({ write: false });
+  const d2 = await CD.collectDesk({ roles: [tma], symbol: 'MNQ', env: nof.env, store: CD.createStore({ root: ROOT }), frames });
+  assert.deepStrictEqual([d2[tma].primaryOk, d2[tma].blocks.map(b => b.args)], [false, [{ symbol: 'MNQ' }]]);
+  assert.strictEqual(rd(tma, none, { precollected: d2 }), 'read no data');
+  assert.match(CD.deskText(tma, d2[tma]), /Not collected: bar_briefing \{"symbol":"MNQ","timeframe":"15m"\} \(no 15m bar briefing\); read it yourself/);
+  // A 15m bar that no longer holds at the cycle's start, or no cycle start: no credit.
+  for (const env of [framed({ cycleAt: new Date(Date.parse(w.b.closedAt) + 3600000).toISOString() }).env, (() => { const { FTH_CYCLE_AT: _a, ...e } = w.env; return e; })()]) {
+    const d3 = await CD.collectDesk({ roles: [tma], symbol: 'MNQ', env, store: CD.createStore({ root: ROOT }), frames });
+    assert.strictEqual(d3[tma].primaryOk, false);
+  }
+  // Through the desk: the cycle's context.frames gives the role its timeframe's read; a run that called nothing counts.
+  const seen = new Map();
+  const runRole = async (role, request) => { seen.set(role, request); return { ok: true, text: 'Data: bar_briefing bar15m@x\nBias: long', tools: [] }; };
+  const now = new Date(w.b.closedAt);
+  const run = await deskFor({ home: w.h, cfg: ON(), root: ROOT, runRole, env: w.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: [tma], now, at: now.toISOString(), context: w.context, store: CD.createStore({ root: ROOT }) });
+  assert.deepStrictEqual(run.missing, []);
+  assert.ok(seen.get(tma).includes('--- bar_briefing {"symbol":"MNQ","timeframe":"15m"} as of'));
+  const run2 = await deskFor({ home: nof.h, cfg: ON(), root: ROOT, runRole, env: nof.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: [tma], now, at: now.toISOString(), context: nof.context, store: CD.createStore({ root: ROOT }) });
+  assert.deepStrictEqual(run2.missing.map(m => m.why), ['read no data']);
+});
+
+test('a read that failed is tried again by a later reader in the cycle: the desk\'s briefing read throws once, the head trader gets its block', async () => {
+  const w = home();
+  let n = 0;
+  const flaky = async (name, a, o) => { if (name === 'bar_briefing' && (n += 1) === 1) throw new Error('flake'); return callTool(name, a, o); };
+  const store = CD.createStore({ root: ROOT, callTool: flaky });
+  const d = await CD.collectDesk({ roles: ['trend-momentum-analyst'], symbol: 'MNQ', env: w.env, store });
+  assert.strictEqual(d['trend-momentum-analyst'].primaryOk, false);
+  const head = await CD.collect({ symbols: ['MNQ'], env: w.env, root: ROOT, store });
+  assert.deepStrictEqual([head.blocks.map(b => b.tool), head.missing], [['bar_briefing'], []]);
+  assert.strictEqual(head.blocks[0].text, (await callTool('bar_briefing', { symbol: 'MNQ' }, { env: w.env, root: ROOT })).content[0].text);
+  assert.strictEqual(n, 2);
+  // A read that succeeded is not read again; one fill never reads a key twice.
+  await CD.collect({ symbols: ['MNQ'], env: w.env, root: ROOT, store });
+  assert.strictEqual(n, 2);
+});
+
+test('phase 1 reads today\'s reviews (since the trading day\'s start, the cycle\'s clock) and the recent lessons', async () => {
+  const { tradingDayStart } = require('../../scripts/lib/trading/clock');
+  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: '2026-04-26T22:00:00.000Z' }).filter(x => x.tool === 'journal_read').map(x => x.args), [{ kind: 'review', since: '2026-04-26T22:00:00.000Z' }, { kind: 'lesson' }]);
+  const w = home();
+  const broker = countingBroker();
+  const now = new Date(w.b.closedAt);
+  const runRole = async () => ({ ok: true, text: '## Risk state: account 7', tools: [] });
+  await deskFor({ home: w.h, cfg: ON(), root: ROOT, runRole, env: w.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString(), context: w.context, store: CD.createStore({ root: ROOT, broker }) });
+  const journal = broker.calls.filter(c => c[0] === 'journal_read').map(c => c[1]);
+  assert.deepStrictEqual(journal, [{ kind: 'review', since: tradingDayStart(now).toISOString() }, { kind: 'lesson' }]);
+  assert.ok(Date.parse(journal[0].since) <= now.getTime() && now.getTime() - Date.parse(journal[0].since) < 86400000);
+});
+
+test('a desk whose time is already spent makes no read', async () => {
+  const w = home();
+  const store = CD.createStore({ root: ROOT, broker: countingBroker() });
+  const stop = new AbortController();
+  stop.abort();
+  const now = new Date(w.b.closedAt);
+  const d = await deskFor({ home: w.h, cfg: ON(), root: ROOT, runRole: async () => ({ ok: true, text: 'x', tools: [] }), env: w.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: ROLES, now, at: now.toISOString(), context: w.context, store, signal: stop.signal });
+  assert.strictEqual(store.made, 0);
+  assert.ok(d.missing.every(m => m.stop === 'cancelled'));
+});

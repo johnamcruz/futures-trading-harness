@@ -47,8 +47,11 @@
  *                               seam for a later preloader; none is built), made (reads made so far), cycle (its
  *                               environment's fingerprint)
  *   kindOf(tool)                'preload' (independent of the closing bar, the clock, the account and the journal) or 'close'
- *   deskReads(role, { symbol, contractId, accountId })   [{ tool, args }] a desk role reads every cycle (its agent body)
- *   collectDesk({ roles, symbol, contractId, accountId, env, store })   { [role]: { blocks, missing, primaryOk } }
+ *   deskReads(role, { symbol, contractId, accountId, timeframe, since })   [{ tool, args }] a desk role reads every cycle
+ *                               (its agent body; `timeframe` an analyst's own, `since` the trading day's start)
+ *   collectDesk({ roles, symbol, contractId, accountId, env, store, frames, since })   { [role]: { blocks, missing, primaryOk } }
+ *                               (`frames`: role -> its own timeframe, the cycle's context.frames)
+ *   frameServed(env, symbol, timeframe)   as briefingServed, for an analyst's own timeframe's briefing
  *   deskFailed(roles, why)      a desk collection that failed as a whole: no block for any role
  *   briefingServed(env, symbol) { briefing, digest } when bar_briefing serves this cycle's bar's briefing, else { why }
  *   collect({ symbols, accountId, env, root, broker, now, callTool, paper, store })   { blocks: [{ tool, args, asOf, text }], missing: [{ tool, args, why }] }
@@ -62,7 +65,7 @@
 
 const crypto = require('crypto');
 const { harnessHome } = require('./paths');
-const { readBriefing } = require('./trading/briefing');
+const { readBriefing, readFrameBriefing, frameHolds } = require('./trading/briefing');
 const { cycleBarOf } = require('./harness-tools/briefing');
 const { briefingAfterClock } = require('./trading/look-ahead');
 const { replayAt } = require('./trading/harness-now');
@@ -115,6 +118,31 @@ function briefingServed(env, symbol) {
   return { briefing: b, digest: sha256(JSON.stringify(b)) };
 }
 
+/**
+ * Whether bar_briefing { symbol, timeframe } serves this cycle's briefing on an analyst's own timeframe
+ * (harness-tools/briefing.js frameText, as the report cache judges it: report-cache.js frameVersions): the runner's briefing this
+ * cycle's (briefingServed), its timeframe's briefing built, not after the replay clock, and its bar the one holding at the
+ * cycle's start (FTH_CYCLE_AT, from the runner: trading/briefing.js frameHolds). A timeframe that is the runner's own is
+ * its briefing (briefingServed).
+ */
+function frameServed(env, symbol, timeframe) {
+  const first = briefingServed(env, symbol);
+  if (!first.briefing) return first;
+  const tf = /^([1-9]\d*)(m|h)$/.exec(String(timeframe || ''));
+  if (!tf) return { why: `${short(timeframe)} is not a timeframe` };
+  const minutes = Number(tf[1]) * (tf[2] === 'h' ? 60 : 1);
+  if (minutes === first.briefing.minutes) return first;
+  const f = readFrameBriefing(harnessHome(env), /^([A-Z0-9]{1,8})/.exec(String(symbol))[1], minutes);
+  if (!f) return { why: `no ${minutes}m bar briefing` };
+  let later;
+  try { later = briefingAfterClock(f, replayAt(env)); } catch (err) { return { why: `the clock refused (${errText(err)})` }; }
+  if (later) return { why: later };
+  const at = Date.parse(env.FTH_CYCLE_AT);
+  if (!Number.isFinite(at)) return { why: 'no cycle start for an own-timeframe briefing' };
+  if (!frameHolds(f, new Date(at))) return { why: `the ${minutes}m briefing is of the bar that closed ${f.closedAt}, not the one holding at the cycle's start` };
+  return { briefing: f, digest: sha256(JSON.stringify([first.digest, f])) };
+}
+
 /** The one text of an MCP tool result, or null (not exactly one text item). */
 function onlyText(res) {
   const c = res && Array.isArray(res.content) ? res.content : [];
@@ -123,14 +151,15 @@ function onlyText(res) {
 
 async function briefingRead(args, { env, root, callTool }) {
   const { symbol } = args;
-  const before = briefingServed(env, symbol);
+  const served = () => (args.timeframe === undefined || args.timeframe === null ? briefingServed(env, symbol) : frameServed(env, symbol, args.timeframe));
+  const before = served();
   if (!before.briefing) return { tool: BRIEFING, args, why: before.why };
   const res = await callTool(BRIEFING, args, { env, root });
   const text = onlyText(res);
   if (res && res.isError) return { tool: BRIEFING, args, why: `the tool refused (${short(text)})` };
   if (text === null) return { tool: BRIEFING, args, why: 'the reply is not one text' };
   // The briefing it rendered is the one checked: the same bar's, unchanged while it was read.
-  const after = briefingServed(env, symbol);
+  const after = served();
   if (!after.briefing || after.digest !== before.digest) return { tool: BRIEFING, args, why: 'the briefing changed while it was read' };
   return { tool: BRIEFING, args, asOf: before.briefing.closedAt, text };
 }
@@ -189,9 +218,12 @@ function createStore({ root, broker = null, now = () => new Date(), callTool = r
       return Promise.all(reads.map(r => {
         const k = keyOf(r.tool, r.args);
         const had = entries.get(k);
-        if (!had || (refresh.includes(r.tool) && had.fill < fills)) {
+        // Read again: a key in `refresh`, or one that failed (settled not ok), for a later fill; never twice in one.
+        if (!had || (had.fill < fills && (refresh.includes(r.tool) || had.failed))) {
           made += 1;
-          entries.set(k, { fill: fills, p: readOne(r, { env: env0, root, broker, now, callTool, paper }).then(entryOf) });
+          const e = { fill: fills, failed: false };
+          e.p = readOne(r, { env: env0, root, broker, now, callTool, paper }).then(entryOf).then(x => { e.failed = !x.ok; return x; });
+          entries.set(k, e);
         }
         return entries.get(k).p;
       }));
@@ -279,22 +311,26 @@ const failed = why => ({ blocks: [], missing: [], note: `The runner's reads for 
  * every analyst its bar briefing (`bar_briefing {"symbol"}`); market structure the live strategies (`strategies_list`),
  * volume and liquidity the live quote (`get_quote`, once); risk-manager phase 1 its steps 1 to 5 (the server's config,
  * the accounts, the account's snapshot, today's reviews and recent lessons, the attempts). An analyst on its own
- * timeframe reads the runner's briefing too (its session facts), so that read is the same for it.
+ * timeframe reads its timeframe's briefing first (`timeframe`, its primary read: frameServed), and the runner's for its
+ * session facts.
  */
-function deskReads(role, { symbol, contractId = null, accountId = null }) {
-  const brief = { tool: BRIEFING, args: { symbol } };
-  if (role === 'market-structure-analyst') return [brief, { tool: 'strategies_list', args: {} }];
-  if (role === 'trend-momentum-analyst') return [brief];
-  if (role === 'volume-liquidity-analyst') return [brief, { tool: 'get_quote', args: { contractId: contractId || symbol } }];
+function deskReads(role, { symbol, contractId = null, accountId = null, timeframe = null, since = null }) {
+  // An analyst on its own timeframe: that timeframe's briefing first (its primary read), the runner's for the session.
+  const brief = [...(timeframe && role !== RISK_MANAGER ? [{ tool: BRIEFING, args: { symbol, timeframe } }] : []), { tool: BRIEFING, args: { symbol } }];
+  if (role === 'market-structure-analyst') return [...brief, { tool: 'strategies_list', args: {} }];
+  if (role === 'trend-momentum-analyst') return brief;
+  if (role === 'volume-liquidity-analyst') return [...brief, { tool: 'get_quote', args: { contractId: contractId || symbol } }];
   if (role === RISK_MANAGER) {
     const account = Number.isInteger(accountId) && accountId >= 1 ? [{ tool: 'get_account_snapshot', args: { accountId } }] : [];
-    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, { tool: 'journal_read', args: { kind: 'review' } }, { tool: 'journal_read', args: { kind: 'lesson' } }, { tool: 'combine_status', args: {} }];
+    // Today's reviews (since the trading day's start), the recent lessons.
+    const review = { tool: 'journal_read', args: { kind: 'review', ...(typeof since === 'string' && since ? { since } : {}) } };
+    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'journal_read', args: { kind: 'lesson' } }, { tool: 'combine_status', args: {} }];
   }
   return [];
 }
 
 /** The read a role's credit rests on (checks.js read-data): an analyst's bar briefing, phase 1's account snapshot. */
-const primaryOf = (role, { symbol, accountId = null }) => (role === RISK_MANAGER ? (Number.isInteger(accountId) && accountId >= 1 ? keyOf('get_account_snapshot', { accountId }) : null) : keyOf(BRIEFING, { symbol }));
+const primaryOf = (role, { symbol, accountId = null, timeframe = null }) => (role === RISK_MANAGER ? (Number.isInteger(accountId) && accountId >= 1 ? keyOf('get_account_snapshot', { accountId }) : null) : keyOf(BRIEFING, timeframe ? { symbol, timeframe } : { symbol }));
 
 /**
  * The desk's reads, made once in the cycle's store (a read several roles share made once), then each role's: its blocks
@@ -302,8 +338,9 @@ const primaryOf = (role, { symbol, accountId = null }) => (role === RISK_MANAGER
  * (primaryOf) made whole and in its blocks: a bar briefing served as this cycle's, an account snapshot answered as one
  * text with no error. Phase 1 without an account in the runner config: no snapshot, a line, no credit.
  */
-async function collectDesk({ roles, symbol, contractId = null, accountId = null, env, store, maxBytes = MAX_BYTES }) {
-  const per = Object.fromEntries(roles.map(role => [role, deskReads(role, { symbol, contractId, accountId })]));
+async function collectDesk({ roles, symbol, contractId = null, accountId = null, env, store, maxBytes = MAX_BYTES, frames = {}, since = null }) {
+  const tfOf = role => (frames && Object.prototype.hasOwnProperty.call(frames, role) && typeof frames[role] === 'string' && role !== RISK_MANAGER ? frames[role] : null);
+  const per = Object.fromEntries(roles.map(role => [role, deskReads(role, { symbol, contractId, accountId, timeframe: tfOf(role), since })]));
   const all = Object.values(per).flat();
   const done = store ? await store.fill(all, { env }) : null;
   if (!done) return deskFailed(roles, 'the cycle\'s store is another cycle\'s');
@@ -311,9 +348,9 @@ async function collectDesk({ roles, symbol, contractId = null, accountId = null,
   const out = {};
   for (const role of roles) {
     const entries = per[role].map(r => byKey.get(keyOf(r.tool, r.args)));
-    const noAccount = role === RISK_MANAGER && !primaryOf(role, { symbol, accountId }) ? [{ tool: 'get_account_snapshot', args: {}, why: 'no account in the runner config' }] : [];
+    const noAccount = role === RISK_MANAGER && !primaryOf(role, { symbol, accountId, timeframe: null }) ? [{ tool: 'get_account_snapshot', args: {}, why: 'no account in the runner config' }] : [];
     const got = capped({ blocks: entries.filter(e => e.ok).map(asBlock), missing: [...entries.filter(e => !e.ok).map(asMissing), ...noAccount] }, maxBytes, { intro: introOf(role) });
-    const primary = primaryOf(role, { symbol, accountId });
+    const primary = primaryOf(role, { symbol, accountId, timeframe: tfOf(role) });
     const primaryOk = Boolean(primary) && got.blocks.some(b => keyOf(b.tool, b.args) === primary);
     out[role] = Object.freeze({ blocks: got.blocks, missing: got.missing, primaryOk });
   }
@@ -326,4 +363,4 @@ const deskFailed = (roles, why) => Object.freeze(Object.fromEntries(roles.map(ro
 /** A desk role's data section in its request ('' without a record for it). */
 const deskText = (role, rec) => (rec ? render(rec, { intro: introOf(role) }) : '');
 
-module.exports = { READS, BRIEFING, INTRO, DESK_INTRO, MAX_BYTES, VOLATILE, PER_RUN, PRELOAD, kindOf, on, sha256, keyOf, cycleOf, briefingServed, onlyText, createStore, collect, deskReads, collectDesk, deskFailed, deskText, capped, render, records, failed, skipped };
+module.exports = { READS, BRIEFING, INTRO, DESK_INTRO, MAX_BYTES, VOLATILE, PER_RUN, PRELOAD, kindOf, on, sha256, keyOf, cycleOf, briefingServed, onlyText, createStore, collect, frameServed, deskReads, collectDesk, deskFailed, deskText, capped, render, records, failed, skipped };

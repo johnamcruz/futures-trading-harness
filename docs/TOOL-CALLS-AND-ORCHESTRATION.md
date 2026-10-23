@@ -287,21 +287,26 @@ against:
   roles run, the runner makes each role's every-cycle reads, as its agent body
   names them, in the cycle's store (`scripts/lib/cycle-data.js` `createStore`,
   `collectDesk`). Analysts get `bar_briefing`, market structure also gets
-  `strategies_list`, and volume and liquidity also gets `get_quote`. Phase 1
+  `strategies_list`, and volume and liquidity also gets `get_quote`. An
+  analyst on its own timeframe (the cycle's `frames`) also gets its
+  timeframe's briefing, first: that is its primary read. Phase 1
   gets `get_server_config`, `list_accounts`, `get_account_snapshot`, its two
-  `journal_read`s and `combine_status`. Each read is made once a cycle
+  `journal_read`s (today's reviews, since the trading day's start, and the
+  recent lessons) and `combine_status`. Each read is made once a cycle
   (the analysts' shared briefing once), with the environment the roles' runs
   get. Each role's request ends with exactly the text each tool returned,
   and a line for each read not made ("read it yourself"). The store is
   the runner's, in memory, one per cycle: no session writes it and no tool
   serves from it. The head trader's reads take the same entries, but the
   account's reads are made again for it, since they change with fills. A
-  reader of another cycle never takes from it.
+  reader of another cycle never takes from it. A read that failed is tried
+  again by the next reader in the cycle.
   `read-data` then also counts a role that called no data tool when the
   runner's own record for that role (`collectedFor`, from the workflow's
   context built in code) says its primary read was made whole and is in its
-  request: an analyst's briefing, served as this cycle's, or phase 1's account
-  snapshot. Another role's record, a failed read, another bar's briefing or a
+  request: an analyst's briefing, served as this cycle's (for one on its own
+  timeframe, that timeframe's, the one holding at the cycle's start), or phase
+  1's account snapshot. Another role's record, a failed read, another bar's briefing or a
   block dropped by the size cap gives no credit; nothing parses the blocks.
   Each read has a kind: `preload` (only `strategies_list`, which depends on
   neither the closing bar, the clock, the account nor the journal) or `close`.
