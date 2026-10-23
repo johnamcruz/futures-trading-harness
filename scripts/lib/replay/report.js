@@ -195,4 +195,4 @@ function toText(summary) {
   return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
-module.exports = { summarize, tradesOf, toMarkdown, toText };
+module.exports = { summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };

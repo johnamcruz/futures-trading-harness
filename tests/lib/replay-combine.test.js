@@ -186,9 +186,10 @@ test('the driver: each attempt from zero; no step after a blow or a pass; the ne
   const w = world();
   const { run, res, steps, log, logs } = await combineRun(w, { pnl: [BLOW, ...PASS] });
   assert.strictEqual(res.done, true);
-  // Attempt 1: day 1 whole (four bars, end of day), day 2 only up to the blow (its first two bars), then nothing: 03-03 never stepped.
-  assert.deepStrictEqual(steps.filter(s => s.day <= '2022-03-03').map(s => `${s.day} ${s.kind}`), [...Array(4).fill('2022-03-01 trade'), '2022-03-01 eod', '2022-03-02 trade', '2022-03-02 trade']);
-  assert.ok(steps.every(s => s.t < BLOW.at || s.day >= '2022-03-07'), 'no step of attempt 1 after its blow');
+  // Attempt 1: day 1 whole (four bars, end of day), day 2 up to the blow (its first two bars), then only that day's end
+  // of day (the runner's flatten and close): no trade cycle after the blow, and 03-03 never stepped.
+  assert.deepStrictEqual(steps.filter(s => s.day <= '2022-03-03').map(s => `${s.day} ${s.kind}`), [...Array(4).fill('2022-03-01 trade'), '2022-03-01 eod', '2022-03-02 trade', '2022-03-02 trade', '2022-03-02 eod']);
+  assert.ok(steps.every(s => s.t < BLOW.at || s.kind === 'eod' || s.day >= '2022-03-07'), 'no trade step of attempt 1 after its blow');
   // Attempt 2 starts fresh: the broker at the starting balance, a new record (no closed days), started on its first day.
   const first2 = steps.find(s => s.day === '2022-03-07');
   assert.deepStrictEqual([first2.balance, first2.days, first2.startedAt.slice(0, 10)], [S0, 0, '2022-03-07']);
@@ -209,7 +210,7 @@ test('the driver: each attempt from zero; no step after a blow or a pass; the ne
   assert.deepStrictEqual([manifest.finished, manifest.combine.current, manifest.combine.ended], [true, null, [0, 1]]);
 });
 
-test('the driver: an attempt still active after maxSessions ends unfinished; a blown attempt with a position open runs only its day\'s end of day', async () => {
+test('the driver: an attempt still active after maxSessions ends unfinished; ended with a position open, only a day\'s end of day runs', async () => {
   const w = world();
   const quiet = await combineRun(w);
   assert.deepStrictEqual(quiet.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome, x.sessions, x.profit]), [[1, 'unfinished', 3, 0], [2, 'unfinished', 3, 0]]);
@@ -220,7 +221,12 @@ test('the driver: an attempt still active after maxSessions ends unfinished; a b
   const a1 = held.steps.filter(s => s.day <= '2022-03-03').map(s => `${s.day} ${s.kind}`);
   assert.deepStrictEqual(a1, [...Array(4).fill('2022-03-01 trade'), '2022-03-01 eod', '2022-03-02 trade', '2022-03-02 trade', '2022-03-02 eod'], 'the end of day flattens; no trade cycle after the blow');
   assert.deepStrictEqual(held.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome]), [[1, 'blown'], [2, 'unfinished']]);
-  assert.ok(held.logs.some(l => /blown with a position or working order open: only the day's end of day runs/.test(l)), held.logs.join('\n'));
+  assert.ok(held.logs.some(l => /combine attempt 1 blown: no trade cycle after it; only the day's end of day runs/.test(l)), held.logs.join('\n'));
+  // Passed at 03-08's close with a position still open the next morning: 03-09 runs only its end of day, then it ends.
+  const u = world();
+  const late = await combineRun(u, { pnl: PASS, open: now => now >= '2022-03-09T00:00:00Z' && now < '2022-03-09T20:51:00Z' });
+  assert.deepStrictEqual(late.steps.filter(s => s.day === '2022-03-09').map(s => s.kind), ['eod']);
+  assert.deepStrictEqual(late.log.filter(x => x.kind === 'end').map(x => [x.attempt, x.outcome, x.sessions]), [[1, 'unfinished', 3], [2, 'passed', 3]]);
 });
 
 test('the driver: a resume keeps the attempt under way and starts none twice; it refuses a broker that ignores the schedule or an attempt that would start open', async () => {
@@ -249,7 +255,7 @@ test('the report: per attempt and totals (pass rate, blows, median sessions to p
   assert.match(lines[1], new RegExp(`attempt 1 from 2022-03-01: blown after 2 session\\(s\\); profit -\\$${-BLOW.usd}\\.00 of \\$${ACCOUNT.profit_target}\\.00; lowest cushion -\\$100\\.00 to the floor; worst day -\\$${-BLOW.usd}\\.00 \\(daily limit \\$${ACCOUNT.daily_loss_limit}\\.00\\); 1 trade\\(s\\), win rate 0\\.0%, mean R -`));
   assert.match(lines[2], /attempt 2 from 2022-03-07: passed after 2 session\(s\); .*2 trade\(s\), win rate 50\.0%, mean R 0\.50/);
   assert.match(lines[3], /totals: 2 attempt\(s\) ended: 1 passed \(pass rate 50\.0%\), 1 blown, 0 unfinished; median sessions to pass 2/);
-  assert.match(lines[4], /promotion gate numbers \(prop\/promotion\.js, frozen: at least 20 independent attempts over 2 months, at most 0 blows, pass rate at least 40%\): practice \(practice-train\), never a promotion score: .*never a promotion score.*too small an out-of-sample test \(2 independent of 2 attempts over 1 month\(s\).*blows out of sample \(1/);
+  assert.match(lines[4], /promotion gate numbers \(prop\/promotion\.js, frozen: at least 20 independent attempts over 2 months, at most 0 blows, pass rate at least 40%\): practice \(practice-train\), never a promotion score; short of them: too small an out-of-sample test \(2 independent of 2 attempts over 1 month\(s\).*blows out of sample \(1/);
   // report.js: the same lines in the terminal table and report.md, only for a combine run.
   const R = require('../../scripts/lib/replay/report');
   const summary = R.summarize(days, { runDir: run.paths.runDir });

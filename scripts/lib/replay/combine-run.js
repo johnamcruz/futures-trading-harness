@@ -19,9 +19,11 @@
  *     the balance schedule (as a drawn state's day is), a fresh attempt record (prop-state startAttempt), and the broker's
  *     balance checked to be the starting balance (else refused);
  *   - the attempt's state is read from its record and the broker's balance (prop-state stateFrom, combine.js): passed or
- *     blown ends it. Flat, it ends at once and no step runs; with a position or a working order still open, only the
- *     day's end of day runs (the runner's own flatten, as live: the gate already refuses new entries) and it ends once
- *     flat. Every later time of an ended attempt runs no step: the clock moves to the next attempt's start.
+ *     blown ends it. Before the day's first step (a pass at the last close), flat, it ends at once and no step runs;
+ *     during a day it stepped (a blow), or with a position or a working order still open, no trade cycle runs: only the
+ *     day's end of day (the runner's own flatten and the day's close, as live; the gate already refuses new entries),
+ *     and it ends at the next time after it. Every later time of an ended attempt runs no step: the clock moves to the
+ *     next attempt's start.
  * An attempt still active when its last session is done ends `unfinished` (at the next attempt's start, or the run's end).
  * Each start and end is a line of the run's combine.jsonl (never shown to the model); the driver's own state (the attempt
  * under way, its lowest cushion and worst day so far, the attempts ended) is the manifest's `combine`.
@@ -51,14 +53,14 @@ function validateCombineConfig(raw) {
   for (const k of Object.keys(raw)) if (!KEYS.includes(k)) errors.push(`combine.${k}: unknown (${KEYS.join(', ')})`);
   if (!(typeof raw.account === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(raw.account))) errors.push('combine.account: an account profile name (accounts/<name>/ACCOUNT.md)');
   const a = raw.attempts;
-  if (!(Array.isArray(a) && a.length && a.every(d => typeof d === 'string' && DATE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d))) {
+  if (!(Array.isArray(a) && a.length && a.every(d => typeof d === 'string' && DATE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d)))) {
     errors.push('combine.attempts: a list of each attempt\'s first trading day (YYYY-MM-DD), at least one');
   } else if (a.some((d, i) => i && d <= a[i - 1])) errors.push('combine.attempts: in order, each after the one before');
   if (raw.maxSessions !== undefined && !(Number.isInteger(raw.maxSessions) && raw.maxSessions >= 1)) errors.push('combine.maxSessions: a whole number of trading sessions, 1 or more (default: the profile\'s sessions)');
   return errors.length ? { combine: null, errors } : { combine: { account: raw.account, attempts: [...a], maxSessions: raw.maxSessions === undefined ? null : raw.maxSessions }, errors };
 }
 
-const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().split('T')[0];
 
 /**
  * The attempts' windows on the run's trading days (`points`: its decision times, replay/schedule.js): each attempt's
@@ -170,7 +172,8 @@ async function startOne(run, idx, point, ranAt, env, deps, { root, manifest, sav
   if (ps.readAttempt(run.paths.runHome, account.name)) ps.endAttempt(run.paths.runHome, account.name, ranAt);
   ps.startAttempt(run.paths.runHome, account, ranAt);
   const balance = await balanceOf(run, env, deps);
-  if (!(Math.abs(balance - account.starting_balance) <= 0.01)) {
+  // To the cent, as a broker reports a balance.
+  if (Math.round(balance * 100) !== Math.round(account.starting_balance * 100)) {
     throw refused(`the replay broker reports a balance of ${balance}, not ${account.name}'s starting ${account.starting_balance}: it doesn't apply the balance schedule (${run.brokerEnv.balanceSchedule || 'brokerEnv.balanceSchedule'})`);
   }
   appendLog(run.paths.runDir, { kind: 'start', attempt: a.n, start: a.start, day: point.day, at: ranAt.toISOString(), balance });
@@ -202,7 +205,7 @@ async function endOne(run, env, deps, { root, manifest, save, log, outcome = nul
   st.closing = null;
   st.track = null;
   save();
-  log(`combine attempt ${a.n} (${a.start}) ${out} after ${days.length} session(s): profit $${sum.profit}, lowest cushion $${sum.lowCushion}; no step runs for it after this`);
+  log(`combine attempt ${a.n} (${a.start}) ${out} after ${days.length} session(s): profit ${usd(sum.profit)}, lowest cushion ${usd(sum.lowCushion)}; no step runs for it after this`);
 }
 
 /** Before a step of a combine run: start its attempt, end it when it passed or blew; whether the step runs (header). */
@@ -230,12 +233,15 @@ async function beforeStep(run, point, ranAt, env, deps, ctx) {
     ctx.save();
     return true;
   }
-  // A check that fails counts as open: the day's end of day still runs (never leaves a position alone).
-  const open = await Promise.resolve().then(() => deps.open(env, run.cfg.account)).then(Boolean, () => true);
-  if (open) {
-    if (!st.closing) ctx.log(`combine attempt ${run.combine.attempts[idx].n} ${outcome} with a position or working order open: only the day's end of day runs (the runner's flatten), then it ends`);
-    st.closing = { outcome, day: point.day };
-    const eod = point.kind === 'eod' || point.kind === 'eod-retry';
+  // Ended during a day it stepped: only that day's end of day runs (the runner's flatten and the day's close, as live;
+  // never a trade cycle), then it ends. Ended before the day's first step (passed at the last close): it ends now, unless
+  // a position or working order is still open (a check that fails counts as open: never left alone).
+  const eod = point.kind === 'eod' || point.kind === 'eod-retry';
+  const underWay = t.days.includes(point.day) || (st.closing && st.closing.day === point.day);
+  const open = underWay ? null : await Promise.resolve().then(() => deps.open(env, run.cfg.account)).then(Boolean, () => true);
+  if (underWay || open) {
+    if (!st.closing) ctx.log(`combine attempt ${run.combine.attempts[idx].n} ${outcome}: no trade cycle after it; only the day's end of day runs (the runner's flatten and close), then it ends`);
+    st.closing = { outcome, day: st.closing ? st.closing.day : point.day };
     if (eod && !t.days.includes(point.day)) t.days.push(point.day);
     ctx.save();
     return eod;
@@ -279,12 +285,14 @@ function combineReport(runDir, { days = null, role = null } = {}) {
   const { gateFailures, PROMOTION_GATE } = require('../prop/promotion');
   const months = {};
   for (const r of done) {
-    const m = r.start.slice(0, 7);
+    const m = r.start.slice(0, 'YYYY-MM'.length);
     months[m] = months[m] || { blown: 0 };
     if (r.outcome === 'blown') months[m].blown += 1;
   }
   // Every attempt shares no session with another (combineForRun), so each is independent: ess is their count.
-  const gate = gateFailures({ attempts: done.length, passed: passed.length, blown, ess: done.length, months, diagnostic: true, score: `continuous combine practice on ${role || 'no role'}` });
+  // Judged as the gate judges an out-of-sample result, but labelled practice (reportLines): the gate's own evidence is the
+  // Monte Carlo of a test or final window, never these attempts.
+  const gate = gateFailures({ attempts: done.length, passed: passed.length, blown, ess: done.length, months });
   return {
     attempts: rows, role,
     totals: { attempts: done.length, running: rows.length - done.length, passed: passed.length, blown, unfinished: done.filter(r => r.outcome === 'unfinished').length, passRate: done.length ? passed.length / done.length : null, medianSessionsToPass: median(passed.map(r => r.sessions)) },
@@ -292,9 +300,12 @@ function combineReport(runDir, { days = null, role = null } = {}) {
   };
 }
 
-const usd = x => (typeof x === 'number' && Number.isFinite(x) ? `${x < 0 ? '-' : ''}$${Math.abs(x).toFixed(2)}` : '-');
-const pct = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1)}%`);
-const fix = x => (x === null || x === undefined ? '-' : x.toFixed(2));
+// The report's own formats (report.js): dollars, a rate, a number.
+const F = () => require('./report').formats;
+const known = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+const usd = x => F().usd(known(x));
+const pct = x => F().pct(known(x));
+const fix = x => F().fix(known(x));
 
 /** The report's lines (the stage report and `replay.js report`). */
 function reportLines(rep) {
@@ -308,7 +319,8 @@ function reportLines(rep) {
     lines.push(`  attempt ${r.attempt} from ${r.start}: ${r.outcome} after ${r.sessions} session(s)${nums}; ${r.trades} trade(s), win rate ${pct(r.winRate)}, mean R ${fix(r.meanR)}`);
   }
   lines.push(`  totals: ${T.attempts} attempt(s) ended${T.running ? ` (${T.running} still running)` : ''}: ${T.passed} passed (pass rate ${pct(T.passRate)}), ${T.blown} blown, ${T.unfinished} unfinished; median sessions to pass ${T.medianSessionsToPass === null ? '-' : T.medianSessionsToPass}`);
-  lines.push(`  promotion gate numbers (prop/promotion.js, frozen: at least ${G.minAttempts} independent attempts over ${G.minMonths} months, at most ${G.maxBlows} blows, pass rate at least ${G.minPassRate * 100}%): practice${rep.role ? ` (${rep.role})` : ''}, never a promotion score: ${rep.gate.failures.join('; ')}`);
+  const verdict = rep.gate.failures.length ? `short of them: ${rep.gate.failures.join('; ')}` : 'these attempts meet them';
+  lines.push(`  promotion gate numbers (prop/promotion.js, frozen: at least ${G.minAttempts} independent attempts over ${G.minMonths} months, at most ${G.maxBlows} blows, pass rate at least ${G.minPassRate * 100}%): practice${rep.role ? ` (${rep.role})` : ''}, never a promotion score; ${verdict}`);
   return lines;
 }
 

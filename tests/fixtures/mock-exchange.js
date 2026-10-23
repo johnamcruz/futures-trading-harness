@@ -40,6 +40,9 @@
  * triggering stops and limits, as a replay server's simulated fills follow its data. MOCK_BALANCE_SCHEDULE=<file> is the
  * replay-only balance schedule the driver writes (a JSON list of { at, balance }): the balance is the latest entry's once the
  * clock has reached its `at`, as a replay broker applies it (a run with account states).
+ * scriptedFills (a state field, from MOCK_INIT or MOCK_INIT_FILE): [{ at, pnl, contractId? }], each a round trip the account
+ * makes once the clock reaches its `at` (an opening fill and a closing fill with that realized P&L, no fees; the
+ * balance moves by it): an account's P&L scripted without a model, as a replay server's fills would move it.
  */
 
 const fs = require('fs');
@@ -314,6 +317,20 @@ function applySchedule(s, file) {
   }
 }
 
+/** scriptedFills: each round trip whose time the clock has reached, once (header). */
+function applyScriptedFills(s) {
+  for (const f of s.scriptedFills) {
+    if (f.done || Date.parse(f.at) > s.nowMs) continue;
+    f.done = true;
+    const contractId = f.contractId || CONTRACTS[0].id;
+    const at = Date.parse(f.at);
+    const price = s.prices[contractId] || 0;
+    s.fills.push({ id: s.nextId++, orderId: s.nextId++, accountId: ACCOUNT, contractId, creationTimestamp: iso(at), price, profitAndLoss: null, fees: 0, side: 0, size: 1, voided: false });
+    s.fills.push({ id: s.nextId++, orderId: s.nextId++, accountId: ACCOUNT, contractId, creationTimestamp: iso(at + 1000), price, profitAndLoss: f.pnl, fees: 0, side: 1, size: 1, voided: false });
+    s.balance = Math.round((s.balance + f.pnl) * 100) / 100;
+  }
+}
+
 /** One tool call against the shared state; every call is logged in state.calls. */
 function handle(file, tool, args = {}, env = process.env) {
   let thrown = null;
@@ -322,6 +339,7 @@ function handle(file, tool, args = {}, env = process.env) {
     if (env.MOCK_CLOCK_FILE) s.nowMs = Date.parse(JSON.parse(fs.readFileSync(env.MOCK_CLOCK_FILE, 'utf8')).now);
     if (env.MOCK_PRICE_FROM_BARS === '1') followBars(s);
     if (env.MOCK_BALANCE_SCHEDULE) applySchedule(s, env.MOCK_BALANCE_SCHEDULE);
+    if (Array.isArray(s.scriptedFills)) applyScriptedFills(s);
     // With whether a position was open when the call came (an order cancelled while one was, say).
     s.calls.push({ tool, args, open: s.positions.length > 0 });
     if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);

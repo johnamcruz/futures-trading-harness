@@ -105,7 +105,7 @@ const { latencySetting } = require('./latency');
 const { WALL_START } = require('../trading/harness-now');
 const { validateCuratedConfig, curatedForRun, emptyWindows } = require('../learning/curated-lists');
 const { decisionPoints } = require('./schedule');
-const { applyStage } = require('./stage');
+const { applyStage, stageRequirements } = require('./stage');
 const { validateCombineConfig, combineForRun } = require('./combine-run');
 const { adapterTag } = require('../learning/adapter');
 
@@ -235,7 +235,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   errors.push(...combineCfg.errors);
   let combineAccount = null;
   if (r.combine !== undefined) {
-    if (staged.stage !== 2) errors.push('combine: stage 2\'s continuous combine (stage: 2); refused in stage 1 and without a stage');
+    const req = staged.stage ? stageRequirements(staged.stage) : null;
+    if (!(req && req.combine === 'allowed')) errors.push('combine: stage 2\'s continuous combine (stage: 2); refused in stage 1 and without a stage');
     if (statesCfg !== undefined) errors.push('combine: not with accountStates (drawn states practise curated days; the continuous combine trades whole attempts from zero): one stage-2 mode per replay config');
     if (curatedCfg.curated) errors.push('combine: not with curatedList (every decision time of an attempt\'s days is stepped)');
     if (r.prop !== undefined) errors.push('combine: not with prop (combine.account is the attempts\' account)');

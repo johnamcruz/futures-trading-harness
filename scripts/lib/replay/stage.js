@@ -289,6 +289,26 @@ function practiceLines(log, planned = null) {
   ];
 }
 
+/** A continuous combine run's lines: its attempts, then the Monte Carlo of its own trades (continuous days: their natural rate). */
+function combineLines(run, rd, f, validate) {
+  const C = require('./combine-run');
+  const rep = rd.combine ? rd.combine() : C.combineReport(run.paths.runDir, { role: rd.role() });
+  return [
+    ...(rep ? C.reportLines(rep) : ['continuous combine: no attempt started']),
+    f.monteCarlo ? '30-day Monte Carlo of the run\'s own trades (continuous days, their natural rate): see the prop report' : '30-day Monte Carlo: N/A (needs feat/prop-mc-model)',
+    ...(validate ? [f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)'] : []),
+  ];
+}
+
+/** A drawn-state run's lines: the practice by account state, then the Monte Carlo by account state. */
+function statesLines(run, rd, f, validate) {
+  return [
+    ...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir), run.accountStates && run.accountStates.assignment ? run.accountStates.assignment.days.length : null),
+    f.monteCarlo ? '30-day Monte Carlo by account state: see the prop report' : '30-day Monte Carlo by account state: N/A (phase 2, needs feat/prop-mc-model)',
+    ...(validate ? [f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)'] : []),
+  ];
+}
+
 function stageReport(run, opts = {}) {
   if (!run.stage) return [];
   try {
@@ -322,18 +342,8 @@ function stageLines(run, { root, env = process.env, barsFiles = {}, read = null 
     lines.push(head);
     for (const x of tests) lines.push(`  ${x.status} ${x.test}: ${x.detail}`);
   }
-  if (run.stage === 2 && run.combine) {
-    // The continuous combine: its attempts, then the Monte Carlo of its own trades (continuous days: their natural rate).
-    const C = require('./combine-run');
-    const rep = rd.combine ? rd.combine() : C.combineReport(run.paths.runDir, { role: rd.role() });
-    lines.push(...(rep ? C.reportLines(rep) : ['continuous combine: no attempt started']));
-    lines.push(f.monteCarlo ? '30-day Monte Carlo of the run\'s own trades (continuous days, their natural rate): see the prop report' : '30-day Monte Carlo: N/A (needs feat/prop-mc-model)');
-    if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');
-  } else if (run.stage === 2) {
-    lines.push(...practiceLines(rd.statesLog ? rd.statesLog() : require('../prop/account-states').readStatesLog(run.paths.runDir), run.accountStates && run.accountStates.assignment ? run.accountStates.assignment.days.length : null));
-    lines.push(f.monteCarlo ? '30-day Monte Carlo by account state: see the prop report' : '30-day Monte Carlo by account state: N/A (phase 2, needs feat/prop-mc-model)');
-    if (validate) lines.push(f.monteCarlo ? 'promotion gate: see the prop report' : 'promotion gate (prop/promotion.js): N/A (needs the Monte Carlo\'s attempts, feat/prop-mc-model)');
-  }
+  // Stage 2: the continuous combine's attempts (a combine is stage 2's only: replay/config.js), or the drawn states' practice.
+  if (run.stage === 2) lines.push(...(run.combine ? combineLines(run, rd, f, validate) : statesLines(run, rd, f, validate)));
   return lines;
 }
 
