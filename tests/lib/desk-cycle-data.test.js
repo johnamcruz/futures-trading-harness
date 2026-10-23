@@ -369,14 +369,59 @@ test('each entry\'s kind: a preload read may be made before the close (the seam)
 });
 
 /** An analyst on 15m bars: its briefing written beside the runner's, the cycle's context naming it (runner.js deskContext). */
-function framed({ cycleAt = null, write = true } = {}) {
-  const w = home();
+function framed({ cycleAt = null, write = true, frameBars = 1300, extra = {} } = {}) {
+  const w = home({ extra });
   const { candles } = require('../../scripts/lib/trading/mtf');
-  const whole = candles(BARS.slice(0, 1300), 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  const whole = candles(BARS.slice(0, frameBars), 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
   if (write) B.writeFrameBriefing(w.h, B.buildFrameBriefing({ symbol: 'NQ', contractId: null, bars: whole, minutes: 15, first: w.b }));
   const context = { ...w.context, cycleAt: cycleAt || w.b.closedAt, frames: [{ role: 'trend-momentum-analyst', timeframe: '15m' }] };
   return { ...w, context, env: childEnv(ON(), ROOT, w.base, context) };
 }
+
+test('an own-timeframe briefing of a bar that closed after the replay clock gives no credit (no look-ahead), though it would hold at the cycle\'s start', async () => {
+  const tma = 'trend-momentum-analyst';
+  const frames = { [tma]: '15m' };
+  // A replay broker (its config says replay), so FTH_REPLAY_NOW is the harness's clock.
+  const dir = tmpDir();
+  const brokers = path.join(dir, 'replay-brokers.json');
+  fs.writeFileSync(brokers, JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL' } } }));
+  // The 15m briefing is built on bars past the runner's (its bar closed later); the cycle's start is set at its close,
+  // so it holds there (frameHolds), and only the replay clock, at the runner's bar's close, is before it.
+  const probe = framed({ frameBars: 1320 });
+  const f = B.readFrameBriefing(probe.h, 'MNQ', 15);
+  assert.ok(Date.parse(f.closedAt) > Date.parse(probe.b.closedAt), 'the frame\'s bar closed after the runner\'s');
+  const w = framed({ frameBars: 1320, cycleAt: f.closedAt, extra: { FTH_BROKERS_FILE: brokers, FTH_REPLAY_NOW: probe.b.closedAt } });
+  assert.strictEqual(CD.briefingServed(w.env, 'MNQ').briefing.asOf, w.b.asOf, 'the runner\'s briefing is this cycle\'s under the replay clock');
+  const served = CD.frameServed(w.env, 'MNQ', '15m');
+  assert.ok(!served.briefing && /after the replay clock/.test(served.why), JSON.stringify(served));
+  const d = await CD.collectDesk({ roles: [tma], symbol: 'MNQ', env: w.env, store: CD.createStore({ root: ROOT }), frames });
+  assert.strictEqual(d[tma].primaryOk, false);
+  assert.strictEqual(CHECKS['read-data'](tma, { text: 'Data: bar_briefing bar15m@x', tools: [] }, { precollected: d }), 'read no data');
+  assert.ok(!d[tma].blocks.some(b => b.args.timeframe), 'no block of it');
+  // The tool agrees: it doesn't serve it either.
+  assert.match((await callTool('bar_briefing', { symbol: 'MNQ', timeframe: '15m' }, { env: w.env, root: ROOT })).content[0].text, /not served/);
+  // At the frame's own close, the same briefing is credited.
+  const later = framed({ frameBars: 1320, cycleAt: f.closedAt, extra: { FTH_BROKERS_FILE: brokers, FTH_REPLAY_NOW: f.closedAt } });
+  const ok = await CD.collectDesk({ roles: [tma], symbol: 'MNQ', env: later.env, store: CD.createStore({ root: ROOT }), frames });
+  assert.strictEqual(ok[tma].primaryOk, true);
+});
+
+test('a preloaded read that failed is tried again by the cycle\'s fill', async () => {
+  const w = home();
+  let n = 0;
+  const flaky = async (name, a, o) => { if (name === 'strategies_list' && (n += 1) === 1) throw new Error('flake'); return callTool(name, a, o); };
+  const store = CD.createStore({ root: ROOT, callTool: flaky });
+  const [pre] = await store.preload([{ tool: 'strategies_list', args: {} }], { env: w.env });
+  assert.deepStrictEqual([pre.ok, pre.kind], [false, 'preload']);
+  const d = await CD.collectDesk({ roles: ['market-structure-analyst'], symbol: 'MNQ', env: w.env, store });
+  assert.strictEqual(n, 2, 'read again at the close');
+  assert.strictEqual(d['market-structure-analyst'].blocks.find(b => b.tool === 'strategies_list').text, (await callTool('strategies_list', {}, { env: w.env, root: ROOT })).content[0].text);
+  // A preload that succeeded is taken as made.
+  const ok = CD.createStore({ root: ROOT, callTool: flaky });
+  await ok.preload([{ tool: 'strategies_list', args: {} }], { env: w.env });
+  await CD.collectDesk({ roles: ['market-structure-analyst'], symbol: 'MNQ', env: w.env, store: ok });
+  assert.strictEqual(n, 3);
+});
 
 test('an analyst on its own timeframe: its timeframe\'s briefing is its primary read, credited only when it is the one holding at the cycle\'s start', async () => {
   const rd = CHECKS['read-data'];

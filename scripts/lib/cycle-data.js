@@ -203,11 +203,18 @@ const entryOf = r => (typeof r.text === 'string' ? { tool: r.tool, args: r.args,
  * comes back { ok: false, why }. The cycle's fill takes a preloaded entry as made.
  */
 function createStore({ root, broker = null, now = () => new Date(), callTool = require('./harness-tools/protocol').callTool, paper = false } = {}) {
-  const entries = new Map(); // key -> { fill, p: Promise<entry> }
+  const entries = new Map(); // key -> { fill, failed, p: Promise<entry> }
   let cycle = null;
   let env0 = null;
   let fills = 0;
   let made = 0;
+  // One read as the store keeps it: the fill it was made in, and whether it failed (a later fill tries it again).
+  const make = (r, env) => {
+    made += 1;
+    const e = { fill: fills, failed: false };
+    e.p = readOne(r, { env, root, broker, now, callTool, paper }).then(entryOf).then(x => { e.failed = !x.ok; return x; });
+    return e;
+  };
   return {
     get cycle() { return cycle; },
     get made() { return made; },
@@ -220,10 +227,7 @@ function createStore({ root, broker = null, now = () => new Date(), callTool = r
         const had = entries.get(k);
         // Read again: a key in `refresh`, or one that failed (settled not ok), for a later fill; never twice in one.
         if (!had || (had.fill < fills && (refresh.includes(r.tool) || had.failed))) {
-          made += 1;
-          const e = { fill: fills, failed: false };
-          e.p = readOne(r, { env: env0, root, broker, now, callTool, paper }).then(entryOf).then(x => { e.failed = !x.ok; return x; });
-          entries.set(k, e);
+          entries.set(k, make(r, env0));
         }
         return entries.get(k).p;
       }));
@@ -232,10 +236,7 @@ function createStore({ root, broker = null, now = () => new Date(), callTool = r
       return Promise.all(reads.map(r => {
         if (kindOf(r.tool) !== 'preload') return Promise.resolve({ tool: r.tool, args: r.args, kind: 'close', ok: false, why: 'a read of the closing bar: made only at its close' });
         const k = keyOf(r.tool, r.args);
-        if (!entries.has(k)) {
-          made += 1;
-          entries.set(k, { fill: fills, p: readOne(r, { env, root, broker, now, callTool, paper }).then(entryOf) });
-        }
+        if (!entries.has(k)) entries.set(k, make(r, env));
         return entries.get(k).p;
       }));
     },
