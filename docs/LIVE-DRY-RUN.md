@@ -56,13 +56,17 @@ next day, Sunday evening to Friday afternoon.
   marker (not an object, an id that isn't one, a name that isn't a profile, or
   two accounts under one profile: an attempt is kept per profile) refuses
   every entry until it is fixed. A live run on a marked account with no
-  attempt running refuses to start, with the gate's message; preflight fails
-  it (`prop account`). A `propAccounts` key the gate never reads (at the top
-  level of a brokers file, under another broker's entry, or in the home's
-  `brokers.json` while `FTH_BROKERS_FILE` names another file) is a preflight
-  warning naming where it was found and the file and broker in force, and a
-  failure for a live run. Replays use their own broker file, so they are never
-  marked.
+  attempt running refuses to start, with the gate's message. Preflight
+  (`prop account`) fails a marked account with no attempt running on a live
+  run, and warns about it in a paper run. A `propAccounts` key the gate never
+  reads is a preflight row naming where it was found and the file and broker
+  in force: at the top level of a brokers file, or in the home's
+  `brokers.json` while `FTH_BROKERS_FILE` names another file, it fails a live
+  run and warns otherwise; under another broker's entry (that broker's own
+  mark, read only while it is the active broker) it warns in every mode.
+  Only the active broker's entry is read, so a replay (its replay broker's
+  entry active) is unmarked by a mark on the live broker; marking the replay
+  broker's own entry would mark the replay.
 
 ## 3. Prop attempt
 
