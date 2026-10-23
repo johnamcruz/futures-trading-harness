@@ -455,3 +455,16 @@ test('a desk whose time is already spent makes no read', async () => {
   assert.strictEqual(store.made, 0);
   assert.ok(d.missing.every(m => m.stop === 'cancelled'));
 });
+
+test('with roleSkillsInPrompt too: each role\'s request carries its reads and its run\'s skills record comes through the desk\'s results', async () => {
+  const w = home();
+  const seen = new Map();
+  const skills = { mode: 'prompt', embedded: ['trader-process'] };
+  const runRole = async (role, request) => { seen.set(role, request); return { ok: true, text: role === 'risk-manager' ? '## Risk state: account 7' : 'Data: bar_briefing m3@x\nBias: long', tools: [], skills }; };
+  const now = new Date(w.b.closedAt);
+  const cfg = ON({ roleSkillsInPrompt: true, deskBriefReports: true });
+  const d = await deskFor({ home: w.h, cfg, root: ROOT, runRole, env: w.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: ROLES, now, at: now.toISOString(), context: w.context, store: CD.createStore({ root: ROOT, broker: countingBroker() }) });
+  assert.deepStrictEqual(d.missing, []);
+  assert.ok(d.results.every(r => r.skills === skills), 'the skills record kept per role');
+  for (const role of ROLES) assert.ok(seen.get(role).includes(CD.DESK_INTRO) && seen.get(role).includes(BRIEF), role);
+});
