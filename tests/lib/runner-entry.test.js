@@ -124,6 +124,22 @@ test('gateDecision: an allowed place_order of the cycle wins over a refusal befo
   assert.deepStrictEqual(E.gateRefusal(env, 'c1', now - 1000), { checks: ['exposure'], message: '[exposure] no' });
 });
 
+test('runEntry: each role run in the entry record carries its own skills record (phase 2\'s and the executor\'s), never the head trader\'s loads', async () => {
+  const rec = (role, missing) => ({ expected: [`${role}-skill`], embedded: [], loaded: [], had: [], missing });
+  const s = setup({
+    roles: {
+      phase2: { ok: true, timedOut: false, text: P2, tools: ['harness_order_plan'], lookups: [], output: '', skills: rec('rm', ['position-sizing']) },
+      'trade-executor': { ok: true, timedOut: false, text: 'EXECUTED\nOrders: 1', tools: ['broker_place_order'], lookups: [], output: '', skills: rec('ex', []) },
+    },
+  });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual(r.entry.ran.map(x => [x.role, x.skills && x.skills.missing]), [['risk-manager', ['position-sizing']], ['trade-executor', []]]);
+  // The head trader's load (trade-lifecycle, in its cycle output) is in no role's record.
+  assert.ok(r.entry.ran.every(x => !x.skills.loaded.includes('trade-lifecycle')));
+  const { withSkillsMissing } = require('../../scripts/lib/role-skills-record');
+  assert.deepStrictEqual(withSkillsMissing(r.entry.ran), { skillsMissing: { 'risk-manager': ['position-sizing'] } });
+});
+
 test('runEntry: the hook refused the executor\'s place_order and it reported nothing: blocked with the gate\'s refusal, never "trade-executor invalid"', async () => {
   const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: '' } }, state: { positions: [], orders: [] } });
   const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);

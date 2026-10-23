@@ -236,6 +236,21 @@ function cycleClock(env, at, wallMs = at.getTime()) {
  * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
  * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
  */
+const { perRole } = require('./role-skills-record');
+/**
+ * { roleSkillsMissing: { desk, entry }, roleSkillsReloaded: { desk, entry } }, each when the desk's or the entry's record
+ * names roles missing skills (or loading ones their prompt holds), else {}.
+ */
+function roleSkillsMissing(context, entry) {
+  const out = {};
+  for (const [key, field] of [['roleSkillsMissing', 'skillsMissing'], ['roleSkillsReloaded', 'skillsReloaded']]) {
+    const desk = context && context.desk && context.desk[field];
+    const ent = entry && entry[field];
+    if (desk || ent) out[key] = { ...(desk ? { desk } : {}), ...(ent ? { entry: ent } : {}) };
+  }
+  return out;
+}
+
 function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
@@ -295,7 +310,9 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
-      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}) } } : {}),
+      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(perRole(entry.ran) ? { skills: perRole(entry.ran) } : {}), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}) } } : {}),
+      // The roles the runner ran without some of their skills (role-skills-record.js; the cycle's desk and entry records).
+      ...roleSkillsMissing(context, entry),
     })}\n`);
   } catch (_err) {
     // best effort

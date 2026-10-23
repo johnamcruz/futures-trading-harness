@@ -12,7 +12,7 @@
  *   ctx.gate      the learning gate's options (replay.js run): from, to, runId, learning, candidate, evaluation, ...
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
- * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery,
+ * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery, role-prompts,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
@@ -189,6 +189,28 @@ function headDelivery(ctx) {
   const bad = set.filter(k => cfg[k] !== true || cfg.harness !== 'claude');
   if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false, for harness claude only`);
   return r('head-delivery', PASS, `on: ${set.join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
+}
+
+/**
+ * The roles' prompt additions (the runner config's roleSkillsInPrompt, Claude Code; role-prompt.js): each role the runner
+ * runs on its own has one that builds, is written and read back as the runner writes it, embeds exactly its role-skills'
+ * current text and indexes exactly its role-index (with the skill_lookup tool to read them). Without the key: a PASS saying so.
+ */
+function rolePrompts(ctx) {
+  const cfg = ctx.run.cfg || {};
+  if (!(cfg.harness === 'claude' && cfg.roleSkillsInPrompt === true)) return r('role-prompts', PASS, 'off: the roles the runner runs load their skills themselves (roleSkillsInPrompt absent)');
+  const same = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+  const bad = [];
+  const sizes = [];
+  for (const x of ctx.read.claudeRoles()) {
+    if (!x.prompt || x.prompt !== x.expected) { bad.push(`${x.role}: its prompt addition can't be built or read back (role-prompt.js)`); continue; }
+    if (!same(x.embedded, x.skills)) bad.push(`${x.role}: embeds ${x.embedded.join(', ') || 'none'}, not its role-skills ${x.skills.join(', ')}`);
+    if (!same(x.indexed, x.index)) bad.push(`${x.role}: indexes ${x.indexed.join(', ') || 'none'}, not its role-index ${x.index.join(', ') || 'none'}`);
+    if (x.index.length && !x.lookupTool) bad.push(`${x.role}: a role-index without the skill_lookup tool`);
+    sizes.push(`${x.role} ${x.prompt.length}`);
+  }
+  if (bad.length) return r('role-prompts', FAIL, bad.join('; '));
+  return r('role-prompts', PASS, `${sizes.length} roles' prompt additions embed their role-skills and index their role-index (chars: ${sizes.join(', ')})`);
 }
 
 function adaptersInSync(ctx) {
@@ -592,7 +614,7 @@ function adapter(ctx) {
 }
 
 const CHECKS = Object.freeze([
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, adaptersInSync, noWebInReplay, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
@@ -760,6 +782,28 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       }
       return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
     }),
+    // The roles' prompt additions (roleSkillsInPrompt), each written to a scratch home as the runner writes it and read back.
+    claudeRoles: once(() => {
+      const RP = require('../role-prompt');
+      const hp = require('../head-prompt');
+      const lookup = `mcp__${require('../harness-tools/registry').SERVER_NAME}__skill_lookup`;
+      return require('../opencode').RUNNER_RUN_ROLES().map(role => {
+        const agent = require('../role-skills').loadRoles(root).find(a => a.name === role) || { skills: [], index: [], tools: [] };
+        let prompt;
+        let expected = null;
+        let scratch = null;
+        try {
+          scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-claude-role-'));
+          expected = RP.claudeRoleText(root, role);
+          prompt = fs.readFileSync(RP.writeClaudeRole(scratch, root, role).file, 'utf8');
+        } catch (_err) {
+          prompt = null;
+        } finally {
+          if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
+        }
+        return { role, prompt, expected, skills: agent.skills, index: agent.index, lookupTool: agent.tools.includes(lookup), embedded: hp.embeddedSkills(prompt, root), indexed: RP.indexedIn(prompt) };
+      });
+    }),
     replayStep: run => require('../replay/web-access').replayStep(run, { root, env }),
     syncStale: once(() => require('../harness-sync').syncHarness(root, { check: true, mode: require('../role-skills').modeOf(env) })),
     sampleBriefing: opts => sampleBriefing({ barsFiles, env }, opts),
@@ -849,7 +893,7 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, n
 
 module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
-  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, adaptersInSync, facts, curatedList,
+  strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, preflightForRun,

@@ -94,6 +94,7 @@ const { ENUMS } = require('./broker/interface');
 // The 1m bars read for the price before a composed fill's stop moves, as many as the signal age limit counts.
 const SIGNAL_BARS = TUN.gate.signalMaxAgeBars;
 const { expectedRoles } = require('./trading/desk-check');
+const { withSkillsMissing } = require('./role-skills-record');
 const UNFLAT_GRACE_MS = ORDER_GRACE_MS; // gate-timing.js: one home (shorter is stricter here)
 const FILL_GRACE_MS = RUN.fillGraceMs;
 // The account read for a run's prompt never holds a run up longer than this.
@@ -1798,7 +1799,8 @@ function createRunner(deps) {
             // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
             // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.
             action: again.action, cachedRoles: cached ? cached.roles : [],
-            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs }, runnerRoles: deskReports.map(r => r.role) } : {}),
+            // skillsMissing: the desk roles that ran without some of their role-skills (role-skills-record.js), detection only.
+            ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs, ...withSkillsMissing(deskRun.results) }, runnerRoles: deskReports.map(r => r.role) } : {}),
             ...(rolesFile ? { rolesFile } : {}),
             // The runner runs the entry this cycle (FTH_CYCLE_ENTRY: the entry-route rule; the prompt says the route).
             ...(runsEntry ? { entry: true } : {}),

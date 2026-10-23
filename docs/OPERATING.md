@@ -539,6 +539,51 @@ never the repo; absent means the run behaves as without them; a wrong value, or
 | `headSkillsInPrompt` | Claude Code's head trader loads its per-cycle skills with its skill tool, one tool turn each, as the cycle's prompt says (`false` is the same) | `true` (harness `claude` only): the head trader runs as opencode's does in index mode. The runner writes its per-cycle skills (`scripts/lib/head-prompt.js` `CORE`, the same text a load returns) and a one-line index of every other skill to `<harness home>/head-prompt/claude-head-<hash>.md` and gives it to the head trader's run as `--append-system-prompt-file` (the cached prefix, before the cycle's prompt); the cycle's prompt says they are loaded, and any other skill is read whole with `skill_lookup`. The runner attests the file for that cycle (`FTH_HEAD_PROMPT`); the order gate counts the embedded skills, the head trader's `skill_lookup` reads and index mode's situational lookups only when the file still hashes to the attestation, embeds each skill's current text, and the call is that cycle's (the head trader's own session, or the runner's entry executor). Anything off: none counts, and the transcript decides as before. The roles still load their skills themselves |
 | `cycleDataInPrompt` | Claude Code's head trader makes its first reads of every trade and manage cycle itself: `bar_briefing` for each symbol, then the account (`get_account_snapshot`, `list_open_positions`, `list_open_orders`), one tool turn each (`false` is the same) | `true` (harness `claude` only): the runner makes those reads just before the head trader's run, with that run's own environment, and puts their exact text at the end of its prompt, before the result line (the cached prefix is unchanged): `bar_briefing` through the harness tool itself, the broker reads straight to the server through the contract translator, as the gateway passes the model's reads. Each block's header names the tool, its arguments and its as-of time; the model calls a tool again only for anything more or newer. A read not made whole (an error, a briefing that isn't this cycle's bar's, a broker client that can't read raw text) gives no block, only a line telling the model to read it itself. The reads take their time from the cycle's limit, only above the head trader's floor (`config/runner.json` `cycle.timeoutMinMinutes`): with no time above it they aren't made, reads still going when it runs out are dropped, and the run goes with the "read it yourself" line, never with less than its floor because of them. In paper mode no broker read is made (each is a "read it yourself" line). The whole section stays under `config/runner.json` `prompt.cycleDataMaxBytes`: the largest blocks give way to their lines first. The blocks are data, as tool results are: no gate or check reads them (the gate recomputes from the harness home, as always), and nothing trusts a block's header or footer; the footer's sha256 is a record of the text given, never a check. The cycle log's context records `precollected` (`tool`, `args`, `asOf`, `sha256`, `chars`) and `notCollected`; the key is part of a replay's config and setup hashes and its setup record, and its decisions carry it, so the decision dataset refuses to pool them with decisions made without it; the training preflight's `head-delivery` line says it (both keys are `scripts/lib/autotrader.js` `HEAD_DELIVERY_KEYS`, which these readers share), so a run with it is never pooled or compared with one without it (`scripts/lib/cycle-data.js`) |
 
+### Machine-local role settings
+
+One optional key of the runner config, set the same way (the user's machine,
+never the repo; absent means the run behaves as without it; a wrong value, or
+one set on a harness other than `claude`, refuses the config).
+
+| Key | Absent (default) | Set |
+|---|---|---|
+| `roleSkillsInPrompt` | Claude Code's roles that the runner runs on its own (the desk's analysts, risk-manager phase 1 and 2, the trade-executor) load their `role-skills` with the Skill tool, as their body says (`false` is the same) | `true` (harness `claude` only): each such role runs as opencode's roles do in index mode, from the same selection (`scripts/lib/role-skills.js` `skillPlan`). The runner writes the role's `role-skills` in full (the same text a load returns) and its `role-index` one line each, read whole with `skill_lookup`, to `<harness home>/role-prompt/claude-<role>-<hash>.md` and gives it to the role's run as `--append-system-prompt-file`; the file says those skills are loaded and not to load them again. It holds no cycle data, so it is the same every cycle (the cached prefix); a role's older files are pruned, its newest one kept. Nothing is attested and the gate is unchanged: no gate check credits a desk role's skills, and the executor's entry checks still read the head trader's loads. The key is one of `scripts/lib/autotrader.js` `HEAD_DELIVERY_KEYS`, so a run with it is never pooled or compared with one without it; the training preflight's `role-prompts` line checks each role's file embeds its `role-skills` and indexes its `role-index` (`scripts/lib/role-prompt.js`) |
+
+On every harness, the key on or off, the cycle log records which skills each
+role the runner ran had (`scripts/lib/role-skills-record.js`). In the cycle's
+file, each run of the desk record (`context.desk.results`) and of the entry
+record (`entry.ran`) carries `skills`:
+
+- `expected`: its `role-skills`;
+- `embedded`: those its prompt holds whole (the role file, or opencode's role
+  prompt);
+- `loaded`: those its own run loaded. On Claude Code that is a Skill call of
+  its own session answered without an error, a `skill_lookup` whose reply is
+  the skill, or a Skill call its session's tool-call log shows completed (a
+  subagent's call, an unanswered or errored one, and a lookup from the log
+  alone never count); on opencode, its completed skill and `skill_lookup`
+  calls;
+- `had`, `missing` (expected but not had), and `reloaded` (loaded although
+  embedded).
+
+The cycle's summary line keeps the entry's per role as `entry.skills`
+(`{ role: record }`) beside `entry.ran`. The desk and entry records carry
+`skillsMissing` and `skillsReloaded` (`{ role: [skills] }`) when any role has
+any, and the summary line has `roleSkillsMissing` and `roleSkillsReloaded`. The
+runner logs one line a cycle, `desk: roles ran without their skills: <role>
+[<skills>]` (or `entry: ...`), and, with `roleSkillsInPrompt`, `desk: roles
+loaded skills their prompt addition already holds (was it seen?): ...`, for a
+watchdog to grep. It is detection only: no report is refused for it. A role
+prompt file that can't be built or written fails that role's run with an error
+naming `role-prompt`.
+
+The runner runs roles on its own only in a full trade cycle on one symbol,
+outside paper mode and cycles that only manage (on Claude Code, only in a cycle
+whose entry it may run, or a managed one under `deskOnManagedCycles`). In
+multi-symbol, paper, manage-only and lean cycles the head trader launches its
+roles as subagents in its own session: there is no role file and no per-role
+record.
+
 ### Replay
 
 `scripts/replay.js` runs the live harness over history: the same runner,

@@ -203,16 +203,20 @@ const claudeHeadFile = (home, text) => path.join(home, 'head-prompt', `claude-he
 function writeClaudeHead(home, root) {
   const text = claudeHeadText(root);
   const file = claudeHeadFile(home, text);
+  if (writeAtomic(file, text)) pruneClaudeHeads(path.dirname(file), file);
+  return { file, text };
+}
+
+/** `text` at `file`, written atomically when missing or different: true when it wrote (writeClaudeHead's; role-prompt.js's too). */
+function writeAtomic(file, text) {
   let same;
   try { same = fs.readFileSync(file, 'utf8') === text; } catch (_err) { same = false; }
-  if (!same) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    fs.writeFileSync(tmp, text);
-    fs.renameSync(tmp, file);
-    pruneClaudeHeads(path.dirname(file), file);
-  }
-  return { file, text };
+  if (same) return false;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+  return true;
 }
 
 /**
@@ -220,10 +224,12 @@ function writeClaudeHead(home, root) {
  * that started before the change may still be attested for. A run whose file went fails closed (the gate counts none).
  * Best effort: a file another runner removed first, or one that can't be removed, is left.
  */
-function pruneClaudeHeads(dir, keep) {
+const pruneClaudeHeads = (dir, keep) => pruneOlder(dir, keep, CLAUDE_FILE);
+/** pruneClaudeHeads's rule for any family of files (`pattern`; role-prompt.js a role's): those but `keep`, all but the newest (by mtime) removed. */
+function pruneOlder(dir, keep, pattern) {
   let older;
   try {
-    older = fs.readdirSync(dir).filter(n => CLAUDE_FILE.test(n) && path.join(dir, n) !== keep)
+    older = fs.readdirSync(dir).filter(n => pattern.test(n) && path.join(dir, n) !== keep)
       .map(n => { const f = path.join(dir, n); try { return { f, t: fs.statSync(f).mtimeMs }; } catch (_err) { return null; } })
       .filter(Boolean).sort((x, y) => y.t - x.t);
   } catch (_err) {
@@ -334,5 +340,5 @@ function attestedSkills(att, root, { transcript } = {}) {
 
 module.exports = {
   HEAD_AGENT, ATTEST_ENV, HEAD_MARK, CORE, COMPOSED_READS, headPlan, headRequired, headPrompt, embeddedSkills, headPromptIn, attestation, parseAttestation, isOpencodeTranscript, attestedSkills, sha256,
-  claudeHeadText, claudeHeadFile, writeClaudeHead, claudeAttestation, claudeHeadIn, claudeStreamSession, claudeSessionOfPath, claudeAttested,
+  claudeHeadText, claudeHeadFile, writeClaudeHead, writeAtomic, pruneOlder, block, skillBody, andList, claudeAttestation, claudeHeadIn, claudeStreamSession, claudeSessionOfPath, claudeAttested,
 };
