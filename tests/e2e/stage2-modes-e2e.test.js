@@ -140,17 +140,20 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   // can't meet consistency); as much again the next day, so its second close passes under the consistency rule.
   const big = ACCOUNT.profit_target + 200;
   const blowAt = '2022-04-21T16:40:00Z';
-  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 100) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
+  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 1000) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
   const moments = scanMoments(w);
   const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
   assert.ok(entry, moments.map(m => m.bar).join(', '));
   const exitBar = iso(Date.parse(entry.bar) + D.STEP);
   const refusedBar = iso(Date.parse(entry.bar) + 7 * 86400000); // the same bar a week later (the second week's Thursday)
-  const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
+  // The rulebook's floor (min_contracts 3): the entry is sized at it and fills; attempt 2's entry is composed at 2, under
+  // it, so the gate refuses it on the floor too ([min-contracts]: no trade, never sized up).
+  const SIZE = 3;
+  const compose = (m, size = SIZE) => ({ do: 'compose', scenario: scenarioOf(m), size, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
   playScript(w, {
     [entry.bar]: compose(entry),
-    [exitBar]: { do: 'exit', side: entry.side, review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
-    [refusedBar]: { ...compose(entry), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
+    [exitBar]: { do: 'exit', side: entry.side, size: SIZE, review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
+    [refusedBar]: { ...compose(entry, 2), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
   });
   const config = replayConfig(w, 'combine-e2e', {
     start: '2022-04-21T13:30:00Z', end: '2022-04-30T00:00:00Z',
@@ -206,6 +209,10 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const gated = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision !== 'allowed');
   assert.strictEqual(gated.length, 1, JSON.stringify(gated));
   assert.match(gated[0].violations.find(v => v.check === 'combine').message, /past the profit target with today the best day .*more today can't meet consistency/);
+  // Composed at 2, under the rulebook's floor (min_contracts 3): refused on it as well, never sized up.
+  const floor = gated[0].violations.find(v => v.check === 'min-contracts');
+  assert.ok(floor, JSON.stringify(gated[0].violations));
+  assert.match(floor.message, /size 2 MNQ is under the floor of 3 contracts/);
   // The stage report's attempt lines, then the Monte Carlo of the finished run.
   assert.match(r.out, /stage 2 \(pass prop\) report:/);
   assert.match(r.out, /continuous combine: 2 attempt\(s\), each from zero at the starting balance/);

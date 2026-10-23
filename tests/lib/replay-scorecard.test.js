@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
 const path = require('path');
-const { tmpDir } = require('../helpers');
+const { tmpDir, testSizing } = require('../helpers');
 const { scoreRun, writeScorecard, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, CATEGORIES } = require('../../scripts/lib/replay/scorecard');
 
 // ------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@ test('categories: an entry the gate refused at the loss streak stop is a risk-ru
   ]);
   prop.snapshot(home, account, 50000 - 2 * 20.74, new Date('2026-06-01T14:59:00Z'), { fills });
   // The gate's own refusal of the next entry, logged as the label reads it (labels.js: the violations' checks).
-  const violations = prop.propViolations(home, { strategy: { name: 'prop_portfolio', valid: true, account: 'mini' }, account, input: { contractId: 'MNQ', side: 'buy', size: 1, stopLossBracket: { ticks: 40, type: 'stop' } }, now });
+  const violations = prop.propViolations(home, { strategy: { name: 'prop_portfolio', valid: true, account: 'mini', sizing: testSizing() }, account, input: { contractId: 'MNQ', side: 'buy', size: 1, stopLossBracket: { ticks: 40, type: 'stop' } }, now });
   assert.strictEqual(violations.length, 1, JSON.stringify(violations));
   assert.match(violations[0].message, /2 losing trades in a row this session, at the loss streak stop \(loss_streak_stop 2\)/);
   const gate = { decision: 'refused', by: 'gateway', checks: violations.map(v => v.check) };

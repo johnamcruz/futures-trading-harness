@@ -1,6 +1,6 @@
 ---
 name: gate-refusals-limits
-description: Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [strategy], [max-order-size] or [max-risk].
+description: Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [min-contracts], [strategy], [max-order-size] or [max-risk].
 ---
 
 # Gate refusals: limits
@@ -8,7 +8,7 @@ description: Use when the gate refuses an entry with [combine], [prop-account-at
 ## When to Use
 
 - The gate refused an entry with `[combine]`, `[prop-account-attempt]`,
-  `[policy]`, `[strategy]`, `[max-order-size]` or `[max-risk]`.
+  `[policy]`, `[min-contracts]`, `[strategy]`, `[max-order-size]` or `[max-risk]`.
 
 ## How It Works
 
@@ -19,6 +19,7 @@ description: Use when the gate refuses an entry with [combine], [prop-account-at
 | `[combine] <account>: the account balance couldn't be checked against the broker's fills (…)` | `search_trades` failed or returned a fill the harness can't read, so the balance is unchecked | No entry until a snapshot can check it; exits and stops go. Don't retry the entry this bar. |
 | `[prop-account-attempt] account <id> is a <profile> prop account and no <profile> attempt is running` (or its marker or profile is invalid) | The user marked the account a prop account: no entry without its attempt (floor, daily limits). Hard, any mode | Stand aside; don't switch accounts. Starting it (`node scripts/combine.js start --account <profile>`) or fixing the marker is the user's: tell them. Exits and stops go. |
 | `[policy] setup:<policy>: the latest verdict's setup is from <name>: <name> has status "paper": <policy> trades only its active strategies live` (or `is not a known strategy`, `is not one of <policy>'s strategies`) | A paper strategy stays paper inside a policy: the verdict is for a setup of a strategy that isn't active (or one the gate can't find), so no live entry from it. Hard: it can't be skipped | Stand aside; don't relabel the setup or wait it out. Activating a strategy is the user's call. Exits and `[protect]` stops always go. |
+| `[min-contracts] setup:<policy>: size <n> <ROOT> is under the floor of <m> contracts` | A prop entry is at least the rulebook's `min_contracts` (a mini counts as 10 micros). Hard | Size at the verdict's full size if it is `<m>` or more; else skip. Never a tighter stop, never split. Exits, stops, cancels and closes go. |
 | `[strategy] setup:<name> trades <SELECTED> (the selected contract), not <ROOT>` | The user selected the other contract of that micro/mini family (the runner's `symbols`, or `FTH_SYMBOLS`); every strategy (a policy strategy too) trades only the selected one, never both | Plan and send the entry on the contract it names, or stand aside. Don't switch legs or change the selection; that is the user's. Exits and `[protect]` stops on either contract always go. |
 | `[strategy] setup:<name> lists both <MICRO> and <MINI>, and neither is selected` | No contract of that index is selected, and the strategy lists both: which one to trade is the user's choice | Stand aside. Tell the user to select one contract per index (the runner's `symbols`, or `FTH_SYMBOLS`). Exits and stops still go. |
 | `[strategy] FTH_SYMBOLS selects two contracts of one index` (or `is not a comma-separated list`) | The selected contracts are unreadable: every entry is refused (`order_plan` and `strategies_scan` refuse too) | Don't retry. Exits and stops still go. Tell the user to set one contract per index (e.g. `NQ` or `MNQ`). |

@@ -40,7 +40,7 @@ const fullVerdict = () => 1;
 function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction }) {
   return combine.contractPlan({
     dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: trade.stopTicks, legs, mode,
-    guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks,
+    guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
   });
 }
 

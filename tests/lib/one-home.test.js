@@ -37,8 +37,8 @@ test('sizing has no code default: an incomplete sizing sizes nothing and is refu
   // The one-contract guard is the sizing's: none given never takes a contract over the budget.
   assert.strictEqual(combine.contracts(600, 800, 100, 1.5), 1);
   assert.strictEqual(combine.contracts(600, 800, 100), 0);
-  assert.strictEqual(combine.contractPlan({ dollars: 20, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' }), null, 'a stop over the budget: no guard, no contract');
-  assert.deepStrictEqual(combine.contractPlan({ dollars: 20, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro', guard: 1.5 }), { root: 'MNQ', size: 1, riskPerContract: 21.24 });
+  assert.strictEqual(combine.contractPlan({ minContracts: 1, dollars: 20, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' }), null, 'a stop over the budget: no guard, no contract');
+  assert.deepStrictEqual(combine.contractPlan({ minContracts: 1, dollars: 20, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro', guard: 1.5 }), { root: 'MNQ', size: 1, riskPerContract: 21.24 });
 });
 
 test('sizing: the rulebook is the one home; the strategy loader hands each policy its rulebook entry, whole', () => {
@@ -111,7 +111,7 @@ test('fees: the account profile is the one home; the contract table and the brok
   const prop = require('../../scripts/lib/trading/prop-state');
   assert.strictEqual(prop.legOf(acct({ fees_per_side: {} }), 'MNQ').fee, null);
   // contractPlan never prices a leg without a fee (a null fee would count as $0).
-  assert.strictEqual(combine.contractPlan({ dollars: 400, stopTicks: 40, legs: { micro: { ...MNQ_LEGS.micro, fee: null }, mini: null }, mode: 'micro' }), null);
+  assert.strictEqual(combine.contractPlan({ minContracts: 1, dollars: 400, stopTicks: 40, legs: { micro: { ...MNQ_LEGS.micro, fee: null }, mini: null }, mode: 'micro' }), null);
 });
 
 test('fees: a counterfactual without a fee prices before fees and leaves its net unknown, never a guessed fee', () => {

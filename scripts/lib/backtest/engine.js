@@ -413,7 +413,7 @@ function runEngine(markets, strategies, opts = {}) {
       const legs = legsOf(book);
       const sizeFor = fraction => combine.contractPlan({
         dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
-        guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks,
+        guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
       });
       // Times the verdict's multiplier (the rulebook's enforced items, as prop/verdict.js): 0 skips the setup.
       const { multiplier } = ceiling(o.prop && o.prop.strategy ? o.prop.strategy.multipliers : [], {}, closeAt);

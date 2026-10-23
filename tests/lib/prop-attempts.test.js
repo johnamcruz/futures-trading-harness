@@ -73,10 +73,26 @@ test('attempts: the default sizing is today\'s contractPlan from the budget and 
   const t = trade(10);
   const plan = mode => at.defaultSize({ cs, trade: t, sizing: TEST_SIZING, legs, mode, ratio, fraction: 1 });
   // 0.2 x $1,000 = $200 budget; (20 + 1) x $0.50 + $0.74 = $11.24 a micro: 17 micros, or (auto) 1 NQ.
-  assert.deepStrictEqual(plan('auto'), combine.contractPlan({ dollars: 200, room: 600, stopTicks: 20, legs, mode: 'auto', fraction: 1, ratio, slipTicks: 1 }));
+  assert.deepStrictEqual(plan('auto'), combine.contractPlan({ minContracts: 1, dollars: 200, room: 600, stopTicks: 20, legs, mode: 'auto', fraction: 1, ratio, slipTicks: 1 }));
   assert.deepStrictEqual([plan('micro').root, plan('micro').size, plan('auto').root, plan('auto').size], ['MNQ', 17, 'NQ', 1]);
   assert.deepStrictEqual(Object.keys(legs), ['micro', 'mini']);
   assert.deepStrictEqual([legs.micro.root, legs.mini.root, legs.mini.fee, legs.mini.max], ['MNQ', 'NQ', 1.4, 5]);
+});
+
+test('attempts: the rulebook\'s floor (min_contracts) skips a trade the budget sizes under it, as the verdict and the gate do', () => {
+  // 0.2 x $1,000 = $200 budget; a 160-tick stop: 161 x $0.50 + $0.74 = $81.24 a micro, 2 fit ($162.48), 3 would be $243.72.
+  const wide = trade(60, { stopTicks: 160 });
+  const run = min => at.runAttempt(days([wide]), ctx({ size: undefined, sizing: testSizing({ min_contracts: min }), account: { sessions: 1 } }));
+  assert.deepStrictEqual([run(1).taken, run(1).skipped], [1, 0]);
+  assert.deepStrictEqual([run(3).taken, run(3).skipped], [0, 1]);
+  // The simulator's default sizing is contractPlan with the floor, as live sizes it (never 3 over the budget).
+  const a = account();
+  const { legs, ratio } = at.legsFor(a, 'MNQ', { tickValue: 0.5 });
+  const plan = min => at.defaultSize({ cs: combine.start(a), trade: wide, sizing: testSizing({ min_contracts: min }), legs, mode: 'micro', ratio, fraction: 1 });
+  assert.deepStrictEqual(plan(1), { root: 'MNQ', size: 2, riskPerContract: 81.24 });
+  assert.strictEqual(plan(3), null);
+  // A sizing without the floor sizes nothing (no code default).
+  assert.strictEqual(plan(undefined), null);
 });
 
 test('attempts: entry blocks and the realized daily stop skip trades', () => {

@@ -1890,6 +1890,69 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.ok(fs.existsSync(dir));
 });
 
+test('order gate hook: a prop entry under the rulebook\'s min_contracts is refused ([min-contracts]), even with the checks skipped; at the floor it goes; risk-reducing orders at any size go', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const name = fs.readFileSync(path.join(ROOT, 'strategies', 'propped', 'STRATEGY.md'), 'utf8').match(/^account: (\S+)/m)[1];
+  // The propped policy's rulebook with a floor of 3 (the shipped prop_portfolio's).
+  const accounts = path.join(tmpDir(), 'accounts');
+  fs.cpSync(HOOK_ACCOUNTS, accounts, { recursive: true });
+  const file = path.join(accounts, name, 'RULEBOOK.md');
+  const text = fs.readFileSync(file, 'utf8');
+  assert.match(text, /^ {6}min_contracts: 1$/m);
+  fs.writeFileSync(file, text.replace(/^ {6}min_contracts: 1$/m, '      min_contracts: 3'));
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(path.dirname(accounts), {}).accounts.find(a => a.name === name);
+  const now = Date.parse(TEST_NOW);
+  const run = (input, skip = 'combine,policy,strategy') => {
+    const home = tmpDir();
+    prop.startAttempt(home, account);
+    prop.snapshot(home, account, 50000, new Date(now - 60000), { fills: [] });
+    prop.appendVerdict(home, {
+      strategy: 'propped', component: 'crossing', contractId: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, maxSize: 18,
+      bar: HOOK_BAR, at: new Date(now - 60000).toISOString(), expiresAt: new Date(now + 120000).toISOString(),
+    });
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: accounts, FTH_SYMBOLS: 'MNQ', FTH_ORDER_GATE_SKIP: skip });
+    return gate(orderPayload(input), env);
+  };
+  const order = entryOrder({ contractId: 'MNQ', rationale: 'setup:propped long, stop 21480, target 21540' });
+  for (const size of [1, 2]) {
+    const r = run({ ...order, size });
+    assert.strictEqual(r.code, 2, r.stderr);
+    assert.match(r.stderr, new RegExp(`\\[min-contracts\\] setup:propped: size ${size} MNQ is under the floor of 3 contracts`));
+  }
+  const at = run({ ...order, size: 3 });
+  assert.strictEqual(at.code, 0, at.stderr);
+  // Exits, flattens and protective stops at 1 or 2 contracts are never held by the floor.
+  for (const size of [1, 2]) {
+    for (const o of [{ ...order, size, side: 1, rationale: '[exit] close the long' }, { ...order, size, side: 1, rationale: '[exit] flatten' },
+      { ...order, size, side: 1, type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the open long' }]) {
+      const r = run(o);
+      assert.strictEqual(r.code, 0, `${o.rationale} ${size}: ${r.stderr}`);
+    }
+  }
+});
+
+test('MCP gateway wiring: a prop entry under the shipped rulebook\'s min_contracts is refused ([min-contracts]) before the broker sees it; at the floor no such refusal; an exit is forwarded', { timeout: 60000 }, async () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const policy = loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const min = policy.sizing.min_contracts;
+  assert.ok(Number.isInteger(min) && min > 1, 'the shipped floor');
+  const account = loadAccounts(REPO, {}).accounts.find(a => a.name === policy.account);
+  const home = tmpDir();
+  prop.startAttempt(home, account);
+  prop.snapshot(home, account, account.starting_balance, new Date(Date.parse(TEST_NOW) - 60000), { fills: [] });
+  const text = r => r.result.content[0].text;
+  const entry = size => call(size, 'place_order', { ...ORDER, contractId: 'MNQ', size, rationale: 'setup:prop_portfolio long, stop 21480, target 21540' });
+  const under = await gatewayRun({ FTH_HOME: home, FTH_SYMBOLS: 'MNQ' }, [entry(min - 1)]);
+  assert.ok(under.byId[min - 1].result.isError, text(under.byId[min - 1]));
+  assert.match(text(under.byId[min - 1]), new RegExp(`\\[min-contracts\\] setup:prop_portfolio: size ${min - 1} MNQ is under the floor of ${min} contracts`));
+  const at = await gatewayRun({ FTH_HOME: home, FTH_SYMBOLS: 'MNQ' }, [entry(min)]);
+  assert.doesNotMatch(text(at.byId[min]), /\[min-contracts\]/, 'at the floor the floor never refuses (the order still needs its compose record)');
+  const exit = await gatewayRun({ FTH_HOME: home, FTH_SYMBOLS: 'MNQ', FAKE_POSITIONS: LONG1 }, [call(9, 'place_order', { ...EXIT_BASE, contractId: 'MNQ', size: 1, side: 'sell', rationale: '[exit] flatten' })]);
+  assert.strictEqual(text(exit.byId[9]), 'forwarded:tools/call:place_order');
+});
+
 test('order gate wiring: a policy entry whose verdict names a paper component is refused, even with the checks skipped; exits still go', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');

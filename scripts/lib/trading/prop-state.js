@@ -565,10 +565,12 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   const bad = combine.sizingErrors(z);
   if (bad.length) return { error: `${strategy.name} has no whole sizing from its account's rulebook (${bad.join('; ')}): no size` };
   const { legs, ratio, mode } = legsFor(account, root, specOf, selected);
-  const plan = combine.contractPlan({
-    dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,
-  });
-  return plan || { root: null, size: 0, riskPerContract: 0 };
+  const args = {
+    dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks, minContracts: z.min_contracts,
+  };
+  const plan = combine.contractPlan(args);
+  // None fits: `floor` says so when the rulebook's min_contracts alone sized it out.
+  return plan || { root: null, size: 0, riskPerContract: 0, floor: combine.floorReason(args) };
 }
 
 /** The latest verdict for a strategy on a contract root, or null. */
@@ -602,11 +604,29 @@ function verdictBarProblem(home, strategy, root, v) {
 }
 
 /**
+ * Why an entry of `size` on `root` is under the floor of a strategy that trades an account (its rulebook's
+ * sizing.min_contracts), or null. Counted in micro-equivalents, as combine.contractPlan sizes: a mini is its family's
+ * ratio of micros, a contract with no family one. Fails closed: a sizing without a whole floor of 1 or more refuses.
+ */
+function minContractsRefusal(strategy, account, root, size, specOf = specFor) {
+  const min = strategy && strategy.sizing ? strategy.sizing.min_contracts : undefined;
+  if (!(Number.isInteger(min) && min >= 1)) {
+    return `setup:${strategy && strategy.name}: its account's rulebook states no sizing.min_contracts (${JSON.stringify(min)}), so no floor can be checked: no entry (fails closed). Exits and protective stops still go.`;
+  }
+  const fam = familyOf(root);
+  const ratio = fam && root === fam.mini ? legsFor(account, root, specOf).ratio : 1;
+  const n = Number(size);
+  if (Number.isInteger(n) && n >= 1 && n * ratio >= min) return null;
+  return `setup:${strategy.name}: size ${size} ${root} is under the floor of ${min} contracts${ratio > 1 ? ` (a ${root} counts as ${ratio})` : ''} (its account's rulebook, sizing.min_contracts): trade ${min} or more within the size budget, or no trade; never a tighter stop. Exits, protective stops, stop moves, cancels and closes still go.`;
+}
+
+/**
  * The prop-challenge checks for a new entry by a strategy that trades an
  * account: [{ check, message }]. Hard checks: they fail closed on missing or
  * stale state and can't be skipped.
  *   combine: an attempt is running, the snapshot is fresh, the account allows
  *            entries, and the size is within the budget for the order's stop;
+ *   min-contracts: the size is at least the rulebook's floor (minContractsRefusal);
  *   policy:  a fresh verdict for this policy strategy, contract and side,
  *            recorded on the bar the setup is on now (the last bar of the
  *            signal record), whose action allows an entry (ENTRY_ACTIONS: full;
@@ -646,10 +666,13 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf, selected);
     if (b.error) out.push({ check: 'combine', message: `${account.name}: ${b.error}.` });
     else if (b.root !== root || !(size >= 1 && size <= b.size)) {
-      const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : 'nothing';
+      const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : `nothing${b.floor ? `: ${b.floor}` : ''}`;
       out.push({ check: 'combine', message: `${account.name}: ${input.size} ${root} is not within the account's ${fraction < 1 ? `${fraction}x ` : ''}size budget for a ${ticks}-tick stop (${allowed}; contracts: ${strategy.contracts || 'auto'}).` });
     }
   }
+  // The floor (the rulebook's min_contracts), whatever the budget or the verdict say: an entry below it is no trade.
+  const floorMsg = minContractsRefusal(strategy, account, root, input.size, specOf);
+  if (floorMsg) out.push({ check: 'min-contracts', message: floorMsg });
   // Every entry of a policy strategy follows a fresh verdict the runner
   // recorded at its setup (prop/verdict.js).
   if (strategy.signal === 'policy') {
@@ -738,5 +761,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
+  legOf, legsFor, budgetPlan, minContractsRefusal, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

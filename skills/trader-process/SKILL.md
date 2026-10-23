@@ -101,7 +101,7 @@ PLAN:
 4 Setup: long, 15m rejected prior vah up
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
 6 Entry: 3m close top, 3m momentum up
-7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
+7 Risk: stop 111 ticks, target 2.08R (compose_check), size 5 ($277.50), ahead prior RTH high 1.2R
 8 Decision: take - full, compose_check OK
 9 Manage: flat
 ```

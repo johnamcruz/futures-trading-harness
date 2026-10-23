@@ -285,7 +285,7 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   assert.strictEqual(verdictOf(example), 'APPROVE', example);
   // Its Size line, in the agent's own words, approves beside an APPROVE line.
   const size = /e\.g\. `(Size: [^`]+)`/.exec(rm.replace(/\n\s*/g, ' '))[1];
-  assert.strictEqual(size, 'Size: 1 (record 8 cut to 1: no reviewed trades yet)');
+  assert.strictEqual(size, 'Size: 3 (record 5 cut to 3: one loss short of loss_streak_stop)');
   // A cut is an approval of the smaller size (runner-entry.js orders exactly it; the gate's composed-reads takes it).
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('To cut, approve the smaller size: the order is exactly it.'));
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('- "verdict" and "decision" nowhere else in the report, headings included.'));
@@ -294,13 +294,13 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   // The baseline's taught step line still approves (the parser keeps it).
   assert.strictEqual(verdictOf(`8 Decision: take - aligned continuation with room\n${V}`), 'APPROVE');
   // Each phrasing that reads as a veto, beside an APPROVE line: a veto (the gate's reading, unchanged).
-  for (const bad of ['Sizing decision: size 1', 'Decision: cut to size 1', 'The verdict priority order: step 2 allows', 'VETO rules: none apply', 'Sizing verdict: skip x0.5', '8 Decision: valid yes, full - compose_check OK', 'not a VETO']) {
+  for (const bad of ['Sizing decision: size 1', 'Decision: cut to size 1', 'Decision: cut to size 3', 'The verdict priority order: step 2 allows', 'VETO rules: none apply', 'Sizing verdict: skip x0.5', '8 Decision: valid yes, full - compose_check OK', 'not a VETO']) {
     assert.strictEqual(verdictOf(`${bad}\n${V}`), 'VETO', bad);
   }
   // The agent states each rule and names the phrasings it warns of.
   const flatRm = rm.replace(/\n\s*/g, ' ');
-  for (const rule of ['The code reads your report; anything else reads as a veto:', '- These read as a veto: `Decision: cut to size 1`,']) assert.ok(flatRm.includes(rule), rule);
-  for (const named of ['`Decision: cut to size 1`', '`8 Decision: valid yes`', '`The verdict priority order: ...`', '`Sizing verdict: skip x0.5`', '"VETO rules: none"', '"not a VETO"', '"sizing decision"']) assert.ok(flatRm.includes(named), named);
+  for (const rule of ['The code reads your report; anything else reads as a veto:', '- These read as a veto: `Decision: cut to size 3`,']) assert.ok(flatRm.includes(rule), rule);
+  for (const named of ['`Decision: cut to size 3`', '`8 Decision: valid yes`', '`The verdict priority order: ...`', '`Sizing verdict: skip x0.5`', '"VETO rules: none"', '"not a VETO"', '"sizing decision"']) assert.ok(flatRm.includes(named), named);
 });
 
 test('a markdown heading is never a decision line: a heading naming the verdict leaves a clean APPROVE an approval; a veto in a heading still vetoes', () => {

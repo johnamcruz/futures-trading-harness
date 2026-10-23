@@ -106,8 +106,8 @@ const ALLOWED = [
     now: "from the record): limit long 21540.25, stop 21512.50 (111 ticks = $55.50),",
     reason: "the example's old line (orb, retired): the composed example replaces it" },
   { old: "stop 21498.00 (1R = 5.25 pts = 21 ticks = $10.50), 1 MNQ; exit: trail from +2R",
-    now: "target 21598.00 (231 ticks, 2.08R), 1 MNQ.",
-    reason: "the example's old line (orb, retired): the composed example replaces it" },
+    now: "target 21598.00 (231 ticks, 2.08R), 5 MNQ ($277.50).",
+    reason: "the example's old line (orb, retired): the composed example replaces it; then feat/prop-min-contracts (owner-approved 2026-10-23): a full-size example (5 MNQ, $277.50 under the $300 cap), never size 1" },
   { old: "(21513.75), giving back 0.5R.",
     copies: 0,
     reason: "the example's old line (orb, retired): the composed example replaces it" },
@@ -418,9 +418,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // veto, a Size line in the example and the cut rule, approve the smaller size; gate-refusals-cycle's new [phase2-size]
 // row), so a looser model's APPROVE isn't read as a veto and no entry exceeds the size phase 2 approved; trader-process's
 // step-8 line, now take or pass first, shrank every role it is embedded in. With #258, the risk manager +1449 over 90222.
+// Then the prop sizing floor (feat/prop-min-contracts, owner-approved 2026-10-23, "sizing floor is 3"): the risk manager
+// +1048 each mode (its agent's cut example at 3 and the floor rule, position-sizing's floor and its example,
+// gate-refusals-limits' [min-contracts] row, prop-challenge-pacing's refusal list), the news and volume analysts +7
+// (trader-process's PLAN example at a full size 5 ($277.50), never size 1); the strategy researcher -7.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 91671, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 77548, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10189, 'risk-manager': 92719, 'strategy-researcher': 25554, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48502 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10189, 'risk-manager': 78596, 'strategy-researcher': 25554, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32982 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

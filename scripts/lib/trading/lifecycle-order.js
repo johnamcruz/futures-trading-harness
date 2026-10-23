@@ -14,7 +14,12 @@
  *     contract, which must be the record's (a size is a number of its own contract).
  * A stated size over the ceiling is refused, never cut: the model composes again at or below it. `size` (the runner's
  * entry only: phase 2 approved fewer) cuts the order to it, a whole size from 1 to the record's; the brackets are the
- * record's, the risk worked out for the size ordered (the gate's composed-reads takes exactly that cut).
+ * record's, the risk worked out for the size ordered (the gate's composed-reads takes exactly that cut). In an attempt,
+ * the size ordered (stated or cut) is at least the policy's floor (its rulebook's min_contracts, prop-state.js
+ * minContractsRefusal), else refused: a cut under it is no trade.
+ *
+ *   attemptFloorProblem({ home, strategy, strategies, accounts, root, size, specOf })
+ *       compose_check's floor problem in a running attempt, or null
  *
  *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected, size })
  *       { args, line, plan, policy, account, verdict } or throws the refusal
@@ -78,6 +83,9 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
     if (verdict.action !== 'full' || !(verdict.maxSize >= 1)) throw new Error(`${policy.name} skipped the composed setup${verdict.reason ? ` (${verdict.reason})` : ''}; no order`);
     if (verdict.contract !== root) throw new Error(`${policy.name}'s verdict trades ${verdict.contract}, not ${root}, the record's contract: a stated size is a number of its own contract; compose on ${verdict.contract}`);
     contract = verdict.contract;
+    // The floor (the rulebook's min_contracts): a stated size, or phase 2's cut, under it is no trade, never sized up.
+    const floor = prop.minContractsRefusal(policy, account, contract, ordered, specOf);
+    if (floor) throw new Error(`[min-contracts] ${floor}${cutWhy ? ` (${cutWhy} to ${ordered}: no trade)` : ''}`);
   }
   // The strategy's dollar cap is the hard ceiling, inside an attempt too (the owner's $300); the verdict and the budget
   // lower it there, never raise it.
@@ -112,4 +120,17 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   return { args, line, plan: { strategy: strategy.name, side, contract, size: ordered, ...(cutWhy ? { recordSize: stated } : {}), entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
 }
 
-module.exports = { composedOrder, attemptPolicy };
+/**
+ * compose_check's floor (the rulebook's min_contracts) in a running attempt: why a stated size is under the floor of the
+ * policy that trades the composed strategy, or null (no attempt, the size clears it, or no policy: order_plan refuses
+ * that itself).
+ */
+function attemptFloorProblem({ home, strategy, strategies = [], accounts = [], root, size, specOf }) {
+  let policy;
+  try { policy = attemptPolicy(home, strategy, strategies, root); } catch (_err) { return null; }
+  if (!policy) return null;
+  const account = accounts.find(a => a.name === policy.account && a.valid) || null;
+  return prop.minContractsRefusal(policy, account, root, size, specOf);
+}
+
+module.exports = { composedOrder, attemptPolicy, attemptFloorProblem };

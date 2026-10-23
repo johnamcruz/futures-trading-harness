@@ -479,6 +479,14 @@ isn't the policy's. Narrower sessions are fine.
 The combine block is in both run hashes. The preflight's `combine` check shows
 the account, `maxSessions` and every attempt's window.
 
+Each attempt's entries are sized as live: the policy's verdict from the
+account's rulebook, never under its floor (`sizing.min_contracts`, in
+micro-equivalents: a mini counts as its family's ratio). A setup that fits
+fewer at its stop is a skip, and the gate refuses an entry under it
+(`[min-contracts]`); the backtester and the prop Monte Carlo's attempt
+simulator skip the same setups, so a combine run and its Monte Carlo size
+alike.
+
 What the run does:
 
 1. **Each attempt is a real combine from zero.** Before its first step, with

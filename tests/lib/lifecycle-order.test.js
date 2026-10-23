@@ -83,6 +83,29 @@ test('order_plan, composed, in an attempt: the policy sizes the record once (its
   assert.strictEqual(attemptPolicy(trendHome(), P.LC_DOC, strategies, 'MNQ'), null, 'no attempt: none');
 });
 
+test('order_plan, composed, in an attempt: never under the policy\'s floor (min_contracts) - a stated size or phase 2\'s cut under it is refused, a budget under it is the verdict\'s skip', () => {
+  const { testSizing } = require('../helpers');
+  const strategies = P.registry({ sizing: testSizing({ min_contracts: 3 }) });
+  const at = (o, home) => order(home, { strategy: P.LC_DOC, strategies, ...o });
+  // The record's 5 at the floor of 3 goes; phase 2's cut to 3 goes; a cut to 2 is no trade, never sized back up.
+  assert.strictEqual(at({}, P.propHome({ size: 5 }).home).args.size, 5);
+  assert.strictEqual(at({ size: 3 }, P.propHome({ size: 5 }).home).args.size, 3);
+  assert.throws(() => at({ size: 2 }, P.propHome({ size: 5 }).home), /^Error: \[min-contracts\] setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts .* \(phase 2 cut the record's 5 to 2: no trade\)$/);
+  // A record stated under the floor: refused with the reason (compose again at 3 or more, or pass).
+  for (const size of [1, 2]) assert.throws(() => at({}, P.propHome({ size }).home), new RegExp(`\\[min-contracts\\] setup:prop_portfolio: size ${size} MNQ is under the floor of 3 contracts`), String(size));
+  // A $600 cushion: 0.2 x = $120, 2 micros at $56.74 ($113.48); 3 would risk $170.22: the verdict is a skip that says so.
+  const tight = { ...P.MINI, max_loss: 600 };
+  const thin = P.propHome({ size: 3, account: tight });
+  assert.throws(() => order(thin.home, { strategy: P.LC_DOC, strategies, accounts: [tight] }), /prop_portfolio skipped the composed setup \(3 MNQ at this stop risk \$170\.22, over the \$120\.00 budget .*2 MNQ would fit\): skip; never a tighter stop\); no order/);
+  // compose_check's floor problem: only in a running attempt, only under the floor.
+  const { attemptFloorProblem } = require('../../scripts/lib/trading/lifecycle-order');
+  const probe = (home, size) => attemptFloorProblem({ home, strategy: P.LC_DOC, strategies, accounts: [P.MINI], root: 'MNQ', size, specOf: SPEC });
+  const live = P.propHome({ size: 5 }).home;
+  assert.match(probe(live, 2), /size 2 MNQ is under the floor of 3 contracts/);
+  assert.strictEqual(probe(live, 3), null);
+  assert.strictEqual(probe(trendHome(), 1), null, 'no attempt (stage 1): no floor');
+});
+
 test('the order_plan tool routes trade_lifecycle (and a policy listing it) to the compose record; the bars are not read', () => {
   const { plan } = require('../../scripts/lib/harness-tools/order-plan');
   const { FAKE_BROKERS } = require('../helpers');

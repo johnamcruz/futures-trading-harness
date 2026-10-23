@@ -62,7 +62,8 @@ on the replay broker, and there is no live trading until the owner says
    none selected, as minis once it reaches one mini (`contracts: auto`).
 4. The verdict: every setup gets the full size its budget allows (step 3),
    times the verdict's multiplier (the rulebook's enforced items; none yet,
-   so 1), or a skip when the budget can't fund one contract at its stop, the
+   so 1), or a skip when the budget can't fund the rulebook's floor
+   (`min_contracts`, in micro-equivalents) at its stop, the
    attempt blocks entries (its soft daily stop, its loss streak stop:
    `loss_streak_stop` losing trades in a row stop new entries for the
    session), or the multiplier is 0. The rulebook's `exit` manages every

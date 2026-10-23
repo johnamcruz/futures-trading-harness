@@ -437,6 +437,29 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   }
 });
 
+test('runEntry in a prop attempt: phase 2\'s cut under the policy\'s floor (min_contracts) is no trade - order_plan refuses it, nothing is sent; a cut at the floor goes', async () => {
+  // order_plan's own composed path (lifecycle-order.js composedOrder) on a prop attempt whose policy has a floor of 3.
+  const P = require('../fixtures/lifecycle-prop');
+  const LC = require('../fixtures/lifecycle');
+  const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
+  const strategies = P.registry({ sizing: require('../helpers').testSizing({ min_contracts: 3 }) });
+  const real = () => {
+    const { home } = P.propHome({ size: 5 });
+    return a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null });
+  };
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const p2 = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
+  let s = setup({ roles: { phase2: p2(`Size: 2 (record 5 cut to 2)\nVERDICT: APPROVE - size 2, risk $111\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 5 } })], plan: real() });
+  let r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 5' }));
+  assert.strictEqual(r.entry.outcome, 'no-trade');
+  assert.match(r.result, /order_plan refused the composed plan: \[min-contracts\] setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts/);
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor run: nothing sent');
+  assert.deepStrictEqual(s.journal, [], 'no plan journaled');
+  s = setup({ roles: { phase2: p2(`Size: 3 (record 5 cut to 3)\nVERDICT: APPROVE - size 3, risk $166.50\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 5 } })], plan: real(), market: 21540.25 });
+  r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 5' }));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { approved: 3, record: 5, ordered: 3 }]);
+});
+
 test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing, or the plan unjournaled: no executor, logged, a no-trade naming it; a phase 2 that reads no data doesn\'t count', async () => {
   const cases = [
     [{ roles: { phase2: { ok: false, timedOut: true, text: '', tools: [], output: '' } } }, /risk-manager phase 2 timed_out \(timed out\)/, 2],

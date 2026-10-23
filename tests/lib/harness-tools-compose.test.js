@@ -60,6 +60,24 @@ test('compose_check: a false read, an unknown skill or a size over the cap is re
   assert.deepStrictEqual(readRecords(home, 'MNQ').map(x => x.ok), [false, false, false]);
 });
 
+test('compose_check in a running prop attempt: a size under the shipped policy\'s floor (min_contracts) is recorded NOT OK with the reason; at it, OK; no attempt, no floor', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const policy = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const min = policy.sizing.min_contracts;
+  assert.ok(min > 1, 'the shipped floor');
+  const account = require('../../scripts/lib/trading/accounts').accountNamed(ROOT, policy.account, {});
+  const { home, ctx } = setup();
+  prop.startAttempt(home, account, new Date('2026-04-22T14:00:00Z'));
+  const under = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: min - 1 }, ctx);
+  assert.match(under.text, new RegExp(`PROBLEM: setup:prop_portfolio: size ${min - 1} MNQ is under the floor of ${min} contracts[^]*NOT OK`));
+  const at = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: min }, ctx);
+  assert.match(at.text, /OK: every read verified/);
+  assert.deepStrictEqual(readRecords(home, 'MNQ').map(x => x.ok), [false, true]);
+  // Stage 1 (no attempt): size 1 stays OK.
+  const free = setup();
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, free.ctx).text, /OK: every read verified/);
+});
+
 test('compose_check: no cycle bar, another bar\'s briefing or none: refused and recorded, never checked against a guess', () => {
   for (const [opts, why] of [[{ cycleBar: null }, /no cycle bar for MNQ/], [{ cycleBar: '2026-04-23T15:00:00.000Z' }, /briefing is for the bar at 2026-04-23T14:57:00.000Z, not the cycle's/], [{ briefing: null }, /no bar briefing for MNQ/]]) {
     const { home, ctx } = setup(opts);

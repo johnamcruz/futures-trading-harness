@@ -153,7 +153,8 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - Exception: while a prop attempt runs a policy strategy (`signal: policy`),
   its verdict sets the size in the selected contract, sized from the
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
-  order gate enforces the verdict instead. Never exceed the verdict.
+  order gate enforces the verdict instead. Never exceed the verdict, and
+  never trade under the rulebook's `min_contracts` (fewer fit: skip).
 - Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
   (for a trailing exit with no target, the trail activation `trailActivateR`
   stands in for it).

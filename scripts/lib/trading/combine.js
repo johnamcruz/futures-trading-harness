@@ -36,12 +36,15 @@
  *   cap_usd             and at most this many dollars (0 = no cap: the rulebook's `off`)
  *   clock_k             > 0: also at most k x (target - profit) / (sessions left x r_per_session)
  *   r_per_session       the R a session makes (clock sizing)
- *   min_size_guard      one contract is still taken when it risks at most guard x budget
+ *   min_size_guard      one contract is still taken when it risks at most guard x budget (only with min_contracts 1:
+ *                       a floor above 1 refuses the one contract the guard would allow)
+ *   min_contracts       the floor: the size, in micro-equivalents (a mini counts as the family's ratio of micros), is at
+ *                       least this many, else no size (skip); never rounded up past the budget or the room
  *   drawdown_halve_usd  > 0: halve the budget while the balance is at least this far below its peak
  *   stop_slippage_ticks a stop's expected slippage, in ticks per contract, counted in each contract's risk: a full
  *                       stop plus this never reaches the floor or the daily limit
  */
-const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks']);
+const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts']);
 /**
  * The floor under a stop's expected slippage: the schema's (rulebook.js refuses less), not a value. A missing or
  * smaller slippage only ever sizes the same or down. The backtester's fill slippage (engine.js DEFAULTS.slippageTicks)
@@ -58,6 +61,7 @@ function sizingErrors(z) {
     if (!(typeof v === 'number' && Number.isFinite(v) && v >= 0)) out.push(`sizing.${k}: ${v === undefined ? 'missing' : JSON.stringify(v)}; the policy's rulebook states it (no code default)`);
   }
   if (!out.length && z.stop_slippage_ticks < MIN_STOP_SLIPPAGE_TICKS) out.push(`sizing.stop_slippage_ticks: at least ${MIN_STOP_SLIPPAGE_TICKS}`);
+  if (!out.length && !(Number.isInteger(z.min_contracts) && z.min_contracts >= 1)) out.push(`sizing.min_contracts: ${JSON.stringify(z.min_contracts)}; a whole number of contracts, 1 or more`);
   return out;
 }
 
@@ -226,9 +230,14 @@ const CONTRACT_MODES = ['micro', 'mini', 'auto'];
  * A contract's risk is its stop plus `slipTicks` (the stop's expected
  * slippage, sizing.stop_slippage_ticks) in ticks, plus fees both ways, so a
  * stopped trade's expected loss fits the budget and never reaches the room.
+ * The floor (`minContracts`, sizing.min_contracts): the size traded, in micro-equivalents (a mini counts as `ratio`
+ * micros; a contract with no family as one), is at least the floor, else null (the setup is skipped). In micro and auto
+ * mode the floor is that many micros, and a whole mini clears any floor up to `ratio`. The floor never rounds a size up:
+ * a budget or room that fits fewer sizes nothing. A missing or invalid floor sizes nothing (fails closed).
  * Returns { root, size, riskPerContract } or null when no contract fits.
  */
-function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = 0, fraction = 1, ratio = 10, slipTicks = MIN_STOP_SLIPPAGE_TICKS }) {
+function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = 0, fraction = 1, ratio = 10, slipTicks = MIN_STOP_SLIPPAGE_TICKS, minContracts }) {
+  if (!(Number.isInteger(minContracts) && minContracts >= 1)) return null;
   const mi = legs.micro;
   const mn = legs.mini;
   // Never less than the floor: a missing or smaller expected slippage only ever sizes the same or down.
@@ -246,16 +255,35 @@ function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto'
   // Never more than the whole budget; a fraction that isn't a number sizes nothing (fails closed).
   const f = typeof fraction === 'number' && Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
   if (f < 1 && n > 0) n = Math.floor(n * f);
-  if (!n) return null;
+  if (!n || n < minContracts) return null;
   const minis = Math.floor(n / ratio);
   const useMini = canMini && (mode === 'mini' || (mode === 'auto' && (minis >= 1 || !canMicro)));
   if (useMini) {
     const size = Math.min(minis, mn.max);
-    if (size < 1 || size * riskOf(mn) > room - 0.01) return null;
+    if (size < 1 || size * ratio < minContracts || size * riskOf(mn) > room - 0.01) return null;
     return { root: mn.root, size, riskPerContract: riskOf(mn) };
   }
   if (!canMicro) return null;
-  return { root: mi.root, size: Math.min(n, mi.max), riskPerContract: riskOf(mi) };
+  const size = Math.min(n, mi.max);
+  if (size < minContracts) return null;
+  return { root: mi.root, size, riskPerContract: riskOf(mi) };
+}
+
+/**
+ * Why contractPlan(args) sized nothing because of the floor alone, or null: without the floor (a floor of 1) a size
+ * fits, but fewer than args.minContracts micro-equivalents. The reason names what the floor's size would risk against
+ * the budget: the setup is a skip, never a tighter stop or a size rounded up.
+ */
+function floorReason(args) {
+  const min = args.minContracts;
+  if (!(Number.isInteger(min) && min > 1) || contractPlan(args)) return null;
+  const under = contractPlan({ ...args, minContracts: 1 });
+  if (!under) return null;
+  // The floor in the contract that would trade: minis, the whole minis it takes (a mini is the ratio contractPlan sized with).
+  const mini = under.root === (args.legs.mini && args.legs.mini.root);
+  const need = mini ? Math.ceil(min / args.ratio) : min;
+  return `${need} ${under.root}${mini ? ` (the floor of ${min} micro-equivalents)` : ''} at this stop risk $${round2(need * under.riskPerContract).toFixed(2)}, over the $${round2(args.dollars).toFixed(2)} budget`
+    + `${Number.isFinite(args.room) ? ` or the $${round2(args.room).toFixed(2)} room` : ''} (the rulebook's min_contracts ${min}; ${under.size} ${under.root} would fit): skip; never a tighter stop`;
 }
 
 /** Dollars a stopped trade may lose without touching the floor or the firm's daily limit. */
@@ -308,6 +336,6 @@ const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
   : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
 
 module.exports = {
-  SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS, sizingErrors, requireSizing, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary, attemptFacts,
+  SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS, sizingErrors, requireSizing, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, floorReason, room, summary, attemptFacts,
   profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

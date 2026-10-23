@@ -11,7 +11,7 @@
  *       { do: 'compose', scenario: { side, skill, reads: [[step, skill, read], ...] }, size, order?, rationale?, policy?, result? }   the composed
  *            entry (composed-cycle.js); `order`: place_order's arguments instead of the plan's, `rationale` the plan order's, `policy` the
  *            policy strategy whose order_plan sizes it (an attempt's account layer)
- *       { do: 'exit', side, review? }             closes the position with a market order (manage-position); review:
+ *       { do: 'exit', side, size?, review? }      closes the position (size: its size, 1 by default) with a market order (manage-position); review:
  *                                                 { result, setup, r? }, the trade's review journaled after it
  *       { do: 'pass', why }                       the model reads the bar (the roles' round) and passes
  */
@@ -34,7 +34,7 @@ function stepsFor(script, bar, w) {
   if (step.do === 'exit') {
     const side = step.side === 'long' ? 'sell' : 'buy';
     return [
-      { executor: [{ broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side, type: 'market', size: 1, rationale: '[exit] the composed trade out' } }] },
+      { executor: [{ broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side, type: 'market', size: step.size || 1, rationale: '[exit] the composed trade out' } }] },
       // `review`: the trade's review journaled after it (its result and setup tags), as the head trader writes one.
       ...(step.review ? [{ broker: 'journal_add', args: { kind: 'review', contractId: 'MNQ', tags: [`result:${step.review.result}`, `setup:${step.review.setup}`, ...(step.review.r !== undefined ? [`r:${step.review.r}`] : [])], text: `${step.side} out: ${step.review.result}` } }] : []),
       { result: 'CYCLE RESULT: managed - out' },

@@ -10,7 +10,8 @@
  * The briefing is the cycle bar's (FTH_CYCLE_BRIEFING_BARS, else FTH_CYCLE_BARS, from the runner): without a cycle bar
  * the call is refused, never checked against whatever briefing is current. The strategy document
  * (strategies/trade_lifecycle) gives risk.min_rr, risk.max_risk_usd and valid_bars (how many base bars after its bar's
- * close the record stays valid); one that is missing or invalid refuses.
+ * close the record stays valid); one that is missing or invalid refuses. In a running prop attempt, a size under the
+ * policy's floor (its rulebook's sizing.min_contracts) makes the record not OK, with the reason.
  *
  *   compose_check { symbol, side, reads: [{ step, skill, read, why }], size }
  */
@@ -26,6 +27,8 @@ const { loadStrategies } = require('../trading/strategies');
 const { specFor } = require('../trading/contracts');
 const { cycleId } = require('../trading/check-order');
 const { briefingAfterClock } = require('../trading/look-ahead');
+const { loadAccounts } = require('../trading/accounts');
+const { attemptFloorProblem } = require('../trading/lifecycle-order');
 
 const USAGE = 'usage: compose-check.js --symbol MNQ --side long|short --size <contracts> --reads <JSON array of { step, skill, read, why }>';
 const ROOT = /^[A-Z0-9]{1,8}$/;
@@ -51,7 +54,8 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   // Under a replay clock, never a briefing of a bar that closed after it (no look-ahead).
   const later = briefingAfterClock(got.briefing, c.replayAt());
   if (later) return refused([later]);
-  const doc = loadStrategies(c.root, c.env).strategies.find(s => s.name === STRATEGY);
+  const all = loadStrategies(c.root, c.env).strategies;
+  const doc = all.find(s => s.name === STRATEGY);
   if (!doc || !doc.valid) return refused([`strategies/${STRATEGY}/STRATEGY.md is ${doc ? `invalid (${(doc.errors || [])[0]})` : 'missing'}`]);
   const spec = specFor(symbol);
   const tick = spec ? spec.tickSize : null;
@@ -59,7 +63,9 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const planned = checked.stop && checked.target
     ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk) })
     : null;
-  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
+  // In a running attempt, a size under the policy's floor (its rulebook's min_contracts) is no OK record.
+  const floor = attemptFloorProblem({ home, strategy: doc, strategies: all, accounts: loadAccounts(c.root, c.env).accounts, root: symbol, size, specOf: specFor });
+  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, problems: floor ? [floor] : [], cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
   // A record that is not OK is an answer, not a failure: the text says what stands.
   return { text: renderRecord(record, checked) };

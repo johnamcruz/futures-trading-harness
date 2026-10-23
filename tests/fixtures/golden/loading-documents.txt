@@ -662,7 +662,7 @@ strategy fx_vwap_reclaim: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4120 chars sha256:b2116fa3a95a62a6",
+  "body": "4171 chars sha256:b6d7bf6fd0cdad53",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -700,7 +700,8 @@ strategy prop_portfolio: {
     "min_size_guard": 1.5,
     "stop_slippage_ticks": 1,
     "clock_k": 0,
-    "r_per_session": 0.3
+    "r_per_session": 0.3,
+    "min_contracts": 3
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",

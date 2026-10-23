@@ -45,7 +45,7 @@ test('the verdict skips (fails closed) with no attempt, no snapshot or no bar; a
 
 test('pacing on a composed trade: the policy\'s clock_k caps the verdict at k x what the pass still needs per session left; off leaves the budget', () => {
   const { home, rec } = P.propHome();
-  const sizing = clock => ({ cushion_frac: 0.2, cap_usd: 0, drawdown_halve_usd: 0, min_size_guard: 1.5, stop_slippage_ticks: 1, r_per_session: 0.3, clock_k: clock });
+  const sizing = clock => ({ cushion_frac: 0.2, cap_usd: 0, drawdown_halve_usd: 0, min_size_guard: 1.5, stop_slippage_ticks: 1, r_per_session: 0.3, min_contracts: 1, clock_k: clock });
   assert.strictEqual(composedVerdict(args(home, rec, { policy: P.policy({ sizing: sizing(0) }) })).maxSize, 7, 'off: the $400 budget');
   // $3,000 still needed over 30 sessions at 0.3R: k 0.5 caps the risk at 0.5 x 3000 / 9 = $166.67: 2 micros at $56.74.
   const other = { ...rec, id: 'paced' };

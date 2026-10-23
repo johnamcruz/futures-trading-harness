@@ -153,7 +153,8 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - Exception: while a prop attempt runs a policy strategy (`signal: policy`),
   its verdict sets the size in the selected contract, sized from the
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
-  order gate enforces the verdict instead. Never exceed the verdict.
+  order gate enforces the verdict instead. Never exceed the verdict, and
+  never trade under the rulebook's `min_contracts` (fewer fit: skip).
 - Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
   (for a trailing exit with no target, the trail activation `trailActivateR`
   stands in for it).
@@ -186,7 +187,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `fib-retracement` (skills/fib-retracement/SKILL.md): Use after an impulse to judge pullback depth, or for a CISD's OTE zone (0.62-0.79) - fib levels and a bounce on a completed candle. A read, never a veto.
 - `gate-refusals` (skills/gate-refusals/SKILL.md): Use when the gate refuses an order for itself - its stop, account, tick specs, a pending order, the replay clock.
 - `gate-refusals-cycle` (skills/gate-refusals-cycle/SKILL.md): Use when the gate refuses an entry with [roles-ran], [phase2-facts] or [phase2-size].
-- `gate-refusals-limits` (skills/gate-refusals-limits/SKILL.md): Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [strategy], [max-order-size] or [max-risk].
+- `gate-refusals-limits` (skills/gate-refusals-limits/SKILL.md): Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [min-contracts], [strategy], [max-order-size] or [max-risk].
 - `gate-refusals-positions` (skills/gate-refusals-positions/SKILL.md): Use when the gate refuses managing a position (an exit by contract month, a trading-day change), or can't read one; close_position is never gated.
 - `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].
 - `harness-root` (skills/harness-root/SKILL.md): Find the harness root (<root>) for absolute paths.

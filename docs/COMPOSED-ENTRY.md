@@ -420,7 +420,13 @@ unchanged: `accounts/<account>/RULEBOOK.md` holds them, the one place (R1).
 Today `prop_portfolio` lists no strategies (`strategies: []`, allowed
 since 2026-10-14: no component, no setup, no verdict, so every entry is
 refused). The model states its size in the record from the sizing skills;
-the verdict is the ceiling and the gate holds the order to it. Code changes
+the verdict is the ceiling and the gate holds the order to it. The floor
+(the owner, 2026-10-23): the rulebook's `sizing.min_contracts` (3) is the
+fewest contracts a prop entry trades, in micro-equivalents (a mini counts as
+its family's ratio). A verdict that fits fewer at the record's stop is a
+skip, a record stated under it is not OK in an attempt (`compose_check`),
+`order_plan` refuses it and a phase-2 cut under it, and the gate refuses the
+entry (`[min-contracts]`); risk-reducing orders always go. Code changes
 this needs:
 
 - `strategies.js` (the policy component check after the load) and

@@ -934,6 +934,66 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
   assert.match(run('auto', entryOrder({ contractId: NQ, size: 2 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /2 NQ is not within/);
 });
 
+test('min-contracts: a prop entry under the rulebook\'s floor is refused (hard, unskippable); at it, it goes; exits and protective stops at any size go', () => {
+  const floored = (min, extra = {}) => propStrategy({ sizing: testSizing({ min_contracts: min }), ...extra });
+  const ev = (input, { strategy = floored(3), balance = 50000, days = [], verdict = {} } = {}) => {
+    const home = trendHome();
+    prop.startAttempt(home, MINI, new Date(NOW.getTime() - (days.length + 1) * 86400000));
+    for (const [day, close] of days) prop.recordEndOfDay(home, MINI, close, day);
+    prop.snapshot(home, MINI, balance, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, {
+      strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+      maxSize: 18, bar: BAR, at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(), ...verdict,
+    });
+    return evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, skipChecks: new Set(['combine', 'policy', 'strategy', 'min-contracts']) }, strategies: [strategy, EMA_CROSS], accounts: [MINI] }).violations;
+  };
+  for (const size of [1, 2]) {
+    const v = ev(entryOrder({ size }));
+    assert.deepStrictEqual(v.map(x => x.check), ['min-contracts'], JSON.stringify(v));
+    assert.match(v[0].message, new RegExp(`setup:orb: size ${size} MNQ is under the floor of 3 contracts \\(its account's rulebook, sizing.min_contracts\\): trade 3 or more within the size budget, or no trade; never a tighter stop`));
+  }
+  assert.deepStrictEqual(ev(entryOrder({ size: 3 })), []);
+  assert.deepStrictEqual(ev(entryOrder({ size: 18 })), []);
+  // A floor of 1 changes nothing.
+  assert.deepStrictEqual(ev(entryOrder({ size: 1 }), { strategy: floored(1) }), []);
+  // Risk-reducing orders are never held by the floor: an exit, a flatten, a protective stop, at 1 or 2.
+  for (const size of [1, 2]) {
+    for (const rationale of ['[exit] close the long', '[exit] flatten', '[protect] stop for the open long']) {
+      assert.deepStrictEqual(ev(entryOrder({ size, side: 'sell', stopLossBracket: undefined, rationale })), [], `${rationale} ${size}`);
+    }
+  }
+  // Fails closed: a sizing without a whole floor (no rulebook value) refuses, never read as 1.
+  for (const min of [undefined, 0, 2.5, '3', null]) {
+    const v = ev(entryOrder({ size: 18 }), { strategy: floored(min) });
+    assert.match(v.map(x => `[${x.check}] ${x.message}`).join(' '), /\[min-contracts\] setup:orb: its account's rulebook states no sizing.min_contracts .*no entry \(fails closed\)/, String(min));
+  }
+  // A budget that fits fewer than the floor: the budget check names the floor; the entry under it is refused on both.
+  // A $250 cushion (balance $48,250, yesterday's close): 0.2 x $250 = $50, 2 micros at $21.24; 3 would risk $63.72.
+  const thin = ev(entryOrder({ size: 2 }), { balance: 48250, days: [['2026-10-06', 48250]] });
+  assert.deepStrictEqual(thin.map(x => x.check), ['combine', 'min-contracts']);
+  assert.match(thin[0].message, /2 MNQ is not within the account's size budget for a 40-tick stop \(nothing: 3 MNQ at this stop risk \$63\.72, over the \$50\.00 budget or the \$250\.00 room \(the rulebook's min_contracts 3; 2 MNQ would fit\): skip; never a tighter stop/);
+  // A strategy that trades no account (no attempt's policy) is never held by a floor.
+  const rules = { ...EMA_CROSS, name: 'orb', signal: 'rules' };
+  const free = evaluateOrder({ input: entryOrder({ size: 1 }), entries: [plan()], now: NOW, config: { ...config, home: trendHome() }, strategies: [rules], accounts: [MINI] }).violations;
+  assert.ok(!free.some(x => x.check === 'min-contracts'), JSON.stringify(free));
+});
+
+test('min-contracts: counted in micro-equivalents - a mini counts as its family\'s ratio, so 1 NQ clears a floor of 3 and not one of 12', () => {
+  const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const run = (min, input, verdict) => {
+    const home = trendHome();
+    prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString(), ...verdict });
+    return evaluateOrder({ input, entries: [plan(5, { contractId: input.contractId })], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts: 'mini', sizing: testSizing({ min_contracts: min }) }), EMA_CROSS], accounts: [acct] }).violations;
+  };
+  assert.deepStrictEqual(run(3, entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 }), []);
+  // A floor of 12 micros: 1 NQ (10) is under it, and the budget's 1 NQ is too, so it sizes nothing.
+  const v = run(12, entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 });
+  assert.match(v.find(x => x.check === 'min-contracts').message, /size 1 NQ is under the floor of 12 contracts \(a NQ counts as 10\)/);
+  assert.match(v.find(x => x.check === 'combine').message, /1 NQ is not within the account's size budget .*\(nothing/);
+});
+
 test('combine: a selected leg is the only one a policy strategy trades and is sized in, whatever its contract mode', () => {
   // As above: $400 budget, a 40-tick stop. MNQ selected: 18 MNQ under auto (never 1 NQ); NQ selected: 1 NQ under micro.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
