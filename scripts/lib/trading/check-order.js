@@ -13,12 +13,13 @@ const path = require('path');
 const { harnessHome } = require('../paths');
 const { loadConfig } = require('./config');
 const { resolveJournalPath, readJournalWindow } = require('./journal');
-const { evaluateOrder, evaluateModify, formatBlock, isRiskReducing } = require('./order-gate');
+const { evaluateOrder, evaluateModify, formatBlock, isRiskReducing, SETUP_TAG } = require('./order-gate');
 const { loadStrategies } = require('./strategies');
 const { loadAccounts } = require('./accounts');
 const { resolveClock, createGatewayClock } = require('./harness-now');
 const { activeBroker } = require('../broker/config');
 const { liveEntryRefusal } = require('../broker/allow-list');
+const { propAccountRefusal } = require('./prop-accounts');
 const { heldByRunner } = require('../account-lock');
 const { loadEnvFiles } = require('../env-file');
 
@@ -80,6 +81,8 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations), now };
   }
   const journal = readJournalWindow(journalPath);
+  const strategies = loadStrategies(pluginRoot, env).strategies;
+  const accounts = loadAccounts(pluginRoot, env).accounts;
   const result = evaluateOrder({
     input: input || {},
     entries: journal.entries,
@@ -87,8 +90,8 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     now,
     config,
     blackouts: readBlackouts(config.blackoutsFile),
-    strategies: loadStrategies(pluginRoot, env).strategies,
-    accounts: loadAccounts(pluginRoot, env).accounts,
+    strategies,
+    accounts,
     transcriptPath,
   });
   // A live entry needs the broker's allow-list (broker/allow-list.js) holding its account: never "any account".
@@ -102,6 +105,12 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     // Outside a runner (no FTH_ACCOUNT_LOCK): no entry on an account a live runner holds (account-lock.js).
     const held = config.accountLock ? null : heldByRunner({ env: serverEnv, broker: activeBroker(env), accountId: (input || {}).accountId });
     if (held) result.violations.push({ check: 'account-lock', message: held });
+    // An account the user marks as a prop account (its broker's propAccounts, prop-accounts.js) enters only while its
+    // profile's attempt runs, in every mode (a marked practice account is judged as live). Unmarked: nothing changes.
+    const setup = SETUP_TAG.exec(String((input || {}).rationale || ''));
+    const strategy = setup ? strategies.find(x => x.name === setup[1].toLowerCase()) || null : null;
+    const prop = propAccountRefusal({ broker: activeBroker(env), accountId: (input || {}).accountId, home: config.home, accounts, strategy });
+    if (prop) result.violations.push({ check: 'prop-account-attempt', message: `${prop}. Exits, protective stops, stop moves, cancels and close_position still go.` });
   }
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now, ...(result.composed ? { composed: result.composed } : {}) };

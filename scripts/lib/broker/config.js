@@ -11,7 +11,8 @@
  *   FTH_BROKER                      the broker to use (else the file's "broker")
  *
  * A broker: { description, repo, entry | entryEnv | command, journal, journalEnv,
- * env, paperEnv, replay, fingerprintEnv, limits }. A replay broker's `limits` ({ dailyLoss, maxOrderSize, maxPositionSize })
+ * env, paperEnv, replay, fingerprintEnv, limits, propAccounts }. `propAccounts` (the user's own config only) marks
+ * the broker's prop accounts, each id to its account profile: the order gate's prop-account check (trading/prop-accounts.js). A replay broker's `limits` ({ dailyLoss, maxOrderSize, maxPositionSize })
  * name the env variable of each limit the replay driver sets from the account (replay/config.js replayEnv). `replay: true` marks a simulated broker that replays
  * history: only then may FTH_REPLAY_NOW set the harness's clock
  * (trading/harness-now.js). A broker the defaults define without it stays live

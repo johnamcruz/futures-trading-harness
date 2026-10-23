@@ -611,6 +611,7 @@ function formatBlock(violations) {
 
 module.exports = {
   STOP_PRICE,
+  SETUP_TAG,
   marketClosed,
   isRiskReducing,
   checkConsistency,
