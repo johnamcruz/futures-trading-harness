@@ -262,13 +262,17 @@ phases:
    (`context.desk.results`) and the entry record (`entry.ran`) carries
    `skills` { `expected` (its `role-skills`), `embedded` (those its prompt
    holds whole: Claude Code's role prompt file under the machine's
-   `roleSkillsInPrompt`, or opencode's role prompt), `loaded` (a Skill call or
-   a `skill_lookup` that returned the skill, in that run's own stream or its
-   own session's tool-call log, never the head trader's or another role's),
-   `had`, `missing` }, and either record has `skillsMissing` `{ role: [skills]
-   }` when any role lacks any; the runner logs one line a cycle for it
-   (`desk: roles ran without their skills: ...`). It is detection only: no
-   check reads it and no report is refused for it. With `roleSkillsInPrompt`
+   `roleSkillsInPrompt`, or opencode's role prompt), `loaded` (on Claude Code
+   a Skill call of its own session answered without an error, a `skill_lookup`
+   whose reply is the skill, or a Skill call its own session's tool-call log
+   shows completed; never a subagent's, the head trader's or another role's),
+   `had`, `missing`, `reloaded` (loaded although embedded) }; the cycle's
+   summary line keeps the entry's per role (`entry.skills`). Either record has
+   `skillsMissing` and `skillsReloaded` `{ role: [skills] }` when any role has
+   any; the runner logs one line a cycle for each (`desk: roles ran without
+   their skills: ...`; the reloaded one only with `roleSkillsInPrompt`, a sign
+   the prompt addition wasn't seen). It is detection only: no check reads it
+   and no report is refused for it. With `roleSkillsInPrompt`
    (Claude Code, absent by default) each such role's run gets its
    `role-skills` in full and its `role-index` one line each in a fixed file
    (`--append-system-prompt-file`, `scripts/lib/role-prompt.js`, opencode's

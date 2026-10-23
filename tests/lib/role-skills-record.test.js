@@ -57,6 +57,80 @@ test('a role with all its loads (Skill calls, skill_lookup reads, its own sessio
   assert.ok(!r.loaded.includes('x'));
 });
 
+test('a Skill call counts only when its own session\'s tool_result answers it without an error: errored, unanswered, a subagent\'s or a sidechain\'s never; a log lookup the stream rejected never', () => {
+  const [a, b, c, d, e] = SKILLS(TREND);
+  const errored = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'k1', content: 'Unknown skill: x', is_error: true }] } });
+  const out = [
+    init('s-role'),
+    use('k0', 'Skill', { skill: a }), res('k0', 'Launching skill'),
+    use('k1', 'Skill', { skill: b }), errored,
+    use('k2', 'Skill', { skill: c }), // never answered
+    use('k3', 'Skill', { skill: d }, { parent_tool_use_id: 'agent1' }), res('k3', 'ok', { parent_tool_use_id: 'agent1' }),
+    use('k4', 'Skill', { skill: e }, { isSidechain: true }), res('k4', 'ok', { isSidechain: true }),
+    use('l0', 'mcp__harness__skill_lookup', { skill: c, role: TREND }), res('l0', 'skill_lookup: no skill "x"'),
+    done,
+  ].join('\n');
+  // The tool-call log shows the lookup completed (its reply only a digest): never a load from the log.
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, 'logs', 'toolcall'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'logs', 'toolcall', 's-role.jsonl'), JSON.stringify({ event: 'post', call: { name: 'mcp__harness__skill_lookup', args: { skill: c }, session: 's-role' }, result: { text: 'sha256:x' } }));
+  const r = R.roleSkills({ root: ROOT, role: TREND, output: out, home });
+  assert.deepStrictEqual(r.loaded, [a]);
+  for (const s of [b, c, d, e]) assert.ok(r.missing.includes(s), s);
+  // An opencode stream (no init): its own completed calls, as the transcript reader reads them.
+  const oc = JSON.stringify({ type: 'tool_use', part: { tool: 'skill', state: { status: 'completed', input: { name: a } } } });
+  const ocErr = JSON.stringify({ type: 'tool_use', part: { tool: 'skill', state: { status: 'error', input: { name: b } } } });
+  assert.deepStrictEqual(R.loadedInRun(`${oc}\n${ocErr}`, home), [a]);
+});
+
+test('reloaded: a skill the prompt embeds and the run loaded too; the runner logs it only with roleSkillsInPrompt', async () => {
+  const [a, b] = SKILLS(TREND);
+  const r = R.roleSkills({ root: ROOT, role: TREND, output: stream({ skills: [a] }), embedded: SKILLS(TREND) });
+  assert.deepStrictEqual([r.reloaded, r.missing], [[a], []]);
+  assert.deepStrictEqual(R.roleSkills({ root: ROOT, role: TREND, output: stream({ skills: [a] }) }).reloaded, [], 'nothing embedded: nothing reloaded');
+  assert.deepStrictEqual(R.withSkillsMissing([{ role: TREND, skills: r }]), { skillsReloaded: { [TREND]: [a] } });
+  assert.match(R.reloadedLine({ [TREND]: [a, b] }), new RegExp(`^desk: roles loaded skills their prompt addition already holds \\(was it seen\\?\\): ${TREND} \\[${a}, ${b}\\]$`));
+  const lines = async over => {
+    const home = tmpDir();
+    const errs = [];
+    const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });
+    const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], ...over });
+    await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 60000, context: { action: 'trade', desk: { results: [], missing: [], ms: 1, skillsReloaded: { [TREND]: [a] } } } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run, out: () => {}, err: t => errs.push(t), guard: () => true });
+    const summary = JSON.parse(fs.readFileSync(path.join(home, 'logs', fs.readdirSync(path.join(home, 'logs')).find(f => /^cycles-.*\.jsonl$/.test(f))), 'utf8').trim());
+    return { errs: errs.filter(x => /already holds/.test(x)), summary };
+  };
+  const on = await lines({ roleSkillsInPrompt: true });
+  assert.deepStrictEqual([on.errs.length, on.summary.roleSkillsReloaded], [1, { desk: { [TREND]: [a] } }]);
+  assert.deepStrictEqual((await lines({})).errs, [], 'the key off: no line');
+});
+
+test('the cycle\'s summary line keeps the entry\'s per-role skills beside its ran list (its shape unchanged)', async () => {
+  const home = tmpDir();
+  const rec = { expected: ['x'], embedded: [], loaded: [], had: [], missing: ['x'], reloaded: [] };
+  const { writeCycleLog } = require('../../scripts/lib/cycle-log');
+  writeCycleLog(home, { at: new Date('2026-10-07T14:30:00Z'), action: 'trade', harness: 'claude', prompt: 'p', entry: { outcome: 'executed', ran: [{ role: 'risk-manager', stop: 'completed', skills: rec }, { role: 'trade-executor', stop: 'completed' }], skillsMissing: { 'risk-manager': ['x'] } } });
+  const summary = JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim());
+  assert.deepStrictEqual(summary.entry.ran, ['risk-manager', 'trade-executor']);
+  assert.deepStrictEqual(summary.entry.skills, { 'risk-manager': rec });
+  assert.deepStrictEqual(summary.roleSkillsMissing, { entry: { 'risk-manager': ['x'] } });
+  // No record: no field (as before).
+  const h2 = tmpDir();
+  writeCycleLog(h2, { at: new Date('2026-10-07T14:30:00Z'), action: 'trade', harness: 'claude', prompt: 'p', entry: { outcome: 'executed', ran: [{ role: 'trade-executor', stop: 'completed' }] } });
+  assert.ok(!('skills' in JSON.parse(fs.readFileSync(path.join(h2, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim()).entry));
+});
+
+test('a role prompt that can\'t be built or written fails that role\'s run with an error naming role-prompt; the key off, nothing of it', async () => {
+  const home = tmpDir();
+  // The harness home's role-prompt folder is a file: nothing can be written there.
+  fs.writeFileSync(path.join(home, 'role-prompt'), 'not a folder');
+  const run = async () => ({ ok: true, timedOut: false, code: 0, output: done, stdout: done });
+  const env = { FTH_HOME: home, HOME: home, PATH: process.env.PATH };
+  const on = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], roleSkillsInPrompt: true });
+  await assert.rejects(runRole(on, TREND, 'report', { timeoutMs: 5000 }, { root: ROOT, home, env, run }), /^Error: role-prompt: trend-momentum-analyst's prompt addition \(roleSkillsInPrompt\) can't be built or written: /);
+  const off = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
+  assert.strictEqual((await runRole(off, TREND, 'report', { timeoutMs: 5000 }, { root: ROOT, home, env, run })).ok, true);
+});
+
 test('the key on: the embedded skills count, so none is missing', () => {
   const r = R.roleSkills({ root: ROOT, role: TREND, output: stream(), embedded: SKILLS(TREND) });
   assert.deepStrictEqual([r.embedded, r.loaded, r.missing], [[...SKILLS(TREND)].sort(), [], []]);

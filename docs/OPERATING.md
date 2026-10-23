@@ -550,16 +550,39 @@ one set on a harness other than `claude`, refuses the config).
 | `roleSkillsInPrompt` | Claude Code's roles that the runner runs on its own (the desk's analysts, risk-manager phase 1 and 2, the trade-executor) load their `role-skills` with the Skill tool, as their body says (`false` is the same) | `true` (harness `claude` only): each such role runs as opencode's roles do in index mode, from the same selection (`scripts/lib/role-skills.js` `skillPlan`). The runner writes the role's `role-skills` in full (the same text a load returns) and its `role-index` one line each, read whole with `skill_lookup`, to `<harness home>/role-prompt/claude-<role>-<hash>.md` and gives it to the role's run as `--append-system-prompt-file`; the file says those skills are loaded and not to load them again. It holds no cycle data, so it is the same every cycle (the cached prefix); a role's older files are pruned, its newest one kept. Nothing is attested and the gate is unchanged: no gate check credits a desk role's skills, and the executor's entry checks still read the head trader's loads. The key is one of `scripts/lib/autotrader.js` `HEAD_DELIVERY_KEYS`, so a run with it is never pooled or compared with one without it; the training preflight's `role-prompts` line checks each role's file embeds its `role-skills` and indexes its `role-index` (`scripts/lib/role-prompt.js`) |
 
 On every harness, the key on or off, the cycle log records which skills each
-role the runner ran had (`scripts/lib/role-skills-record.js`): each run in the
-desk record (`context.desk.results`) and the entry record (`entry.ran`) carries
-`skills` (`expected`: its `role-skills`; `embedded`: those its prompt holds
-whole; `loaded`: those its own run loaded with the Skill tool or `skill_lookup`,
-in its own stream or its own session's tool-call log; `had`; `missing`, expected
-but not had), and the desk and entry records carry `skillsMissing`
-(`{ role: [skills] }`) when any role lacks any. The cycle's summary line then
-has `roleSkillsMissing`, and the runner logs one line a cycle,
-`desk: roles ran without their skills: <role> [<skills>]` (or `entry: ...`), for
-a watchdog to grep. It is detection only: no report is refused for it.
+role the runner ran had (`scripts/lib/role-skills-record.js`). In the cycle's
+file, each run of the desk record (`context.desk.results`) and of the entry
+record (`entry.ran`) carries `skills`:
+
+- `expected`: its `role-skills`;
+- `embedded`: those its prompt holds whole (the role file, or opencode's role
+  prompt);
+- `loaded`: those its own run loaded. On Claude Code that is a Skill call of
+  its own session answered without an error, a `skill_lookup` whose reply is
+  the skill, or a Skill call its session's tool-call log shows completed (a
+  subagent's call, an unanswered or errored one, and a lookup from the log
+  alone never count); on opencode, its completed skill and `skill_lookup`
+  calls;
+- `had`, `missing` (expected but not had), and `reloaded` (loaded although
+  embedded).
+
+The cycle's summary line keeps the entry's per role as `entry.skills`
+(`{ role: record }`) beside `entry.ran`. The desk and entry records carry
+`skillsMissing` and `skillsReloaded` (`{ role: [skills] }`) when any role has
+any, and the summary line has `roleSkillsMissing` and `roleSkillsReloaded`. The
+runner logs one line a cycle, `desk: roles ran without their skills: <role>
+[<skills>]` (or `entry: ...`), and, with `roleSkillsInPrompt`, `desk: roles
+loaded skills their prompt addition already holds (was it seen?): ...`, for a
+watchdog to grep. It is detection only: no report is refused for it. A role
+prompt file that can't be built or written fails that role's run with an error
+naming `role-prompt`.
+
+The runner runs roles on its own only in a full trade cycle on one symbol,
+outside paper mode and cycles that only manage (on Claude Code, only in a cycle
+whose entry it may run, or a managed one under `deskOnManagedCycles`). In
+multi-symbol, paper, manage-only and lean cycles the head trader launches its
+roles as subagents in its own session: there is no role file and no per-role
+record.
 
 ### Replay
 
