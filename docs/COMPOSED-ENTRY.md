@@ -424,9 +424,13 @@ the verdict is the ceiling and the gate holds the order to it. The floor
 (the owner, 2026-10-23): the rulebook's `sizing.min_contracts` (3) is the
 fewest contracts a prop entry trades, in micro-equivalents (a mini counts as
 its family's ratio). A verdict that fits fewer at the record's stop is a
-skip, a record stated under it is not OK in an attempt (`compose_check`),
-`order_plan` refuses it and a phase-2 cut under it, and the gate refuses the
-entry (`[min-contracts]`); risk-reducing orders always go. Code changes
+skip, and the gate refuses an entry under it (`[min-contracts]`);
+risk-reducing orders always go. In an attempt the record's size is a
+suggestion: the order is the translated size (`prop/size-translate.js`, the
+one place: the largest the verdict, the size budget now, the dollar cap and
+the broker's max allow, never under the floor), which `order_plan` builds and
+the gate's composed-reads check accepts exactly, or phase 2's smaller cut (a
+cut under the floor is no trade). Outside an attempt the record's size stands. Code changes
 this needs:
 
 - `strategies.js` (the policy component check after the load) and

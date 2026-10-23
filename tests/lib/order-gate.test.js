@@ -3594,23 +3594,56 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
   assert.ok(checks(lcPropEval(home, args)).includes('composed-reads'));
 });
 
-test('trade_lifecycle in an attempt: over the verdict\'s size is refused even when the record states it; a verdict not sized on this record is refused', () => {
-  // The record states 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4.
+test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {
+  // The record suggests 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4 (the
+  // record's, over the verdict and not the translated 3) and takes 3.
   const { home, rec } = LCP.propHome({ size: 4, account: LCP.THIN });
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy: LCP.policy(), component: 'trade_lifecycle', account: LCP.THIN, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec: lcSpec('MNQ'), specOf: lcSpec, now: LCP.NOW });
   const four = LC.order({ accountId: 1, size: 4, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' });
   const r = lcPropEval(home, four, { accounts: [LCP.THIN] });
   assert.ok(checks(r).includes('policy') && checks(r).includes('combine'), JSON.stringify(r.violations));
   assert.ok(r.violations.some(v => /size 4 is over the verdict's 3 MNQ/.test(v.message)));
-  assert.ok(!checks(r).includes('composed-reads'), 'the size is the record\'s');
+  assert.match(r.violations.find(v => v.check === 'composed-reads').message, /size 4 is not the translated size 3 \(the rulebook's size at this stop: 3 MNQ \(the verdict's 3, the size budget's 3\); the record suggested 4\): order_plan gives it/);
+  assert.deepStrictEqual(lcPropEval(home, { ...four, size: 3 }, { accounts: [LCP.THIN] }).violations, [], 'the translated size goes');
+  assert.deepStrictEqual(checks(lcPropEval(home, { ...four, size: 2 }, { accounts: [LCP.THIN] })), ['composed-reads'], 'any other size is refused');
   // A verdict sized on another record (the same bar and stop): refused.
   const p = LCP.propHome({ size: 2 });
   prop.appendVerdict(p.home, { strategy: 'prop_portfolio', component: 'trade_lifecycle', contract: 'MNQ', contractId: 'MNQ', symbol: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 111, maxSize: 7, bar: LC.BAR, at: '2026-10-07T13:59:55Z', expiresAt: '2026-10-07T14:06:00Z', record: 'another' });
-  const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 2, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
+  // (the translated 5: the $300 cap at $55.50, the other record's verdict at 7)
+  const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 5, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
   assert.deepStrictEqual(checks(two), ['policy']);
   assert.match(two.violations[0].message, /the latest verdict is not the one sized on the compose record/);
   // An exit under the policy goes with nothing.
   assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 2, rationale: '[exit] flatten the prop_portfolio long' }).violations, []);
+});
+
+test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_plan\'s translated size (the rulebook\'s) goes; phase 2\'s cut under the floor refuses; a skip refuses every size; stage 1 is unchanged', () => {
+  // The record suggests 1; the $400 budget's verdict is 7, the $300 cap 5 ($55.50 at 111 ticks): the order is 5.
+  const { home } = LCP.propHome({ size: 1 });
+  const args = lcPropPlan(home);
+  assert.strictEqual(args.size, 5);
+  assert.deepStrictEqual(lcPropEval(home, args).violations, []);
+  const one = lcPropEval(home, { ...args, size: 1 });
+  assert.deepStrictEqual(checks(one), ['composed-reads']);
+  assert.match(one.violations[0].message, /size 1 is not the translated size 5 \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$55.50 a contract\); the record suggested 1\)/);
+  for (const size of [4, 6, 7]) assert.ok(checks(lcPropEval(home, { ...args, size })).includes('composed-reads'), String(size));
+  // A floor of 3: phase 2's approved 2 (its cut) is under it: refused on the floor; 3 goes.
+  const floored = LCP.registry({ sizing: testSizing({ min_contracts: 3 }) });
+  const f3 = LCP.propHome({ size: 1 });
+  const fargs = composedOrder({ home: f3.home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: floored, accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'], approved: 3 }).args;
+  assert.strictEqual(fargs.size, 3);
+  assert.ok(checks(lcPropEval(f3.home, { ...fargs, size: 2 }, { registry: floored })).includes('min-contracts'));
+  // A skip (the verdict on this record says skip): every size refused by composed-reads, with the reason.
+  const sk = LCP.propHome({ size: 3 });
+  const a3 = lcPropPlan(sk.home);
+  const v = prop.latestVerdict(sk.home, 'prop_portfolio', 'MNQ');
+  prop.appendVerdict(sk.home, { ...v, action: 'skip', maxSize: 0, multiplier: 0, reason: 'cushion' });
+  assert.match(lcPropEval(sk.home, a3).violations.find(x => x.check === 'composed-reads').message, /no size: prop_portfolio skipped the setup \(cushion\)/);
+  // Stage 1 (no attempt, setup:trade_lifecycle): no translation, the record's own size, as before.
+  const free = trendHome();
+  LC.writeScenario(free, { size: 1 });
+  const ev1 = composedOrder({ home: free, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: [LCP.LC_DOC], accounts: [], specOf: lcSpec, accountId: 1, selected: ['MNQ'] });
+  assert.deepStrictEqual([ev1.args.size, 'translatedSize' in ev1.plan], [1, false]);
 });
 
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {

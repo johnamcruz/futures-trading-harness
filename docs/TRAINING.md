@@ -485,7 +485,9 @@ micro-equivalents: a mini counts as its family's ratio). A setup that fits
 fewer at its stop is a skip, and the gate refuses an entry under it
 (`[min-contracts]`); the backtester and the prop Monte Carlo's attempt
 simulator skip the same setups, so a combine run and its Monte Carlo size
-alike.
+alike. The size the model states is a suggestion: the order is the translated
+size (`prop/size-translate.js`: the largest the verdict, the budget, the
+composed cap and the broker allow), in a combine run as live.
 
 What the run does:
 

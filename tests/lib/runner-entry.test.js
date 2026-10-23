@@ -437,27 +437,42 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   }
 });
 
-test('runEntry in a prop attempt: phase 2\'s cut under the policy\'s floor (min_contracts) is no trade - order_plan refuses it, nothing is sent; a cut at the floor goes', async () => {
-  // order_plan's own composed path (lifecycle-order.js composedOrder) on a prop attempt whose policy has a floor of 3.
+test('runEntry in a prop attempt: the record suggests 1, the order is the translated size; phase 2\'s cut to 3 is 3; a cut under the floor (min_contracts) is no trade, nothing sent', async () => {
+  // order_plan's own composed path (lifecycle-order.js composedOrder) on a prop attempt whose policy has a floor of 3:
+  // the record suggests 1; the translation (prop/size-translate.js) is 5 (the $300 cap at 111 ticks, $55.50 a contract).
   const P = require('../fixtures/lifecycle-prop');
   const LC = require('../fixtures/lifecycle');
   const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
   const strategies = P.registry({ sizing: require('../helpers').testSizing({ min_contracts: 3 }) });
   const real = () => {
-    const { home } = P.propHome({ size: 5 });
-    return a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null });
+    const { home } = P.propHome({ size: 1 });
+    return a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null, approved: a.approved ?? null });
   };
   const FACTS = 'FACTS: window opening drive; trend long allowed';
   const p2 = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
-  let s = setup({ roles: { phase2: p2(`Size: 2 (record 5 cut to 2)\nVERDICT: APPROVE - size 2, risk $111\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 5 } })], plan: real() });
-  let r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 5' }));
-  assert.strictEqual(r.entry.outcome, 'no-trade');
-  assert.match(r.result, /order_plan refused the composed plan: \[min-contracts\] setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts/);
-  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor run: nothing sent');
-  assert.deepStrictEqual(s.journal, [], 'no plan journaled');
-  s = setup({ roles: { phase2: p2(`Size: 3 (record 5 cut to 3)\nVERDICT: APPROVE - size 3, risk $166.50\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 5 } })], plan: real(), market: 21540.25 });
-  r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 5' }));
-  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { approved: 3, record: 5, ordered: 3 }]);
+  const run = async (verdict, before = '') => {
+    const s = setup({ roles: { phase2: p2(`${before}VERDICT: ${verdict}\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 1 } })], plan: real(), market: 21540.25 });
+    const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }));
+    return { s, r };
+  };
+  // Phase 2 approves the translated 5: the order is 5.
+  let { s, r } = await run('APPROVE - size 5, risk $277.50');
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 5, record: 5, ordered: 5 }]);
+  assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
+  assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\)/);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 5 MNQ \(the runner's entry/);
+  // Phase 2's cut to 3: exactly 3.
+  ({ r } = await run('APPROVE - size 3, risk $166.50', 'Size: 3 (cut to 3)\n'));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 3, record: 5, ordered: 3 }]);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 3 MNQ \(phase 2 cut the translated 5\)/);
+  // A cut to 2, or phase 2 approving the record's 1: under the floor, no trade, nothing sent or journaled.
+  for (const n of [2, 1]) {
+    ({ s, r } = await run(`APPROVE - size ${n}, risk $${(55.5 * n).toFixed(2)}`));
+    assert.strictEqual(r.entry.outcome, 'no-trade', String(n));
+    assert.match(r.result, new RegExp(`order_plan refused the composed plan: \\[min-contracts\\] setup:prop_portfolio: size ${n} MNQ is under the floor of 3 contracts`));
+    assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor run: nothing sent');
+    assert.deepStrictEqual(s.journal, [], 'no plan journaled');
+  }
 });
 
 test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing, or the plan unjournaled: no executor, logged, a no-trade naming it; a phase 2 that reads no data doesn\'t count', async () => {

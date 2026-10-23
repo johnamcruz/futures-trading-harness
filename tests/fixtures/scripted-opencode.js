@@ -8,10 +8,10 @@
  *
  *   SMOKE_MODEL_SCRIPT  a JSON file { bars: { "<bar open time>": step } }, the bar the cycle decides (FTH_CYCLE_BARS) its key;
  *                       a bar with no step is a quiet one: the model answers at once. A step is one of
- *       { do: 'compose', scenario: { side, skill, reads: [[step, skill, read], ...] }, size, order?, rationale?, policy?, result? }   the composed
+ *       { do: 'compose', scenario: { side, skill, reads: [[step, skill, read], ...] }, size, order?, rationale?, policy?, planned?, result? }   the composed
  *            entry (composed-cycle.js); `order`: place_order's arguments instead of the plan's, `rationale` the plan order's, `policy` the
- *            policy strategy whose order_plan sizes it (an attempt's account layer)
- *       { do: 'exit', side, size?, review? }      closes the position (size: its size, 1 by default) with a market order (manage-position); review:
+ *            policy strategy whose order_plan sizes it (an attempt's account layer), `planned` phase 2 and the order at order_plan's size
+ *       { do: 'exit', side, size?, review? }      closes the position (size: its size, 'position' the broker's, 1 by default) with a market order; review:
  *                                                 { result, setup, r? }, the trade's review journaled after it
  *       { do: 'pass', why }                       the model reads the bar (the roles' round) and passes
  */
@@ -24,7 +24,7 @@ function stepsFor(script, bar, w) {
   const C = require('./composed-cycle');
   const step = (script.bars || {})[bar];
   if (step.do === 'compose') {
-    const cycle = C.composedCycle(w, step.scenario, { size: step.size || 1, order: step.order || null, rationale: step.rationale || null, policy: step.policy || null, result: step.result || null });
+    const cycle = C.composedCycle(w, step.scenario, { size: step.size || 1, order: step.order || null, rationale: step.rationale || null, policy: step.policy || null, result: step.result || null, planned: Boolean(step.planned) });
     // A live cycle takes minutes before its order; the replay broker's clock moves in ticks of a second (latency.js TICK_MS),
     // so a scripted one waits for a tick: the order fills after the compose record it follows, as the experience log reads it.
     const steps = cycle();
@@ -33,8 +33,17 @@ function stepsFor(script, bar, w) {
   }
   if (step.do === 'exit') {
     const side = step.side === 'long' ? 'sell' : 'buy';
+    // size 'position': the open position's own size, read from the broker first (an entry the code sized).
+    const held = ctx => {
+      const c = ctx.calls.filter(x => x.tool === 'list_open_positions').at(-1);
+      let list = [];
+      try { list = JSON.parse(c.text); } catch (_err) { /* none */ }
+      const p = (Array.isArray(list) ? list : list.positions || []).find(x => /MNQ/.test(String(x.contractId)));
+      return p ? Math.abs(p.size) : 1;
+    };
     return [
-      { executor: [{ broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side, type: 'market', size: step.size || 1, rationale: '[exit] the composed trade out' } }] },
+      ...(step.size === 'position' ? [{ broker: 'list_open_positions', args: { accountId: 7 } }] : []),
+      { executor: [{ broker: 'place_order', args: ctx => ({ accountId: 7, contractId: 'MNQ', side, type: 'market', size: step.size === 'position' ? held(ctx) : step.size || 1, rationale: '[exit] the composed trade out' }) }] },
       // `review`: the trade's review journaled after it (its result and setup tags), as the head trader writes one.
       ...(step.review ? [{ broker: 'journal_add', args: { kind: 'review', contractId: 'MNQ', tags: [`result:${step.review.result}`, `setup:${step.review.setup}`, ...(step.review.r !== undefined ? [`r:${step.review.r}`] : [])], text: `${step.side} out: ${step.review.result}` } }] : []),
       { result: 'CYCLE RESULT: managed - out' },

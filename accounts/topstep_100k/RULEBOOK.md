@@ -108,12 +108,20 @@ micro-equivalents: a mini counts as its family's ratio (10 micros), so in
 the budget or the room fits fewer at the setup's stop, the verdict is
 `skip` ("3 MNQ at this stop risk $X, over the $Y budget ...: skip; never
 a tighter stop"); the size is never rounded up past the budget. The gate
-refuses an entry below it (`[min-contracts]`), and so do `order_plan` and
-`compose_check` in an attempt; a phase-2 cut below it is no trade. Exits,
+refuses an entry below it (`[min-contracts]`); a phase-2 cut below it is no
+trade. Exits,
 protective stops, stop moves, cancels and closes always go. The one-contract
 guard (`min_size_guard`) only matters with a floor of 1: above it, the one
 contract the guard allows is under the floor. The backtester and the attempt
 simulator skip the same setups, so the Monte Carlo is sized as live.
+
+**The size at entry.** In an attempt the size the model states (its compose
+record) is a suggestion: `prop/size-translate.js`, the one place, translates
+it at entry to the correct size from these values alone: the largest the
+verdict, the size budget now, the composed strategy's dollar cap and the
+broker's max order size allow, never under the floor (under it: no trade)
+and never with a tighter stop. `order_plan` builds the order at it, the gate
+accepts exactly it (or phase 2's smaller cut) and refuses any other size.
 
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the

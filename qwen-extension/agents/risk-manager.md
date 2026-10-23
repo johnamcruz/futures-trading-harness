@@ -214,12 +214,10 @@ The code reads your report; anything else reads as a veto:
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
 - "verdict" and "decision" nowhere else in the report, headings included.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
-- Size → its own `Size:` line, e.g. `Size: 3 (record 5 cut to 3: one
-  loss short of loss_streak_stop)`; never "sizing decision" or "sizing
-  verdict". To cut, approve the smaller size: the order is exactly it. In
-  a prop attempt, never under the rulebook's `min_contracts` (a cut under
-  it is no trade: veto instead).
-- These read as a veto: `Decision: cut to size 3`, `8 Decision: valid
+- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no
+  reviewed trades yet)`; never "sizing decision" or "sizing verdict". To
+  cut, approve the smaller size: the order is exactly it.
+- These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `The verdict priority order: ...`, `Sizing verdict: skip x0.5`.
 
 For example:

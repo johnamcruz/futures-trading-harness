@@ -418,9 +418,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // veto, a Size line in the example and the cut rule, approve the smaller size; gate-refusals-cycle's new [phase2-size]
 // row), so a looser model's APPROVE isn't read as a veto and no entry exceeds the size phase 2 approved; trader-process's
 // step-8 line, now take or pass first, shrank every role it is embedded in. With #258, the risk manager +1449 over 90222.
+// Then the prop sizing floor and the size translation (feat/prop-min-contracts, owner-approved 2026-10-23): the risk
+// manager +516 each mode (gate-refusals-limits' [min-contracts] row, position-sizing's one sentence: the size stated in
+// an attempt is a suggestion, translated at entry); every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 91671, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 77548, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 86462, 'news-calendar-analyst': 10182, 'risk-manager': 92187, 'strategy-researcher': 25561, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54454, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 42803, 'news-calendar-analyst': 10182, 'risk-manager': 78064, 'strategy-researcher': 25561, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 39937, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

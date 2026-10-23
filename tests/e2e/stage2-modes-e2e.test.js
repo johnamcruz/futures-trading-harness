@@ -146,14 +146,13 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   assert.ok(entry, moments.map(m => m.bar).join(', '));
   const exitBar = iso(Date.parse(entry.bar) + D.STEP);
   const refusedBar = iso(Date.parse(entry.bar) + 7 * 86400000); // the same bar a week later (the second week's Thursday)
-  // The rulebook's floor (min_contracts 3): the entry is sized at it and fills; attempt 2's entry is composed at 2, under
-  // it, so the gate refuses it on the floor too ([min-contracts]: no trade, never sized up).
-  const SIZE = 3;
-  const compose = (m, size = SIZE) => ({ do: 'compose', scenario: scenarioOf(m), size, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
+  // The model suggests 1 (as a small model does); the size is translated at entry to the rulebook's
+  // (prop/size-translate.js): order_plan builds the order at it, phase 2 approves it and the executor sends it.
+  const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', planned: true, rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
   playScript(w, {
     [entry.bar]: compose(entry),
-    [exitBar]: { do: 'exit', side: entry.side, size: SIZE, review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
-    [refusedBar]: { ...compose(entry, 2), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
+    [exitBar]: { do: 'exit', side: entry.side, size: 'position', review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
+    [refusedBar]: { ...compose(entry), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
   });
   const config = replayConfig(w, 'combine-e2e', {
     start: '2022-04-21T13:30:00Z', end: '2022-04-30T00:00:00Z',
@@ -173,6 +172,14 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const entered = days['2022-04-21'].find(x => barOf(x) === entry.bar);
   assert.match(entered.ran[0].result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle ${entry.side} MNQ`), JSON.stringify(entered.ran));
   assert.deepStrictEqual(entered.refusals, []);
+  // The record suggested 1; the order the gate allowed is the translated size, at or over the floor (min_contracts 3).
+  const gateLog = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const allowed = gateLog.filter(e => e.decision === 'allowed' && e.tool === 'place_order' && /^setup:prop_portfolio/.test(String(e.rationale || '')));
+  assert.strictEqual(allowed.length, 1, JSON.stringify(allowed));
+  assert.ok(allowed[0].size >= 3, `the translated size ${allowed[0].size}`);
+  const recs = require('../../scripts/lib/trading/trade-lifecycle').readRecords(runHomeOf(w, 'combine-e2e'), 'MNQ').filter(x => x.bar === entry.bar);
+  assert.deepStrictEqual(recs.map(x => x.plan.size), [1], 'the record keeps the suggestion');
+  assert.match(entered.ran[0].result, new RegExp(`MNQ ${allowed[0].size}$`));
   const out = days['2022-04-21'].find(x => barOf(x) === exitBar);
   assert.match(out.ran[0].result, /^CYCLE RESULT: managed - out/);
   const fills = days['2022-04-21'].flatMap(x => x.trades || []).filter(f => !(f.creationTimestamp || '').startsWith(blowAt.slice(0, 16)));
@@ -209,10 +216,11 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const gated = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision !== 'allowed');
   assert.strictEqual(gated.length, 1, JSON.stringify(gated));
   assert.match(gated[0].violations.find(v => v.check === 'combine').message, /past the profit target with today the best day .*more today can't meet consistency/);
-  // Composed at 2, under the rulebook's floor (min_contracts 3): refused on it as well, never sized up.
+  // order_plan refused it (the attempt blocks entries), so the executor sent the record's suggested 1: refused on the
+  // floor and on the translation too, never sized up.
   const floor = gated[0].violations.find(v => v.check === 'min-contracts');
   assert.ok(floor, JSON.stringify(gated[0].violations));
-  assert.match(floor.message, /size 2 MNQ is under the floor of 3 contracts/);
+  assert.match(floor.message, /size 1 MNQ is under the floor of 3 contracts/);
   // The stage report's attempt lines, then the Monte Carlo of the finished run.
   assert.match(r.out, /stage 2 \(pass prop\) report:/);
   assert.match(r.out, /continuous combine: 2 attempt\(s\), each from zero at the starting balance/);

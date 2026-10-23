@@ -55,7 +55,7 @@ test('order_plan, composed: refused without a cycle bar, a record for the side, 
   assert.throws(() => order(none), /states no size/);
 });
 
-test('order_plan, composed, in an attempt: the policy sizes the record once (its verdict, record id), the stated size goes at or under it, under the policy\'s tag', () => {
+test('order_plan, composed, in an attempt: the policy sizes the record once (its verdict, record id); the order is the translated size, under the policy\'s tag', () => {
   const { home, rec } = P.propHome({ size: 5 });
   const strategies = P.registry();
   const r = order(home, { strategy: P.LC_DOC, strategies });
@@ -66,10 +66,12 @@ test('order_plan, composed, in an attempt: the policy sizes the record once (its
   // Planned again: the same verdict, not a second one.
   order(home, { strategy: P.LC_DOC, strategies });
   assert.strictEqual(readVerdicts(home).length, 1);
-  // The ceiling is the lower of the $300 cap and the verdict: a $1,000 cushion's $200 budget sizes 3 ($56.74 each); 4
-  // ($222.00, under $300) is over it.
+  // The size is the translation's (prop/size-translate.js): the lower of the $300 cap (5) and the verdict and the budget:
+  // a $1,000 cushion's $200 budget sizes 3 ($56.74 each). The record's 4 is a suggestion: the order is 3.
   const over = P.propHome({ size: 4, account: P.THIN });
-  assert.throws(() => order(over.home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] }), /your stated size 4 is over the ceiling 3 \(prop_portfolio's verdict \(3 MNQ\) and the size budget now, under the \$300.00 cap\)/);
+  const three = order(over.home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] });
+  assert.deepStrictEqual([three.args.size, three.plan.suggestedSize, three.plan.translatedSize], [3, 4, 3]);
+  assert.match(three.line, /size 3: the rulebook's size at this stop: 3 MNQ \(the verdict's 3, the size budget's 3\); the record suggested 4/);
   assert.strictEqual(latestVerdict(over.home, 'prop_portfolio', 'MNQ').record, over.rec.id);
   assert.strictEqual(order(P.propHome({ size: 3, account: P.THIN }).home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] }).args.size, 3);
   // The $400 budget's verdict (7) over the cap: 6 ($333.00) is refused by the cap (the plan, as the gate's).
@@ -77,38 +79,30 @@ test('order_plan, composed, in an attempt: the policy sizes the record once (its
   // A verdict on another contract than the record's: refused.
   const nq = P.propHome({ size: 1 });
   require('../../scripts/lib/trading/prop-state').appendVerdict(nq.home, { ...order(nq.home, { strategy: P.LC_DOC, strategies }).verdict, contract: 'NQ' });
-  assert.throws(() => order(nq.home, { strategy: P.LC_DOC, strategies }), /verdict trades NQ, not MNQ, the record's contract/);
+  assert.throws(() => order(nq.home, { strategy: P.LC_DOC, strategies }), /verdict trades NQ, not MNQ: a size is a number of its own contract; no order/);
   // An attempt runs but no policy that trades it lists the composed strategy: no entry.
   assert.throws(() => order(home, { strategy: P.LC_DOC, strategies: [P.policy({ strategies: [] }), P.LC_DOC] }), /no policy strategy that trades it lists trade_lifecycle/);
   assert.strictEqual(attemptPolicy(trendHome(), P.LC_DOC, strategies, 'MNQ'), null, 'no attempt: none');
 });
 
-test('order_plan, composed, in an attempt: never under the policy\'s floor (min_contracts) - a stated size or phase 2\'s cut under it is refused, a budget under it is the verdict\'s skip', () => {
+test('order_plan, composed, in an attempt: the suggestion is translated (1 -> the rulebook\'s size); phase 2\'s cut under the floor (min_contracts) is no trade; a budget under it is the verdict\'s skip', () => {
   const { testSizing } = require('../helpers');
   const strategies = P.registry({ sizing: testSizing({ min_contracts: 3 }) });
   const at = (o, home) => order(home, { strategy: P.LC_DOC, strategies, ...o });
-  // The record's 5 at the floor of 3 goes; phase 2's cut to 3 goes; a cut to 2 is no trade, never sized back up.
-  assert.strictEqual(at({}, P.propHome({ size: 5 }).home).args.size, 5);
+  // The translated 5 (the $300 cap at $55.50) goes whatever the record suggests: 1, 2 or 5; phase 2's cut to 3 goes
+  // (as `approved` or `size`); a cut to 2 is no trade, never sized back up.
+  for (const size of [1, 2, 5]) {
+    const r = at({}, P.propHome({ size }).home);
+    assert.deepStrictEqual([r.args.size, r.plan.suggestedSize, r.plan.translatedSize], [5, size, 5], String(size));
+  }
   assert.strictEqual(at({ size: 3 }, P.propHome({ size: 5 }).home).args.size, 3);
-  assert.throws(() => at({ size: 2 }, P.propHome({ size: 5 }).home), /^Error: \[min-contracts\] setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts .* \(phase 2 cut the record's 5 to 2: no trade\)$/);
-  // A record stated under the floor: refused with the reason (compose again at 3 or more, or pass).
-  for (const size of [1, 2]) assert.throws(() => at({}, P.propHome({ size }).home), new RegExp(`\\[min-contracts\\] setup:prop_portfolio: size ${size} MNQ is under the floor of 3 contracts`), String(size));
+  assert.deepStrictEqual([at({ approved: 3 }, P.propHome({ size: 1 }).home).args.size, at({ approved: 9 }, P.propHome({ size: 1 }).home).args.size], [3, 5]);
+  assert.throws(() => at({ approved: 2 }, P.propHome({ size: 5 }).home), /^Error: \[min-contracts\] setup:prop_portfolio: size 2 MNQ is under the floor of 3 contracts .* \(phase 2 cut the translated 5 to 2: no trade\)$/);
+  for (const approved of [0, 1.5, '3']) assert.throws(() => at({ approved }, P.propHome({ size: 5 }).home), /phase 2's approved size is a whole number of 1 or more/, String(approved));
   // A $600 cushion: 0.2 x = $120, 2 micros at $56.74 ($113.48); 3 would risk $170.22: the verdict is a skip that says so.
   const tight = { ...P.MINI, max_loss: 600 };
   const thin = P.propHome({ size: 3, account: tight });
-  assert.throws(() => order(thin.home, { strategy: P.LC_DOC, strategies, accounts: [tight] }), /prop_portfolio skipped the composed setup \(3 MNQ at this stop risk \$170\.22, over the \$120\.00 budget .*2 MNQ would fit\): skip; never a tighter stop\); no order/);
-  // compose_check's floor problem: only in a running attempt, only under the floor.
-  const { attemptFloorProblem } = require('../../scripts/lib/trading/lifecycle-order');
-  const probe = (home, size) => attemptFloorProblem({ home, strategy: P.LC_DOC, strategies, accounts: [P.MINI], root: 'MNQ', size, specOf: SPEC });
-  const live = P.propHome({ size: 5 }).home;
-  assert.match(probe(live, 2), /size 2 MNQ is under the floor of 3 contracts/);
-  assert.strictEqual(probe(live, 3), null);
-  assert.strictEqual(probe(trendHome(), 1), null, 'no attempt (stage 1): no floor');
-  // The policy's account missing (accounts: []) on a mini: a refusal or none, never a throw.
-  const noAccount = (size, policySizing) => attemptFloorProblem({ home: live, strategy: P.LC_DOC, strategies: P.registry({ instruments: ['MNQ', 'NQ'], sizing: require('../helpers').testSizing({ min_contracts: policySizing }) }), accounts: [], root: 'NQ', size, specOf: SPEC });
-  assert.strictEqual(noAccount(1, 3), null);
-  assert.match(noAccount(1, 12), /size 1 NQ is under the floor of 12 contracts/);
-  assert.match(probe(live, null), /no size stated on MNQ; the floor is 3 contracts/);
+  assert.throws(() => order(thin.home, { strategy: P.LC_DOC, strategies, accounts: [tight] }), /prop_portfolio skipped the setup \(3 MNQ at this stop risk \$170\.22, over the \$120\.00 budget .*2 MNQ would fit\): skip; never a tighter stop\); no order \(the record suggested 3\)/);
 });
 
 test('the order_plan tool routes trade_lifecycle (and a policy listing it) to the compose record; the bars are not read', () => {

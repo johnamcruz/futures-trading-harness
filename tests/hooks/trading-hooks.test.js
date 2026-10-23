@@ -566,6 +566,56 @@ test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard 
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+/**
+ * A composed prop entry's world on the shipped prop_portfolio (its account's rulebook): an attempt at the starting
+ * balance, the scenario's compose record suggesting `size`, and the policy's verdict on it (as order_plan records it).
+ * The translated size (prop/size-translate.js) is 5: the $300 cap at 111 ticks ($55.50 a contract), under the verdict.
+ */
+function composedPropWorld(home, size) {
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(REPO, {}).accounts.find(a => a.name === policy.account);
+  const now = new Date('2026-10-07T14:00:02.000Z');
+  prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
+  prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
+  const rec = LC.writeScenario(home, { size });
+  const spec = { tickSize: 0.25, tickValue: 0.5 };
+  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
+  return { order: n => LC.order({ size: n, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+}
+
+test('order gate hook: in a prop attempt the record\'s size is a suggestion: the translated size passes composed-reads, the model\'s raw 1 and any other size are refused; exits go', () => {
+  const home = tmpDir();
+  const w = composedPropWorld(home, 1);
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+  const at = gate(orderPayload(w.order(5)), env);
+  assert.doesNotMatch(at.stderr, /\[composed-reads\]/, at.stderr);
+  for (const n of [1, 4, 6]) {
+    const r = gate(orderPayload(w.order(n)), env);
+    assert.strictEqual(r.code, 2, String(n));
+    assert.match(r.stderr, new RegExp(`\\[composed-reads\\] setup:trade_lifecycle: size ${n} is not the translated size 5 \\(the rulebook's size at this stop: 5 MNQ`), String(n));
+  }
+  const exit = gate(orderPayload({ ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('MCP gateway wiring: in a prop attempt the translated size passes composed-reads, the model\'s raw 1 is refused before the broker sees it; an exit is forwarded', { timeout: 60000 }, async () => {
+  const home = tmpDir();
+  const w = composedPropWorld(home, 1);
+  const text = r => r.result.content[0].text;
+  // The hook tests' own environment (the broker's tick specs recorded, the journal's plan), through the gateway.
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+  const run = msgs => gatewayRun(env, msgs);
+  const one = await run([call(1, 'place_order', w.order(1))]);
+  assert.ok(one.byId[1].result.isError, text(one.byId[1]));
+  assert.match(text(one.byId[1]), /\[composed-reads\] setup:trade_lifecycle: size 1 is not the translated size 5/);
+  const five = await run([call(2, 'place_order', w.order(5))]);
+  assert.doesNotMatch(text(five.byId[2]), /\[composed-reads\]/, text(five.byId[2]));
+  const exit = await gatewayRun({ ...env, FAKE_POSITIONS: LONG1 }, [call(3, 'place_order', { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] flatten' })]);
+  assert.strictEqual(text(exit.byId[3]), 'forwarded:tools/call:place_order');
+});
+
 test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
   const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);

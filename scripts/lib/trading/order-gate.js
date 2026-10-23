@@ -23,6 +23,7 @@ const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot, 
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
+const { translatorFor } = require('../prop/size-translate');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
@@ -403,7 +404,15 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   if (composed) {
     const doc = strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size() });
+    // Inside a policy (a prop attempt's account layer), the record's size is a suggestion: the order is the translated
+    // size (prop/size-translate.js, the one place), from the policy's latest verdict and the attempt's snapshot, as
+    // order_plan built it; any other size is refused.
+    const translate = named && named.signal === 'policy' && named.account && doc ? translatorFor({
+      home: config.home, root: contractRoot(input.contractId), policy: named, account: accounts.find(a => a.name === named.account) || null, strategy: doc,
+      verdict: latestVerdict(config.home, named.name, contractRoot(input.contractId)), specOf, selected: config.selection ? config.selection.symbols : null,
+      orderMax: brokerOrderLimit(contractsFile).maxOrderSize,
+    }) : null;
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
