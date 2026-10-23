@@ -84,7 +84,9 @@ function liveSizing({ policy, strategies = [], home, runner = {}, env = process.
   const legOf = s => { const f = familyOf(s); return !f ? null : s === f.micro ? 'micro' : s === f.mini ? 'mini' : null; };
   const legs = [...new Set(syms.map(legOf))];
   const contracts = legs.length === 1 && legs[0] ? legs[0] : null;
-  return { limits: comp && comp.risk && comp.risk.max_risk_usd > 0 ? { capUsd: comp.risk.max_risk_usd, orderMax } : null, contracts };
+  const capUsd = comp && comp.risk && comp.risk.max_risk_usd > 0 ? comp.risk.max_risk_usd : null;
+  // Either limit alone still applies (live translateSize takes the broker's max whatever the cap); neither: none.
+  return { limits: capUsd !== null || orderMax !== null ? { capUsd, orderMax } : null, contracts };
 }
 
 /** The policy strategy that trades `account` (its sizing and contracts), or null. */

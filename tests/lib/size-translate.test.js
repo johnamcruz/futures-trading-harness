@@ -129,5 +129,7 @@ test('liveSizing: the run\'s Monte Carlo takes the composed cap, the broker\'s m
   assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: tmpDirOf(), runner: {}, env: {} }).limits.orderMax, null, 'none recorded: no limit');
   assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: h, runner: { symbols: ['NQ'] }, env: {} }).contracts, 'mini');
   assert.strictEqual(liveSizing({ policy: pol, strategies: [pol, comp], home: h, runner: { symbols: ['MNQ', 'ES'] }, env: {} }).contracts, null, 'mixed legs: the policy\'s own');
-  assert.strictEqual(liveSizing({ policy: pol, strategies: [pol], home: h, runner: {}, env: {} }).limits, null, 'no composed component: no limits');
+  // No composed cap: the broker's max still applies (live translateSize takes it whatever the cap); neither: no limits.
+  assert.deepStrictEqual(liveSizing({ policy: pol, strategies: [pol], home: h, runner: {}, env: {} }), { limits: { capUsd: null, orderMax }, contracts: null });
+  assert.deepStrictEqual(liveSizing({ policy: pol, strategies: [pol], home: tmpDirOf(), runner: {}, env: {} }), { limits: null, contracts: null });
 });

@@ -468,6 +468,32 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   assert.strictEqual(resolveAccount({ strategies: [{ signal: 'policy', account: 'b' }], accounts: [{ name: 'b' }] }).why, 'the policy strategies\' account');
 });
 
+test('liveSizing: the run\'s Monte Carlo sizes with the broker\'s max from the run home, the contract the runner traded, and the composed cap', () => {
+  const { liveSizing } = require('../../scripts/lib/prop/model-score');
+  const { recordBrokerSpecs } = require('../helpers');
+  const { brokerOrderLimit, contractsFileFor } = require('../../scripts/lib/trading/broker-specs');
+  const pol = { name: 'prop_portfolio', strategies: ['trade_lifecycle'] };
+  const comp = { name: 'trade_lifecycle', signal: 'composed', risk: { max_risk_usd: 300 } };
+  // The run home's recorded broker max, as the gate reads it; a home with none: no broker limit.
+  const home = tmpHome('fth-ls-');
+  recordBrokerSpecs(home);
+  const orderMax = brokerOrderLimit(contractsFileFor(home, {})).maxOrderSize;
+  assert.ok(Number.isInteger(orderMax) && orderMax >= 1, 'the fixture records one');
+  const live = (o = {}) => liveSizing({ policy: pol, strategies: [pol, comp], home, runner: {}, env: {}, ...o });
+  assert.strictEqual(live().limits.orderMax, orderMax);
+  assert.strictEqual(live({ home: tmpHome('fth-ls0-') }).limits.orderMax, null);
+  // The composed component's cap; none: the broker's max alone (never dropped with the cap); neither: no limits.
+  assert.strictEqual(live().limits.capUsd, 300);
+  assert.deepStrictEqual(live({ strategies: [pol, { ...comp, risk: {} }] }).limits, { capUsd: null, orderMax });
+  assert.strictEqual(live({ strategies: [pol], home: tmpHome('fth-ls1-') }).limits, null);
+  // The contract the runner traded: every symbol a micro, micro; every one a mini, mini; mixed or none, the policy's.
+  assert.strictEqual(live({ runner: { symbols: ['MNQ'] } }).contracts, 'micro');
+  assert.strictEqual(live({ runner: { symbols: ['MNQ', 'MES'] } }).contracts, 'micro');
+  assert.strictEqual(live({ runner: { symbols: ['NQ'] } }).contracts, 'mini');
+  assert.strictEqual(live({ runner: { symbols: ['MNQ', 'ES'] } }).contracts, null);
+  assert.strictEqual(live().contracts, null);
+});
+
 test('scoreRun: a real score never leaves an unsettled entry out', () => {
   const t0 = '2023-03-15T14:00:00.000Z';
   const { dir } = multiDayRun({ days: [{ day: '2023-03-15', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25]],
