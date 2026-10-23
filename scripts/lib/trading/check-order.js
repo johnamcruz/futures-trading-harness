@@ -19,7 +19,7 @@ const { loadAccounts } = require('./accounts');
 const { resolveClock, createGatewayClock } = require('./harness-now');
 const { activeBroker } = require('../broker/config');
 const { liveEntryRefusal } = require('../broker/allow-list');
-const { propAccountRefusal } = require('./prop-accounts');
+const { propAccountRefusal, propAccountMessage } = require('./prop-accounts');
 const { heldByRunner } = require('../account-lock');
 const { loadEnvFiles } = require('../env-file');
 
@@ -110,7 +110,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     const setup = SETUP_TAG.exec(String((input || {}).rationale || ''));
     const strategy = setup ? strategies.find(x => x.name === setup[1].toLowerCase()) || null : null;
     const prop = propAccountRefusal({ broker: activeBroker(env), accountId: (input || {}).accountId, home: config.home, accounts, strategy });
-    if (prop) result.violations.push({ check: 'prop-account-attempt', message: `${prop}. Exits, protective stops, stop moves, cancels and close_position still go.` });
+    if (prop) result.violations.push({ check: 'prop-account-attempt', message: propAccountMessage(prop) });
   }
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now, ...(result.composed ? { composed: result.composed } : {}) };

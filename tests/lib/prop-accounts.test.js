@@ -82,3 +82,34 @@ test('prop account refusal: fails closed on a malformed marker, a missing or inv
   assert.match(at({ 7: 'broken' }, 7), /under "broken", which is an invalid account profile \(max_loss: required\)/);
   assert.match(propAccountRefusal({ broker: broker({ 7: 'p100' }), accountId: 7, home }), /not an account profile/, 'no profiles loaded');
 });
+
+test('misplaced prop accounts: a propAccounts key the gate never reads is named with where it sits and what is in force; the active broker\'s own is not', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { misplacedPropAccounts } = require('../../scripts/lib/trading/prop-accounts');
+  const home = tmpDir();
+  const own = path.join(home, 'brokers.json');
+  const write = (file, cfg) => fs.writeFileSync(file, JSON.stringify(cfg));
+  const env = { FTH_HOME: home };
+  const at = (file = own) => misplacedPropAccounts(env, { file, broker: 'sim' });
+  // None anywhere, a missing file, an unreadable one: nothing.
+  assert.deepStrictEqual(at(), []);
+  write(own, { broker: 'sim', brokers: { sim: { propAccounts: { 7: 'p100' } } } });
+  assert.deepStrictEqual(at(), [], 'under the active broker: read, not misplaced');
+  fs.writeFileSync(own, '{ not json');
+  assert.deepStrictEqual(at(), []);
+  // At the top level.
+  write(own, { broker: 'sim', propAccounts: { 7: 'p100' }, brokers: { sim: {} } });
+  assert.deepStrictEqual(at(), [`"propAccounts" found at the top level of ${own}: the active broker is "sim" in ${own}, and only its entry's "propAccounts" is read`]);
+  // Under another broker's entry.
+  write(own, { broker: 'sim', brokers: { sim: {}, other: { propAccounts: { 7: 'p100' } } } });
+  assert.deepStrictEqual(at(), [`"propAccounts" found under broker "other" in ${own}: the active broker is "sim" in ${own}, and only its entry's "propAccounts" is read`]);
+  // The home's file while FTH_BROKERS_FILE names another: every key in it, the active broker's too.
+  const other = path.join(tmpDir(), 'brokers.json');
+  write(other, { broker: 'sim', brokers: { sim: {} } });
+  write(own, { brokers: { sim: { propAccounts: { 7: 'p100' } } } });
+  assert.deepStrictEqual(at(other), [`"propAccounts" found under broker "sim" in ${own} (FTH_BROKERS_FILE names another file, so it isn't read): the active broker is "sim" in ${other}, and only its entry's "propAccounts" is read`]);
+  // The file in force with its own misplaced key, and the home's: both named.
+  write(other, { broker: 'sim', propAccounts: {}, brokers: { sim: {} } });
+  assert.strictEqual(at(other).length, 2);
+});

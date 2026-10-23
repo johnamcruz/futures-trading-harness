@@ -22,11 +22,20 @@
  *                                  a valid account profile, a strategy sized for another profile, or no attempt
  *                                  running for its profile
  *
+ *   propAccountMessage(why)        a refusal as the gate and the runner's start give it (exits still go)
+ *   misplacedPropAccounts(env, { file, broker })   where a "propAccounts" key sits that the gate never reads, one line
+ *                                  each: at the top level of a brokers file, under another broker's entry, or anywhere in
+ *                                  the home's brokers.json while FTH_BROKERS_FILE names another file (local files only;
+ *                                  `file` is the brokers file in force, `broker` the active broker's name)
+ *
  * Attempts are kept per profile (combine/<profile>.json), so a profile marks one account at most: two accounts
  * under one profile would share one attempt's floor, and the marker is refused.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { normId } = require('../broker/allow-list');
+const { harnessHome } = require('../paths');
 const { readAttempt } = require('./prop-state');
 
 const PROFILE = /^[a-z0-9][a-z0-9_-]*$/; // an account profile's name (accounts.js, prop-state.js)
@@ -74,4 +83,39 @@ function propAccountRefusal({ broker, accountId, home, accounts = [], strategy =
   return null;
 }
 
-module.exports = { propAccountMarks, propAccountRefusal };
+function propAccountMessage(why) {
+  return `${why}. Exits, protective stops, stop moves, cancels and close_position still go.`;
+}
+
+/** A brokers file's JSON, or null when it is missing or unreadable (the broker config refuses those itself). */
+function readJson(file) {
+  try {
+    const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** Every place in `cfg` (one brokers file) a propAccounts key sits, the active broker's entry left out when `active`. */
+function keysIn(cfg, file, { active = null } = {}) {
+  const out = [];
+  if (!cfg) return out;
+  if (KEY in cfg) out.push(`at the top level of ${file}`);
+  const brokers = cfg.brokers && typeof cfg.brokers === 'object' && !Array.isArray(cfg.brokers) ? cfg.brokers : {};
+  for (const [name, b] of Object.entries(brokers)) {
+    if (name !== active && b && typeof b === 'object' && KEY in b) out.push(`under broker "${name}" in ${file}`);
+  }
+  return out;
+}
+
+function misplacedPropAccounts(env = process.env, { file, broker }) {
+  const active = path.resolve(String(file));
+  const home = path.join(harnessHome(env), 'brokers.json');
+  const where = keysIn(readJson(active), active, { active: broker });
+  if (path.resolve(home) !== active) where.push(...keysIn(readJson(home), home).map(w => `${w} (FTH_BROKERS_FILE names another file, so it isn't read)`));
+  const inForce = `the active broker is "${broker}" in ${active}, and only its entry's "${KEY}" is read`;
+  return where.map(w => `"${KEY}" found ${w}: ${inForce}`);
+}
+
+module.exports = { propAccountMarks, propAccountRefusal, propAccountMessage, misplacedPropAccounts };

@@ -21,9 +21,11 @@
  *   agentChecks(cfg, agents)                 each agent role's effective timeframe; a non-analyst off the first lane's, or an analyst on one it can't be given, fails
  *   propProfiles(strategies, accounts, cfg)  the prop profiles this run trades (active policy strategies, its lanes and symbols)
  *   propChecks({ profiles, home })            every prop account a policy strategy trades has its attempt started
- *   propAccountChecks({ cfg, broker, accounts, home })   the run's account, when the user marks it a prop account
- *                                             (its broker's propAccounts, trading/prop-accounts.js), has its profile's
- *                                             attempt running (the gate refuses its entries otherwise); a malformed marker fails
+ *   propAccountChecks({ cfg, broker, accounts, home, misplaced })   the run's account, when the user marks it a prop
+ *                                             account (its broker's propAccounts, trading/prop-accounts.js), has its
+ *                                             profile's attempt running (the gate refuses its entries otherwise); a malformed
+ *                                             marker fails; a propAccounts key the gate never reads (`misplaced`:
+ *                                             misplacedPropAccounts) warns, and fails a live run
  *   barFieldChecks({ strategies, cfg, barsBySymbol })   bars carry the field("...") paths active strategies read
  *   localChecks({ now, killSwitchFile, exists })        market hours, kill switch
  *   fieldPaths(strategy)                      the field("a.b") paths a strategy's rules read
@@ -34,7 +36,7 @@
 const fs = require('fs');
 const path = require('path');
 const { validateConfig, buildCommand } = require('./autotrader');
-const { activeBroker, translatedCommand } = require('./broker/config');
+const { activeBroker, translatedCommand, loadBrokers } = require('./broker/config');
 const { allowListProblem, allowList, normId } = require('./broker/allow-list');
 const { liveRunBlocked, createAdapter } = require('./broker/adapter');
 const { lockExemption, lockStatus, lockRefusal, serverIdentities, lockDir, lockDirProblem, lockDirWritable, apiUrlEnvProblem, normApi } = require('./account-lock');
@@ -45,7 +47,7 @@ const { lanesOf, lanePolicies, retireLanes, laneStrategyErrors, signalLaneErrors
 const { loadAgents } = require('./harness-sync');
 const { loadAccounts } = require('./trading/accounts');
 const { readAttempt } = require('./trading/prop-state');
-const { propAccountMarks, propAccountRefusal } = require('./trading/prop-accounts');
+const { propAccountMarks, propAccountRefusal, misplacedPropAccounts } = require('./trading/prop-accounts');
 const { familyRoot } = require('./trading/contracts');
 const { readField } = require('./trading/rules');
 const { loadConfig } = require('./trading/config');
@@ -226,14 +228,17 @@ function propChecks({ profiles, home }) {
  * The run's account as the gate judges it (prop-accounts.js): none marked, no row (as before); marked, its profile's
  * attempt must run, or every entry is refused (a warning in a paper run, which enters nothing anyway).
  */
-function propAccountChecks({ cfg, broker, accounts, home }) {
+function propAccountChecks({ cfg, broker, accounts, home, misplaced = [] }) {
+  // A key the gate never reads leaves an account the user meant to mark unmarked: a failure for a live run.
+  const live = !cfg.paper && broker.replay !== true;
+  const lost = misplaced.map(m => r('prop account', live ? 'fail' : 'warn', `${m}; move it under that entry to mark the account`));
   const { marks, error } = propAccountMarks(broker);
-  if (error) return [r('prop account', 'fail', `${error}: the gate refuses every entry until it is fixed`)];
-  if (!Object.keys(marks).length) return [];
+  if (error) return [...lost, r('prop account', 'fail', `${error}: the gate refuses every entry until it is fixed`)];
+  if (!Object.keys(marks).length) return lost;
   const id = normId(cfg.account);
-  if (id === null || !Object.keys(marks).includes(id)) return [r('prop account', 'ok', `account ${cfg.account || '(none)'} is not marked as a prop account`)];
+  if (id === null || !Object.keys(marks).includes(id)) return [...lost, r('prop account', 'ok', `account ${cfg.account || '(none)'} is not marked as a prop account`)];
   const why = propAccountRefusal({ broker, accountId: id, home, accounts });
-  return [why ? r('prop account', cfg.paper ? 'warn' : 'fail', `${why}; the gate refuses every entry on it until then`)
+  return [...lost, why ? r('prop account', cfg.paper ? 'warn' : 'fail', `${why}; the gate refuses every entry on it until then`)
     : r('prop account', 'ok', `account ${id} is a ${marks[id]} prop account, its attempt running`)];
 }
 
@@ -301,7 +306,8 @@ async function runPreflight({ raw, root, env = process.env, home = loadConfig(en
   const profileList = loadAccounts(root, env).accounts;
   const profiles = propProfiles(all, profileList, cfg);
   results.push(...propChecks({ profiles, home }));
-  results.push(...propAccountChecks({ cfg, broker, accounts: profileList, home }));
+  const misplaced = misplacedPropAccounts(env, { file: loadBrokers(env).file, broker: broker.name });
+  results.push(...propAccountChecks({ cfg, broker, accounts: profileList, home, misplaced }));
   let opened;
   try {
     opened = (deps.open || openReadOnly)({ broker, root, env });
