@@ -48,7 +48,13 @@ test('a leg window: leadBars bars before the start through its catch window, who
   assert.strictEqual(new Date(early.from).toISOString(), `${DAY}T14:27:00.000Z`, 'its first bar the session\'s first, the 09:30 ET close');
   // A leg outside the runner's sessions: dropped, said why.
   const late = TW.windowsFor({ ...OPTS, legs: [leg('long', `${DAY}T18:00:00.000Z`, `${DAY}T18:30:00.000Z`)] });
-  assert.deepStrictEqual([late.windows, late.dropped.map(d => d.why)], [[], ['outside the runner\'s sessions']]);
+  const NONE = 'no decision time of the runner\'s sessions (outside them, or an exchange holiday)';
+  assert.deepStrictEqual([late.windows, late.dropped.map(d => d.why)], [[], [NONE]]);
+  // An exchange holiday (Memorial Day 2021): no decision time, as the run's own config closes it; its legs dropped.
+  const HOL = '2021-05-31';
+  assert.deepStrictEqual(TW.dayCloses(CFG, HOL), []);
+  assert.ok(TW.dayCloses(CFG, '2021-06-01').length > 0);
+  assert.deepStrictEqual(TW.windowsFor({ ...OPTS, day: HOL, closes: TW.dayCloses(CFG, HOL), legs: [leg('long', `${HOL}T13:42:00.000Z`, `${HOL}T14:30:00.000Z`, HOL)] }).dropped.map(d => d.why), [NONE]);
   // A different lead-in or catch share: a different window.
   assert.strictEqual(new Date(TW.windowsFor({ ...OPTS, legs: [A], leadBars: 2, controlPerLeg: 0 }).windows[0].from).toISOString(), `${DAY}T14:36:00.000Z`);
 });

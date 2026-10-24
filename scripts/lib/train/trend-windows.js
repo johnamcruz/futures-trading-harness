@@ -43,14 +43,17 @@ const overlaps = (a, b) => a.from < b.to && b.from < a.to;
 
 /** The day's trade decision times' base bar closes (replay/schedule.js decisionPoints: the runner's sessions). */
 function dayCloses(cfg, day) {
-  const { decisionPoints } = require('../replay/schedule');
+  const { decisionPoints, holidayDates } = require('../replay/schedule');
   const start = tradingDayStart(new Date(`${day}T12:00:00Z`));
   const step = cfg.timeframe * 60000;
   const delay = (cfg.barDelaySeconds || 0) * 1000;
   // The session ends where the next one starts: UTC midnight after the date lies in it (after 18:00 New York time).
   const [y, m, d] = day.split('-').map(Number);
   const end = tradingDayStart(new Date(Date.UTC(y, m - 1, d + 1)));
-  const out = decisionPoints(cfg, { start, end }).filter(p => p.kind === 'trade' && p.day === day).map(p => p.t.getTime() - delay).filter(c => c % step === 0);
+  // The exchange's holidays and early closes, as the run's own config adds them (replay/config.js resolveReplay).
+  const hol = holidayDates(start, end);
+  const runCfg = { ...cfg, closedDates: [...(cfg.closedDates || []), ...hol.closed], earlyCloseDates: [...(cfg.earlyCloseDates || []), ...hol.early] };
+  const out = decisionPoints(runCfg, { start, end }).filter(p => p.kind === 'trade' && p.day === day).map(p => p.t.getTime() - delay).filter(c => c % step === 0);
   return [...new Set(out)].sort((a, b) => a - b);
 }
 
@@ -73,7 +76,7 @@ function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, l
   for (const g of [...legs].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     const w = legSpan(g, { step, leadBars, catchShare });
     const cs = inside(w);
-    if (!cs.length) { dropped.push({ id: g.id, why: 'outside the runner\'s sessions' }); continue; }
+    if (!cs.length) { dropped.push({ id: g.id, why: 'no decision time of the runner\'s sessions (outside them, or an exchange holiday)' }); continue; }
     own.push({ leg: g.id, from: cs[0] - step, to: cs[cs.length - 1] });
   }
   // Touching leg windows merge: one window, its legs listed.
