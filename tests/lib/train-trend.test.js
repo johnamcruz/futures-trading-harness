@@ -345,6 +345,9 @@ test('first tries: per root, bar and side the first record by time; later ones a
   assert.deepStrictEqual(FT.summarize(pts), { points: 3, reads: 4, readAccuracy: 0.5, decisionAccuracy: 0.3333, okRate: 0.3333, rescueRate: 0.3333 });
   assert.deepStrictEqual(FT.summarize([]), { points: 0, reads: 0, readAccuracy: null, decisionAccuracy: null, okRate: null, rescueRate: null });
   assert.strictEqual(FT.keyOf({ side: 'long' }), null);
+  // OK first, then composed again: never rescued (no hint was needed).
+  const again = FT.firstTries([rec('2022-03-07T14:37:05Z', 'long', true, [['bias', true]], { bar: '2022-03-07T14:36:00.000Z' }), rec('2022-03-07T14:37:30Z', 'long', true, [['bias', true]], { bar: '2022-03-07T14:36:00.000Z' })]);
+  assert.deepStrictEqual(again.map(p => [p.first.ok, p.tries, p.rescued]), [[true, 2, false]]);
 });
 
 test('first tries paired: worse under the decision rule is a harm; too few changed points, or better, never', () => {
