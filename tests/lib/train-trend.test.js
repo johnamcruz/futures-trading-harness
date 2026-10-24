@@ -259,6 +259,12 @@ test('the default trendData step: a run\'s capture report from its own folder, w
   assert.deepStrictEqual(Object.keys(got.days), ['2022-03-07']);
   assert.deepStrictEqual([got.capture.runId, got.capture.legs, got.capture.detector.session], ['r1', [], NY]);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(runDir, 'trend-capture.json'), 'utf8')), got.capture);
+  // Its sessions: this one never reached its end of day; the translator's day file gives its front month.
+  assert.deepStrictEqual(got.sessions, [{ day: '2022-03-07', complete: false, why: 'stopped before the session ended (a call limit or an interruption)', rollMonth: false }]);
+  fs.writeFileSync(path.join(home, 'contracts-sim.2022-03-07.json'), JSON.stringify({ front: { MNQ: { month: '2022-03', day: '2022-03-07' } } }));
+  fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ timeframe: 3, sessions: [NY], symbols: ['MNQ'] }));
+  fs.appendFileSync(path.join(runDir, '2022-03-07.jsonl'), `${JSON.stringify({ t: '2022-03-07T20:50:00.000Z', day: '2022-03-07', kind: 'eod' })}\n`);
+  assert.deepStrictEqual(PR.trendData({ runDir }).sessions, [{ day: '2022-03-07', complete: true, why: null, rollMonth: true }]);
 });
 
 // --- the batch size and the learning curve --------------------------------------------------------------------------
@@ -366,4 +372,48 @@ test('the default trendData step reads the run home\'s compose records for its f
   TL.appendRecord(home, rec('2022-03-07T14:31:20Z', 'long', true, [['entry', true]]));
   const got = PR.trendData({ runDir });
   assert.deepStrictEqual(got.first.map(p => [p.key, p.first.ok, p.rescued]), [['MNQ|2022-03-07T14:30:00.000Z|long', false, true]]);
+});
+
+// --- complete sessions only ------------------------------------------------------------------------------------------
+
+test('sessions: complete when the end-of-day step ran; else why it stopped; a roll month flagged', () => {
+  const days = {
+    '2022-03-07': [{ t: 'a', kind: 'trade' }, { t: 'b', kind: 'eod' }],
+    '2022-03-08': [{ t: 'a', kind: 'trade', errors: [] }],
+    '2022-03-09': [{ t: 'a', kind: 'trade', errors: ['the harness exited 1'] }],
+    '2022-03-10': [{ t: 'a', kind: 'trade' }],
+  };
+  const combine = [{ kind: 'end', attempt: 1, day: '2022-03-10', outcome: 'blown' }];
+  const s = TSC.sessionsOf({ days, combine, fronts: { '2022-03-07': '2022-03', '2022-03-08': '2022-06' } });
+  assert.deepStrictEqual(s.map(x => [x.day, x.complete, x.why, x.rollMonth]), [
+    ['2022-03-07', true, null, true],
+    ['2022-03-08', false, 'stopped before the session ended (a call limit or an interruption)', true],
+    ['2022-03-09', false, 'failed cycles (a crash or errors)', false],
+    ['2022-03-10', false, 'its combine attempt ended (blown)', false],
+  ]);
+  // The roll month: the front's expiry month, or the month after its roll (the front three months on); never otherwise.
+  assert.deepStrictEqual([['2022-05-16', '2022-06'], ['2022-06-06', '2022-06'], ['2022-06-20', '2022-09'], ['2022-07-01', '2022-09'], ['2022-06-20', null], ['2022-12-20', '2023-03']].map(([d, f]) => TSC.rollMonth(d, f)), [false, true, true, false, false, true], 'across a year end too');
+});
+
+test('the trend screen pairs only sessions both runs finished: an incomplete one is neither a miss nor a catch; each side says which and why', () => {
+  const day = d => `2022-03-${String(7 + d).padStart(2, '0')}`;
+  const side = ({ caught, incomplete = [], r = () => 0 }) => TSC.sideOfTrend({
+    captures: [{ legs: Array.from({ length: 20 }, (_, i) => ({ id: `${day(i % 10)}|long|${i}`, day: day(i % 10), captured: caught(i), availableR: 1 })) }],
+    days: Object.fromEntries(Array.from({ length: 10 }, (_, d) => [day(d), [{ trades: [{ roundTrip: { r: r(d) } }] }]])),
+    first: Array.from({ length: 10 }, (_, d) => ({ key: `MNQ|${day(d)}T14:33:00.000Z|long`, bar: `${day(d)}T14:33:00.000Z`, first: { ok: true, reads: [{ check: true }] } })),
+    sessions: Array.from({ length: 10 }, (_, d) => ({ day: day(d), complete: !incomplete.includes(d), why: incomplete.includes(d) ? 'stopped before the session ended (a call limit or an interruption)' : null, rollMonth: d === 9 })),
+  });
+  // The edit catches every leg, but stopped early on two sessions where the champion had missed its legs.
+  const champ = side({ caught: i => i % 10 >= 2 });
+  const m = TSC.measureTrend(champ, side({ caught: () => true, incomplete: [0, 1] }));
+  assert.deepStrictEqual([m.capture.pairs, m.capture.b, m.capture.c], [16, 0, 0], 'the legs of the unfinished sessions dropped: no catch counted');
+  assert.strictEqual(m.netR.pairs, 8);
+  assert.strictEqual(m.firstTry.paired.pairs, 8, 'first tries on unfinished sessions dropped too');
+  assert.deepStrictEqual(m.sides.probe, { found: 20, paired: 16, dropped: [{ day: day(0), why: 'stopped before the session ended (a call limit or an interruption)' }, { day: day(1), why: 'stopped before the session ended (a call limit or an interruption)' }], rollMonth: [day(9)] });
+  assert.deepStrictEqual(m.sides.champion.dropped, [{ day: day(0), why: 'the other side did not finish it' }, { day: day(1), why: 'the other side did not finish it' }]);
+  // And the champion's unfinished session is no miss of the edit's either.
+  const m2 = TSC.measureTrend(side({ caught: () => true, incomplete: [3] }), side({ caught: i => i % 10 !== 3 }));
+  assert.deepStrictEqual([m2.capture.pairs, m2.capture.c], [18, 0]);
+  // Without sessions (a stub's), every day counts.
+  assert.strictEqual(TSC.measureTrend(tside({ caught: () => false }), tside({ caught: () => true })).capture.pairs, 20);
 });

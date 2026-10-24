@@ -119,8 +119,21 @@ function trendData({ runDir }) {
   const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {} });
   tc.writeCapture(runDir, capture);
   // The first tries of the run's compose records (first-try.js): its own home's, one session's.
-  const first = require('./first-try').firstTries(require('../trading/trade-lifecycle').readRecords(path.resolve(runDir, '..', '..')));
-  return { capture, days, first };
+  const home = path.resolve(runDir, '..', '..');
+  const first = require('./first-try').firstTries(require('../trading/trade-lifecycle').readRecords(home));
+  // Each session: stepped to its end or not, and why; near a contract roll or not (the translator's day files: their
+  // standard front month for the run's root).
+  const rootOf = (readJson(path.join(runDir, 'autotrader.json'), {}) || {}).symbols;
+  const fronts = {};
+  for (const f of fs.readdirSync(home)) {
+    const m = /^contracts-[a-z0-9_-]+\.(\d{4}-\d{2}-\d{2})\.json$/i.exec(f);
+    if (!m) continue;
+    const doc = readJson(path.join(home, f), null);
+    const front = doc && doc.front && Array.isArray(rootOf) && rootOf.length ? doc.front[String(rootOf[0]).toUpperCase()] : null;
+    if (front && front.month) fronts[m[1]] = front.month;
+  }
+  const sessions = require('./trend-screen').sessionsOf({ days, combine: require('../replay/combine-run').readLog(runDir), fronts });
+  return { capture, days, first, sessions };
 }
 
 /**
@@ -213,7 +226,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [] };
     for (const day of days) {
       const tag = `t${day.replace(/-/g, '')}`;
       const key = `trend-day:${side}:${day}`;
@@ -221,13 +234,15 @@ async function probeRound(ctx, { n, champion, api }) {
       const runs = await api.windowRuns(ctx, { side, tag, windows: TS.dayWindows([day]), tree, look, replay: trend.replay, share });
       const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}.json`), async () => {
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir });
-        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [] });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null });
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       out.legs.push(...one.legs);
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
+      // A session the step reported nothing of: taken as complete (the stub steps; the default step always reports).
+      out.sessions.push(...(one.sessions || [{ day, complete: true, why: null, rollMonth: false }]));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
       if (withFindings && one.capture) out.captures.push(one.capture);
@@ -237,7 +252,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const mine = which === 'regression' ? null : new Set(split[which].legs);
     const legs = mine ? out.legs.filter(([id]) => mine.has(id)) : out.legs;
     if (withFindings && mine) out.captures = out.captures.map(c => ({ ...c, legs: (c.legs || []).filter(l => mine.has(l.id)) }));
-    return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first } };
+    return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first, sessions: out.sessions } };
   };
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   if (trend) {
@@ -340,7 +355,7 @@ async function probeRound(ctx, { n, champion, api }) {
       findingKind: p.finding.kind, windows: cfg.windows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));
+  report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture, sides: p.measures.trend.sides } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));
   for (const p of probes) report.cycles.edits[p.id] = p.cycles === undefined ? null : p.cycles;
   for (const p of probes) ctx.log(`iteration ${n}: probe ${p.id} (${(PE.targetOf(p.tag) || { label: '?' }).label}, ${p.tag.kind}, ${p.finding.id}): ${p.screen.verdict}${p.screen.harms.length ? `: ${p.screen.harms.join('; ')}` : ''}`);
   const passed = probes.filter(p => p.screen.pass);
@@ -390,7 +405,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry } } : {}) };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

@@ -352,6 +352,10 @@
    "value": 2,
    "from": "new in ppc/flow-learning (owner-approved 2026-10-23: it doubles)"
   },
+  "trendScreen.rollFlagGaps": {
+   "value": [0, 3],
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: flag the sessions near a contract roll, months from the session to its front contract: 0, the expiry month; 3, the month after a quarterly roll, until a roll-spanning run confirms leg ids pair there)"
+  },
   "trendBatch.plateauRounds": {
    "value": 3,
    "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the learning curve flags a plateau after 3 rounds with no gain beyond the interval)"

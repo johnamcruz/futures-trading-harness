@@ -496,6 +496,19 @@ and leg ids; the lessons lines record the batch too.
   session worse (on at least `minPairs` sessions) and a blow. These use the
   `SCREEN` thresholds above. On the regression days fewer of the champion's
   legs caught, net, is a harm. They never show a gain.
+- **Finished sessions only.** A session pairs only when both runs stepped it
+  to its end (its end-of-day step ran). A session a run left early (a call
+  limit, a crash or failed cycles, its combine attempt ending) holds fewer
+  legs than the market had. Its legs, net R and first tries count neither as
+  a miss nor as a catch: they are dropped. Each side's report gives the batch
+  legs its captures found, the legs paired, and the sessions dropped and why.
+- **Contract rolls are unverified.** Leg ids are `day|side|start` and never
+  a price, so a constant back-adjustment offset leaves them as they are. On
+  a roll day, though, a back-adjusted roll gap could shift a leg's start, and
+  pairing across a roll has not been checked against a run that spans one.
+  Until one does, each side's report flags the sessions in the front
+  contract's expiry month or the month after its roll (`rollMonth`, from
+  the run home's contract day files).
 - **First-try reasoning** (`scripts/lib/train/first-try.js`). compose_check
   answers a refusal with HINT lines that say what is true on the bar, so a
   final OK can hide whether the model read the bar itself. For each
