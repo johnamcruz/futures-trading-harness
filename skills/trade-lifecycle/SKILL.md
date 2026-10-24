@@ -38,7 +38,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
-   $600 on that risk); beyond 3:1 only when that is the real level.
+   $600 on that risk); beyond 3:1 only when that is the real level. In an
+   attempt, NOT OK `no size fits`: a closer stop, or pass.
 
 2. **Then read** `confluence-counting` and `invalidation` whenever you
    composed on the bar, `rejection` when a read says a candle rejected a
@@ -52,9 +53,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `takeProfitBracket.ticks`, size and contract, rationale
    `setup:trade_lifecycle long|short ...`
    (in an attempt, `setup:prop_portfolio`); `order_plan` gives these and
-   refuses a size over code's caps ($300, the broker's max, in an attempt
-   the verdict). In an attempt it translates the size to the rulebook's:
-   yours is a suggestion. No priority order halves a composed trade.
+   refuses a size over code's caps ($300, the broker's max, the verdict);
+   in an attempt it translates yours, a suggestion, to the rulebook's. No priority order halves a composed trade.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
    (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level> up|down`
    your way, a key level, not a gap edge); else the trend rule refuses it.
@@ -68,7 +68,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |
-| `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED and with or against your side, then the plan in code; recorded for this bar, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
+| `compose_check` | `symbol`, `side`, `reads`, `size` | each read TRUE, FALSE or UNCHECKED, with or against your side, then the plan in code; recorded, OK or what fails | `compose-check.js --symbol MNQ --side long --size 1 --reads '[...]'` |
 | `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 **Your risk record**, last in `experience_lookup` when the run shows it

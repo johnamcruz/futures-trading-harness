@@ -18,6 +18,8 @@
  *       { size, contract, suggested, reason } or { skip: true, size: 0, contract: null, suggested, reason }
  *   translatorFor({ home, root, policy, account, strategy, verdict, specOf, selected, orderMax })
  *       (plan, spec, suggested) -> translateSize(...) for a compose record's plan (its stop ticks, the contract's tick value)
+ *   floorFit({ capUsd, floor, stopTicks, tickValue, slipTicks, feePerSide })   { fits, floor, perContract, capSize, maxStopTicks } | null
+ *   noSizeFits({ policy, account, capUsd, stop, spec, root, strategy, specOf })   { problem, hint } | null (compose_check)
  */
 
 const prop = require('../trading/prop-state');
@@ -89,6 +91,51 @@ function allInRisk({ stopTicks, tickValue, slipTicks, feePerSide }) {
   return typeof feePerSide === 'number' && Number.isFinite(feePerSide) ? (stopTicks + slip) * tickValue + 2 * feePerSide : NaN;
 }
 
+/**
+ * Whether the rulebook's floor (`floor`, in the order's own contracts: prop-state.js minContractsIn) fits under the
+ * composed cap at a stop, counted as translateSize counts it (capsOf at allInRisk): { fits, floor, perContract, capSize,
+ * maxStopTicks: the widest whole-tick stop whose floor still fits, 0 for none }, or null when it can't be priced (no
+ * cap, floor, tick value or fee). compose_check's "no size fits" refusal (harness-tools/compose.js).
+ */
+function floorFit({ capUsd, floor, stopTicks, tickValue, slipTicks, feePerSide }) {
+  const at = t => allInRisk({ stopTicks: t, tickValue, slipTicks, feePerSide });
+  const sizeAt = t => { const c = capsOf({ capUsd, perContract: at(t) }); return c.length ? c[0][0] : 0; };
+  const perContract = at(stopTicks);
+  if (!(capUsd > 0) || !(Number.isInteger(floor) && floor >= 1) || !(tickValue > 0) || !(perContract > 0)) return null;
+  // The widest stop: the closed form's estimate, then held to capsOf's own count (never a second formula).
+  let max = Math.floor((capUsd / floor - at(0)) / tickValue + 1e-9);
+  while (max >= 1 && sizeAt(max) < floor) max -= 1;
+  while (sizeAt(max + 1) >= floor) max += 1;
+  const capSize = sizeAt(stopTicks);
+  return { fits: capSize >= floor, floor, perContract, capSize, maxStopTicks: Math.max(0, max) };
+}
+
+const money = x => (Number.isInteger(x) ? `$${x}` : usd(x));
+
+/**
+ * compose_check's "no size fits" (owner-approved 2026-10-24): in a running attempt, the floor of the policy's rulebook
+ * (sizing.min_contracts, in the order's own contracts) at the record's stop, all in as translateSize counts it
+ * (floorFit), over the composed strategy's risk.max_risk_usd: order_plan could only skip the record. { problem, hint }
+ * (the hint names the widest stop that fits, in ticks and points of the order's own contract; none at or over the
+ * record's minimum stop: skip), or null (the floor fits, or it can't be priced). `stop`: the plan's { ticks, floorTicks }.
+ */
+function noSizeFits({ policy, account, capUsd, stop, spec, root, strategy, specOf }) {
+  if (!policy || !account || !stop || !spec) return null;
+  const fit = floorFit({ capUsd, floor: prop.minContractsIn(policy, account, root, specOf), stopTicks: stop.ticks, tickValue: spec.tickValue,
+    slipTicks: policy.sizing ? policy.sizing.stop_slippage_ticks : null, feePerSide: feePerSideOf(account, root) });
+  if (!fit || fit.fits) return null;
+  const n = `${fit.floor} ${root}`;
+  const max = fit.maxStopTicks;
+  const minStop = Number.isInteger(stop.floorTicks) ? stop.floorTicks : 1;
+  const points = Number((max * spec.tickSize).toFixed(6));
+  return {
+    problem: `no size fits: the floor of ${n} (${policy.name}'s rulebook, sizing.min_contracts) at ${usd(fit.perContract)} a contract all in (the ${stop.ticks}-tick stop with its slippage, and fees both ways) is ${usd(fit.floor * fit.perContract)}, over ${strategy}'s risk.max_risk_usd ${money(capUsd)}`,
+    hint: max >= minStop
+      ? `size: no size fits: ${n} need a stop of ${max} ticks (${points} points) or less under the ${money(capUsd)} cap; use a closer structural stop or skip`
+      : `size: no size fits: ${n} fit under the ${money(capUsd)} cap only at a stop of ${max} ticks or less, under the minimum stop of ${minStop}: skip`,
+  };
+}
+
 function translatorFor({ home, root, policy, account, strategy, verdict, specOf, selected = null, orderMax = null }) {
   return (plan, spec, suggested = null) => translateSize({
     suggested, home, root, policy, account, verdict, capUsd: strategy && strategy.risk ? strategy.risk.max_risk_usd : null,
@@ -97,4 +144,4 @@ function translatorFor({ home, root, policy, account, strategy, verdict, specOf,
   });
 }
 
-module.exports = { translateSize, translatorFor, capsOf, limitPlan, allInRisk };
+module.exports = { translateSize, translatorFor, capsOf, limitPlan, allInRisk, floorFit, noSizeFits };

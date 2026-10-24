@@ -437,7 +437,12 @@ the broker's max allow, never under the floor), which `order_plan` builds and
 the gate's composed-reads check accepts exactly, or phase 2's smaller cut (a
 cut under the floor is no trade). The runner's entry reads the translated size
 before phase 2 and names it in phase 2's request as the size to approve or
-cut. Outside an attempt the record's size stands.
+cut. Outside an attempt the record's size stands. In an attempt `compose_check`
+refuses a record whose stop no size fits: the floor, all in as the translation
+counts it (the stop plus `stop_slippage_ticks` at the tick value, plus fees both
+ways), over `risk.max_risk_usd` is NOT OK `no size fits`, with one HINT naming
+the widest stop that fits in ticks and points (`prop/size-translate.js
+noSizeFits`, owner-approved 2026-10-24: `order_plan` could only skip it).
 The entry's freshness (no late entry, `trading/late-entry.js`): one rule,
 the same for a long and a short, in R: the share of the plan's risk (entry
 to stop) the price has moved toward the stop when the order goes. Over

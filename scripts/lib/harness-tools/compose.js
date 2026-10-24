@@ -10,7 +10,9 @@
  * The briefing is the cycle bar's (FTH_CYCLE_BRIEFING_BARS, else FTH_CYCLE_BARS, from the runner): without a cycle bar
  * the call is refused, never checked against whatever briefing is current. The strategy document
  * (strategies/trade_lifecycle) gives risk.min_rr, risk.max_risk_usd and valid_bars (how many base bars after its bar's
- * close the record stays valid); one that is missing or invalid refuses.
+ * close the record stays valid); one that is missing or invalid refuses. In a running prop attempt a record whose
+ * stop no size fits (the rulebook's min_contracts all in over risk.max_risk_usd: size-translate.js noSizeFits) is NOT OK, with a HINT
+ * naming the widest stop that fits (owner-approved 2026-10-24: order_plan could only skip it).
  *
  *   compose_check { symbol, side, reads: [{ step, skill, read, why }], size }
  */
@@ -29,6 +31,8 @@ const { briefingAfterClock } = require('../trading/look-ahead');
 const { attemptPolicy } = require('../trading/lifecycle-order');
 const { hintsFor } = require('../trading/compose-hints');
 const { standardPlans } = require('../learning/setup-library');
+const { loadAccounts } = require('../trading/accounts');
+const { noSizeFits } = require('../prop/size-translate');
 
 /** A running prop attempt whose policy trades the composed strategy: its size is a suggestion, translated at entry. */
 const inAttempt = (home, doc, strategies, root) => { try { return Boolean(attemptPolicy(home, doc, strategies, root)); } catch (_err) { return true; } };
@@ -65,11 +69,29 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25 });
   const plan = { size, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) };
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: got.briefing, side, tick, ...plan }) : null;
-  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
+  const fits = noSizeFitsHere({ c, home, doc, all, symbol, planned, spec });
+  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, problems: fits ? [fits.problem] : [], cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
   // A record that is not OK is an answer, not a failure: the text says what stands, then what is TRUE on this bar
   // (compose-hints.js: never a verdict; a hint that can't be worked out is left out, the record unchanged).
-  return { text: renderRecord(record, checked, record.ok ? [] : hintsOf({ checked, planned, briefing: got.briefing, side, tick, plan, spec })) };
+  // The floor alone failing: its hint alone (the reads stand; a hint to compose them again would only fail again).
+  const alone = fits && checked.ok && !planned.problems.length;
+  const hints = record.ok ? [] : [...(alone ? [] : hintsOf({ checked, planned, briefing: got.briefing, side, tick, plan, spec })), ...(fits ? [fits.hint] : [])];
+  return { text: renderRecord(record, checked, hints) };
+}
+
+/**
+ * In a running prop attempt, the record's stop no size fits (prop/size-translate.js noSizeFits, on the policy that
+ * trades the attempt and its account): { problem, hint }, or null (no attempt, no policy or valid account, no plan:
+ * order_plan still sizes, or refuses, the entry itself).
+ */
+function noSizeFitsHere({ c, home, doc, all, symbol, planned, spec }) {
+  const p = planned && planned.plan;
+  if (!p || !p.stop || !spec) return null;
+  let policy = null;
+  try { policy = attemptPolicy(home, doc, all, symbol); } catch (_err) { return null; }
+  const account = policy ? loadAccounts(c.root, c.env).accounts.find(a => a.name === policy.account && a.valid) : null;
+  return account ? noSizeFits({ policy, account, capUsd: doc.risk.max_risk_usd, stop: p.stop, spec, root: symbol, strategy: STRATEGY }) : null;
 }
 
 /** A refusal's hints (compose-hints.js), with the briefing's standard plan for the side when it passes; none on any error. */

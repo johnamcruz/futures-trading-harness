@@ -143,3 +143,67 @@ test('liveSizing: the run\'s Monte Carlo takes the composed cap, the broker\'s m
   assert.deepStrictEqual(liveSizing({ policy: pol, strategies: [pol], home: h, runner: {}, env: {} }), { limits: { capUsd: null, orderMax }, contracts: null });
   assert.deepStrictEqual(liveSizing({ policy: pol, strategies: [pol], home: tmpDirOf(), runner: {}, env: {} }), { limits: null, contracts: null });
 });
+
+test('floorFit: the floor at the stop under the cap, counted as translateSize counts it; the widest stop that fits, worked by hand', () => {
+  const { floorFit } = require('../../scripts/lib/prop/size-translate');
+  // MNQ ($0.50 a tick, $0.37 a side, 1 tick of slippage): 197 ticks is (197 + 1) x $0.50 + $0.74 = $99.74 a contract,
+  // 3 of them $299.22 under $300; 198 ticks is $100.24, 3 of them $300.72 over it. 197 ticks = 49.25 points.
+  const mnq = t => floorFit({ capUsd: 300, floor: 3, stopTicks: t, tickValue: 0.5, slipTicks: 1, feePerSide: 0.37 });
+  assert.deepStrictEqual(mnq(197), { fits: true, floor: 3, perContract: 99.74, capSize: 3, maxStopTicks: 197 });
+  assert.deepStrictEqual(mnq(198), { fits: false, floor: 3, perContract: 100.24, capSize: 2, maxStopTicks: 197 });
+  assert.strictEqual(mnq(267).perContract, 134.74, 'the replay\'s 267-tick stop: $134.74 a contract all in, as order_plan said');
+  // MES ($1.25 a tick): 78 ticks is 79 x $1.25 + $0.74 = $99.49 (3: $298.47); 79 ticks $100.74 (3: $302.22). 19.5 points.
+  const mes = t => floorFit({ capUsd: 300, floor: 3, stopTicks: t, tickValue: 1.25, slipTicks: 1, feePerSide: 0.37 });
+  assert.deepStrictEqual([mes(78).fits, mes(79).fits, mes(79).maxStopTicks], [true, false, 78]);
+  // Two ticks of slippage: (196 + 2) x $0.50 + $0.74 = $99.74; 197 ticks is $100.24. Under the minimum of 1, 1 counts.
+  assert.strictEqual(floorFit({ capUsd: 300, floor: 3, stopTicks: 1, tickValue: 0.5, slipTicks: 2, feePerSide: 0.37 }).maxStopTicks, 196);
+  assert.strictEqual(floorFit({ capUsd: 300, floor: 3, stopTicks: 1, tickValue: 0.5, slipTicks: 0, feePerSide: 0.37 }).maxStopTicks, 197);
+  // A floor of 1: (597 + 1) x $0.50 + $0.74 = $299.74.
+  assert.strictEqual(floorFit({ capUsd: 300, floor: 1, stopTicks: 1, tickValue: 0.5, slipTicks: 1, feePerSide: 0.37 }).maxStopTicks, 597);
+  // A cap no stop fits: 0.
+  assert.strictEqual(floorFit({ capUsd: 3, floor: 3, stopTicks: 10, tickValue: 0.5, slipTicks: 1, feePerSide: 0.37 }).maxStopTicks, 0);
+  // Can't be priced: null (no fee is never assumed; no cap; no whole floor; no tick value).
+  for (const o of [{ feePerSide: null }, { capUsd: 0 }, { floor: null }, { floor: 1.5 }, { tickValue: 0 }]) {
+    assert.strictEqual(floorFit({ capUsd: 300, floor: 3, stopTicks: 100, tickValue: 0.5, slipTicks: 1, feePerSide: 0.37, ...o }), null, JSON.stringify(o));
+  }
+});
+
+test('parity: noSizeFits refuses exactly the stops translateSize skips under the floor at the cap (MNQ and MES, stop by stop)', () => {
+  const { noSizeFits, allInRisk } = require('../../scripts/lib/prop/size-translate');
+  const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5, MES: 50 }, fees_per_side: { MNQ: 0.37, NQ: 1.4, MES: 0.37 } };
+  const spec = r => ({ MES: { tickSize: 0.25, tickValue: 1.25 }, ES: { tickSize: 0.25, tickValue: 12.5 } })[r] || specOf(r);
+  const p = policy({ min_contracts: 3 });
+  const h = home(50000, acct);
+  for (const [root, lo, hi] of [['MNQ', 185, 205], ['MES', 70, 85]]) {
+    let refusals = 0;
+    for (let t = lo; t <= hi; t += 1) {
+      const perContract = allInRisk({ stopTicks: t, tickValue: spec(root).tickValue, slipTicks: 1, feePerSide: 0.37 });
+      const tr = translateSize({ suggested: 1, home: h, root, policy: p, account: acct, verdict: verdict({ contract: root, stopTicks: t, maxSize: 50 }), capUsd: 300, perContract, specOf: spec, selected: [root] });
+      const refused = noSizeFits({ policy: p, account: acct, capUsd: 300, stop: { ticks: t, floorTicks: 1 }, spec: spec(root), root, strategy: 'trade_lifecycle', specOf: spec });
+      assert.strictEqual(Boolean(refused), Boolean(tr.skip), `${root} ${t} ticks: ${tr.reason}`);
+      if (refused) assert.match(tr.reason, /under the floor of 3 contracts/, `${root} ${t}`);
+      refusals += refused ? 1 : 0;
+    }
+    assert.ok(refusals > 0 && refusals < hi - lo + 1, `${root}: both sides of the boundary are covered`);
+  }
+});
+
+test('noSizeFits: the problem and the one hint, in ticks and points of the order\'s own contract; a floor that fits, or no attempt\'s sizing, is none', () => {
+  const { noSizeFits } = require('../../scripts/lib/prop/size-translate');
+  const p = policy({ min_contracts: 3 });
+  const one = (root, ticks, o = {}) => noSizeFits({ policy: p, account: MINI, capUsd: 300, stop: { ticks, floorTicks: o.floorTicks ?? 40 }, spec: specOf(root), root, strategy: 'trade_lifecycle', specOf, ...o });
+  // The replay's 267-tick MNQ stop: (267 + 1) x $0.50 + $0.74 = $134.74; 3 of them $404.22.
+  assert.deepStrictEqual(one('MNQ', 267), {
+    problem: 'no size fits: the floor of 3 MNQ (prop_portfolio\'s rulebook, sizing.min_contracts) at $134.74 a contract all in (the 267-tick stop with its slippage, and fees both ways) is $404.22, over trade_lifecycle\'s risk.max_risk_usd $300',
+    hint: 'size: no size fits: 3 MNQ need a stop of 197 ticks (49.25 points) or less under the $300 cap; use a closer structural stop or skip',
+  });
+  assert.strictEqual(one('MNQ', 197), null, 'at the widest stop: it fits');
+  assert.match(one('MNQ', 198).hint, /197 ticks \(49\.25 points\)/);
+  // NQ: the floor of 3 micro-equivalents is 1 NQ ($5 a tick, $1.40 a side): (58 + 1) x $5 + $2.80 = $297.80; 59 ticks $302.80.
+  assert.strictEqual(one('NQ', 58), null);
+  assert.strictEqual(one('NQ', 59).hint, 'size: no size fits: 1 NQ need a stop of 58 ticks (14.5 points) or less under the $300 cap; use a closer structural stop or skip');
+  // The widest stop that fits is under the record's minimum stop: skip, never a stop the plan refuses.
+  assert.strictEqual(one('MNQ', 267, { floorTicks: 200 }).hint, 'size: no size fits: 3 MNQ fit under the $300 cap only at a stop of 197 ticks or less, under the minimum stop of 200: skip');
+  // No policy, account, stop or spec, or an account with no fee: none (order_plan sizes or refuses the entry itself).
+  for (const o of [{ policy: null }, { account: null }, { stop: null }, { spec: null }, { account: { ...MINI, fees_per_side: {} } }]) assert.strictEqual(one('MNQ', 267, o), null, JSON.stringify(Object.keys(o)));
+});
