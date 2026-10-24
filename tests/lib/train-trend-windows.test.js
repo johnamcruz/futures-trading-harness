@@ -63,7 +63,10 @@ test('a leg window: leadBars bars before the start through its catch window, who
 test('legs whose windows touch merge into one; control windows are as long, in the session, clear of every census leg, seeded', () => {
   const B = leg('short', `${DAY}T15:00:00.000Z`, `${DAY}T15:24:00.000Z`);
   const other = leg('long', `${DAY}T16:00:00.000Z`, `${DAY}T16:30:00.000Z`);
-  const { windows } = TW.windowsFor({ ...OPTS, legs: [A, B], others: [other] });
+  // A session to 15:50 New York time: room for both legs' controls clear of every leg's whole extent.
+  const WIDE = TW.dayCloses(validateConfig({ ...TRADER, sessions: ['09:30-15:50@America/New_York'] }), DAY);
+  const OW = { ...OPTS, closes: WIDE };
+  const { windows } = TW.windowsFor({ ...OW, legs: [A, B], others: [other] });
   const legsW = windows.filter(w => w.kind === 'leg');
   assert.deepStrictEqual(legsW.map(w => w.legs), [[A.id, B.id]], 'one merged window');
   const controls = windows.filter(w => w.kind === 'control');
@@ -72,16 +75,24 @@ test('legs whose windows touch merge into one; control windows are as long, in t
   for (const c of controls) {
     const forLeg = own(c.for === A.id ? A : B);
     assert.strictEqual(c.to - c.from, forLeg.to - forLeg.from, 'the same length as its leg\'s window');
-    for (let t = c.from + MIN3; t <= c.to; t += MIN3) assert.ok(CLOSES.includes(t), 'every bar in the session');
+    for (let t = c.from + MIN3; t <= c.to; t += MIN3) assert.ok(WIDE.includes(t), 'every bar in the session');
   }
-  // No window shares a bar with another, nor with any census leg's window (the batch's or not).
-  const otherW = TW.legSpan(other, { step: MIN3, leadBars: 4, catchShare: 0.5 });
-  const all = [...windows, otherW];
-  for (let i = 0; i < all.length; i += 1) for (let j = i + 1; j < all.length; j += 1) assert.ok(!(all[i].from < all[j].to && all[j].from < all[i].to), `windows ${i} and ${j} overlap`);
+  // No window shares a bar with another; no control window with any census leg (the batch's own or not), from its
+  // lead-in to its end (its tail past the catch window included).
+  const overlap = (a, b) => a.from < b.to && b.from < a.to;
+  const extents = [A, B, other].map(g => TW.legExtent(g, { step: MIN3, leadBars: 4 }));
+  for (let i = 0; i < windows.length; i += 1) for (let j = i + 1; j < windows.length; j += 1) assert.ok(!overlap(windows[i], windows[j]), `windows ${i} and ${j} overlap`);
+  for (const c of controls) for (const x of extents) assert.ok(!overlap(c, x), 'a control window on a leg');
   for (let i = 1; i < windows.length; i += 1) assert.ok(windows[i].from >= windows[i - 1].to, 'in order');
+  // Whatever the seed: a leg's own control never sits in its tail (14:42 to 15:30, its catch window ending 15:06).
+  const tail = TW.legExtent(A, { step: MIN3, leadBars: 4 });
+  assert.deepStrictEqual([new Date(tail.from).toISOString(), new Date(tail.to).toISOString()], [`${DAY}T14:30:00.000Z`, `${DAY}T15:33:00.000Z`]);
+  for (let seed = 1; seed <= 40; seed += 1) {
+    for (const c of TW.windowsFor({ ...OPTS, seed, legs: [A] }).windows.filter(w => w.kind === 'control')) assert.ok(!overlap(c, tail), `seed ${seed}`);
+  }
   // Seeded: the same inputs the same windows (the champion and every edit step these); another seed may move a control.
-  assert.deepStrictEqual(TW.windowsFor({ ...OPTS, legs: [A, B], others: [other] }).windows, windows);
-  const seeds = new Set([1, 2, 3, 4, 5].map(seed => JSON.stringify(TW.windowsFor({ ...OPTS, seed, legs: [A, B], others: [other] }).windows.filter(w => w.kind === 'control').map(w => w.from))));
+  assert.deepStrictEqual(TW.windowsFor({ ...OW, legs: [A, B], others: [other] }).windows, windows);
+  const seeds = new Set([1, 2, 3, 4, 5].map(seed => JSON.stringify(TW.windowsFor({ ...OW, seed, legs: [A, B], others: [other] }).windows.filter(w => w.kind === 'control').map(w => w.from))));
   assert.ok(seeds.size > 1, 'the seed picks the control windows');
   // Two sessions with a gap between: a control window never spans the gap (every bar of it a decision bar).
   const seg = (from, n) => Array.from({ length: n }, (_, i) => ms0(from) + (i + 1) * MIN3);
@@ -93,28 +104,49 @@ test('legs whose windows touch merge into one; control windows are as long, in t
   assert.deepStrictEqual([full.windows.filter(w => w.kind === 'control'), full.dropped.map(d => d.why)], [[], ['no free stretch of the same length in the session']]);
 });
 
-test('the window guard: a window counts only when a record reached its end; failed cycles never count; R to the window it followed', () => {
+test('the window guard: a window counts only when its own bars ran to its end; an end of day alone, a latency skip or a failed cycle never count', () => {
   const { windows } = TW.windowsFor({ ...OPTS, legs: [A] });
   const [first, second] = windows;
   const rec = (t, extra = {}) => ({ t, day: DAY, kind: 'trade', ...extra });
-  const t2 = new Date(second.to + 2000).toISOString();
-  const states = TW.windowStates({ days: { [DAY]: [rec(new Date(first.to + 2000).toISOString())] }, windows });
-  assert.deepStrictEqual(states.map(s => [s.kind, s.complete]), windows.map(w => [w.kind, w.id === first.id]));
-  assert.match(states.find(s => !s.complete).why, /stopped before the window ended/);
-  // Both reached: both count; the last record of a window failed: it doesn't.
-  assert.ok(TW.windowStates({ days: { [DAY]: [rec(new Date(first.to + 2000).toISOString()), rec(t2)] }, windows }).every(s => s.complete));
-  const failed = TW.windowStates({ days: { [DAY]: [rec(new Date(first.to + 2000).toISOString(), { errors: ['crash'] }), rec(t2)] }, windows });
+  const at = ms => new Date(ms).toISOString();
+  const states = (recs, minutes = 3) => TW.windowStates({ days: { [DAY]: recs }, windows, minutes });
+  const ran = w => rec(at(w.to + 2000)); // its last bar's cycle
+  const one1 = states([ran(first)]);
+  assert.deepStrictEqual(one1.map(s => [s.kind, s.complete]), windows.map(w => [w.kind, w.id === first.id]));
+  assert.match(one1.find(s => !s.complete).why, /stopped before the window ended|no trade cycle on its bars/);
+  // Both ran: both count; the last record of a window failed: it doesn't.
+  assert.ok(states([ran(first), ran(second)].sort((a, b) => Date.parse(a.t) - Date.parse(b.t))).every(s => s.complete));
+  const failed = states([rec(at(first.to + 2000), { errors: ['crash'] }), ran(second)]);
   assert.deepStrictEqual(failed.map(s => s.complete), windows.map(w => w.id !== first.id));
-  // An end of day reaches every window of the day; its flatten's R goes to the day's last window.
+  // An end of day reaches every window of the day, but a window none of whose bars ran saw nothing: not finished.
   const eod = rec(`${DAY}T20:50:00.000Z`, { kind: 'eod', trades: [{ roundTrip: { r: -1 } }] });
-  assert.ok(TW.windowStates({ days: { [DAY]: [eod] }, windows }).every(s => s.complete));
-  // R: a trade closed while managing after the window, and the end of day's flatten, both to the window they followed;
-  // a record before the first window (premarket) to none.
+  assert.deepStrictEqual(states([eod]).map(s => [s.complete, s.why]), windows.map(() => [false, 'no trade cycle on its bars']));
+  assert.ok(states([ran(first), ran(second), eod].sort((a, b) => Date.parse(a.t) - Date.parse(b.t))).every(s => s.complete));
+  // A decision time inside it passed without a step (latency charged, a slow cycle): not finished, said why.
+  const slow = states([rec(at(first.from + MIN3 + 2000)), rec(at(first.to + 2000), { skipped: [at(first.from + 2 * MIN3 + 2000)] }), ran(second), eod].sort((a, b) => Date.parse(a.t) - Date.parse(b.t)));
+  assert.deepStrictEqual(slow.map(s => s.complete), windows.map(w => w.id !== first.id));
+  assert.match(slow.find(s => !s.complete).why, /1 decision time\(s\) inside it passed without a step/);
+  // A management record after the window doesn't count as a cycle of its bars.
+  assert.ok(!TW.windowStates({ days: { [DAY]: [rec(at(first.to + 3 * MIN3 + 2000)), eod] }, windows: [first], minutes: 3 })[0].complete);
+  assert.throws(() => TW.windowStates({ days: {}, windows }), /minutes, the run's base timeframe/);
+  // R: each round trip to the window it was opened in. A trade closed while managing after the window, and the end of
+  // day's flatten, with no opening known: the window their close followed; a record before the first window: none.
   const one = TW.windowsFor({ ...OPTS, legs: [A], controlPerLeg: 0 }).windows;
-  const managed = rec(new Date(one[0].to + MIN3 * 3 + 2000).toISOString(), { trades: [{ roundTrip: { r: 2 } }] });
+  const managed = rec(at(one[0].to + MIN3 * 3 + 2000), { trades: [{ roundTrip: { r: 2 } }] });
   const pre = rec(`${DAY}T13:00:00.000Z`, { trades: [{ roundTrip: { r: 5 } }] });
   assert.deepStrictEqual(TW.unitR({ days: { [DAY]: [pre, managed, eod] }, windows: one }), { [one[0].id]: 1 });
-  assert.deepStrictEqual(TW.unitR({ days: { [DAY]: [rec(new Date(one[0].from + MIN3 + 2000).toISOString(), { trades: [{ roundTrip: { r: 1.5 } }] })] }, windows }), Object.fromEntries(windows.map(w => [w.id, w.kind === 'leg' ? 1.5 : 0])));
+  assert.deepStrictEqual(TW.unitR({ days: { [DAY]: [rec(at(one[0].from + MIN3 + 2000), { trades: [{ roundTrip: { r: 1.5 } }] })] }, windows }), Object.fromEntries(windows.map(w => [w.id, w.kind === 'leg' ? 1.5 : 0])));
+  // A trade opened in the earlier window and closed inside the later one stays the earlier one's: by its opening fill,
+  // or by its roundTrip's openMs.
+  const [w1, w2] = windows;
+  const closeIn2 = trades => rec(at(w2.from + MIN3 + 2000), { trades });
+  const openFill = rec(at(w1.from + MIN3 + 2000), { trades: [{ roundTripId: 9, profitAndLoss: null, creationTimestamp: at(w1.from + MIN3 + 1000) }] });
+  const r1 = TW.unitR({ days: { [DAY]: [openFill, closeIn2([{ roundTripId: 9, profitAndLoss: 50, roundTrip: { r: 3 } }])] }, windows });
+  assert.deepStrictEqual([r1[w1.id], r1[w2.id]], [3, 0]);
+  const r2 = TW.unitR({ days: { [DAY]: [closeIn2([{ roundTripId: 4, profitAndLoss: 50, roundTrip: { r: -1, openMs: w1.from + MIN3 } }])] }, windows });
+  assert.deepStrictEqual([r2[w1.id], r2[w2.id]], [-1, 0]);
+  const r3 = TW.unitR({ days: { [DAY]: [closeIn2([{ roundTripId: 5, profitAndLoss: 50, roundTrip: { r: 2 } }])] }, windows });
+  assert.deepStrictEqual([r3[w1.id], r3[w2.id]], [0, 2], 'no opening known: the window its close followed');
   assert.strictEqual(TW.unitOfBar(windows, new Date(first.from).toISOString(), 3), first.id, 'the bar that closes first in it');
   assert.strictEqual(TW.unitOfBar(windows, new Date(first.from - MIN3).toISOString(), 3), null, 'its close is the window\'s from: outside');
 });
@@ -126,9 +158,12 @@ test('the screen on windows: legs pair only in windows both sides finished; net 
   const wb = TW.windowsFor({ ...OPTS, day: day2, closes: TW.dayCloses(CFG, day2), legs: [B] }).windows;
   const windows = [...wa, ...wb];
   const eod = d => ({ t: `${d}T20:50:00.000Z`, day: d, kind: 'eod' });
+  // Every window's bars ran (a cycle on its first bar), then the day's end of day.
+  const cycles = (ws, d) => ws.filter(w => w.day === d).map(w => ({ t: new Date(w.from + MIN3 + 2000).toISOString(), day: d, kind: 'trade' }));
+  const sorted = recs => recs.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
   const side = ({ caught, finished = [DAY, day2], controlR = 0 }) => {
-    const days = Object.fromEntries(finished.map(d => [d, [...(controlR ? windows.filter(w => w.day === d && w.kind === 'control').map(w => ({ t: new Date(w.to - 1000).toISOString(), day: d, kind: 'trade', trades: [{ roundTrip: { r: controlR } }] })) : []), eod(d)]]));
-    return TSC.sideOfTrend({ captures: [{ legs: [A, B].map(l => ({ id: l.id, day: l.day, captured: caught.includes(l.id) })) }], days, windows, minutes: 3, sessions: TW.windowStates({ days, windows }) });
+    const days = Object.fromEntries(finished.map(d => [d, sorted([...cycles(windows, d), ...(controlR ? windows.filter(w => w.day === d && w.kind === 'control').map(w => ({ t: new Date(w.to - 1000).toISOString(), day: d, kind: 'trade', trades: [{ roundTrip: { r: controlR } }] })) : []), eod(d)])]));
+    return TSC.sideOfTrend({ captures: [{ legs: [A, B].map(l => ({ id: l.id, day: l.day, captured: caught.includes(l.id) })) }], days, windows, minutes: 3, sessions: TW.windowStates({ days, windows, minutes: 3 }) });
   };
   const champ = side({ caught: [] });
   const both = TSC.measureTrend(champ, side({ caught: [A.id, B.id] }));
@@ -141,8 +176,8 @@ test('the screen on windows: legs pair only in windows both sides finished; net 
   const many = Array.from({ length: 12 }, (_, i) => `2022-03-${String(9 + i).padStart(2, '0')}`).filter(d => ![12, 13, 19, 20].includes(Number(d.slice(8))));
   const wins = many.flatMap(d => TW.windowsFor({ ...OPTS, day: d, closes: TW.dayCloses(CFG, d), legs: [leg('long', `${d}T14:42:00.000Z`, `${d}T15:30:00.000Z`, d)] }).windows);
   const mk = r => {
-    const days = Object.fromEntries(many.map(d => [d, [...wins.filter(w => w.day === d && w.kind === 'control').map(w => ({ t: new Date(w.to - 1000).toISOString(), day: d, kind: 'trade', trades: [{ roundTrip: { r } }] })), eod(d)]]));
-    return TSC.sideOfTrend({ captures: [{ legs: [] }], days, windows: wins, minutes: 3, sessions: TW.windowStates({ days, windows: wins }) });
+    const days = Object.fromEntries(many.map(d => [d, sorted([...cycles(wins, d), ...wins.filter(w => w.day === d && w.kind === 'control').map(w => ({ t: new Date(w.to - 1000).toISOString(), day: d, kind: 'trade', trades: [{ roundTrip: { r } }] })), eod(d)])]));
+    return TSC.sideOfTrend({ captures: [{ legs: [] }], days, windows: wins, minutes: 3, sessions: TW.windowStates({ days, windows: wins, minutes: 3 }) });
   };
   const m = TSC.measureTrend(mk(0), mk(-1));
   assert.ok(m.netR.pairs >= 10);
@@ -171,9 +206,10 @@ test('a stepped-windows replay: steps the windows\' bars and those days\' end of
   seedBrokers(run);
   assert.notStrictEqual(configHash(run, env), configHash(other, env));
   assert.notStrictEqual(setupHash(run), setupHash(other));
-  for (const [k, v] of [['curatedList', { file: 'c.json' }], ['practice', { mode: 'setup-focus' }], ['prop', 'acct'], ['everyNthBar', 2]]) {
-    assert.throws(() => resolveReplay({ ...base, [k]: v, stepWindows: TW.asConfig(windows) }, { baseDir: user, env, root: ROOT }), /stepWindows: not with|stepWindows: every bar/, k);
+  for (const [k, v] of [['curatedList', { file: 'c.json' }], ['practice', { mode: 'setup-focus' }], ['prop', 'acct'], ['everyNthBar', 2], ['learning', false]]) {
+    assert.throws(() => resolveReplay({ ...base, [k]: v, stepWindows: TW.asConfig(windows) }, { baseDir: user, env, root: ROOT }), /stepWindows: not with|stepWindows: every bar|stepWindows: a learning run only/, k);
   }
+  assert.throws(() => resolveReplay({ ...base, learning: false, stepWindows: TW.asConfig(windows) }, { baseDir: user, env, root: ROOT }), /stepWindows: a learning run only/);
   assert.throws(() => resolveReplay({ ...base, stepWindows: { kind: 'trend-set', windows: [{ from: `${DAY}T20:00:00.000Z`, to: `${DAY}T20:30:00.000Z` }] } }, { baseDir: user, env, root: ROOT }), /hold no decision time/);
   assert.throws(() => resolveReplay({ ...base, stepWindows: { kind: 'trend-set', windows: [{ from: '2022-03-09T14:30:00.000Z', to: '2022-03-09T15:00:00.000Z' }] } }, { baseDir: user, env, root: ROOT }), /outside the run's/);
   assert.deepStrictEqual(SW.validateStepWindows({ kind: 'x', windows: [] }).errors.length, 2);

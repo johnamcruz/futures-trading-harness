@@ -242,6 +242,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (stepCfg.stepWindows) {
     for (const k of ['curatedList', 'practice', 'combine', 'accountStates', 'prop']) if (r[k] !== undefined) errors.push(`stepWindows: not with ${k} (the windows are stepped as a whole-session run steps its bars, nothing else chosen)`);
     if (everyNth !== 1) errors.push('stepWindows: every bar of its windows runs (everyNthBar 1)');
+    // Only the loop's trend-set role runs them, which the training preflight checks; a run declared not learning skips it.
+    if (r.learning === false) errors.push('stepWindows: a learning run only (the training loop\'s trend-set role, checked by the training preflight, which a run declared not learning skips)');
   }
   // Stage 2's continuous combine: one stage-2 mode or the other (drawn states on curated days), never both.
   const combineCfg = validateCombineConfig(r.combine);

@@ -502,7 +502,7 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
       // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
-      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows }).map(s => ({ ...s, rollMonth: false }));
+      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
       return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
@@ -974,4 +974,21 @@ test('the learning curve reads only the windows the champion finished; the champ
   // The round's reactions: inside the runner's sessions only (the 21:00Z ones, after 15:50 New York time, never).
   const reactions = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'trend-reactions.json'), 'utf8'));
   assert.ok(reactions.length > 0 && reactions.every(r => r.bar.endsWith('T14:33:00.000Z')));
+});
+
+test('a day whose legs have no window is never run, and the report and the log say so; never a silent skip', async () => {
+  const w = world({ trend: true, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs')] });
+  // The first probe day's legs after the runner's session (16:30 New York time): no decision time in their windows.
+  const day = ROUND1.probe.days[0];
+  const spans = { ...w.loop.probe.trend.set.spans };
+  for (const side of ['long', 'short']) spans[legId(day, side)] = { ...spans[legId(day, side)], start: `${day}T21:30:00.000Z`, end: `${day}T21:51:00.000Z` };
+  w.loop.probe.trend.set = { ...w.loop.probe.trend.set, spans };
+  const lines = [];
+  await run(w, { log: m => lines.push(m) });
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.deepStrictEqual(report.trend.windows.probe.noWindows, [day]);
+  assert.deepStrictEqual(report.trend.windows.probe.dropped.filter(d => d.id.startsWith(day)).map(d => d.why), ['no decision time of the runner\'s sessions (outside them, or an exchange holiday)', 'no decision time of the runner\'s sessions (outside them, or an exchange holiday)']);
+  assert.deepStrictEqual([report.trend.windows.confirm.noWindows, report.trend.windows.regression.noWindows], [[], []]);
+  assert.ok(lines.some(l => l.includes(`trend probe: no windows on ${day} (never run)`)), lines.join('\n'));
+  assert.ok(!w.calls.runs.some(r => TREND_RUN.test(r.runId) && dayOfRun(r.runId) === day), 'never run');
 });

@@ -10,12 +10,12 @@
  *                   through its catch window (its first catchShare, config/replay.json trendCapture: the span a catch
  *                   counts in, trend-capture.js), clipped to the runner's sessions; legs whose windows touch merge into one
  *   control window  per leg, controlPerLeg windows of the same length from the same session, in the runner's sessions,
- *                   sharing no bar with any census leg's window that day (the batch's or not) or another window; chosen by
+ *                   sharing no bar with any census leg that day (the batch's or not: its lead-in to its end) or another window; chosen by
  *                   a seeded hash (the loop's seed), so the screen still sees entries where there is no leg to catch
  *   management      a position or working order open after a window is managed bar by bar until flat (the driver's own)
  *
  * The screen's units become the windows (trend-screen.js): a leg pairs only when its window was stepped to its end on
- * both sides (windowStates); net R is per window (each round trip to the window it followed: unitR); first tries and
+ * both sides (windowStates); net R is per window (each round trip to the window it was opened in: unitR); first tries and
  * the selection value read only the windows' bars. Nothing of a window's choice reaches the model: the run's runner
  * config, environment and run home are a whole-session run's (replay/step-windows.js); the model reads each bar as there.
  *
@@ -24,11 +24,11 @@
  *   dayCloses(cfg, day)                         [ms]: the base-timeframe bar closes of the day's trade decision times
  *   windowsFor({ day, legs, others, closes, minutes, seed, leadBars, controlPerLeg, catchShare })
  *                                               { windows: [{ id, day, kind: 'leg' | 'control', legs, from, to }], dropped }
- *   windowStates({ days, windows })             [{ unit, day, kind, complete, why }]: each window stepped to its end or not
+ *   windowStates({ days, windows, minutes })    [{ unit, day, kind, complete, why }]: each window stepped to its end or not
  *   unitOfRecord(windows, t)                    the window a record at decision time t follows (its day's last window
  *                                               opened before t), or null
  *   unitOfBar(windows, bar, minutes)            the window holding the bar (by its close), or null
- *   unitR({ days, windows })                    { unit: net R }: every round trip with an R, to the window it followed
+ *   unitR({ days, windows })                    { unit: net R }: every round trip with an R, to the window it was opened in
  *   asConfig(windows)                           the replay config's stepWindows: { kind: 'trend-set', windows: [{ from, to }] }
  */
 
@@ -66,6 +66,11 @@ function legSpan(g, { step, leadBars, catchShare }) {
   return { from: t0 - leadBars * step, to };
 }
 
+/** A leg's whole extent: leadBars bars before its start bar through its end bar's close (no control window enters it). */
+function legExtent(g, { step, leadBars }) {
+  return { from: Date.parse(g.start) - leadBars * step, to: Date.parse(g.end) + step };
+}
+
 function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, leadBars, controlPerLeg, catchShare }) {
   const step = minutes * 60000;
   const set = new Set(closes);
@@ -85,8 +90,9 @@ function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, l
     const last = merged[merged.length - 1];
     if (last && w.from <= last.to) { last.to = Math.max(last.to, w.to); last.legs.push(w.leg); } else merged.push({ from: w.from, to: w.to, legs: [w.leg] });
   }
-  // Every census leg's window that day (the batch's or not): no control window shares a bar with one.
-  const busy = [...merged, ...others.map(g => legSpan(g, { step, leadBars, catchShare }))];
+  // Every census leg that day (the batch's or not), from its lead-in to its end: no control window shares a bar with one
+  // (its tail past the catch window included: an entry there would still be on the leg).
+  const busy = [...merged, ...[...legs, ...others].map(g => legExtent(g, { step, leadBars }))];
   const controls = [];
   for (const w of own) {
     const len = Math.round((w.to - w.from) / step);
@@ -110,16 +116,29 @@ function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, l
 
 const recsOf = (days, day) => (isObj(days) && Array.isArray(days[day]) ? days[day] : []).filter(r => isObj(r) && Number.isFinite(Date.parse(r.t)));
 
-/** Each window stepped to its end (a record of its day at or after its last bar's close) or not, and why. */
-function windowStates({ days = {}, windows = [] } = {}) {
+/**
+ * Each window stepped to its end or not, and why. Finished: a record of its day at or after its last bar's close, at
+ * least one trade cycle of its own on its bars (a decision time from a bar's close until the next bar's: minutes, the
+ * base timeframe), no decision time inside it passed without a step (a record's `skipped`: latency charged, a slow cycle),
+ * and its last cycle not failed. An end of day reaching it is not enough: a window none of whose bars ran saw nothing.
+ */
+function windowStates({ days = {}, windows = [], minutes = null } = {}) {
+  if (!(Number.isFinite(minutes) && minutes > 0)) throw new Error('windowStates: minutes, the run\'s base timeframe');
+  const step = minutes * 60000;
   return windows.map(w => {
     const recs = recsOf(days, w.day);
+    const onBars = ms => ms > w.from && ms < w.to + step;
     const reached = recs.some(r => Date.parse(r.t) >= w.to);
+    const ran = recs.some(r => r.kind === 'trade' && onBars(Date.parse(r.t)));
+    const skipped = recs.flatMap(r => (Array.isArray(r.skipped) ? r.skipped : [])).filter(t => onBars(Date.parse(t)));
     // Its own records: the window's and the management after it, up to the next window (unitOfRecord).
     const own = recs.filter(r => unitOfRecord(windows, r.t) === w.id && r.kind !== 'eod');
     const failed = own.length && Array.isArray(own[own.length - 1].errors) && own[own.length - 1].errors.length;
-    const complete = reached && !failed;
-    const why = complete ? null : failed ? 'failed cycles (a crash or errors)' : 'stopped before the window ended (a call limit or an interruption)';
+    const complete = Boolean(reached && ran && !skipped.length && !failed);
+    const why = complete ? null : failed ? 'failed cycles (a crash or errors)'
+      : !reached ? 'stopped before the window ended (a call limit or an interruption)'
+        : !ran ? 'no trade cycle on its bars'
+          : `${skipped.length} decision time(s) inside it passed without a step (latency: a slow cycle)`;
     return { unit: w.id, day: w.day, kind: w.kind, complete, why };
   });
 }
@@ -139,13 +158,28 @@ function unitOfBar(windows, bar, minutes) {
   return w ? w.id : null;
 }
 
+/** A fill's own time (ms), or null. */
+const fillMs = f => (num(f.ms) !== null ? f.ms : Number.isFinite(Date.parse(f.creationTimestamp)) ? Date.parse(f.creationTimestamp) : null);
+
+/**
+ * Each window's net R: every round trip with an R, to the window it was opened in (the last window of its day opened
+ * before its open: its roundTrip's openMs, else its opening fill's time, else that fill's record), so a trade opened in a
+ * leg window and closed in the next window stays the leg window's. With no opening known: the window its close followed.
+ */
 function unitR({ days = {}, windows = [] } = {}) {
   const out = Object.fromEntries(windows.map(w => [w.id, 0]));
   for (const day of new Set(windows.map(w => w.day))) {
-    for (const rec of recsOf(days, day)) {
-      const u = unitOfRecord(windows, rec.t);
-      if (u === null) continue;
-      for (const t of Array.isArray(rec.trades) ? rec.trades : []) if (isObj(t) && isObj(t.roundTrip) && num(t.roundTrip.r) !== null) out[u] += t.roundTrip.r;
+    const recs = recsOf(days, day);
+    const fills = recs.flatMap(rec => (Array.isArray(rec.trades) ? rec.trades : []).filter(isObj).map(f => ({ f, t: rec.t })));
+    const opened = new Map();
+    for (const { f, t } of fills) {
+      if ((f.profitAndLoss === null || f.profitAndLoss === undefined) && f.roundTripId !== undefined && !opened.has(f.roundTripId)) opened.set(f.roundTripId, fillMs(f) ?? Date.parse(t));
+    }
+    for (const { f, t } of fills) {
+      if (!isObj(f.roundTrip) || num(f.roundTrip.r) === null) continue;
+      const openMs = num(f.roundTrip.openMs) !== null ? f.roundTrip.openMs : opened.has(f.roundTripId) ? opened.get(f.roundTripId) : null;
+      const u = unitOfRecord(windows, openMs !== null ? iso(openMs) : t);
+      if (u !== null) out[u] += f.roundTrip.r;
     }
   }
   for (const k of Object.keys(out)) out[k] = Math.round(out[k] * 10000) / 10000;
@@ -154,4 +188,4 @@ function unitR({ days = {}, windows = [] } = {}) {
 
 const asConfig = windows => ({ kind: 'trend-set', windows: windows.map(w => ({ from: iso(w.from), to: iso(w.to) })) });
 
-module.exports = { dayCloses, legSpan, windowsFor, windowStates, unitOfRecord, unitOfBar, unitR, asConfig };
+module.exports = { dayCloses, legSpan, legExtent, windowsFor, windowStates, unitOfRecord, unitOfBar, unitR, asConfig };
