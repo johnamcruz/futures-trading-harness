@@ -352,6 +352,9 @@ async function probeRound(ctx, { n, champion, api }) {
   if (trend) {
     const left = s => (s ? { dropped: s.dropped, noWindows: s.noWindows } : { dropped: [], noWindows: [] });
     report.trend.windows = { probe: left(trendBase), confirm: left(trendConfirm), regression: left(regBase) };
+    // Each side's bars skipped while a cycle ran (latency charged, as live): never a dropped window, but shown, so a
+    // slower edit is visible (its missed legs already count against it).
+    report.skipped = { champion: TW.skippedShare([trendBase, regBase, trendConfirm].flatMap(s => (s ? s.sessions : []))), edits: {}, composed: null };
     for (const [which, x] of Object.entries(report.trend.windows)) {
       if (x.noWindows.length) ctx.log(`iteration ${n}: trend ${which}: no windows on ${x.noWindows.join(', ')} (never run): ${x.dropped.filter(d => x.noWindows.includes(d.id.split('|')[0])).map(d => d.why).filter((w, i, a) => a.indexOf(w) === i).join('; ')}`);
       const rest = x.dropped.filter(d => !x.noWindows.includes(d.id.split('|')[0]));
@@ -417,7 +420,7 @@ async function probeRound(ctx, { n, champion, api }) {
     if (isTrend && !tm) throw new Error(`probe ${e.id}: a trend finding needs the trend set's runs`);
     const screen = combinedScreen({ curated: SC.screen(m), curatedTarget: !isTrend, trend: tm, trendTarget: isTrend, regression: rs ? TSC.regressionHarms(regBase.side, rs.side) : [], rule: ctx.loop.rule });
     const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(rm ? { regression: rm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
-    return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
+    return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}) };
   }));
   // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id).
   const recorded = new Set(LS.readLessons(lessonsFile).filter(e => e.iteration === n && !e.composed).map(e => e.proposalId));
@@ -427,8 +430,9 @@ async function probeRound(ctx, { n, champion, api }) {
       findingKind: p.finding.kind, windows: cfg.windows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture, sides: p.measures.trend.sides } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));
+  report.probes = probes.map(p => ({ ...(p.skipped ? { skipped: p.skipped } : {}), id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture, sides: p.measures.trend.sides } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));
   for (const p of probes) report.cycles.edits[p.id] = p.cycles === undefined ? null : p.cycles;
+  if (report.skipped) for (const p of probes) if (p.skipped) report.skipped.edits[p.id] = p.skipped;
   for (const p of probes) ctx.log(`iteration ${n}: probe ${p.id} (${(PE.targetOf(p.tag) || { label: '?' }).label}, ${p.tag.kind}, ${p.finding.id}): ${p.screen.verdict}${p.screen.harms.length ? `: ${p.screen.harms.join('; ')}` : ''}`);
   const passed = probes.filter(p => p.screen.pass);
   if (!passed.length) {
@@ -468,9 +472,10 @@ async function probeRound(ctx, { n, champion, api }) {
     const verdict = harms.length ? 'hurt' : cancelled.length ? 'no effect' : 'helped';
     const targets = [...s.targets, ...trendParts.map(p => ({ id: p.id, target: tm ? tm.capture : { pairs: 0, b: 0, c: 0 } }))];
     const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries, { stepped: ts.stepped }) : null;
-    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
+    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}) };
   });
   report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;
+  if (report.skipped && composed.skipped) report.skipped.composed = composed.skipped;
   // (One part alone: the combined change has the part's id, so the composed line is told apart by `composed`.)
   if (!LS.readLessons(lessonsFile).some(e => e.iteration === n && e.composed === true && e.proposalId === cid)) {
     LS.appendLesson(lessonsFile, {

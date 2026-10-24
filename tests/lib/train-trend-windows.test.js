@@ -24,6 +24,7 @@ const { validateConfig } = require('../../scripts/lib/autotrader');
 const ROOT = path.resolve(__dirname, '..', '..');
 const MIN3 = 180000;
 const ms0 = iso => Date.parse(iso);
+const of2 = (states, w) => states.find(s => s.unit === w.id);
 const DAY = '2022-03-07';
 const TRADER = { harness: 'claude', model: 'm', symbols: ['MNQ'], account: '1', timeframe: 3, premarketAt: '', sessions: ['09:30-12:00@America/New_York'] };
 const CFG = validateConfig(TRADER);
@@ -104,7 +105,7 @@ test('legs whose windows touch merge into one; control windows are as long, in t
   assert.deepStrictEqual([full.windows.filter(w => w.kind === 'control'), full.dropped.map(d => d.why)], [[], ['no free stretch of the same length in the session']]);
 });
 
-test('the window guard: a window counts only when its own bars ran to its end; an end of day alone, a latency skip or a failed cycle never count', () => {
+test('the window guard: a window counts only when its own bars ran to its end; an end of day alone or a failed cycle never count; a latency skip counts, recorded', () => {
   const { windows } = TW.windowsFor({ ...OPTS, legs: [A] });
   const [first, second] = windows;
   const rec = (t, extra = {}) => ({ t, day: DAY, kind: 'trade', ...extra });
@@ -122,10 +123,22 @@ test('the window guard: a window counts only when its own bars ran to its end; a
   const eod = rec(`${DAY}T20:50:00.000Z`, { kind: 'eod', trades: [{ roundTrip: { r: -1 } }] });
   assert.deepStrictEqual(states([eod]).map(s => [s.complete, s.why]), windows.map(() => [false, 'no trade cycle on its bars']));
   assert.ok(states([ran(first), ran(second), eod].sort((a, b) => Date.parse(a.t) - Date.parse(b.t))).every(s => s.complete));
-  // A decision time inside it passed without a step (latency charged, a slow cycle): not finished, said why.
-  const slow = states([rec(at(first.from + MIN3 + 2000)), rec(at(first.to + 2000), { skipped: [at(first.from + 2 * MIN3 + 2000)] }), ran(second), eod].sort((a, b) => Date.parse(a.t) - Date.parse(b.t)));
-  assert.deepStrictEqual(slow.map(s => s.complete), windows.map(w => w.id !== first.id));
-  assert.match(slow.find(s => !s.complete).why, /1 decision time\(s\) inside it passed without a step/);
+  // A decision time inside it passed while a cycle ran (latency charged, as live): still finished (part of the result),
+  // the skip counted, and whether it was a leg's start or catch bar.
+  const legW = windows.find(w => w.kind === 'leg');
+  const ctrlW = windows.find(w => w.kind === 'control');
+  const legStart = Date.parse(A.start);
+  const slow = states([rec(at(legW.from + MIN3 + 2000)), rec(at(legW.to + 2000), { skipped: [at(legStart + 2 * MIN3 + 2000)] }), rec(at(ctrlW.to + 2000), { skipped: [at(ctrlW.from + MIN3 + 2000), at(ctrlW.from + 2 * MIN3 + 2000)] }), eod].sort((a, b) => Date.parse(a.t) - Date.parse(b.t)));
+  assert.ok(slow.every(s => s.complete), 'a latency skip never drops a window');
+  const of = w => slow.find(s => s.unit === w.id);
+  assert.deepStrictEqual([of(legW).ran, of(legW).skipped, of(legW).legSkipped], [2, 1, true]);
+  assert.deepStrictEqual([of(ctrlW).ran, of(ctrlW).skipped, of(ctrlW).legSkipped], [1, 2, false], 'a control window has no leg bar');
+  // A skip in the lead-in only (before the leg's start): counted, never a leg bar.
+  const lead = states([rec(at(legW.to + 2000), { skipped: [at(legW.from + MIN3 + 2000)] }), ran(ctrlW)].sort((a, b) => Date.parse(a.t) - Date.parse(b.t)));
+  assert.deepStrictEqual([of2(lead, legW).skipped, of2(lead, legW).legSkipped], [1, false]);
+  // Each side's share of skipped bars over its windows (shown in the iteration report: a slower edit is visible).
+  assert.deepStrictEqual(TW.skippedShare(slow), { skipped: 3, bars: 3 + 3, share: 0.5, legWindows: 1 });
+  assert.deepStrictEqual(TW.skippedShare([]), { skipped: 0, bars: 0, share: null, legWindows: 0 });
   // A management record after the window doesn't count as a cycle of its bars.
   assert.ok(!TW.windowStates({ days: { [DAY]: [rec(at(first.to + 3 * MIN3 + 2000)), eod] }, windows: [first], minutes: 3 })[0].complete);
   assert.throws(() => TW.windowStates({ days: {}, windows }), /minutes, the run's base timeframe/);

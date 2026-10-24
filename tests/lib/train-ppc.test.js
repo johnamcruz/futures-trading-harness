@@ -648,6 +648,10 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual([rec.deltas.capture.broken, rec.deltas.capture.rate.probe, rec.deltas.capture.pairs], [0, 1, split.confirm.legs.length]);
   assert.ok(rec.deltas.capture.fixed > 0);
   assert.match(IR.line(rec), /legs caught \+\d+\/-0 of \d+ \([\d.]+ -> 1\)/);
+  // Each side's share of skipped bars (latency; none in the stub world), the champion's, each edit's and the combined change's.
+  assert.deepStrictEqual(rec.skipped.champion, { skipped: 0, bars: rec.skipped.champion.bars, share: 0, legWindows: 0 });
+  assert.ok(rec.skipped.champion.bars > 0 && Object.keys(rec.skipped.edits).length === report.probes.length && rec.skipped.composed);
+  assert.match(IR.line(rec), new RegExp(`; skipped bars: champion 0, ${report.probes[0].id} 0, .*combined 0`));
   // Selection value on the confirm half: the champion took the winning longs and passed the losing shorts.
   const n = split.confirm.days.length;
   assert.deepStrictEqual(report.trend.champion.selection, { reactions: n * 2, taken: { n, meanR: 2 }, passed: { n, meanR: -1 }, value: 3 });

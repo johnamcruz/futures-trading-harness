@@ -24,7 +24,8 @@
  *   dayCloses(cfg, day)                         [ms]: the base-timeframe bar closes of the day's trade decision times
  *   windowsFor({ day, legs, others, closes, minutes, seed, leadBars, controlPerLeg, catchShare })
  *                                               { windows: [{ id, day, kind: 'leg' | 'control', legs, from, to }], dropped }
- *   windowStates({ days, windows, minutes })    [{ unit, day, kind, complete, why }]: each window stepped to its end or not
+ *   windowStates({ days, windows, minutes })    [{ unit, day, kind, complete, why, ran, skipped, legSkipped }]: each window stepped to its end or not
+ *   skippedShare(states)                        { skipped, bars, share, legWindows }: one side's skipped bars (latency) over its windows
  *   unitOfRecord(windows, t)                    the window a record at decision time t follows (its day's last window
  *                                               opened before t), or null
  *   unitOfBar(windows, bar, minutes)            the window holding the bar (by its close), or null
@@ -119,8 +120,10 @@ const recsOf = (days, day) => (isObj(days) && Array.isArray(days[day]) ? days[da
 /**
  * Each window stepped to its end or not, and why. Finished: a record of its day at or after its last bar's close, at
  * least one trade cycle of its own on its bars (a decision time from a bar's close until the next bar's: minutes, the
- * base timeframe), no decision time inside it passed without a step (a record's `skipped`: latency charged, a slow cycle),
- * and its last cycle not failed. An end of day reaching it is not enough: a window none of whose bars ran saw nothing.
+ * base timeframe), and its last cycle not failed. An end of day reaching it is not enough: a window none of whose bars
+ * ran saw nothing. A decision time inside it that passed while a cycle ran (a record's `skipped`: latency charged, as
+ * live) is part of the result, never a reason to drop it: counted (skipped, beside ran: its trade cycles), and legSkipped
+ * when one came after a leg's start (its start or catch bars).
  */
 function windowStates({ days = {}, windows = [], minutes = null } = {}) {
   if (!(Number.isFinite(minutes) && minutes > 0)) throw new Error('windowStates: minutes, the run\'s base timeframe');
@@ -129,18 +132,33 @@ function windowStates({ days = {}, windows = [], minutes = null } = {}) {
     const recs = recsOf(days, w.day);
     const onBars = ms => ms > w.from && ms < w.to + step;
     const reached = recs.some(r => Date.parse(r.t) >= w.to);
-    const ran = recs.some(r => r.kind === 'trade' && onBars(Date.parse(r.t)));
+    const ran = recs.filter(r => r.kind === 'trade' && onBars(Date.parse(r.t))).length;
+    // Decision times inside it that passed while a cycle ran (latency charged, as live): part of the result, never a
+    // reason to drop the window. Counted, and whether one was a leg's start or catch bar (after its lead-in).
     const skipped = recs.flatMap(r => (Array.isArray(r.skipped) ? r.skipped : [])).filter(t => onBars(Date.parse(t)));
+    const starts = (w.legs || []).map(id => Date.parse((/^[^|]*\|[^|]*\|(.*)$/.exec(String(id)) || [])[1])).filter(Number.isFinite); // day|side|start
+    const legSkipped = starts.length > 0 && skipped.some(t => starts.some(s => Date.parse(t) > s));
     // Its own records: the window's and the management after it, up to the next window (unitOfRecord).
     const own = recs.filter(r => unitOfRecord(windows, r.t) === w.id && r.kind !== 'eod');
     const failed = own.length && Array.isArray(own[own.length - 1].errors) && own[own.length - 1].errors.length;
-    const complete = Boolean(reached && ran && !skipped.length && !failed);
+    const complete = Boolean(reached && ran && !failed);
     const why = complete ? null : failed ? 'failed cycles (a crash or errors)'
       : !reached ? 'stopped before the window ended (a call limit or an interruption)'
-        : !ran ? 'no trade cycle on its bars'
-          : `${skipped.length} decision time(s) inside it passed without a step (latency: a slow cycle)`;
-    return { unit: w.id, day: w.day, kind: w.kind, complete, why };
+        : 'no trade cycle on its bars';
+    return { unit: w.id, day: w.day, kind: w.kind, complete, why, ran, skipped: skipped.length, legSkipped };
   });
+}
+
+/**
+ * One side's skipped bars over its windows' states: { skipped, bars (trade cycles plus skipped), share, legWindows
+ * (windows where a leg's start or catch bar was skipped) }; share null with no bar. A slower side shows here; its missed
+ * legs already count against it in capture.
+ */
+function skippedShare(states = []) {
+  const s = (Array.isArray(states) ? states : []).filter(x => x && Number.isFinite(x.skipped) && Number.isFinite(x.ran));
+  const skipped = s.reduce((a, x) => a + x.skipped, 0);
+  const bars = s.reduce((a, x) => a + x.ran + x.skipped, 0);
+  return { skipped, bars, share: bars ? Math.round((skipped / bars) * 10000) / 10000 : null, legWindows: s.filter(x => x.legSkipped).length };
 }
 
 function unitOfRecord(windows, t) {
@@ -188,4 +206,4 @@ function unitR({ days = {}, windows = [] } = {}) {
 
 const asConfig = windows => ({ kind: 'trend-set', windows: windows.map(w => ({ from: iso(w.from), to: iso(w.to) })) });
 
-module.exports = { dayCloses, legSpan, legExtent, windowsFor, windowStates, unitOfRecord, unitOfBar, unitR, asConfig };
+module.exports = { dayCloses, legSpan, legExtent, windowsFor, windowStates, skippedShare, unitOfRecord, unitOfBar, unitR, asConfig };

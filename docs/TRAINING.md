@@ -588,11 +588,16 @@ and leg ids; the lessons lines record the batch too.
   caught, net, is a harm. They never show a gain.
 - **Finished windows only.** A window pairs only when both runs stepped it
   to its end: a record at or after its last bar, at least one trade cycle
-  on its own bars (the day's end of day reaching it is not enough), no
-  decision time inside it passed without a step (with latency charged, a
-  slow cycle skips the bars that close during it), and its last cycle not
-  failed. A window a run left early (a call limit, a crash, failed cycles,
-  skipped bars) holds fewer bars than the other side's. Its legs, net R and first tries count neither as a miss nor as a
+  on its own bars (the day's end of day reaching it is not enough), and its
+  last cycle not failed. A window a run left early (a call limit, a crash,
+  failed cycles) holds fewer bars than the other side's. A bar skipped
+  because a cycle was still running (latency charged: live, bars pass while
+  the model works) is part of the result, not a reason to drop the window:
+  each window records its skipped decision times and whether a leg's start
+  or catch bar was among them, and the iteration's record and `status` give
+  each side's share of skipped bars (`skipped bars: champion ..., <edit>
+  ..., combined ...`), so a slower edit is visible. Its missed legs already
+  count against it in capture. Its legs, net R and first tries count neither as a miss nor as a
   catch: they are dropped. Each side's report gives the batch legs its
   captures found, the legs paired, and the windows dropped and why.
 - **Contract rolls are unverified.** Leg ids are `day|side|start` and never

@@ -278,7 +278,7 @@ test('the default trendData step: a run\'s capture report from its own folder, w
   const windows = [{ id: '2022-03-07|leg|2022-03-07T14:30:00.000Z', day: '2022-03-07', kind: 'leg', legs: [legs[0].id], from: Date.parse('2022-03-07T14:30:00Z'), to: Date.parse('2022-03-07T15:06:00Z') }];
   const w = PR.trendData({ runDir, legs, windows });
   assert.deepStrictEqual(w.capture.legs.map(l => [l.id, l.captured, l.availableR]), [[legs[0].id, false, null]], 'the given leg (no bar served: its available R unknown)');
-  assert.deepStrictEqual(w.sessions, [{ unit: windows[0].id, day: '2022-03-07', kind: 'leg', complete: true, why: null, rollMonth: true }]);
+  assert.deepStrictEqual(w.sessions, [{ unit: windows[0].id, day: '2022-03-07', kind: 'leg', complete: true, why: null, ran: 1, skipped: 0, legSkipped: false, rollMonth: true }]);
   assert.deepStrictEqual([w.stepped, w.minutes], [['2022-03-07T14:33:02.000Z', '2022-03-07T20:50:00.000Z'], 3]);
 });
 
