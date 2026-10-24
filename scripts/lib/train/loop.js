@@ -219,7 +219,7 @@ async function championTree(ctx) {
  * <evaluation>.<label>), required
  * there as replay.js run requires --evaluation; the candidate is the loop's look's.
  */
-function learningGate(ctx, run, look, label) {
+function learningGate(ctx, run, look, label, loopRole = null) {
   const l = ctx.loop.learning || {};
   let practice = false;
   try { practice = rolesBetween(run.start, run.end).every(r => r === 'practice-train'); } catch (_err) { /* the gate names it */ }
@@ -228,6 +228,8 @@ function learningGate(ctx, run, look, label) {
     from: run.start, to: run.end, runId: run.runId, learning: run.learning,
     candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked && l.evaluation ? `${l.evaluation}.${label}` : null,
     validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, practice: run.practice || null, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
+    // Set by the loop's code only (never by a replay config or the replay CLI): the preflight reads it (loop-role).
+    ...(loopRole ? { loopRole } : {}),
   };
 }
 
@@ -236,7 +238,18 @@ function learningGate(ctx, run, look, label) {
  * look first and keep checkpoints for the point runs; a challenger's (the model-scoring verifier's) run under the look
  * its iteration or judging already took, with the same replay config and seed.
  */
-async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, replay = null, share = 1 }) {
+/**
+ * One window's run as windowRuns resolves it, and its learning gate: replay, another replay config (the probe round's),
+ * else the loop's. role: the run's loop role (the training preflight's loop-role check, learning/preflight.js): the
+ * keep rule's runs (the loop's own replay, judged by modelScore) or the trend set's (probe.js); none for a curated probe.
+ */
+function windowRun(ctx, { label, window, tree, look, replay = null, role = undefined }) {
+  const loopRole = role !== undefined ? role : !replay && ctx.loop.modelScore ? 'keep-rule' : null;
+  const run = resolveReplay(replayFor(replay ? { ...ctx.loop, replay } : ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
+  return { run, gate: learningGate(ctx, run, look, label, loopRole) };
+}
+
+async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, replay = null, share = 1, role = undefined }) {
   const champion = side === 'champion';
   if (champion && !ctx.state.done[`look:${tag}`]) {
     S.logLook(ctx.paths.ledger, look);
@@ -247,14 +260,13 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, re
   for (const [i, window] of windows.entries()) {
     const label = `${side}-${tag}${i}`;
     // replay: another replay config for these runs (the probe round's curated practice config), else the loop's.
-    const run = resolveReplay(replayFor(replay ? { ...ctx.loop, replay } : ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
+    const { run, gate } = windowRun(ctx, { label, window, tree, look, replay, role });
     const checkpoints = path.join(W(ctx), 'checkpoints', label);
     runs.push({ label, window, runDir: run.paths.runDir, checkpoints, run });
     if (ctx.state.done[`run:${label}`]) continue;
-    // The learning gate (learning/run-gate.js), as replay.js run applies it: checked before the run home is seeded,
+    // The learning gate (windowRun; learning/run-gate.js), as replay.js run applies it: checked before the run home is seeded,
     // its look taken before the first cycle, its decision checked again on resume. The point runs start from this
     // run's checkpoints (decision-points.js runPoint copies its home), so they inherit what it was allowed.
-    const gate = learningGate(ctx, run, look, label);
     // The training preflight (learning/preflight.js), as replay.js run applies it: any FAIL refuses the run before it
     // is seeded. Its facts read the loop's data source (the evaluator's bars) when it has one; else they are N/A.
     const data = ctx.loop.evaluator && ctx.loop.evaluator.data ? ctx.loop.evaluator.data : null;
@@ -660,4 +672,4 @@ function importProposal({ loop, env = process.env, root, proposal, approvedBy })
   return { id, file };
 }
 
-module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive };
+module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive, windowRun };
