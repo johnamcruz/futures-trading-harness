@@ -59,6 +59,7 @@ const TS = require('./trend-set');
 const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
 const TC = require('./trend-curve');
+const FT = require('./first-try');
 const { readJson } = require('../harness-run');
 
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
@@ -109,7 +110,7 @@ function probeData({ runDir, tree, barsFiles = {}, keep = null }) {
   };
 }
 
-/** The default step: a whole-session trend run's capture report (replay/trend-capture.js), written to its folder, and its days. */
+/** The default step: a whole-session trend run's capture report (replay/trend-capture.js), written to its folder, its days and its first tries. */
 function trendData({ runDir }) {
   const tc = require('../replay/trend-capture');
   const { readRun } = require('../replay/store');
@@ -117,7 +118,9 @@ function trendData({ runDir }) {
   const days = readRun(runDir).days;
   const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {} });
   tc.writeCapture(runDir, capture);
-  return { capture, days };
+  // The first tries of the run's compose records (first-try.js): its own home's, one session's.
+  const first = require('./first-try').firstTries(require('../trading/trade-lifecycle').readRecords(path.resolve(runDir, '..', '..')));
+  return { capture, days, first };
 }
 
 /**
@@ -125,8 +128,8 @@ function trendData({ runDir }) {
  * regression days) is a harm; the gain is the target set's own (the trend set's legs for a trend finding, else the
  * curated target). Without a trend set, the curated screen alone.
  */
-function combinedScreen({ curated, curatedTarget = true, trend = null, trendTarget = false, regression = [] }) {
-  const t = trend ? TSC.screenTrend(trend, { target: trendTarget }) : null;
+function combinedScreen({ curated, curatedTarget = true, trend = null, trendTarget = false, regression = [], rule = undefined }) {
+  const t = trend ? TSC.screenTrend(trend, { target: trendTarget, rule }) : null;
   const harms = [...curated.harms, ...(t ? t.harms : []), ...regression];
   const gain = Boolean((curatedTarget && curated.gain) || (trendTarget && t && t.gain));
   const verdict = harms.length ? 'hurt' : gain ? 'helped' : 'no effect';
@@ -210,7 +213,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [] };
     for (const day of days) {
       const tag = `t${day.replace(/-/g, '')}`;
       const key = `trend-day:${side}:${day}`;
@@ -218,12 +221,13 @@ async function probeRound(ctx, { n, champion, api }) {
       const runs = await api.windowRuns(ctx, { side, tag, windows: TS.dayWindows([day]), tree, look, replay: trend.replay, share });
       const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}.json`), async () => {
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir });
-        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [] });
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       out.legs.push(...one.legs);
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
+      out.first.push(...(one.first || []));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
       if (withFindings && one.capture) out.captures.push(one.capture);
@@ -233,7 +237,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const mine = which === 'regression' ? null : new Set(split[which].legs);
     const legs = mine ? out.legs.filter(([id]) => mine.has(id)) : out.legs;
     if (withFindings && mine) out.captures = out.captures.map(c => ({ ...c, legs: (c.legs || []).filter(l => mine.has(l.id)) }));
-    return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows } };
+    return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first } };
   };
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   if (trend) {
@@ -270,7 +274,7 @@ async function probeRound(ctx, { n, champion, api }) {
   if (trendConfirm) {
     const legs = [...trendConfirm.side.legs.values()];
     const days = Object.values(trendConfirm.side.dayR);
-    report.trend.champion = { legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
+    report.trend.champion = { firstTry: FT.summarize(trendConfirm.side.first), legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
@@ -324,7 +328,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const tm = ts ? TSC.measureTrend(trendBase.side, ts.side) : null;
     const isTrend = e.finding.kind === TF.KIND;
     if (isTrend && !tm) throw new Error(`probe ${e.id}: a trend finding needs the trend set's runs`);
-    const screen = combinedScreen({ curated: SC.screen(m), curatedTarget: !isTrend, trend: tm, trendTarget: isTrend, regression: rs ? TSC.regressionHarms(regBase.side, rs.side) : [] });
+    const screen = combinedScreen({ curated: SC.screen(m), curatedTarget: !isTrend, trend: tm, trendTarget: isTrend, regression: rs ? TSC.regressionHarms(regBase.side, rs.side) : [], rule: ctx.loop.rule });
     const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(rm ? { regression: rm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
     return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
   }));
@@ -370,7 +374,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const rs = regBase ? await trendSide(`k-${cid}`, tree.dir, 1, 'regression') : null;
     const tm = ts ? TSC.measureTrend(trendConfirm.side, ts.side) : null;
     const trendParts = parts.filter(p => p.finding.kind === TF.KIND);
-    const harms = [...(s.measures ? s.harms : SC.screen(cm).harms), ...(tm ? TSC.trendHarms(tm) : []), ...(rs ? TSC.regressionHarms(regBase.side, rs.side) : [])];
+    const harms = [...(s.measures ? s.harms : SC.screen(cm).harms), ...(tm ? TSC.trendHarms(tm, { rule: ctx.loop.rule }) : []), ...(rs ? TSC.regressionHarms(regBase.side, rs.side) : [])];
     // Every trend part's target is the trend set's legs caught: it must still gain on the confirm half.
     const lostTrend = trendParts.length && !(tm && TSC.gained(tm.capture)) ? trendParts.map(p => p.id) : [];
     const cancelled = [...s.cancelled, ...lostTrend];
@@ -386,7 +390,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR } } : {}) };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

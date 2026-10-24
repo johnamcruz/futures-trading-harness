@@ -460,8 +460,10 @@ trigger (start, keep, grow, cap, restart) and why.
 replays each round's confirm half too, so each round has a point: the
 confirm half's capture rate (with a Wilson interval at the keep rule's
 level) and net R per session, as the champion after that round's keep
-stands (the kept change's numbers when one was kept). The iteration's
-record holds the curve across rounds and its pooled rate. Two flags report
+stands (the kept change's numbers when one was kept). Beside it are the
+round's first-try read accuracy, first-try compose OK rate and hint-rescue
+rate (OK only after a hint). The iteration's record holds the curve across
+rounds and its pooled rate, and `train-loop.js status` prints them. Two flags report
 only, and never keep or reject a change:
 
 - **plateau**: in the last `plateauRounds` rounds (3), no round's capture
@@ -494,6 +496,18 @@ and leg ids; the lessons lines record the batch too.
   session worse (on at least `minPairs` sessions) and a blow. These use the
   `SCREEN` thresholds above. On the regression days fewer of the champion's
   legs caught, net, is a harm. They never show a gain.
+- **First-try reasoning** (`scripts/lib/train/first-try.js`). compose_check
+  answers a refusal with HINT lines that say what is true on the bar, so a
+  final OK can hide whether the model read the bar itself. For each
+  decision point (the compose record's root, bar and side), the first record
+  by time is the first try, and every later one is after a hint. The first
+  try gives its reads verified or not, whether it was OK, and the flow steps
+  it failed. The point is hint-rescued when the first try was refused and a
+  later one was OK. Paired on the same points, an edit whose first tries are
+  all verified on fewer points, significantly under the loop's decision
+  rule (`decisionRule`: at least `minDiscordant` changed points, p at most
+  `alpha`), is `hurt`, even if it catches more legs. First tries never make
+  a gain on their own.
 - **Both sets judge every edit.** A harm on either hurts. The gain is the
   target set's: the trend batch's legs for a trend finding, the curated
   target for any other. The combined change must keep every trend part's

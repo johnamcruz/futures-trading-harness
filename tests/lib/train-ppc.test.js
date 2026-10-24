@@ -482,10 +482,12 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const days = Object.keys(store.readRun(runDir).days).sort();
       const legs = days.flatMap(day => ['long', 'short'].map(side => {
         const lucky = /LUCKYLEGS/.test(text) && (ROUND1.probe.days.includes(day) || day === REG_DAY);
-        const caught = lucky || (/TREND|GREEDY/.test(text) || (/REGLOSE/.test(text) && day !== REG_DAY)) || (!/REGLOSE/.test(text) && side === 'long' && DAYS.indexOf(day) % 2 === 0);
+        const caught = lucky || (/TREND|GREEDY|SLOPPY/.test(text) || (/REGLOSE/.test(text) && day !== REG_DAY)) || (!/REGLOSE/.test(text) && side === 'long' && DAYS.indexOf(day) % 2 === 0);
         return { id: `${day}|${side}|x`, day, side, captured: caught, availableR: 2, blocker: caught ? null : { step: 'entry', code: 'entry:momentum', by: 'compose_check' }, cycles: caught ? [] : [{ code: 'entry:momentum', by: 'compose_check', step: 'entry', message: 'momentum: weak', reads: [{ step: 'entry', read: 'x', skill: 'a', verified: false }] }] };
       }));
-      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])) };
+      // The first tries: one decision point a side a session; SLOPPY reads wrong first and is rescued by the hint.
+      const first = days.flatMap(day => ['long', 'short'].map(side => ({ key: `MNQ|${day}T14:33:00.000Z|${side}`, root: 'MNQ', bar: `${day}T14:33:00.000Z`, side, first: { ok: !/SLOPPY/.test(text), reads: [{ step: 'entry', skill: 'a', check: !/SLOPPY/.test(text) }], failed: /SLOPPY/.test(text) ? ['entry'] : [] }, tries: /SLOPPY/.test(text) ? 2 : 1, rescued: /SLOPPY/.test(text), finalOk: true })));
+      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first };
     },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
@@ -656,7 +658,17 @@ test('the trend batch adapts: it doubles after two rounds without an improvement
   assert.deepStrictEqual(recs.map(r => r.curve.points.length), [1, 2, 3, 4, 5]);
   assert.ok(recs.every(r => r.curvePoint.source === 'champion' && r.curvePoint.legs > 0));
   assert.strictEqual(recs[4].curve.pooled.legs, recs.reduce((s, r) => s + r.curvePoint.legs, 0));
-  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0 \(champion\), pooled [\d.]+ over 5 round\(s\)/);
+  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0, first-try reads 1 OK 1 hint-rescued 0 \(champion\), pooled [\d.]+ over 5 round\(s\)/);
+});
+
+test('first-try reasoning is a harm check: an edit that catches every leg only after the hints is hurt, never a gain', async () => {
+  const w = world({ trend: true, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- SLOPPY → retry until OK', 'more legs, on the hints')] });
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.strictEqual(report.probes[0].verdict, 'hurt');
+  assert.match(report.probes[0].harms.join(), /trend set: first-try reads worse \(broken \d+, fixed 0 of \d+ points, p [\d.]+\): the edit leans on the hints/);
+  assert.deepStrictEqual(report.trend.champion.firstTry, { points: report.trend.confirm.days.length * 2, reads: report.trend.confirm.days.length * 2, readAccuracy: 1, decisionAccuracy: 1, okRate: 1, rescueRate: 0 });
+  assert.strictEqual(w.calls.verifier.length, 0);
 });
 
 test('a kept change resets the trend batch to its start; the curve then reads the kept change', async () => {

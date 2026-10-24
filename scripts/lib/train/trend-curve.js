@@ -17,7 +17,8 @@
  *
  * The learning curve: each round's confirm half, as the champion after that round's keep stands: the kept change's
  * numbers when it was kept, the champion's otherwise. Its capture rate (legs caught of the half's legs, with a Wilson
- * interval at the keep rule's level) and net R per session; the curve across rounds and its pooled rate. Two flags,
+ * interval at the keep rule's level), net R per session and the first-try reasoning summary (first-try.js: read accuracy,
+ * compose OK rate, hint-rescue rate); the curve across rounds and its pooled rate. Two flags,
  * reported only:
  *   plateau       the last plateauRounds rounds: none caught more than every earlier round did, beyond its interval (its
  *                 lower bound above the best earlier rate)
@@ -28,7 +29,7 @@
  *   outcomeOf({ probes, composed, kept })      the round's outcome
  *   planBatch(history, { pool, cfg })          { size, trigger: start | restart | keep | grow | cap, why }; history: the
  *                                              earlier rounds' [{ size, outcome }], oldest first
- *   curvePoint({ round, size, champion, composed, kept })   { round, batch, legs, caught, rate, lo, hi, netR, source }
+ *   curvePoint({ round, size, champion, composed, kept })   { round, batch, legs, caught, rate, lo, hi, netR, firstTry, source }
  *   curveOf(points, { plateauRounds })         { points, pooled: { legs, caught, rate }, plateau }
  *   memorizationOf(probes, composed)           [{ id, probe, regression, confirm }]: the edits flagged
  */
@@ -72,7 +73,9 @@ function curvePoint({ round, size, champion, composed = null, kept = false }) {
   const caught = useKept ? champion.caught + composed.capture.b - composed.capture.c : champion.caught;
   const netR = useKept && composed.netR && composed.netR.diff !== null ? champion.netR + composed.netR.diff : champion.netR;
   const w = wilson(caught, champion.legs, LEVEL());
-  return { round, batch: size, legs: champion.legs, caught, rate: w.rate, lo: w.lo, hi: w.hi, netR: netR === null ? null : Math.round(netR * 10000) / 10000, source: useKept ? 'kept change' : 'champion' };
+  // First-try reasoning (first-try.js): the kept change's own when it was kept, else the champion's.
+  const firstTry = useKept && composed.firstTry ? composed.firstTry.probe : champion.firstTry || null;
+  return { round, batch: size, legs: champion.legs, caught, rate: w.rate, lo: w.lo, hi: w.hi, netR: netR === null ? null : Math.round(netR * 10000) / 10000, firstTry, source: useKept ? 'kept change' : 'champion' };
 }
 
 function curveOf(points, { plateauRounds = CFG().plateauRounds } = {}) {

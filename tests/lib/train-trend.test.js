@@ -294,7 +294,7 @@ test('the batch size: start, kept after one round without an improvement, double
 test('the learning curve: each round\'s confirm half as the champion after its keep; pooled; a plateau and memorization flagged, never judged', () => {
   const champion = { legs: 50, caught: 10, netR: 0.2 };
   const composed = { capture: { b: 8, c: 2, pairs: 50 }, netR: { diff: 0.3 } };
-  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, source: 'champion' });
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, firstTry: null, source: 'champion' });
   const k = TC.curvePoint({ round: 2, size: 100, champion, composed, kept: true });
   assert.deepStrictEqual([k.caught, k.rate, k.netR, k.source], [16, 0.32, 0.5, 'kept change'], 'the kept change\'s legs: the champion\'s, plus fixed, minus broken');
   const pt = (round, caught, legs = 50) => TC.curvePoint({ round, size: 100, champion: { legs, caught, netR: 0 } });
@@ -312,4 +312,58 @@ test('the learning curve: each round\'s confirm half as the champion after its k
   assert.deepStrictEqual(TC.memorizationOf(probes, { parts: ['a', 'b'], trend: { capture: { b: 1, c: 1 } } }), [{ id: 'a', probe: 5, regression: 2, confirm: 0 }]);
   assert.deepStrictEqual(TC.memorizationOf(probes, { parts: ['a'], trend: { capture: { b: 3, c: 1 } } }), [], 'it held on the confirm half');
   assert.deepStrictEqual(TC.memorizationOf(probes, null), []);
+});
+
+// --- first-try reasoning --------------------------------------------------------------------------------------------
+
+const FT = require('../../scripts/lib/train/first-try');
+
+/** A compose record (trade-lifecycle.js fields): its time, side, bar, OK, reads (check true or not), problems. */
+const rec = (at, side, ok, checks, { bar = '2022-03-07T14:30:00.000Z', root = 'MNQ', problems = [] } = {}) => ({ at, root, side, bar, ok, problems, reads: checks.map(([step, check]) => ({ step, skill: `s-${step}`, read: 'x', check })) });
+
+test('first tries: per root, bar and side the first record by time; later ones after a hint; the other side apart', () => {
+  const records = [
+    rec('2022-03-07T14:31:20Z', 'long', true, [['bias', true], ['entry', true]]), // the retry, written later
+    rec('2022-03-07T14:31:05Z', 'long', false, [['bias', true], ['entry', false]], { problems: ['steps not stated: stop, target'] }), // the first try
+    rec('2022-03-07T14:31:10Z', 'short', false, [['bias', false]]),
+    rec('2022-03-07T14:34:05Z', 'long', true, [['bias', true]], { bar: '2022-03-07T14:33:00.000Z' }),
+    { at: 'x', side: 'long' }, // no bar: no point
+  ];
+  const pts = FT.firstTries(records);
+  assert.deepStrictEqual(pts.map(p => [p.key, p.first.ok, p.first.failed, p.tries, p.rescued, p.finalOk]), [
+    ['MNQ|2022-03-07T14:30:00.000Z|long', false, ['entry', 'stop', 'target'], 2, true, true],
+    ['MNQ|2022-03-07T14:30:00.000Z|short', false, ['bias'], 1, false, false],
+    ['MNQ|2022-03-07T14:33:00.000Z|long', true, [], 1, false, true],
+  ]);
+  assert.deepStrictEqual(pts[0].first.reads, [{ step: 'bias', skill: 's-bias', check: true }, { step: 'entry', skill: 's-entry', check: false }], 'the first try\'s reads, never the retry\'s');
+  assert.deepStrictEqual(FT.summarize(pts), { points: 3, reads: 4, readAccuracy: 0.5, decisionAccuracy: 0.3333, okRate: 0.3333, rescueRate: 0.3333 });
+  assert.deepStrictEqual(FT.summarize([]), { points: 0, reads: 0, readAccuracy: null, decisionAccuracy: null, okRate: null, rescueRate: null });
+  assert.strictEqual(FT.keyOf({ side: 'long' }), null);
+});
+
+test('first tries paired: worse under the decision rule is a harm; too few changed points, or better, never', () => {
+  const pts = (n, ok) => Array.from({ length: n }, (_, i) => ({ key: `k${i}`, first: { ok: ok(i), reads: [{ step: 'entry', check: ok(i) }] } }));
+  const champ = pts(20, () => true);
+  const rule = { ...require('../../scripts/lib/train/paired').DECISION_RULE };
+  const worse = FT.pairFirstTries(champ, pts(20, i => i >= 8));
+  assert.deepStrictEqual([worse.pairs, worse.b, worse.c], [20, 0, 8]);
+  assert.match(FT.firstTryHarm(worse, rule), /^first-try reads worse \(broken 8, fixed 0 of 20 points, p [\d.]+\): the edit leans on the hints$/);
+  const few = FT.pairFirstTries(champ, pts(20, i => i >= rule.minDiscordant - 1));
+  assert.strictEqual(FT.firstTryHarm(few, rule), null, 'under minDiscordant changed points');
+  assert.strictEqual(FT.firstTryHarm(FT.pairFirstTries(pts(20, i => i >= 8), champ), rule), null, 'better is no harm (and no gain)');
+  assert.strictEqual(FT.firstTryHarm(worse, { ...rule, alpha: 0.001 }), null, 'the loop\'s own rule decides');
+  assert.strictEqual(FT.pairFirstTries(champ, pts(5, () => true)).pairs, 5, 'only the points both sides have pair');
+});
+
+test('the default trendData step reads the run home\'s compose records for its first tries', () => {
+  const home = tmpDir();
+  const runDir = path.join(home, 'replay', 'r1');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'manifest.json'), JSON.stringify({ runId: 'r1' }));
+  fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ timeframe: 3, sessions: [NY] }));
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  TL.appendRecord(home, rec('2022-03-07T14:31:05Z', 'long', false, [['entry', false]]));
+  TL.appendRecord(home, rec('2022-03-07T14:31:20Z', 'long', true, [['entry', true]]));
+  const got = PR.trendData({ runDir });
+  assert.deepStrictEqual(got.first.map(p => [p.key, p.first.ok, p.rescued]), [['MNQ|2022-03-07T14:30:00.000Z|long', false, true]]);
 });

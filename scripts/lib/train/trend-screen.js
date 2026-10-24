@@ -11,21 +11,24 @@
  *   netR      the paired bootstrap interval of each session's net R (every round trip's R, leg or not), edit minus
  *             champion: the harm a looser rule shows on the days with nothing to catch
  *   blows     decisions the run's scorecard records at or past the account's floor
+ *   firstTry  the model's first compose_check of each decision point, before any hint (first-try.js): paired, a harm
+ *             when significantly worse under the loop's decision rule, whatever the legs caught; never a gain
  * The thresholds are the curated screen's own (screen.js SCREEN): a gain needs minDiscordant changed legs, p at most
  * gainAlpha and minEffect of the paired legs net; a harm p at most harmAlpha, or netR's interval wholly below zero on at
  * least minPairs sessions. The regression days (the trend-move set) judge only harm: fewer legs caught there than the
  * champion caught, net, is a harm, whatever the census showed.
  *
  *   dayR(days)                                  { day: net R } of a run's day records (every round trip with an R)
- *   sideOfTrend({ captures, days, scorecard })  { legs: Map id -> { day, captured, availableR }, dayR, blows }
+ *   sideOfTrend({ captures, days, scorecard, first })   { legs: Map id -> { day, captured, availableR }, dayR, blows, first }
  *   measureTrend(champion, probe)               { capture, netR, legs, rate: { champion, probe }, blows }
- *   trendHarms(m), regressionHarms(champion, probe)   [harm]
- *   screenTrend(m, { target })                  { verdict, pass, harms, gain }: target false judges harm only
+ *   trendHarms(m, { rule }), regressionHarms(champion, probe)   [harm] (rule: the loop's decision rule, for first tries)
+ *   screenTrend(m, { target, rule })            { verdict, pass, harms, gain }: target false judges harm only
  */
 
 const { tally } = require('./paired');
 const { pairedInterval } = require('./ab-compare');
 const { SCREEN } = require('./screen');
+const FT = require('./first-try');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -41,10 +44,10 @@ function dayR(days) {
   return out;
 }
 
-function sideOfTrend({ captures = [], days = {}, scorecard = [] } = {}) {
+function sideOfTrend({ captures = [], days = {}, scorecard = [], first = [] } = {}) {
   const legs = new Map();
   for (const doc of captures) for (const l of (isObj(doc) && Array.isArray(doc.legs) ? doc.legs : [])) legs.set(l.id, { day: l.day, captured: l.captured === true, availableR: num(l.availableR) });
-  return { legs, dayR: dayR(days), blows: (scorecard || []).filter(d => d && d.blow === true).length };
+  return { legs, dayR: dayR(days), blows: (scorecard || []).filter(d => d && d.blow === true).length, first: Array.isArray(first) ? first : [] };
 }
 
 function measureTrend(champion, probe) {
@@ -64,14 +67,17 @@ function measureTrend(champion, probe) {
     capture: { pairs: ids.length, b: t.b, c: t.c, n: t.n, pBetter: t.pBetter, pWorse: t.pWorse },
     netR: { pairs: sameDays.length, diff: iv.diff, lo: iv.lo, hi: iv.hi },
     legs: ids.length, rate: { champion: rate(champion), probe: rate(probe) }, blows: probe.blows,
+    firstTry: { paired: FT.pairFirstTries(champion.first, probe.first), champion: FT.summarize(champion.first), probe: FT.summarize(probe.first) },
   };
 }
 
 const harmful = t => t && t.n >= SCREEN.minDiscordant && t.c > t.b && t.pWorse <= SCREEN.harmAlpha;
 const gained = t => t && t.n >= SCREEN.minDiscordant && t.b > t.c && t.pBetter <= SCREEN.gainAlpha && t.pairs > 0 && (t.b - t.c) / t.pairs >= SCREEN.minEffect;
 
-function trendHarms(m) {
+function trendHarms(m, { rule } = {}) {
   const out = [];
+  const ft = m.firstTry ? FT.firstTryHarm(m.firstTry.paired, rule) : null;
+  if (ft) out.push(`trend set: ${ft}`);
   if (m.blows > 0) out.push(`trend set: ${m.blows} blow(s) on the probe's side`);
   if (harmful(m.capture)) out.push(`trend set: legs caught worse (broken ${m.capture.c}, fixed ${m.capture.b}, p ${m.capture.pWorse})`);
   if (m.netR.pairs >= SCREEN.minPairs && m.netR.hi !== null && m.netR.hi < 0) out.push(`trend set: net R per session worse (${m.netR.diff} [${m.netR.lo}, ${m.netR.hi}])`);
@@ -87,8 +93,8 @@ function regressionHarms(champion, probe) {
   return out;
 }
 
-function screenTrend(m, { target = true } = {}) {
-  const harms = trendHarms(m);
+function screenTrend(m, { target = true, rule } = {}) {
+  const harms = trendHarms(m, { rule });
   const gain = target && gained(m.capture);
   const verdict = harms.length ? 'hurt' : gain ? 'helped' : 'no effect';
   return { verdict, pass: verdict === 'helped', harms, gain: Boolean(gain) };
