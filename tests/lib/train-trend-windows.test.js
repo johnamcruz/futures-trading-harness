@@ -23,6 +23,7 @@ const { validateConfig } = require('../../scripts/lib/autotrader');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const MIN3 = 180000;
+const ms0 = iso => Date.parse(iso);
 const DAY = '2022-03-07';
 const TRADER = { harness: 'claude', model: 'm', symbols: ['MNQ'], account: '1', timeframe: 3, premarketAt: '', sessions: ['09:30-12:00@America/New_York'] };
 const CFG = validateConfig(TRADER);
@@ -82,6 +83,11 @@ test('legs whose windows touch merge into one; control windows are as long, in t
   assert.deepStrictEqual(TW.windowsFor({ ...OPTS, legs: [A, B], others: [other] }).windows, windows);
   const seeds = new Set([1, 2, 3, 4, 5].map(seed => JSON.stringify(TW.windowsFor({ ...OPTS, seed, legs: [A, B], others: [other] }).windows.filter(w => w.kind === 'control').map(w => w.from))));
   assert.ok(seeds.size > 1, 'the seed picks the control windows');
+  // Two sessions with a gap between: a control window never spans the gap (every bar of it a decision bar).
+  const seg = (from, n) => Array.from({ length: n }, (_, i) => ms0(from) + (i + 1) * MIN3);
+  const gapped = [...seg(`${DAY}T14:30:00.000Z`, 20), ...seg(`${DAY}T16:27:00.000Z`, 5)];
+  const split = TW.windowsFor({ ...OPTS, closes: gapped, legs: [A] });
+  assert.deepStrictEqual([split.windows.map(w => w.kind), split.dropped.map(d => d.why)], [['leg'], ['no free stretch of the same length in the session']]);
   // No free stretch: the control is dropped, said why, never placed on a leg.
   const full = TW.windowsFor({ ...OPTS, legs: [A], others: [leg('short', `${DAY}T14:30:00.000Z`, `${DAY}T19:40:00.000Z`)] });
   assert.deepStrictEqual([full.windows.filter(w => w.kind === 'control'), full.dropped.map(d => d.why)], [[], ['no free stretch of the same length in the session']]);
@@ -265,4 +271,39 @@ test('the replay gate never carries a loop role from a replay config: replay.js 
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   const run = resolveReplay({ runId: 'g', workDir: path.join(user, 'work'), broker: 'backtester', start: `${DAY}T00:00:00Z`, end: '2022-03-08T00:00:00Z', autotrader: TRADER, loopRole: 'trend-set' }, { baseDir: user, env, root: ROOT });
   assert.strictEqual(P.gateOptions(run).loopRole, undefined);
+});
+
+test('the driver steps a stepped-windows run\'s windows, its days\' end of day, and manages what is open after a window until flat', async () => {
+  const { seedRunHome, runReplay } = require('../../scripts/lib/replay/driver');
+  const dir = tmpDir();
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live);
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL' } } }));
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json') };
+  const trader = { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-12:00@America/New_York'], eodAt: '15:50@America/New_York' };
+  const { windows } = TW.windowsFor({ ...OPTS, closes: TW.dayCloses(validateConfig(trader), DAY), legs: [A], controlPerLeg: 0 });
+  const run = resolveReplay({ runId: 's1', workDir: path.join(dir, 'replays'), broker: 'sim', start: `${DAY}T00:00:00Z`, end: '2022-03-09T00:00:00Z', premarket: false, latency: false, autotrader: trader, stepWindows: TW.asConfig(windows) }, { baseDir: dir, env, home: dir, root: null });
+  seedRunHome(run, { root: ROOT, userEnv: env });
+  const steps = [];
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) {
+      steps.push(`${point.kind}@${point.t.toISOString().slice(5, 16)}`);
+      if (point.kind === 'eod') fs.writeFileSync(path.join(run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [] })}\n` };
+    },
+    async trades() { return []; },
+    // A position opened in the window (14:45Z) and open until 15:15Z; flat before and after.
+    async open(e) { return e.FTH_REPLAY_NOW >= `${DAY}T14:45:00Z` && e.FTH_REPLAY_NOW <= `${DAY}T15:15:59Z`; },
+  };
+  const res = await runReplay({ run, baseEnv: env, root: ROOT, deps });
+  assert.strictEqual(res.done, true);
+  const trade = steps.filter(s => s.startsWith('trade@')).map(s => s.slice('trade@'.length));
+  // The window's bars (closes 14:33 to 15:06), then managed while open (15:09 to 15:15), then nothing until end of day.
+  assert.deepStrictEqual([trade[0], trade[trade.length - 1]], ['03-07T14:33', '03-07T15:15']);
+  assert.strictEqual(trade.length, 12 + 3);
+  assert.deepStrictEqual(steps.filter(s => s.startsWith('eod')), ['eod@03-07T20:50'], 'the window day\'s end of day; the next day, no window, is never stepped');
+  // Its manifest names the windows (kind, hash, count), so no scorer reads it as whole days.
+  const manifest = JSON.parse(fs.readFileSync(run.paths.manifest, 'utf8'));
+  assert.deepStrictEqual(manifest.stepWindows, { kind: 'trend-set', hash: run.stepWindows.hash, windows: 1 });
 });

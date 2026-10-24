@@ -432,11 +432,12 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
   loop.probe = { ...loop.probe, replay: { ...replay, latency: false, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
-  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [] };
+  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [], preflight: [] };
   const trees = new Map();
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
-    preflight: () => ({ ok: true, results: [], record: () => null }),
+    // The preflight's own tests run it for real (train-trend-windows.test.js); here each run's loop role is recorded.
+    preflight: (run, gate) => { calls.preflight.push({ runId: run.runId, loopRole: gate.loopRole || null }); return { ok: true, results: [], record: () => null }; },
     makeTree: dir => { fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace')); return 'c0ffee'; },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
     seedRunHome: run => {
@@ -513,7 +514,8 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
   };
   // The scan's reactions: a long that won and a short that lost, each session at 14:33Z.
   const momentsFile = path.join(user, 'moments.jsonl');
-  fs.writeFileSync(momentsFile, DAYS.flatMap(day => [['long', 2], ['short', -1]].map(([side, R]) => JSON.stringify({ day, bar: `${day}T14:33:00.000Z`, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
+  // And one after the runner's session (21:00Z, 16:00 New York time), which no run could act on: never counted.
+  fs.writeFileSync(momentsFile, DAYS.flatMap(day => [[`${day}T14:33:00.000Z`, 'long', 2], [`${day}T14:33:00.000Z`, 'short', -1], [`${day}T21:00:00.000Z`, 'long', 9]].map(([bar, side, R]) => JSON.stringify({ day, bar, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
   if (trend) loop.probe = { ...loop.probe, trend: { moments: momentsFile, replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL, spans: SPANS }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
   const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
   return w;
@@ -638,6 +640,9 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   for (const p of report.probes) assert.deepStrictEqual(daysOf(`l1-p-${p.id}`), [...split.probe.days, REG_DAY].sort(), p.id);
   assert.deepStrictEqual(daysOf(`l1-k-${report.composed.id}`), [...split.confirm.days, REG_DAY].sort());
   assert.strictEqual(report.composed.verdict, 'helped');
+  // The keep rule's runs (the champion's tuning replays and the challenger's) carry the loop's keep-rule role; the trend runs trend-set.
+  const roles = re => [...new Set(w.calls.preflight.filter(p => re.test(p.runId)).map(p => p.loopRole))];
+  assert.deepStrictEqual([roles(/-(champion|c-[0-9a-f]+)-t\d+$/), roles(TREND_RUN)], [['keep-rule'], ['trend-set']]);
   assert.strictEqual(report.composition.parts.length, 2, 'the trend edit and the curated one, on different lines');
   const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
   assert.deepStrictEqual([rec.deltas.capture.broken, rec.deltas.capture.rate.probe, rec.deltas.capture.pairs], [0, 1, split.confirm.legs.length]);
@@ -961,4 +966,12 @@ test('the learning curve reads only the windows the champion finished; the champ
     const of = side => w.calls.trendData.find(c => c.run.startsWith(`l1-${side}`) && c.legs.some(id => id.startsWith(day)));
     assert.deepStrictEqual(of(`p-${edit}-t`).windows, of('pc-t').windows, day);
   }
+  // Each run's loop role, set by the loop: the trend runs trend-set, the curated probe runs none (they need their
+  // practice mode and curated list as any stage-1 run); the keep rule's runs: the trend set's test above.
+  const roleOf = re => [...new Set(w.calls.preflight.filter(p => re.test(p.runId)).map(p => p.loopRole))];
+  assert.deepStrictEqual(roleOf(TREND_RUN), ['trend-set']);
+  assert.deepStrictEqual(roleOf(/-[pq]\d+$/), [null]);
+  // The round's reactions: inside the runner's sessions only (the 21:00Z ones, after 15:50 New York time, never).
+  const reactions = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'trend-reactions.json'), 'utf8'));
+  assert.ok(reactions.length > 0 && reactions.every(r => r.bar.endsWith('T14:33:00.000Z')));
 });
