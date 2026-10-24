@@ -16,7 +16,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R. Call
    `compose_check` with one true read per step at least, each your side's
    way (the against stay in the count), and your size. The standard plan
-   or Trend setups line says OK → compose with its reads. The record is for this bar and side;
+   says OK → compose with its reads. The record is for this bar and side;
    it expires `valid_bars` base bars after its bar's close (6 min on 3m).
 
    | Step | The read, your side's way | The skill for the fact |

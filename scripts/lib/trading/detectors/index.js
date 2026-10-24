@@ -25,10 +25,11 @@
  *                                                  { cisd, engulfing, volume, momentum } (booleans)
  *   RULES                                          the rules' names and descriptions
  *
- * Wired (the owner's approval, 2026-10-23, on the screen-period sample: more legs, earlier, more R left than today's
- * scan, a positive expectancy after costs, no more false fires): WIRED, in order, each with its momentum-onset filter on
- * the bar (ONSET, onsetRules): breakout with any 2 of the 4 onset facts, rejection with a momentum read the trend's way. The opening
- * range's and the initial balance's levels are none of either rule's (negative for both on the sample: a general rule).
+ * The measured pair (WIRED, in order, each with its momentum-onset filter on the bar: ONSET, onsetRules): breakout with
+ * any 2 of the 4 onset facts, rejection with a momentum read the trend's way; the opening range's and the initial
+ * balance's levels are none of either rule's. NOT wired into the briefing: on a fresh, disjoint sample (deduplicated,
+ * one trade per leg and per run of firings) adding either lowered the total R and deepened the drawdown of today's
+ * scan alone (the validation, 2026-10-23). The code stays, tested, for a later measurement.
  *   wiredPlan(briefing, side, ctx)               the first wired rule that fires with its filter: { ...detect, rule, onset }
  *   wiredContext(symbol)                          { tick, plan } for the briefing: the shipped trade_lifecycle strategy's
  *                                                  risk at one contract (a stop one contract over the cap fits none)

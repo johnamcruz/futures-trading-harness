@@ -741,11 +741,6 @@ function summaryLines(b, et) {
   // Its standard plan (learning/setup-library.js planLine, the census's composeAt and planOf): R:R as code's fact.
   const plan = check ? require('../learning/setup-library').planLine(b) : null;
   if (plan) out.push(plan);
-  // The wired trend setups (trading/detectors: a breakout or a rejection at a named level the trend's way, with its
-  // momentum onset), for the sides the standard plan doesn't already plan OK: a ready plan, as code's fact.
-  const okSides = plan ? (require('../learning/setup-library').standardPlans(b) || []).filter(x => x.status === 'traded').map(x => x.side) : [];
-  const detected = m3.bar && m3.windowEntries === 'allowed' ? require('./detectors').detectedLine(b, { et, skip: okSides }) : null;
-  if (detected) out.push(detected);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
   // Only rules setups fire; a composed one is the model's to read, so none fired is never "no setup".
