@@ -400,7 +400,7 @@ function practiceMode(ctx) {
   // A continuous combine steps every decision time of its attempts' days (the config refuses practice with it).
   if (ctx.run.combine) return r('practice-mode', PASS, 'continuous combine: every decision time of the attempts\' days, no setup focus');
   // The loop's whole-day roles (loop-role checks the run is one): no setup focus by design.
-  if (loopRoleOf(ctx) && !ctx.run.practice) return r('practice-mode', PASS, `the training loop's ${loopRoleOf(ctx)} run: whole days, no setup focus`);
+  if (loopRoleOf(ctx) && !ctx.run.practice) return r('practice-mode', PASS, `the training loop's ${loopRoleOf(ctx)} run: no setup focus (each bar as a whole session's)`);
   if (!ctx.run.practice) return r('practice-mode', FAIL, 'a practice-train run sets its practice mode (the replay config\'s practice)');
   return r('practice-mode', PASS, `${ctx.run.practice.mode}, ${ctx.run.practice.setupTf}m setups`);
 }
@@ -498,7 +498,7 @@ function stage(ctx) {
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
   const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ', no prop';
   if (combineMode) return r('stage', PASS, `stage ${st} on ${role}: continuous combine (${ctx.run.combine.attempts.length} attempt(s) on ${ctx.run.combine.account}), latency charged, library hidden${own}`);
-  if (wholeDays && role === req.curatedOn) return r('stage', PASS, `stage ${st} on ${role}: the training loop's ${loopRoleOf(ctx)} run (whole days, no curated list), latency charged, library hidden${own}`);
+  if (wholeDays && role === req.curatedOn) return r('stage', PASS, `stage ${st} on ${role}: the training loop's ${loopRoleOf(ctx)} run (no curated list by design), latency charged, library hidden${own}`);
   return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden${own}`);
 }
 

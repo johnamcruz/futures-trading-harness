@@ -604,18 +604,23 @@ and leg ids; the lessons lines record the batch too.
   target for any other. The combined change must keep every trend part's
   gain on the confirm half, and every curated part's.
 
-**The cost.** A batch's legs lie in its sessions, so the cost is the
-sessions the batch spans, about 50 cycles each on the morning session. A
-fresh batch each round means new sessions each round: the champion replays
-each round's sessions, both halves (once each in a loop; a session a later
-round draws again is reused), then every edit replays the probe half's
-sessions and the regression days, on top of its curated half, and the
-combined change the confirm half's. Legs drawn at random from the whole pool spread over many
-sessions: 200 legs can span well over 100 sessions, which is about 5,000
-cycles a side for the probe half alone. A smaller `batch` costs less and
-screens with fewer legs (the `SCREEN` thresholds: at least four changed
-legs and a tenth of the pairs, net); the batch grows only when rounds show
-nothing.
+**The cost.** A run steps a leg's window and its control windows, not the
+leg's whole session: on the 3-minute morning session (about 50 cycles a
+session), a leg's window and its control window were about 17 cycles
+together in the dry run below, plus the day's end of day and any
+management. The champion steps each
+round's windows, both halves (a day's same windows, such as the regression
+days', are reused), then every edit steps the probe half's windows and the
+regression days, on top of its curated half, and the combined change the
+confirm half's. A model-free dry run of a 50-leg batch (25 probe legs on 25
+days, 24 confirm on 24, 4 regression days, three edits and the combined
+change) stepped 2,994 trend cycles in all: 850 for the champion, 559 for each
+edit, 467 for the combined change. The same days in whole sessions are 8,466
+cycles, and the earlier whole-session screen of a 100-leg batch was 15,096.
+The keep rule's runs are unchanged (full days, the strict judge): about 5,300
+cycles a tuning window a side. A smaller `batch` costs less and screens with
+fewer legs (the `SCREEN` thresholds: at least four changed legs and a tenth
+of the pairs, net); the batch grows only when rounds show nothing.
 
 **The iteration's record.** Each iteration writes
 `<iteration dir>/iteration-report.json` (`scripts/lib/train/iteration-report.js`):

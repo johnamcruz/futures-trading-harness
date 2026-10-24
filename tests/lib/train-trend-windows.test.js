@@ -224,7 +224,7 @@ test('the real preflight passes the loop\'s trend-set run (stage 1, stepped wind
   const t = preflight(ctx, trend);
   assert.ok(t.ok, (t.fails || []).join('\n'));
   assert.match(t.results.find(x => x.check === 'loop-role').detail, /the trend set's run: stage 1, 2 stepped window\(s\)/);
-  assert.match(t.results.find(x => x.check === 'stage').detail, /the training loop's trend-set run \(whole days, no curated list\)/);
+  assert.match(t.results.find(x => x.check === 'stage').detail, /the training loop's trend-set run \(no curated list by design\)/);
   // Whole sessions in the role pass too.
   assert.ok(preflight(ctx, L.windowRun(ctx, { label: 'pc-t2', window, tree: ROOT, look: {}, replay, role: 'trend-set' })).ok);
   // The keep rule's run, as the loop builds it (its own replay under modelScore): whole days, no practice, no list.
@@ -232,7 +232,7 @@ test('the real preflight passes the loop\'s trend-set run (stage 1, stepped wind
   assert.strictEqual(keep.gate.loopRole, 'keep-rule');
   const k = preflight(ctx, keep);
   assert.ok(k.ok, (k.fails || []).join('\n'));
-  assert.match(k.results.find(x => x.check === 'practice-mode').detail, /the training loop's keep-rule run: whole days/);
+  assert.match(k.results.find(x => x.check === 'practice-mode').detail, /the training loop's keep-rule run: no setup focus/);
   // An ordinary stage-1 replay of the same day without a curated list (no loop role): still refused, as before.
   const plain = preflight(ctx, L.windowRun(ctx, { label: 'x', window, tree: ROOT, look: {}, replay }));
   assert.ok(!plain.ok);
