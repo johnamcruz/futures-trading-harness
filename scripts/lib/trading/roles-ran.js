@@ -67,6 +67,8 @@
  *                                                checkRolesRan judges it: { text } | { error } | null
  *   approvalReadAsVeto(text)                     an approving VERDICT line in a report that reads as a veto: { why, line }
  *                                                | null (the runner's reporting; the gate's reading is verdictOf's)
+ *   decisiveLine(text)                           the line verdictOf decided on (APPROVE: the first approving VERDICT line;
+ *                                                VETO: the refusing one), trimmed, or '' (what the executor is handed)
  *   approvedSize(text)                           the size an approving report approves: { size } | { error } (fails closed)
  *   sizeRefusal(report, size)                    the gate's phase2-size check: an entry over phase 2's approved size (or none
  *                                                readable) refuses; null when no phase 2 is required (report null)
@@ -350,8 +352,31 @@ function verdictOf(text) {
  */
 function approvalReadAsVeto(text) {
   if (verdictOf(text) !== 'VETO') return null;
-  const ok = decisionLines(text).find(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
+  const ok = approvingLines(text)[0];
   return ok ? { why: verdictProblem(text), line: ok.line.trim() } : null;
+}
+
+/** The approving VERDICT lines, as decisionLines reads them: the ones verdictOf approves on and approvedSize sizes. */
+const approvingLines = text => decisionLines(text).filter(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
+
+/**
+ * The line a report's verdict was decided on (verdictOf's own reading, never a second one), trimmed, or '':
+ *   APPROVE   the first approving VERDICT line (a markdown heading never is: "## Phase 2 verdict: MNQ long" decides nothing)
+ *   VETO      the first decision line that refuses (not approve/take), else the first line saying veto
+ *   none      '' (no verdict line)
+ * What the runner hands the trade-executor and names in a veto's why.
+ */
+function decisiveLine(text) {
+  const v = verdictOf(text);
+  const one = l => String(l).trim().replace(/\s+/g, ' ');
+  if (v === 'APPROVE') return one(approvingLines(text)[0].line);
+  if (v !== 'VETO') return '';
+  const lines = decisionLines(text);
+  const refusing = lines.find(l => !AGREE.has(l.word)) || lines.find(l => VETO_WORD.test(l.line));
+  if (refusing) return one(refusing.line);
+  // The report says VETO elsewhere (verdictProblem's last rule): that line, as shown.
+  const veto = plainLine(String(text || '')).split(/\r\n|\r|\n/).find(l => VETO_WORD.test(l));
+  return veto ? one(veto) : '';
 }
 
 // "size <n>" on a verdict line, a "Size: <n>" line (a list bullet, number or quote mark before it), and on either a cut:
@@ -375,7 +400,7 @@ function approvedSize(text) {
   // A word after it is prose, not a size ("size within budget"); anything else must read as one.
   const word = tok => /^[A-Za-z]/.test(String(tok || ''));
   const cuts = (line, shown) => { for (const m of line.matchAll(CUT_TO)) if (!word(m[1])) read(m[1], shown); };
-  const approving = decisionLines(text).filter(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word));
+  const approving = approvingLines(text);
   if (!approving.length) return { error: 'no approving VERDICT line' };
   for (const l of approving) {
     const said = [...l.line.matchAll(SIZE_SAID)].filter(m => !word(m[1]));
@@ -555,4 +580,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, approvedSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };

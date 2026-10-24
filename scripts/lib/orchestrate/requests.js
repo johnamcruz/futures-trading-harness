@@ -17,7 +17,7 @@
  *              (the desk's and the cached reports, phase 1 among them), entrySize (in a prop attempt: { size, contract, suggested,
  *              reason, floor }, the size code translated: the one to approve or cut) }
  *     execute  the trade-executor on the approved plan; ctx adds { args (order_plan's place_order arguments, built in
- *              code: runner-entry.js), verdict (phase 2's VERDICT line) }
+ *              code: runner-entry.js), verdict (phase 2's decisive VERDICT line: roles-ran.js decisiveLine) }
  */
 
 const RISK_MANAGER = 'risk-manager';

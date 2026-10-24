@@ -45,8 +45,9 @@ failure: logged, and nothing runs.
    attempt, the policy verdict are what the gate checks) and the journal plan
    for this bar (through the broker adapter).
 3. `execute`: the trade-executor (the `execute` request: those arguments and
-   phase 2's verdict line). It counts if it called `place_order` or reported
-   the refusal (`order-sent`). Never run again (`retries: 0`, `orders: true`:
+   phase 2's decisive VERDICT line, the one its approval was read from,
+   `roles-ran.js decisiveLine`, never a heading). It counts if it called
+   `place_order` or reported the refusal (`order-sent`). Never run again (`retries: 0`, `orders: true`:
    only a last phase may run the order role, once).
 
 Each run is written to the cycle's role record (`FTH_CYCLE_ROLES`) with its

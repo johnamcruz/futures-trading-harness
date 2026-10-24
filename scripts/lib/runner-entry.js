@@ -37,12 +37,13 @@
  *      entry (entry-orders.json); else, when the
  *      gate let a place_order of this cycle through (its log, this cycle's id, the hook's records and the gateway's),
  *      the order's (a later refused retry never hides it); else blocked with the gate's refusal (the same log) or the
- *      executor's own BLOCKED or ABORTED report; else a failed
+ *      executor's own BLOCKED or ABORTED report (an ABORTED with no order call at all is the executor's own abort: a
+ *      no-trade, outcome `aborted`, never a broker's refusal); else a failed
  *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
  *
  *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
  *   plannedDrift(result, rec)  why the head trader's planned line (its side, its size) isn't the record's, or null
- *   verdictLine(text)        phase 2's VERDICT line, as written
+ *   verdictLine(text)        phase 2's decisive VERDICT line (roles-ran.js decisiveLine), never a heading
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
  *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan }
@@ -56,7 +57,7 @@
 
 const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
-const { verdictOf, approvalReadAsVeto, approvedSize } = require('./trading/roles-ran');
+const { verdictOf, approvalReadAsVeto, approvedSize, decisiveLine } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -128,8 +129,11 @@ function plannedDrift(result, rec) {
   return null;
 }
 
-/** Phase 2's VERDICT line, as written (the first line stating a verdict: "VERDICT: ..." or "Verdict - ..."), or ''. */
-const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict\b[*_`\s]*[:-]/i.test(l)) || '').trim();
+/**
+ * Phase 2's decisive VERDICT line (roles-ran.js decisiveLine: the line verdictOf and approvedSize decided on; never a
+ * heading or another line that names a verdict), or ''.
+ */
+const verdictLine = text => decisiveLine(text);
 
 /**
  * The gate's last refusal of a place_order in this cycle (the gate log, stamped with the cycle's id: check-order.js
@@ -194,7 +198,8 @@ function placeOrderDecisions(env, id, sinceMs) {
 }
 
 /**
- * The cycle's outcome after the executor's run: { outcome: executed | blocked | no-trade, result, why }.
+ * The cycle's outcome after the executor's run: { outcome: executed | unknown | blocked | aborted | no-trade, result, why }
+ * (aborted: the executor's ABORTED with no order call made, let through or refused: a no-trade, said as its abort).
  *   entered   the account shows a position on the family, or the gateway recorded this record's entry
  *   refusal   the gate's refusal this cycle ({ checks, message }) or null
  *   report    the executor's report (its BLOCKED or ABORTED line), or ''
@@ -227,6 +232,10 @@ function entryOutcome({ entered, filled = false, working = null, refusal = null,
   // A place_order call was made, never completed, and the gate log holds no decision of it (none can be read): unknown.
   if (attempted && !sent && !allowed && !refusal) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (a place_order call was made, its reply never came and the gate log has no decision of it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
+  // An ABORTED report with no order call at all (none made, none let through, none refused): the trade-executor stopped
+  // itself before any order, so neither the gate nor the broker refused anything. No order: a no-trade (`blocked` is a
+  // refused order), its entry outcome `aborted`, said as the executor's abort, never as a broker's refusal.
+  if (said && said[1] === 'ABORTED' && !attempted && !sent && !allowed) return { outcome: 'aborted', result: `CYCLE RESULT: no-trade - the trade-executor aborted the ${label} with no order sent (no order call in its run, none in the gate log): ${short(report)}`, why: short(report) };
   // A BLOCKED report after the gate let an order through is a refused retry's: the order's outcome decides.
   if (said && !(allowed && said[1] === 'BLOCKED')) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.

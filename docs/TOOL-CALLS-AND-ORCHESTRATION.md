@@ -382,7 +382,9 @@ head trader's run, before the cycle log; per role `config/runner.json`
    the gateway checks it again on the broker's bar at the order
    (`account-gate.js freshEntryPrice`).
 5. **`execute`.** The trade-executor with those exact arguments and phase 2's
-   verdict line (the `execute` request), `orders: true` and `retries: 0`: only
+   decisive VERDICT line (the `execute` request; `roles-ran.js decisiveLine`,
+   the line the approval and its size were read from, never a heading that
+   names a verdict), `orders: true` and `retries: 0`: only
    a workflow's last phase may run the order role, once. Accepted on
    `order-sent` (its `place_order` completed, or it reported the refusal). Its
    own run has its own transcript; the gate reads the role record
