@@ -300,7 +300,7 @@ test('the batch size: start, kept after one round without an improvement, double
 test('the learning curve: each round\'s confirm half as the champion after its keep; pooled; a plateau and memorization flagged, never judged', () => {
   const champion = { legs: 50, caught: 10, netR: 0.2 };
   const composed = { capture: { b: 8, c: 2, pairs: 50 }, netR: { diff: 0.3 } };
-  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, firstTry: null, source: 'champion' });
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, firstTry: null, selection: null, source: 'champion' });
   const k = TC.curvePoint({ round: 2, size: 100, champion, composed, kept: true });
   assert.deepStrictEqual([k.caught, k.rate, k.netR, k.source], [16, 0.32, 0.5, 'kept change'], 'the kept change\'s legs: the champion\'s, plus fixed, minus broken');
   const pt = (round, caught, legs = 50) => TC.curvePoint({ round, size: 100, champion: { legs, caught, netR: 0 } });
@@ -416,4 +416,36 @@ test('the trend screen pairs only sessions both runs finished: an incomplete one
   assert.deepStrictEqual([m2.capture.pairs, m2.capture.c], [18, 0]);
   // Without sessions (a stub's), every day counts.
   assert.strictEqual(TSC.measureTrend(tside({ caught: () => false }), tside({ caught: () => true })).capture.pairs, 20);
+});
+
+// --- selection value ------------------------------------------------------------------------------------------------
+
+const SEL = require('../../scripts/lib/train/selection');
+
+test('selection value: the scan reactions the model took minus those it passed, by the standard trade\'s R', () => {
+  const m = (day, bar, side, R, status = 'traded') => ({ day, bar, side, minutes: 3, validBars: 2, standard: { status }, outcome: { R } });
+  const moments = [
+    m('2022-03-07', '2022-03-07T14:30:00.000Z', 'long', 2), m('2022-03-07', '2022-03-07T15:00:00.000Z', 'short', -1),
+    m('2022-03-07', '2022-03-07T15:30:00.000Z', 'long', -1), m('2022-03-08', '2022-03-08T14:30:00.000Z', 'long', 1),
+    m('2022-03-07', '2022-03-07T16:00:00.000Z', 'long', 5, 'no-room'), m('2022-03-09', '2022-03-09T14:30:00.000Z', 'long', 3),
+  ];
+  const reactions = SEL.reactionsOf(moments, { days: ['2022-03-07', '2022-03-08'] });
+  assert.deepStrictEqual(reactions.map(r => [r.day, r.R]), [['2022-03-07', 2], ['2022-03-07', -1], ['2022-03-07', -1], ['2022-03-08', 1]], 'traded reactions of those days only');
+  // Taken: an entry its side from the bar's close to the end of its entry window (validBars bars).
+  const entries = SEL.entriesOf([
+    { at: '2022-03-07T14:33:30.000Z', composed: { side: 'long' } }, // the 14:30 long, in its window
+    { at: '2022-03-07T15:03:30.000Z', side: 'buy' }, // a long while the 15:00 reaction was a short: not it
+    { at: '2022-03-07T15:42:00.000Z', side: 'buy' }, // after the 15:30 long's window
+    { at: 'x', side: 'buy' },
+  ]);
+  assert.deepStrictEqual(entries.map(e => e.side), ['long', 'long', 'long']);
+  assert.deepStrictEqual(SEL.selectionOf(reactions, entries), { reactions: 4, taken: { n: 1, meanR: 2 }, passed: { n: 3, meanR: -0.3333 }, value: 2.3333 });
+  assert.deepStrictEqual(SEL.selectionOf(reactions, []), { reactions: 4, taken: { n: 0, meanR: null }, passed: { n: 4, meanR: 0.25 }, value: null }, 'nothing taken: no value');
+  assert.strictEqual(SEL.selectionOf(reactions, [{ at: '2022-03-07T14:30:00.000Z', side: 'long' }]).taken.n, 0, 'before the bar closed is not taking it');
+});
+
+test('the curve carries the selection value: the kept change\'s when kept', () => {
+  const champion = { legs: 10, caught: 2, netR: 0, selection: { value: 0 } };
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 10, champion }).selection, { value: 0 });
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 10, champion, composed: { capture: { b: 1, c: 0 }, selection: { value: 0.5 } }, kept: true }).selection, { value: 0.5 });
 });

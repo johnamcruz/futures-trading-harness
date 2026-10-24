@@ -462,7 +462,13 @@ confirm half's capture rate (with a Wilson interval at the keep rule's
 level) and net R per session, as the champion after that round's keep
 stands (the kept change's numbers when one was kept). Beside it are the
 round's first-try read accuracy, first-try compose OK rate and hint-rescue
-rate (OK only after a hint). The iteration's record holds the curve across
+rate (OK only after a hint), and, with `trend.moments` (the curated scan's
+moments file), the **selection value** (`scripts/lib/train/selection.js`).
+Each traded scan reaction on the confirm half carries the standard trade's
+own R. It is taken when the model placed an entry its side within the
+reaction's entry window, else passed. The value is the taken reactions' mean R
+minus the passed ones'. About 0 means no selection skill, which is what a
+first baseline measured; moving it above 0 on fresh batches is the target. The iteration's record holds the curve across
 rounds and its pooled rate, and `train-loop.js status` prints them. Two flags report
 only, and never keep or reject a change:
 

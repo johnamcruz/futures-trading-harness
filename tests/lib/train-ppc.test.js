@@ -487,7 +487,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       }));
       // The first tries: one decision point a side a session; SLOPPY reads wrong first and is rescued by the hint.
       const first = days.flatMap(day => ['long', 'short'].map(side => ({ key: `MNQ|${day}T14:33:00.000Z|${side}`, root: 'MNQ', bar: `${day}T14:33:00.000Z`, side, first: { ok: !/SLOPPY/.test(text), reads: [{ step: 'entry', skill: 'a', check: !/SLOPPY/.test(text) }], failed: /SLOPPY/.test(text) ? ['entry'] : [] }, tries: /SLOPPY/.test(text) ? 2 : 1, rescued: /SLOPPY/.test(text), finalOk: true })));
-      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first };
+      // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
+      const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
+      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries };
     },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
@@ -496,7 +498,10 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     modelVerifier: opts => { calls.verifier.push(opts); return { available: true, verdict, reasons: [`model ${verdict}`], windows: [] }; },
     writeBranch: opts => { calls.branches.push(opts); return 'deadbeef'.repeat(5); },
   };
-  if (trend) loop.probe = { ...loop.probe, trend: { replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
+  // The scan's reactions: a long that won and a short that lost, each session at 14:33Z.
+  const momentsFile = path.join(user, 'moments.jsonl');
+  fs.writeFileSync(momentsFile, DAYS.flatMap(day => [['long', 2], ['short', -1]].map(([side, R]) => JSON.stringify({ day, bar: `${day}T14:33:00.000Z`, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
+  if (trend) loop.probe = { ...loop.probe, trend: { moments: momentsFile, replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
   const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
   return w;
 }
@@ -625,6 +630,11 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual([rec.deltas.capture.broken, rec.deltas.capture.rate.probe, rec.deltas.capture.pairs], [0, 1, split.confirm.legs.length]);
   assert.ok(rec.deltas.capture.fixed > 0);
   assert.match(IR.line(rec), /legs caught \+\d+\/-0 of \d+ \([\d.]+ -> 1\)/);
+  // Selection value on the confirm half: the champion took the winning longs and passed the losing shorts.
+  const n = split.confirm.days.length;
+  assert.deepStrictEqual(report.trend.champion.selection, { reactions: n * 2, taken: { n, meanR: 2 }, passed: { n, meanR: -1 }, value: 3 });
+  // The kept change took every reaction: its taken mean 0.5, none passed, so no value to compare (never a guess).
+  assert.deepStrictEqual(rec.curvePoint.selection, { reactions: n * 2, taken: { n: n * 2, meanR: 0.5 }, passed: { n: 0, meanR: null }, value: null });
   assert.match(IR.line(rec), new RegExp(`trend batch 0 \\(probe ${split.probe.legs.length} legs on ${split.probe.days.length} day\\(s\\), confirm ${split.confirm.legs.length} on ${split.confirm.days.length}\\)`));
   // The lessons: the trend edits' lines carry their n on the batch's legs, and the batch they were judged on.
   const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => !l.composed);
@@ -658,7 +668,7 @@ test('the trend batch adapts: it doubles after two rounds without an improvement
   assert.deepStrictEqual(recs.map(r => r.curve.points.length), [1, 2, 3, 4, 5]);
   assert.ok(recs.every(r => r.curvePoint.source === 'champion' && r.curvePoint.legs > 0));
   assert.strictEqual(recs[4].curve.pooled.legs, recs.reduce((s, r) => s + r.curvePoint.legs, 0));
-  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0, first-try reads 1 OK 1 hint-rescued 0 \(champion\), pooled [\d.]+ over 5 round\(s\)/);
+  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0, first-try reads 1 OK 1 hint-rescued 0, selection value 3 \(taken \d+ at 2R, passed \d+ at -1R\) \(champion\), pooled [\d.]+ over 5 round\(s\)/);
 });
 
 test('first-try reasoning is a harm check: an edit that catches every leg only after the hints is hurt, never a gain', async () => {

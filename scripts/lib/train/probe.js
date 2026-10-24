@@ -60,6 +60,7 @@ const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
 const TC = require('./trend-curve');
 const FT = require('./first-try');
+const SEL = require('./selection');
 const { readJson } = require('../harness-run');
 
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
@@ -133,7 +134,9 @@ function trendData({ runDir }) {
     if (front && front.month) fronts[m[1]] = front.month;
   }
   const sessions = require('./trend-screen').sessionsOf({ days, combine: require('../replay/combine-run').readLog(runDir), fronts });
-  return { capture, days, first, sessions };
+  // The model's entries (the run home's entry orders), for the selection value (selection.js).
+  const entries = require('./selection').entriesOf(readJson(path.join(home, 'entry-orders.json'), []) || []);
+  return { capture, days, first, sessions, entries };
 }
 
 /**
@@ -226,7 +229,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [], entries: [] };
     for (const day of days) {
       const tag = `t${day.replace(/-/g, '')}`;
       const key = `trend-day:${side}:${day}`;
@@ -235,12 +238,13 @@ async function probeRound(ctx, { n, champion, api }) {
       const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}.json`), async () => {
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       out.legs.push(...one.legs);
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
+      out.entries.push(...(one.entries || []));
       // A session the step reported nothing of: taken as complete (the stub steps; the default step always reports).
       out.sessions.push(...(one.sessions || [{ day, complete: true, why: null, rollMonth: false }]));
       out.cycles += one.cycles;
@@ -285,11 +289,16 @@ async function probeRound(ctx, { n, champion, api }) {
   // The champion's confirm half too, every round: the learning curve reads it (trend-curve.js); nothing of it reaches the
   // proposer, and no edit runs it.
   const trendConfirm = trend ? await trendSide('pc', champion.dir, 1, 'confirm') : null;
+  // The scan's traded reactions on the round's confirm days (selection.js), read once a round from the moments file.
+  const reactions = trend && trend.moments ? await api.phase(ctx, `${n}:trend-reactions`, path.join(dir, 'trend-reactions.json'), async () => {
+    const lines = fs.readFileSync(trend.moments, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)]; } catch (_err) { return []; } });
+    return SEL.reactionsOf(lines, { days: trendDays('confirm') });
+  }) : null;
   if (trendBase) report.cycles.champion.trend = trendBase.fresh + (regBase ? regBase.fresh : 0) + (trendConfirm ? trendConfirm.fresh : 0);
   if (trendConfirm) {
     const legs = [...trendConfirm.side.legs.values()];
     const days = Object.values(trendConfirm.side.dayR);
-    report.trend.champion = { firstTry: FT.summarize(trendConfirm.side.first), legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
+    report.trend.champion = { selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries) : null, firstTry: FT.summarize(trendConfirm.side.first), legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
@@ -395,7 +404,8 @@ async function probeRound(ctx, { n, champion, api }) {
     const cancelled = [...s.cancelled, ...lostTrend];
     const verdict = harms.length ? 'hurt' : cancelled.length ? 'no effect' : 'helped';
     const targets = [...s.targets, ...trendParts.map(p => ({ id: p.id, target: tm ? tm.capture : { pairs: 0, b: 0, c: 0 } }))];
-    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, measures: { ...compact(cm), ...(tm ? { trend: tm } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
+    const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries) : null;
+    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
   });
   report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;
   // (One part alone: the combined change has the part's id, so the composed line is told apart by `composed`.)
@@ -405,7 +415,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides } } : {}) };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides, selection: composed.measures.trend.selection || null } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

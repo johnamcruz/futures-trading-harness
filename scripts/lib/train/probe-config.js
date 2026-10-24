@@ -35,7 +35,7 @@ const { rolesBetween } = require('../learning/splits');
 const { tradingDayStart } = require('../trading/clock');
 
 const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend']);
-const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression']);
+const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression', 'moments']);
 // The batch settings a loop config may set for itself (the rest, and every default: config/training.json trendBatch).
 const BATCH_KEYS = Object.freeze(['start', 'max', 'half']);
 // [default, min, max] of each (config/training.json probe).
@@ -48,7 +48,7 @@ const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' 
 
 const overlaps = (a, b) => a.from < b.to && b.from < a.to;
 
-function resolveProbe(raw, { read, readCensus = () => { throw new Error('no census reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
+function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { throw new Error('no census reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
   const errors = [];
@@ -96,7 +96,7 @@ function resolveProbe(raw, { read, readCensus = () => { throw new Error('no cens
     return { ...cfg, autotrader: own };
   };
   replay = sameTrader(replay, 'probe.replay');
-  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, tuningWindows, errors, sameTrader, parallel });
+  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, resolvePath, tuningWindows, errors, sameTrader, parallel });
   if (errors.length) throw new Error(errors.join('\n- '));
   return { replay, windows, k, parallel, ...(trend ? { trend } : {}) };
 }
@@ -115,9 +115,10 @@ const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOStr
  * practice-train and sharing no session date with the tuning windows (a round's batch, its size and halves:
  * config/training.json trendBatch, trend-curve.js; batch: { start, max, half }, each optional, overrides those three for
  * this loop). regression: { days: [YYYY-MM-DD] } (the trend-move set's), harm only: in practice-train, outside the
- * tuning windows, and never in the pool (left out of it).
+ * tuning windows, and never in the pool (left out of it). moments (optional): the curated scan's moments file, for
+ * the selection value on the confirm half (selection.js).
  */
-function resolveTrend(raw, { read, readCensus, tuningWindows, errors, sameTrader, parallel }) {
+function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindows, errors, sameTrader, parallel }) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { errors.push(`probe.trend: { ${TREND_KEYS.join(', ')} }`); return null; }
   for (const k of Object.keys(raw)) if (!TREND_KEYS.includes(k)) errors.push(`probe.trend.${k}: not a setting (${TREND_KEYS.join(', ')})`);
   let replay = null;
@@ -173,7 +174,9 @@ function resolveTrend(raw, { read, readCensus, tuningWindows, errors, sameTrader
   if (!(Number.isInteger(batch.start) && batch.start >= halves)) errors.push('probe.trend.batch.start: a whole number of legs, two or more (a batch splits into two halves)');
   if (!(Number.isInteger(batch.max) && batch.max >= batch.start)) errors.push('probe.trend.batch.max: a whole number of legs, at least start');
   if (!(typeof batch.half === 'number' && batch.half > 0 && batch.half < 1)) errors.push('probe.trend.batch.half: the probe half\'s share of a batch, between 0 and 1 (the confirm half holds the rest)');
-  return census ? { replay, set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs }, batch, regression } : null;
+  if (raw.moments !== undefined && !(typeof raw.moments === 'string' && raw.moments)) errors.push('probe.trend.moments: the curated scan\'s moments file (curated-lists.js scan), for the selection value');
+  const moments = typeof raw.moments === 'string' && raw.moments ? resolvePath(raw.moments) : null;
+  return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs }, batch, regression } : null;
 }
 
 module.exports = { PROBE_KEYS, TREND_KEYS, BATCH_KEYS, PROBE_LIMITS, resolveProbe, overlaps };
