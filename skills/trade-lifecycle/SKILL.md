@@ -23,10 +23,10 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | --- | --- | --- |
    | bias | the 15m/1h trend gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; against it only by step 4 | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
    | location | the pullback into a key level: `at <level>`, `at 15m fvg`, `vwap above`, `value below` | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
-   | setup | the reaction ending it, back the trend's way, on a closed candle above the base (often 15m): `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, or a breakout the trend's way; never 3m: no later close confirms this bar's candle | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
-   | entry | continuation on a candle closed after the setup's (often 3m): `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | setup | the reaction ending it, the trend's way, on a closed candle above the base (often 15m): `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, or a breakout the trend's way; never 3m: nothing later confirms it | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
+   | entry | continuation on a candle closed after the setup's: `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | beyond the pullback's extreme: `stop 15m low <price>` (short: high), `stop swing low <price>` | `invalidation` |
-   | target | the first swing or level named at 2R or more: `target 1h swing high <price>`, `target <level> <price>`; none named: `target 2r`; past it the runner trails the trend | `take-profit` |
+   | target | the first swing or level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r`; past it the runner trails the trend | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled: the record's stop and target are the exit; the policy's exit mode (in an attempt or not) may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
 

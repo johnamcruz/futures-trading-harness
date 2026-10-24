@@ -537,7 +537,7 @@
      "bar": "2021-05-03T14:51:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     }
    ],
    "plans": [
@@ -717,7 +717,7 @@
      "bar": "2021-05-04T13:33:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:36:00.000Z",
@@ -729,31 +729,31 @@
      "bar": "2021-05-04T13:39:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:42:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:45:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:48:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:51:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     }
    ],
    "plans": [
@@ -1768,31 +1768,31 @@
      "bar": "2021-05-04T14:45:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T14:48:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T14:51:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T14:54:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T14:57:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T15:00:00.000Z",
@@ -1804,19 +1804,19 @@
      "bar": "2021-05-04T15:03:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T15:06:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T15:09:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     }
    ],
    "plans": [

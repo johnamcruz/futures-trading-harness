@@ -123,10 +123,10 @@ function nearestStops(list, b, side, tick, rule) {
  * The targets a plan can take the side's way: the named ones (composed-reads.js targetsAhead), else the 2R mark
  * (`target 2r`, TRUE then: checkRead with the side).
  */
-function targetsOf(b, side, tick) {
-  const named = targetsAhead(b, side, { tick });
+function targetsOf(b, side, tick, riskPts = null) {
+  const named = targetsAhead(b, side, { tick, riskPts });
   if (named.length) return named;
-  const c = checkRead(parseRead('target 2r'), b, { tick, side });
+  const c = checkRead(parseRead('target 2r'), b, { tick, side, riskPts });
   return c.check === true ? [{ read: 'target 2r', price: null, mark: true }] : [];
 }
 
@@ -184,6 +184,8 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null }) {
     return [...keep, ...listed];
   };
   const [bias, location, setups, entries, stops, targets] = STEPS.map(pool);
+  // The 2R mark last: the check decides it with each combination's own stop (the room rule's R).
+  if (!targets.some(t => t[0] && t[0].mark)) targets.push([{ read: 'target 2r', price: null, mark: true, skill: skillOf('target') }]);
   const closesAfter = (e, after) => e.some(x => { const t = candleClose(m3, parseRead(x.read).form.split(' ')[0]); return t !== null && t > after; });
   let tries = 0;
   // The first bias and location (the model's own when TRUE), the most recent setups, then every stop and the nearest
@@ -214,7 +216,8 @@ const planArgs = (checked, briefing, side, tick, plan) => ({ checked, briefing, 
 function planOkFor(checked, briefing, side, tick, plan) {
   if (!checked.stop || !checked.target) return false;
   const p = planOf(planArgs(checked, briefing, side, tick, plan));
-  return Boolean(p.plan) && p.problems.every(x => /^size/.test(x));
+  // A stop one contract of which already risks more than the cap fits no size: no plan to offer.
+  return Boolean(p.plan) && p.problems.every(x => /^size/.test(x)) && !(p.plan.maxSize === 0);
 }
 
 const quote = list => list.map(x => `"${x.read}"`).join(', ');
@@ -280,9 +283,12 @@ function targetHint(checked, cand, b, side, tick, plan) {
   const n = LIMITS.perStep;
   const stopRead = (checked.reads || []).find(r => r.kind === 'stop' && r.check === true && r.agrees);
   const stop = stopRead ? { price: stopRead.price } : cand.stop[0] ? { price: cand.stop[0].price } : null;
-  if (!cand.target.length) return `target: the briefing names no level on the winning side: no target for the ${side}`;
-  if (!stop || !isObj(plan)) return `target: named levels on the winning side: ${quote(cand.target.slice(0, n))}`;
-  const rated = cand.target.map(x => ({ ...x, r: rrOf(stop, x, checked, b, side, tick, plan) })).filter(x => x.r);
+  // With a stop, the room rule's R is its distance: the levels within roomIgnoreR of the entry are none of the candidates.
+  const ref = num(checked.reference);
+  const targets = stop && ref !== null ? targetsOf(b, side, tick, Math.abs(ref - stop.price)) : cand.target;
+  if (!targets.length) return `target: the briefing names no level on the winning side: no target for the ${side}`;
+  if (!stop || !isObj(plan)) return `target: named levels on the winning side: ${quote(targets.slice(0, n))}`;
+  const rated = targets.map(x => ({ ...x, r: rrOf(stop, x, checked, b, side, tick, plan) })).filter(x => x.r);
   const min = plan.minRR;
   const enough = rated.filter(x => x.r.ok);
   const from = `from the stop at ${stop.price}`;

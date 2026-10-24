@@ -101,3 +101,57 @@ test('2R mark: live, its resting target bracket at the mark is the one cancelled
   const got = liveTarget({ rec, entry: p.entry.price, sign: 1, tick: 0.25, orders: [resting, other], contractId: 'MNQ' });
   assert.deepStrictEqual([got.price, got.cancel.map(o => o.id)], [21595.75, [9]]);
 });
+
+test('room rule: the running day or session extreme the trade extends is no level in the way: a short at a new day low gets the mark', () => {
+  const short = (edit = () => {}) => {
+    const b = scenario1();
+    const d = b.sections.m3.data;
+    d.swingTargets.below = [];
+    d.candles['3m'].relations = [];
+    d.candles['15m'].relations = [];
+    d.liquidity.equalLows = [];
+    // The bar made the day's and the session's low (21529.75) and closed above it at 21540.25.
+    b.keyLevels = [['day low', 21529.75], ['session low', 21529.75]];
+    edit(b);
+    return b;
+  };
+  assert.deepStrictEqual(targetsAhead(short(), 'short', { tick: 0.25 }), [], 'the running low the bar is at is no level ahead');
+  const reads = [{ step: 'bias', skill: 'x', read: '1h bos up' }, { step: 'target', skill: 'take-profit', read: 'target 2r' }];
+  assert.strictEqual(checkReads({ reads, side: 'short', briefing: short(), tick: 0.25 }).reads[1].check, true);
+  // The bar above the day low (not at or through it): a real level in the way, the mark refused.
+  assert.strictEqual(checkReads({ reads, side: 'short', briefing: short(b => { b.sections.m3.data.bar.l = 21531; }), tick: 0.25 }).reads[1].check, false);
+  // A level beyond the running low stays the next target.
+  assert.deepStrictEqual(targetsAhead(short(b => { b.keyLevels.push(['prior RTH low', 21480]); }), 'short', { tick: 0.25 }).map(x => x.price), [21480]);
+  // The overnight low is a finished session's level, never ignored as running.
+  assert.deepStrictEqual(targetsAhead(short(b => { b.keyLevels = [['overnight low', 21529.75]]; }), 'short', { tick: 0.25 }).map(x => x.price), [21529.75]);
+});
+
+test('room rule: the running day high a long extends, mirrored', () => {
+  const b = bare(x => { x.keyLevels = [['day high', 21541], ['session high', 21541]]; });
+  assert.strictEqual(b.sections.m3.data.bar.h, 21541);
+  assert.deepStrictEqual(targetsAhead(b, 'long', { tick: 0.25 }), []);
+  b.sections.m3.data.bar.h = 21540.5;
+  assert.deepStrictEqual(targetsAhead(b, 'long', { tick: 0.25 }).map(x => x.read), ['target day high 21541', 'target session high 21541']);
+});
+
+test('room rule: a named level within roomIgnoreR (0.25R) of the entry is ignored; one past it refuses the mark; long and short', () => {
+  assert.strictEqual(require('../../scripts/lib/tunables').analysis().composedReads.roomIgnoreR, 0.25);
+  // Long from 21540.25, the stop read at the 15m low 21512.75: R = 27.5 points. 0.2R ahead: 21545.75; 0.3R: 21548.5.
+  const at = price => bare(b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price }]; });
+  const mark = b => checkReads({ reads: withTarget('target 2r'), side: 'long', briefing: b, tick: 0.25 }).reads.find(r => r.step === 'target').check;
+  assert.strictEqual(mark(at(21545.75)), true, '0.2R: ignored');
+  assert.strictEqual(mark(at(21548.5)), false, '0.3R: in the way');
+  // Without a stop's R nothing is ignored by distance.
+  assert.deepStrictEqual(targetsAhead(at(21545.75), 'long', { tick: 0.25 }).map(x => x.price), [21545.75]);
+  assert.deepStrictEqual(targetsAhead(at(21545.75), 'long', { tick: 0.25, riskPts: 27.5 }), []);
+  // Short mirrored: from 21540.25 with R = 27.5, a level 0.2R below is ignored, one 0.3R below stands.
+  const b = scenario1();
+  b.keyLevels = [];
+  b.sections.m3.data.candles['3m'].relations = [];
+  b.sections.m3.data.candles['15m'].relations = [];
+  b.sections.m3.data.liquidity.equalLows = [];
+  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21534.75 }];
+  assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }), []);
+  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21532 }];
+  assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }).map(x => x.price), [21532]);
+});

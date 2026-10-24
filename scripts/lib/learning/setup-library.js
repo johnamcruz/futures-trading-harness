@@ -71,7 +71,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildBriefing, sessionWindow } = require('../trading/briefing');
-const { checkReads, checkRead, parseRead } = require('../trading/composed-reads');
+const { checkReads, parseRead } = require('../trading/composed-reads');
 const { STRATEGY: LIFECYCLE, planOf, stopRuleOf, expiryOf } = require('../trading/trade-lifecycle');
 const { limitOutcome } = require('./experience-log');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
@@ -157,8 +157,8 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
   const ref = num(m3.price);
   // The 2R mark (composed-reads.js `target 2r`) when asked (the briefing's standard plan, as compose_check plans it) and
   // the briefing names no target the side's way; the library's own scan keeps the named levels only.
-  const markTrue = mark && checkRead(parseRead('target 2r'), b, { tick, side }).check === true;
-  const targets = [...targetCandidates(m3, side, ref), ...(markTrue ? [{ read: 'target 2r', price: null }] : [])];
+  // The checker decides it with the combination's stop (the room rule's R), tried after every named level.
+  const targets = [...targetCandidates(m3, side, ref), ...(mark ? [{ read: 'target 2r', price: null }] : [])];
   if (!targets.length) return { status: 'no-room', why: 'no level on the winning side' };
   // The first bias and location that are true (the target aside), then the nearest target at 2:1 or more.
   let pair = null;

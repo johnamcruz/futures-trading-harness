@@ -75,7 +75,8 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
     assert.match(text, /\nNOT OK: no entry on this record/, `${p.leg} ${p.bar}`);
     const b = briefingAt(p.bar);
     for (const l of text.split('\n').filter(x => x.startsWith('- HINT '))) {
-      for (const read of quoted(l)) {
+      // The 2R mark is TRUE by the combination's own stop (the room rule's R): judged with its whole below.
+      for (const read of quoted(l).filter(x => x !== 'target 2r')) {
         const c = checkRead(parseRead(read), b, { tick: 0.25 });
         assert.strictEqual(c.check, true, `${p.leg} ${p.bar} ${read}: ${c.fact}`);
         assert.ok(!c.dir || c.dir === p.side, `${read} points ${c.dir}`);
@@ -87,7 +88,7 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
     assert.match(compose(p.bar, p.side, asReads(whole)), /\nOK: every read verified and the plan stands/, `${p.leg} ${p.bar}: ${whole}`);
   }
   // The guided retries that pass (pinned: a change that loses one is a regression, one that adds one says why).
-  assert.strictEqual(wholes, 21);
+  assert.strictEqual(wholes, 40);
 });
 
 test('trend-move set: per leg, a valid trend-following plan in its first half where the set says, and every such leg caught by a guided retry', () => {

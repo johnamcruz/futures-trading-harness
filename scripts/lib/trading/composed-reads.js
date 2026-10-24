@@ -58,7 +58,8 @@
  *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), or <level>; the
  *                                           source's price within one tick of <price>    below price long
  *   target 2r                               step target only: the 2R mark, TRUE only when the briefing names no target
- *                                           the side's way (targetsAhead); the plan puts it at the minimum R (planOf)  its side
+ *                                           the side's way (targetsAhead: past the running extreme the trade extends
+ *                                           and the levels within roomIgnoreR of the entry, by the stop read's R); the plan puts it at the minimum R (planOf)  its side
  *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
  *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
  *                                           mid is the price on the tick toward price; a side the candle forming
@@ -116,6 +117,13 @@ const MOMENTUM = { rangeAtr: require('../tunables').analysis().momentum.rangeAtr
 // High volume: at least 1.5 times the average (the snapshot's own participation scale, market-snapshot.js: "under 1.0
 // is thin participation, 1.5+ strong"; the absorption skill's "about 1.5 times"). Momentum asks only for the average.
 const VOLUME_HIGH = require('../tunables').analysis().composedReads.volumeHigh;
+// The room rule's band (the owner, 2026-10-23: "loosen it"): a named level within this many R of the entry (R: the
+// combination's own stop distance) is no level in the way and no target candidate (config/analysis.json composedReads).
+const ROOM_IGNORE_R = require('../tunables').analysis().composedReads.roomIgnoreR;
+// The running extremes a trade extends: the day's and the session's own low (a short) or high (a long), when the bar
+// traded at or through them; neither is in the way of the move making it. The overnight extremes are not: in RTH they
+// are the finished overnight session's, a real level.
+const RUNNING = { short: ['day low', 'session low'], long: ['day high', 'session high'] };
 // Absorption (the absorption skill): high volume (VOLUME_HIGH) with little progress, the candle's net move |close -
 // open| at most half its timeframe's ATR(14), at a level it met without closing beyond (rejected, or touched and held).
 const ABSORPTION = { volRatio: VOLUME_HIGH, progressAtr: require('../tunables').analysis().composedReads.absorptionProgressAtr };
@@ -323,9 +331,11 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
 /**
  * The target reads the briefing names on the side's winning side, nearest first: the swing targets, the levels it names,
  * the prior 1h and 4h candle's high, mid and low, the gaps' edges; each checked TRUE (checkRead) and on that side.
- * [{ read, price }]. The 2R mark is TRUE only when this is empty.
+ * [{ read, price }]. Never counted (the room rule): the running day or session extreme the trade extends (RUNNING, the
+ * bar at or through it), and with `riskPts` (the combination's stop distance) any level within ROOM_IGNORE_R of the entry.
+ * The 2R mark is TRUE only when this is empty.
  */
-function targetsAhead(b, side, { tick }) {
+function targetsAhead(b, side, { tick, riskPts = null }) {
   const m3 = data(b, 'm3');
   const ref = m3 ? num(m3.price) : null;
   if (ref === null || !SIDES.includes(side)) return [];
@@ -333,7 +343,9 @@ function targetsAhead(b, side, { tick }) {
   const forms = [];
   const t = isObj(m3.swingTargets) ? m3.swingTargets : {};
   for (const x of (long ? t.above : t.below) || []) if (isObj(x) && num(x.price) !== null && x.frame) forms.push(`target ${levelName(x.frame)} swing ${long ? 'high' : 'low'} ${x.price}`);
-  for (const [name, prices] of levelIndex(b)) for (const p of prices) forms.push(`target ${name} ${p}`);
+  const bar = isObj(m3.bar) ? m3.bar : {};
+  const extended = (name, p) => RUNNING[side].includes(name) && (long ? num(bar.h) !== null && bar.h >= p : num(bar.l) !== null && bar.l <= p);
+  for (const [name, prices] of levelIndex(b)) for (const p of prices) if (!extended(name, p)) forms.push(`target ${name} ${p}`);
   for (const tf of ['1h', '4h']) {
     const r = isObj(m3.rangeTargets) ? m3.rangeTargets[tf] : null;
     for (const part of ['high', 'mid', 'low']) if (isObj(r) && isObj(r[part]) && num(r[part].price) !== null) forms.push(`target prior ${tf} ${part} ${r[part].price}`);
@@ -350,7 +362,8 @@ function targetsAhead(b, side, { tick }) {
     if (seen.has(read)) continue;
     seen.add(read);
     const c = checkRead(parseRead(read), b, { tick });
-    if (c.check === true && c.dir === side) out.push({ read, price: c.price });
+    const near = num(riskPts) !== null && riskPts > 0 && Math.abs(c.price - ref) <= ROOM_IGNORE_R * riskPts;
+    if (c.check === true && c.dir === side && !near) out.push({ read, price: c.price });
   }
   return out.sort((x, y) => Math.abs(x.price - ref) - Math.abs(y.price - ref) || x.read.localeCompare(y.read));
 }
@@ -436,7 +449,7 @@ function relationsOf(c, tf, level) {
  * One parsed read checked against the briefing: { check: true | false | 'unchecked', fact, field, value, dir }. dir:
  * the side the read points to (null: none). A stop or target carries the briefing's price for it (`price`).
  */
-function checkRead(p, b, { tick = 0.25, side = null } = {}) {
+function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
   const res = (check, fact, extra = {}) => ({ check, fact, field: null, value: null, dir: null, ...extra });
   if (p.kind === 'ambiguous') return res(false, 'a negation, a bracket or a character outside plain ASCII: state each read plainly');
   if (p.kind === 'unknown') return res('unchecked', p.why || 'not a form this check knows (the forms: trading/composed-reads.js)');
@@ -628,7 +641,7 @@ function checkRead(p, b, { tick = 0.25, side = null } = {}) {
         // TRUE only when the briefing names no target the side's way at all: a named level ahead is the target (the first
         // at the minimum R or more), and one short of it in the way is no room, never the mark.
         if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
-        const ahead = targetsAhead(b, side, { tick });
+        const ahead = targetsAhead(b, side, { tick, riskPts });
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
         return res(true, `no named level ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the 2R mark (the plan's entry plus the minimum R times its stop)`, { field: 'm3 targets', value: '2r', price: null, dir: side, mark: true });
       }
@@ -708,6 +721,10 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   const m3 = data(briefing, 'm3');
   const reference = m3 ? num(m3.price) : null;
   const seen = new Set();
+  // The combination's stop distance (its first TRUE stop read's price from the reference): the room rule's R.
+  const stopAt = list.map(r => (isObj(r) && r.step === 'stop' ? parseRead(r.read) : null)).filter(p => p && p.kind === 'stop')
+    .map(p => checkRead(p, briefing, { tick })).find(c => c.check === true);
+  const riskPts = stopAt && reference !== null ? Math.abs(reference - stopAt.price) : null;
   const checked = list.slice(0, MAX_READS).map((r, i) => {
     const x = isObj(r) ? r : {};
     // Every stored field bounded (the CLI takes any JSON): the step and skill to their forms' length, the read to READ_MAX.
@@ -730,7 +747,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     if (entryPattern && !ENTRY_PATTERNS[p.value]) return bad(`an entry pattern is one of ${Object.keys(ENTRY_PATTERNS).join(', ')}`);
     if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
     if (p.form) seen.add(p.form);
-    const c = checkRead(p, briefing, { tick, side });
+    const c = checkRead(p, briefing, { tick, side, riskPts });
     return { ...row, ...c, agrees: true };
   });
   // Side agreement (D12), with D2's verified reversal: a trend or break read against the side stands when the reads
