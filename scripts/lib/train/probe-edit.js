@@ -45,7 +45,12 @@ const GROW_BYTES = require('../tunables').training().probeEdit.growBytes;
 // a pronoun ("the one that", "no one"), and a lone "one" adds no threshold the text did not have.
 const NUMBER_WORDS = Object.freeze(['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
   'twenty', 'thirty', 'forty', 'fifty', 'hundred', 'thousand', 'half', 'halves', 'quarter', 'quarters', 'third', 'thirds',
-  'twice', 'thrice', 'double', 'triple', 'dozen', 'percent']);
+  'twice', 'thrice', 'double', 'triple', 'dozen', 'percent', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
+  'fourths', 'fifths', 'single']);
+// A count in other scripts: a vulgar fraction (½, ⅓, ...) and a roman numeral of two letters or more (a lone I, V or X
+// is mostly a pronoun or a label, as "one" is left out above).
+const FRACTIONS = /[\u00BC-\u00BE\u2150-\u215E]/g;
+const ROMAN = /\b(?:I{2,3}|IV|VI{1,3}|IX|XI{1,3}|XIV|XV|XX)\b/g;
 const WORD = new RegExp(`\\b(?:${NUMBER_WORDS.join('|')})\\b`, 'gi');
 const FRONTMATTER = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 const SKILL_FILE = /^skills\/([a-z0-9-]+)\/SKILL\.md$/;
@@ -93,7 +98,7 @@ function tagErrors(tag, proposal, { findings = [] } = {}) {
   return errors;
 }
 
-const numbers = s => new Set([...(String(s).match(/\d+(?:[.,]\d+)?/g) || []), ...(String(s).match(WORD) || []).map(w => w.toLowerCase())]);
+const numbers = s => new Set([...(String(s).match(/\d+(?:[.,]\d+)?/g) || []), ...(String(s).match(WORD) || []).map(w => w.toLowerCase()), ...(String(s).match(FRACTIONS) || []), ...(String(s).match(ROMAN) || [])]);
 
 function frontmatterEnd(text) {
   const m = FRONTMATTER.exec(String(text));

@@ -489,7 +489,8 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const first = days.flatMap(day => ['long', 'short'].map(side => ({ key: `MNQ|${day}T14:33:00.000Z|${side}`, root: 'MNQ', bar: `${day}T14:33:00.000Z`, side, first: { ok: !/SLOPPY/.test(text), reads: [{ step: 'entry', skill: 'a', check: !/SLOPPY/.test(text) }], failed: /SLOPPY/.test(text) ? ['entry'] : [] }, tries: /SLOPPY/.test(text) ? 2 : 1, rescued: /SLOPPY/.test(text), finalOk: true })));
       // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
-      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries };
+      const sessions = days.map(day => ({ day, complete: true, why: null, rollMonth: false }));
+      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions };
     },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
@@ -901,4 +902,22 @@ test('no model judges: the screen, compose and the lessons record load no harnes
   const probe = fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'probe.js'), 'utf8');
   assert.strictEqual((probe.match(/ctx\.steps\.proposeProbes\(/g) || []).length, 1);
   assert.doesNotMatch(probe, /require\([^)]*proposer[^)]*\)/);
+});
+
+test('review: a trend step that reports no session state pairs nothing (fail closed); a one-day batch is inconclusive', async () => {
+  const w = world({ trend: true, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs')] });
+  const step = w.steps.trendData;
+  w.steps.trendData = opts => { const { sessions: _s, ...rest } = step(opts); return rest; };
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.deepStrictEqual([report.probes[0].verdict, report.probes[0].target.pairs], ['no effect', 0], 'no leg pairs: no catch, no miss');
+  assert.ok(report.probes[0].trend.sides.probe.dropped.every(x => x.why === 'the step reported no session state'));
+  // A batch of one session: no confirm (or probe) half, so nothing is replayed and nothing proposed.
+  const one = world({ trend: true, trendBatch: { start: 2, max: 2 }, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → x', 'x')] });
+  one.loop.probe.trend.set = { ...one.loop.probe.trend.set, legs: POOL.filter(id => id.startsWith(SET_DAYS[0])) };
+  await run(one);
+  const r1 = JSON.parse(fs.readFileSync(path.join(one.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.match(r1.why, /^inconclusive: no (probe|confirm) days in the trend batch \(2 leg\(s\) on 1 day\(s\)\)$/);
+  assert.strictEqual(one.calls.proposeProbes.length, 0);
+  assert.deepStrictEqual(one.calls.runs.filter(r => /-t\d{8}\d+$/.test(r.runId)), [], 'no trend session replayed');
 });

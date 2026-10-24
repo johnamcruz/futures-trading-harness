@@ -362,11 +362,23 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    frontmatter byte for byte (its tools, so only the executor ever holds
    order tools, and its skill lists), its "Load the skills" sentence, every
    heading, fenced block and paragraph naming a report format (VERDICT,
-   FACTS, EXECUTED, ABORTED, PLAN, CYCLE RESULT, and a verdict word in code
-   or quotes) unchanged and none added, no skill named that its lists don't
-   hold, and its body at most its size plus the growth budget. The judging
-   prose (when to approve or veto) is the role's reasoning and may be
-   edited. The edit's tree is synced (`sync-harness`), so every harness's
+   FACTS, EXECUTED, ABORTED, PLAN, CYCLE RESULT, a line starting `Size:` or
+   naming it, and a verdict word in code or quotes) unchanged and none added,
+   no second `---` block in the body, no skill named that its lists don't hold
+   (in code, as "the <name> skill", a hyphenated name written plainly, or a
+   one-word name right after a load verb such as "read" or "use", so the word
+   in ordinary prose never counts), no new number (in digits, words, vulgar
+   fractions or roman numerals), and its body at most its size plus the
+   growth budget.
+
+   **What stays editable, and what guards it.** The judging prose is the
+   role's reasoning and is editable: the risk manager's veto conditions
+   (when to approve, when to veto, when to cut the size), and the
+   executor's prose. No format guard protects them. A change there is held
+   only by the code gates, which no edit can loosen, and by the keep rule.
+   The gates are the approval cap (the order is never larger than the size
+   phase 2 approved), `[min-contracts]`, the composed reads the gateway
+   re-checks, and the contract match an exit needs. The edit's tree is synced (`sync-harness`), so every harness's
    adapter carries it, and it is probed, composed and kept exactly as a
    skill edit is.
 3. **Probe.** Each edit's tree replays the same curated moments with the

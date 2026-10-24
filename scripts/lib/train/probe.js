@@ -245,8 +245,8 @@ async function probeRound(ctx, { n, champion, api }) {
       out.blows += one.blows;
       out.first.push(...(one.first || []));
       out.entries.push(...(one.entries || []));
-      // A session the step reported nothing of: taken as complete (the stub steps; the default step always reports).
-      out.sessions.push(...(one.sessions || [{ day, complete: true, why: null, rollMonth: false }]));
+      // A session the step reported nothing of: never taken as finished (fail closed: it pairs nothing).
+      out.sessions.push(...(one.sessions || [{ day, complete: false, why: 'the step reported no session state', rollMonth: false }]));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
       if (withFindings && one.capture) out.captures.push(one.capture);
@@ -259,6 +259,8 @@ async function probeRound(ctx, { n, champion, api }) {
     return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first, sessions: out.sessions } };
   };
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
+  // A half of the trend batch with no session (a one-day batch): nothing to screen on one and judge on the other.
+  const trendEmpty = trend && (!split.probe.days.length || !split.confirm.days.length);
   if (trend) {
     report.trend = {
       set: trend.set.fingerprint, batch: { index: n - 1, size: draw.items.length, from: draw.from, cycles: draw.cycles, trigger: plan.trigger, why: plan.why },
@@ -278,6 +280,17 @@ async function probeRound(ctx, { n, champion, api }) {
     }
     writeReport();
     ctx.log(`iteration ${n}: ${report.why} (moments: probe ${report.split.moments.probe}, confirm ${report.split.moments.confirm})`);
+    return { proposals: [], report };
+  }
+  if (trendEmpty) {
+    // As the curated split: a trend half with no session day is inconclusive, never a pass, and nothing is replayed.
+    report.why = `inconclusive: no ${split.probe.days.length ? 'confirm' : 'probe'} days in the trend batch (${draw.items.length} leg(s) on ${new Set(draw.items.map(TS.dayOfLeg)).size} day(s))`;
+    const id = `iteration-${n}-trend-split`;
+    if (!LS.readLessons(lessonsFile).some(e => e.iteration === n && e.proposalId === id)) {
+      LS.appendLesson(lessonsFile, { proposalId: id, iteration: n, composed: true, verdict: 'no effect', n: 0, half: 'none', windows: cfg.windows, seed, why: report.why });
+    }
+    writeReport();
+    ctx.log(`iteration ${n}: ${report.why}`);
     return { proposals: [], report };
   }
   // The champion's probe half: the findings and every edit's screen (its confirm half runs only for a combined change).

@@ -9,9 +9,12 @@
  *   1. the frontmatter, byte for byte: name, description, tools (so only trade-executor ever holds order-writing tools),
  *      model, role-skills, role-index and timeframe;
  *   2. the body's "Load the skills ..." sentence (opencode.js LOAD_SENTENCE: the one the role-skills test keeps equal to
- *      the two lists), the same text and the same count; and no skill named that the role's two lists don't hold;
+ *      the two lists), the same text and the same count; no skill named that the role's two lists don't hold (in code,
+ *      as "the <name> skill", a hyphenated name written plainly, or a one-word name after a load verb: mentioned);
+ *      and no --- block in the body, a second frontmatter;
  *   3. the report formats: every paragraph naming a report format (REPORT_WORDS: the VERDICT and FACTS lines phase
- *      2's parsers read, roles-ran.js verdictOf, approvedSize, decisiveLine; EXECUTED, ABORTED; PLAN; CYCLE RESULT; and
+ *      2's parsers read, roles-ran.js verdictOf, approvedSize, decisiveLine; a line starting Size: or naming it in code or
+ *      quotes; EXECUTED, ABORTED; PLAN; CYCLE RESULT; and
  *      a verdict word in code or quotes, CODED_WORDS: `APPROVE`, `VETO`, `BLOCK`), every heading and every fenced
  *      block (the output templates) stays as it is, whole, and none is added. Prose that judges (when to VETO, when to
  *      APPROVE) is the role's reasoning, and may be edited: an over-veto is fixed there;
@@ -40,8 +43,12 @@ const FRONTMATTER = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 const wordsRe = words => new RegExp(`\\b(?:${words.map(w => w.replace(' ', '\\s+')).join('|')})\\b`);
 const WORD = wordsRe(REPORT_WORDS);
 const CODED = wordsRe([...REPORT_WORDS, ...CODED_WORDS]);
-/** A line names a report format: a report word anywhere, or a verdict word inside a code span or quotes. */
-const namesFormat = line => WORD.test(line) || [...line.matchAll(/`([^`]*)`|"([^"]*)"/g)].some(m => CODED.test(m[1] || m[2] || ''));
+// phase 2's Size line (roles-ran.js approvedSize reads a line starting `Size:`), case-sensitive: a line that starts
+// with it, or one that names it in code or quotes (the rule for its format).
+const SIZE_LINE = /^\s*(?:[-*]\s+)?`?Size:/;
+const SIZE_NAMED = /\bSize:/;
+/** A line names a report format: a report word anywhere, the Size line, or a verdict word or Size: inside a code span or quotes. */
+const namesFormat = line => WORD.test(line) || SIZE_LINE.test(line) || [...line.matchAll(/`([^`]*)`|"([^"]*)"/g)].some(m => CODED.test(m[1] || m[2] || '') || SIZE_NAMED.test(m[1] || m[2] || ''));
 
 function roleOfFile(file) {
   const m = AGENT_FILE.exec(String(file));
@@ -84,16 +91,35 @@ function protectedParts(text) {
 
 const listOf = v => (Array.isArray(v) ? v.map(String) : v === undefined || v === null ? [] : [String(v)]);
 
-/** Skill names a text mentions: `name` in backticks, or "the name skill". */
+// A load verb before a plain one-word skill name ("Read absorption first"): only then is a one-word name a mention, so
+// prose that uses the word ("a rejection candle") never counts as one.
+const LOAD_VERB = '(?:read|load|use|see|follow|consult|apply|check|look\\s+up)';
+// Skill names are [a-z0-9-] (skill-names test): only the hyphen needs no escape; none of them holds a regex character.
+const escape = s => s.replace(/[^a-z0-9-]/g, '');
+
+/**
+ * Skill names a text mentions: in backticks, as "the <name> skill", a hyphenated name written plainly (word-bounded:
+ * a hyphenated catalog name is never ordinary prose), or a one-word name right after a load verb ("read", "use", ...,
+ * with an optional "the"), any case.
+ */
 function mentioned(text, skillNames) {
   const known = new Set(skillNames);
+  const t = String(text);
   const out = new Set();
-  for (const m of String(text).matchAll(/`([a-z0-9-]+)`|\bthe ([a-z0-9-]+) skill\b/g)) {
+  for (const m of t.matchAll(/`([a-z0-9-]+)`|\bthe ([a-z0-9-]+) skill\b/g)) {
     const n = m[1] || m[2];
     if (known.has(n)) out.add(n);
   }
+  for (const n of known) {
+    if (out.has(n)) continue;
+    const plain = n.includes('-') ? new RegExp(`(?:^|[^a-z0-9-])${escape(n)}(?:[^a-z0-9-]|$)`, 'i') : new RegExp(`\\b${LOAD_VERB}\\s+(?:the\\s+)?${escape(n)}\\b`, 'i');
+    if (plain.test(t)) out.add(n);
+  }
   return out;
 }
+
+/** The lines of a body that open a frontmatter-like block (a line of only ---). */
+const fenceLines = body => String(body).split('\n').filter(l => /^\s*---\s*$/.test(l)).length;
 
 function agentEditErrors(file, before, after, { skillNames = [] } = {}) {
   const role = roleOfFile(file);
@@ -117,6 +143,8 @@ function agentEditErrors(file, before, after, { skillNames = [] } = {}) {
   const hadNumbers = PE.numbers(before);
   const newNumbers = [...PE.numbers(after)].filter(x => !hadNumbers.has(x));
   if (newNumbers.length) errors.push(`${file}: no new numbers in a role: the edit adds ${newNumbers.join(', ')}`);
+  // No second frontmatter-like block in the body: a reader could take its keys for the role's.
+  if (fenceLines(String(after).slice(b.frontmatter.length)) > fenceLines(String(before).slice(a.frontmatter.length))) errors.push(`${file}: no --- block in the body (a second frontmatter); its frontmatter is the one at the top`);
   if (added.length) errors.push(`${file}: names skill(s) the role doesn't load (${added.join(', ')}): its skills are its frontmatter's lists, the owner's to change`);
   return errors;
 }

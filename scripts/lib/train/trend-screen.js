@@ -29,7 +29,7 @@
  *   sessionsOf({ days, combine, fronts })       [{ day, complete, why, rollMonth }]: days a run's day records; combine
  *                                               its combine log; fronts { day: the front contract's YYYY-MM }
  *   sideOfTrend({ captures, days, scorecard, first, sessions })   { legs: Map id -> { day, captured, availableR }, dayR, blows,
- *                                               first, sessions } (sessions: sessionsOf; none: every day complete)
+ *                                               first, sessions } (sessions: sessionsOf; none: no session known finished, none pairs)
  *   measureTrend(champion, probe)               { capture, netR, legs, rate: { champion, probe }, blows }
  *   trendHarms(m, { rule }), regressionHarms(champion, probe)   [harm] (rule: the loop's decision rule, for first tries)
  *   screenTrend(m, { target, rule })            { verdict, pass, harms, gain }: target false judges harm only
@@ -90,7 +90,8 @@ function sideOfTrend({ captures = [], days = {}, scorecard = [], first = [], ses
 
 function measureTrend(champion, probe) {
   // Only sessions both sides stepped to their end (an incomplete session is neither a miss nor a catch).
-  const done = s => new Set((s.sessions || Object.keys(s.dayR).map(day => ({ day, complete: true }))).filter(x => x.complete).map(x => x.day));
+  // No session state: none known finished (fail closed), so nothing pairs.
+  const done = s => new Set((Array.isArray(s.sessions) ? s.sessions : []).filter(x => x && x.complete).map(x => x.day));
   const a = done(champion);
   const b = done(probe);
   const ok = d => a.has(d) && b.has(d);

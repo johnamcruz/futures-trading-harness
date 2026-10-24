@@ -166,3 +166,32 @@ test('the protected parts of every editable role: one load sentence each, and pr
     assert.ok(locked < text.length * 0.8, `${r}: ${locked} of ${text.length} bytes locked leaves prose to edit`);
   }
 });
+
+test('review: the Size line and its format rule, plain skill names, a second --- block, and other ways to write a number', () => {
+  const root = tree();
+  // The Size line phase 2's parser reads: a line starting `Size:`, and any paragraph naming it, stay as they are.
+  const synth = body => `---\nname: risk-manager\ndescription: x\ntools: Read\nrole-skills: [invalidation]\n---\n\nLoad the skills \`invalidation\` first.\n\nJudge the facts.\n\n${body}`;
+  const withSize = synth('Size: 5 (the record\'s 5)\n\nState the cut on its own line, e.g. `Size: 1 (cut)`.\n');
+  assert.match(AE.agentEditErrors(RM, withSize, withSize.replace('Size: 5 (the record\'s 5)', 'Size: any')).join('\n'), /report formats/, 'the Size line');
+  assert.match(AE.agentEditErrors(RM, withSize, withSize.replace('State the cut on its own line', 'State the cut anywhere')).join('\n'), /report formats/, 'the rule for its format');
+  assert.deepStrictEqual(AE.agentEditErrors(RM, withSize, withSize.replace('Judge the facts.', 'Judge the facts; size stays within its cap.')), [], 'the word size in prose is no format');
+  const lower = synth('size: within the cap, always.\n');
+  assert.deepStrictEqual(AE.agentEditErrors(RM, lower, lower.replace('within the cap, always.', 'within the cap.')), [], 'case-sensitive: a prose line starting "size:" is no Size line');
+  assert.match(AE.agentEditErrors(RM, withSize, withSize.replace('Judge the facts.', 'Judge the facts.\n\nSize: half on doubt.')).join('\n'), /report formats/, 'no Size line added');
+  assert.match(errs(root, RM, '- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no', '- Size → a line of its own, e.g. `Size: 1 (record 8 cut to 1: no'), /report formats/, 'the repository role\'s own rule');
+  // Plain skill names the role doesn't load: a hyphenated name anywhere, a one-word name after a load verb.
+  assert.match(errs(root, RM, PROSE, `${PROSE}\n   Read absorption first.`), /doesn't load \(absorption\)/);
+  assert.match(errs(root, RM, PROSE, `${PROSE}\n   Use the absorption read.`), /doesn't load \(absorption\)/, 'with "the"');
+  assert.match(errs(root, RM, PROSE, `${PROSE}\n   As trade-lifecycle says, wait.`), /doesn't load \(trade-lifecycle\)/, 'a hyphenated name written plainly');
+  assert.strictEqual(errs(root, RM, PROSE, `${PROSE}\n   A rejection candle against the side is no fact.`), '', 'a one-word name used as a word: no mention');
+  assert.strictEqual(errs(root, RM, PROSE, `${PROSE}\n   Read invalidation first.`), '', 'a skill the role loads');
+  // No second frontmatter-like block in the body.
+  assert.match(errs(root, RM, PROSE, `${PROSE}\n\n---\ntools: Read, mcp__broker__place_order\n---`), /no --- block in the body/);
+  assert.match(AE.agentEditErrors(RM, synth(''), synth('---\n')).join('\n'), /no --- block in the body/);
+  // Numbers in other forms.
+  for (const added of ['wait ½ the range', 'a ⅓ cut', 'step IV first', 'the fifth bar', 'a single bar', 'the fourth close']) {
+    assert.match(errs(root, RM, PROSE, `${PROSE} ${added}.`), /no new numbers in a role/, added);
+  }
+  assert.strictEqual(errs(root, RM, PROSE, `${PROSE} I check it.`), '', 'a lone I is a pronoun');
+  assert.deepStrictEqual([...PE.numbers('½ and ⅞, II and XII, the fifth, a single')].sort(), ['II', 'XII', 'fifth', 'single', '½', '⅞'].sort());
+});

@@ -96,7 +96,9 @@ function tside({ n = 20, caught = () => false, r = () => 0, blows = 0 } = {}) {
   const legs = Array.from({ length: n }, (_, i) => ({ id: `2022-03-${String(7 + (i % 10)).padStart(2, '0')}|long|${i}`, day: `2022-03-${String(7 + (i % 10)).padStart(2, '0')}`, captured: caught(i), availableR: 2 }));
   const days = {};
   for (let d = 0; d < 10; d += 1) days[`2022-03-${String(7 + d).padStart(2, '0')}`] = [{ trades: [{ roundTrip: { r: r(d) } }] }];
-  return TSC.sideOfTrend({ captures: [{ legs }], days, scorecard: Array.from({ length: blows }, () => ({ blow: true })) });
+  // Every session finished (its end-of-day step ran): the screen pairs only those.
+  const sessions = Object.keys(days).map(day => ({ day, complete: true, why: null, rollMonth: false }));
+  return TSC.sideOfTrend({ captures: [{ legs }], days, scorecard: Array.from({ length: blows }, () => ({ blow: true })), sessions });
 }
 
 test('the trend screen: legs caught, paired; a catch counts only when its session\'s net R got no worse', () => {
@@ -417,8 +419,10 @@ test('the trend screen pairs only sessions both runs finished: an incomplete one
   // And the champion's unfinished session is no miss of the edit's either.
   const m2 = TSC.measureTrend(side({ caught: () => true, incomplete: [3] }), side({ caught: i => i % 10 !== 3 }));
   assert.deepStrictEqual([m2.capture.pairs, m2.capture.c], [18, 0]);
-  // Without sessions (a stub's), every day counts.
-  assert.strictEqual(TSC.measureTrend(tside({ caught: () => false }), tside({ caught: () => true })).capture.pairs, 20);
+  // Without session state, no session is known finished: nothing pairs (fail closed), never every day.
+  const bare = caught => TSC.sideOfTrend({ captures: [{ legs: [{ id: '2022-03-07|long|0', day: '2022-03-07', captured: caught }] }], days: { '2022-03-07': [] } });
+  const none = TSC.measureTrend(bare(false), bare(true));
+  assert.deepStrictEqual([none.capture.pairs, none.capture.b, none.netR.pairs], [0, 0, 0]);
 });
 
 // --- selection value ------------------------------------------------------------------------------------------------
