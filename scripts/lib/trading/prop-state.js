@@ -603,11 +603,6 @@ function verdictBarProblem(home, strategy, root, v) {
   return `the latest verdict is for the ${tf} bar opened ${v.bar}, after the last recorded ${tf} bar (opened ${cur.bar}): the signal record is behind the verdict (the runner records both every bar); wait for the next bar`;
 }
 
-/**
- * Why an entry of `size` on `root` is under the floor of a strategy that trades an account (its rulebook's
- * sizing.min_contracts), or null. Counted in micro-equivalents, as combine.contractPlan sizes: a mini is its family's
- * ratio of micros, a contract with no family one. Fails closed: a sizing without a whole floor of 1 or more refuses.
- */
 /** What one `root` contract counts toward the floor (micro-equivalents): a mini its family's ratio, else 1. */
 function floorRatio(account, root, specOf = specFor) {
   const fam = familyOf(root);
@@ -625,6 +620,11 @@ function minContractsIn(strategy, account, root, specOf = specFor) {
   return Math.ceil(min / floorRatio(account, root, specOf));
 }
 
+/**
+ * Why an entry of `size` on `root` is under the floor of a strategy that trades an account (its rulebook's
+ * sizing.min_contracts), or null. Counted in micro-equivalents, as combine.contractPlan sizes: a mini is its family's
+ * ratio of micros, a contract with no family one. Fails closed: a sizing without a whole floor of 1 or more refuses.
+ */
 function minContractsRefusal(strategy, account, root, size, specOf = specFor) {
   const min = strategy && strategy.sizing ? strategy.sizing.min_contracts : undefined;
   if (!(Number.isInteger(min) && min >= 1)) {

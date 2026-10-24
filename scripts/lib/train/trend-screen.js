@@ -97,7 +97,8 @@ function measureTrend(champion, probe) {
   const ok = d => a.has(d) && b.has(d);
   const ids = [...champion.legs.keys()].filter(id => probe.legs.has(id) && ok(champion.legs.get(id).day));
   const sameDays = Object.keys(champion.dayR).filter(d => d in probe.dayR && ok(d));
-  const dropped = s => (s.sessions || []).filter(x => !ok(x.day)).map(x => ({ day: x.day, why: x.complete ? 'the other side did not finish it' : x.why }));
+  // No session state at all: nothing paired from that side, and the report says why (never an empty, silent list).
+  const dropped = s => (Array.isArray(s.sessions) ? s.sessions.filter(x => !ok(x.day)).map(x => ({ day: x.day, why: x.complete ? 'the other side did not finish it' : x.why })) : [{ day: null, why: 'the step reported no session state' }]);
   const onDays = list => (list || []).filter(p => ok(dayOfBar(p.bar)));
   const worseDay = d => (probe.dayR[d] ?? 0) < (champion.dayR[d] ?? 0);
   // A leg caught only by the edit is fixed only when its session's net R got no worse.

@@ -423,6 +423,13 @@ test('the trend screen pairs only sessions both runs finished: an incomplete one
   const bare = caught => TSC.sideOfTrend({ captures: [{ legs: [{ id: '2022-03-07|long|0', day: '2022-03-07', captured: caught }] }], days: { '2022-03-07': [] } });
   const none = TSC.measureTrend(bare(false), bare(true));
   assert.deepStrictEqual([none.capture.pairs, none.capture.b, none.netR.pairs], [0, 0, 0]);
+  // Each side without it says why, never an empty list; a side with it lists its own (the other's missing state).
+  const NO_STATE = [{ day: null, why: 'the step reported no session state' }];
+  assert.deepStrictEqual([none.sides.champion.dropped, none.sides.probe.dropped], [NO_STATE, NO_STATE]);
+  const half = TSC.measureTrend(champ, bare(true));
+  assert.deepStrictEqual(half.sides.probe.dropped, NO_STATE);
+  assert.strictEqual(half.sides.champion.dropped.length, 10, 'the champion\'s finished sessions, none paired');
+  assert.ok(half.sides.champion.dropped.every(x => x.why === 'the other side did not finish it'));
 });
 
 // --- selection value ------------------------------------------------------------------------------------------------

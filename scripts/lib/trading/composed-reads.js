@@ -364,11 +364,13 @@ function targetsAhead(b, side, { tick, riskPts = null }) {
   }
   const out = [];
   const seen = new Set();
+  // A band of 0 (no stop R, no tick, or roomIgnoreTicks 0) ignores nothing, a level exactly at the entry included.
+  const band = roomBand(riskPts, tick);
   for (const read of forms) {
     if (seen.has(read)) continue;
     seen.add(read);
     const c = checkRead(parseRead(read), b, { tick });
-    const near = Math.abs(c.price - ref) <= roomBand(riskPts, tick);
+    const near = band > 0 && Math.abs(c.price - ref) <= band;
     if (c.check === true && c.dir === side && !near) out.push({ read, price: c.price });
   }
   return out.sort((x, y) => Math.abs(x.price - ref) - Math.abs(y.price - ref) || x.read.localeCompare(y.read));
@@ -828,4 +830,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, targetsAhead, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

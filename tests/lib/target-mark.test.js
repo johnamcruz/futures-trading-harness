@@ -163,6 +163,20 @@ test('room rule: the band is min(roomIgnoreR x the stop distance, roomIgnoreTick
   assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }).map(x => x.price), [21538]);
 });
 
+test('room rule: a band of 0 ignores nothing (no stop R, no tick); a level at the entry price is never a target either way', () => {
+  const { roomBand } = require('../../scripts/lib/trading/composed-reads');
+  assert.deepStrictEqual([roomBand(null, 0.25), roomBand(0, 0.25), roomBand(27.5, null), roomBand(27.5, 0)], [0, 0, 0, 0]);
+  assert.deepStrictEqual([roomBand(27.5, 0.25), roomBand(4, 0.25)], [2, 1], 'the cap, then the R band under it');
+  // A level exactly at the entry points no side (checkRead's dir null): no target with or without a band.
+  const b = bare(x => { x.keyLevels = [['prior rth high', 21540.25]]; });
+  assert.strictEqual(checkRead(parseRead('target prior rth high 21540.25'), b, { tick: 0.25 }).dir, null);
+  for (const o of [{ tick: 0.25 }, { tick: null, riskPts: 27.5 }, { tick: 0.25, riskPts: 27.5 }]) assert.deepStrictEqual(targetsAhead(b, 'long', o), [], JSON.stringify(o));
+  // One tick past the entry with no band: in the way (the band is what ignores it, never the distance alone).
+  const tickAhead = bare(x => { x.keyLevels = [['prior rth high', 21540.5]]; });
+  assert.deepStrictEqual(targetsAhead(tickAhead, 'long', { tick: 0.25 }).map(x => x.price), [21540.5]);
+  assert.deepStrictEqual(targetsAhead(tickAhead, 'long', { tick: 0.25, riskPts: 27.5 }), []);
+});
+
 test('room rule: a wider verified stop can\'t wave a real obstacle through (the review\'s case)', () => {
   // Long from 21540.25 with a 15m swing high 10 points ahead: 0.36R from the 15m-low stop (R 27.5), 0.2R from the 1h-low
   // stop (R 50.25). Under both stops the swing is in the way and the 2R mark is refused.
