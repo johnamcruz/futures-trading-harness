@@ -28,7 +28,7 @@ edit. Code decides; the model never does.
    to a strategy or the rulebook is `blocked` until the evaluator (section
    10 step 9) screens it; a strategy's name, status, account, sizing,
    contracts, exit, instruments, timeframe, list and regime gate are never a
-   proposal's to change, and a rulebook may only be tightened, key by key
+   proposal's to change, and a rulebook (only a person's, imported) may only be tightened, key by key
    (no limit raised or turned `off`, no fact value's effective size
    multiplier raised, including a value no entry lists, which is 0; no exit
    changed, no key removed).

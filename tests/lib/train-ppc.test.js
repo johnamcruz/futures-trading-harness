@@ -20,6 +20,7 @@ const SC = require('../../scripts/lib/train/screen');
 const C = require('../../scripts/lib/train/compose');
 const LS = require('../../scripts/lib/train/lessons');
 const PR = require('../../scripts/lib/train/probe');
+const IR = require('../../scripts/lib/train/iteration-report');
 const PC = require('../../scripts/lib/train/probe-config');
 const proposer = require('../../scripts/lib/train/proposer');
 const { DECISION_RULE } = require('../../scripts/lib/train/paired');
@@ -34,6 +35,8 @@ const TIMES = Array.from({ length: 40 }, (_, i) => new Date(Date.parse(`${DAYS[M
 const timeAt = i => (i < TIMES.length ? TIMES[i] : new Date(Date.parse(TIMES[i % TIMES.length]) + Math.floor(i / TIMES.length) * 100 * 86400000).toISOString());
 const dayOfT = t => t.slice(0, 10);
 const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
+// The keep rule's tuning windows: disjoint from the probe windows (probe-config.js: an edit is never judged where it was chosen).
+const TUNING = [{ from: '2022-06-06', to: '2022-06-18' }];
 
 // --- the screen's sides, built from scripted decisions -------------------------------------------------------------
 
@@ -175,12 +178,12 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   assert.deepStrictEqual(PE.tagErrors({ skill: 'a', finding: 'F1', kind: 'rule' }, ok, { findings: FINDINGS }), []);
   assert.deepStrictEqual(PE.styleErrors(ok, { root, kind: 'rule' }), []);
   assert.deepStrictEqual(PE.splitTagged({ tag: { skill: 'a' }, targets: ['x'] }), { tag: { skill: 'a' }, proposal: { targets: ['x'] } });
-  assert.match(PE.tagErrors(null, ok, { findings: FINDINGS }).join(), /tag: \{ skill, finding, kind \}/);
+  assert.match(PE.tagErrors(null, ok, { findings: FINDINGS }).join(), /tag: \{ skill or agent, finding, kind \}/);
   assert.match(PE.tagErrors({ skill: 'a', finding: 'F9', kind: 'rule' }, ok, { findings: FINDINGS }).join(), /tag.finding/);
   assert.match(PE.tagErrors({ skill: 'a', finding: 'F1', kind: 'rewrite' }, ok, { findings: FINDINGS }).join(), /tag.kind/);
   assert.match(PE.tagErrors({ skill: 'b', finding: 'F1', kind: 'rule' }, ok, { findings: FINDINGS }).join(), /finding F1 is about a, not b/);
   // An unattributed finding: any skill, still one skill's file.
-  assert.match(PE.tagErrors({ skill: 'b', finding: 'F2', kind: 'rule' }, ok, { findings: FINDINGS }).join(), /one skill only, skills\/b\/SKILL\.md/);
+  assert.match(PE.tagErrors({ skill: 'b', finding: 'F2', kind: 'rule' }, ok, { findings: FINDINGS }).join(), /one document only, skills\/b\/SKILL\.md/);
   assert.match(PE.styleErrors(edit('- line one', '- wait 3 bars'), { root }).join(), /no numbers: the edit adds 3/);
   assert.deepStrictEqual(PE.styleErrors(edit('- line 2 of 2', '- line 2 of 2, reworded'), { root: tree(TEXT.replace('line two', 'line 2 of 2')) }), [], 'a number the text held is kept');
   assert.match(PE.styleErrors(edit('- line one', `- ${'x'.repeat(PE.MAX_LINE)}`), { root }).join(), /short condition -> action lines/);
@@ -406,14 +409,14 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
   const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3, account: '7' };
   const replay = { workDir: path.join(user, 'work'), broker: 'sim', premarket: false, autotrader: trader };
   const loop = resolveLoop({
-    loopId: 'l1', replay, tuningWindows: WINDOW, proposer: trader, repeats: 1, seed: 3, maxFlagged: 6, controlPoints: 0, modelScore: MODEL,
+    loopId: 'l1', replay, tuningWindows: TUNING, proposer: trader, repeats: 1, seed: 3, maxFlagged: 6, controlPoints: 0, modelScore: MODEL,
     // The config's probe replay is a stage-1 curated practice config; the stub world runs the same replay without a list.
     // parallel 2: no latency charged, so the probes queued together are charged as the champion's run alone (none).
     probe: { replay: { ...replay, latency: false, stage: 1, curatedList: { file: 'curated.json', list: 'mix' }, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } }, windows: WINDOW, k: 4, parallel: 2 },
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
   loop.probe = { ...loop.probe, replay: { ...replay, latency: false, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
-  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0 };
+  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [] };
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
     preflight: () => ({ ok: true, results: [], record: () => null }),
@@ -427,7 +430,10 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
       calls.runs.push({ runId: run.runId, start: run.start.toISOString(), end: run.end.toISOString(), practice: run.practice || null, tree: path.basename(root) });
       const manifest = store.openRun(run.paths, { runId: run.runId, hash: 'h' });
       const done = store.recordedTimes(run.paths.runDir);
-      const todo = TIMES.filter(t => !done.has(t));
+      // A probe half's run (its label: -p0 the probe half, -q0 the confirm half) steps that half's moments only, as the
+      // half's curated list does (probe-halves.js); every other run steps them all.
+      const half = /-p\d+$/.test(run.runId) ? 'probe' : /-q\d+$/.test(run.runId) ? 'confirm' : null;
+      const todo = TIMES.filter(t => !done.has(t) && (!half || SC.halfOf(dayOfT(t), w.loop.seed) === half));
       for (const t of todo) {
         fs.writeFileSync(run.paths.clockFile, JSON.stringify({ now: t }));
         const res = await deps.step({ t: new Date(t), kind: 'trade', day: dayOfT(t) }, {}, 1000);
@@ -451,13 +457,16 @@ function world({ proposals, verdict = 'kept', loop: over = {} } = {}) {
       const wrong = decisions.filter(d => !d.reads[0].check).length;
       return { decisions, usage: { skills: [{ skill: 'a', reads: 20, correct: 20 - wrong, wrong, available: 20, used: 20, relevant: 20, missed: 0, topRefusals: wrong ? [{ what: 'false: y', count: wrong }] : [], topMissed: [] }] }, records: [] };
     },
+    // Each half: the same replay config (the stub replays no list), its session dates and moments, as the real step reads them.
+    halfReplay: ({ replay: r, which, seed }) => { calls.halves.push(which); const days = DAYS.filter(d => SC.halfOf(d, seed) === which); return { replay: r, days, moments: days.length * 4, fingerprint: `f-${which}` }; },
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: proposals.map(p => ({ ...p })) }; },
     propose: async () => { calls.propose += 1; return { proposals: [] }; },
     evaluator: async () => ({ available: false, why: 'stub' }),
     modelVerifier: opts => { calls.verifier.push(opts); return { available: true, verdict, reasons: [`model ${verdict}`], windows: [] }; },
     writeBranch: opts => { calls.branches.push(opts); return 'deadbeef'.repeat(5); },
   };
-  return { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
+  const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
+  return w;
 }
 
 const tagged = (skill, finding, kind, find, replace, expects = 'fewer misreads') => ({ tag: { skill, finding, kind }, proposal: edit(find, replace, { expects }) });
@@ -485,9 +494,15 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   // The fifth is past k; nothing of it runs.
   assert.strictEqual(report.edits.length, 4);
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['helped', 'helped', 'hurt', 'no effect']);
-  // Every probe replayed the same moments with the same replay config as the champion's probe run.
-  const probeRuns = w.calls.runs.filter(r => r.runId.endsWith('-p0'));
-  assert.strictEqual(probeRuns.length, 1 + 4 + 1, 'the champion, four probes, one combined change');
+  // Every probe replayed the same moments with the same replay config as the champion's probe run: each half a run
+  // of its own (probe-halves.js), the champion each half, each edit the probe half only, the combined change the
+  // confirm half only.
+  const probeRuns = w.calls.runs.filter(r => /-[pq]0$/.test(r.runId));
+  assert.strictEqual(probeRuns.length, 1 + 4 + 1 + 1, 'the champion\'s two halves, four probes, one combined change');
+  assert.deepStrictEqual(probeRuns.filter(r => r.runId.endsWith('-q0')).map(r => r.runId), ['l1-pc-q0', `l1-k-${report.composed.id}-q0`], 'only the champion and the combined change replay the confirm half');
+  assert.deepStrictEqual(w.calls.halves, ['probe', 'confirm'], 'each half is written once');
+  // The cycles each side cost, from its recorded steps: 7 probe-half dates and 3 confirm-half dates, 4 times each.
+  assert.deepStrictEqual(report.cycles, { champion: { probe: 28, confirm: 12 }, edits: Object.fromEntries(report.probes.map(p => [p.id, 28])), composed: 12 });
   assert.deepStrictEqual([...new Set(probeRuns.map(r => `${r.start}..${r.end}|${JSON.stringify(r.practice)}`))], [`${probeRuns[0].start}..${probeRuns[0].end}|${JSON.stringify(probeRuns[0].practice)}`]);
   assert.strictEqual(probeRuns[0].practice.seed, 7, 'the probe config\'s seed, on every side');
   // The keep rule's runs are the loop's own full-day replay config, never the probes'.
@@ -498,6 +513,12 @@ test('the loop with `probe`: k edits probed on the champion\'s moments and seed;
   assert.ok(at('l1-champion-t0') > Math.max(...probeRuns.map(r => at(r.runId))), w.calls.runs.map(r => r.runId).join(', '));
   assert.strictEqual(probeRuns[0].tree, 'champion');
   assert.deepStrictEqual(probeRuns.slice(1, 5).map(r => r.runId).sort(), report.probes.map(p => `l1-p-${p.id}-p0`).sort());
+  // The iteration in one record: what was proposed, screened, composed and kept, the deltas and the cycles.
+  const rec = JSON.parse(fs.readFileSync(path.join(dir, 'iteration-report.json'), 'utf8'));
+  assert.deepStrictEqual([rec.proposed.length, rec.screened.map(x => x.verdict), rec.composed.verdict, rec.kept.verdict], [4, ['helped', 'helped', 'hurt', 'no effect'], 'helped', 'kept']);
+  assert.deepStrictEqual(rec.deltas.target, { fixed: rec.deltas.target.fixed, broken: 0, pairs: 12 });
+  assert.strictEqual(rec.deltas.capture, null, 'no trend set screened yet');
+  assert.match(IR.line(rec), /^iteration 1: proposed 4 \(0 refused\), screened helped 2, hurt 1, no effect 1; combined \w+ helped; keep rule kept; confirm deltas: .*; cycles: champion 40, edits 112, combined 12$/);
   // The two helpful edits touch the same line: the larger gain (GOOD) kept, the conflict reported.
   const [good, some] = report.probes;
   assert.deepStrictEqual(report.composition.parts, [good.id]);
@@ -544,9 +565,10 @@ test('a half with no session dates is inconclusive, never a pass: the report and
   assert.strictEqual(w.calls.proposeProbes.length, 0, 'nothing is proposed or probed');
   assert.strictEqual(w.calls.branches.length, 0);
   assert.strictEqual(readArchive(w.paths.archive).length, 0, 'never a kept change');
-  assert.deepStrictEqual(Object.values(report.split.pairs).sort(), [0, 40]);
+  assert.deepStrictEqual(Object.values(report.split.moments).sort(), [0, 40]);
+  assert.deepStrictEqual(w.calls.runs, [], 'the split is read from the list: nothing is replayed');
   const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE));
-  assert.deepStrictEqual(lessons.map(l => [l.why, l.n, l.pairs]), [[report.why, 0, report.split.pairs]]);
+  assert.deepStrictEqual(lessons.map(l => [l.why, l.n, l.moments]), [[report.why, 0, report.split.moments]]);
   assert.match(LS.summarize(lessons), /none yet/, 'it is no evidence for the proposer');
 });
 
@@ -696,7 +718,13 @@ test('the `probe` config: needs modelScore; stage-1 curated practice; practice-t
   assert.throws(() => PC.resolveProbe({ ...ok, judge: 'model' }, { read, modelScore: MODEL }), /probe.judge: not a setting/);
   // Through the loop's config: in its hash; refused without modelScore.
   const base = world({ proposals: [] }).loop;
-  const raw = over => ({ loopId: 'l1', replay: base.replay, proposer: base.proposer, tuningWindows: WINDOW, modelScore: MODEL, probe: ok, ...over });
+  const raw = over => ({ loopId: 'l1', replay: base.replay, proposer: base.proposer, tuningWindows: TUNING, modelScore: MODEL, probe: ok, ...over });
+  // Disjoint from the keep rule's windows: a probe window sharing a session date with a tuning window is refused.
+  assert.throws(() => resolveLoop(raw({ tuningWindows: WINDOW })), /probe.windows 2022-03-07..2022-03-19: shares session dates with the tuning window 2022-03-07..2022-03-19/);
+  assert.throws(() => resolveLoop(raw({ tuningWindows: [{ from: '2022-03-18', to: '2022-04-01' }] })), /shares session dates/, 'one shared date is enough');
+  assert.doesNotThrow(() => resolveLoop(raw({ tuningWindows: [{ from: '2022-03-19', to: '2022-04-01' }] })), 'to is exclusive: adjacent windows are disjoint');
+  assert.strictEqual(PC.overlaps({ from: '2022-03-01', to: '2022-03-05' }, { from: '2022-03-04', to: '2022-03-09' }), true);
+  assert.strictEqual(PC.overlaps({ from: '2022-03-01', to: '2022-03-05' }, { from: '2022-03-05', to: '2022-03-09' }), false);
   assert.notStrictEqual(resolveLoop(raw()).hash, resolveLoop({ ...raw(), probe: undefined }).hash);
   assert.throws(() => resolveLoop(raw({ modelScore: undefined })), /set modelScore/);
   assert.throws(() => resolveLoop(raw({ probe: { ...ok, replay: { ...replay, autotrader: { ...base.replay.autotrader, timeframe: 1 } } } })), /probe.replay.autotrader/);

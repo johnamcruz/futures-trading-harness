@@ -14,7 +14,8 @@
  *   FINDING_KINDS
  *   mergeUsage(reports)                        one report's skill rows from several runs' (counts summed)
  *   refusalsOf(decisions, records)             [{ key, skills, falseReasons }]: the wrong-reason refusals, attributed
- *   findingsFrom({ skills, refusals, exists, max })   [{ id, skill, kind, count, of, detail }], ranked, at most max
+ *   findingsFrom({ skills, refusals, exists, max })   [{ id, skill, kind, count, of, step, detail }], ranked, at most max;
+ *                                              step: the flow step it blocks (flow.js stepOf)
  *   findingLine(f)                             one line of the proposer's prompt
  */
 
@@ -22,6 +23,7 @@ const { familyRoot } = require('../trading/contracts');
 const { skillOfRead } = require('../learning/curated-moments');
 const { NO_READ_SKILLS } = require('../learning/skill-usage');
 const { LOOP_SKILLS } = require('./proposal');
+const { stepOf } = require('./flow');
 
 const FINDING_KINDS = Object.freeze(['misread', 'missed', 'wrong-reason refusal']);
 const NOT_PROBED = new Set([...Object.values(NO_READ_SKILLS).flat(), ...LOOP_SKILLS, 'unknown']);
@@ -91,12 +93,12 @@ function findingsFrom({ skills = [], refusals = [], exists = () => true, max = 8
   for (const r of ranked) {
     for (const x of r.items.sort((a, b) => b.count - a.count || FINDING_KINDS.indexOf(a.kind) - FINDING_KINDS.indexOf(b.kind))) out.push({ skill: r.skill, ...x });
   }
-  return out.slice(0, max).map((f, i) => ({ id: `F${i + 1}`, ...f, detail: String(f.detail || '').slice(0, 240) }));
+  return out.slice(0, max).map((f, i) => ({ id: `F${i + 1}`, ...f, step: stepOf(f), detail: String(f.detail || '').slice(0, 240) }));
 }
 
 function findingLine(f) {
   const what = f.kind === 'misread' ? `${f.count} of ${f.of} claimed reads refused` : f.kind === 'missed' ? `missed ${f.count} of ${f.of} times its read was true for the side` : `${f.count} refusal(s) for a reason the facts refute`;
-  return `${f.id}. ${f.skill || '(no skill read at the bar)'}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;
+  return `${f.id}. ${f.skill || (f.agent ? `agent ${f.agent}` : '(no skill read at the bar)')}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;
 }
 
 module.exports = { FINDING_KINDS, mergeUsage, refusalsOf, findingsFrom, findingLine };

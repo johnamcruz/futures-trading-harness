@@ -25,7 +25,8 @@
 const fs = require('fs');
 const path = require('path');
 const { validateProposal, FAILURES } = require('./proposal');
-const { styleErrors } = require('./probe-edit');
+const { styleErrors, targetOf } = require('./probe-edit');
+const labelOf = tag => (targetOf(tag) || { label: String((tag && (tag.skill || tag.agent)) || '?') }).label;
 
 const MAX_EXPECTS = require('../tunables').training().compose.maxExpects; // config/training.json compose
 const MAX_WHY = require('../tunables').training().compose.maxWhy;
@@ -59,7 +60,7 @@ function combined(parts) {
   return {
     targets,
     expects: clip(`the probed edits together: ${parts.map(p => p.proposal.expects).join('; ')}`, MAX_EXPECTS),
-    why: clip(`composed by code from ${parts.length} edit(s) that passed the probe screen: ${parts.map(p => `${p.id} (${p.tag.skill}, ${p.tag.kind}, finding ${p.finding.id} ${p.finding.kind})`).join('; ')}`, MAX_WHY),
+    why: clip(`composed by code from ${parts.length} edit(s) that passed the probe screen: ${parts.map(p => `${p.id} (${labelOf(p.tag)}, ${p.tag.kind}, finding ${p.finding.id} ${p.finding.kind})`).join('; ')}`, MAX_WHY),
     edits: parts.flatMap(p => p.proposal.edits.map(e => ({ file: e.file, find: e.find, replace: e.replace }))),
   };
 }
@@ -91,7 +92,7 @@ function compose(parts, { root }) {
   const chosen = accepted.map(x => x.part);
   return {
     proposal: chosen.length ? combined(chosen) : null,
-    parts: chosen.map(p => ({ id: p.id, skill: p.tag.skill, kind: p.tag.kind, finding: p.finding, gain: gainOf(p), target: p.measures.target })),
+    parts: chosen.map(p => ({ id: p.id, skill: labelOf(p.tag), kind: p.tag.kind, finding: p.finding, gain: gainOf(p), target: p.measures.target })),
     conflicts, dropped,
   };
 }
@@ -101,7 +102,7 @@ function compositionLines(c) {
   return [
     '', '### Propose-Probe-Compose', '',
     `Composed by code from ${c.parts.length} probed edit(s) that passed the screen (train/screen.js), each screened alone against the champion on the probe half of the same curated practice-train moments and seed, then together on the confirm half (${c.composed ? `${c.composed.verdict}` : 'not re-probed'}).`, '',
-    '| part | skill | kind | finding | target fixed/broken (pairs) | gain |', '| --- | --- | --- | --- | --- | ---: |',
+    '| part | skill or role | kind | finding | target fixed/broken (pairs) | gain |', '| --- | --- | --- | --- | --- | ---: |',
     ...c.parts.map(p => `| ${p.id} | ${p.skill} | ${p.kind} | ${p.finding.id} ${p.finding.kind} | ${p.target.b}/${p.target.c} (${p.target.pairs}) | ${p.gain} |`),
     ...(c.conflicts.length ? ['', 'Conflicts (the same lines; the larger paired gain kept):', ...c.conflicts.map(x => `- ${x.dropped} left out for ${x.kept}: ${x.file} lines ${x.lines} (gains ${x.gains.join(' vs ')})`)] : []),
     ...(c.dropped.length ? ['', 'Left out (the combined change would not apply or would break a cap):', ...c.dropped.map(x => `- ${x.id}: ${x.why.join('; ')}`)] : []),

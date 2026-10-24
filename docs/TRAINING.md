@@ -293,7 +293,7 @@ better.
 ### Propose–Probe–Compose
 
 Stage-1 tuning, inside the training loop (section 6): find good skill
-edits faster without loosening the bar for keeping one. A cheap screen
+and desk-role edits faster without loosening the bar for keeping one. A cheap screen
 first, then the strict test. The LLM proposes; code judges every step.
 It is on when the loop config has a `probe` block
 (`scripts/lib/train/probe-config.js`), and it needs `modelScore`:
@@ -301,7 +301,7 @@ It is on when the loop config has a `probe` block
 ```json
 "probe": {
   "replay": "s1-practice.json",
-  "windows": [{ "from": "2021-05-03", "to": "2024-06-29" }],
+  "windows": [{ "from": "2021-05-03", "to": "2022-09-01" }],
   "k": 4,
   "parallel": 1
 }
@@ -311,26 +311,43 @@ It is on when the loop config has a `probe` block
 "A practice run" above), and `windows` lie in practice-train. Each window is
 a run of that list, so it must hold every moment of the list (a run refuses
 a list with moments outside its window): with a list over all of
-practice-train, that is one window spanning the list, as here. Its
+practice-train, that is one window spanning the list, as here. The
+windows share no session date with the keep rule's `tuningWindows` (the
+config refuses an overlap): the dates edits are found and screened on never
+judge them. Here the probes take 2021-05-03 to 2022-08-31, and the keep
+rule's windows (section 6) lie after them. Its
 `autotrader` must be the loop's (leave it out to use the loop's), so the
 probes and the keep rule run the same model and runner config. Each
 iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
 
 0. **Split.** The curated moments are split by session date, by a seeded
    hash (the loop's `seed`), into a probe half and a confirm half, both in
-   practice-train. The iteration's `probe-report.json` records the seed and
-   each half's dates. Give the windows enough session dates for both
-   halves (a half with too few decisions shows no gain).
-1. **Findings.** The champion replays the windows' curated moments. Its
-   skill-usage report and scorecard on the probe half give the skills with
-   the most misreads, misses and wrong-reason refusals
-   (`scripts/lib/train/findings.js`). A refusal is credited to the skills
-   whose reads the model composed at that bar.
+   practice-train. Each half is written once per loop as a curated list of
+   its own (`scripts/lib/train/probe-halves.js`: the source's moments of
+   that half only, fingerprinted again), so a side replays only the half it
+   is judged on: the champion each half, every edit the probe half, the
+   combined change the confirm half. No edit's run holds a confirm moment.
+   The iteration's `probe-report.json` records the seed and each half's
+   dates, read from the list before any run. Give the windows enough session
+   dates for both halves (a half with too few decisions shows no gain; a
+   half with none is `inconclusive` and nothing is replayed).
+1. **Findings.** The champion replays the probe half. Its skill-usage
+   report and scorecard give the skills with the most misreads, misses and
+   wrong-reason refusals (`scripts/lib/train/findings.js`). A refusal is
+   credited to the skills whose reads the model composed at that bar. Each
+   finding is placed on the step of the trading flow it blocks
+   (`scripts/lib/train/flow.js`: bias, location, setup, entry, stop, target,
+   then risk and execution, the desk's steps after the plan). The
+   champion's confirm half runs only once a round has a combined change.
 2. **Propose.** One proposer call (the `design-self-review` skill's probe
-   prompt) writes up to `k` small, independent skill edits. Each targets
-   one finding and carries a tag: the skill, the finding and the edit's
-   kind (rewording, example, rule or removal). Code checks every edit
-   (`scripts/lib/train/probe-edit.js`): one skill's file, no new numbers
+   prompt) writes up to `k` small, independent edits, each to one skill or
+   to one desk role's body. The prompt gives the flow in order and the
+   findings grouped by the step they block, and asks for the earliest
+   step's fix first. Each edit targets one finding and carries a tag: the
+   skill (or `agent`, the role), the finding and the edit's kind
+   (rewording, example, rule or removal). A finding that names a skill or a
+   role takes only that one. Code checks every edit
+   (`scripts/lib/train/probe-edit.js`): one document, no new numbers
    (in digits or words, such as "three bars" or "half"), condition → action
    lines of at most 120 characters, a removal that removes, the frontmatter
    untouched, and the skill's byte cap (`scripts/lib/skill-caps.js`, the
@@ -339,6 +356,19 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    example a misread needs, even in a skill already over its cap. Only an
    edit that helps is kept, and its PR's checklist asks the reviewer to trim
    the bytes back before merging, so no role prompt grows. An edit probed before is not run again.
+   A desk role (`agents/<role>.md`: the three analysts, `risk-manager` and
+   `trade-executor`, never the reviewer, the researcher or the calendar
+   analyst) is checked as well by `scripts/lib/train/agent-edit.js`: its
+   frontmatter byte for byte (its tools, so only the executor ever holds
+   order tools, and its skill lists), its "Load the skills" sentence, every
+   heading, fenced block and paragraph naming a report format (VERDICT,
+   FACTS, EXECUTED, ABORTED, PLAN, CYCLE RESULT, and a verdict word in code
+   or quotes) unchanged and none added, no skill named that its lists don't
+   hold, and its body at most its size plus the growth budget. The judging
+   prose (when to approve or veto) is the role's reasoning and may be
+   edited. The edit's tree is synced (`sync-harness`), so every harness's
+   adapter carries it, and it is probed, composed and kept exactly as a
+   skill edit is.
 3. **Probe.** Each edit's tree replays the same curated moments with the
    same replay config and seed as the champion. Code pairs the two runs
    decision by decision on the probe half only
@@ -370,6 +400,25 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    judging as its own step. A kept change is a local branch and a PR body
    that lists its parts. Nothing merges, and no skill is edited on main:
    edits exist only in the probe trees and the PR.
+
+**What no model's proposal edits.** Code (the order gate, the promotion
+gate, the tunables, `harness-sync.js`), `config/`, `ACCOUNT.md`, `rules/`,
+`commands/`, generated files and the loop's own skills are never a
+document a proposal may edit. A rulebook (`accounts/<account>/RULEBOOK.md`)
+is the owner's: only a proposal a person brings
+(`train-loop.js import-proposal --approved-by <name>`) may edit it, and
+then only to tighten it (`scripts/lib/train/rulebook-guard.js`).
+`scripts/lib/train/proposal.js` refuses it in every model's proposal, the
+probe round's and the single-shot proposer's alike.
+
+**The iteration's record.** Each iteration writes
+`<iteration dir>/iteration-report.json` (`scripts/lib/train/iteration-report.js`):
+the findings with their steps, what was proposed (and refused), each
+edit's screen verdict and n, the combined change and its confirm verdict,
+the keep rule's verdict, the combined change's deltas on the confirm half
+(net reads, process and target decisions fixed, R per decision), and the
+cycles each side's runs recorded. `train-loop.js status` prints it as one
+line per iteration.
 
 **The screen's thresholds** are `SCREEN` in `scripts/lib/train/screen.js`,
 the one place:
@@ -409,9 +458,11 @@ sizes. It holds practice-train lines only: a line on any other window is
 refused, and no validate, test or final outcome is ever in it.
 
 **Cost.** K probes multiply model time. The champion replays the probe
-windows once per loop. Each round then replays them k + 1 times: each of
-the k edits and the combined change. That is about k + 1 times the model
-time of one practice run a round, on top of the keep rule's runs. The keep
+half once per loop, and the confirm half once, when a round first has a
+combined change. Each round then replays one half k + 1 times: each of the
+k edits the probe half, the combined change the confirm half. That is about
+(k + 1) / 2 times the model time of one practice run of the list a round,
+on top of the keep rule's runs. The keep
 rule's champion runs (its full-day tuning windows, the costliest part) run
 once, and only when a round first has a combined change to judge: rounds
 whose probes pass nothing never pay for them. Probes
@@ -790,6 +841,28 @@ moments are picked outcome-balanced, so even at natural rates its outcomes are
 the list's, not the market's, and its rebuilt days are drawn, so it has no
 real start days to pair.
 
+**The session and the model-call limit** (your local `loop.json`, never
+committed). Give the loop's runner config the session you trade: for the
+New York morning, `"sessions": ["09:30-12:00@America/New_York"]` (03:30 to
+06:00 HST). The probes run the same runner config (probe-config.js), so they
+match. That is about 50 three-minute cycles a session instead of about 127
+for 09:30 to 15:50: the keep rule's statistics don't change (the same
+windows of at least 90 sessions, blocks of S), only their cost. Set
+`limits.maxModelCalls` to cover what an iteration may spend: the keep
+rule's first judgment runs the champion and the challenger over every
+tuning window, so two windows of about 105 sessions cost about 10,500
+cycles a side on the morning session (about 21,000 for the first keep,
+about 10,500 for each later challenger), plus the probe rounds. The loop
+stops at the limit between calls, resumable; a limit under the keep rule's
+cost stops every keep before its verdict. The default (`loop.limits` in
+`config/training.json`) is small, for a first dry run.
+
+The continuous combine (section 5) is not the keep rule's evidence. A
+window of about 105 sessions holds only about three attempts that share no
+session, too few for blocks of S, and a combine run steps no day after an
+attempt passes or blows, so its trades are not the market's whole days and
+the two sides' days differ. Run it to see how the model does from zero.
+
 A change that adds return but adds a blow is rejected. A change with no
 significant pooled gain is not kept. A measure that can't be read (an
 unsettled entry, a run without its reads, a window too short, too few
@@ -804,7 +877,8 @@ The other verifiers can still only reject:
 With model scoring, a strategy or rulebook change is no longer blocked for
 want of a mechanical screen.
 
-**A rulebook change.** The account's firm rules (its `ACCOUNT.md`: sessions,
+**A rulebook change** (only a person's, brought with `import-proposal`: no
+model proposes one). The account's firm rules (its `ACCOUNT.md`: sessions,
 target, max loss, daily limit) must be the same in both trees, or the change
 is blocked. The policy's sizing, exit and multipliers (the account's
 `RULEBOOK.md`) and its contracts may differ:

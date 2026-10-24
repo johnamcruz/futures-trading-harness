@@ -6,15 +6,19 @@
  *
  *   look      a tuning look at the probe windows (practice-train: no budget), logged once
  *   split     the curated moments split by session date, by a seeded hash (the loop's seed: screen.js halfOf), into a
- *             probe half and a confirm half, both practice-train; the report records the seed and each half's dates
- *   champion  the champion's tree replays the probe windows' curated moments (the stage-1 `probe.replay`, the loop's
- *             seed); its skill-usage report and scorecard on the probe half give the findings (findings.js): the
- *             skills with the most misreads, misses and wrong-reason refusals
- *   propose   one model call: the proposer writes up to k small, independent skill edits, each tagged with its skill,
- *             the finding it addresses and its kind (probe-edit.js), reading the lessons record's capped summary
- *             (lessons.js). Each is checked in code (proposal.js, probe-edit.js); an edit probed before is not re-run
- *   probe     each edit's tree replays the SAME moments with the SAME replay config and seed; code pairs it with the
- *             champion decision by decision on the probe half only and screens it (screen.js): helped, no effect or
+ *             probe half and a confirm half, both practice-train, each written as a curated list of its own
+ *             (probe-halves.js, the step halfReplay), so a side replays only the half it is judged on; the report records
+ *             the seed and each half's dates, read from the list before any run
+ *   champion  the champion's tree replays the probe half's curated moments (the stage-1 `probe.replay`, the loop's
+ *             seed); its skill-usage report and scorecard give the findings (findings.js): the skills with the most
+ *             misreads, misses and wrong-reason refusals, each placed on the flow step it blocks (flow.js). Its confirm
+ *             half runs only once a round has a combined change to judge
+ *   propose   one model call: the proposer writes up to k small, independent edits, each to one skill or one desk
+ *             role's body (agent-edit.js), tagged with its target, the finding it addresses and its kind (probe-edit.js),
+ *             reading the findings by flow step and the lessons record's capped summary (lessons.js). Each is checked in
+ *             code (proposal.js, probe-edit.js, agent-edit.js); an edit probed before is not re-run
+ *   probe     each edit's tree replays the SAME probe-half moments with the SAME replay config and seed (never the
+ *             confirm half); code pairs it with the champion decision by decision and screens it (screen.js): helped, no effect or
  *             hurt. `parallel` probes at once (default 1; more only without latency charged: probe-config.js). The
  *             lessons record gets one line per probe
  *   compose   code combines every edit that helped into one change (compose.js: a conflict on the same lines keeps the
@@ -33,6 +37,9 @@
  *                                           points in keep(root, bar) counted; every point's relevance listed) and compose reads
  *   inHalf(which, seed)                     keep(root, bar) for one half
  *   pool(items, limit, fn)                  fn over items, at most limit at once; every started one finishes
+ *
+ * The report (probe-report.json) also holds each side's cost: the cycles its runs recorded (cycles.champion.probe and
+ * .confirm, cycles.edits[id], cycles.composed), read by the iteration's summary (iteration-report.js).
  */
 
 const fs = require('fs');
@@ -47,6 +54,16 @@ const SC = require('./screen');
 const C = require('./compose');
 const LS = require('./lessons');
 const { checkLook } = require('../prop/looks');
+const { recordedTimes } = require('../replay/store');
+
+/** The steps (cycles) a run recorded; 0 for a run with no records. */
+function stepsOf(runDir) {
+  try {
+    return recordedTimes(runDir).size;
+  } catch (_err) {
+    return 0;
+  }
+}
 
 async function pool(items, limit, fn) {
   const out = new Array(items.length);
@@ -111,9 +128,18 @@ async function probeRound(ctx, { n, champion, api }) {
   // One side's runs of the probe windows (the same replay config and seed for every side), reduced for the screen.
   // `which`: the half its skill-usage counts describe (the probe half for the champion's findings and each edit; the
   // confirm half for the combined change); every point's relevance is kept for the screen either way.
+  // Each half is a run of its own (probe-halves.js): the curated list's half, written once per loop, so a side replays
+  // only the half it is judged on (the champion each half, an edit the probe half, the combined change the confirm half).
+  const halves = await api.phase(ctx, 'probe:halves', path.join(ctx.paths.dir, 'probes', 'halves.json'), async () => {
+    const out = {};
+    for (const which of SC.HALVES) out[which] = await ctx.steps.halfReplay({ replay: cfg.replay, which, seed, dir: path.join(api.workDir, 'curated-halves'), root: ctx.root });
+    return out;
+  });
+  const TAG = { probe: 'p', confirm: 'q' };
+  // `which`: the half the side replays and its skill-usage counts describe; every point's relevance is kept for the screen.
   const sideData = async (side, tree, share, which, withFindings = false) => {
-    const runs = await api.windowRuns(ctx, { side, tag: 'p', windows: cfg.windows, tree, look, replay: cfg.replay, share });
-    return api.phase(ctx, `probe-data:${side}`, path.join(ctx.paths.dir, 'probes', `${side}.json`), async () => {
+    const runs = await api.windowRuns(ctx, { side, tag: TAG[which], windows: cfg.windows, tree, look, replay: halves[which].replay, share });
+    return api.phase(ctx, `probe-data:${side}-${TAG[which]}`, path.join(ctx.paths.dir, 'probes', `${side}-${TAG[which]}.json`), async () => {
       const data = [];
       for (const r of runs.runs) data.push(await ctx.steps.probeData({ runDir: r.runDir, tree, barsFiles, keep: inHalf(which, seed) }));
       const usage = F.mergeUsage(data.map(d => d.usage));
@@ -122,28 +148,31 @@ async function probeRound(ctx, { n, champion, api }) {
       const ownHalf = runs.decisions.filter(d => inHalf(which, seed)(d.symbol, d.barT || d.t));
       return {
         side: sided,
+        // The cycles the side's runs stepped (their recorded steps): what this side cost, for the iteration's report.
+        cycles: runs.runs.reduce((sum, r) => sum + stepsOf(r.runDir), 0),
         ...(withFindings ? { skills: usage, refusals: F.refusalsOf(ownHalf, data.flatMap(d => d.records || [])) } : {}),
       };
     });
   };
-  const report = { iteration: n, windows: cfg.windows, seed };
+  const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   const writeReport = () => writeJsonAtomic(path.join(dir, 'probe-report.json'), report);
-  const base = await sideData('pc', champion.dir, 1, 'probe', true);
-  const days = which => [...new Set(SC.half(base.side, which, seed).decisions.map(d => d.day))].sort();
-  report.split = { seed, by: 'session date', probe: days('probe'), confirm: days('confirm') };
+  report.split = { seed, by: 'session date', probe: halves.probe.days, confirm: halves.confirm.days };
   if (!report.split.probe.length || !report.split.confirm.length) {
     // One half holds no session dates: nothing could be screened on one and judged on the other, so never a pass.
-    const pairs = which => SC.half(base.side, which, seed).decisions.length;
-    report.split.pairs = { probe: pairs('probe'), confirm: pairs('confirm') };
+    // Nothing is replayed for it either: the split is read from the list's moments before any run.
+    report.split.moments = { probe: halves.probe.moments, confirm: halves.confirm.moments };
     report.why = 'inconclusive: a half has no session dates';
     const id = `iteration-${n}-split`;
     if (!LS.readLessons(lessonsFile).some(e => e.iteration === n && e.proposalId === id)) {
-      LS.appendLesson(lessonsFile, { proposalId: id, iteration: n, composed: true, verdict: 'no effect', n: 0, half: 'none', windows: cfg.windows, seed, why: report.why, pairs: report.split.pairs });
+      LS.appendLesson(lessonsFile, { proposalId: id, iteration: n, composed: true, verdict: 'no effect', n: 0, half: 'none', windows: cfg.windows, seed, why: report.why, moments: report.split.moments });
     }
     writeReport();
-    ctx.log(`iteration ${n}: ${report.why} (decisions: probe ${report.split.pairs.probe}, confirm ${report.split.pairs.confirm})`);
+    ctx.log(`iteration ${n}: ${report.why} (moments: probe ${report.split.moments.probe}, confirm ${report.split.moments.confirm})`);
     return { proposals: [], report };
   }
+  // The champion's probe half: the findings and every edit's screen (its confirm half runs only for a combined change).
+  const base = await sideData('pc', champion.dir, 1, 'probe', true);
+  report.cycles.champion.probe = base.cycles;
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.findingsFrom({
     skills: base.skills, refusals: base.refusals, max: cfg.k * 2, exists: s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md')),
   }));
@@ -185,19 +214,20 @@ async function probeRound(ctx, { n, champion, api }) {
     const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });
     const side = await sideData(`p-${e.id}`, tree.dir, Math.min(cfg.parallel, runnable.length), 'probe');
     // Screened on the probe half only: the confirm half stays unseen until the combined change.
-    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill, kind: e.finding.kind });
-    return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures: compact(m), screen: SC.screen(m) };
+    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind });
+    return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures: compact(m), screen: SC.screen(m), cycles: side.cycles };
   }));
   // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id).
   const recorded = new Set(LS.readLessons(lessonsFile).filter(e => e.iteration === n && !e.composed).map(e => e.proposalId));
   for (const p of probes.filter(x => !recorded.has(x.id))) {
     LS.appendLesson(lessonsFile, {
-      proposalId: p.id, iteration: n, skill: p.tag.skill, kind: p.tag.kind, finding: { id: p.finding.id, kind: p.finding.kind, line: F.findingLine(p.finding) },
+      proposalId: p.id, iteration: n, ...(p.tag.agent ? { agent: p.tag.agent } : { skill: p.tag.skill }), kind: p.tag.kind, finding: { id: p.finding.id, kind: p.finding.kind, line: F.findingLine(p.finding) },
       findingKind: p.finding.kind, windows: cfg.windows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs,
     });
   }
   report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target }));
-  for (const p of probes) ctx.log(`iteration ${n}: probe ${p.id} (${p.tag.skill}, ${p.tag.kind}, ${p.finding.id}): ${p.screen.verdict}${p.screen.harms.length ? `: ${p.screen.harms.join('; ')}` : ''}`);
+  for (const p of probes) report.cycles.edits[p.id] = p.cycles === undefined ? null : p.cycles;
+  for (const p of probes) ctx.log(`iteration ${n}: probe ${p.id} (${(PE.targetOf(p.tag) || { label: '?' }).label}, ${p.tag.kind}, ${p.finding.id}): ${p.screen.verdict}${p.screen.harms.length ? `: ${p.screen.harms.join('; ')}` : ''}`);
   const passed = probes.filter(p => p.screen.pass);
   if (!passed.length) {
     report.why = 'no edit passed the screen';
@@ -212,13 +242,17 @@ async function probeRound(ctx, { n, champion, api }) {
     return { proposals: [], report };
   }
   const cid = P.proposalId(composition.proposal);
+  // The champion's confirm half: run once a round first has a combined change to judge on it (never for an edit).
+  const confirmBase = await sideData('pc', champion.dir, 1, 'confirm');
+  report.cycles.champion.confirm = confirmBase.cycles;
   // The combined change, probed once more and judged on the confirm half only: it must hold there, its parts not cancel.
   const composed = await api.phase(ctx, `${n}:composed`, path.join(dir, `composed-${cid}.json`), async () => {
     const tree = await api.candidateTree(ctx, { dir: work, id: `k-${cid}`, proposal: composition.proposal, champion });
     const side = await sideData(`k-${cid}`, tree.dir, 1, 'confirm');
-    const s = SC.composedScreen(SC.half(base.side, 'confirm', seed), SC.half(side.side, 'confirm', seed), passed.filter(p => composition.parts.some(x => x.id === p.id)));
-    return { verdict: s.verdict, pass: s.pass, harms: s.harms, cancelled: s.cancelled, targets: s.targets, measures: s.measures ? compact(s.measures) : null };
+    const s = SC.composedScreen(SC.half(confirmBase.side, 'confirm', seed), SC.half(side.side, 'confirm', seed), passed.filter(p => composition.parts.some(x => x.id === p.id)));
+    return { verdict: s.verdict, pass: s.pass, harms: s.harms, cancelled: s.cancelled, targets: s.targets, measures: s.measures ? compact(s.measures) : null, cycles: side.cycles };
   });
+  report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;
   // (One part alone: the combined change has the part's id, so the composed line is told apart by `composed`.)
   if (!LS.readLessons(lessonsFile).some(e => e.iteration === n && e.composed === true && e.proposalId === cid)) {
     LS.appendLesson(lessonsFile, {
@@ -226,7 +260,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

@@ -22,8 +22,11 @@
  * screen alone.
  *
  *   PROBE_KEYS, PROBE_LIMITS
- *   resolveProbe(raw, { read, modelScore, autotrader })   the resolved setting, or null without one; throws with every
- *                                             error. autotrader: the loop's replay's, resolved
+ *   resolveProbe(raw, { read, modelScore, autotrader, tuningWindows })   the resolved setting, or null without one; throws
+ *                                             with every error. autotrader: the loop's replay's, resolved. tuningWindows:
+ *                                             the keep rule's; a probe window that shares a session date with one is
+ *                                             refused (the dates edits are chosen on never judge them)
+ *   overlaps(a, b)                            whether two { from, to } session-date windows (to exclusive) share a date
  */
 
 const { rolesBetween } = require('../learning/splits');
@@ -38,7 +41,9 @@ const sessionStart = d => tradingDayStart(new Date(`${d}T12:00:00Z`));
 /** JSON with its object keys sorted: two configs equal whatever their key order. */
 const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v));
 
-function resolveProbe(raw, { read, modelScore = null, autotrader = null } = {}) {
+const overlaps = (a, b) => a.from < b.to && b.from < a.to;
+
+function resolveProbe(raw, { read, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
   const errors = [];
@@ -52,6 +57,10 @@ function resolveProbe(raw, { read, modelScore = null, autotrader = null } = {}) 
       let roles;
       try { roles = rolesBetween(sessionStart(w.from), sessionStart(w.to)); } catch (err) { roles = [err.message]; }
       if (!(roles.length === 1 && roles[0] === 'practice-train')) errors.push(`probe.windows ${w.from}..${w.to}: probes run on practice-train only (this touches ${roles.join(' + ')})`);
+      // Disjoint from the keep rule's windows: an edit chosen on a date is never judged on it (selection bias).
+      for (const t of (Array.isArray(tuningWindows) ? tuningWindows : []).filter(x => x && DATE.test(x.from) && DATE.test(x.to))) {
+        if (overlaps(w, t)) errors.push(`probe.windows ${w.from}..${w.to}: shares session dates with the tuning window ${t.from}..${t.to}; the dates edits are found and screened on never judge them: make them disjoint`);
+      }
     });
   }
   let replay = null;
@@ -83,4 +92,4 @@ function resolveProbe(raw, { read, modelScore = null, autotrader = null } = {}) 
   return { replay, windows, k, parallel };
 }
 
-module.exports = { PROBE_KEYS, PROBE_LIMITS, resolveProbe };
+module.exports = { PROBE_KEYS, PROBE_LIMITS, resolveProbe, overlaps };

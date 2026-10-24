@@ -40,6 +40,12 @@ const ALLOWED = [
     copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
   { old: "Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the same: the one ledger is where the budget lives.",
     copies: 0, reason: "the evaluator passage was rewritten (owner-approved, PR #196): scripts/evaluate.js is deleted; a change is judged by pairRuns" },
+  { old: "The user wants the agent's skills, strategies or rulebook improved from its own replays, or wants to resume, read or judge a loop.",
+    copies: 0, reason: 'PPC phase 1 (owner-approved 2026-10-23): a model\'s proposal may edit the desk roles\' bodies and never a rulebook (scripts/lib/train/proposal.js)' },
+  { old: "A change to a strategy or the rulebook is `blocked` until the evaluator (section 10 step 9) screens it; a strategy's name, status, account, sizing, contracts, exit, instruments, timeframe, list and regime gate are never a proposal's to change, and a rulebook may only be tightened, key by key (no limit raised or turned `off`, no fact value's effective size multiplier raised, including a value no entry lists, which is 0; no exit changed, no key removed).",
+    copies: 0, reason: 'PPC phase 1 (owner-approved 2026-10-23): only a person\'s imported proposal may edit a rulebook, and only to tighten it' },
+  { old: "Proposals may edit only skills, strategies (never a `name:` or `status:` line, nor a policy's account, sizing, contracts or exit) and rulebooks (`accounts/<account>/RULEBOOK.md`): never code, account profiles (`ACCOUNT.md`), agents, rules, or the loop's own skills.",
+    copies: 0, reason: 'PPC phase 1 (owner-approved 2026-10-23): a model\'s proposal may edit the desk roles\' bodies (agent-edit.js guards) and never a rulebook' },
 ];
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
