@@ -58,6 +58,8 @@ const { recordedTimes } = require('../replay/store');
 const TS = require('./trend-set');
 const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
+const TC = require('./trend-curve');
+const { readJson } = require('../harness-run');
 
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
 function stepsOf(runDir) {
@@ -186,10 +188,21 @@ async function probeRound(ctx, { n, champion, api }) {
   // This round's draw from the trend pool (trend-set.js drawRound): per days without replacement across rounds,
   // reshuffled once the pool is used up; the champion and every edit of the round replay the same days, split into the
   // probe and confirm halves by the loop's seed. The regression days are the same every round.
-  const draw = trend ? TS.drawRound(trend.set.legs, { seed, round: n, per: trend.batch }) : null;
+  // This round's batch size (trend-curve.js planBatch, config/training.json trendBatch): from the earlier rounds' sizes and
+  // outcomes (their iteration reports), frozen once planned; then its batch, the pool's next legs after theirs.
+  const plan = trend ? await api.phase(ctx, `${n}:trend-plan`, path.join(dir, 'trend-plan.json'), async () => {
+    const earlier = [];
+    for (let i = 1; i < n; i += 1) {
+      const rep = readJson(path.join(ctx.paths.iter(i), 'probe-report.json'), null);
+      const rec = readJson(path.join(ctx.paths.iter(i), 'iteration-report.json'), null);
+      if (rep && rep.trend && rep.trend.batch) earlier.push({ size: rep.trend.batch.size, outcome: rec && rec.trend ? rec.trend.outcome : 'neutral' });
+    }
+    return { ...TC.planBatch(earlier, { pool: trend.set.legs.length, cfg: trend.batch }), sizes: earlier.map(e => e.size) };
+  }) : null;
+  const draw = trend ? TS.drawBatches(trend.set.legs, { seed, sizes: [...plan.sizes, plan.size] }).pop() : null;
   // The batch split by session date into the probe half (findings, each edit's screen) and the confirm half (the
   // combined change), about trend.half of the legs each, no day in both.
-  const split = draw ? TS.splitBatch(draw.items, { seed, half: trend.half }) : null;
+  const split = draw ? TS.splitBatch(draw.items, { seed, half: trend.batch.half }) : null;
   const trendDays = which => (which === 'regression' ? (trend.regression ? trend.regression.days : []) : split[which].days);
   // One side's runs of a trend half's sessions (or the regression days), one run a session, each session's capture
   // report reduced for the screen. A session is its own phase: the champion's, replayed once in a loop (its tree never
@@ -225,7 +238,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   if (trend) {
     report.trend = {
-      set: trend.set.fingerprint, batch: { index: n - 1, size: draw.items.length, cycles: draw.cycles },
+      set: trend.set.fingerprint, batch: { index: n - 1, size: draw.items.length, from: draw.from, cycles: draw.cycles, trigger: plan.trigger, why: plan.why },
       probe: { days: split.probe.days, legs: split.probe.legs }, confirm: { days: split.confirm.days, legs: split.confirm.legs }, regression: trendDays('regression'),
     };
   }
@@ -250,7 +263,15 @@ async function probeRound(ctx, { n, champion, api }) {
   // The trend set's probe half and the regression days, the champion's (the findings read the probe half only).
   const trendBase = trend ? await trendSide('pc', champion.dir, 1, 'probe', true) : null;
   const regBase = trend ? await trendSide('pc', champion.dir, 1, 'regression') : null;
-  if (trendBase) report.cycles.champion.trend = trendBase.fresh + (regBase ? regBase.fresh : 0);
+  // The champion's confirm half too, every round: the learning curve reads it (trend-curve.js); nothing of it reaches the
+  // proposer, and no edit runs it.
+  const trendConfirm = trend ? await trendSide('pc', champion.dir, 1, 'confirm') : null;
+  if (trendBase) report.cycles.champion.trend = trendBase.fresh + (regBase ? regBase.fresh : 0) + (trendConfirm ? trendConfirm.fresh : 0);
+  if (trendConfirm) {
+    const legs = [...trendConfirm.side.legs.values()];
+    const days = Object.values(trendConfirm.side.dayR);
+    report.trend.champion = { legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
+  }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
     trendBase ? TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }) : [],
@@ -299,11 +320,12 @@ async function probeRound(ctx, { n, champion, api }) {
     const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind });
     const ts = trendBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'probe') : null;
     const rs = regBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'regression') : null;
+    const rm = rs ? TSC.measureTrend(regBase.side, rs.side) : null;
     const tm = ts ? TSC.measureTrend(trendBase.side, ts.side) : null;
     const isTrend = e.finding.kind === TF.KIND;
     if (isTrend && !tm) throw new Error(`probe ${e.id}: a trend finding needs the trend set's runs`);
     const screen = combinedScreen({ curated: SC.screen(m), curatedTarget: !isTrend, trend: tm, trendTarget: isTrend, regression: rs ? TSC.regressionHarms(regBase.side, rs.side) : [] });
-    const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
+    const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(rm ? { regression: rm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
     return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
   }));
   // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id).
@@ -314,7 +336,7 @@ async function probeRound(ctx, { n, champion, api }) {
       findingKind: p.finding.kind, windows: cfg.windows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target }));
+  report.probes = probes.map(p => ({ id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));
   for (const p of probes) report.cycles.edits[p.id] = p.cycles === undefined ? null : p.cycles;
   for (const p of probes) ctx.log(`iteration ${n}: probe ${p.id} (${(PE.targetOf(p.tag) || { label: '?' }).label}, ${p.tag.kind}, ${p.finding.id}): ${p.screen.verdict}${p.screen.harms.length ? `: ${p.screen.harms.join('; ')}` : ''}`);
   const passed = probes.filter(p => p.screen.pass);
@@ -333,8 +355,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const cid = P.proposalId(composition.proposal);
   // The champion's confirm half: run once a round first has a combined change to judge on it (never for an edit).
   const confirmBase = await sideData('pc', champion.dir, 1, 'confirm');
-  const trendConfirm = trend ? await trendSide('pc', champion.dir, 1, 'confirm') : null;
-  report.cycles.champion.confirm = confirmBase.cycles + (trendConfirm ? trendConfirm.fresh : 0);
+  report.cycles.champion.confirm = confirmBase.cycles;
   // The combined change, probed once more and judged on the confirm half only: it must hold there, its parts not cancel.
   const composed = await api.phase(ctx, `${n}:composed`, path.join(dir, `composed-${cid}.json`), async () => {
     const tree = await api.candidateTree(ctx, { dir: work, id: `k-${cid}`, proposal: composition.proposal, champion });
@@ -365,7 +386,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

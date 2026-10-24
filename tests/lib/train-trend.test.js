@@ -237,13 +237,17 @@ test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days pr
   const set = { kind: 'trend-set', fingerprint: 'fp', days: [{ day: '2022-03-07' }, { day: '2022-03-08' }], legs: [{ id: '2022-03-07|long|a' }, { id: '2022-03-08|short|b' }] };
   const base = { replay: curated, windows: [{ from: '2022-03-07', to: '2022-03-19' }] };
   const tuning = [{ from: '2022-06-06', to: '2022-06-18' }];
-  const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t && typeof t === 'object' ? { batch: 2, half: 0.5, ...t } : t }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
+  const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
   const ok = go({ replay: { stage: 1 }, set: 'set.json', regression: { days: ['2021-05-04', '2021-05-03'] } });
-  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'set.json', fingerprint: 'fp', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'] }, batch: 2, half: 0.5, regression: { days: ['2021-05-03', '2021-05-04'] } });
-  // The batch and its halves' share: from the loop config, bounded by the pool.
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: 3 }), /probe.trend.batch: the legs a round draws, a whole number from 1 to the pool's 2/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: undefined }), /probe.trend.batch/);
-  for (const half of [0, 1, '0.5', undefined]) assert.throws(() => go({ replay: { stage: 1 }, set: 's', half }), /probe.trend.half: the probe half's share/, String(half));
+  const TB = require('../../scripts/lib/tunables').training().trendBatch;
+  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'set.json', fingerprint: 'fp', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'] }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
+  // The batch: config/training.json trendBatch, its start, max and half overridable by the loop config, within bounds.
+  assert.deepStrictEqual(go({ replay: { stage: 1 }, set: 's', batch: { start: 10, max: 40, half: 0.4 } }).trend.batch, { ...TB, start: 10, max: 40, half: 0.4 });
+  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { growAfter: 1 } }), /probe.trend.batch.growAfter: not a setting \(start, max, half\)/);
+  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { start: 1 } }), /probe.trend.batch.start: a whole number of legs, two or more/);
+  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { start: 50, max: 40 } }), /probe.trend.batch.max: a whole number of legs, at least start/);
+  for (const half of [0, 1, '0.5']) assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { half } }), /probe.trend.batch.half: the probe half's share/, String(half));
+  assert.throws(() => go({ replay: { stage: 1 }, set: 's' }, { readSet: () => ({ ...set, legs: [{ id: '2022-03-07|long|a' }] }) }), /a pool of two legs or more/);
   assert.strictEqual(go(undefined).trend, undefined, 'none without it');
   assert.throws(() => go({ replay: { stage: 1, curatedList: {} }, set: 's' }), /probe.trend.replay.curatedList: not here/);
   assert.throws(() => go({ replay: { stage: 1, practice: {} }, set: 's' }), /probe.trend.replay.practice/);
@@ -258,7 +262,7 @@ test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days pr
   assert.throws(() => go({ replay: { stage: 1 }, set: 's', regression: { days: ['2022-06-07'] } }), /probe.trend.regression 2022-06-07: inside the tuning window/);
   assert.throws(() => go({ replay: { stage: 1 }, set: 's', regression: { days: [] } }), /probe.trend.regression: \{ days/);
   // parallel above 1: no latency charged on the trend runs either.
-  const par = t => PC.resolveProbe({ ...base, replay: { ...curated, latency: false }, parallel: 2, trend: { batch: 2, half: 0.5, ...t } }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning });
+  const par = t => PC.resolveProbe({ ...base, replay: { ...curated, latency: false }, parallel: 2, trend: t }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning });
   assert.throws(() => par({ replay: { stage: 1 }, set: 's' }), /probe.parallel: more than 1 only with probe.trend.replay.latency false/);
   assert.strictEqual(par({ replay: { stage: 1, latency: false }, set: 's' }).parallel, 2);
 });
@@ -274,4 +278,57 @@ test('the default trendData step: a run\'s capture report from its own folder, w
   assert.deepStrictEqual(Object.keys(got.days), ['2022-03-07']);
   assert.deepStrictEqual([got.capture.runId, got.capture.legs, got.capture.detector.session], ['r1', [], NY]);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(runDir, 'trend-capture.json'), 'utf8')), got.capture);
+});
+
+// --- the batch size and the learning curve --------------------------------------------------------------------------
+
+const TC = require('../../scripts/lib/train/trend-curve');
+const CFG = { start: 100, max: 400, half: 0.5, growAfter: 2, growFactor: 2, plateauRounds: 3 };
+
+test('a round\'s outcome: kept, improved (the combined change confirmed), no improvement, or neutral (nothing judged, or every edit worse)', () => {
+  assert.strictEqual(TC.outcomeOf({ probes: [{ verdict: 'helped' }], composed: { verdict: 'helped' }, kept: true }), 'kept');
+  assert.strictEqual(TC.outcomeOf({ probes: [{ verdict: 'helped' }], composed: { verdict: 'helped' } }), 'improved');
+  assert.strictEqual(TC.outcomeOf({ probes: [{ verdict: 'helped' }], composed: { verdict: 'no effect' } }), 'no-improvement', 'not confirmed');
+  assert.strictEqual(TC.outcomeOf({ probes: [{ verdict: 'no effect' }, { verdict: 'hurt' }] }), 'no-improvement', 'inconclusive or no gain');
+  assert.strictEqual(TC.outcomeOf({ probes: [{ verdict: 'hurt' }, { verdict: 'hurt' }] }), 'neutral', 'a clearly worse edit is rejected, never a reason to grow');
+  assert.strictEqual(TC.outcomeOf({ probes: [] }), 'neutral');
+});
+
+test('the batch size: start, kept after one round without an improvement, doubled after two, capped, reset after a keep', () => {
+  const h = list => list.map(([size, outcome]) => ({ size, outcome }));
+  assert.deepStrictEqual(TC.planBatch([], { cfg: CFG }), { size: 100, trigger: 'start', why: 'the loop\'s first round: 100 legs' });
+  assert.deepStrictEqual(TC.planBatch(h([[100, 'no-improvement']]), { cfg: CFG }).size, 100, 'one round is not enough');
+  assert.deepStrictEqual(TC.planBatch(h([[100, 'no-improvement'], [100, 'no-improvement']]), { cfg: CFG }), { size: 200, trigger: 'grow', why: '2 rounds without an improvement at 100 legs: 200 legs' });
+  assert.strictEqual(TC.planBatch(h([[100, 'no-improvement'], [100, 'neutral'], [100, 'no-improvement']]), { cfg: CFG }).size, 200, 'a neutral round between them is skipped');
+  assert.strictEqual(TC.planBatch(h([[100, 'no-improvement'], [100, 'improved'], [100, 'no-improvement']]), { cfg: CFG }).size, 100, 'an improvement breaks the run');
+  assert.strictEqual(TC.planBatch(h([[100, 'no-improvement'], [100, 'no-improvement'], [200, 'no-improvement']]), { cfg: CFG }).size, 200, 'rounds at the old size never count at the new');
+  assert.deepStrictEqual(TC.planBatch(h([[200, 'no-improvement'], [200, 'no-improvement']]), { cfg: { ...CFG, max: 300 } }), { size: 300, trigger: 'grow', why: '2 rounds without an improvement at 200 legs: 300 legs' }, 'capped');
+  assert.strictEqual(TC.planBatch(h([[400, 'no-improvement'], [400, 'no-improvement']]), { cfg: CFG }).trigger, 'cap');
+  assert.strictEqual(TC.planBatch(h([[100, 'no-improvement'], [100, 'no-improvement']]), { cfg: CFG, pool: 150 }).size, 150, 'never more than the pool');
+  assert.deepStrictEqual(TC.planBatch(h([[200, 'no-improvement'], [200, 'kept']]), { cfg: CFG }), { size: 100, trigger: 'restart', why: 'round 2 kept a change (a new champion): back to 100 legs' });
+  assert.strictEqual(TC.planBatch([], { cfg: CFG, pool: 60 }).size, 60);
+  assert.strictEqual(TC.planBatch(h([[100, 'neutral'], [100, 'neutral']]), { cfg: CFG }).trigger, 'keep', 'neutral rounds never grow it');
+});
+
+test('the learning curve: each round\'s confirm half as the champion after its keep; pooled; a plateau and memorization flagged, never judged', () => {
+  const champion = { legs: 50, caught: 10, netR: 0.2 };
+  const composed = { capture: { b: 8, c: 2, pairs: 50 }, netR: { diff: 0.3 } };
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, source: 'champion' });
+  const k = TC.curvePoint({ round: 2, size: 100, champion, composed, kept: true });
+  assert.deepStrictEqual([k.caught, k.rate, k.netR, k.source], [16, 0.32, 0.5, 'kept change'], 'the kept change\'s legs: the champion\'s, plus fixed, minus broken');
+  const pt = (round, caught, legs = 50) => TC.curvePoint({ round, size: 100, champion: { legs, caught, netR: 0 } });
+  const flat = TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 12), pt(4, 11)], { plateauRounds: 3 });
+  assert.deepStrictEqual([flat.pooled, flat.plateau], [{ legs: 200, caught: 44, rate: 0.22 }, true]);
+  assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 25), pt(4, 11)], { plateauRounds: 3 }).plateau, false, 'round 3 beat every earlier round beyond its interval');
+  assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 12)], { plateauRounds: 3 }).plateau, false, 'too few rounds to say');
+  assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 25), pt(3, 25), pt(4, 25), pt(5, 25)], { plateauRounds: 3 }).plateau, true, 'no new gain in the last three');
+  // Memorization: up on the probe half and the regression days, not on the confirm half.
+  const probes = [
+    { id: 'a', trend: { capture: { b: 6, c: 1 } }, regression: { capture: { b: 2, c: 0 } } },
+    { id: 'b', trend: { capture: { b: 6, c: 1 } }, regression: { capture: { b: 0, c: 0 } } },
+    { id: 'c', trend: { capture: { b: 6, c: 1 } }, regression: { capture: { b: 2, c: 0 } } },
+  ];
+  assert.deepStrictEqual(TC.memorizationOf(probes, { parts: ['a', 'b'], trend: { capture: { b: 1, c: 1 } } }), [{ id: 'a', probe: 5, regression: 2, confirm: 0 }]);
+  assert.deepStrictEqual(TC.memorizationOf(probes, { parts: ['a'], trend: { capture: { b: 3, c: 1 } } }), [], 'it held on the confirm half');
+  assert.deepStrictEqual(TC.memorizationOf(probes, null), []);
 });

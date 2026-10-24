@@ -19,8 +19,9 @@
  *                                              from..to session dates (to exclusive)
  *   writeTrendSet(dir, doc), readTrendSet(file)   <dir>/trend-set-<fingerprint>.json; read checks its kind, version (v)
  *                                              and fingerprint
- *   drawRound(items, { seed, round, per })     round n's batch: per items without replacement across rounds,
- *                                              reshuffled when the pool is used up: { items, cycles }
+ *   drawBatches(items, { seed, sizes })        every round's batch, sizes[i] items for round i + 1: without replacement
+ *                                              across rounds, reshuffled when the pool is used up: [{ items, cycles, from }]
+ *   drawRound(items, { seed, round, per })     round n's batch when every round draws per: { items, cycles }
  *   dayOfLeg(id)                               a leg id's session date (its first field: day|side|start)
  *   splitBatch(ids, { seed, half })            { probe: { days, legs }, confirm: { days, legs } }: whole days, ordered by a
  *                                              seeded hash, to the probe half until it holds half of the legs
@@ -97,33 +98,42 @@ function readTrendSet(file) {
 const orderOf = (pool, seed, c) => [...pool].sort((a, b) => hash(`${seed}|${c}|${a}`).localeCompare(hash(`${seed}|${c}|${b}`)) || a.localeCompare(b));
 
 /**
- * Round n's batch (n from 1): per items of the pool, without replacement until the pool is used up, then a fresh
- * shuffle. The rounds read one sequence, the pool's cycles one after another (each a seeded shuffle), per items a round:
- * every item once a cycle, a round never twice the same item. A round that spans two cycles takes the next cycle's first
- * items among those it doesn't hold yet (that cycle's order moves its own copies of them later).
+ * The rounds' batches, round by round (sizes[i]: round i + 1's), from one sequence: the pool's cycles one after another,
+ * each a seeded shuffle, so every item comes once a cycle, without replacement until the pool is used up. A round never
+ * holds an item twice: a round that spans two cycles takes the next cycle's first items among those it doesn't hold yet
+ * (that cycle's order moves its own copies of them later). [{ items, cycles, from }].
  */
-function drawRound(pool, { seed, round, per }) {
+function drawBatches(pool, { seed, sizes }) {
   const items = [...new Set(pool)].sort();
   const N = items.length;
-  if (!(Number.isInteger(per) && per >= 1 && per <= N)) throw new Error(`drawRound: per is 1 to the pool's ${N}, not ${per}`);
-  if (!(Number.isInteger(round) && round >= 1)) throw new Error(`drawRound: round is 1 or more, not ${round}`);
-  const from = (round - 1) * per;
-  const to = from + per;
+  if (!Array.isArray(sizes) || !sizes.length) throw new Error('drawBatches: sizes, one a round');
+  for (const per of sizes) if (!(Number.isInteger(per) && per >= 1 && per <= N)) throw new Error(`drawBatches: a batch is 1 to the pool's ${N}, not ${per}`);
+  const bounds = [];
+  let at = 0;
+  for (const per of sizes) { bounds.push([at, at + per]); at += per; }
+  const total = at;
   const seq = [];
-  for (let c = 0; seq.length < to; c += 1) {
+  for (let c = 0; seq.length < total; c += 1) {
     let order = orderOf(items, seed, c);
-    // The round that spans this cycle's start: the items it already took from the cycle before stay out of its slots.
-    const at = seq.length;
-    const b = Math.floor(at / per) * per;
-    const taken = new Set(seq.slice(b, at));
-    if (taken.size) {
-      const head = order.filter(d => !taken.has(d)).slice(0, b + per - at);
+    const start = seq.length;
+    const spanning = bounds.find(([x, y]) => x < start && start < y);
+    if (spanning) {
+      const taken = new Set(seq.slice(spanning[0], start));
+      const head = order.filter(d => !taken.has(d)).slice(0, spanning[1] - start);
       order = [...head, ...order.filter(d => !head.includes(d))];
     }
     seq.push(...order);
   }
-  const out = seq.slice(from, to);
-  return { items: [...out].sort(), cycles: [...new Set(out.map((_d, i) => Math.floor((from + i) / N)))].sort((a, b) => a - b) };
+  return bounds.map(([x, y]) => ({ items: seq.slice(x, y).sort(), cycles: [...new Set(seq.slice(x, y).map((_d, i) => Math.floor((x + i) / N)))].sort((p, q) => p - q), from: x }));
+}
+
+/** Round n's batch (n from 1) when every round draws per items: drawBatches with equal sizes. { items, cycles }. */
+function drawRound(pool, { seed, round, per }) {
+  if (!(Number.isInteger(round) && round >= 1)) throw new Error(`drawRound: round is 1 or more, not ${round}`);
+  const N = new Set(pool).size;
+  if (!(Number.isInteger(per) && per >= 1 && per <= N)) throw new Error(`drawRound: per is 1 to the pool's ${N}, not ${per}`);
+  const { items, cycles } = drawBatches(pool, { seed, sizes: Array.from({ length: round }, () => per) })[round - 1];
+  return { items, cycles };
 }
 
 /** A batch split by session date: whole days, in a seeded hash order, to the probe half until it holds half the legs. */
@@ -154,4 +164,4 @@ function dayWindows(days) {
   return out;
 }
 
-module.exports = { VERSION, KIND, sessionDays, buildTrendSet, writeTrendSet, readTrendSet, drawRound, dayOfLeg, splitBatch, dayWindows, fingerprintOf };
+module.exports = { VERSION, KIND, sessionDays, buildTrendSet, writeTrendSet, readTrendSet, drawBatches, drawRound, dayOfLeg, splitBatch, dayWindows, fingerprintOf };

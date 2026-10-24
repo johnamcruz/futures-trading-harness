@@ -331,6 +331,30 @@
   "skillUsage.top": {
    "value": 3,
    "from": "learning/skill-usage.js TOP"
+  },
+  "trendBatch.start": {
+   "value": 100,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: a loop starts at 100 trend legs a round, 50 probe and 50 confirm)"
+  },
+  "trendBatch.max": {
+   "value": 400,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the batch grows to at most 400 legs)"
+  },
+  "trendBatch.half": {
+   "value": 0.5,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the probe half holds half of a batch, the confirm half the rest)"
+  },
+  "trendBatch.growAfter": {
+   "value": 2,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the batch grows after 2 rounds in a row without an improvement)"
+  },
+  "trendBatch.growFactor": {
+   "value": 2,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: it doubles)"
+  },
+  "trendBatch.plateauRounds": {
+   "value": 3,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the learning curve flags a plateau after 3 rounds with no gain beyond the interval)"
   }
  },
  "replay": {

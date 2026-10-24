@@ -12,14 +12,34 @@
  * trend set the legs caught on its confirm half (fixed, broken, pairs, each side's capture rate, the paired net R per
  * session: trend-screen.js); null without one.
  *
- *   build({ probeReport, entries })   the iteration's record (entries: the archive's lines of the iteration)
+ *   build({ probeReport, entries, previous })   the iteration's record (entries: the archive's lines of the iteration;
+ *                                     previous: the earlier iterations' records, oldest first, for the learning curve)
  *   line(record)                      one line for status
  */
+
+const TC = require('./trend-curve');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
 
-function build({ probeReport = null, entries = [] } = {}) {
+/** The round's trend batch: its size and why, its index, the pool, each half's days and legs, the round's outcome. */
+function trendOf(r, kept) {
+  const t = r.trend;
+  const outcome = TC.outcomeOf({ probes: r.probes || [], composed: r.composed || null, kept: Boolean(kept && kept.verdict === 'kept') });
+  return { set: t.set, batch: t.batch, outcome, probe: { days: t.probe.days.length, legs: t.probe.legs.length }, confirm: { days: t.confirm.days.length, legs: t.confirm.legs.length } };
+}
+
+/** The learning curve to this round (trend-curve.js): this round's confirm-half point, the curve, its flags. */
+function curveFields(r, kept, previous) {
+  if (!r.trend.champion) return { curve: curveOfPrevious(previous), memorization: [] };
+  const point = TC.curvePoint({ round: r.iteration, size: r.trend.batch.size, champion: r.trend.champion, composed: r.composed && r.composed.trend ? r.composed.trend : null, kept: Boolean(kept && kept.verdict === 'kept') });
+  return { curvePoint: point, curve: TC.curveOf([...previousPoints(previous), point]), memorization: TC.memorizationOf(r.probes || [], r.composed || null) };
+}
+
+const previousPoints = previous => (previous || []).map(x => x && x.curvePoint).filter(Boolean);
+const curveOfPrevious = previous => TC.curveOf(previousPoints(previous));
+
+function build({ probeReport = null, entries = [], previous = [] } = {}) {
   const r = probeReport || {};
   const findings = new Map((r.findings || []).map(f => [f.id, f]));
   const kept = entries.find(e => e && e.phase !== 'held-out' && e.composition) || entries.find(e => e && e.phase !== 'held-out') || null;
@@ -37,7 +57,8 @@ function build({ probeReport = null, entries = [] } = {}) {
     kept: kept ? { proposalId: kept.proposalId, verdict: kept.verdict, reasons: kept.reasons || [] } : null,
     deltas: m ? { reads: net(m.reads), process: net(m.process), target: net(m.target), rPerDecision: m.r ? { diff: m.r.diff, lo: m.r.lo, hi: m.r.hi, pairs: m.r.pairs } : null, capture: m.trend ? { ...net(m.trend.capture), rate: m.trend.rate, netR: m.trend.netR } : null } : null,
     // The round's trend batch: its index in the pool's draw, the pool's fingerprint, each half's days and legs.
-    trend: r.trend ? { set: r.trend.set, batch: r.trend.batch, probe: { days: r.trend.probe.days.length, legs: r.trend.probe.legs.length }, confirm: { days: r.trend.confirm.days.length, legs: r.trend.confirm.legs.length } } : null,
+    trend: r.trend ? trendOf(r, kept) : null,
+    ...(r.trend ? curveFields(r, kept, previous) : {}),
     cycles: r.cycles || null,
     why: r.why || null,
   };
@@ -54,6 +75,9 @@ function line(x) {
   const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/session ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
   return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused), screened ${screened}`
     + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
+    + `${x.trend ? `, ${x.trend.batch.trigger} (${x.trend.outcome})` : ''}`
+    + `${x.curvePoint ? `; confirm capture ${x.curvePoint.rate} [${x.curvePoint.lo}, ${x.curvePoint.hi}] net R/session ${x.curvePoint.netR} (${x.curvePoint.source}), pooled ${x.curve.pooled.rate} over ${x.curve.points.length} round(s)${x.curve.plateau ? `, PLATEAU (no gain in ${x.curve.plateauRounds} rounds)` : ''}` : ''}`
+    + `${x.memorization && x.memorization.length ? `; MEMORIZATION: ${x.memorization.map(m => m.id).join(', ')}` : ''}`
     + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${x.why ? `; ${x.why}` : ''}`;
 }
 

@@ -81,6 +81,7 @@ const TRAINING = {
   lessons: { maxLines: int(1), maxChars: int(1) },
   probeEdit: { maxLine: int(1), growBytes: int(0) },
   skillUsage: { top: int(1) },
+  trendBatch: { start: int(2), max: int(2), half: num({ min: 0.1, max: 0.9 }), growAfter: int(1), growFactor: int(2), plateauRounds: int(1) },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).

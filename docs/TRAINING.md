@@ -430,8 +430,6 @@ loop config:
 "trend": {
   "replay": "s1-sessions.json",
   "set": "~/fth-train/trend-set-<fingerprint>.json",
-  "batch": 200,
-  "half": 0.5,
   "regression": { "days": ["2021-05-03", "2021-05-04", "2021-05-05", "2021-05-06"] }
 }
 ```
@@ -441,12 +439,39 @@ practice, no combine or account states), on the loop's runner config. The
 pool's days and the regression days lie in practice-train, outside the
 tuning windows, and never in both lists (the config refuses each).
 
-**A round's batch.** Each round takes the next `batch` legs of the pool,
-seeded by the loop's seed and the round. The draw is without replacement
+**A round's batch.** Each round takes the pool's next legs, seeded by the
+loop's seed. The draw is without replacement
 until the pool is used up, then reshuffled, so over the rounds every leg is
 screened, as often as any other. The batch splits by session date into a
 probe half and a confirm half: whole days, in a seeded order, go to the
-probe half until it holds `half` of the legs, and no day is in both. The
+probe half until it holds `half` of the legs, and no day is in both.
+
+**How many legs** (`config/training.json` `trendBatch`; a loop config's
+`trend.batch` may set `start`, `max` and `half` for itself). Each loop starts
+at `start` legs (100: 50 probe, 50 confirm). A round shows an improvement
+when its combined change is confirmed on the confirm half. After
+`growAfter` rounds in a row with none (2: every edit inconclusive or with
+no gain, or the combined change not confirmed) at the current size, the
+next batch is `growFactor` times larger (2), up to `max` (400) and the
+pool. A round with nothing judged, or where every edit was clearly worse
+(`hurt`), counts neither way: a rejected edit is no sign the batch is too
+small. A kept change (a new champion) sets the next batch back to `start`,
+so the next search starts cheap. Each round's report records the size, the
+trigger (start, keep, grow, cap, restart) and why.
+
+**The learning curve** (`scripts/lib/train/trend-curve.js`). The champion
+replays each round's confirm half too, so each round has a point: the
+confirm half's capture rate (with a Wilson interval at the keep rule's
+level) and net R per session, as the champion after that round's keep
+stands (the kept change's numbers when one was kept). The iteration's
+record holds the curve across rounds and its pooled rate. Two flags report
+only, and never keep or reject a change:
+
+- **plateau**: in the last `plateauRounds` rounds (3), no round's capture
+  rose beyond its interval above every earlier round's.
+- **memorization**: an edit whose legs caught rose on the probe half and on
+  the regression days, but whose combined change did not gain on the
+  confirm half. The
 probe half gives the findings and screens each edit; the confirm half judges
 the combined change, which counts only if it helps there too. The champion
 and every edit of a round replay the same days, one run a session, and
@@ -480,14 +505,15 @@ leg ids; the lessons lines record the batch too.
 **The cost.** A batch's legs lie in its sessions, so the cost is the
 sessions the batch spans, about 50 cycles each on the morning session. A
 fresh batch each round means new sessions each round: the champion replays
-each round's sessions (once each in a loop; a session a later round draws
-again is reused), then every edit replays the probe half's sessions and the
-regression days, on top of its curated half, and the combined change the
-confirm half's. Legs drawn at random from the whole pool spread over many
+each round's sessions, both halves (once each in a loop; a session a later
+round draws again is reused), then every edit replays the probe half's
+sessions and the regression days, on top of its curated half, and the
+combined change the confirm half's. Legs drawn at random from the whole pool spread over many
 sessions: 200 legs can span well over 100 sessions, which is about 5,000
 cycles a side for the probe half alone. A smaller `batch` costs less and
 screens with fewer legs (the `SCREEN` thresholds: at least four changed
-legs and a tenth of the pairs, net).
+legs and a tenth of the pairs, net); the batch grows only when rounds show
+nothing.
 
 **The iteration's record.** Each iteration writes
 `<iteration dir>/iteration-report.json` (`scripts/lib/train/iteration-report.js`):

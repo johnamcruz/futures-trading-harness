@@ -35,7 +35,9 @@ const { rolesBetween } = require('../learning/splits');
 const { tradingDayStart } = require('../trading/clock');
 
 const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend']);
-const TREND_KEYS = Object.freeze(['replay', 'set', 'batch', 'half', 'regression']);
+const TREND_KEYS = Object.freeze(['replay', 'set', 'batch', 'regression']);
+// The batch settings a loop config may set for itself (the rest, and every default: config/training.json trendBatch).
+const BATCH_KEYS = Object.freeze(['start', 'max', 'half']);
 // [default, min, max] of each (config/training.json probe).
 const PROBE_LIMITS = Object.freeze(Object.fromEntries(Object.entries(require('../tunables').training().probe).map(([k, r]) => [k, Object.freeze([r.default, r.min, r.max])])));
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -106,11 +108,11 @@ const roleOf = d => {
 const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().split('T')[0];
 
 /**
- * probe.trend (trend-set.js, trend-screen.js): { replay, set, batch, half, regression }. replay: a stage-1 replay config
+ * probe.trend (trend-set.js, trend-screen.js): { replay, set, batch, regression }. replay: a stage-1 replay config
  * of whole sessions (no curated list, no practice, no combine or account states: every bar of the runner's session, as
  * live), the loop's autotrader. set: a trend pool file (scripts/trend-set.js build), its days in practice-train and
- * sharing no session date with the tuning windows. batch: the legs a round draws (a whole number, at most the pool's);
- * half: the probe half's share of them (between 0 and 1; the confirm half holds the rest). regression: { days:
+ * sharing no session date with the tuning windows (a round's batch, its size and halves: config/training.json trendBatch,
+ * trend-curve.js; batch: { start, max, half }, each optional, overrides those three for this loop). regression: { days:
  * [YYYY-MM-DD] } (the trend-move set's), harm only: in practice-train, outside the tuning windows and the pool's days.
  */
 function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, parallel }) {
@@ -150,9 +152,21 @@ function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, p
     }
   }
   const legs = set ? set.legs.map(l => l.id) : [];
-  if (!(Number.isInteger(raw.batch) && raw.batch >= 1 && (!set || raw.batch <= legs.length))) errors.push(`probe.trend.batch: the legs a round draws, a whole number from 1 to the pool's ${set ? legs.length : 'legs'}`);
-  if (!(typeof raw.half === 'number' && raw.half > 0 && raw.half < 1)) errors.push('probe.trend.half: the probe half\'s share of a batch, between 0 and 1 (the confirm half holds the rest)');
-  return set ? { replay, set: { file: raw.set, fingerprint: set.fingerprint, days: setDays, legs }, batch: raw.batch, half: raw.half, regression } : null;
+  // A batch splits into the screen's two halves (screen.js HALVES): one leg each at the least.
+  const halves = require('./screen').HALVES.length;
+  if (set && legs.length < halves) errors.push('probe.trend.set: a pool of two legs or more (a batch splits into two halves)');
+  const batch = { ...require('../tunables').training().trendBatch };
+  if (raw.batch !== undefined) {
+    if (!raw.batch || typeof raw.batch !== 'object' || Array.isArray(raw.batch)) errors.push(`probe.trend.batch: { ${BATCH_KEYS.join(', ')} } (each optional; config/training.json trendBatch otherwise)`);
+    else {
+      for (const k of Object.keys(raw.batch)) if (!BATCH_KEYS.includes(k)) errors.push(`probe.trend.batch.${k}: not a setting (${BATCH_KEYS.join(', ')})`);
+      Object.assign(batch, raw.batch);
+    }
+  }
+  if (!(Number.isInteger(batch.start) && batch.start >= halves)) errors.push('probe.trend.batch.start: a whole number of legs, two or more (a batch splits into two halves)');
+  if (!(Number.isInteger(batch.max) && batch.max >= batch.start)) errors.push('probe.trend.batch.max: a whole number of legs, at least start');
+  if (!(typeof batch.half === 'number' && batch.half > 0 && batch.half < 1)) errors.push('probe.trend.batch.half: the probe half\'s share of a batch, between 0 and 1 (the confirm half holds the rest)');
+  return set ? { replay, set: { file: raw.set, fingerprint: set.fingerprint, days: setDays, legs }, batch, regression } : null;
 }
 
-module.exports = { PROBE_KEYS, TREND_KEYS, PROBE_LIMITS, resolveProbe, overlaps };
+module.exports = { PROBE_KEYS, TREND_KEYS, BATCH_KEYS, PROBE_LIMITS, resolveProbe, overlaps };

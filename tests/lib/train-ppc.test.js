@@ -411,7 +411,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {} } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -487,13 +487,14 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false } =
       }));
       return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])) };
     },
-    proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: proposals.map(p => ({ ...p })) }; },
+    // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
+    proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
     propose: async () => { calls.propose += 1; return { proposals: [] }; },
     evaluator: async () => ({ available: false, why: 'stub' }),
     modelVerifier: opts => { calls.verifier.push(opts); return { available: true, verdict, reasons: [`model ${verdict}`], windows: [] }; },
     writeBranch: opts => { calls.branches.push(opts); return 'deadbeef'.repeat(5); },
   };
-  if (trend) loop.probe = { ...loop.probe, trend: { replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL }, batch: BATCH, half: 0.5, regression: { days: [REG_DAY] } } };
+  if (trend) loop.probe = { ...loop.probe, trend: { replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
   const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
   return w;
 }
@@ -602,7 +603,7 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual([f[0].kind, f[0].skill, f[0].step, f[0].count, f[0].cost, f[0].of], ['trend-blocker', 'a', 'entry', missed, missed * 2, probeLegs.length], 'the champion\'s probe half: the batch\'s legs only, 2R each');
   assert.deepStrictEqual(f.slice(1).map(x => x.kind), ['misread', 'wrong-reason refusal']);
   const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
-  assert.deepStrictEqual(report.trend.batch, { index: 0, size: BATCH, cycles: [0] });
+  assert.deepStrictEqual(report.trend.batch, { index: 0, size: BATCH, from: 0, cycles: [0], trigger: 'start', why: `the loop's first round: ${BATCH} legs` });
   assert.deepStrictEqual([report.trend.probe.legs, report.trend.confirm.legs], [split.probe.legs, split.confirm.legs]);
   assert.deepStrictEqual(report.trend.probe.days.filter(d => report.trend.confirm.days.includes(d)), [], 'no day in both halves');
   assert.deepStrictEqual(report.trend.regression, [REG_DAY]);
@@ -639,6 +640,32 @@ test('with a trend pool: a trend edit gains only on the trend batch; one that ga
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['no effect', 'helped'], 'a curated gain is no trend finding\'s gain');
   assert.deepStrictEqual([report.composed.verdict, report.composed.cancelled.length], ['no effect', 1], 'its trend gain must hold on the confirm half');
   assert.strictEqual(w.calls.verifier.length, 0);
+});
+
+test('the trend batch adapts: it doubles after two rounds without an improvement, to its cap; a rejected edit never grows it', async () => {
+  // Each round a new neutral edit (no effect anywhere): no improvement, round after round.
+  const w = world({ trend: true, trendBatch: { start: 4, max: 10 }, proposals: r => [tagged('a', 'F1', 'rule', '- line three', `- line three, plain ${'x'.repeat(r)}`, `neutral ${r}`)], loop: { limits: { maxIterations: 5, maxModelCalls: 10000, maxWallMinutes: 30 } } });
+  await run(w);
+  const reps = [1, 2, 3, 4, 5].map(n => JSON.parse(fs.readFileSync(path.join(w.paths.iter(n), 'probe-report.json'), 'utf8')).trend.batch);
+  assert.deepStrictEqual(reps.map(b => [b.size, b.trigger]), [[4, 'start'], [4, 'keep'], [8, 'grow'], [8, 'keep'], [10, 'grow']], reps.map(b => b.why).join(' | '));
+  // The batches read one sequence: each round's from is where the one before ended.
+  assert.deepStrictEqual(reps.map(b => b.from), [0, 4, 8, 16, 24]);
+  const recs = [1, 2, 3, 4, 5].map(n => JSON.parse(fs.readFileSync(path.join(w.paths.iter(n), 'iteration-report.json'), 'utf8')));
+  assert.deepStrictEqual(recs.map(r => r.trend.outcome), ['no-improvement', 'no-improvement', 'no-improvement', 'no-improvement', 'no-improvement']);
+  // The learning curve: each round's champion confirm half, pooled across rounds.
+  assert.deepStrictEqual(recs.map(r => r.curve.points.length), [1, 2, 3, 4, 5]);
+  assert.ok(recs.every(r => r.curvePoint.source === 'champion' && r.curvePoint.legs > 0));
+  assert.strictEqual(recs[4].curve.pooled.legs, recs.reduce((s, r) => s + r.curvePoint.legs, 0));
+  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0 \(champion\), pooled [\d.]+ over 5 round\(s\)/);
+});
+
+test('a kept change resets the trend batch to its start; the curve then reads the kept change', async () => {
+  const w = world({ trend: true, trendBatch: { start: 6, max: 18 }, proposals: r => (r === 3 ? [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs')] : [tagged('a', 'F1', 'rule', '- line three', `- line three, plain ${'x'.repeat(r)}`, `neutral ${r}`)]), loop: { limits: { maxIterations: 4, maxModelCalls: 10000, maxWallMinutes: 30 } } });
+  await run(w);
+  const reps = [1, 2, 3, 4].map(n => JSON.parse(fs.readFileSync(path.join(w.paths.iter(n), 'probe-report.json'), 'utf8')).trend.batch);
+  assert.deepStrictEqual(reps.map(b => [b.size, b.trigger]), [[6, 'start'], [6, 'keep'], [12, 'grow'], [6, 'restart']], reps.map(b => b.why).join(' | '));
+  const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(3), 'iteration-report.json'), 'utf8'));
+  assert.deepStrictEqual([rec.trend.outcome, rec.kept.verdict, rec.curvePoint.source, rec.curvePoint.rate], ['kept', 'kept', 'kept change', 1]);
 });
 
 test('with a trend pool, each round draws the next batch; the champion replays a session once a loop; edits share the round\'s days', async () => {

@@ -494,7 +494,10 @@ async function iteration(ctx, n, { champion, champOf }) {
 function writeIterationReport(ctx, n) {
   const probeReport = readJson(path.join(ctx.paths.iter(n), 'probe-report.json'), null);
   const entries = A.readArchive(ctx.paths.archive).filter(e => e.iteration === n && e.phase !== 'held-out');
-  writeJsonAtomic(path.join(ctx.paths.iter(n), 'iteration-report.json'), IR.build({ probeReport, entries }));
+  // The earlier iterations' records: the learning curve runs across the loop's rounds.
+  const previous = [];
+  for (let i = 1; i < n; i += 1) previous.push(readJson(path.join(ctx.paths.iter(i), 'iteration-report.json'), null));
+  writeJsonAtomic(path.join(ctx.paths.iter(n), 'iteration-report.json'), IR.build({ probeReport, entries, previous: previous.filter(Boolean) }));
 }
 
 /** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
