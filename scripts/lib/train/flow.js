@@ -3,9 +3,10 @@
 /**
  * The trading flow as the training loop's frame (Propose-Probe-Compose, docs/TRAINING.md): every finding is placed on
  * the step of the flow it blocks, so the proposer reads its problems in the order a trade is built and fixes the
- * earliest one first. The read steps are the compose crosswalk's own (learning/curated-moments.js READ_SKILL: bias,
- * location, setup, entry, stop, target), then the two the desk owns after the plan: risk (risk-manager phase 2) and
- * execution (the trade-executor).
+ * earliest one first. The steps are the harness's one list (trading/composed-reads.js FLOW_STEPS, which the refusal
+ * hints and the trend-capture report name too): the six compose steps (the crosswalk's own, learning/curated-moments.js
+ * READ_SKILL: bias, location, setup, entry, stop, target), then the two the desk owns after the plan: risk
+ * (risk-manager phase 2) and execution (the gate, the trade-executor).
  *
  *   FLOW_STEPS                     the steps, in flow order
  *   ROLE_STEP                      the step each editable desk role owns (agent-edit.js EDITABLE_ROLES)
@@ -19,8 +20,11 @@
 const { READ_SKILL } = require('../learning/curated-moments');
 const { EDITABLE_ROLES } = require('./agent-edit');
 
+const { FLOW_STEPS } = require('../trading/composed-reads');
+
 const READ_STEPS = Object.freeze(Object.keys(READ_SKILL));
-const FLOW_STEPS = Object.freeze([...READ_STEPS, 'risk', 'execution']);
+// The crosswalk's steps are the flow's first six, in order: one list, never two that drift.
+if (READ_STEPS.join() !== FLOW_STEPS.slice(0, READ_STEPS.length).join()) throw new Error('flow.js: the read steps of the crosswalk are not the first steps of FLOW_STEPS');
 const ROLE_STEP = Object.freeze({
   'market-structure-analyst': 'bias', 'trend-momentum-analyst': 'bias', 'volume-liquidity-analyst': 'location', 'risk-manager': 'risk', 'trade-executor': 'execution',
 });

@@ -8,8 +8,9 @@
  * Nothing here judges: every verdict in it is the screen's (screen.js) or the keep rule's (model-verifier.js).
  *
  * The deltas are the combined change's on the confirm half (net fixed minus broken decisions, of the pairs, for the
- * correct reads, process adherence and its parts' target; the paired mean difference of R per decision). The capture
- * deltas (the trend set: legs caught, missed R) are null until a round screens one.
+ * correct reads, process adherence and its parts' target; the paired mean difference of R per decision), and with a
+ * trend set the legs caught on its confirm half (fixed, broken, pairs, each side's capture rate, the paired net R per
+ * session: trend-screen.js); null without one.
  *
  *   build({ probeReport, entries })   the iteration's record (entries: the archive's lines of the iteration)
  *   line(record)                      one line for status
@@ -34,7 +35,9 @@ function build({ probeReport = null, entries = [] } = {}) {
     screened: (r.probes || []).map(p => ({ id: p.id, target: targetLabel(p.tag), verdict: p.verdict, n: p.target ? p.target.pairs : null, harms: p.harms || [] })),
     composed: r.composed ? { id: r.composed.id, verdict: r.composed.verdict, parts: r.composition ? r.composition.parts : [], cancelled: r.composed.cancelled || [] } : null,
     kept: kept ? { proposalId: kept.proposalId, verdict: kept.verdict, reasons: kept.reasons || [] } : null,
-    deltas: m ? { reads: net(m.reads), process: net(m.process), target: net(m.target), rPerDecision: m.r ? { diff: m.r.diff, lo: m.r.lo, hi: m.r.hi, pairs: m.r.pairs } : null, capture: null } : null,
+    deltas: m ? { reads: net(m.reads), process: net(m.process), target: net(m.target), rPerDecision: m.r ? { diff: m.r.diff, lo: m.r.lo, hi: m.r.hi, pairs: m.r.pairs } : null, capture: m.trend ? { ...net(m.trend.capture), rate: m.trend.rate, netR: m.trend.netR } : null } : null,
+    // The round's trend batch: its index in the pool's draw, the pool's fingerprint, each half's days and legs.
+    trend: r.trend ? { set: r.trend.set, batch: r.trend.batch, probe: { days: r.trend.probe.days.length, legs: r.trend.probe.legs.length }, confirm: { days: r.trend.confirm.days.length, legs: r.trend.confirm.legs.length } } : null,
     cycles: r.cycles || null,
     why: r.why || null,
   };
@@ -46,10 +49,11 @@ function line(x) {
   const c = x.cycles || {};
   const edits = Object.values(c.edits || {}).reduce((s, v) => s + (Number(v) || 0), 0);
   const ch = c.champion || {};
-  const cost = `cycles: champion ${(ch.probe || 0) + (ch.confirm || 0)}, edits ${edits}, combined ${c.composed || 0}`;
+  const cost = `cycles: champion ${(ch.probe || 0) + (ch.confirm || 0) + (ch.trend || 0)}, edits ${edits}, combined ${c.composed || 0}`;
   const d = x.deltas;
-  const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}` : '';
+  const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/session ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
   return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused), screened ${screened}`
+    + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
     + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${x.why ? `; ${x.why}` : ''}`;
 }
 

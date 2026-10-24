@@ -411,13 +411,92 @@ then only to tighten it (`scripts/lib/train/rulebook-guard.js`).
 `scripts/lib/train/proposal.js` refuses it in every model's proposal, the
 probe round's and the single-shot proposer's alike.
 
+**The trend pool** (`probe.trend`, optional). The curated list holds few of
+the market's trend legs (a 200-moment list covers about 140 of
+practice-train's thousands), so the round can also screen on the legs
+themselves. Build the pool once from the screen period's base bars:
+
+```bash
+node scripts/trend-set.js build --bars <MNQ 3m or 1m bars> --from 2021-05-07 --to 2022-09-01 \
+  --minutes 3 --exclude 2021-05-03,2021-05-04,2021-05-05,2021-05-06
+```
+
+It holds every trend leg of the period (`scripts/lib/train/trend-set.js`),
+found by the capture report's own detector and identified by its ids, in a
+fingerprinted file. `--exclude` keeps the regression days out. Then, in the
+loop config:
+
+```json
+"trend": {
+  "replay": "s1-sessions.json",
+  "set": "~/fth-train/trend-set-<fingerprint>.json",
+  "batch": 200,
+  "half": 0.5,
+  "regression": { "days": ["2021-05-03", "2021-05-04", "2021-05-05", "2021-05-06"] }
+}
+```
+
+`replay` is a stage-1 replay config of whole sessions (no curated list, no
+practice, no combine or account states), on the loop's runner config. The
+pool's days and the regression days lie in practice-train, outside the
+tuning windows, and never in both lists (the config refuses each).
+
+**A round's batch.** Each round takes the next `batch` legs of the pool,
+seeded by the loop's seed and the round. The draw is without replacement
+until the pool is used up, then reshuffled, so over the rounds every leg is
+screened, as often as any other. The batch splits by session date into a
+probe half and a confirm half: whole days, in a seeded order, go to the
+probe half until it holds `half` of the legs, and no day is in both. The
+probe half gives the findings and screens each edit; the confirm half judges
+the combined change, which counts only if it helps there too. The champion
+and every edit of a round replay the same days, one run a session, and
+each screens the batch's own legs only. The round's `probe-report.json`
+records the batch's index, the pool's fingerprint, and each half's days and
+leg ids; the lessons lines record the batch too.
+
+- **Findings.** The champion's missed legs on the probe half
+  (`scripts/lib/train/trend-findings.js`, kind `trend-blocker`) are grouped
+  by the flow step that blocked them and its owner, ranked by the R they
+  left (each leg's `availableR`), and come before the curated findings. Code
+  ranks by that move; the proposer's line names what blocked the plan and
+  how many legs, never the move, a price or an R. The owner is the skill of
+  the read compose_check refused at that step, `risk-manager` for a phase-2
+  veto, or `trade-executor` for an abort. A late or unfilled entry, or the
+  head trader's pass, names no owner. A rule (the clock, the account's
+  stops, news), a bar outside the session and a position already open are
+  never findings: those are code and the rulebook.
+- **The screen** (`scripts/lib/train/trend-screen.js`). Legs are paired by
+  id: caught or not, a one-sided McNemar test. A catch counts as fixed only
+  when its session's net R got no worse, so catching more by trading more
+  and losing more never gains. Harms are fewer legs caught, net R per
+  session worse (on at least `minPairs` sessions) and a blow. These use the
+  `SCREEN` thresholds above. On the regression days fewer of the champion's
+  legs caught, net, is a harm. They never show a gain.
+- **Both sets judge every edit.** A harm on either hurts. The gain is the
+  target set's: the trend batch's legs for a trend finding, the curated
+  target for any other. The combined change must keep every trend part's
+  gain on the confirm half, and every curated part's.
+
+**The cost.** A batch's legs lie in its sessions, so the cost is the
+sessions the batch spans, about 50 cycles each on the morning session. A
+fresh batch each round means new sessions each round: the champion replays
+each round's sessions (once each in a loop; a session a later round draws
+again is reused), then every edit replays the probe half's sessions and the
+regression days, on top of its curated half, and the combined change the
+confirm half's. Legs drawn at random from the whole pool spread over many
+sessions: 200 legs can span well over 100 sessions, which is about 5,000
+cycles a side for the probe half alone. A smaller `batch` costs less and
+screens with fewer legs (the `SCREEN` thresholds: at least four changed
+legs and a tenth of the pairs, net).
+
 **The iteration's record.** Each iteration writes
 `<iteration dir>/iteration-report.json` (`scripts/lib/train/iteration-report.js`):
 the findings with their steps, what was proposed (and refused), each
 edit's screen verdict and n, the combined change and its confirm verdict,
 the keep rule's verdict, the combined change's deltas on the confirm half
-(net reads, process and target decisions fixed, R per decision), and the
-cycles each side's runs recorded. `train-loop.js status` prints it as one
+(net reads, process and target decisions fixed, R per decision; with a
+trend set the legs caught, fixed and broken, each side's capture rate and
+the net R per session), and the cycles each side's runs recorded. `train-loop.js status` prints it as one
 line per iteration.
 
 **The screen's thresholds** are `SCREEN` in `scripts/lib/train/screen.js`,
@@ -492,7 +571,8 @@ The twelve legs of `tests/fixtures/trend-moves` are a regression and
 diagnosis set, never a tuning target. The follow-up for the training loop's
 findings is a census of these legs over practice-train, split by session
 date with the loop's seeded split, so an edit tuned on one half is
-confirmed on dates it never saw; it is not built yet.
+confirmed on dates it never saw: the probe round's trend set
+(Propose–Probe–Compose above, `probe.trend`: a batch of the pool's legs each round).
 
 ## 5. Stage 2: pass prop
 

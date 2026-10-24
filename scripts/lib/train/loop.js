@@ -140,6 +140,8 @@ function defaultSteps({ root, env = process.env }) {
     proposeProbes: opts => proposer.proposeProbes(opts),
     // A probe half as a curated list of its own (train/probe-halves.js): each side replays only the half it is judged on.
     halfReplay: opts => require('./probe-halves').halfReplay(opts),
+    // A trend-set run's capture report and days (train/probe.js trendData, replay/trend-capture.js).
+    trendData: opts => require('./probe').trendData(opts),
     probeData: opts => require('./probe').probeData(opts),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };

@@ -8,6 +8,7 @@
  *
  * Kinds: `misread` (the skill's claimed reads the checker refused), `missed` (a read of the skill was true and pointed
  * the side's way, and the model claimed none), `wrong-reason refusal` (it passed for a reason the facts refute).
+ * `trend-blocker` (the trend set's missed legs) comes from trend-findings.js and is merged ahead (mergeFindings).
  * The skills with the most of the three together come first; a skill with no SKILL.md in the tree, a size or management
  * skill (no read), and the loop's own skills are left out. A refusal no compose read explains is listed unattributed.
  *
@@ -16,6 +17,8 @@
  *   refusalsOf(decisions, records)             [{ key, skills, falseReasons }]: the wrong-reason refusals, attributed
  *   findingsFrom({ skills, refusals, exists, max })   [{ id, skill, kind, count, of, step, detail }], ranked, at most max;
  *                                              step: the flow step it blocks (flow.js stepOf)
+ *   mergeFindings(trend, reads, { max })       the trend set's findings (trend-findings.js, by cost) then these, renumbered
+ *   NOT_PROBED                                 the skills a finding never names (no read, the loop's own)
  *   findingLine(f)                             one line of the proposer's prompt
  */
 
@@ -25,7 +28,7 @@ const { NO_READ_SKILLS } = require('../learning/skill-usage');
 const { LOOP_SKILLS } = require('./proposal');
 const { stepOf } = require('./flow');
 
-const FINDING_KINDS = Object.freeze(['misread', 'missed', 'wrong-reason refusal']);
+const FINDING_KINDS = Object.freeze(['misread', 'missed', 'wrong-reason refusal', 'trend-blocker']);
 const NOT_PROBED = new Set([...Object.values(NO_READ_SKILLS).flat(), ...LOOP_SKILLS, 'unknown']);
 const ENTRY = new Set(['long', 'short']);
 
@@ -70,6 +73,9 @@ function refusalsOf(decisions, records) {
   }));
 }
 
+/** A finding's detail, as the prompt shows it (one cap for every kind). */
+const clipDetail = d => String(d || '').slice(0, 240);
+
 function findingsFrom({ skills = [], refusals = [], exists = () => true, max = 8 } = {}) {
   const probed = s => s && !NOT_PROBED.has(s) && exists(s);
   const rows = new Map();
@@ -93,12 +99,26 @@ function findingsFrom({ skills = [], refusals = [], exists = () => true, max = 8
   for (const r of ranked) {
     for (const x of r.items.sort((a, b) => b.count - a.count || FINDING_KINDS.indexOf(a.kind) - FINDING_KINDS.indexOf(b.kind))) out.push({ skill: r.skill, ...x });
   }
-  return out.slice(0, max).map((f, i) => ({ id: `F${i + 1}`, ...f, step: stepOf(f), detail: String(f.detail || '').slice(0, 240) }));
+  return out.slice(0, max).map((f, i) => ({ id: `F${i + 1}`, ...f, step: stepOf(f), detail: clipDetail(f.detail) }));
+}
+
+/**
+ * One ranked list: the trend set's findings first (trend-findings.js: the legs missed, by the R they left), then the
+ * curated set's (by count), numbered again F1, F2, ..., at most max.
+ */
+function mergeFindings(trend = [], reads = [], { max } = {}) {
+  return [...trend, ...reads].slice(0, max).map((f, i) => ({ ...f, id: `F${i + 1}`, step: f.step === undefined ? stepOf(f) : f.step, detail: clipDetail(f.detail) }));
 }
 
 function findingLine(f) {
+  if (f.kind === 'trend-blocker') {
+    const owner = f.skill || (f.agent ? `agent ${f.agent}` : '(no skill or role named)');
+    // Its rank is the move the legs left (code ranks by it); the line names no move, price or R: the proposer reads what
+    // blocked the plan, never what the market did after.
+    return `${f.id}. ${owner}: trend-blocker at ${f.step || 'no step'}: blocked ${f.count} of ${f.of} trend legs${f.detail ? `. Most often: ${f.detail}` : ''}`;
+  }
   const what = f.kind === 'misread' ? `${f.count} of ${f.of} claimed reads refused` : f.kind === 'missed' ? `missed ${f.count} of ${f.of} times its read was true for the side` : `${f.count} refusal(s) for a reason the facts refute`;
   return `${f.id}. ${f.skill || (f.agent ? `agent ${f.agent}` : '(no skill read at the bar)')}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;
 }
 
-module.exports = { FINDING_KINDS, mergeUsage, refusalsOf, findingsFrom, findingLine };
+module.exports = { FINDING_KINDS, NOT_PROBED, mergeUsage, refusalsOf, findingsFrom, mergeFindings, findingLine };

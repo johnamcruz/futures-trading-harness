@@ -283,8 +283,9 @@ test('skill usage: never shown to the model: only the replay report (and the sta
   // whose verdicts go to the archive and the owner's PR body, never to the proposer's prompt (train/loop.js proposalsFor).
   // And by an adapter's validation (learning/adapter-validation.js deriveValidation), required by its operator CLI
   // alone (scripts/adapter.js validated): the result it records is the A/B's verdict, never shown to the model.
-  // And by the probe screen (train/screen.js), for decisionsByKey and the paired interval: a code judge as well.
-  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/adapter-validation.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js', 'scripts/lib/train/screen.js']);
+  // And by the probe screen (train/screen.js), for decisionsByKey and the paired interval: a code judge as well; and the
+  // trend screen (train/trend-screen.js), for the paired interval of net R per session: a code judge too.
+  assert.deepStrictEqual(abUsers, ['scripts/ab-compare.js', 'scripts/lib/learning/adapter-validation.js', 'scripts/lib/learning/run-pins.js', 'scripts/lib/train/model-verifier.js', 'scripts/lib/train/screen.js', 'scripts/lib/train/trend-screen.js']);
   const validationUsers = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /adapter-validation'\)/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(ROOT, f).split(path.sep).join('/'));
   assert.deepStrictEqual(validationUsers, ['scripts/adapter.js']);
   // The findings the proposer reads carry no outcome: findings.js never reads the report's outcome section.

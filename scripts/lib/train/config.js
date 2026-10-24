@@ -116,7 +116,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   // The probe round runs the loop's own model and runner config (its replay's autotrader, a path resolved as below).
   let trader = replay ? replay.autotrader : null;
   try { if (typeof trader === 'string') trader = readSpec(trader, baseDir, 'replay.autotrader'); } catch (_err) { trader = null; }
-  try { probe = resolveProbe(r.probe, { read: spec => readSpec(spec, baseDir, 'probe.replay'), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
+  try { probe = resolveProbe(r.probe, { read: spec => readSpec(spec, baseDir, 'probe.replay'), readSet: file => require('./trend-set').readTrendSet(path.resolve(baseDir, expandHome(String(file)))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
   let modelScore = null;
   try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
   if (modelScore) {
